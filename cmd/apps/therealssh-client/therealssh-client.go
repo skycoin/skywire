@@ -7,11 +7,11 @@ import (
 	"flag"
 	"net/http"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app"
-	ssh "github.com/skycoin/skywire/pkg/therealssh"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
 )
 
 var log *logging.MasterLogger

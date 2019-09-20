@@ -6,8 +6,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
 )
 
 // Hop defines a route hop between 2 nodes.

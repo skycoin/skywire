@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/creack/pty"
-	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 // Port reserved for SSH app

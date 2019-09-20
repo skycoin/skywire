@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
 )
 
 // RuleHeaderSize represents the base size of a rule.
