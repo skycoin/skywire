@@ -251,7 +251,7 @@ func (d *RPCClientDialer) Run(srv *rpc.Server, retry time.Duration) error {
 	for {
 		if err := d.establishConn(); err != nil {
 			// Only return if not network error.
-			if err != dmsg.ErrRequestRejected {
+			if err == dmsg.ErrRequestRejected {
 				return err
 			}
 		} else {
