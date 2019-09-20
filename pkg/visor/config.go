@@ -10,6 +10,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"

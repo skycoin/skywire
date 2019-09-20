@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/creack/pty"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/creack/pty"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 
