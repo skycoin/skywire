@@ -5,8 +5,8 @@ package routing
 import (
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/google/uuid"
 )
 
 // Hop defines a route hop between 2 nodes.

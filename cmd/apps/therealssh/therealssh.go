@@ -6,9 +6,9 @@ package main
 import (
 	"flag"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"

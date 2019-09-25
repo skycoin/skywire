@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/creack/pty"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/creack/pty"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )

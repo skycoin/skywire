@@ -11,12 +11,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 )
 

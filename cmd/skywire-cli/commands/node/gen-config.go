@@ -82,7 +82,7 @@ func defaultConfig() *visor.Config {
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
 
-	conf.Messaging.Discovery = "https://messaging.discovery.skywire.skycoin.net"
+	conf.Messaging.Discovery = "https://messaging.discovery.skywire.skycoin.com"
 	conf.Messaging.ServerCount = 1
 
 	passcode := base64.StdEncoding.EncodeToString(cipher.RandByte(8))
@@ -93,11 +93,11 @@ func defaultConfig() *visor.Config {
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
 
-	conf.Transport.Discovery = "https://transport.discovery.skywire.skycoin.net"
+	conf.Transport.Discovery = "https://transport.discovery.skywire.skycoin.com"
 	conf.Transport.LogStore.Type = "file"
 	conf.Transport.LogStore.Location = "./skywire/transport_logs"
 
-	conf.Routing.RouteFinder = "https://routefinder.skywire.skycoin.net/"
+	conf.Routing.RouteFinder = "https://routefinder.skywire.skycoin.com/"
 
 	const defaultSetupNodePK = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 	sPK := cipher.PubKey{}

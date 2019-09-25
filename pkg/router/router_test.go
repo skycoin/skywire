@@ -7,16 +7,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	routeFinder "github.com/SkycoinProject/skywire-mainnet/pkg/route-finder/client"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 

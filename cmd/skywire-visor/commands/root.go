@@ -18,10 +18,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"

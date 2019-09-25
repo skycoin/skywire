@@ -9,8 +9,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 
-	"github.com/google/uuid"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

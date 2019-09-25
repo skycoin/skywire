@@ -7,8 +7,8 @@ import (
 	"flag"
 	"net/http"
 
-	"github.com/sirupsen/logrus"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
