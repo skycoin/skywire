@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/creack/pty"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/creack/pty"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"

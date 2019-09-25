@@ -11,9 +11,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"

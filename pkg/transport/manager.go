@@ -7,12 +7,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 
-	"github.com/google/uuid"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/google/uuid"
 )
 
 // ManagerConfig configures a Manager.

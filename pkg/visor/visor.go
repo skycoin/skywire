@@ -19,11 +19,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	routeFinder "github.com/SkycoinProject/skywire-mainnet/pkg/route-finder/client"

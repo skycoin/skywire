@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 

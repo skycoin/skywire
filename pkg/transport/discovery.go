@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/google/uuid"
 )
 
 // DiscoveryClient performs Transport discovery operations.
