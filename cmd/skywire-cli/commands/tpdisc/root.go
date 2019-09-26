@@ -24,7 +24,7 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVar(&addr, "addr", "https://transport.discovery.skywire.skycoin.net", "address of transport discovery")
+	RootCmd.Flags().StringVar(&addr, "addr", internal.DefaultTpDisc, "address of transport discovery")
 	RootCmd.Flags().Var(&tpID, "id", "if specified, obtains a single transport of given ID")
 	RootCmd.Flags().Var(&tpPK, "pk", "if specified, obtains transports associated with given public key")
 }
