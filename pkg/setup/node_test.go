@@ -15,11 +15,12 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/net/nettest"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
