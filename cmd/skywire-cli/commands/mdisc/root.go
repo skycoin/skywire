@@ -16,7 +16,7 @@ import (
 var mdAddr string
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", "https://messaging.discovery.skywire.skycoin.net", "address of messaging discovery server")
+	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", internal.DefaultDmsgDisc, "address of messaging discovery server")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with messaging services.
