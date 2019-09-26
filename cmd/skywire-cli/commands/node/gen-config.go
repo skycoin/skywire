@@ -9,6 +9,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
 
+	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -74,13 +75,6 @@ func localConfig() *visor.Config {
 	return c
 }
 
-const (
-	DefaultTpDisc      = "http://transport.discovery.skywire.cc"
-	DefaultDmsgDisc    = "http://dmsg.discovery.skywire.cc"
-	DefaultRouteFinder = "http://routefinder.skywire.cc"
-	DefaultSetupPK     = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
-)
-
 func defaultConfig() *visor.Config {
 	conf := &visor.Config{}
 	conf.Version = "1.0"
@@ -89,7 +83,7 @@ func defaultConfig() *visor.Config {
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
 
-	conf.Messaging.Discovery = DefaultDmsgDisc
+	conf.Messaging.Discovery = internal.DefaultDmsgDisc
 	conf.Messaging.ServerCount = 1
 
 	passcode := base64.StdEncoding.EncodeToString(cipher.RandByte(8))
@@ -100,15 +94,15 @@ func defaultConfig() *visor.Config {
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
 
-	conf.Transport.Discovery = DefaultTpDisc
+	conf.Transport.Discovery = internal.DefaultTpDisc
 	conf.Transport.LogStore.Type = "file"
 	conf.Transport.LogStore.Location = "./skywire/transport_logs"
 
-	conf.Routing.RouteFinder = DefaultRouteFinder
+	conf.Routing.RouteFinder = internal.DefaultRouteFinder
 
 	sPK := cipher.PubKey{}
-	if err := sPK.UnmarshalText([]byte(DefaultSetupPK)); err != nil {
-		log.WithError(err).Warnf("Failed to unmarshal default setup node public key %s", DefaultSetupPK)
+	if err := sPK.UnmarshalText([]byte(internal.DefaultSetupPK)); err != nil {
+		log.WithError(err).Warnf("Failed to unmarshal default setup node public key %s", internal.DefaultSetupPK)
 	}
 	conf.Routing.SetupNodes = []cipher.PubKey{sPK}
 	conf.Routing.Table.Type = "boltdb"
