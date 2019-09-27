@@ -1,4 +1,4 @@
-package network
+package appnet
 
 // Type represents the network type.
 type Type string

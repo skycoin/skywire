@@ -8,7 +8,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/app2/network"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -17,8 +17,8 @@ func TestListener_Accept(t *testing.T) {
 
 	lisID := uint16(1)
 	localPK, _ := cipher.GenerateKeyPair()
-	local := network.Addr{
-		Net:    network.TypeDMSG,
+	local := appnet.Addr{
+		Net:    appnet.TypeDMSG,
 		PubKey: localPK,
 		Port:   routing.Port(100),
 	}
@@ -26,8 +26,8 @@ func TestListener_Accept(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		acceptConnID := uint16(1)
 		acceptRemotePK, _ := cipher.GenerateKeyPair()
-		acceptRemote := network.Addr{
-			Net:    network.TypeDMSG,
+		acceptRemote := appnet.Addr{
+			Net:    appnet.TypeDMSG,
 			PubKey: acceptRemotePK,
 			Port:   routing.Port(100),
 		}
@@ -72,8 +72,8 @@ func TestListener_Accept(t *testing.T) {
 	t.Run("conn already exists", func(t *testing.T) {
 		acceptConnID := uint16(1)
 		acceptRemotePK, _ := cipher.GenerateKeyPair()
-		acceptRemote := network.Addr{
-			Net:    network.TypeDMSG,
+		acceptRemote := appnet.Addr{
+			Net:    appnet.TypeDMSG,
 			PubKey: acceptRemotePK,
 			Port:   routing.Port(100),
 		}
@@ -102,8 +102,8 @@ func TestListener_Accept(t *testing.T) {
 	t.Run("conn already exists, conn closed with error", func(t *testing.T) {
 		acceptConnID := uint16(1)
 		acceptRemotePK, _ := cipher.GenerateKeyPair()
-		acceptRemote := network.Addr{
-			Net:    network.TypeDMSG,
+		acceptRemote := appnet.Addr{
+			Net:    appnet.TypeDMSG,
 			PubKey: acceptRemotePK,
 			Port:   routing.Port(100),
 		}
@@ -132,7 +132,7 @@ func TestListener_Accept(t *testing.T) {
 
 	t.Run("accept error", func(t *testing.T) {
 		acceptConnID := uint16(0)
-		acceptRemote := network.Addr{}
+		acceptRemote := appnet.Addr{}
 		acceptErr := errors.New("accept error")
 
 		rpc := &MockRPCClient{}
@@ -156,8 +156,8 @@ func TestListener_Close(t *testing.T) {
 
 	lisID := uint16(1)
 	localPK, _ := cipher.GenerateKeyPair()
-	local := network.Addr{
-		Net:    network.TypeDMSG,
+	local := appnet.Addr{
+		Net:    appnet.TypeDMSG,
 		PubKey: localPK,
 		Port:   routing.Port(100),
 	}

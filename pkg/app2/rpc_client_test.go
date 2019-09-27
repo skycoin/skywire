@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/skycoin/skywire/pkg/app2/network"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -26,10 +26,10 @@ func TestRPCClient_Dial(t *testing.T) {
 
 		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		remoteNet := network.TypeDMSG
+		remoteNet := appnet.TypeDMSG
 		remotePK, _ := cipher.GenerateKeyPair()
 		remotePort := routing.Port(100)
-		remote := network.Addr{
+		remote := appnet.Addr{
 			Net:    remoteNet,
 			PubKey: remotePK,
 			Port:   remotePort,
@@ -50,11 +50,11 @@ func TestRPCClient_Dial(t *testing.T) {
 			dmsgLocal, dmsgRemote, 0, func() {})
 		var noErr error
 
-		n := &network.MockNetworker{}
+		n := &appnet.MockNetworker{}
 		n.On("DialContext", dialCtx, remote).Return(dialConn, noErr)
 
-		network.ClearNetworkers()
-		err := network.AddNetworker(remoteNet, n)
+		appnet.ClearNetworkers()
+		err := appnet.AddNetworker(remoteNet, n)
 		require.NoError(t, err)
 
 		connID, localPort, err := cl.Dial(remote)
@@ -72,10 +72,10 @@ func TestRPCClient_Dial(t *testing.T) {
 
 		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		remoteNet := network.TypeDMSG
+		remoteNet := appnet.TypeDMSG
 		remotePK, _ := cipher.GenerateKeyPair()
 		remotePort := routing.Port(100)
-		remote := network.Addr{
+		remote := appnet.Addr{
 			Net:    remoteNet,
 			PubKey: remotePK,
 			Port:   remotePort,
@@ -85,11 +85,11 @@ func TestRPCClient_Dial(t *testing.T) {
 		var dialConn net.Conn
 		dialErr := errors.New("dial error")
 
-		n := &network.MockNetworker{}
+		n := &appnet.MockNetworker{}
 		n.On("DialContext", dialCtx, remote).Return(dialConn, dialErr)
 
-		network.ClearNetworkers()
-		err := network.AddNetworker(remoteNet, n)
+		appnet.ClearNetworkers()
+		err := appnet.AddNetworker(remoteNet, n)
 		require.NoError(t, err)
 
 		connID, localPort, err := cl.Dial(remote)
@@ -109,10 +109,10 @@ func TestRPCClient_Listen(t *testing.T) {
 
 		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		localNet := network.TypeDMSG
+		localNet := appnet.TypeDMSG
 		localPK, _ := cipher.GenerateKeyPair()
 		localPort := routing.Port(100)
-		local := network.Addr{
+		local := appnet.Addr{
 			Net:    localNet,
 			PubKey: localPK,
 			Port:   localPort,
@@ -122,11 +122,11 @@ func TestRPCClient_Listen(t *testing.T) {
 		var listenLis net.Listener
 		var noErr error
 
-		n := &network.MockNetworker{}
+		n := &appnet.MockNetworker{}
 		n.On("ListenContext", listenCtx, local).Return(listenLis, noErr)
 
-		network.ClearNetworkers()
-		err := network.AddNetworker(localNet, n)
+		appnet.ClearNetworkers()
+		err := appnet.AddNetworker(localNet, n)
 		require.NoError(t, err)
 
 		lisID, err := cl.Listen(local)
@@ -142,10 +142,10 @@ func TestRPCClient_Listen(t *testing.T) {
 
 		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		localNet := network.TypeDMSG
+		localNet := appnet.TypeDMSG
 		localPK, _ := cipher.GenerateKeyPair()
 		localPort := routing.Port(100)
-		local := network.Addr{
+		local := appnet.Addr{
 			Net:    localNet,
 			PubKey: localPK,
 			Port:   localPort,
@@ -155,11 +155,11 @@ func TestRPCClient_Listen(t *testing.T) {
 		var listenLis net.Listener
 		listenErr := errors.New("listen error")
 
-		n := &network.MockNetworker{}
+		n := &appnet.MockNetworker{}
 		n.On("ListenContext", listenCtx, local).Return(listenLis, listenErr)
 
-		network.ClearNetworkers()
-		err := network.AddNetworker(localNet, n)
+		appnet.ClearNetworkers()
+		err := appnet.AddNetworker(localNet, n)
 		require.NoError(t, err)
 
 		lisID, err := cl.Listen(local)
@@ -204,8 +204,8 @@ func TestRPCClient_Accept(t *testing.T) {
 
 		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		wantRemote := network.Addr{
-			Net:    network.TypeDMSG,
+		wantRemote := appnet.Addr{
+			Net:    appnet.TypeDMSG,
 			PubKey: remotePK,
 			Port:   routing.Port(remotePort),
 		}
@@ -241,7 +241,7 @@ func TestRPCClient_Accept(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, err.Error(), listenErr.Error())
 		require.Equal(t, connID, uint16(0))
-		require.Equal(t, remote, network.Addr{})
+		require.Equal(t, remote, appnet.Addr{})
 	})
 }
 

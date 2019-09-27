@@ -6,7 +6,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2/network"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -37,7 +37,7 @@ func NewClient(log *logging.Logger, localPK cipher.PubKey, pid ProcID, rpc RPCCl
 }
 
 // Dial dials the remote node using `remote`.
-func (c *Client) Dial(remote network.Addr) (net.Conn, error) {
+func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	connID, localPort, err := c.rpc.Dial(remote)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (c *Client) Dial(remote network.Addr) (net.Conn, error) {
 	conn := &Conn{
 		id:  connID,
 		rpc: c.rpc,
-		local: network.Addr{
+		local: appnet.Addr{
 			Net:    remote.Net,
 			PubKey: c.pk,
 			Port:   localPort,
@@ -69,8 +69,8 @@ func (c *Client) Dial(remote network.Addr) (net.Conn, error) {
 }
 
 // Listen listens on the specified `port` for the incoming connections.
-func (c *Client) Listen(n network.Type, port routing.Port) (net.Listener, error) {
-	local := network.Addr{
+func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) {
+	local := appnet.Addr{
 		Net:    n,
 		PubKey: c.pk,
 		Port:   port,
