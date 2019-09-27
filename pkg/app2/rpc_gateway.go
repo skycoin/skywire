@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2/network"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -34,19 +34,19 @@ type DialResp struct {
 }
 
 // Dial dials to the remote.
-func (r *RPCGateway) Dial(remote *network.Addr, resp *DialResp) error {
+func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
 	reservedConnID, free, err := r.cm.reserveNextID()
 	if err != nil {
 		return err
 	}
 
-	conn, err := network.Dial(*remote)
+	conn, err := appnet.Dial(*remote)
 	if err != nil {
 		free()
 		return err
 	}
 
-	wrappedConn, err := network.WrapConn(conn)
+	wrappedConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		free()
 		return err
@@ -61,7 +61,7 @@ func (r *RPCGateway) Dial(remote *network.Addr, resp *DialResp) error {
 		return err
 	}
 
-	localAddr := wrappedConn.LocalAddr().(network.Addr)
+	localAddr := wrappedConn.LocalAddr().(appnet.Addr)
 
 	resp.ConnID = *reservedConnID
 	resp.LocalPort = localAddr.Port
@@ -70,13 +70,13 @@ func (r *RPCGateway) Dial(remote *network.Addr, resp *DialResp) error {
 }
 
 // Listen starts listening.
-func (r *RPCGateway) Listen(local *network.Addr, lisID *uint16) error {
+func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) error {
 	nextLisID, free, err := r.lm.reserveNextID()
 	if err != nil {
 		return err
 	}
 
-	l, err := network.Listen(*local)
+	l, err := appnet.Listen(*local)
 	if err != nil {
 		free()
 		return err
@@ -98,7 +98,7 @@ func (r *RPCGateway) Listen(local *network.Addr, lisID *uint16) error {
 
 // AcceptResp contains response parameters for `Accept`.
 type AcceptResp struct {
-	Remote network.Addr
+	Remote appnet.Addr
 	ConnID uint16
 }
 
@@ -120,7 +120,7 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 		return err
 	}
 
-	wrappedConn, err := network.WrapConn(conn)
+	wrappedConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		free()
 		return err
@@ -135,7 +135,7 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 		return err
 	}
 
-	remote := wrappedConn.RemoteAddr().(network.Addr)
+	remote := wrappedConn.RemoteAddr().(appnet.Addr)
 
 	resp.Remote = remote
 	resp.ConnID = *connID
