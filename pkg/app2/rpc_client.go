@@ -3,7 +3,7 @@ package app2
 import (
 	"net/rpc"
 
-	"github.com/skycoin/skywire/pkg/app2/network"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -11,9 +11,9 @@ import (
 
 // RPCClient describes RPC interface to communicate with the server.
 type RPCClient interface {
-	Dial(remote network.Addr) (connID uint16, localPort routing.Port, err error)
-	Listen(local network.Addr) (uint16, error)
-	Accept(lisID uint16) (connID uint16, remote network.Addr, err error)
+	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
+	Listen(local appnet.Addr) (uint16, error)
+	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
 	Write(connID uint16, b []byte) (int, error)
 	Read(connID uint16, b []byte) (int, error)
 	CloseConn(id uint16) error
@@ -33,7 +33,7 @@ func NewRPCClient(rpc *rpc.Client) RPCClient {
 }
 
 // Dial sends `Dial` command to the server.
-func (c *rpcCLient) Dial(remote network.Addr) (connID uint16, localPort routing.Port, err error) {
+func (c *rpcCLient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
 	var resp DialResp
 	if err := c.rpc.Call("RPCGateway.Dial", &remote, &resp); err != nil {
 		return 0, 0, err
@@ -43,7 +43,7 @@ func (c *rpcCLient) Dial(remote network.Addr) (connID uint16, localPort routing.
 }
 
 // Listen sends `Listen` command to the server.
-func (c *rpcCLient) Listen(local network.Addr) (uint16, error) {
+func (c *rpcCLient) Listen(local appnet.Addr) (uint16, error) {
 	var lisID uint16
 	if err := c.rpc.Call("RPCGateway.Listen", &local, &lisID); err != nil {
 		return 0, err
@@ -53,10 +53,10 @@ func (c *rpcCLient) Listen(local network.Addr) (uint16, error) {
 }
 
 // Accept sends `Accept` command to the server.
-func (c *rpcCLient) Accept(lisID uint16) (connID uint16, remote network.Addr, err error) {
+func (c *rpcCLient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error) {
 	var acceptResp AcceptResp
 	if err := c.rpc.Call("RPCGateway.Accept", &lisID, &acceptResp); err != nil {
-		return 0, network.Addr{}, err
+		return 0, appnet.Addr{}, err
 	}
 
 	return acceptResp.ConnID, acceptResp.Remote, nil

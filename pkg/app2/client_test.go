@@ -8,7 +8,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/app2/network"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -19,8 +19,8 @@ func TestClient_Dial(t *testing.T) {
 
 	remotePK, _ := cipher.GenerateKeyPair()
 	remotePort := routing.Port(120)
-	remote := network.Addr{
-		Net:    network.TypeDMSG,
+	remote := appnet.Addr{
+		Net:    appnet.TypeDMSG,
 		PubKey: remotePK,
 		Port:   remotePort,
 	}
@@ -38,7 +38,7 @@ func TestClient_Dial(t *testing.T) {
 		wantConn := &Conn{
 			id:  dialConnID,
 			rpc: rpc,
-			local: network.Addr{
+			local: appnet.Addr{
 				Net:    remote.Net,
 				PubKey: localPK,
 				Port:   dialLocalPort,
@@ -129,8 +129,8 @@ func TestClient_Listen(t *testing.T) {
 	pid := ProcID(1)
 
 	port := routing.Port(1)
-	local := network.Addr{
-		Net:    network.TypeDMSG,
+	local := appnet.Addr{
+		Net:    appnet.TypeDMSG,
 		PubKey: localPK,
 		Port:   port,
 	}
@@ -150,7 +150,7 @@ func TestClient_Listen(t *testing.T) {
 			addr: local,
 		}
 
-		listener, err := cl.Listen(network.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDMSG, port)
 		require.Nil(t, err)
 
 		appListener, ok := listener.(*Listener)
@@ -177,7 +177,7 @@ func TestClient_Listen(t *testing.T) {
 		_, err := cl.lm.add(listenLisID, nil)
 		require.NoError(t, err)
 
-		listener, err := cl.Listen(network.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDMSG, port)
 		require.Equal(t, err, errValueAlreadyExists)
 		require.Nil(t, listener)
 	})
@@ -197,7 +197,7 @@ func TestClient_Listen(t *testing.T) {
 		_, err := cl.lm.add(listenLisID, nil)
 		require.NoError(t, err)
 
-		listener, err := cl.Listen(network.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDMSG, port)
 		require.Equal(t, err, errValueAlreadyExists)
 		require.Nil(t, listener)
 	})
@@ -210,7 +210,7 @@ func TestClient_Listen(t *testing.T) {
 
 		cl := NewClient(l, localPK, pid, rpc)
 
-		listener, err := cl.Listen(network.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDMSG, port)
 		require.Equal(t, listenErr, err)
 		require.Nil(t, listener)
 	})
