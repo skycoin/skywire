@@ -4,8 +4,7 @@ import (
 	"net"
 
 	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/pkg/app2/network"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 )
 
 // Listener is a listener for app server connections.
@@ -14,7 +13,7 @@ type Listener struct {
 	log     *logging.Logger
 	id      uint16
 	rpc     RPCClient
-	addr    network.Addr
+	addr    appnet.Addr
 	cm      *idManager // contains conns associated with their IDs
 	freeLis func()
 }
