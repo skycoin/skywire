@@ -40,10 +40,10 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	dmsgC := dmsg.NewClient(
 		conf.PubKey,
 		conf.SecKey,
-		disc.NewHTTP(conf.Messaging.Discovery),
+		disc.NewHTTP(conf.Dmsg.Discovery),
 		dmsg.SetLogger(logger.PackageLogger(dmsg.Type)),
 	)
-	if err := dmsgC.InitiateServerConnections(ctx, conf.Messaging.ServerCount); err != nil {
+	if err := dmsgC.InitiateServerConnections(ctx, conf.Dmsg.ServerCount); err != nil {
 		return nil, fmt.Errorf("failed to init dmsg: %s", err)
 	}
 	log.Info("connected to dmsg servers")
@@ -58,7 +58,7 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 		Logger:   log,
 		dmsgC:    dmsgC,
 		dmsgL:    dmsgL,
-		srvCount: conf.Messaging.ServerCount,
+		srvCount: conf.Dmsg.ServerCount,
 		metrics:  metrics,
 	}, nil
 }

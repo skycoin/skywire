@@ -8,7 +8,7 @@ This document is to specify the tests currently missing within `dmsg` (and that 
 
 The individual entities of `dmsg` (`dmsg.Client` and `dmsg.Server`), should be capable of dealing with erroneous (and in the future, malicious) behaviour of remote entities.
 
-Note that even though `messaging-discovery` is also considered to be an entity of `dmsg`, however it's mechanics are simple and will not be tested here.
+Note that even though `dmsg-discovery` is also considered to be an entity of `dmsg`, however it's mechanics are simple and will not be tested here.
 
 **`failed_accepts_should_not_result_in_hang`**
 
@@ -52,7 +52,7 @@ Note that even though `messaging-discovery` is also considered to be an entity o
   - Server disconnects
 - Then:
   - Transports should be closed
-  
+
 **`server_disconnect_should_close_transports_while_communication_is_going_on`**
 
 - Given:
@@ -103,13 +103,13 @@ Also we need some kind of control panel from which we will run events. Events ma
   - second, we pick a corresponding number of events, each of them picked randomly
   - third, based on the probability of each event we calculate whether it will be executed or not
   - finally, we execute all the winner-events in goroutines
-  
+
 Before running each of the picked events we may need to take a snapshot of the whole system to check consistency
 
-Event type may be an struct containing function with some signature. Also this struct should have probability of the event, maybe the type of the event. 
+Event type may be an struct containing function with some signature. Also this struct should have probability of the event, maybe the type of the event.
 
 Running event should result in a snapshot of system's previous state. Snapshot should allow to simulate the event and return a new state. So this way we:
   - run a series of N events, get a series of N snapshots
   - for snapshots 0...N we pick (I)th snapshot and simulate an event on it which results in a new state. This new state may then be compared to the (I+1)th snapshot for consistency.
-  
+
 Snapshot should be able to dump the state in some form comfortable to examine in case something is wrong

@@ -26,7 +26,7 @@ type APIClient interface {
 	AvailableServers(context.Context) ([]*Entry, error)
 }
 
-// HTTPClient represents a client that communicates with a messaging-discovery service through http, it
+// HTTPClient represents a client that communicates with a dmsg-discovery service through http, it
 // implements APIClient
 type httpClient struct {
 	client    http.Client
@@ -45,7 +45,7 @@ func NewHTTP(address string) APIClient {
 // Entry retrieves an entry associated with the given public key.
 func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry, error) {
 	var entry Entry
-	endpoint := fmt.Sprintf("%s/messaging-discovery/entry/%s", c.address, publicKey)
+	endpoint := fmt.Sprintf("%s/dmsg-discovery/entry/%s", c.address, publicKey)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -86,7 +86,7 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 
 // SetEntry creates a new Entry.
 func (c *httpClient) SetEntry(ctx context.Context, e *Entry) error {
-	endpoint := c.address + "/messaging-discovery/entry/"
+	endpoint := c.address + "/dmsg-discovery/entry/"
 	marshaledEntry, err := json.Marshal(e)
 	if err != nil {
 		return err
@@ -109,6 +109,7 @@ func (c *httpClient) SetEntry(ctx context.Context, e *Entry) error {
 		}()
 	}
 	if err != nil {
+		fmt.Println("req.Do err")
 		return err
 	}
 
@@ -123,6 +124,7 @@ func (c *httpClient) SetEntry(ctx context.Context, e *Entry) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println("response msg err")
 		return errFromString(httpResponse.Message)
 	}
 	return nil
@@ -164,7 +166,7 @@ func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry
 // AvailableServers returns list of available servers.
 func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 	var entries []*Entry
-	endpoint := c.address + "/messaging-discovery/available_servers"
+	endpoint := c.address + "/dmsg-discovery/available_servers"
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
