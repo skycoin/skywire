@@ -9,9 +9,9 @@ import (
 	"os/user"
 	"testing"
 
-	"github.com/creack/pty"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/creack/pty"
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"

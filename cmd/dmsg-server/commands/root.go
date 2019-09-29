@@ -1,6 +1,12 @@
 package commands
 
 import (
+	"log"
+	"log/syslog"
+	"net"
+	"net/http"
+	"os"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -8,24 +14,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
-	"log"
-	"log/syslog"
-	"net"
-	"net/http"
-	"os"
 )
 
 var (
-	pubKey       string
-	secKey       string
-	localAddr    string
-	publicAddr   string
+	pubKey        string
+	secKey        string
+	localAddr     string
+	publicAddr    string
 	discoveryAddr string
-	logLvl       string
-	metricsAddr  string
-	syslogAddr   string
-	tag          string
-	cfgFromStdin bool
+	logLvl        string
+	metricsAddr   string
+	syslogAddr    string
+	tag           string
+	cfgFromStdin  bool
 )
 
 // Config is a dmsg-server config
