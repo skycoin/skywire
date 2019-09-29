@@ -40,6 +40,9 @@ type RPCClient interface {
 	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 
+	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
+	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
+
 	RoutingRules() ([]*RoutingEntry, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	AddRoutingRule(rule routing.Rule) (routing.RouteID, error)
@@ -174,6 +177,18 @@ func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, public bo
 // RemoveTransport calls RemoveTransport.
 func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
+}
+
+func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+	var entries []*transport.EntryWithStatus
+	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
+	return entries, err
+}
+
+func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+	var entry transport.EntryWithStatus
+	err := rc.Call("DiscoverTransportByID", &id, &entry)
+	return &entry, err
 }
 
 // RoutingRules calls RoutingRules.
@@ -468,6 +483,14 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 		}
 		return fmt.Errorf("transport of id '%s' is not found", tid)
 	})
+}
+
+func (mc *mockRPCClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+	return nil, ErrNotImplemented
+}
+
+func (mc *mockRPCClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+	return nil, ErrNotImplemented
 }
 
 // RoutingRules implements RPCClient.
