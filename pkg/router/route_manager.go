@@ -70,7 +70,10 @@ func (rm *routeManager) Close() error {
 // Serve initiates serving connections by route manager.
 func (rm *routeManager) Serve() {
 	// Routing table garbage collect loop.
-	go rm.rtGarbageCollectLoop()
+	// TODO(evanlinjin): This is disabled for now as it is causing issues.
+	// TODO - When a rule for a transport is deleted, the routes using the tp are not informed.
+	// TODO - Hence, sending edge believes in successful
+	// go rm.rtGarbageCollectLoop()
 
 	// Accept setup node request loop.
 	for {
@@ -134,9 +137,12 @@ func (rm *routeManager) handleSetupConn(conn net.Conn) error {
 
 	if err != nil {
 		rm.Logger.Infof("Setup request with type %s failed: %s", t, err)
-		return proto.WritePacket(setup.RespFailure, err.Error())
+		_ = proto.WritePacket(setup.RespFailure, err.Error()) //nolint:errcheck
+		return err
 	}
-	return proto.WritePacket(setup.RespSuccess, respBody)
+
+	_ = proto.WritePacket(setup.RespSuccess, respBody) //nolint:errcheck
+	return nil
 }
 
 func (rm *routeManager) rtGarbageCollectLoop() {
@@ -225,6 +231,9 @@ func (rm *routeManager) setRoutingRules(data []byte) error {
 	if err := json.Unmarshal(data, &rules); err != nil {
 		return err
 	}
+
+	jb, _ := json.MarshalIndent(rules, "", "\t") //nolint:errcheck
+	rm.Logger.Infof("Adding rules: %s", string(jb))
 
 	for _, rule := range rules {
 		routeID := rule.RequestRouteID()
