@@ -70,10 +70,7 @@ func (rm *routeManager) Close() error {
 // Serve initiates serving connections by route manager.
 func (rm *routeManager) Serve() {
 	// Routing table garbage collect loop.
-	// TODO(evanlinjin): This is disabled for now as it is causing issues.
-	// TODO - When a rule for a transport is deleted, the routes using the tp are not informed.
-	// TODO - Hence, sending edge believes in successful
-	// go rm.rtGarbageCollectLoop()
+	go rm.rtGarbageCollectLoop()
 
 	// Accept setup node request loop.
 	for {

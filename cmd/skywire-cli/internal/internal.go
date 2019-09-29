@@ -35,6 +35,7 @@ func ParseUUID(name, v string) uuid.UUID {
 	return id
 }
 
+// Constants for default services.
 const (
 	DefaultTpDisc      = "http://transport.discovery.skywire.cc"
 	DefaultDmsgDisc    = "http://dmsg.discovery.skywire.cc"
