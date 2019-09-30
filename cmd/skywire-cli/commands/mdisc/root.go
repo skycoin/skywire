@@ -7,6 +7,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/spf13/cobra"
 
@@ -16,7 +18,7 @@ import (
 var mdAddr string
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", internal.DefaultDmsgDisc, "address of messaging discovery server")
+	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of messaging discovery server")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with messaging services.
