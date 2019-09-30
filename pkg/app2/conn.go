@@ -2,6 +2,7 @@ package app2
 
 import (
 	"net"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app2/appnet"
@@ -10,11 +11,12 @@ import (
 // Conn is a connection from app client to the server.
 // Implements `net.Conn`.
 type Conn struct {
-	id       uint16
-	rpc      RPCClient
-	local    appnet.Addr
-	remote   appnet.Addr
-	freeConn func()
+	id         uint16
+	rpc        RPCClient
+	local      appnet.Addr
+	remote     appnet.Addr
+	freeConn   func()
+	freeConnMx sync.RWMutex
 }
 
 func (c *Conn) Read(b []byte) (int, error) {
@@ -32,6 +34,8 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 func (c *Conn) Close() error {
 	defer func() {
+		c.freeConnMx.RLock()
+		defer c.freeConnMx.RUnlock()
 		if c.freeConn != nil {
 			c.freeConn()
 		}
