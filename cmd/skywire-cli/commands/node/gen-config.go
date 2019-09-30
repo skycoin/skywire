@@ -135,7 +135,7 @@ func defaultSkychatConfig() visor.AppConfig {
 		Version:   skyenv.SkychatVersion,
 		AutoStart: true,
 		Port:      routing.Port(skyenv.SkychatPort),
-		Args:      []string{fmt.Sprintf(`--addr="%s"`, skyenv.SkychatAddr)},
+		Args:      []string{"-addr", skyenv.SkychatAddr},
 	}
 }
 
@@ -151,7 +151,7 @@ func defaultSkysshConfig() visor.AppConfig {
 func defaultSkyproxyConfig(passcode string) visor.AppConfig {
 	var args []string
 	if passcode != "" {
-		args = []string{fmt.Sprintf(`--passcode="%s"`, passcode)}
+		args = []string{"-passcode", passcode}
 	}
 	return visor.AppConfig{
 		App:       skyenv.SkyproxyName,
