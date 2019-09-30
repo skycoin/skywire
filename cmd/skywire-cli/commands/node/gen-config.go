@@ -156,7 +156,7 @@ func defaultSkyproxyConfig(passcode string) visor.AppConfig {
 	return visor.AppConfig{
 		App:       skyenv.SkyproxyName,
 		Version:   skyenv.SkyproxyVersion,
-		AutoStart: false,
+		AutoStart: true,
 		Port:      routing.Port(skyenv.SkyproxyPort),
 		Args:      args,
 	}
