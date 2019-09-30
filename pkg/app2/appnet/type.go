@@ -6,6 +6,8 @@ type Type string
 const (
 	// TypeDMSG is a network type for DMSG communication.
 	TypeDMSG Type = "dmsg"
+	// TypeSkynet is a network type for skywire communication.
+	TypeSkynet Type = "skynet"
 )
 
 // IsValid checks whether the network contains valid value for the type.
@@ -16,6 +18,7 @@ func (n Type) IsValid() bool {
 
 var (
 	validNetworks = map[Type]struct{}{
-		TypeDMSG: {},
+		TypeDMSG:   {},
+		TypeSkynet: {},
 	}
 )

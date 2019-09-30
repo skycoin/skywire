@@ -41,20 +41,16 @@ func (l *Listener) IntroduceTransport(tp *Transport) error {
 	defer l.mx.Unlock()
 
 	if l.isClosed() {
+		_ = tp.Close() //nolint:errcheck
 		return ErrClientClosed
 	}
 
 	select {
-	case <-l.done:
-		return ErrClientClosed
-
 	case l.accept <- tp:
-		if err := tp.WriteAccept(); err != nil {
-			return err
-		}
-		go tp.Serve()
 		return nil
-
+	case <-l.done:
+		_ = tp.Close() //nolint:errcheck
+		return ErrClientClosed
 	default:
 		_ = tp.Close() //nolint:errcheck
 		return ErrClientAcceptMaxed
