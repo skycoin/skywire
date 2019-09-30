@@ -65,5 +65,8 @@ func (s *Server) Close() error {
 type passcodeCredentials string
 
 func (s passcodeCredentials) Valid(user, password string) bool {
+	if len(s) == 0 {
+		return true
+	}
 	return user == string(s) || password == string(s)
 }

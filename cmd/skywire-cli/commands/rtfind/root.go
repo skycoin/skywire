@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
 
@@ -16,7 +18,7 @@ var frMinHops, frMaxHops uint16
 var timeout time.Duration
 
 func init() {
-	RootCmd.Flags().StringVar(&frAddr, "addr", internal.DefaultRouteFinder, "address in which to contact route finder service")
+	RootCmd.Flags().StringVar(&frAddr, "addr", skyenv.DefaultRouteFinderAddr, "address in which to contact route finder service")
 	RootCmd.Flags().Uint16Var(&frMinHops, "min-hops", 1, "min hops for the returning routeFinderRoutesCmd")
 	RootCmd.Flags().Uint16Var(&frMaxHops, "max-hops", 1000, "max hops for the returning routeFinderRoutesCmd")
 	RootCmd.Flags().DurationVar(&timeout, "timeout", 10*time.Second, "timeout for remote server requests")
