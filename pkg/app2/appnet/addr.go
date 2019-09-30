@@ -45,6 +45,12 @@ func ConvertAddr(addr net.Addr) (Addr, error) {
 			PubKey: a.PK,
 			Port:   routing.Port(a.Port),
 		}, nil
+	case routing.Addr:
+		return Addr{
+			Net:    TypeSkynet,
+			PubKey: a.PubKey,
+			Port:   a.Port,
+		}, nil
 	default:
 		return Addr{}, ErrUnknownAddrType
 	}
