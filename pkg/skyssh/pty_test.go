@@ -1,6 +1,6 @@
 // +build dragonfly freebsd linux netbsd openbsd
 
-package therealssh
+package skyssh
 
 import (
 	"net"

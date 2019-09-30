@@ -34,7 +34,7 @@
       "args": []
     },
     {
-      "app": "SSH",
+      "app": "skyssh",
       "version": "1.0",
       "auto_start": true,
       "port": 2,

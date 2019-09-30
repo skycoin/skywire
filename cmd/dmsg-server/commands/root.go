@@ -118,28 +118,6 @@ func parseEnvVars() {
 	logLvl = os.Getenv("DMSG_SERVER_LOG_LVL")
 }
 
-/*
-func parseConfig(configFile string) *Config {
-	var rdr io.Reader
-	var err error
-	if !cfgFromStdin {
-		rdr, err = os.Open(filepath.Clean(configFile))
-		if err != nil {
-			log.Fatalf("Failed to open config: %s", err)
-		}
-	} else {
-		rdr = bufio.NewReader(os.Stdin)
-	}
-
-	conf := &Config{}
-	if err := json.NewDecoder(rdr).Decode(&conf); err != nil {
-		log.Fatalf("Failed to decode %s: %s", rdr, err)
-	}
-
-	return conf
-}
-*/
-
 // Execute executes root CLI command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {

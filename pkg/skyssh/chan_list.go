@@ -1,18 +1,18 @@
-package therealssh
+package skyssh
 
 import "sync"
 
 type chanList struct {
 	sync.Mutex
 
-	chans []*SSHChannel
+	chans []*skysshChannel
 }
 
 func newChanList() *chanList {
-	return &chanList{chans: []*SSHChannel{}}
+	return &chanList{chans: []*skysshChannel{}}
 }
 
-func (c *chanList) add(sshCh *SSHChannel) uint32 {
+func (c *chanList) add(sshCh *skysshChannel) uint32 {
 	c.Lock()
 	defer c.Unlock()
 
@@ -27,7 +27,7 @@ func (c *chanList) add(sshCh *SSHChannel) uint32 {
 	return uint32(len(c.chans) - 1)
 }
 
-func (c *chanList) getChannel(id uint32) *SSHChannel {
+func (c *chanList) getChannel(id uint32) *skysshChannel {
 	c.Lock()
 	defer c.Unlock()
 
@@ -38,10 +38,10 @@ func (c *chanList) getChannel(id uint32) *SSHChannel {
 	return nil
 }
 
-func (c *chanList) dropAll() []*SSHChannel {
+func (c *chanList) dropAll() []*skysshChannel {
 	c.Lock()
 	defer c.Unlock()
-	var r []*SSHChannel
+	var r []*skysshChannel
 
 	for _, ch := range c.chans {
 		if ch == nil {

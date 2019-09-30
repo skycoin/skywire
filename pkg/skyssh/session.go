@@ -1,4 +1,4 @@
-package therealssh
+package skyssh
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 )
 
 // Log is the package level logger, which can be replaced from outside
-var Log = logging.MustGetLogger("therealssh")
+var Log = logging.MustGetLogger("skyssh")
 
 // Session represents PTY sessions. Channel normally handles Session's lifecycle.
 type Session struct {

@@ -1,4 +1,4 @@
-package therealssh
+package skyssh
 
 import (
 	"encoding/binary"

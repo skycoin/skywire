@@ -1,4 +1,4 @@
-package therealssh
+package skyssh
 
 import (
 	"encoding/binary"
@@ -96,7 +96,7 @@ func TestChannelServeSocket(t *testing.T) {
 	in, out := net.Pipe()
 	ch := OpenChannel(1, routing.Addr{PubKey: cipher.PubKey{}, Port: Port}, in)
 
-	assert.Equal(t, filepath.Join(os.TempDir(), "therealsshd-1"), ch.SocketPath())
+	assert.Equal(t, filepath.Join(os.TempDir(), "skysshd-1"), ch.SocketPath())
 
 	serveErr := make(chan error, 1)
 	go func() {

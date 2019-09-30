@@ -7,8 +7,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+
+	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 // Errors related to REQUEST frames.

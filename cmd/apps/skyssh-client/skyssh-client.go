@@ -11,20 +11,20 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
+	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/skyssh"
 )
 
 var log *logging.MasterLogger
 
 func main() {
-	log = app.NewLogger("SSH-client")
-	ssh.Log = log.PackageLogger("therealssh")
+	log = app.NewLogger("skyssh-client")
+	ssh.Log = log.PackageLogger("skyssh")
 
 	var rpcAddr = flag.String("rpc", ":2222", "Client RPC address to listen on")
 	var debug = flag.Bool("debug", false, "enable debug messages")
 	flag.Parse()
 
-	config := &app.Config{AppName: "SSH-client", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+	config := &app.Config{AppName: "skyssh-client", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
 	sshApp, err := app.Setup(config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)

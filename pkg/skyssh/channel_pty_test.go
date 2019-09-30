@@ -1,6 +1,6 @@
 // +build !no_ci
 
-package therealssh
+package skyssh
 
 import (
 	"net"

@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 
-	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
+	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/skyssh"
 )
 
 var (
@@ -32,8 +32,8 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "SSH-cli [user@]remotePK [command] [args...]",
-	Short: "Client for the SSH-client app",
+	Use:   "skyssh-cli [user@]remotePK [command] [args...]",
+	Short: "Client for the skyssh-client app",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		if ptyMode {

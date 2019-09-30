@@ -1,4 +1,4 @@
-package therealssh
+package skyssh
 
 import (
 	"encoding/binary"
@@ -43,7 +43,7 @@ func NewClient(rpcAddr string, d dialer) (net.Listener, *Client, error) {
 }
 
 // OpenChannel requests new Channel on the remote Server.
-func (c *Client) OpenChannel(remotePK cipher.PubKey) (localID uint32, sshCh *SSHChannel, cErr error) {
+func (c *Client) OpenChannel(remotePK cipher.PubKey) (localID uint32, sshCh *skysshChannel, cErr error) {
 	var conn net.Conn
 	var err error
 
@@ -83,7 +83,7 @@ func (c *Client) OpenChannel(remotePK cipher.PubKey) (localID uint32, sshCh *SSH
 	return localID, sshCh, cErr
 }
 
-func (c *Client) resolveChannel(remotePK cipher.PubKey, localID uint32) (*SSHChannel, error) {
+func (c *Client) resolveChannel(remotePK cipher.PubKey, localID uint32) (*skysshChannel, error) {
 	sshCh := c.chans.getChannel(localID)
 	if sshCh == nil {
 		return nil, errors.New("channel is not opened")
@@ -151,7 +151,7 @@ func (c *Client) Close() error {
 
 	for _, sshCh := range c.chans.dropAll() {
 		if err := sshCh.Close(); err != nil {
-			Log.WithError(err).Warn("Failed to close SSH channel")
+			Log.WithError(err).Warn("Failed to close skyssh channel")
 		}
 	}
 
@@ -165,7 +165,7 @@ type RPCClient struct {
 
 // RequestPTY defines RPC request for a new PTY session.
 func (rpc *RPCClient) RequestPTY(args *RequestPTYArgs, channelID *uint32) error {
-	Log.Debugln("requesting SSH channel")
+	Log.Debugln("requesting skyssh channel")
 	localID, channel, err := rpc.c.OpenChannel(args.RemotePK)
 	if err != nil {
 		return err

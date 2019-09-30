@@ -11,21 +11,21 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
+	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/skyssh"
 )
 
 var log *logging.MasterLogger
 
 func main() {
-	log = app.NewLogger("SSH")
-	ssh.Log = log.PackageLogger("therealssh")
+	log = app.NewLogger("skyssh")
+	ssh.Log = log.PackageLogger("skyssh")
 
-	var authFile = flag.String("auth", "~/.therealssh/authorized_keys", "Auth file location. Should contain one PubKey per line.")
+	var authFile = flag.String("auth", "~/.skyssh/authorized_keys", "Auth file location. Should contain one PubKey per line.")
 	var debug = flag.Bool("debug", false, "enable debug messages")
 
 	flag.Parse()
 
-	config := &app.Config{AppName: "SSH", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+	config := &app.Config{AppName: "skyssh", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
 	sshApp, err := app.Setup(config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)

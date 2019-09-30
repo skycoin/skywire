@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"io"
 	"math"
 	"sync/atomic"
 	"time"
+
+	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 const (

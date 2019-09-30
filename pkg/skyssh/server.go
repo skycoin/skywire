@@ -1,4 +1,4 @@
-package therealssh
+package skyssh
 
 import (
 	"encoding/binary"
@@ -65,7 +65,7 @@ type Server struct {
 
 // NewServer constructs new Server.
 func NewServer(auth Authorizer, log *logging.MasterLogger) *Server {
-	return &Server{log.PackageLogger("therealssh_server"), auth, newChanList()}
+	return &Server{log.PackageLogger("skyssh_server"), auth, newChanList()}
 }
 
 // OpenChannel opens new client channel.
