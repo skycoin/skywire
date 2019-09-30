@@ -6,6 +6,8 @@ package main
 import (
 	"flag"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
@@ -17,15 +19,15 @@ import (
 var log *logging.MasterLogger
 
 func main() {
-	log = app.NewLogger("SSH")
-	ssh.Log = log.PackageLogger("therealssh")
+	log = app.NewLogger(skyenv.SkysshName)
+	ssh.Log = log.PackageLogger(skyenv.SkysshName)
 
 	var authFile = flag.String("auth", "~/.therealssh/authorized_keys", "Auth file location. Should contain one PubKey per line.")
 	var debug = flag.Bool("debug", false, "enable debug messages")
 
 	flag.Parse()
 
-	config := &app.Config{AppName: "SSH", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+	config := &app.Config{AppName: skyenv.SkysshName, AppVersion: skyenv.SkysshVersion, ProtocolVersion: skyenv.AppProtocolVersion}
 	sshApp, err := app.Setup(config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)

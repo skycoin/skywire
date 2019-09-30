@@ -34,11 +34,3 @@ func ParseUUID(name, v string) uuid.UUID {
 	Catch(err, fmt.Sprintf("failed to parse <%s>:", name))
 	return id
 }
-
-// Constants for default services.
-const (
-	DefaultTpDisc      = "http://transport.discovery.skywire.cc"
-	DefaultDmsgDisc    = "http://dmsg.discovery.skywire.cc"
-	DefaultRouteFinder = "http://routefinder.skywire.cc"
-	DefaultSetupPK     = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
-)
