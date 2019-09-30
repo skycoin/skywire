@@ -3,13 +3,12 @@ package dmsg
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"sync/atomic"
 	"time"
-
-	"github.com/skycoin/dmsg/ioutil"
 
 	"github.com/skycoin/dmsg/cipher"
 )
@@ -17,14 +16,13 @@ import (
 const (
 	// Type returns the transport type string.
 	Type = "dmsg"
+
 	// HandshakePayloadVersion contains payload version to maintain compatibility with future versions
-	// of HandshakePayload format.
+	// of HandshakeData format.
 	HandshakePayloadVersion = "2.0"
 
-	tpBufCap      = math.MaxUint16
-	tpBufFrameCap = math.MaxUint8
-	tpAckCap      = math.MaxUint8
-	headerLen     = 5 // fType(1 byte), chID(2 byte), payLen(2 byte)
+	maxFwdPayLen = math.MaxUint16 // maximum len of FWD payload
+	headerLen    = 5              // fType(1 byte), chID(2 byte), payLen(2 byte)
 )
 
 var (
@@ -54,19 +52,26 @@ func (a Addr) String() string {
 	return fmt.Sprintf("%s:%d", a.PK, a.Port)
 }
 
-// HandshakePayload represents format of payload sent with REQUEST frames.
-type HandshakePayload struct {
+// HandshakeData represents format of payload sent with REQUEST frames.
+type HandshakeData struct {
 	Version  string `json:"version"` // just in case the struct changes.
 	InitAddr Addr   `json:"init_address"`
 	RespAddr Addr   `json:"resp_address"`
+
+	// Window is the advertised read window size.
+	Window int32 `json:"window"`
 }
 
-func marshalHandshakePayload(p HandshakePayload) ([]byte, error) {
-	return json.Marshal(p)
+func marshalHandshakeData(p HandshakeData) []byte {
+	b, err := json.Marshal(p)
+	if err != nil {
+		panic(fmt.Errorf("marshalHandshakeData: %v", err))
+	}
+	return b
 }
 
-func unmarshalHandshakePayload(b []byte) (HandshakePayload, error) {
-	var p HandshakePayload
+func unmarshalHandshakeData(b []byte) (HandshakeData, error) {
+	var p HandshakeData
 	err := json.Unmarshal(b, &p)
 	return p, err
 }
@@ -157,8 +162,13 @@ func (f Frame) Disassemble() (ft FrameType, id uint16, p []byte) {
 func (f Frame) String() string {
 	var p string
 	switch f.Type() {
-	case FwdType, AckType:
-		p = fmt.Sprintf("<seq:%d>", ioutil.DecodeUint16Seq(f.Pay()))
+	case AckType:
+		offset, err := disassembleAckPayload(f.Pay())
+		if err != nil {
+			p = fmt.Sprintf("<offset:%v>", err)
+		} else {
+			p = fmt.Sprintf("<offset:%d>", offset)
+		}
 	}
 	return fmt.Sprintf("<type:%s><id:%d><size:%d>%s", f.Type(), f.TpID(), f.PayLen(), p)
 }
@@ -188,7 +198,7 @@ type writeError struct{ error }
 
 func (e *writeError) Error() string { return "write error: " + e.error.Error() }
 
-// TODO(evanlinjin): Determine if this is still needed, may be useful elsewhere.
+// TODO(evanlinjin): determine if this is still needed.
 //func isWriteError(err error) bool {
 //	_, ok := err.(*writeError)
 //	return ok
@@ -202,26 +212,43 @@ func writeFrame(w io.Writer, f Frame) error {
 	return nil
 }
 
-func writeFwdFrame(w io.Writer, id uint16, seq ioutil.Uint16Seq, p []byte) error {
-	return writeFrame(w, MakeFrame(FwdType, id, append(seq.Encode(), p...)))
+func writeRequestFrame(w io.Writer, id uint16, lAddr, rAddr Addr, lWindow int32) error {
+	return writeFrame(w, MakeFrame(RequestType, id, marshalHandshakeData(
+		HandshakeData{
+			Version:  HandshakePayloadVersion,
+			InitAddr: lAddr,
+			RespAddr: rAddr,
+			Window:   lWindow,
+		})))
+}
+
+func writeAcceptFrame(w io.Writer, id uint16, lAddr, rAddr Addr, lWindow int32) error {
+	return writeFrame(w, MakeFrame(AcceptType, id, marshalHandshakeData(
+		HandshakeData{
+			Version:  HandshakePayloadVersion,
+			InitAddr: rAddr,
+			RespAddr: lAddr,
+			Window:   lWindow,
+		})))
+}
+
+func writeFwdFrame(w io.Writer, id uint16, p []byte) error {
+	return writeFrame(w, MakeFrame(FwdType, id, p))
+}
+
+func writeAckFrame(w io.Writer, id uint16, offset uint16) error {
+	p := make([]byte, 2)
+	binary.BigEndian.PutUint16(p, offset)
+	return writeFrame(w, MakeFrame(AckType, id, p))
+}
+
+func disassembleAckPayload(p []byte) (offset uint16, err error) {
+	if len(p) != 2 {
+		return 0, errors.New("invalid ACK payload size")
+	}
+	return binary.BigEndian.Uint16(p), nil
 }
 
 func writeCloseFrame(w io.Writer, id uint16, reason byte) error {
 	return writeFrame(w, MakeFrame(CloseType, id, []byte{reason}))
-}
-
-func combinePKs(initPK, respPK cipher.PubKey) []byte {
-	return append(initPK[:], respPK[:]...)
-}
-
-func splitPKs(b []byte) (initPK, respPK cipher.PubKey, ok bool) {
-	const pkLen = 33
-
-	if len(b) != pkLen*2 {
-		ok = false
-		return
-	}
-	copy(initPK[:], b[:pkLen])
-	copy(respPK[:], b[pkLen:])
-	return initPK, respPK, true
 }

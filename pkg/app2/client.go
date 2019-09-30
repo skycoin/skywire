@@ -63,7 +63,9 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		return nil, err
 	}
 
+	conn.freeConnMx.Lock()
 	conn.freeConn = free
+	conn.freeConnMx.Unlock()
 
 	return conn, nil
 }
@@ -98,7 +100,9 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 		return nil, err
 	}
 
+	listener.freeLisMx.Lock()
 	listener.freeLis = freeLis
+	listener.freeLisMx.Unlock()
 
 	return listener, nil
 }

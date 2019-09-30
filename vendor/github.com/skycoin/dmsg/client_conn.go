@@ -83,7 +83,7 @@ func (c *ClientConn) addTp(ctx context.Context, rPK cipher.PubKey, lPort, rPort 
 	if err != nil {
 		return nil, err
 	}
-	tp := NewTransport(c.Conn, c.log, Addr{c.lPK, lPort}, Addr{rPK, rPort}, id, func() {
+	tp := NewTransport(c.Conn, c.log, Addr{c.lPK, lPort}, Addr{rPK, rPort}, id, maxFwdPayLen, func() {
 		c.delTp(id)
 		closeCB()
 	})
@@ -129,7 +129,7 @@ func (c *ClientConn) readOK() error {
 }
 
 // This handles 'REQUEST' frames which represent remotely-initiated tps. 'REQUEST' frames should:
-// - have a HandshakePayload marshaled to JSON as payload.
+// - have a HandshakeData marshaled to JSON as payload.
 // - have a resp_pk be of local client.
 // - have an odd tp_id.
 func (c *ClientConn) handleRequestFrame(log *logrus.Entry, id uint16, p []byte) (cipher.PubKey, error) {
@@ -154,7 +154,7 @@ func (c *ClientConn) handleRequestFrame(log *logrus.Entry, id uint16, p []byte) 
 		return initPK, origErr
 	}
 
-	pay, err := unmarshalHandshakePayload(p)
+	pay, err := unmarshalHandshakeData(p)
 	if err != nil {
 		return closeTp(ErrRequestCheckFailed) // TODO(nkryuchkov): reason = payload format is incorrect.
 	}
@@ -171,7 +171,12 @@ func (c *ClientConn) handleRequestFrame(log *logrus.Entry, id uint16, p []byte) 
 		return closeTp(ErrClientClosed) // TODO(nkryuchkov): reason = client is closed.
 	}
 
-	tp := NewTransport(c.Conn, c.log, pay.RespAddr, pay.InitAddr, id, func() { c.delTp(id) })
+	tp := NewTransport(c.Conn, c.log, pay.RespAddr, pay.InitAddr, id, maxFwdPayLen, func() { c.delTp(id) })
+	if err := tp.WriteAccept(int(pay.Window)); err != nil {
+		return initPK, err
+	}
+	go tp.Serve()
+
 	if err := lis.IntroduceTransport(tp); err != nil {
 		return initPK, err
 	}

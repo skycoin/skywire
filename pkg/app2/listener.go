@@ -2,6 +2,7 @@ package app2
 
 import (
 	"net"
+	"sync"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/app2/appnet"
@@ -10,12 +11,13 @@ import (
 // Listener is a listener for app server connections.
 // Implements `net.Listener`.
 type Listener struct {
-	log     *logging.Logger
-	id      uint16
-	rpc     RPCClient
-	addr    appnet.Addr
-	cm      *idManager // contains conns associated with their IDs
-	freeLis func()
+	log       *logging.Logger
+	id        uint16
+	rpc       RPCClient
+	addr      appnet.Addr
+	cm        *idManager // contains conns associated with their IDs
+	freeLis   func()
+	freeLisMx sync.RWMutex
 }
 
 func (l *Listener) Accept() (net.Conn, error) {
@@ -40,13 +42,17 @@ func (l *Listener) Accept() (net.Conn, error) {
 		return nil, err
 	}
 
+	conn.freeConnMx.Lock()
 	conn.freeConn = free
+	conn.freeConnMx.Unlock()
 
 	return conn, nil
 }
 
 func (l *Listener) Close() error {
 	defer func() {
+		l.freeLisMx.RLock()
+		defer l.freeLisMx.RUnlock()
 		if l.freeLis != nil {
 			l.freeLis()
 		}
