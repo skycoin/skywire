@@ -1,6 +1,7 @@
 package app2
 
 import (
+	"fmt"
 	"net/rpc"
 
 	"github.com/skycoin/skywire/pkg/app2/appnet"
@@ -22,20 +23,22 @@ type RPCClient interface {
 
 // rpcClient implements `RPCClient`.
 type rpcCLient struct {
-	rpc *rpc.Client
+	rpc    *rpc.Client
+	appKey string
 }
 
 // NewRPCClient constructs new `rpcClient`.
-func NewRPCClient(rpc *rpc.Client) RPCClient {
+func NewRPCClient(rpc *rpc.Client, appKey string) RPCClient {
 	return &rpcCLient{
-		rpc: rpc,
+		rpc:    rpc,
+		appKey: appKey,
 	}
 }
 
 // Dial sends `Dial` command to the server.
 func (c *rpcCLient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
 	var resp DialResp
-	if err := c.rpc.Call("RPCGateway.Dial", &remote, &resp); err != nil {
+	if err := c.rpc.Call(c.formatMethod("Dial"), &remote, &resp); err != nil {
 		return 0, 0, err
 	}
 
@@ -45,7 +48,7 @@ func (c *rpcCLient) Dial(remote appnet.Addr) (connID uint16, localPort routing.P
 // Listen sends `Listen` command to the server.
 func (c *rpcCLient) Listen(local appnet.Addr) (uint16, error) {
 	var lisID uint16
-	if err := c.rpc.Call("RPCGateway.Listen", &local, &lisID); err != nil {
+	if err := c.rpc.Call(c.formatMethod("Listen"), &local, &lisID); err != nil {
 		return 0, err
 	}
 
@@ -55,7 +58,7 @@ func (c *rpcCLient) Listen(local appnet.Addr) (uint16, error) {
 // Accept sends `Accept` command to the server.
 func (c *rpcCLient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error) {
 	var acceptResp AcceptResp
-	if err := c.rpc.Call("RPCGateway.Accept", &lisID, &acceptResp); err != nil {
+	if err := c.rpc.Call(c.formatMethod("Accept"), &lisID, &acceptResp); err != nil {
 		return 0, appnet.Addr{}, err
 	}
 
@@ -70,7 +73,7 @@ func (c *rpcCLient) Write(connID uint16, b []byte) (int, error) {
 	}
 
 	var n int
-	if err := c.rpc.Call("RPCGateway.Write", &req, &n); err != nil {
+	if err := c.rpc.Call(c.formatMethod("Write"), &req, &n); err != nil {
 		return n, err
 	}
 
@@ -85,7 +88,7 @@ func (c *rpcCLient) Read(connID uint16, b []byte) (int, error) {
 	}
 
 	var resp ReadResp
-	if err := c.rpc.Call("RPCGateway.Read", &req, &resp); err != nil {
+	if err := c.rpc.Call(c.formatMethod("Read"), &req, &resp); err != nil {
 		return 0, err
 	}
 
@@ -96,10 +99,16 @@ func (c *rpcCLient) Read(connID uint16, b []byte) (int, error) {
 
 // CloseConn sends `CloseConn` command to the server.
 func (c *rpcCLient) CloseConn(id uint16) error {
-	return c.rpc.Call("RPCGateway.CloseConn", &id, nil)
+	return c.rpc.Call(c.formatMethod("CloseConn"), &id, nil)
 }
 
 // CloseListener sends `CloseListener` command to the server.
 func (c *rpcCLient) CloseListener(id uint16) error {
-	return c.rpc.Call("RPCGateway.CloseListener", &id, nil)
+	return c.rpc.Call(c.formatMethod("CloseListener"), &id, nil)
+}
+
+// formatMethod formats complete RPC method signature.
+func (c *rpcCLient) formatMethod(method string) string {
+	const methodFmt = "%s.%s"
+	return fmt.Sprintf(methodFmt, c.appKey, method)
 }
