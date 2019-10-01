@@ -24,8 +24,8 @@ const Port = 2
 // Debug enables debug messages.
 var Debug = false
 
-// skysshChannel defines communication channel parameters.
-type skysshChannel struct {
+// Channel defines communication channel parameters.
+type Channel struct {
 	RemoteID   uint32
 	RemoteAddr routing.Addr
 
@@ -43,26 +43,26 @@ type skysshChannel struct {
 	done     chan struct{}
 }
 
-// OpenChannel constructs new skysshChannel with empty Session.
-func OpenChannel(remoteID uint32, remoteAddr routing.Addr, conn net.Conn) *skysshChannel {
-	return &skysshChannel{RemoteID: remoteID, conn: conn, RemoteAddr: remoteAddr, msgCh: make(chan []byte),
+// OpenChannel constructs new Channel with empty Session.
+func OpenChannel(remoteID uint32, remoteAddr routing.Addr, conn net.Conn) *Channel {
+	return &Channel{RemoteID: remoteID, conn: conn, RemoteAddr: remoteAddr, msgCh: make(chan []byte),
 		dataCh: make(chan []byte), done: make(chan struct{})}
 }
 
-// OpenClientChannel constructs new client skysshChannel with empty Session.
-func OpenClientChannel(remoteID uint32, remotePK cipher.PubKey, conn net.Conn) *skysshChannel {
+// OpenClientChannel constructs new client Channel with empty Session.
+func OpenClientChannel(remoteID uint32, remotePK cipher.PubKey, conn net.Conn) *Channel {
 	ch := OpenChannel(remoteID, routing.Addr{PubKey: remotePK, Port: Port}, conn)
 	return ch
 }
 
 // Send sends command message.
-func (sshCh *skysshChannel) Send(cmd CommandType, payload []byte) error {
+func (sshCh *Channel) Send(cmd CommandType, payload []byte) error {
 	data := appendU32([]byte{byte(cmd)}, sshCh.RemoteID)
 	_, err := sshCh.conn.Write(append(data, payload...))
 	return err
 }
 
-func (sshCh *skysshChannel) Read(p []byte) (int, error) {
+func (sshCh *Channel) Read(p []byte) (int, error) {
 	data, more := <-sshCh.dataCh
 	if !more {
 		return 0, io.EOF
@@ -71,14 +71,14 @@ func (sshCh *skysshChannel) Read(p []byte) (int, error) {
 	return copy(p, data), nil
 }
 
-func (sshCh *skysshChannel) Write(p []byte) (n int, err error) {
+func (sshCh *Channel) Write(p []byte) (n int, err error) {
 	n = len(p)
 	err = sshCh.Send(CmdChannelData, p)
 	return
 }
 
 // Request sends request message and waits for response.
-func (sshCh *skysshChannel) Request(requestType RequestType, payload []byte) ([]byte, error) {
+func (sshCh *Channel) Request(requestType RequestType, payload []byte) ([]byte, error) {
 	Log.Debugf("sending request %x", requestType)
 	req := append([]byte{byte(requestType)}, payload...)
 
@@ -95,7 +95,7 @@ func (sshCh *skysshChannel) Request(requestType RequestType, payload []byte) ([]
 }
 
 // Serve starts request handling loop.
-func (sshCh *skysshChannel) Serve() error {
+func (sshCh *Channel) Serve() error {
 	for data := range sshCh.msgCh {
 		var err error
 		Log.Debugf("new request %x", data[0])
@@ -144,12 +144,12 @@ func (sshCh *skysshChannel) Serve() error {
 
 // SocketPath returns unix socket location. This socket is normally
 // used by the CLI to exchange PTY data with a client app.
-func (sshCh *skysshChannel) SocketPath() string {
+func (sshCh *Channel) SocketPath() string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("skysshd-%d", sshCh.RemoteID))
 }
 
 // ServeSocket starts socket handling loop.
-func (sshCh *skysshChannel) ServeSocket() error {
+func (sshCh *Channel) ServeSocket() error {
 	if err := os.Remove(sshCh.SocketPath()); err != nil {
 		Log.WithError(err).Warn("Failed to remove skyssh channel socket file")
 	}
@@ -196,7 +196,7 @@ func (sshCh *skysshChannel) ServeSocket() error {
 }
 
 // OpenPTY creates new PTY Session for the Channel.
-func (sshCh *skysshChannel) OpenPTY(user *user.User, sz *pty.Winsize) (err error) {
+func (sshCh *Channel) OpenPTY(user *user.User, sz *pty.Winsize) (err error) {
 	if sshCh.session != nil {
 		return errors.New("session is already started")
 	}
@@ -212,12 +212,12 @@ func (sshCh *skysshChannel) OpenPTY(user *user.User, sz *pty.Winsize) (err error
 }
 
 // Shell starts shell process on Channel's PTY session.
-func (sshCh *skysshChannel) Shell() error {
+func (sshCh *Channel) Shell() error {
 	return sshCh.Start("shell")
 }
 
 // Start executes provided command on Channel's PTY session.
-func (sshCh *skysshChannel) Start(command string) error {
+func (sshCh *Channel) Start(command string) error {
 	if sshCh.session == nil {
 		return errors.New("session is not started")
 	}
@@ -233,7 +233,7 @@ func (sshCh *skysshChannel) Start(command string) error {
 }
 
 // Run executes provided command on Channel's PTY session and returns output as []byte.
-func (sshCh *skysshChannel) Run(command string) error {
+func (sshCh *Channel) Run(command string) error {
 	if sshCh.session == nil {
 		return errors.New("session is not started")
 	}
@@ -252,7 +252,7 @@ func (sshCh *skysshChannel) Run(command string) error {
 	return err
 }
 
-func (sshCh *skysshChannel) serveSession() error {
+func (sshCh *Channel) serveSession() error {
 	defer func() {
 		if err := sshCh.Send(CmdChannelServerClose, nil); err != nil {
 			Log.WithError(err).Warn("Failed to send to skyssh channel")
@@ -278,7 +278,7 @@ func (sshCh *skysshChannel) serveSession() error {
 }
 
 // WindowChange resize PTY Session size.
-func (sshCh *skysshChannel) WindowChange(sz *pty.Winsize) error {
+func (sshCh *Channel) WindowChange(sz *pty.Winsize) error {
 	if sshCh.session == nil {
 		return errors.New("session is not started")
 	}
@@ -286,7 +286,7 @@ func (sshCh *skysshChannel) WindowChange(sz *pty.Winsize) error {
 	return sshCh.session.WindowChange(sz)
 }
 
-func (sshCh *skysshChannel) close() (closed bool, err error) {
+func (sshCh *Channel) close() (closed bool, err error) {
 	sshCh.doneOnce.Do(func() {
 		closed = true
 
@@ -322,7 +322,7 @@ func (sshCh *skysshChannel) close() (closed bool, err error) {
 }
 
 // Close safely closes Channel resources.
-func (sshCh *skysshChannel) Close() error {
+func (sshCh *Channel) Close() error {
 	if sshCh == nil {
 		return nil
 	}
@@ -339,7 +339,7 @@ func (sshCh *skysshChannel) Close() error {
 }
 
 // IsClosed returns whether the Channel is closed.
-func (sshCh *skysshChannel) IsClosed() bool {
+func (sshCh *Channel) IsClosed() bool {
 	select {
 	case <-sshCh.done:
 		return true
@@ -348,7 +348,7 @@ func (sshCh *skysshChannel) IsClosed() bool {
 	}
 }
 
-func (sshCh *skysshChannel) closeListener() error {
+func (sshCh *Channel) closeListener() error {
 	sshCh.listenerMx.Lock()
 	defer sshCh.listenerMx.Unlock()
 

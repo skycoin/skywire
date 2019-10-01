@@ -89,8 +89,8 @@ dep: ## Sorts dependencies
 host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skyssh.v1.0  ./cmd/apps/skyssh
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skyssh-client.v1.0  ./cmd/apps/skyssh-client
 
@@ -112,8 +112,8 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `skyssh-cli` and
 	${OPTS} go build -o ./skyssh-cli ./cmd/skyssh-cli
 	${OPTS} go build -o ./apps/skychat.v1.0 ./cmd/apps/skychat
 	${OPTS} go build -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	${OPTS} go build -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
+	${OPTS} go build -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
+	${OPTS} go build -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 	${OPTS} go build -o ./apps/skyssh.v1.0  ./cmd/apps/skyssh
 	${OPTS} go build -o ./apps/skyssh-client.v1.0  ./cmd/apps/skyssh-client
 
@@ -131,8 +131,8 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
 	-${DOCKER_OPTS} go build -race -o ./node/apps/skychat.v1.0 ./cmd/apps/skychat
 	-${DOCKER_OPTS} go build -race -o ./node/apps/helloworld.v1.0 ./cmd/apps/helloworld
-	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
+	-${DOCKER_OPTS} go build -race -o ./node/apps/skysocks.v1.0 ./cmd/apps/skysocks
+	-${DOCKER_OPTS} go build -race -o ./node/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 	-${DOCKER_OPTS} go build -race -o ./node/apps/skyssh.v1.0  ./cmd/apps/skyssh
 	-${DOCKER_OPTS} go build -race -o ./node/apps/skyssh-client.v1.0  ./cmd/apps/skyssh-client
 

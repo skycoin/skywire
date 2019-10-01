@@ -217,9 +217,9 @@ The proxy test environment will define the following:
 
 It's really tricky to make socks5 proxy work now from clean start.
 
-Because `socksproxy-client` needs:
+Because `skysocks-client` needs:
 - transport to NodeA
-- NodeA must be running **before** start of `socksproxy-client`
+- NodeA must be running **before** start of `skysocks-client`
 
 Recipe for clean start:
 
@@ -229,7 +229,7 @@ Recipe for clean start:
 4. Stop NodeA, NodeB, NodeC
 5. Restart all nodes
 6. Wait for message in NodeC logs about successful start of
-socksproxy-client
+skysocks-client
 7. Check `lsof -i :9999` that it's really started
 8. Check `curl -v --retry 5 --retry-connrefused 1  --connect-timeout 5 -x socks5://123456:@localhost:9999 https://www.google.com`
 

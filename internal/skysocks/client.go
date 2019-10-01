@@ -1,4 +1,4 @@
-package therealproxy
+package skysocks
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
-// Log is therealproxy package level logger, it can be replaced with a different one from outside the package
-var Log = logging.MustGetLogger("therealproxy")
+// Log is skysocks package level logger, it can be replaced with a different one from outside the package
+var Log = logging.MustGetLogger("skysocks")
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {

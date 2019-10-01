@@ -89,7 +89,7 @@ func defaultConfig() *visor.Config {
 	conf.Apps = []visor.AppConfig{
 		{App: "skychat", Version: "1.0", Port: 1, AutoStart: true, Args: []string{}},
 		{App: "skyssh", Version: "1.0", Port: 2, AutoStart: true, Args: []string{}},
-		{App: "socksproxy", Version: "1.0", Port: 3, AutoStart: true, Args: []string{"-passcode", passcode}},
+		{App: "skysocks", Version: "1.0", Port: 3, AutoStart: true, Args: []string{"-passcode", passcode}},
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
 

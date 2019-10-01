@@ -43,7 +43,7 @@ func NewClient(rpcAddr string, d dialer) (net.Listener, *Client, error) {
 }
 
 // OpenChannel requests new Channel on the remote Server.
-func (c *Client) OpenChannel(remotePK cipher.PubKey) (localID uint32, sshCh *skysshChannel, cErr error) {
+func (c *Client) OpenChannel(remotePK cipher.PubKey) (localID uint32, sshCh *Channel, cErr error) {
 	var conn net.Conn
 	var err error
 
@@ -83,7 +83,7 @@ func (c *Client) OpenChannel(remotePK cipher.PubKey) (localID uint32, sshCh *sky
 	return localID, sshCh, cErr
 }
 
-func (c *Client) resolveChannel(remotePK cipher.PubKey, localID uint32) (*skysshChannel, error) {
+func (c *Client) resolveChannel(remotePK cipher.PubKey, localID uint32) (*Channel, error) {
 	sshCh := c.chans.getChannel(localID)
 	if sshCh == nil {
 		return nil, errors.New("channel is not opened")

@@ -18,7 +18,7 @@ func TestClientOpenChannel(t *testing.T) {
 	c := &Client{dialer, newChanList()}
 
 	type data struct {
-		ch  *skysshChannel
+		ch  *Channel
 		err error
 	}
 	resCh := make(chan data)
