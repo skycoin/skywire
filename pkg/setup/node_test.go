@@ -332,7 +332,7 @@ func TestNode(t *testing.T) {
 		}()
 
 		// client_2 accepts close request.
-		tp, err := clients[2].Listener.AcceptTransport()
+		tp, err := clients[2].Listener.AcceptStream()
 		require.NoError(t, err)
 		defer func() { require.NoError(t, tp.Close()) }()
 
