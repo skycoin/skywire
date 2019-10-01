@@ -490,5 +490,5 @@ func prepClient(t *testing.T, network, addr string) RPCClient {
 	rpcCl, err := rpc.Dial(network, addr)
 	require.NoError(t, err)
 
-	return NewRPCClient(rpcCl)
+	return NewRPCClient(rpcCl, "RPCGateway")
 }
