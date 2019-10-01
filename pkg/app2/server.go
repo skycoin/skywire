@@ -2,11 +2,9 @@ package app2
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/rpc"
 
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 )
 
@@ -33,40 +31,13 @@ func (s *Server) ListenAndServe() error {
 		return err
 	}
 
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			return err
-		}
+	s.rpcS.Accept(l)
 
-		go s.serveConn(conn)
-	}
+	return nil
 }
 
-// serveConn instantiates RPC gateway for an application.
-func (s *Server) serveConn(conn net.Conn) {
-	var appKey cipher.PubKey
-	if _, err := io.ReadFull(conn, appKey[:]); err != nil {
-		s.closeConn(conn)
-		s.log.WithError(err).Error("error reading app key")
-		return
-	}
-
-	appKeyHex := appKey.Hex()
-
-	gateway := newRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_gateway_%s", appKeyHex)))
-	if err := s.rpcS.RegisterName(appKeyHex, gateway); err != nil {
-		s.closeConn(conn)
-		s.log.WithError(err).Errorf("error registering rpc gateway for app with key %s", appKeyHex)
-		return
-	}
-
-	go s.rpcS.ServeConn(conn)
-}
-
-// closeConn closes connection and logs error if any.
-func (s *Server) closeConn(conn net.Conn) {
-	if err := conn.Close(); err != nil {
-		s.log.WithError(err).Error("error closing conn")
-	}
+// AllowApp allows app with the key `appKey` to do RPC calls.
+func (s *Server) AllowApp(appKey string) error {
+	gateway := newRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_gateway_%s", appKey)))
+	return s.rpcS.RegisterName(appKey, gateway)
 }
