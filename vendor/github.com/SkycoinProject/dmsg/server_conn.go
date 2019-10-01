@@ -120,8 +120,8 @@ func (c *ServerConn) Serve(ctx context.Context, getConn getConnFunc) (err error)
 	}()
 
 	defer func() {
-		// Send CLOSE frames to all transports which are established with this dmsg.Client
-		// This ensures that all parties are informed about the transport closing.
+		// Send CLOSE frames to all streams which are established with this dmsg.Client
+		// This ensures that all parties are informed about the stream closing.
 		c.mx.Lock()
 		for _, conn := range c.nextConns {
 			why := byte(0)
@@ -153,7 +153,7 @@ func (c *ServerConn) Serve(ctx context.Context, getConn getConnFunc) (err error)
 
 		switch df.Type {
 		case RequestType:
-			ctx, cancel := context.WithTimeout(ctx, TransportHandshakeTimeout)
+			ctx, cancel := context.WithTimeout(ctx, StreamHandshakeTimeout)
 			_, why, ok := c.handleRequest(ctx, getConn, df.TpID, df.Pay)
 			cancel()
 			if !ok {

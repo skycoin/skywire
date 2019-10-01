@@ -25,8 +25,8 @@ type ClientConn struct {
 	// locally-initiated tps use an even tp_id between local and intermediary dms_server.
 	nextInitID uint16
 
-	// Transports: map of transports to remote dms_clients (key: tp_id, val: transport).
-	tps map[uint16]*Transport
+	// Streams: map of streams to remote dms_clients (key: tp_id, val: stream).
+	tps map[uint16]*Stream
 	mx  sync.RWMutex // to protect tps
 
 	pm *PortManager
@@ -44,7 +44,7 @@ func NewClientConn(log *logging.Logger, pm *PortManager, conn net.Conn, lPK, rPK
 		lPK:        lPK,
 		srvPK:      rPK,
 		nextInitID: randID(true),
-		tps:        make(map[uint16]*Transport),
+		tps:        make(map[uint16]*Stream),
 		pm:         pm,
 		done:       make(chan struct{}),
 	}
@@ -75,7 +75,7 @@ func (c *ClientConn) getNextInitID(ctx context.Context) (uint16, error) {
 	}
 }
 
-func (c *ClientConn) addTp(ctx context.Context, rPK cipher.PubKey, lPort, rPort uint16, closeCB func()) (*Transport, error) {
+func (c *ClientConn) addTp(ctx context.Context, rPK cipher.PubKey, lPort, rPort uint16, closeCB func()) (*Stream, error) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 
@@ -83,7 +83,7 @@ func (c *ClientConn) addTp(ctx context.Context, rPK cipher.PubKey, lPort, rPort 
 	if err != nil {
 		return nil, err
 	}
-	tp := NewTransport(c.Conn, c.log, Addr{c.lPK, lPort}, Addr{rPK, rPort}, id, maxFwdPayLen, func() {
+	tp := NewStream(c.Conn, c.log, Addr{c.lPK, lPort}, Addr{rPK, rPort}, id, maxFwdPayLen, func() {
 		c.delTp(id)
 		closeCB()
 	})
@@ -91,7 +91,7 @@ func (c *ClientConn) addTp(ctx context.Context, rPK cipher.PubKey, lPort, rPort 
 	return tp, nil
 }
 
-func (c *ClientConn) setTp(tp *Transport) {
+func (c *ClientConn) setTp(tp *Stream) {
 	c.mx.Lock()
 	c.tps[tp.id] = tp
 	c.mx.Unlock()
@@ -103,7 +103,7 @@ func (c *ClientConn) delTp(id uint16) {
 	c.mx.Unlock()
 }
 
-func (c *ClientConn) getTp(id uint16) (*Transport, bool) {
+func (c *ClientConn) getTp(id uint16) (*Stream, bool) {
 	c.mx.RLock()
 	tp := c.tps[id]
 	c.mx.RUnlock()
@@ -143,7 +143,7 @@ func (c *ClientConn) handleRequestFrame(log *logrus.Entry, id uint16, p []byte) 
 	// TODO(evanlinjin): derive close reason from error.
 	closeTp := func(origErr error) (cipher.PubKey, error) {
 		if err := writeCloseFrame(c.Conn, id, PlaceholderReason); err != nil {
-			log.WithError(err).Warn("handleRequestFrame: failed to close transport: ending conn to server.")
+			log.WithError(err).Warn("handleRequestFrame: failed to close stream: ending conn to server.")
 			log.WithError(c.Close()).Warn("handleRequestFrame: closing connection to server.")
 			return initPK, origErr
 		}
@@ -171,13 +171,13 @@ func (c *ClientConn) handleRequestFrame(log *logrus.Entry, id uint16, p []byte) 
 		return closeTp(ErrClientClosed) // TODO(nkryuchkov): reason = client is closed.
 	}
 
-	tp := NewTransport(c.Conn, c.log, pay.RespAddr, pay.InitAddr, id, maxFwdPayLen, func() { c.delTp(id) })
+	tp := NewStream(c.Conn, c.log, pay.RespAddr, pay.InitAddr, id, maxFwdPayLen, func() { c.delTp(id) })
 	if err := tp.WriteAccept(int(pay.Window)); err != nil {
 		return initPK, err
 	}
 	go tp.Serve()
 
-	if err := lis.IntroduceTransport(tp); err != nil {
+	if err := lis.IntroduceStream(tp); err != nil {
 		return initPK, err
 	}
 	c.setTp(tp)
@@ -206,7 +206,7 @@ func (c *ClientConn) Serve(ctx context.Context) (err error) {
 		// Delete tp on any failure.
 		if tp, ok := c.getTp(df.TpID); ok {
 			if err := tp.HandleFrame(f); err != nil {
-				log.WithError(err).Warnf("Rejected [%s]: Transport closed.", df.Type)
+				log.WithError(err).Warnf("Rejected [%s]: Stream closed.", df.Type)
 			}
 			continue
 		}
@@ -227,7 +227,7 @@ func (c *ClientConn) Serve(ctx context.Context) (err error) {
 			}(log)
 
 		default:
-			log.Debugf("Ignored [%s]: No transport of given ID.", df.Type)
+			log.Debugf("Ignored [%s]: No stream of given ID.", df.Type)
 			if df.Type != CloseType {
 				if err := writeCloseFrame(c.Conn, df.TpID, PlaceholderReason); err != nil {
 					return err
@@ -237,8 +237,8 @@ func (c *ClientConn) Serve(ctx context.Context) (err error) {
 	}
 }
 
-// DialTransport dials a transport to remote dms_client.
-func (c *ClientConn) DialTransport(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Transport, error) {
+// DialStream dials a stream to remote dms_client.
+func (c *ClientConn) DialStream(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Stream, error) {
 	lPort, closeCB, err := c.pm.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, err
@@ -270,7 +270,7 @@ func (c *ClientConn) close() (closed bool) {
 			tp := tp
 			go func() {
 				if err := tp.Close(); err != nil {
-					log.WithError(err).Warn("Failed to close transport")
+					log.WithError(err).Warn("Failed to close stream")
 				}
 			}()
 		}

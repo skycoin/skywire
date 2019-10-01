@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	// Type returns the transport type string.
+	// Type returns the stream type string.
 	Type = "dmsg"
 
 	// HandshakePayloadVersion contains payload version to maintain compatibility with future versions
@@ -26,8 +26,8 @@ const (
 )
 
 var (
-	// TransportHandshakeTimeout defines the duration a transport handshake should take.
-	TransportHandshakeTimeout = time.Second * 10
+	// StreamHandshakeTimeout defines the duration a stream handshake should take.
+	StreamHandshakeTimeout = time.Second * 10
 
 	// AcceptBufferSize defines the size of the accepts buffer.
 	AcceptBufferSize = 20
@@ -76,7 +76,7 @@ func unmarshalHandshakeData(b []byte) (HandshakeData, error) {
 	return p, err
 }
 
-// determines whether the transport ID is of an initiator or responder.
+// determines whether the stream ID is of an initiator or responder.
 func isInitiatorID(tpID uint16) bool { return tpID%2 == 0 }
 
 func randID(initiator bool) uint16 {

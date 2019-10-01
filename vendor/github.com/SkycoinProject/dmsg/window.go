@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-// LocalWindow represents the read window of a given dmsg.Transport
+// LocalWindow represents the read window of a given dmsg.Stream
 type LocalWindow struct {
 	r   int           // remaining window (in bytes)
 	max int           // max possible window (in bytes)
@@ -40,7 +40,7 @@ func (lw *LocalWindow) Remaining() int {
 }
 
 // Enqueue adds the given payload 'p' to the internal buffer of the window.
-// 'tpDone' indicates whether the associated dmsg.Transport has been closed.
+// 'tpDone' indicates whether the associated dmsg.Stream has been closed.
 func (lw *LocalWindow) Enqueue(p []byte, tpDone chan struct{}) error {
 	lw.mx.Lock()
 	defer lw.mx.Unlock()
@@ -143,7 +143,7 @@ func NewRemoteWindow(size int) *RemoteWindow {
 }
 
 // Grow should be triggered when we receive a remote ACK to grow our record of the remote window.
-// 'tpDone' signals when the associated dmsg.Transport is closed.
+// 'tpDone' signals when the associated dmsg.Stream is closed.
 func (rw *RemoteWindow) Grow(n int, tpDone <-chan struct{}) error {
 	rw.mx.Lock()
 	defer rw.mx.Unlock()
@@ -163,7 +163,7 @@ func (rw *RemoteWindow) Grow(n int, tpDone <-chan struct{}) error {
 	return nil
 }
 
-// Write blocks until all of 'p' is written, an error occurs, or the associated dmsg.Transport is closed.
+// Write blocks until all of 'p' is written, an error occurs, or the associated dmsg.Stream is closed.
 // 'sendFwd' contains the logic to write a FWD frame.
 func (rw *RemoteWindow) Write(p []byte, sendFwd func([]byte) error) (n int, err error) {
 	rw.wMx.Lock()

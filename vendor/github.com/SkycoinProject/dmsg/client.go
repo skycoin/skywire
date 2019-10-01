@@ -44,7 +44,7 @@ func SetLogger(log *logging.Logger) ClientOption {
 	}
 }
 
-// Client implements transport.Factory
+// Client implements stream.Factory
 type Client struct {
 	log *logging.Logger
 
@@ -205,7 +205,7 @@ func (c *Client) findOrConnectToServer(ctx context.Context, srvPK cipher.PubKey)
 	if err != nil {
 		return nil, err
 	}
-	nc, err := noise.WrapConn(tcpConn, ns, TransportHandshakeTimeout)
+	nc, err := noise.WrapConn(tcpConn, ns, StreamHandshakeTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -248,8 +248,8 @@ func (c *Client) Listen(port uint16) (*Listener, error) {
 	return l, nil
 }
 
-// Dial dials a transport to remote dms_client.
-func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Transport, error) {
+// Dial dials a stream to remote dms_client.
+func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Stream, error) {
 	entry, err := c.dc.Entry(ctx, remote)
 	if err != nil {
 		return nil, fmt.Errorf("get entry failure: %s", err)
@@ -266,7 +266,7 @@ func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*
 			c.log.WithError(err).Warn("failed to connect to server")
 			continue
 		}
-		return conn.DialTransport(ctx, remote, port)
+		return conn.DialStream(ctx, remote, port)
 	}
 	return nil, errors.New("failed to find dms_servers for given client pk")
 }
@@ -278,7 +278,7 @@ func (c *Client) Addr() net.Addr {
 	}
 }
 
-// Type returns the transport type.
+// Type returns the stream type.
 func (c *Client) Type() string {
 	return Type
 }

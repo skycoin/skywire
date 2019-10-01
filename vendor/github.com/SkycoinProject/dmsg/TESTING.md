@@ -14,20 +14,20 @@ Note that even though `dmsg-discovery` is also considered to be an entity of `dm
 
 - Given:
   - clientA is connected to clientB via a server.
-  - There is already a single transport established between clientA and clientB.
-  - The single transport is being written/read to/from in a continuous loop.
+  - There is already a single stream established between clientA and clientB.
+  - The single stream is being written/read to/from in a continuous loop.
 - When:
-  - clientA dials transports to clientB until failure (in which clientB does not call `.Accept()`).
+  - clientA dials streams to clientB until failure (in which clientB does not call `.Accept()`).
 - Then:
-  - Read/writes to/from the existing transport should still work.
+  - Read/writes to/from the existing stream should still work.
 
-**`capped_transport_buffer_should_not_result_in_hang`**
+**`capped_stream_buffer_should_not_result_in_hang`**
 
 - Given:
-  - A transport is established between clientA and clientB.
+  - A stream is established between clientA and clientB.
   - clientA writes to clientB until clientB's buffer is capped (or in other words, clientA's write blocks).
 - When:
-  - clientB dials to clientA and begins reading/writing to/from the newly established transport.
+  - clientB dials to clientA and begins reading/writing to/from the newly established stream.
 - Then:
   - It should work as expected still.
 
@@ -39,31 +39,31 @@ Note that even though `dmsg-discovery` is also considered to be an entity of `dm
   - The server restarts.
 - Then:
   - Both clients will automatically reconnect to the server.
-  - Transports can be established between clientA and clientB.
+  - Streams can be established between clientA and clientB.
 
-**`server_disconnect_should_close_transports`**
+**`server_disconnect_should_close_streams`**
 
 - Given:
   - clientA and clientB are connected to a server
   - clientB dials clientA
   - clientA accepts connection
-  - Transports are being created
-  - Some read/write operations are performed on transports
+  - Streams are being created
+  - Some read/write operations are performed on streams
   - Server disconnects
 - Then:
-  - Transports should be closed
+  - Streams should be closed
 
-**`server_disconnect_should_close_transports_while_communication_is_going_on`**
+**`server_disconnect_should_close_streams_while_communication_is_going_on`**
 
 - Given:
   - clientA and clientB are connected to a server
   - clientB dials clientA
   - clientA accepts connection
-  - Transports are being created
+  - Streams are being created
   - Read/write operations are being performed
   - Server disconnects
 - Then:
-  - Transports should be closed
+  - Streams should be closed
 
 **`self_dial_should_work`**
 
@@ -71,8 +71,8 @@ Note that even though `dmsg-discovery` is also considered to be an entity of `dm
   - clientA is connected to a server
   - clientA dials himself
 - Then:
-  - clientA accept connections, transports are being created successfully
-  - clientA is able to write/read to/from transports without errors
+  - clientA accept connections, streams are being created successfully
+  - clientA is able to write/read to/from streams without errors
 
 ### Fuzz testing
 
@@ -85,10 +85,10 @@ Possible events:
 2. Stop random server.
 3. Start random client.
    1. With or without `Accept()` handling.
-   2. With or without `transport.Read()` handling.
+   2. With or without `stream.Read()` handling.
 4. Stop random client.
 5. Random client dials to another random client.
-6. Random write (in len/count) from random established transport.
+6. Random write (in len/count) from random established stream.
 
 Notes:
 1. We have a set number of possible servers and we are to start all these servers prior to running the test. This way the discovery has entries of the servers which the clients can access when starting.
@@ -96,7 +96,7 @@ Notes:
 and run the check every x "events".
 
 
-For this test we must have a set up system consisting of X number of servers, Y number of clients, Z number of transports and a single discovery.
+For this test we must have a set up system consisting of X number of servers, Y number of clients, Z number of streams and a single discovery.
 Also we need some kind of control panel from which we will run events. Events maybe picked as following:
   - each event has it's own probability
   - first, we pick a random number of events to be executed

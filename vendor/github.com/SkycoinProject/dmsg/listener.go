@@ -6,11 +6,11 @@ import (
 	"sync"
 )
 
-// Listener listens for remote-initiated transports.
+// Listener listens for remote-initiated streams.
 type Listener struct {
 	addr Addr // local listening address
 
-	accept chan *Transport
+	accept chan *Stream
 	mx     sync.Mutex // protects 'accept'
 
 	doneFunc func() // callback when done
@@ -21,7 +21,7 @@ type Listener struct {
 func newListener(addr Addr) *Listener {
 	return &Listener{
 		addr:   addr,
-		accept: make(chan *Transport, AcceptBufferSize),
+		accept: make(chan *Stream, AcceptBufferSize),
 		done:   make(chan struct{}),
 	}
 }
@@ -30,10 +30,10 @@ func newListener(addr Addr) *Listener {
 // This should be called right after the listener is created and is not thread safe.
 func (l *Listener) AddCloseCallback(cb func()) { l.doneFunc = cb }
 
-// IntroduceTransport handles a transport after receiving a REQUEST frame.
-func (l *Listener) IntroduceTransport(tp *Transport) error {
+// IntroduceStream handles a stream after receiving a REQUEST frame.
+func (l *Listener) IntroduceStream(tp *Stream) error {
 	if tp.LocalAddr() != l.addr {
-		return fmt.Errorf("failed to accept transport as local addresses does not match: we expected %s but got %s",
+		return fmt.Errorf("failed to accept stream as local addresses does not match: we expected %s but got %s",
 			l.addr, tp.LocalAddr())
 	}
 
@@ -59,11 +59,11 @@ func (l *Listener) IntroduceTransport(tp *Transport) error {
 
 // Accept accepts a connection.
 func (l *Listener) Accept() (net.Conn, error) {
-	return l.AcceptTransport()
+	return l.AcceptStream()
 }
 
-// AcceptTransport accepts a transport connection.
-func (l *Listener) AcceptTransport() (*Transport, error) {
+// AcceptStream accepts a stream connection.
+func (l *Listener) AcceptStream() (*Stream, error) {
 	select {
 	case <-l.done:
 		return nil, ErrClientClosed
@@ -116,5 +116,5 @@ func (l *Listener) isClosed() bool {
 // Addr returns the listener's address.
 func (l *Listener) Addr() net.Addr { return l.addr }
 
-// Type returns the transport type.
+// Type returns the stream type.
 func (l *Listener) Type() string { return Type }

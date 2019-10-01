@@ -76,11 +76,11 @@ func (sn *Node) Serve(ctx context.Context) error {
 	sn.Logger.Info("serving setup node")
 
 	for {
-		conn, err := sn.dmsgL.AcceptTransport()
+		conn, err := sn.dmsgL.AcceptStream()
 		if err != nil {
 			return err
 		}
-		go func(conn *dmsg.Transport) {
+		go func(conn *dmsg.Stream) {
 			if err := sn.handleRequest(ctx, conn); err != nil {
 				sn.Logger.Warnf("Failed to serve Transport: %s", err)
 			}
@@ -88,7 +88,7 @@ func (sn *Node) Serve(ctx context.Context) error {
 	}
 }
 
-func (sn *Node) handleRequest(ctx context.Context, tr *dmsg.Transport) error {
+func (sn *Node) handleRequest(ctx context.Context, tr *dmsg.Stream) error {
 	ctx, cancel := context.WithTimeout(ctx, RequestTimeout)
 	defer cancel()
 

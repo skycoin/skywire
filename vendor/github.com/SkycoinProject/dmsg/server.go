@@ -135,7 +135,7 @@ func (s *Server) Serve() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := s.retryUpdateEntry(ctx, TransportHandshakeTimeout); err != nil {
+	if err := s.retryUpdateEntry(ctx, StreamHandshakeTimeout); err != nil {
 		return fmt.Errorf("updating server's client entry failed with: %s", err)
 	}
 
