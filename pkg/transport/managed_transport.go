@@ -8,8 +8,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"

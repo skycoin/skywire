@@ -1,15 +1,15 @@
 .DEFAULT_GOAL := help
-.PHONY : check lint install-linters dep test 
+.PHONY : check lint install-linters dep test
 .PHONY : build  clean install  format  bin
-.PHONY : host-apps bin 
+.PHONY : host-apps bin
 .PHONY : run stop config
-.PHONY : docker-image  docker-clean docker-network  
-.PHONY : docker-apps docker-bin docker-volume 
-.PHONY : docker-run docker-stop     
+.PHONY : docker-image  docker-clean docker-network
+.PHONY : docker-apps docker-bin docker-volume
+.PHONY : docker-run docker-stop
 
 OPTS?=GO111MODULE=on
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
-DOCKER_NETWORK?=SKYNET 
+DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
@@ -18,7 +18,7 @@ BUILD_OPTS?=-race
 
 check: lint test ## Run linters and tests
 
-build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS} 
+build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
@@ -31,10 +31,10 @@ config: ## Generate skywire.json
 
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
-	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor ./SSH-cli
+	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor ./skyssh-cli
 
-install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
-	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/therealssh-cli
+install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `skyssh-cli`
+	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/skyssh-cli
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -43,22 +43,22 @@ rerun: stop
 	./skywire-visor skywire.json
 
 
-lint: ## Run linters. Use make install-linters first	
+lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 	${OPTS} go vet -all ./...
 
 vendorcheck:  ## Run vendorcheck
-	GO111MODULE=off vendorcheck ./internal/... 
-	GO111MODULE=off vendorcheck ./pkg/... 
-	GO111MODULE=off vendorcheck ./cmd/apps/... 
+	GO111MODULE=off vendorcheck ./internal/...
+	GO111MODULE=off vendorcheck ./pkg/...
+	GO111MODULE=off vendorcheck ./cmd/apps/...
 	GO111MODULE=off vendorcheck ./cmd/hypervisor/...
-	GO111MODULE=off vendorcheck ./cmd/setup-node/... 
-	GO111MODULE=off vendorcheck ./cmd/skywire-cli/... 
+	GO111MODULE=off vendorcheck ./cmd/setup-node/...
+	GO111MODULE=off vendorcheck ./cmd/skywire-cli/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-visor/...
-	# vendorcheck fails on ./cmd/therealssh-cli
+	# vendorcheck fails on ./cmd/skyssh-cli
 	# the problem is indirect dependency to github.com/sirupsen/logrus
-	#GO111MODULE=off vendorcheck ./cmd/therealssh-cli/... 	
+	#GO111MODULE=off vendorcheck ./cmd/skyssh-cli/...
 
 test: ## Run tests
 	-go clean -testcache &>/dev/null
@@ -70,7 +70,7 @@ test-no-ci: ## Run no_ci tests
 	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
 
 install-linters: ## Install linters
-	- VERSION=1.17.1 ./ci_scripts/install-golangci-lint.sh 
+	- VERSION=1.17.1 ./ci_scripts/install-golangci-lint.sh
 	# GO111MODULE=off go get -u github.com/FiloSottile/vendorcheck
 	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
 	# However, they suggest `curl ... | bash` which we should not do
@@ -85,44 +85,44 @@ format: ## Formats the code. Must have goimports installed (use make install-lin
 dep: ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-# Apps 
-host-apps: ## Build app 
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat	
+# Apps
+host-apps: ## Build app
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/SSH.v1.0  ./cmd/apps/therealssh
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/SSH-client.v1.0  ./cmd/apps/therealssh-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skyssh.v1.0  ./cmd/apps/skyssh
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skyssh-client.v1.0  ./cmd/apps/skyssh-client
 
-# Bin 
-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
+# Bin
+bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `skyssh-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./messaging-server ./cmd/messaging-server
+	${OPTS} go build ${BUILD_OPTS} -o ./dmsg-server ./cmd/dmsg-server
 	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
-	${OPTS} go build ${BUILD_OPTS} -o ./SSH-cli ./cmd/therealssh-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./skyssh-cli ./cmd/skyssh-cli
 
 
-release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli` and apps without -race flag
+release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `skyssh-cli` and apps without -race flag
 	${OPTS} go build -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build -o ./setup-node ./cmd/setup-node
 	${OPTS} go build -o ./hypervisor ./cmd/hypervisor
-	${OPTS} go build -o ./SSH-cli ./cmd/therealssh-cli
+	${OPTS} go build -o ./skyssh-cli ./cmd/skyssh-cli
 	${OPTS} go build -o ./apps/skychat.v1.0 ./cmd/apps/skychat
 	${OPTS} go build -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	${OPTS} go build -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
-	${OPTS} go build -o ./apps/SSH.v1.0  ./cmd/apps/therealssh
-	${OPTS} go build -o ./apps/SSH-client.v1.0  ./cmd/apps/therealssh-client
+	${OPTS} go build -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
+	${OPTS} go build -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	${OPTS} go build -o ./apps/skyssh.v1.0  ./cmd/apps/skyssh
+	${OPTS} go build -o ./apps/skyssh-client.v1.0  ./cmd/apps/skyssh-client
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
 	docker image build --tag=skywire-runner --rm  - < skywire-runner.Dockerfile
 
 docker-clean: ## Clean docker system: remove container ${DOCKER_NODE} and network ${DOCKER_NETWORK}
-	-docker network rm ${DOCKER_NETWORK} 
+	-docker network rm ${DOCKER_NETWORK}
 	-docker container rm --force ${DOCKER_NODE}
 
 docker-network: ## Create docker network ${DOCKER_NETWORK}
@@ -131,12 +131,12 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
 	-${DOCKER_OPTS} go build -race -o ./node/apps/skychat.v1.0 ./cmd/apps/skychat
 	-${DOCKER_OPTS} go build -race -o ./node/apps/helloworld.v1.0 ./cmd/apps/helloworld
-	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
-	-${DOCKER_OPTS} go build -race -o ./node/apps/SSH.v1.0  ./cmd/apps/therealssh
-	-${DOCKER_OPTS} go build -race -o ./node/apps/SSH-client.v1.0  ./cmd/apps/therealssh-client
+	-${DOCKER_OPTS} go build -race -o ./node/apps/skysocks.v1.0 ./cmd/apps/skysocks
+	-${DOCKER_OPTS} go build -race -o ./node/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	-${DOCKER_OPTS} go build -race -o ./node/apps/skyssh.v1.0  ./cmd/apps/skyssh
+	-${DOCKER_OPTS} go build -race -o ./node/apps/skyssh-client.v1.0  ./cmd/apps/skyssh-client
 
-docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `therealssh-cli`. `go build` with  ${DOCKER_OPTS}
+docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `skyssh-cli`. `go build` with  ${DOCKER_OPTS}
 	${DOCKER_OPTS} go build -race -o ./node/skywire-visor ./cmd/skywire-visor
 
 docker-volume: dep docker-apps docker-bin bin  ## Prepare docker volume for dockerized skywire-visor
@@ -168,7 +168,7 @@ run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
 	-rm -rf /tmp/syslog
 	-mkdir -p /tmp/syslog
 	-docker container rm syslog-ng -f
-	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest 
+	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest
 
 
 integration-startup: ## Starts up the required transports between `skywire-visor`s of interactive testing environment
@@ -197,4 +197,4 @@ mod-uncomm: ## Uncomments the 'replace' rule in go.mod
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-	
+

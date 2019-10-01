@@ -34,7 +34,7 @@ func init() {
 
 var entryCmd = &cobra.Command{
 	Use:   "entry <node-public-key>",
-	Short: "fetches an entry from messaging-discovery",
+	Short: "fetches an entry from dmsg-discovery",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -48,7 +48,7 @@ var entryCmd = &cobra.Command{
 
 var availableServersCmd = &cobra.Command{
 	Use:   "available-servers",
-	Short: "fetch available servers from messaging-discovery",
+	Short: "fetch available servers from dmsg-discovery",
 	Run: func(_ *cobra.Command, _ []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()

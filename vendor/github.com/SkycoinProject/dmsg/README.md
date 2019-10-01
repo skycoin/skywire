@@ -4,9 +4,9 @@ Distributed messaging system.
 
 >**TODO:**
 >
->- `ACK` frames should include the first 4 bytes of the rolling hash of incoming payloads, enforcing reliability of data. Transports should therefore keep track of incoming/outgoing rolling hashes.
->- Transports should also be noise-encrypted. `REQUEST` and `ACCEPT` frames should include noise handshake messages (`KK` handshake pattern), and the `FWD` and `ACK` payloads are to be encrypted.
-> - Transports should implement read/write deadlines and local/remote addresses (like `net.Conn`).
+>- `ACK` frames should include the first 4 bytes of the rolling hash of incoming payloads, enforcing reliability of data. Streams should therefore keep track of incoming/outgoing rolling hashes.
+>- Streams should also be noise-encrypted. `REQUEST` and `ACCEPT` frames should include noise handshake messages (`KK` handshake pattern), and the `FWD` and `ACK` payloads are to be encrypted.
+> - Streams should implement read/write deadlines and local/remote addresses (like `net.Conn`).
 > - `dmsg.Server` should check incoming frames to disallow excessive sending of `CLOSE`, `ACCEPT` and `REQUEST` frames.
 
 ## Terminology
@@ -17,15 +17,15 @@ Distributed messaging system.
 - **frame -** The data unit of the `dmsg` system.
 - **frame type -** The type of `dmsg` frame. There are four frame types; `REQUEST`, `ACCEPT`, `CLOSE`, `FWD`, `ACK`.
 - **connection -** The direct line of duplex communication between a `dmsg.Server` and `dmsg.Client`.
-- **transport -** A line of communication between two `dmsg.Client`s that is proxied via a `dmsg.Server`.
-- **transport ID -** A uint16 value that identifies a transport.
+- **stream -** A line of communication between two `dmsg.Client`s that is proxied via a `dmsg.Server`.
+- **stream ID -** A uint16 value that identifies a stream.
 
 ## Entities
 
 The `dmsg` system is made up of three entity types:
 - `dmsg.Discovery` is a RESTful API that allows `dmsg.Client`s to find remote `dmg.Client`s and `dmsg.Server`s.
 - `dmsg.Server` proxies frames between clients.
-- `dmsg.Client` establishes transports between itself and remote `dmsg.Client`s.
+- `dmsg.Client` establishes streams between itself and remote `dmsg.Client`s.
 
 Entities of types `dmsg.Server` or `dmsg.Client` are represented by a `secp256k1` public key.
 
@@ -56,12 +56,12 @@ Note that `dmsg.Client` always initiates the `dmsg` connection, and it is a give
 Frames are sent and received within a `dmsg` connection after the noise handshake. A frame has two sections; the header and the payload. Here are the fields of a frame:
 
 ```
-|| FrameType | TransportID | PayloadSize || Payload ||
+|| FrameType | StreamID | PayloadSize || Payload ||
 || 1 byte    | 2 bytes     | 2 bytes     || ~ bytes ||
 ```
 
 - The `FrameType` specifies the frame type via the one byte.
-- The `TransportID` contains an encoded `uint16` which represents a identifier for a transport. A set of IDs are unique for a given `dmsg` connection.
+- The `StreamID` contains an encoded `uint16` which represents a identifier for a stream. A set of IDs are unique for a given `dmsg` connection.
 - The `PayloadSize` contains an encoded `uint16` which represents the size (in bytes) of the payload.
 - The `Payload` have a size that is obtainable via `PayloadSize`.
 
@@ -72,28 +72,28 @@ The following is a summary of the frame types:
 | `0x1` | `REQUEST` | initiating client's public key + responding client's public key | 66 |
 | `0x2` | `ACCEPT` | initiating client's public key + responding client's public key | 66 |
 | `0x3` | `CLOSE` | 1 byte that represents the reason for closing | 1 |
-| `0xa` | `FWD` | uint16 sequence + transport payload | >2 |
+| `0xa` | `FWD` | uint16 sequence + stream payload | >2 |
 | `0xb` | `ACK` | uint16 sequence | 2 |
 
-## Transports
+## Streams
 
-Transports are represented by transport IDs and facilitate duplex communication between two `dmsg.Client`s which are connected to a common `dmsg.Server`.
+Streams are represented by stream IDs and facilitate duplex communication between two `dmsg.Client`s which are connected to a common `dmsg.Server`.
 
-Transport IDs are assigned in such a manner:
-- A `dmsg.Client` manages the assignment of even transport IDs between itself and each connected `dmsg.Server`. The set of transport IDs will be unique between itself and each `dmsg.Server`.
-- A `dmsg.Server` manages the assignment of odd transport IDs between itself and each connected `dmsg.Client`. The set of transport IDs will be unique between itself and each `dmsg.Client`.
+Stream IDs are assigned in such a manner:
+- A `dmsg.Client` manages the assignment of even stream IDs between itself and each connected `dmsg.Server`. The set of stream IDs will be unique between itself and each `dmsg.Server`.
+- A `dmsg.Server` manages the assignment of odd stream IDs between itself and each connected `dmsg.Client`. The set of stream IDs will be unique between itself and each `dmsg.Client`.
 
-For a given transport:
-- Between the initiating client and the common server - the transport ID is always a even value.
-- Between the responding client and the common server - the transport ID is always a odd value.
+For a given stream:
+- Between the initiating client and the common server - the stream ID is always a even value.
+- Between the responding client and the common server - the stream ID is always a odd value.
 
-Hence, a transport in it's entirety, is represented by 2 transport IDs.
+Hence, a stream in it's entirety, is represented by 2 stream IDs.
 
-### Transport Establishment
+### Stream Establishment
 
-1. The initiating client chooses an even transport ID and forms a `REQUEST` frame with the chosen transport ID, initiating client's public key (itself) and also the responding client's public key. The `REQUEST` frame is then sent to the common server. The transport ID chosen must be unused between the initiating client and the server.
-2. The common server receives the `REQUEST` frame and checks the contents. If valid, and the responding client exists, the server chooses an odd transport ID, swaps this original transport ID of the `REQUEST` frame with the chosen odd transport ID, and continues to forward it to the responding client. In doing this, the server records a rule relating the initiating/responding clients and the associated odd/even transport IDs.
-3. The responding client receives the `REQUEST` frame and checks the contents. If valid, the responding client sends an `ACCEPT` frame (containing the same payload as the `REQUEST`) back to the common server. The common server changes the transport ID, and forwards the `ACCEPT` to the initiating client.
+1. The initiating client chooses an even stream ID and forms a `REQUEST` frame with the chosen stream ID, initiating client's public key (itself) and also the responding client's public key. The `REQUEST` frame is then sent to the common server. The stream ID chosen must be unused between the initiating client and the server.
+2. The common server receives the `REQUEST` frame and checks the contents. If valid, and the responding client exists, the server chooses an odd stream ID, swaps this original stream ID of the `REQUEST` frame with the chosen odd stream ID, and continues to forward it to the responding client. In doing this, the server records a rule relating the initiating/responding clients and the associated odd/even stream IDs.
+3. The responding client receives the `REQUEST` frame and checks the contents. If valid, the responding client sends an `ACCEPT` frame (containing the same payload as the `REQUEST`) back to the common server. The common server changes the stream ID, and forwards the `ACCEPT` to the initiating client.
 
 On any step, if an error occurs, any entity can send a `CLOSE` frame.
 
@@ -101,8 +101,8 @@ On any step, if an error occurs, any entity can send a `CLOSE` frame.
 
 Each `FWD` frame is to be met with an `ACK` frame in order to be considered delivered.
 
-- Each `FWD` payload has a 2-byte prefix (represented by a uint16 sequence). This sequence is unique per transport.
-- The destination of the transport, after receiving the `FWD` frame, responds with an `ACK` frame with the same sequence as the payload.
+- Each `FWD` payload has a 2-byte prefix (represented by a uint16 sequence). This sequence is unique per stream.
+- The destination of the stream, after receiving the `FWD` frame, responds with an `ACK` frame with the same sequence as the payload.
 
 ## `dmsg.Discovery`
 

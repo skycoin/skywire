@@ -10,6 +10,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
@@ -29,10 +30,10 @@ type Config struct {
 		LocalAddr   string                   `json:"local_address"`
 	} `json:"stcp"`
 
-	Messaging struct {
+	Dmsg struct {
 		Discovery   string `json:"discovery"`
 		ServerCount int    `json:"server_count"`
-	} `json:"messaging"`
+	} `json:"dmsg"`
 
 	Transport struct {
 		Discovery string `json:"discovery"`
@@ -72,7 +73,7 @@ type Config struct {
 
 // MessagingConfig returns config for dmsg client.
 func (c *Config) MessagingConfig() (*DmsgConfig, error) {
-	msgConfig := c.Messaging
+	msgConfig := c.Dmsg
 
 	if msgConfig.Discovery == "" {
 		return nil, errors.New("empty discovery")

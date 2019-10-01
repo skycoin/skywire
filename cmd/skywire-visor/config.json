@@ -25,7 +25,7 @@
       ]
     },
     {
-      "app": "SSH-server",
+      "app": "skyssh-server",
       "auto_start": true,
       "ports": [
         2
