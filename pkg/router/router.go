@@ -353,46 +353,6 @@ func (r *Router) GetRule(routeID routing.RouteID) (routing.Rule, error) {
 	return rule, nil
 }
 
-// ServeApp handles App packets from the App connection on provided port.
-func (r *Router) ServeApp(conn net.Conn, port routing.Port, appConf *app.Config) error {
-	r.wg.Add(1)
-	defer r.wg.Done()
-
-	appProto := app.NewProtocol(conn)
-	if err := r.pm.Open(port, appProto); err != nil {
-		return err
-	}
-
-	r.mx.Lock()
-	r.staticPorts[port] = struct{}{}
-	r.mx.Unlock()
-
-	callbacks := &appCallbacks{
-		CreateLoop: r.requestLoop,
-		CloseLoop:  r.closeLoop,
-		Forward:    r.forwardAppPacket,
-	}
-	am := &appManager{r.Logger, appProto, appConf, callbacks}
-	err := am.Serve()
-
-	for _, port := range r.pm.AppPorts(appProto) {
-		for _, addr := range r.pm.Close(port) {
-			if err := r.closeLoop(context.TODO(), appProto, routing.Loop{Local: routing.Addr{Port: port}, Remote: addr}); err != nil {
-				log.WithError(err).Warn("Failed to close loop")
-			}
-		}
-	}
-
-	r.mx.Lock()
-	delete(r.staticPorts, port)
-	r.mx.Unlock()
-
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
 // Close safely stops Router.
 func (r *Router) Close() error {
 	if r == nil {
@@ -444,41 +404,6 @@ func (r *Router) consumePacket(payload []byte, rule routing.Rule) error {
 
 	r.Logger.Infof("Forwarded packet to App on Port %d", rule.RouteDescriptor().SrcPort())
 	return nil
-}
-
-func (r *Router) forwardAppPacket(ctx context.Context, appConn *app.Protocol, packet *app.Packet) error {
-	if packet.Loop.Remote.PubKey == r.conf.PubKey {
-		return r.forwardLocalAppPacket(packet)
-	}
-
-	l, err := r.pm.GetLoop(packet.Loop.Local.Port, packet.Loop.Remote)
-	if err != nil {
-		return err
-	}
-
-	tr := r.tm.Transport(l.trID)
-	if tr == nil {
-		return errors.New("unknown transport")
-	}
-
-	r.Logger.Infof("Forwarded App packet from LocalPort %d using route ID %d", packet.Loop.Local.Port, l.routeID)
-	return tr.WritePacket(ctx, l.routeID, packet.Payload)
-}
-
-func (r *Router) forwardLocalAppPacket(packet *app.Packet) error {
-	b, err := r.pm.Get(packet.Loop.Remote.Port)
-	if err != nil {
-		return nil
-	}
-
-	p := &app.Packet{
-		Loop: routing.Loop{
-			Local:  routing.Addr{Port: packet.Loop.Remote.Port},
-			Remote: routing.Addr{PubKey: packet.Loop.Remote.PubKey, Port: packet.Loop.Local.Port},
-		},
-		Payload: packet.Payload,
-	}
-	return b.conn.Send(app.FrameSend, p, nil)
 }
 
 func (r *Router) requestLoop(ctx context.Context, appConn *app.Protocol, raddr routing.Addr) (routing.Addr, error) {
