@@ -53,7 +53,7 @@ type App struct {
 
 // Command setups pipe connection and returns *exec.Cmd for an App
 // with initialized connection.
-func Command(config *Config, appsPath string, args []string) (net.Conn, *exec.Cmd, error) {
+func Command(config *Config, appsPath string, args []string, env []string) (net.Conn, *exec.Cmd, error) {
 	srvConn, clientConn, err := OpenPipeConn()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open piped connection: %s", err)
@@ -62,6 +62,7 @@ func Command(config *Config, appsPath string, args []string) (net.Conn, *exec.Cm
 	binaryPath := filepath.Join(appsPath, fmt.Sprintf("%s.v%s", config.AppName, config.AppVersion))
 	cmd := exec.Command(binaryPath, args...) // nolint:gosec
 	cmd.ExtraFiles = []*os.File{clientConn.inFile, clientConn.outFile}
+	cmd.Env = env
 
 	return srvConn, cmd, nil
 }
