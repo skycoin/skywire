@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
@@ -222,7 +223,15 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	if tp, ok := tm.tps[id]; ok {
 		tp.Close()
 		delete(tm.tps, id)
-		tm.Logger.Infof("Unregistered transport %s", id)
+		tm.Logger.Infof("Unregistered transport %s from manager", id)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		err := tm.conf.DiscoveryClient.DeleteTransport(ctx, id)
+		if err != nil {
+			tm.Logger.Errorf("Unregister transport %s from discovery failed with error: %s", id, err)
+		}
+		tm.Logger.Infof("Unregistered transport %s from discovery", id)
 	}
 }
 
