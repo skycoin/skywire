@@ -65,6 +65,8 @@ type Config struct {
 	ShutdownTimeout Duration `json:"shutdown_timeout"` // time value, examples: 10s, 1m, etc
 
 	Interfaces InterfaceConfig `json:"interfaces"`
+
+	AppServerSockFile string `json:"app_server_sock_file"`
 }
 
 // MessagingConfig returns config for dmsg client.
