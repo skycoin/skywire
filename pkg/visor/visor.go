@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2"
+
 	"github.com/skycoin/skywire/pkg/snet"
 
 	"github.com/skycoin/dmsg"
@@ -80,7 +82,6 @@ type appBind struct {
 type PacketRouter interface {
 	io.Closer
 	Serve(ctx context.Context) error
-	ServeApp(conn net.Conn, port routing.Port, appConf *app.Config) error
 	SetupIsTrusted(sPK cipher.PubKey) bool
 }
 
@@ -110,6 +111,8 @@ type Node struct {
 
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
+
+	appServer *app2.Server
 }
 
 // NewNode constructs new Node.
@@ -217,6 +220,8 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 		})
 	}
 
+	node.appServer = app2.NewServer(logging.MustGetLogger("app_server"), node.config.AppServerSockFile)
+
 	return node, err
 }
 
@@ -227,6 +232,12 @@ func (node *Node) Start() error {
 
 	pathutil.EnsureDir(node.dir())
 	node.closePreviousApps()
+
+	node.logger.Info("Starting app server")
+	if err := node.appServer.ListenAndServe(); err != nil {
+		return fmt.Errorf("failed to start app server: %s", err)
+	}
+
 	for _, ac := range node.appsConf {
 		if !ac.AutoStart {
 			continue
@@ -405,10 +416,20 @@ func (node *Node) StartApp(appName string) error {
 func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
 	node.logger.Infof("Starting %s.v%s", config.App, config.Version)
 	node.logger.Warnf("here: config.Args: %+v, with len %d", config.Args, len(config.Args))
+
+	appKey := node.generateAppKey()
+	if err := node.appServer.AllowApp(appKey); err != nil {
+		return fmt.Errorf("failed to start communication server: %s", err)
+	}
+
 	conn, cmd, err := app.Command(
 		&app.Config{ProtocolVersion: supportedProtocolVersion, AppName: config.App, AppVersion: config.Version},
 		node.appsPath,
 		append([]string{filepath.Join(node.dir(), config.App)}, config.Args...),
+		[]string{
+			fmt.Sprintf("APP_KEY=%s", appKey),
+			fmt.Sprintf("SW_UNIX=%s", node.config.AppServerSockFile),
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize App server: %s", err)
@@ -462,26 +483,14 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 		appCh <- node.executer.Wait(cmd)
 	}()
 
-	srvCh := make(chan error)
-	go func() {
-		srvCh <- node.router.ServeApp(conn, config.Port, &app.Config{AppName: config.App, AppVersion: config.Version})
-	}()
-
 	if startCh != nil {
 		startCh <- struct{}{}
 	}
 
 	var appErr error
-	select {
-	case err := <-appCh:
-		if err != nil {
-			if _, ok := err.(*exec.ExitError); !ok {
-				appErr = fmt.Errorf("failed to run app executable: %s", err)
-			}
-		}
-	case err := <-srvCh:
-		if err != nil {
-			appErr = fmt.Errorf("failed to start communication server: %s", err)
+	if err := <-appCh; err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			appErr = fmt.Errorf("failed to run app executable: %s", err)
 		}
 	}
 
@@ -540,4 +549,9 @@ func (node *Node) stopApp(app string, bind *appBind) (err error) {
 	}
 
 	return err
+}
+
+func (node *Node) generateAppKey() string {
+	raw, _ := cipher.GenerateKeyPair()
+	return raw.Hex()
 }
