@@ -73,6 +73,16 @@ func (c *apiClient) Get(ctx context.Context, path string) (*http.Response, error
 	return c.client.Do(req.WithContext(ctx))
 }
 
+// Delete performs a new DELETE request.
+func (c *apiClient) Delete(ctx context.Context, path string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodDelete, c.client.Addr()+path, new(bytes.Buffer))
+	if err != nil {
+		return nil, err
+	}
+
+	return c.client.Do(req.WithContext(ctx))
+}
+
 // RegisterTransports registers new Transports.
 func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transport.SignedEntry) error {
 	if len(entries) == 0 {
@@ -148,6 +158,26 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 	}
 
 	return entries, nil
+}
+
+// DeleteTransport deletes given transpot by it's ID. A visor can only delete transports if he is one of it's edges.
+func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
+	resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
+	if resp != nil {
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.WithError(err).Warn("Failed to close HTTP response body")
+			}
+		}()
+	}
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+	}
+
+	return nil
 }
 
 // UpdateStatuses updates statuses of transports in discovery.
