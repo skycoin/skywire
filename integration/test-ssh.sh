@@ -11,9 +11,9 @@ do
 	echo Test with $N lines
 	mkdir -p ./logs/ssh/$N
 
-	echo Killing nodes and SSH-cli
-	echo Killing $(ps aux |grep "[N]odeA\|[N]odeB\|[N]odeC\|[s]kywire/SSH-cli" |awk '{print $2}')
-	kill $(ps aux |grep "[N]odeA\|[N]odeB\|[N]odeC\|[s]kywire/SSH-cli" |awk '{print $2}')
+	echo Killing nodes and skyssh-cli
+	echo Killing $(ps aux |grep "[N]odeA\|[N]odeB\|[N]odeC\|[s]kywire/skyssh-cli" |awk '{print $2}')
+	kill $(ps aux |grep "[N]odeA\|[N]odeB\|[N]odeC\|[s]kywire/skyssh-cli" |awk '{print $2}')
 
 	echo Restarting nodes
 	./bin/skywire-visor ./integration/ssh/nodeA.json --tag NodeA &> ./logs/ssh/$N/nodeA.log &
@@ -21,10 +21,10 @@ do
 	./bin/skywire-visor ./integration/ssh/nodeC.json --tag NodeC &> ./logs/ssh/$N/nodeC.log &
 
 	sleep 20
-	echo Trying SSH-cli
-	export CMD=$(echo ./bin/SSH-cli $PK_A \"loop -n $N echo A\")
+	echo Trying skyssh-cli
+	export CMD=$(echo ./bin/skyssh-cli $PK_A \"loop -n $N echo A\")
 	echo $CMD 
-	eval $CMD &>./logs/ssh/$N/SSH-cli.out 
+	eval $CMD &>./logs/ssh/$N/skyssh-cli.out
 
 
 	export N=$(($N*2))

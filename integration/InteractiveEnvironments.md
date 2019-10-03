@@ -9,7 +9,7 @@
   - [Environments & scenarios](#environments--scenarios)
     - [Base Environment](#base-environment)
     - [Generic Test Environment](#generic-test-environment)
-    - [SSH Test Environment](#ssh-test-environment)
+    - [skyssh Test Environment](#ssh-test-environment)
     - [Proxy test environment](#proxy-test-environment)
       - [Preparation](#preparation)
       - [Scenario. Proxy test #1](#scenario-proxy-test-1)
@@ -146,8 +146,8 @@ The following steps will be performed:
 
 1. copy sw*.json and start-restart-nodeB.sh into skywire directory
 2. Create 9 tmux windows:
-   1. MSGD: messaging-discovery
-   2. MSG: messaging-server
+   1. MSGD: dmsg-discovery
+   2. MSG: dmsg-server
    3. TRD: transport-discovery
    4. RF: route-finder
    5. SN: setup-node
@@ -156,21 +156,21 @@ The following steps will be performed:
    8. NodeC: first skywire-visor with generic/nodeC.json
    9. shell: new shell for interactive exploration
 3. ENV-vars in shell-window:
-   1. $MSG_PK, $SN_PK - public keys of messaging-server and setup-node
+   1. $MSG_PK, $SN_PK - public keys of dmsg-server and setup-node
    2. $PK_A, $PK_B, $PK_C - public keys of node_A, node_B, node_C
    3. $RPC_A, $RPC_B, $RPC_C - `--rpc` param for ../skywire/skywire-cli
    4. $CHAT_A, $CHAT_B - addresses and ports for `skychat`-apps on node_A and node_C
 4. Aliases in shell-window: `CLI_A`, `CLI_B`, `CLI_C`
 
-### SSH Test Environment
+### skyssh Test Environment
 
-The SSH Test Environment will define the following:
+The skyssh Test Environment will define the following:
 
 - skywire-services running on localhost
 - 3 `skywire-visor`s:
-  - NodeA - running  `SSH` app
+  - NodeA - running  `skyssh` app
   - NodeB - intermediary node without apps
-  - NodeC - running `SSH-client` app
+  - NodeC - running `skyssh-client` app
 
 **Run**
 
@@ -179,7 +179,7 @@ The SSH Test Environment will define the following:
 $ make integration-teardown
 
 # Prerequisite
-$ echo $PK_C > ~/.therealssh/authorized_keys
+$ echo $PK_C > ~/.skyssh/authorized_keys
 
 # Start all services and nodes
 $ make integration-run-ssh
@@ -193,11 +193,11 @@ $ make integration-startup
 - **TEST 1**
   1. Run `./integration/run-ssh-env.sh` - it will run:
      1. skywire-services on localhost
-     2. NodeA with configured `SSH` app 
+     2. NodeA with configured `skyssh` app 
      3. NodeB - intermediary
-     4. NodeC with configured `SSH-client` app
+     4. NodeC with configured `skyssh-client` app
   2. Run `./integration/test-ssh.sh` which will run in cycle:
-     1. `./SSH-cli $PK_A "export n=1; loop -n $n echo A"`
+     1. `./skyssh-cli $PK_A "export n=1; loop -n $n echo A"`
      2. kill all `skywire-visor`s
      3. Collect logs
      4. Increase n by power of 2
@@ -209,17 +209,17 @@ The proxy test environment will define the following:
 
 - skywire-services running on localhost
 - 3 `skywire-visor`s:
-  - NodeA - running  `SSH` app
+  - NodeA - running  `skyssh` app
   - NodeB - intermediary node without apps
-  - NodeC - running `SSH-client` app
+  - NodeC - running `skyssh-client` app
 
 #### Preparation
 
 It's really tricky to make socks5 proxy work now from clean start.
 
-Because `socksproxy-client` needs:
+Because `skysocks-client` needs:
 - transport to NodeA
-- NodeA must be running **before** start of `socksproxy-client`
+- NodeA must be running **before** start of `skysocks-client`
 
 Recipe for clean start:
 
@@ -229,7 +229,7 @@ Recipe for clean start:
 4. Stop NodeA, NodeB, NodeC
 5. Restart all nodes
 6. Wait for message in NodeC logs about successful start of
-socksproxy-client
+skysocks-client
 7. Check `lsof -i :9999` that it's really started
 8. Check `curl -v --retry 5 --retry-connrefused 1  --connect-timeout 5 -x socks5://123456:@localhost:9999 https://www.google.com`
 
@@ -249,7 +249,7 @@ It's possible that a service could start earlier or later than needed.
 Examine windows,  in case of failed service - restart it (E.g. `KeyUp`-`Enter`)
 
 Problem still exists in proxy test environment:
-  - NodeC cannot start `SSH-client` when NodeA is still starting `SSH`
+  - NodeC cannot start `skyssh-client` when NodeA is still starting `skyssh`
 
 ### Tmux for new users
 

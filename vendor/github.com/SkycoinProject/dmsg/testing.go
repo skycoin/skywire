@@ -43,9 +43,9 @@ func checkConnCount(t *testing.T, delay time.Duration, count int, ccs ...connCou
 	}))
 }
 
-func checkTransportsClosed(t *testing.T, transports ...net.Conn) {
-	for _, tr := range transports {
-		if tr, ok := tr.(*Transport); ok && tr != nil {
+func checkStreamsClosed(t *testing.T, streams ...net.Conn) {
+	for _, tr := range streams {
+		if tr, ok := tr.(*Stream); ok && tr != nil {
 			assert.False(t, isDoneChanOpen(tr.done))
 			assert.False(t, isReadChanOpen(tr.inCh))
 		}

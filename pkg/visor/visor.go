@@ -54,7 +54,7 @@ const Version = "0.0.1"
 
 const supportedProtocolVersion = "0.0.1"
 
-var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "SSH", 3: "socksproxy"}
+var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "skyssh", 3: "skysocks"}
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
@@ -127,13 +127,13 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	pk := config.Node.StaticPubKey
 	sk := config.Node.StaticSecKey
 
-	fmt.Println("min servers:", config.Messaging.ServerCount)
+	fmt.Println("min servers:", config.Dmsg.ServerCount)
 	node.n = snet.New(snet.Config{
 		PubKey:        pk,
 		SecKey:        sk,
 		TpNetworks:    []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
-		DmsgDiscAddr:  config.Messaging.Discovery,
-		DmsgMinSrvs:   config.Messaging.ServerCount,
+		DmsgDiscAddr:  config.Dmsg.Discovery,
+		DmsgMinSrvs:   config.Dmsg.ServerCount,
 		STCPLocalAddr: config.TCPTransport.LocalAddr,
 		STCPTable:     config.TCPTransport.PubKeyTable,
 	})

@@ -44,7 +44,7 @@ func SetLogger(log *logging.Logger) ClientOption {
 	}
 }
 
-// Client implements transport.Factory
+// Client implements stream.Factory
 type Client struct {
 	log *logging.Logger
 
@@ -57,7 +57,6 @@ type Client struct {
 
 	pm *PortManager
 
-	// accept map[uint16]chan *transport
 	done chan struct{}
 	once sync.Once
 }
@@ -70,10 +69,8 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, opts ...Cl
 		sk:    sk,
 		dc:    dc,
 		conns: make(map[cipher.PubKey]*ClientConn),
-		pm:    newPortManager(),
-		// accept: make(chan *transport, AcceptBufferSize),
-		// accept: make(map[uint16]chan *transport),
-		done: make(chan struct{}),
+		pm:    newPortManager(pk),
+		done:  make(chan struct{}),
 	}
 	for _, opt := range opts {
 		if err := opt(c); err != nil {
@@ -103,7 +100,7 @@ func (c *Client) updateDiscEntry(ctx context.Context) error {
 
 func (c *Client) setConn(ctx context.Context, conn *ClientConn) {
 	c.mx.Lock()
-	c.conns[conn.remoteSrv] = conn
+	c.conns[conn.srvPK] = conn
 	if err := c.updateDiscEntry(ctx); err != nil {
 		c.log.WithError(err).Warn("updateEntry: failed")
 	}
@@ -142,7 +139,7 @@ func (c *Client) InitiateServerConnections(ctx context.Context, min int) error {
 	if err != nil {
 		return err
 	}
-	c.log.Info("found dms_server entries:", entries)
+	c.log.Info("found dmsg.Server entries:", entries)
 	if err := c.findOrConnectToServers(ctx, entries, min); err != nil {
 		return err
 	}
@@ -208,12 +205,12 @@ func (c *Client) findOrConnectToServer(ctx context.Context, srvPK cipher.PubKey)
 	if err != nil {
 		return nil, err
 	}
-	nc, err := noise.WrapConn(tcpConn, ns, TransportHandshakeTimeout)
+	nc, err := noise.WrapConn(tcpConn, ns, StreamHandshakeTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	conn := NewClientConn(c.log, nc, c.pk, srvPK, c.pm)
+	conn := NewClientConn(c.log, c.pm, nc, c.pk, srvPK)
 	if err := conn.readOK(); err != nil {
 		return nil, err
 	}
@@ -244,15 +241,15 @@ func (c *Client) findOrConnectToServer(ctx context.Context, srvPK cipher.PubKey)
 
 // Listen creates a listener on a given port, adds it to port manager and returns the listener.
 func (c *Client) Listen(port uint16) (*Listener, error) {
-	l, ok := c.pm.NewListener(c.pk, port)
+	l, ok := c.pm.NewListener(port)
 	if !ok {
 		return nil, errors.New("port is busy")
 	}
 	return l, nil
 }
 
-// Dial dials a transport to remote dms_client.
-func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Transport, error) {
+// Dial dials a stream to remote dms_client.
+func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Stream, error) {
 	entry, err := c.dc.Entry(ctx, remote)
 	if err != nil {
 		return nil, fmt.Errorf("get entry failure: %s", err)
@@ -269,7 +266,7 @@ func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*
 			c.log.WithError(err).Warn("failed to connect to server")
 			continue
 		}
-		return conn.DialTransport(ctx, remote, port)
+		return conn.DialStream(ctx, remote, port)
 	}
 	return nil, errors.New("failed to find dms_servers for given client pk")
 }
@@ -281,14 +278,14 @@ func (c *Client) Addr() net.Addr {
 	}
 }
 
-// Type returns the transport type.
+// Type returns the stream type.
 func (c *Client) Type() string {
 	return Type
 }
 
 // Close closes the dms_client and associated connections.
 // TODO(evaninjin): proper error handling.
-func (c *Client) Close() error {
+func (c *Client) Close() (err error) {
 	if c == nil {
 		return nil
 	}
@@ -305,13 +302,8 @@ func (c *Client) Close() error {
 		c.conns = make(map[cipher.PubKey]*ClientConn)
 		c.mx.Unlock()
 
-		c.pm.mu.Lock()
-		defer c.pm.mu.Unlock()
-
-		for _, lis := range c.pm.listeners {
-			lis.close()
-		}
+		err = c.pm.Close()
 	})
 
-	return nil
+	return err
 }
