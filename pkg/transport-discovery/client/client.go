@@ -160,7 +160,7 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 	return entries, nil
 }
 
-// DeleteTransport deletes given transpot by it's ID. A visor can only delete transports if he is one of it's edges.
+// DeleteTransport deletes given transport by it's ID. A visor can only delete transports if he is one of it's edges.
 func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
 	if resp != nil {
