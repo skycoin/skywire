@@ -1,7 +1,8 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/SkycoinProject/dmsg v0.0.0-20190918162505-cc37af88b8bf/go.mod h1:WiVS8uAqzFsuWcRlDBsjrxqAiD41ftxS7S7CDTXZpko=
 github.com/SkycoinProject/dmsg v0.0.0-20190918181704-b7cccca1451e h1:JMIfHAjNSJLvKdnwXpUudbnYG627qD5d6aye+gmDups=
 github.com/SkycoinProject/dmsg v0.0.0-20190918181704-b7cccca1451e/go.mod h1:iB171maaQybaYptTK/mhzb02uonVRKQ8oCsJ7blquRw=
+github.com/SkycoinProject/dmsg v0.0.0-20191001153106-39727ed01af2 h1:e8/hCSFIuNHaEApJhv9V4I8lzCPuG/FjrqmixYV6TSg=
+github.com/SkycoinProject/dmsg v0.0.0-20191001153106-39727ed01af2/go.mod h1:qXPzY/Ga/rBQXIEdwRiyjH90aCxGzpoI/d5ogO4XmNE=
 github.com/SkycoinProject/skycoin v0.26.0 h1:8/ZRZb2VM2DM4YTIitRJMZ3Yo/3H1FFmbCMx5o6ekmA=
 github.com/SkycoinProject/skycoin v0.26.0/go.mod h1:xqPLOKh5B6GBZlGA7B5IJfQmCy7mwimD9NlqxR3gMXo=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=

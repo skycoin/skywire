@@ -3,7 +3,7 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.12
 
 require (
-	github.com/SkycoinProject/dmsg v0.0.0-20190918181704-b7cccca1451e
+	github.com/SkycoinProject/dmsg v0.0.0-20191001153106-39727ed01af2
 	github.com/SkycoinProject/skycoin v0.26.0
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20190910110746-680d30ca3117 // indirect

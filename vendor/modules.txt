@@ -1,9 +1,9 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20190918181704-b7cccca1451e => ../dmsg
+# github.com/SkycoinProject/dmsg v0.0.0-20191001153106-39727ed01af2
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/disc
-github.com/SkycoinProject/dmsg/noise
 github.com/SkycoinProject/dmsg/netutil
+github.com/SkycoinProject/dmsg/noise
 github.com/SkycoinProject/dmsg/ioutil
 # github.com/SkycoinProject/skycoin v0.26.0
 github.com/SkycoinProject/skycoin/src/util/logging

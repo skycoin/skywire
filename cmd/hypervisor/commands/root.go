@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -62,10 +64,22 @@ var rootCmd = &cobra.Command{
 
 		log.Infof("serving RPC on '%s'", rpcAddr)
 		go func() {
-			l, err := net.Listen("tcp", rpcAddr)
+			_, rpcPort, err := config.Interfaces.SplitRPCAddr()
+			if err != nil {
+				log.Fatalln("Failed to parse rpc port from rpc address:", err)
+			}
+
+			dmsgC := dmsg.NewClient(config.PK, config.SK, disc.NewHTTP(config.DmsgDiscovery))
+
+			ctx := context.Background()
+			if err = dmsgC.InitiateServerConnections(ctx, 1); err != nil {
+				log.Fatalln("failed to initiate dmsg server connections:", err)
+			}
+			l, err := dmsgC.Listen(rpcPort)
 			if err != nil {
 				log.Fatalln("Failed to bind tcp port:", err)
 			}
+
 			if err := m.ServeRPC(l); err != nil {
 				log.Fatalln("Failed to serve RPC:", err)
 			}
