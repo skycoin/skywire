@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -90,7 +91,7 @@ func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID
 
 	_, ok := td.entries[id]
 	if !ok {
-		return errors.New("transport not found")
+		return fmt.Errorf("transport with id: %s not found in transport discovery", id)
 	}
 
 	delete(td.entries, id)
