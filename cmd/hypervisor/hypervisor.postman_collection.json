@@ -1,17 +1,17 @@
 {
 	"info": {
-		"_postman_id": "dfdba35b-6b4f-4658-80e1-d57526f1059f",
+		"_postman_id": "7ba2dfbd-649c-4b32-bacf-2b894a14921a",
 		"name": "Skywire Hypervisor",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
-			"name": "/api/nodes",
+			"name": "/api/visors",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes",
+					"raw": "http://localhost:8080/api/visors",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -19,19 +19,19 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes"
+						"visors"
 					]
 				},
-				"description": "Provides a summary of all connected app nodes."
+				"description": "Provides a summary of all connected app visors."
 			},
 			"response": [
 				{
-					"name": "/api/nodes",
+					"name": "/api/visors",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes",
+							"raw": "http://localhost:8080/api/visors",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -39,7 +39,7 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes"
+								"visors"
 							]
 						}
 					},
@@ -66,12 +66,12 @@
 			]
 		},
 		{
-			"name": "/api/nodes/{pk}",
+			"name": "/api/visors/{pk}",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02?",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -79,8 +79,8 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
-						"021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02"
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"
 					],
 					"query": [
 						{
@@ -94,12 +94,12 @@
 			},
 			"response": [
 				{
-					"name": "/api/nodes/:pk",
+					"name": "/api/visors/{pk}",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2?",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -107,8 +107,8 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
-								"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2"
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"
 							],
 							"query": [
 								{
@@ -125,29 +125,29 @@
 					"header": [
 						{
 							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
+							"value": "application/json"
 						},
 						{
 							"key": "Date",
-							"value": "Wed, 13 Feb 2019 00:47:03 GMT"
+							"value": "Mon, 07 Oct 2019 17:43:50 GMT"
 						},
 						{
-							"key": "Transfer-Encoding",
-							"value": "chunked"
+							"key": "Content-Length",
+							"value": "557"
 						}
 					],
 					"cookie": [],
-					"body": "{\n    \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n    \"apps\": [\n        {\n            \"name\": \"foo.v1.0\",\n            \"autostart\": false,\n            \"port\": 10,\n            \"status\": 0\n        },\n        {\n            \"name\": \"bar.v2.0\",\n            \"autostart\": false,\n            \"port\": 20,\n            \"status\": 0\n        }\n    ],\n    \"transports\": [\n        {\n            \"id\": \"3fb65ceb-0cd3-484c-8a9c-21617a06c6dd\",\n            \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n            \"remote_pk\": \"028825991ec52e8f135b9cf9c9f740698644ea2f2144e43a537ad416601ee1d905\",\n            \"type\": \"native\",\n            \"log\": {\n                \"received\": null,\n                \"sent\": null\n            }\n        },\n        {\n            \"id\": \"4cf57b61-8a31-4c8f-b328-b2533978c4e1\",\n            \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n            \"remote_pk\": \"02af5570345c43715442aabdc72de8faecbccc38058fa3be88da8d85afb95762e6\",\n            \"type\": \"messaging\",\n            \"log\": {\n                \"received\": null,\n                \"sent\": null\n            }\n        },\n        {\n            \"id\": \"0d2d208f-8e10-4bb4-ada5-58ffa4256723\",\n            \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n            \"remote_pk\": \"034b60e92c40f566e38753fd0e4bc680a0811d25bee949cb5fee4006e42599d6cd\",\n            \"type\": \"messaging\",\n            \"log\": {\n                \"received\": null,\n                \"sent\": null\n            }\n        },\n        {\n            \"id\": \"b1afc8fd-cb62-4993-9b5e-79267cdcf557\",\n            \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n            \"remote_pk\": \"02add975773c2b1429368c961b9159c14de7662f8185ac5cbf173161e4b9f32937\",\n            \"type\": \"messaging\",\n            \"log\": {\n                \"received\": null,\n                \"sent\": null\n            }\n        },\n        {\n            \"id\": \"43301e4e-594a-422a-b7b1-7a27e39050a8\",\n            \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n            \"remote_pk\": \"029e32e79f1a57aa42704d3d88618ef8458b12a8f897dbbb7eecec0a411820f7d4\",\n            \"type\": \"messaging\",\n            \"log\": {\n                \"received\": null,\n                \"sent\": null\n            }\n        },\n        {\n            \"id\": \"2d92ce65-8e2f-45b9-be29-3057951f4821\",\n            \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n            \"remote_pk\": \"037f94a6071e7cb5edd8039cef0269ba43e48ab290e6144c4195d05478d5b446fb\",\n            \"type\": \"native\",\n            \"log\": {\n                \"received\": null,\n                \"sent\": null\n            }\n        },\n        {\n            \"id\": \"1046b7a7-50ec-4795-91cd-a2fed648f305\",\n            \"local_pk\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n            \"remote_pk\": \"021a12b4514cadb248f65cb4c3b3c9eb32f631e1b9470509c44cd05758021cc32a\",\n            \"type\": \"messaging\",\n            \"log\": {\n                \"received\": null,\n                \"sent\": null\n            }\n        }\n    ]\n}"
+					"body": "{\n    \"tcp_addr\": \"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7:49153\",\n    \"local_pk\": \"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7\",\n    \"node_version\": \"0.0.1\",\n    \"app_protocol_version\": \"0.0.1\",\n    \"apps\": [\n        {\n            \"name\": \"skychat\",\n            \"autostart\": true,\n            \"port\": 1,\n            \"status\": 1\n        }\n    ],\n    \"transports\": [\n        {\n            \"id\": \"221ab9df-7cc7-0cca-9874-9cd72150865b\",\n            \"local_pk\": \"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7\",\n            \"remote_pk\": \"0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe\",\n            \"type\": \"dmsg\",\n            \"is_setup\": false\n        }\n    ],\n    \"routes_count\": 2\n}"
 				}
 			]
 		},
 		{
-			"name": "/api/nodes/{pk}/apps",
+			"name": "/api/visors/{pk}/apps",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02/apps",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -155,8 +155,8 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
-						"021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"apps"
 					]
 				},
@@ -164,12 +164,12 @@
 			},
 			"response": [
 				{
-					"name": "/api/nodes/:pk/apps",
+					"name": "/api/visors/{pk}/apps",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2/apps",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -177,168 +177,9 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
-								"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"apps"
-							]
-						}
-					},
-					"status": "OK",
-					"code": 200,
-					"_postman_previewlanguage": "json",
-					"header": [
-						{
-							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
-						},
-						{
-							"key": "Date",
-							"value": "Wed, 13 Feb 2019 00:48:55 GMT"
-						},
-						{
-							"key": "Content-Length",
-							"value": "119"
-						}
-					],
-					"cookie": [],
-					"body": "[\n    {\n        \"name\": \"foo.v1.0\",\n        \"autostart\": false,\n        \"port\": 10,\n        \"status\": 0\n    },\n    {\n        \"name\": \"bar.v2.0\",\n        \"autostart\": false,\n        \"port\": 20,\n        \"status\": 0\n    }\n]"
-				}
-			]
-		},
-		{
-			"name": "/api/nodes/{pk}/apps/{app}",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "http://localhost:8080/api/nodes/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02/apps/foo.v1.0",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "8080",
-					"path": [
-						"api",
-						"nodes",
-						"021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02",
-						"apps",
-						"foo.v1.0"
-					]
-				},
-				"description": "Starts an app on an AppNode."
-			},
-			"response": [
-				{
-					"name": "/api/nodes/:pk/apps/:app/start",
-					"originalRequest": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "http://localhost:8080/api/nodes/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2/apps/foo.v1.0/start",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "8080",
-							"path": [
-								"api",
-								"nodes",
-								"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2",
-								"apps",
-								"foo.v1.0",
-								"start"
-							]
-						}
-					},
-					"status": "OK",
-					"code": 200,
-					"_postman_previewlanguage": "json",
-					"header": [
-						{
-							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
-						},
-						{
-							"key": "Date",
-							"value": "Wed, 13 Feb 2019 00:50:40 GMT"
-						},
-						{
-							"key": "Content-Length",
-							"value": "130"
-						}
-					],
-					"cookie": [],
-					"body": "{\n    \"node\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n    \"app\": \"foo.v1.0\",\n    \"command\": \"StartApp\",\n    \"success\": true\n}"
-				}
-			]
-		},
-		{
-			"name": "/api/nodes/{pk}/apps/{app}",
-			"request": {
-				"method": "PUT",
-				"header": [
-					{
-						"key": "Content-Type",
-						"name": "Content-Type",
-						"value": "application/json",
-						"type": "text"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n\t\"autostart\": true,\n\t\"status\": 1\n}"
-				},
-				"url": {
-					"raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/apps/foo.v1.0",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "8080",
-					"path": [
-						"api",
-						"nodes",
-						"023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
-						"apps",
-						"foo.v1.0"
-					]
-				},
-				"description": "Starts an app on an AppNode."
-			},
-			"response": [
-				{
-					"name": "/api/nodes/{pk}/apps/{app}",
-					"originalRequest": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "Content-Type",
-								"name": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n\t\"autostart\": true,\n\t\"status\": 1\n}"
-						},
-						"url": {
-							"raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/apps/foo.v1.0",
-							"protocol": "http",
-							"host": [
-								"localhost"
-							],
-							"port": "8080",
-							"path": [
-								"api",
-								"nodes",
-								"023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
-								"apps",
-								"foo.v1.0"
 							]
 						}
 					},
@@ -352,7 +193,7 @@
 						},
 						{
 							"key": "Date",
-							"value": "Sun, 17 Feb 2019 10:37:17 GMT"
+							"value": "Mon, 07 Oct 2019 17:44:33 GMT"
 						},
 						{
 							"key": "Content-Length",
@@ -360,17 +201,17 @@
 						}
 					],
 					"cookie": [],
-					"body": "{\n    \"name\": \"foo.v1.0\",\n    \"autostart\": true,\n    \"port\": 10,\n    \"status\": 0\n}"
+					"body": "[\n    {\n        \"name\": \"skychat\",\n        \"autostart\": true,\n        \"port\": 1,\n        \"status\": 1\n    }\n]"
 				}
 			]
 		},
 		{
-			"name": "/api/nodes/{pk}/transport-types",
+			"name": "/api/visors/{pk}/apps/{app}",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transport-types",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -378,21 +219,22 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
-						"023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
-						"transport-types"
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"apps",
+						"skychat"
 					]
 				},
-				"description": "Lists supported transport types of the given AppNode."
+				"description": "Starts an app on an AppNode."
 			},
 			"response": [
 				{
-					"name": "/api/nodes/:pk/transport-types",
+					"name": "/api/visors/{pk}/apps/{app}",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transport-types",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -400,8 +242,161 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
-								"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"apps",
+								"skychat"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:45:12 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "56"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"name\": \"skychat\",\n    \"autostart\": true,\n    \"port\": 1,\n    \"status\": 1\n}"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/apps/{app}",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"autostart\": true,\n\t\"status\": 0\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"apps",
+						"skychat"
+					]
+				},
+				"description": "Starts an app on a visor.It accepts a json body like the one in the example. status can take values 0 or 1. If 0 the hypervisor will stop such app in the visor, if 1 it will start it. A visor can only start apps that are defined in it's configuration file. The app name provided here should be the same that is defined in the visor's config file."
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/apps/{app}",
+					"originalRequest": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"autostart\": true,\n\t\"status\": 0\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"apps",
+								"skychat"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:57:52 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "56"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"name\": \"skychat\",\n    \"autostart\": true,\n    \"port\": 1,\n    \"status\": 1\n}"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/transport-types",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transport-types",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"transport-types"
+					]
+				},
+				"description": "Lists supported transport types of the given AppNode."
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/transport-types",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transport-types",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"transport-types"
 							]
 						}
@@ -412,29 +407,29 @@
 					"header": [
 						{
 							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
+							"value": "application/json"
 						},
 						{
 							"key": "Date",
-							"value": "Wed, 13 Feb 2019 01:14:08 GMT"
+							"value": "Mon, 07 Oct 2019 17:58:13 GMT"
 						},
 						{
 							"key": "Content-Length",
-							"value": "22"
+							"value": "16"
 						}
 					],
 					"cookie": [],
-					"body": "[\n    \"messaging\",\n    \"native\"\n]"
+					"body": "[\n    \"dmsg\",\n    \"stcp\"\n]"
 				}
 			]
 		},
 		{
-			"name": "/api/nodes/{pk}/transports",
+			"name": "/api/visors/{pk}/transports",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports?logs=true",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports?logs=true",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -442,8 +437,8 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
-						"023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"transports"
 					],
 					"query": [
@@ -458,12 +453,12 @@
 			},
 			"response": [
 				{
-					"name": "/api/nodes/:pk/transports",
+					"name": "/api/visors/{pk}/transports",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports?logs=true",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports?logs=true",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -471,8 +466,8 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
-								"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"transports"
 							],
 							"query": [
@@ -490,24 +485,24 @@
 					"header": [
 						{
 							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
+							"value": "application/json"
 						},
 						{
 							"key": "Date",
-							"value": "Wed, 13 Feb 2019 01:15:50 GMT"
+							"value": "Mon, 07 Oct 2019 17:58:35 GMT"
 						},
 						{
-							"key": "Transfer-Encoding",
-							"value": "chunked"
+							"key": "Content-Length",
+							"value": "267"
 						}
 					],
 					"cookie": [],
-					"body": "[\n    {\n        \"id\": \"e86f4d67-eb22-4d1c-8c27-8f021051a5cf\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"028684d27d1c9bc36406da560d3f75a295a54ad0649d54eb3437655d8524bbe279\",\n        \"type\": \"messaging\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    },\n    {\n        \"id\": \"2ff2d608-fe14-4c17-938c-3af8afd053ae\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"02a2f9b005ce53b77499e73eb4b67d60807a32d1616615809408150d2ff2631da8\",\n        \"type\": \"messaging\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    },\n    {\n        \"id\": \"50142ec9-027d-490d-ba86-e335b6ffffa0\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"02d2b79b0e37671e8da948ddb7a51b24096a7b7fe3a64403f78ab031816b3009f3\",\n        \"type\": \"native\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    },\n    {\n        \"id\": \"85a60d18-f1a3-45b1-b7cc-8906c95dfdb0\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"02c5015450d929bb38c496505f3781d671a11f108cecc0ef6f4a9ff6cf841e5bcf\",\n        \"type\": \"messaging\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    },\n    {\n        \"id\": \"16575562-14c4-492d-9112-dc9f9d3f201d\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"0206ad1343becba521d66ce58b72b2fd8592c998f05ce6fb82a8ab44f3583f9023\",\n        \"type\": \"messaging\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    },\n    {\n        \"id\": \"d0fa7457-e887-406e-ac84-e009fe6df490\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"026202dd7119e8f0635ff1adb52e826fc107472319033db47dbff428b66d3474ae\",\n        \"type\": \"native\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    },\n    {\n        \"id\": \"236d2c10-5d92-4d64-b66a-42e2a60ac231\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"020906cf03d1037149150f3d4d06b242d3fa5a3ee6fc25edef6373061176ad5279\",\n        \"type\": \"native\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    },\n    {\n        \"id\": \"03c845c9-57b0-4b84-a184-70f952497a8a\",\n        \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n        \"remote_pk\": \"0254cffd054fa00fa4c89f2b9d2ee3a52b69641bfd4a9e5ce59f5c086adf8d2e1e\",\n        \"type\": \"native\",\n        \"log\": {\n            \"received\": null,\n            \"sent\": null\n        }\n    }\n]"
+					"body": "[\n    {\n        \"id\": \"221ab9df-7cc7-0cca-9874-9cd72150865b\",\n        \"local_pk\": \"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7\",\n        \"remote_pk\": \"0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe\",\n        \"type\": \"dmsg\",\n        \"log\": {\n            \"recv\": 10,\n            \"sent\": 0\n        },\n        \"is_setup\": false\n    }\n]"
 				}
 			]
 		},
 		{
-			"name": "/api/nodes/{pk}/transports",
+			"name": "/api/visors/{pk}/transports",
 			"request": {
 				"method": "POST",
 				"header": [
@@ -520,10 +515,10 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n\t\"remote_pk\": \"03c497380efd87e19208bb484ee322ede1e091b2a0b653e6d25475f641602376a9\",\n\t\"transport_type\": \"native\",\n\t\"public\": true\n}"
+					"raw": "{\n\t\"remote_pk\": \"031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055\",\n\t\"transport_type\": \"dmsg\",\n\t\"public\": true\n}"
 				},
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -531,8 +526,8 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
-						"023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"transports"
 					]
 				},
@@ -540,7 +535,7 @@
 			},
 			"response": [
 				{
-					"name": "POST /api/nodes/transports",
+					"name": "/api/visors/{pk}/transports",
 					"originalRequest": {
 						"method": "POST",
 						"header": [
@@ -553,10 +548,10 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n\t\"remote_pk\": \"03c497380efd87e19208bb484ee322ede1e091b2a0b653e6d25475f641602376a9\",\n\t\"transport_type\": \"native\",\n\t\"public\": true\n}"
+							"raw": "{\n\t\"remote_pk\": \"031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055\",\n\t\"transport_type\": \"dmsg\",\n\t\"public\": true\n}"
 						},
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -564,8 +559,8 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
-								"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"transports"
 							]
 						}
@@ -576,29 +571,29 @@
 					"header": [
 						{
 							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
+							"value": "application/json"
 						},
 						{
 							"key": "Date",
-							"value": "Wed, 13 Feb 2019 01:19:01 GMT"
+							"value": "Mon, 07 Oct 2019 17:58:59 GMT"
 						},
 						{
 							"key": "Content-Length",
-							"value": "258"
+							"value": "238"
 						}
 					],
 					"cookie": [],
-					"body": "{\n    \"id\": \"7a4236d4-8ae4-478c-acd7-e3577d730a49\",\n    \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n    \"remote_pk\": \"03c497380efd87e19208bb484ee322ede1e091b2a0b653e6d25475f641602376a9\",\n    \"type\": \"native\",\n    \"log\": {\n        \"received\": null,\n        \"sent\": null\n    }\n}"
+					"body": "{\n    \"id\": \"f1989240-9a74-03e7-bd1c-b06183d75f9b\",\n    \"local_pk\": \"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7\",\n    \"remote_pk\": \"031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055\",\n    \"type\": \"dmsg\",\n    \"is_setup\": false\n}"
 				}
 			]
 		},
 		{
-			"name": "/api/nodes/{pk}/transports/{tid}",
+			"name": "/api/visors/{pk}/transports/{tid}",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports/70836b44-f6e5-4c17-a5e8-e1cbef89a10f",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports/221ab9df-7cc7-0cca-9874-9cd72150865b",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -606,22 +601,22 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
-						"023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"transports",
-						"70836b44-f6e5-4c17-a5e8-e1cbef89a10f"
+						"221ab9df-7cc7-0cca-9874-9cd72150865b"
 					]
 				},
 				"description": "Obtains summary of transport of given TransportID and AppNode."
 			},
 			"response": [
 				{
-					"name": "/api/nodes/:pk/transports/:tid",
+					"name": "/api/visors/{pk}/transports/{tid}",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports/2ff2d608-fe14-4c17-938c-3af8afd053ae",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports/221ab9df-7cc7-0cca-9874-9cd72150865b",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -629,10 +624,10 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
-								"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"transports",
-								"2ff2d608-fe14-4c17-938c-3af8afd053ae"
+								"221ab9df-7cc7-0cca-9874-9cd72150865b"
 							]
 						}
 					},
@@ -642,24 +637,24 @@
 					"header": [
 						{
 							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
+							"value": "application/json"
 						},
 						{
 							"key": "Date",
-							"value": "Wed, 13 Feb 2019 01:23:06 GMT"
+							"value": "Mon, 07 Oct 2019 17:59:49 GMT"
 						},
 						{
 							"key": "Content-Length",
-							"value": "261"
+							"value": "265"
 						}
 					],
 					"cookie": [],
-					"body": "{\n    \"id\": \"2ff2d608-fe14-4c17-938c-3af8afd053ae\",\n    \"local_pk\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n    \"remote_pk\": \"02a2f9b005ce53b77499e73eb4b67d60807a32d1616615809408150d2ff2631da8\",\n    \"type\": \"messaging\",\n    \"log\": {\n        \"received\": null,\n        \"sent\": null\n    }\n}"
+					"body": "{\n    \"id\": \"221ab9df-7cc7-0cca-9874-9cd72150865b\",\n    \"local_pk\": \"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7\",\n    \"remote_pk\": \"0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe\",\n    \"type\": \"dmsg\",\n    \"log\": {\n        \"recv\": 10,\n        \"sent\": 0\n    },\n    \"is_setup\": false\n}"
 				}
 			]
 		},
 		{
-			"name": "DELETE /api/nodes/{pk}/transports/{tid}",
+			"name": "DELETE /api/visors/{pk}/transports/{tid}",
 			"request": {
 				"method": "DELETE",
 				"header": [],
@@ -668,7 +663,7 @@
 					"raw": ""
 				},
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports/d5ace20e-06c8-4867-bda2-9449459a9e5a",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports/221ab9df-7cc7-0cca-9874-9cd72150865b",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -676,17 +671,17 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
-						"023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"transports",
-						"d5ace20e-06c8-4867-bda2-9449459a9e5a"
+						"221ab9df-7cc7-0cca-9874-9cd72150865b"
 					]
 				},
 				"description": "Removes transport of given TransportID and AppNode."
 			},
 			"response": [
 				{
-					"name": "DELETE /api/nodes/:pk/transports/:tid",
+					"name": "DELETE /api/visors/{pk}/transports/{tid}",
 					"originalRequest": {
 						"method": "DELETE",
 						"header": [],
@@ -695,7 +690,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports/2ff2d608-fe14-4c17-938c-3af8afd053ae",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/transports/221ab9df-7cc7-0cca-9874-9cd72150865b",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -703,10 +698,10 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
-								"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"transports",
-								"2ff2d608-fe14-4c17-938c-3af8afd053ae"
+								"221ab9df-7cc7-0cca-9874-9cd72150865b"
 							]
 						}
 					},
@@ -716,19 +711,19 @@
 					"header": [
 						{
 							"key": "Content-Type",
-							"value": "application/json; charset=utf-8"
+							"value": "application/json"
 						},
 						{
 							"key": "Date",
-							"value": "Wed, 13 Feb 2019 01:24:20 GMT"
+							"value": "Mon, 07 Oct 2019 18:00:30 GMT"
 						},
 						{
 							"key": "Content-Length",
-							"value": "171"
+							"value": "5"
 						}
 					],
 					"cookie": [],
-					"body": "{\n    \"node\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n    \"transport\": \"2ff2d608-fe14-4c17-938c-3af8afd053ae\",\n    \"command\": \"RemoveTransport\",\n    \"success\": true\n}"
+					"body": "true"
 				}
 			]
 		},
@@ -830,12 +825,12 @@
 			]
 		},
 		{
-			"name": "/api/nodes/{pk}/uptime",
+			"name": "/api/visors/{pk}/uptime",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/uptime",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/uptime",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -843,7 +838,7 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
+						"visors",
 						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"uptime"
 					]
@@ -852,12 +847,12 @@
 			},
 			"response": [
 				{
-					"name": "/api/nodes/{pk}/uptime",
+					"name": "/api/visors/{pk}/uptime",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/uptime",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/uptime",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -865,7 +860,7 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
+								"visors",
 								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"uptime"
 							]
@@ -894,12 +889,12 @@
 			]
 		},
 		{
-			"name": "http://localhost:8080/api/nodes/{pk}/health",
+			"name": "http://localhost:8080/api/visors/{pk}/health",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/health",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/health",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -907,7 +902,7 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
+						"visors",
 						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"health"
 					]
@@ -916,12 +911,12 @@
 			},
 			"response": [
 				{
-					"name": "http://localhost:8080/api/nodes/{pk}/health",
+					"name": "http://localhost:8080/api/visors/{pk}/health",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/health",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/health",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -929,7 +924,7 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
+								"visors",
 								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"health"
 							]
@@ -958,12 +953,12 @@
 			]
 		},
 		{
-			"name": "http://localhost:8080/api/nodes/{pk}/apps/{app}/logs?since={timestamp}",
+			"name": "http://localhost:8080/api/visors/{pk}/apps/{app}/logs?since={timestamp}",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8080/api/nodes/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat/logs?since=2019-09-10T11:30:41.097351631+02:00",
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat/logs?since=2019-09-10T11:30:41.097351631+02:00",
 					"protocol": "http",
 					"host": [
 						"localhost"
@@ -971,7 +966,7 @@
 					"port": "8080",
 					"path": [
 						"api",
-						"nodes",
+						"visors",
 						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 						"apps",
 						"skychat",
@@ -988,12 +983,12 @@
 			},
 			"response": [
 				{
-					"name": "http://localhost:8080/api/nodes/{pk}/apps/{app}/logs?since={timestamp}",
+					"name": "http://localhost:8080/api/visors/{pk}/apps/{app}/logs?since={timestamp}",
 					"originalRequest": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/nodes/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat/logs?since=2019-09-10T11:30:41.097351631+02:00",
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/apps/skychat/logs?since=2019-09-10T11:30:41.097351631+02:00",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -1001,7 +996,7 @@
 							"port": "8080",
 							"path": [
 								"api",
-								"nodes",
+								"visors",
 								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
 								"apps",
 								"skychat",
@@ -1034,6 +1029,440 @@
 					],
 					"cookie": [],
 					"body": "{\n    \"last_log_timestamp\": \"2019-09-10T12:23:33.916965349+02:00\",\n    \"logs\": [\n        \"[2019-09-10T12:13:48.532319632+02:00] INFO []: Serving HTTP on :8000\\n\",\n        \"[2019-09-10T12:23:33.916965349+02:00] INFO []: Serving HTTP on :8000\\n\"\n    ]\n}"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/routes",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"routes"
+					]
+				},
+				"description": "Returns a map of rule entries that compose the requested node routing rules"
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/routes",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"routes"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:23:39 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "258"
+						}
+					],
+					"cookie": [],
+					"body": "[\n    {\n        \"key\": 1,\n        \"rule\": \"0000068c617140000000000002031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055000a000100000001\"\n    },\n    {\n        \"key\": 2,\n        \"rule\": \"0000068c617140000100000002221ab9df7cc70cca98749cd72150865b00000000000000000000000000000000000000000000000002\"\n    }\n]"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/routes",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "\t{\n\t\t\"keep_alive\": 1,\n\t\t\"rule_type\": 1,\n\t\t\"forward_fields\": {\n\t\t\t\"next_rid\":2,\n\t\t\t\"next_tid\":\"221ab9df-7cc7-0cca-9874-9cd72150865b\"\n\t\t},\n\t\t\"request_route_id\":1\n\t}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"routes"
+					]
+				},
+				"description": "Adds a new routing rule. Can be either a forward rule or an app rule. Rule type 0 is app type, rule type 1 is forward type."
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/routes",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "\t{\n\t\t\"keep_alive\": 1,\n\t\t\"rule_type\": 1,\n\t\t\"forward_fields\": {\n\t\t\t\"next_rid\":2,\n\t\t\t\"next_tid\":\"221ab9df-7cc7-0cca-9874-9cd72150865b\"\n\t\t},\n\t\t\"request_route_id\":3\n\t}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"routes"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:24:12 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "277"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"key\": 3,\n    \"rule\": \"00000000000000010100000002221ab9df7cc70cca98749cd72150865b00000000000000000000000000000000000000000000000003\",\n    \"rule_summary\": {\n        \"keep_alive\": 1,\n        \"rule_type\": 1,\n        \"forward_fields\": {\n            \"next_rid\": 2,\n            \"next_tid\": \"221ab9df-7cc7-0cca-9874-9cd72150865b\"\n        },\n        \"request_route_id\": 3\n    }\n}"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/routes/{rid}",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes/5",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"routes",
+						"5"
+					]
+				},
+				"description": "Returns information of rule of given route id. Route ids are displayed on a successful `GET /api/visors/{pk}/routes`"
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/routes/{rid}",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes/1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"routes",
+								"1"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:24:37 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "348"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"key\": 1,\n    \"rule\": \"0000068c617140000000000002031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055000a000100000001\",\n    \"rule_summary\": {\n        \"keep_alive\": 7200000000000,\n        \"rule_type\": 0,\n        \"app_fields\": {\n            \"resp_rid\": 2,\n            \"remote_pk\": \"031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055\",\n            \"remote_port\": 10,\n            \"local_port\": 1\n        },\n        \"request_route_id\": 1\n    }\n}"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/routes/{rid}",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "\t{\n\t\t\"keep_alive\": 1,\n\t\t\"rule_type\": 1,\n\t\t\"forward_fields\": {\n\t\t\t\"next_rid\":2,\n\t\t\t\"next_tid\":\"221ab9df-7cc7-0cca-9874-9cd72150865b\"\n\t\t},\n\t\t\"request_route_id\":2\n\t}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes/2",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"routes",
+						"2"
+					]
+				},
+				"description": "Puts routing rule entry on given route id with the given routing rule provided in the body as json. If an existing route id is used it replaces the previous entry at such id."
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/routes/{rid}",
+					"originalRequest": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "\t{\n\t\t\"keep_alive\": 1,\n\t\t\"rule_type\": 1,\n\t\t\"forward_fields\": {\n\t\t\t\"next_rid\":2,\n\t\t\t\"next_tid\":\"221ab9df-7cc7-0cca-9874-9cd72150865b\"\n\t\t},\n\t\t\"request_route_id\":2\n\t}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes/5",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"routes",
+								"5"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:25:01 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "277"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"key\": 5,\n    \"rule\": \"00000000000000010100000002221ab9df7cc70cca98749cd72150865b00000000000000000000000000000000000000000000000002\",\n    \"rule_summary\": {\n        \"keep_alive\": 1,\n        \"rule_type\": 1,\n        \"forward_fields\": {\n            \"next_rid\": 2,\n            \"next_tid\": \"221ab9df-7cc7-0cca-9874-9cd72150865b\"\n        },\n        \"request_route_id\": 2\n    }\n}"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/routes/1",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes/1",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"routes",
+						"1"
+					]
+				},
+				"description": "Deletes the routing rule of the provided route id"
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/routes/1",
+					"originalRequest": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/routes/1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"routes",
+								"1"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:15:20 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "5"
+						}
+					],
+					"cookie": [],
+					"body": "true"
+				}
+			]
+		},
+		{
+			"name": "/api/visors/{pk}/loops",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/loops",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"visors",
+						"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+						"loops"
+					]
+				},
+				"description": "Returns availabe loops on the visor."
+			},
+			"response": [
+				{
+					"name": "/api/visors/{pk}/loops",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/visors/024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7/loops",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"visors",
+								"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7",
+								"loops"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Date",
+							"value": "Mon, 07 Oct 2019 17:26:31 GMT"
+						},
+						{
+							"key": "Content-Length",
+							"value": "202"
+						}
+					],
+					"cookie": [],
+					"body": "[\n    {\n        \"resp_rid\": 2,\n        \"remote_pk\": \"031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055\",\n        \"remote_port\": 10,\n        \"local_port\": 1,\n        \"resp\": {\n            \"next_rid\": 2,\n            \"next_tid\": \"221ab9df-7cc7-0cca-9874-9cd72150865b\"\n        }\n    }\n]"
 				}
 			]
 		}

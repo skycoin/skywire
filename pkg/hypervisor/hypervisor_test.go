@@ -114,7 +114,7 @@ func TestNewNode(t *testing.T) {
 		testCases(t, addr, client, []TestCase{
 			makeCase(http.MethodGet, "/api/user", nil),
 			makeCase(http.MethodPost, "/api/change-password", strings.NewReader(`{"old_password":"old","new_password":"new"}`)),
-			makeCase(http.MethodGet, "/api/nodes", nil),
+			makeCase(http.MethodGet, "/api/visors", nil),
 		})
 	})
 
@@ -223,7 +223,7 @@ func TestNewNode(t *testing.T) {
 			},
 			{
 				Method:     http.MethodGet,
-				URI:        "/api/nodes",
+				URI:        "/api/visors",
 				RespStatus: http.StatusOK,
 			},
 		})
@@ -278,7 +278,7 @@ func TestNewNode(t *testing.T) {
 			},
 			{
 				Method:     http.MethodGet,
-				URI:        "/api/nodes",
+				URI:        "/api/visors",
 				RespStatus: http.StatusUnauthorized,
 				RespBody: func(t *testing.T, r *http.Response) {
 					body, err := decodeErrorBody(r.Body)

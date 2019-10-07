@@ -38,10 +38,10 @@ type appNodeConn struct {
 
 // Node manages AppNodes.
 type Node struct {
-	c     Config
-	nodes map[cipher.PubKey]appNodeConn // connected remote nodes.
-	users *UserManager
-	mu    *sync.RWMutex
+	c      Config
+	visors map[cipher.PubKey]appNodeConn // connected remote visors.
+	users  *UserManager
+	mu     *sync.RWMutex
 }
 
 // NewNode creates a new Node.
@@ -53,10 +53,10 @@ func NewNode(config Config) (*Node, error) {
 	singleUserDB := NewSingleUserStore("admin", boltUserDB)
 
 	return &Node{
-		c:     config,
-		nodes: make(map[cipher.PubKey]appNodeConn),
-		users: NewUserManager(singleUserDB, config.Cookies),
-		mu:    new(sync.RWMutex),
+		c:      config,
+		visors: make(map[cipher.PubKey]appNodeConn),
+		users:  NewUserManager(singleUserDB, config.Cookies),
+		mu:     new(sync.RWMutex),
 	}, nil
 }
 
@@ -69,7 +69,7 @@ func (m *Node) ServeRPC(lis *dmsg.Listener) error {
 		}
 		addr := conn.RemoteAddr().(dmsg.Addr)
 		m.mu.Lock()
-		m.nodes[addr.PK] = appNodeConn{
+		m.visors[addr.PK] = appNodeConn{
 			Addr:   addr,
 			Client: visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
 		}
@@ -99,7 +99,7 @@ func (m *Node) AddMockData(config MockConfig) error {
 			return err
 		}
 		m.mu.Lock()
-		m.nodes[pk] = appNodeConn{
+		m.visors[pk] = appNodeConn{
 			Addr: dmsg.Addr{
 				PK:   pk,
 				Port: uint16(i),
@@ -132,25 +132,25 @@ func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/user", m.users.UserInfo())
 			r.Post("/change-password", m.users.ChangePassword())
 			r.Post("/exec/{pk}", m.exec())
-			r.Get("/nodes", m.getNodes())
-			r.Get("/nodes/{pk}/health", m.getHealth())
-			r.Get("/nodes/{pk}/uptime", m.getUptime())
-			r.Get("/nodes/{pk}", m.getNode())
-			r.Get("/nodes/{pk}/apps", m.getApps())
-			r.Get("/nodes/{pk}/apps/{app}", m.getApp())
-			r.Put("/nodes/{pk}/apps/{app}", m.putApp())
-			r.Get("/nodes/{pk}/apps/{app}/logs", m.appLogsSince())
-			r.Get("/nodes/{pk}/transport-types", m.getTransportTypes())
-			r.Get("/nodes/{pk}/transports", m.getTransports())
-			r.Post("/nodes/{pk}/transports", m.postTransport())
-			r.Get("/nodes/{pk}/transports/{tid}", m.getTransport())
-			r.Delete("/nodes/{pk}/transports/{tid}", m.deleteTransport())
-			r.Get("/nodes/{pk}/routes", m.getRoutes())
-			r.Post("/nodes/{pk}/routes", m.postRoute())
-			r.Get("/nodes/{pk}/routes/{rid}", m.getRoute())
-			r.Put("/nodes/{pk}/routes/{rid}", m.putRoute())
-			r.Delete("/nodes/{pk}/routes/{rid}", m.deleteRoute())
-			r.Get("/nodes/{pk}/loops", m.getLoops())
+			r.Get("/visors", m.getNodes())
+			r.Get("/visors/{pk}/health", m.getHealth())
+			r.Get("/visors/{pk}/uptime", m.getUptime())
+			r.Get("/visors/{pk}", m.getNode())
+			r.Get("/visors/{pk}/apps", m.getApps())
+			r.Get("/visors/{pk}/apps/{app}", m.getApp())
+			r.Put("/visors/{pk}/apps/{app}", m.putApp())
+			r.Get("/visors/{pk}/apps/{app}/logs", m.appLogsSince())
+			r.Get("/visors/{pk}/transport-types", m.getTransportTypes())
+			r.Get("/visors/{pk}/transports", m.getTransports())
+			r.Post("/visors/{pk}/transports", m.postTransport())
+			r.Get("/visors/{pk}/transports/{tid}", m.getTransport())
+			r.Delete("/visors/{pk}/transports/{tid}", m.deleteTransport())
+			r.Get("/visors/{pk}/routes", m.getRoutes())
+			r.Post("/visors/{pk}/routes", m.postRoute())
+			r.Get("/visors/{pk}/routes/{rid}", m.getRoute())
+			r.Put("/visors/{pk}/routes/{rid}", m.putRoute())
+			r.Delete("/visors/{pk}/routes/{rid}", m.deleteRoute())
+			r.Get("/visors/{pk}/loops", m.getLoops())
 		})
 	})
 	r.ServeHTTP(w, req)
@@ -234,12 +234,12 @@ type summaryResp struct {
 	*visor.Summary
 }
 
-// provides summary of all nodes.
+// provides summary of all visors.
 func (m *Node) getNodes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var summaries []summaryResp
 		m.mu.RLock()
-		for pk, c := range m.nodes {
+		for pk, c := range m.visors {
 			summary, err := c.Client.Summary()
 			if err != nil {
 				log.Printf("failed to obtain summary from AppNode with pk %s. Error: %v", pk, err)
@@ -576,7 +576,7 @@ func (m *Node) getLoops() http.HandlerFunc {
 
 func (m *Node) client(pk cipher.PubKey) (dmsg.Addr, visor.RPCClient, bool) {
 	m.mu.RLock()
-	conn, ok := m.nodes[pk]
+	conn, ok := m.visors[pk]
 	m.mu.RUnlock()
 	return conn.Addr, conn.Client, ok
 }
@@ -651,7 +651,7 @@ func (m *Node) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
 }
 
 func (m *Node) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := m.appCtx(w, r)
+	ctx, ok := m.nodeCtx(w, r)
 	if !ok {
 		return nil, false
 	}
@@ -675,14 +675,15 @@ func (m *Node) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
 }
 
 func (m *Node) routeCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := m.tpCtx(w, r)
+	ctx, ok := m.nodeCtx(w, r)
 	if !ok {
 		return nil, false
 	}
-	rid, err := ridFromParam(r, "key")
+	rid, err := ridFromParam(r, "rid")
 	if err != nil {
 		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 	}
+	log.Warnln("parsed rid: ", rid)
 	ctx.RtKey = rid
 	return ctx, true
 }

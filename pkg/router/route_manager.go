@@ -267,6 +267,7 @@ func (rm *routeManager) confirmLoop(data []byte) error {
 			return true
 		}
 
+		fmt.Println("route ID: ", routeID)
 		appRouteID = routeID
 		appRule = make(routing.Rule, len(rule))
 		copy(appRule, rule)
