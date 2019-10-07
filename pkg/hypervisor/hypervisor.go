@@ -38,10 +38,10 @@ type appNodeConn struct {
 
 // Node manages AppNodes.
 type Node struct {
-	c     Config
+	c      Config
 	visors map[cipher.PubKey]appNodeConn // connected remote visors.
-	users *UserManager
-	mu    *sync.RWMutex
+	users  *UserManager
+	mu     *sync.RWMutex
 }
 
 // NewNode creates a new Node.
@@ -53,10 +53,10 @@ func NewNode(config Config) (*Node, error) {
 	singleUserDB := NewSingleUserStore("admin", boltUserDB)
 
 	return &Node{
-		c:     config,
+		c:      config,
 		visors: make(map[cipher.PubKey]appNodeConn),
-		users: NewUserManager(singleUserDB, config.Cookies),
-		mu:    new(sync.RWMutex),
+		users:  NewUserManager(singleUserDB, config.Cookies),
+		mu:     new(sync.RWMutex),
 	}, nil
 }
 
