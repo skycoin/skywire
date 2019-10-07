@@ -17,13 +17,13 @@ import (
 // SkywireNetworker implements `Networker` for skynet.
 type SkywireNetworker struct {
 	log       *logging.Logger
-	r         router.Interface
+	r         router.Router
 	porter    *netutil.Porter
 	isServing int32
 }
 
 // NewSkywireNetworker constructs skywire networker.
-func NewSkywireNetworker(l *logging.Logger, r router.Interface) Networker {
+func NewSkywireNetworker(l *logging.Logger, r router.Router) Networker {
 	return &SkywireNetworker{
 		log:    l,
 		r:      r,
