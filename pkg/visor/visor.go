@@ -29,7 +29,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app"
-	routeFinder "github.com/skycoin/skywire/pkg/route-finder/client"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -89,7 +89,7 @@ type PacketRouter interface {
 // necessary connections and performing messaging gateway functions.
 type Node struct {
 	config   *Config
-	router   PacketRouter
+	router   router.Router
 	n        *snet.Network
 	tm       *transport.Manager
 	rt       routing.Table
@@ -175,7 +175,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 		SecKey:           sk,
 		TransportManager: node.tm,
 		RoutingTable:     node.rt,
-		RouteFinder:      routeFinder.NewHTTP(config.Routing.RouteFinder, time.Duration(config.Routing.RouteFinderTimeout)),
+		RouteFinder:      rfclient.NewHTTP(config.Routing.RouteFinder, time.Duration(config.Routing.RouteFinderTimeout)),
 		SetupNodes:       config.Routing.SetupNodes,
 	}
 	r, err := router.New(node.n, rConfig)

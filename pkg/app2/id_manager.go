@@ -1,10 +1,9 @@
 package app2
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 var (
@@ -95,11 +94,10 @@ func (m *idManager) set(id uint16, v interface{}) error {
 	if !ok {
 		m.mx.Unlock()
 		return errors.New("id is not reserved")
-	} else {
-		if l != nil {
-			m.mx.Unlock()
-			return errValueAlreadyExists
-		}
+	}
+	if l != nil {
+		m.mx.Unlock()
+		return errValueAlreadyExists
 	}
 
 	m.values[id] = v

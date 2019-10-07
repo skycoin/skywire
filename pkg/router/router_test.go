@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	routeFinder "github.com/skycoin/skywire/pkg/route-finder/client"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/skycoin/skywire/pkg/snet"
@@ -63,7 +63,7 @@ func TestRouter_Serve(t *testing.T) {
 	require.NoError(t, err)
 
 	// CLOSURE: clear all rules in all router.
-	clearRules := func(routers ...*Router) {
+	clearRules := func(routers ...*router) {
 		for _, r := range routers {
 			rules := r.rt.AllRules()
 			for _, rule := range rules {
@@ -72,9 +72,9 @@ func TestRouter_Serve(t *testing.T) {
 		}
 	}
 
-	// TEST: Ensure handlePacket does as expected.
+	// TEST: Ensure handleTransportPacket does as expected.
 	// After setting a rule in r0, r0 should forward a packet to r1 (as specified in the given rule)
-	// when r0.handlePacket() is called.
+	// when r0.handleTransportPacket() is called.
 	t.Run("handlePacket_fwdRule", func(t *testing.T) {
 		defer clearRules(r0, r1)
 
@@ -86,9 +86,9 @@ func TestRouter_Serve(t *testing.T) {
 		err = r0.rt.SaveRule(fwdRule)
 		require.NoError(t, err)
 
-		// Call handlePacket for r0 (this should in turn, use the rule we added).
-		packet := routing.MakePacket(fwdRtID, []byte("This is a test!"))
-		require.NoError(t, r0.handlePacket(context.TODO(), packet))
+		// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
+		packet := routing.MakeDataPacket(fwdRtID, []byte("This is a test!"))
+		require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 		// r1 should receive the packet handled by r0.
 		recvPacket, err := r1.tm.ReadPacket()
@@ -153,15 +153,15 @@ func TestRouter_Serve(t *testing.T) {
 	//	appRtID, err := r0.rm.rt.AddRule(appRule)
 	//	require.NoError(t, err)
 	//
-	//	// Call handlePacket for r0.
+	//	// Call handleTransportPacket for r0.
 	//
 	//	// payload is prepended with two bytes to satisfy app.Proto.
 	//	// payload[0] = frame type, payload[1] = id
 	//	rAddr := routing.Addr{PubKey: keys[1].PK, Port: localPort}
 	//	rawRAddr, _ := json.Marshal(rAddr)
 	//	// payload := append([]byte{byte(app.FrameClose), 0}, rawRAddr...)
-	//	packet := routing.MakePacket(appRtID, rawRAddr)
-	//	require.NoError(t, r0.handlePacket(context.TODO(), packet))
+	//	packet := routing.MakeDataPacket(appRtID, rawRAddr)
+	//	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 	//})
 }
 
@@ -231,7 +231,7 @@ func TestRouter_Rules(t *testing.T) {
 	})
 
 	// TEST: Ensure removing loop rules work properly.
-	t.Run("RemoveLoopRule", func(t *testing.T) {
+	t.Run("RemoveRouteDescriptor", func(t *testing.T) {
 		clearRules()
 
 		pk, _ := cipher.GenerateKeyPair()
@@ -243,12 +243,12 @@ func TestRouter_Rules(t *testing.T) {
 		err = r.rt.SaveRule(rule)
 		require.NoError(t, err)
 
-		loop := routing.Loop{Local: routing.Addr{Port: 3}, Remote: routing.Addr{PubKey: pk, Port: 3}}
-		r.RemoveLoopRule(loop)
+		desc := routing.NewRouteDescriptor(cipher.PubKey{}, pk, 3, 2)
+		r.RemoveRouteDescriptor(desc)
 		assert.Equal(t, 1, rt.Count())
 
-		loop = routing.Loop{Local: routing.Addr{Port: 2}, Remote: routing.Addr{PubKey: pk, Port: 3}}
-		r.RemoveLoopRule(loop)
+		desc = routing.NewRouteDescriptor(cipher.PubKey{}, pk, 2, 3)
+		r.RemoveRouteDescriptor(desc)
 		assert.Equal(t, 0, rt.Count())
 	})
 
@@ -272,12 +272,14 @@ func TestRouter_Rules(t *testing.T) {
 			}()
 
 			// Emulate SetupNode sending RequestRegistrationID request.
-			ids, err := setup.RequestRouteIDs(context.TODO(), setup.NewSetupProtocol(requestIDIn), 1)
+			proto := setup.NewSetupProtocol(requestIDIn)
+			ids, err := proto.ReserveRtIDs(context.TODO(), 1)
 			require.NoError(t, err)
 
 			// Emulate SetupNode sending AddRule request.
 			rule := routing.IntermediaryForwardRule(10*time.Minute, ids[0], 3, uuid.New())
-			err = setup.AddRules(context.TODO(), setup.NewSetupProtocol(addIn), []routing.Rule{rule})
+			proto = setup.NewSetupProtocol(addIn)
+			err = proto.AddRules(context.TODO(), []routing.Rule{rule})
 			require.NoError(t, err)
 
 			// Check routing table state after AddRule.
@@ -335,19 +337,19 @@ func TestRouter_Rules(t *testing.T) {
 		assert.Equal(t, 0, rt.Count())
 	})
 
-	// TEST: Ensure ConfirmLoop request from SetupNode is handled properly.
-	t.Run("ConfirmLoop", func(t *testing.T) {
+	// TEST: Ensure visorRoutesCreated request from SetupNode is handled properly.
+	t.Run("RoutesCreated", func(t *testing.T) {
 		clearRules()
 
 		var inLoop routing.Loop
 		var inRule routing.Rule
 
-		r.OnConfirmLoop = func(loop routing.Loop, rule routing.Rule) (err error) {
+		r.OnRoutesCreated = func(loop routing.Loop, rule routing.Rule) (err error) {
 			inLoop = loop
 			inRule = rule
 			return nil
 		}
-		defer func() { r.OnConfirmLoop = nil }()
+		defer func() { r.OnRoutesCreated = nil }()
 
 		in, out := net.Pipe()
 		errCh := make(chan error, 1)
@@ -381,7 +383,7 @@ func TestRouter_Rules(t *testing.T) {
 			},
 			RouteID: 1,
 		}
-		err := setup.ConfirmLoop(context.TODO(), proto, ld)
+		err := proto.RoutesCreated(context.TODO(), ld)
 		require.NoError(t, err)
 		assert.Equal(t, rule, inRule)
 		assert.Equal(t, routing.Port(2), inLoop.Local.Port)
@@ -492,7 +494,7 @@ func (e *TestEnv) GenRouterConfig(i int) *Config {
 		SecKey:           e.TpMngrConfs[i].SecKey,
 		TransportManager: e.TpMngrs[i],
 		RoutingTable:     routing.NewTable(routing.DefaultConfig()),
-		RouteFinder:      routeFinder.NewMock(),
+		RouteFinder:      rfclient.NewMock(),
 		SetupNodes:       nil, // TODO
 	}
 }
