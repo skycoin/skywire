@@ -1,0 +1,62 @@
+<div class="mt-4.5 d-flex justify-content-between">
+  <div class="font-mini uppercase ml-3.5">Transports</div>
+  <mat-icon
+    (click)="create()"
+    [matTooltip]="'transports.create' | translate"
+    class="ic-mini mr-3.5 table-create-record"
+  >add</mat-icon>
+</div>
+
+<div class="container-elevated-translucid mt-3 overflow">
+  <table
+    class="table-translucid fit"
+    mat-table
+    [dataSource]="dataSource"
+    *ngIf="dataSource.data && dataSource.data.length > 0"
+  >
+    <ng-container matColumnDef="index" class="index-col">
+      <th mat-header-cell *matHeaderCellDef class="bold">#</th>
+      <td mat-cell *matCellDef="let i=index;" class="bold index-col"> {{i+1}}</td>
+    </ng-container>
+    <ng-container matColumnDef="remote">
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'transports.remote' | translate }}</th>
+      <td mat-cell *matCellDef="let transport;">
+        <app-copy-to-clipboard-text [short]="true" text="{{ transport.remote_pk }}"></app-copy-to-clipboard-text>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="type">
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'transports.type' | translate }}</th>
+      <td mat-cell *matCellDef="let transport;">
+        {{ transport.type }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="upload_total">
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.upload' | translate }}</th>
+      <td mat-cell *matCellDef="let transport;">
+        {{ transport.log.sent | autoScale }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="download_total">
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.download' | translate }}</th>
+      <td mat-cell *matCellDef="let transport;">
+        {{ transport.log.recv | autoScale }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="x">
+      <th mat-header-cell *matHeaderCellDef class="bold"></th>
+      <td mat-cell *matCellDef="let transport;" class="text-right">
+        <mat-icon
+          class="table-delete-record ic-mini"
+          [matTooltip]="'transports.delete' | translate"
+          (click)="delete(transport.id)"
+        >close</mat-icon>
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+  </table>
+
+  <div *ngIf="!dataSource.data || dataSource.data.length === 0">
+    <span class="text">Node doesn't have any transports.</span>
+  </div>
+</div>

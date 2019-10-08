@@ -1,0 +1,41 @@
+<app-dialog [headline]="'transports.create' | translate">
+  <form [formGroup]="form">
+    <mat-form-field>
+      <input
+        formControlName="remoteKey"
+        maxlength="66"
+        [placeholder]="'transports.dialog.remote-key' | translate"
+        matInput>
+      <mat-error>
+        <ng-container *ngIf="!this.form.get('remoteKey').hasError('pattern');else hexError">
+          {{ 'transports.dialog.errors.remote-key-length-error' | translate }}
+        </ng-container>
+      </mat-error>
+      <ng-template #hexError>
+        {{ 'transports.dialog.errors.remote-key-chars-error' | translate }}
+      </ng-template>
+    </mat-form-field>
+
+    <mat-form-field>
+      <mat-select
+        formControlName="type"
+        [placeholder]="'transports.dialog.transport-type' | translate">
+        <mat-option *ngFor="let type of types" [value]="type">{{ type }}</mat-option>
+      </mat-select>
+      <mat-error>
+        {{ 'transports.dialog.errors.transport-type-error' | translate }}
+      </mat-error>
+    </mat-form-field>
+
+    <app-button
+      #button
+      (action)="create()"
+      type="mat-raised-button"
+      [disabled]="!form.valid"
+      color="primary"
+      class="float-right">
+      {{ 'transports.create' | translate }}
+    </app-button>
+  </form>
+
+</app-dialog>

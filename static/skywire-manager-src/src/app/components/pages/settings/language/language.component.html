@@ -1,0 +1,11 @@
+<div class="container-elevated-white">
+  <form [formGroup]="form">
+    <mat-form-field class="solo-input">
+      <mat-select formControlName="language" [placeholder]="'settings.language' | translate">
+        <mat-option *ngFor="let lang of languages" [value]="lang.value">
+          {{ lang.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </form>
+</div>

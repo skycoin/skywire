@@ -1,0 +1,16 @@
+@import 'variables';
+
+.overflow {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+
+  table {
+    width: 100%;
+  }
+}
+
+.text {
+  font-size: 14px;
+  font-weight: 300;
+}

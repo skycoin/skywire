@@ -1,0 +1,71 @@
+<app-sidenav-content *ngIf="node">
+  <app-actions [node]="node"></app-actions>
+</app-sidenav-content>
+
+<div class="row" *ngIf="node">
+  <div class="col-12 col-lg-8">
+    <div class="d-flex flex-column h-100">
+      <!--<div class="mt-4">-->
+        <!--<app-status [nodeData]="nodeData"></app-status>-->
+      <!--</div>-->
+      <div class="container-elevated-translucid mt-4">
+        <div class="top-row align-items-center">
+          <span class="row-title mr-2 flex-shrink-0">{{ 'common.public-key' | translate }}</span>
+          <app-copy-to-clipboard-text
+            class="row-content font-smaller text-truncate mw-0"
+            [text]="node.local_pk">
+          </app-copy-to-clipboard-text>
+        </div>
+        <div class="top-row align-items-center">
+          <span class="row-title mr-2 flex-shrink-0">{{ 'common.ip' | translate }}</span>
+          <app-copy-to-clipboard-text
+            class="row-content font-smaller text-truncate mw-0"
+            [text]="node.tcp_addr">
+          </app-copy-to-clipboard-text>
+        </div>
+      </div>
+
+      <router-outlet></router-outlet>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="node-right font-smaller d-flex flex-column h-100 mt-4">
+      <div class="node-ips-container d-flex flex-column justify-content-between">
+        <div class="section">
+          <span class="section-title">{{ 'node.details.node-info' | translate }}</span>
+          <span class="font-smaller">
+            qwertyuiop | asdfghjkl | zxcvbnm
+          </span>
+        </div>
+        <hr>
+        <div class="section">
+          <span class="section-title">{{ 'node.details.manager-info' | translate }}</span>
+          <span class="font-smaller">
+            {{ '123' }}
+            |
+            <app-copy-to-clipboard-text
+              [short]="true"
+              [text]="'123123123123123'"
+              class="d-inline-block">
+            </app-copy-to-clipboard-text>
+          </span>
+        </div>
+        <hr>
+        <div class="section" matTooltip="{{ 'node.details.operational-nodes-tooltip' | translate: {value: operationalNodesCount} }}">
+          <span class="section-title">
+            <i class="dot-green"></i>
+            {{ 'node.details.nodes' | translate }}
+          </span>
+          <span
+            class="font-smaller">
+            1/1 <span class="text-capitalize">{{ 'node.details.operational-nodes' | translate }}</span>
+          </span>
+        </div>
+      </div>
+      <app-charts
+        class="d-flex flex-column justify-content-end mt-5"
+        [transports]="node.transports"
+      ></app-charts>
+    </div>
+  </div>
+</div>

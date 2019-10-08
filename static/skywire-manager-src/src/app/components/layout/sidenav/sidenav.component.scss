@@ -1,0 +1,65 @@
+@import "variables";
+@import "utilities/theme";
+@import "bootstrap_overrides";
+@import "~bootstrap/scss/functions";
+
+nav {
+  width: 285px;
+  height: 100vh;
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  padding: 15px;
+  background: $nav-bg;
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  @media (max-width: map-get($grid-breakpoints, md)) {
+    position: static;
+    width: 100%;
+    height: auto;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .menu-button {
+    margin-right: 15px;
+    cursor: pointer;
+  }
+
+  .menu-container {
+    flex: 1;
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+
+    ::ng-deep app-button {
+      width: 100%;
+
+      ::ng-deep button {
+        width: 100%;
+        text-align: left;
+        margin-bottom: 6px;
+      }
+    }
+  }
+}
+
+.content {
+  width: calc(100vw - 300px);
+  margin-left: 300px;
+
+  @media (max-width: map-get($grid-breakpoints, md)) {
+    width: 100%;
+    margin-left: 0;
+  }
+}

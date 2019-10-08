@@ -1,0 +1,35 @@
+<div class="font-mini uppercase mt-4.5 ml-3.5">Routes</div>
+
+<div class="container-elevated-translucid mt-3 overflow">
+  <table
+    class="table-translucid fit"
+    mat-table
+    [dataSource]="dataSource"
+    *ngIf="dataSource.data && dataSource.data.length > 0"
+  >
+    <ng-container matColumnDef="key">
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'routes.key' | translate }}</th>
+      <td mat-cell *matCellDef="let conn;">
+        {{ conn.key }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="rule">
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'routes.rule' | translate }}</th>
+      <td mat-cell *matCellDef="let conn;">
+        <app-copy-to-clipboard-text [text]="conn.rule"></app-copy-to-clipboard-text>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="x">
+      <th mat-header-cell *matHeaderCellDef class="bold"></th>
+      <td mat-cell *matCellDef="let conn;" class="text-right">
+        <mat-icon class="table-delete-record ic-mini">close</mat-icon>
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+  </table>
+
+  <div *ngIf="!dataSource.data || dataSource.data.length === 0">
+    <span class="text">Node doesn't have any routes.</span>
+  </div>
+</div>

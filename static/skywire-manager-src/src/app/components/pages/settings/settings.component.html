@@ -1,0 +1,16 @@
+<app-sidenav-content>
+  <div>
+    <app-button icon="translate">{{ 'settings.language' | translate }}</app-button>
+    <app-button icon="security">{{ 'login.password' | translate }}</app-button>
+  </div>
+  <app-button (action)="back()" icon="chevron_left">{{ 'common.back' | translate }}</app-button>
+</app-sidenav-content>
+
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="mt-4">
+      <app-language class="mb-4"></app-language>
+      <app-password></app-password>
+    </div>
+  </div>
+</div>

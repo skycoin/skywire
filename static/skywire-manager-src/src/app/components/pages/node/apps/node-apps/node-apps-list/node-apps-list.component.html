@@ -1,0 +1,51 @@
+<div class="mt-4.5 d-flex justify-content-between">
+  <div class="font-mini uppercase ml-3.5">Applications</div>
+  <mat-icon class="ic-mini mr-3.5 table-create-record">add</mat-icon>
+</div>
+
+<div class="container-elevated-translucid mt-3 mb-5">
+  <table
+    class="table-translucid align-center fit"
+    mat-table
+    [dataSource]="dataSource"
+    *ngIf="dataSource.data?.length > 0"
+  >
+    <ng-container matColumnDef="index">
+      <th mat-header-cell *matHeaderCellDef class="bold">#</th>
+      <td mat-cell *matCellDef="let app; let i=index;" class="bold"> {{i+1}}</td>
+    </ng-container>
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef class="bold">App name</th>
+      <td *matCellDef="let app;let i=index;" mat-cell>
+        {{ app.name }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="port">
+      <th mat-header-cell *matHeaderCellDef class="bold">Port</th>
+      <td *matCellDef="let app;let i=index;" mat-cell>
+        {{ app.port }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="status">
+      <th mat-header-cell *matHeaderCellDef class="bold">Status</th>
+      <td *matCellDef="let app;let i=index;" mat-cell>
+        <i class="dot-green"></i>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="autostart">
+      <th mat-header-cell *matHeaderCellDef class="bold">Auto start</th>
+      <td *matCellDef="let app;let i=index;" mat-cell>
+        <mat-icon class="ic-mini">done</mat-icon>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="x">
+      <th mat-header-cell *matHeaderCellDef class="bold"></th>
+      <td *matCellDef="let app;let i=index;" mat-cell class="text-right">
+        <mat-icon class="table-delete-record ic-mini">close</mat-icon>
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+  </table>
+</div>

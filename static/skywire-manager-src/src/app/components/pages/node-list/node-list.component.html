@@ -1,0 +1,137 @@
+<app-sidenav-content>
+  <div>
+    <app-button (action)="refresh()" icon="refresh" #refreshButton>{{ 'nodes.refresh' | translate }}</app-button>
+    <app-button (action)="settings()" icon="settings" #refreshButton>{{ 'nodes.settings' | translate }}</app-button>
+  </div>
+  <app-button (action)="logout()" icon="power_settings_new" #refreshButton>{{ 'nodes.logout' | translate }}</app-button>
+</app-sidenav-content>
+
+<div class="row">
+  <div class="col-12">
+    <div class="node-list-container mt-4">
+      <table
+        class="table-white container-elevated-white"
+        mat-table
+        [dataSource]="dataSource"
+        *ngIf="dataSource.data.length > 0"
+      >
+        <ng-container matColumnDef="enabled">
+          <th mat-header-cell *matHeaderCellDef class="bold"></th>
+          <td mat-cell *matCellDef="let node;">
+            <!--<span [class]="nodeStatusClass(node)" [matTooltip]="'node.statuses.' + node.status + '-tooltip' | translate"></span>-->
+            <span class="dot-green"></span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="index">
+          <th mat-header-cell *matHeaderCellDef class="bold">#</th>
+          <td id="nodeIndex" mat-cell *matCellDef="let node;let i=index;" class="bold">{{i+1}}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="label">
+          <th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.ip' | translate }}</th>
+          <td id="nodeLabel" mat-cell *matCellDef="let node;">
+            {{ node.tcp_addr }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="key">
+          <th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.key' | translate }}</th>
+          <td class="node-key" mat-cell *matCellDef="let node;">
+            <div class="cover"></div>
+            <app-copy-to-clipboard-text [text]="node.local_pk"></app-copy-to-clipboard-text>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let node;" (click)="$event.stopPropagation()" class="actions">
+            <button
+              (click)="open(node)"
+              mat-icon-button
+              [matTooltip]="'nodes.view-node' | translate"
+            >
+              <mat-icon>chevron_right</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let node; columns: displayedColumns;" (click)="open(node)" class="cursor-pointer"></tr>
+      </table>
+
+      <div class="nodes-empty table-white container-elevated-white" *ngIf="dataSource.data.length === 0">
+        <i class="material-icons">warning</i>
+        {{ 'nodes.empty' | translate }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!--<app-toolbar>-->
+<!--<app-button (action)="refresh()" icon="refresh" #refreshButton>{{ 'nodes.refresh' | translate }}</app-button>-->
+<!--</app-toolbar>-->
+<!--<div class="container-fluid mt-5">-->
+<!--<div class="row">-->
+  <!--<div class="col-md-1"></div>-->
+  <!--<div class="col-md-10">-->
+    <!--<div class="node-list-container">-->
+      <!--<table-->
+        <!--class="table-white container-elevated-white"-->
+        <!--mat-table-->
+        <!--[dataSource]="dataSource"-->
+        <!--*ngIf="dataSource.data.length > 0"-->
+      <!--&gt;-->
+        <!--<ng-container matColumnDef="enabled">-->
+          <!--<th mat-header-cell *matHeaderCellDef class="bold"></th>-->
+          <!--<td mat-cell *matCellDef="let node;">-->
+            <!--&lt;!&ndash;<span [class]="nodeStatusClass(node)" [matTooltip]="'node.statuses.' + node.status + '-tooltip' | translate"></span>&ndash;&gt;-->
+            <!--<span class="dot-green"></span>-->
+          <!--</td>-->
+        <!--</ng-container>-->
+
+        <!--<ng-container matColumnDef="index">-->
+          <!--<th mat-header-cell *matHeaderCellDef class="bold">#</th>-->
+          <!--<td id="nodeIndex" mat-cell *matCellDef="let node;let i=index;" class="bold">{{i+1}}</td>-->
+        <!--</ng-container>-->
+
+        <!--<ng-container matColumnDef="label">-->
+          <!--<th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.ip' | translate }}</th>-->
+          <!--<td id="nodeLabel" mat-cell *matCellDef="let node;">-->
+            <!--192.168.0.2-->
+          <!--</td>-->
+        <!--</ng-container>-->
+
+        <!--<ng-container matColumnDef="key">-->
+          <!--<th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.key' | translate }}</th>-->
+          <!--<td class="node-key" mat-cell *matCellDef="let node;">-->
+            <!--<div class="cover"></div>-->
+            <!--<app-copy-to-clipboard-text [text]="node.local_pk"></app-copy-to-clipboard-text>-->
+          <!--</td>-->
+        <!--</ng-container>-->
+
+        <!--<ng-container matColumnDef="actions">-->
+          <!--<th mat-header-cell *matHeaderCellDef></th>-->
+          <!--<td mat-cell *matCellDef="let node;" (click)="$event.stopPropagation()" class="actions">-->
+            <!--<button-->
+              <!--(click)="open(node)"-->
+              <!--mat-icon-button-->
+              <!--[matTooltip]="'nodes.view-node' | translate"-->
+            <!--&gt;-->
+              <!--<mat-icon>chevron_right</mat-icon>-->
+            <!--</button>-->
+          <!--</td>-->
+        <!--</ng-container>-->
+
+        <!--<tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>-->
+        <!--<tr mat-row *matRowDef="let node; columns: displayedColumns;" (click)="open(node)" class="cursor-pointer"></tr>-->
+      <!--</table>-->
+
+      <!--<div class="nodes-empty table-white container-elevated-white" *ngIf="dataSource.data.length === 0">-->
+        <!--<i class="material-icons">warning</i>-->
+        <!--{{ 'nodes.empty' | translate }}-->
+      <!--</div>-->
+    <!--</div>-->
+  <!--</div>-->
+  <!--<div class="col-md-1"></div>-->
+<!--</div>-->
