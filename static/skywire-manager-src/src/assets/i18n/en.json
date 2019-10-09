@@ -197,6 +197,8 @@
     "type": "Type",
     "create": "Create transport",
     "delete": "Delete transport",
+    "deleted": "Transport deleted",
+    "error-deleting": "It was not possible to delete the transport",
     "dialog": {
       "remote-key": "Remote public key",
       "transport-type": "Transport type",

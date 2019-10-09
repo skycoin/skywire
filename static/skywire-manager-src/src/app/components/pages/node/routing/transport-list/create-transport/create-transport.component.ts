@@ -5,6 +5,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatSnackBar } from '@angular/material';
 import { TranslateService } from '@ngx-translate/core';
 import { ButtonComponent } from '../../../../../layout/button/button.component';
+import { NodeComponent } from '../../../node.component';
 
 @Component({
   selector: 'app-create-transport',
@@ -29,7 +30,12 @@ export class CreateTransportComponent implements OnInit {
     this.transportService.types(this.nodeService.getCurrentNodeKey()).subscribe(types => this.types = types);
 
     this.form = this.formBuilder.group({
-      'remoteKey': ['', Validators.compose([Validators.required, Validators.minLength(66), Validators.maxLength(66), Validators.pattern('^[0-9a-fA-F]+$')])],
+      'remoteKey': ['', Validators.compose([
+        Validators.required,
+        Validators.minLength(66),
+        Validators.maxLength(66),
+        Validators.pattern('^[0-9a-fA-F]+$')])
+      ],
       'type': ['', Validators.required],
     });
   }
@@ -53,6 +59,7 @@ export class CreateTransportComponent implements OnInit {
   }
 
   private onSuccess() {
+    NodeComponent.refreshDisplayedData();
     this.snackbar.open(this.translate.instant('transports.dialog.success'));
     this.dialogRef.close();
   }

@@ -81,14 +81,14 @@ export class NodeService {
   }
 
   private getNodes(): Observable<Node[]|null> {
-    return this.apiService.get('nodes', { api2: true });
+    return this.apiService.get('visors', { api2: true });
   }
 
   private getNode(): Observable<Node> {
-    return this.apiService.get(`nodes/${this.currentNodeKey}`, { api2: true });
+    return this.apiService.get(`visors/${this.currentNodeKey}`, { api2: true });
   }
 
   private getTransports() {
-    return this.apiService.get(`nodes/${this.currentNodeKey}/transports`, { api2: true });
+    return this.apiService.get(`visors/${this.currentNodeKey}/transports`, { api2: true });
   }
 }

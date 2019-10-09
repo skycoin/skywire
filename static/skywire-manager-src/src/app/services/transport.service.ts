@@ -11,7 +11,7 @@ export class TransportService {
   ) { }
 
   create(key: string, remoteKey: string, type: string) {
-    return this.apiService.post(`nodes/${key}/transports`, {
+    return this.apiService.post(`visors/${key}/transports`, {
       remote_pk: remoteKey,
       transport_type: type,
       public: true,
@@ -22,10 +22,10 @@ export class TransportService {
   }
 
   delete(key: string, transportId: string) {
-    return this.apiService.delete(`nodes/${key}/transports/${transportId}`, {api2: true});
+    return this.apiService.delete(`visors/${key}/transports/${transportId}`, {api2: true});
   }
 
   types(key: string): Observable<string[]> {
-    return this.apiService.get(`nodes/${key}/transport-types`, {api2: true});
+    return this.apiService.get(`visors/${key}/transport-types`, {api2: true});
   }
 }

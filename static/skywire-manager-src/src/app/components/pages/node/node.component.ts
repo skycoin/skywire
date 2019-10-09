@@ -13,10 +13,19 @@ import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
   styleUrls: ['./node.component.scss']
 })
 export class NodeComponent implements OnInit, OnDestroy {
+  private static currentInstanceInternal: NodeComponent;
+
   showMenu = false;
   node: Node;
 
-  private subscription: Subscription;
+  private dataSubscription: Subscription;
+  private refreshingSubscription: Subscription;
+
+  public static refreshDisplayedData() {
+    if (NodeComponent.currentInstanceInternal) {
+      NodeComponent.currentInstanceInternal.startRefreshingData();
+    }
+  }
 
   constructor(
     private nodeService: NodeService,
@@ -25,23 +34,33 @@ export class NodeComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private errorSnackBar: ErrorsnackbarService,
     private translate: TranslateService,
-  ) { }
+  ) {
+    NodeComponent.currentInstanceInternal = this;
+  }
 
   ngOnInit() {
-    const key: string = this.route.snapshot.params['key'];
-
-    this.subscription = this.nodeService.node().subscribe(
+    this.dataSubscription = this.nodeService.node().subscribe(
       (node: Node) => this.node = node,
       this.onError.bind(this),
     );
 
-    this.subscription.add(
-      this.nodeService.refreshNode(key, this.onError.bind(this))
-    );
+    this.startRefreshingData();
+  }
+
+  private startRefreshingData() {
+    if (this.refreshingSubscription) {
+      this.refreshingSubscription.unsubscribe();
+    }
+
+    const key: string = this.route.snapshot.params['key'];
+    this.refreshingSubscription = this.nodeService.refreshNode(key, this.onError.bind(this));
   }
 
   ngOnDestroy() {
-    this.subscription.unsubscribe();
+    this.dataSubscription.unsubscribe();
+    this.refreshingSubscription.unsubscribe();
+
+    NodeComponent.currentInstanceInternal = undefined;
   }
 
   toggleMenu() {
