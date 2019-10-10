@@ -2,6 +2,7 @@ package app2
 
 import (
 	"errors"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
 	"testing"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -84,7 +85,7 @@ func TestClient_Dial(t *testing.T) {
 		require.NoError(t, err)
 
 		conn, err := cl.Dial(remote)
-		require.Equal(t, err, errValueAlreadyExists)
+		require.Equal(t, err, idmanager.errValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -105,7 +106,7 @@ func TestClient_Dial(t *testing.T) {
 		require.NoError(t, err)
 
 		conn, err := cl.Dial(remote)
-		require.Equal(t, err, errValueAlreadyExists)
+		require.Equal(t, err, idmanager.errValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -178,7 +179,7 @@ func TestClient_Listen(t *testing.T) {
 		require.NoError(t, err)
 
 		listener, err := cl.Listen(appnet.TypeDMSG, port)
-		require.Equal(t, err, errValueAlreadyExists)
+		require.Equal(t, err, idmanager.errValueAlreadyExists)
 		require.Nil(t, listener)
 	})
 
@@ -198,7 +199,7 @@ func TestClient_Listen(t *testing.T) {
 		require.NoError(t, err)
 
 		listener, err := cl.Listen(appnet.TypeDMSG, port)
-		require.Equal(t, err, errValueAlreadyExists)
+		require.Equal(t, err, idmanager.errValueAlreadyExists)
 		require.Nil(t, listener)
 	})
 
@@ -232,14 +233,14 @@ func TestClient_Close(t *testing.T) {
 	rpc.On("CloseListener", lisID1).Return(closeNoErr)
 	rpc.On("CloseListener", lisID2).Return(closeErr)
 
-	lm := newIDManager()
+	lm := idmanager.newIDManager()
 
-	lis1 := &Listener{id: lisID1, rpc: rpc, cm: newIDManager()}
+	lis1 := &Listener{id: lisID1, rpc: rpc, cm: idmanager.newIDManager()}
 	freeLis1, err := lm.add(lisID1, lis1)
 	require.NoError(t, err)
 	lis1.freeLis = freeLis1
 
-	lis2 := &Listener{id: lisID2, rpc: rpc, cm: newIDManager()}
+	lis2 := &Listener{id: lisID2, rpc: rpc, cm: idmanager.newIDManager()}
 	freeLis2, err := lm.add(lisID2, lis2)
 	require.NoError(t, err)
 	lis2.freeLis = freeLis2
@@ -250,7 +251,7 @@ func TestClient_Close(t *testing.T) {
 	rpc.On("CloseConn", connID1).Return(closeNoErr)
 	rpc.On("CloseConn", connID2).Return(closeErr)
 
-	cm := newIDManager()
+	cm := idmanager.newIDManager()
 
 	conn1 := &Conn{id: connID1, rpc: rpc}
 	freeConn1, err := cm.add(connID1, conn1)

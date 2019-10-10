@@ -4,6 +4,8 @@ import (
 	"net"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
+
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/app2/appnet"
 )
@@ -15,7 +17,7 @@ type Listener struct {
 	id        uint16
 	rpc       RPCClient
 	addr      appnet.Addr
-	cm        *idManager // contains conns associated with their IDs
+	cm        *idmanager.Manager // contains conns associated with their IDs
 	freeLis   func()
 	freeLisMx sync.RWMutex
 }
@@ -33,7 +35,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 		remote: remote,
 	}
 
-	free, err := l.cm.add(connID, conn)
+	free, err := l.cm.Add(connID, conn)
 	if err != nil {
 		if err := conn.Close(); err != nil {
 			l.log.WithError(err).Error("error closing listener")
@@ -42,6 +44,12 @@ func (l *Listener) Accept() (net.Conn, error) {
 		return nil, err
 	}
 
+	// TODO: discuss
+	// lock is needed, since the conn is already added to the manager,
+	// but has no `freeConn`. It shouldn't really happen under usual
+	// circumstances, but the data race is possible. If we try to close
+	// the conn without `freeConn` while the next few lines are running,
+	// the panic may raise without this lock
 	conn.freeConnMx.Lock()
 	conn.freeConn = free
 	conn.freeConnMx.Unlock()
@@ -58,8 +66,8 @@ func (l *Listener) Close() error {
 		}
 
 		var conns []net.Conn
-		l.cm.doRange(func(_ uint16, v interface{}) bool {
-			conn, err := assertConn(v)
+		l.cm.DoRange(func(_ uint16, v interface{}) bool {
+			conn, err := idmanager.AssertConn(v)
 			if err != nil {
 				l.log.Error(err)
 				return true

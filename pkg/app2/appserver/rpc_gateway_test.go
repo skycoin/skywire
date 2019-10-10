@@ -1,4 +1,4 @@
-package app2
+package appserver
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 
 		var resp DialResp
 		err := rpc.Dial(&dialAddr, &resp)
-		require.Equal(t, err, errNoMoreAvailableValues)
+		require.Equal(t, err, idmanager.errNoMoreAvailableValues)
 	})
 
 	t.Run("dial error", func(t *testing.T) {
@@ -140,7 +140,7 @@ func TestRPCGateway_Listen(t *testing.T) {
 		var lisID uint16
 
 		err := rpc.Listen(&listenAddr, &lisID)
-		require.Equal(t, err, errNoMoreAvailableValues)
+		require.Equal(t, err, idmanager.errNoMoreAvailableValues)
 	})
 
 	t.Run("listen error", func(t *testing.T) {
@@ -218,7 +218,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 
 		var resp AcceptResp
 		err := rpc.Accept(&lisID, &resp)
-		require.Equal(t, err, errNoMoreAvailableValues)
+		require.Equal(t, err, idmanager.errNoMoreAvailableValues)
 	})
 
 	t.Run("error wrapping conn", func(t *testing.T) {
