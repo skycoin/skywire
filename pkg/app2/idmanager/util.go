@@ -1,4 +1,4 @@
-package app2
+package idmanager
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 )
 
 // assertListener asserts that `v` is of type `net.Listener`.
-func assertListener(v interface{}) (net.Listener, error) {
+func AssertListener(v interface{}) (net.Listener, error) {
 	lis, ok := v.(net.Listener)
 	if !ok {
 		return nil, errors.New("wrong type of value stored for listener")
@@ -16,7 +16,7 @@ func assertListener(v interface{}) (net.Listener, error) {
 }
 
 // assertConn asserts that `v` is of type `net.Conn`.
-func assertConn(v interface{}) (net.Conn, error) {
+func AssertConn(v interface{}) (net.Conn, error) {
 	conn, ok := v.(net.Conn)
 	if !ok {
 		return nil, errors.New("wrong type of value stored for conn")

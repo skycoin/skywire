@@ -1,9 +1,11 @@
-package app2
+package appserver
 
 import (
-	"errors"
 	"fmt"
 	"net"
+
+	"github.com/pkg/errors"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -13,16 +15,16 @@ import (
 
 // RPCGateway is a RPC interface for the app server.
 type RPCGateway struct {
-	lm  *idManager // contains listeners associated with their IDs
-	cm  *idManager // contains connections associated with their IDs
+	lm  *idmanager.Manager // contains listeners associated with their IDs
+	cm  *idmanager.Manager // contains connections associated with their IDs
 	log *logging.Logger
 }
 
 // newRPCGateway constructs new server RPC interface.
 func newRPCGateway(log *logging.Logger) *RPCGateway {
 	return &RPCGateway{
-		lm:  newIDManager(),
-		cm:  newIDManager(),
+		lm:  idmanager.New(),
+		cm:  idmanager.New(),
 		log: log,
 	}
 }
@@ -35,7 +37,7 @@ type DialResp struct {
 
 // Dial dials to the remote.
 func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
-	reservedConnID, free, err := r.cm.reserveNextID()
+	reservedConnID, free, err := r.cm.ReserveNextID()
 	if err != nil {
 		return err
 	}
@@ -52,7 +54,7 @@ func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
 		return err
 	}
 
-	if err := r.cm.set(*reservedConnID, wrappedConn); err != nil {
+	if err := r.cm.Set(*reservedConnID, wrappedConn); err != nil {
 		if err := wrappedConn.Close(); err != nil {
 			r.log.WithError(err).Error("error closing conn")
 		}
@@ -71,7 +73,7 @@ func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
 
 // Listen starts listening.
 func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) error {
-	nextLisID, free, err := r.lm.reserveNextID()
+	nextLisID, free, err := r.lm.ReserveNextID()
 	if err != nil {
 		return err
 	}
@@ -82,7 +84,7 @@ func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) error {
 		return err
 	}
 
-	if err := r.lm.set(*nextLisID, l); err != nil {
+	if err := r.lm.Set(*nextLisID, l); err != nil {
 		if err := l.Close(); err != nil {
 			r.log.WithError(err).Error("error closing listener")
 		}
@@ -109,7 +111,7 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 		return err
 	}
 
-	connID, free, err := r.cm.reserveNextID()
+	connID, free, err := r.cm.ReserveNextID()
 	if err != nil {
 		return err
 	}
@@ -126,7 +128,7 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 		return err
 	}
 
-	if err := r.cm.set(*connID, wrappedConn); err != nil {
+	if err := r.cm.Set(*connID, wrappedConn); err != nil {
 		if err := wrappedConn.Close(); err != nil {
 			r.log.WithError(err).Error("error closing DMSG transport")
 		}
@@ -218,41 +220,41 @@ func (r *RPCGateway) CloseListener(lisID *uint16, _ *struct{}) error {
 // popListener gets listener from the manager by `lisID` and removes it.
 // Handles type assertion.
 func (r *RPCGateway) popListener(lisID uint16) (net.Listener, error) {
-	lisIfc, err := r.lm.pop(lisID)
+	lisIfc, err := r.lm.Pop(lisID)
 	if err != nil {
 		return nil, errors.Wrap(err, "no listener")
 	}
 
-	return assertListener(lisIfc)
+	return idmanager.AssertListener(lisIfc)
 }
 
 // popConn gets conn from the manager by `connID` and removes it.
 // Handles type assertion.
 func (r *RPCGateway) popConn(connID uint16) (net.Conn, error) {
-	connIfc, err := r.cm.pop(connID)
+	connIfc, err := r.cm.Pop(connID)
 	if err != nil {
 		return nil, errors.Wrap(err, "no conn")
 	}
 
-	return assertConn(connIfc)
+	return idmanager.AssertConn(connIfc)
 }
 
 // getListener gets listener from the manager by `lisID`. Handles type assertion.
 func (r *RPCGateway) getListener(lisID uint16) (net.Listener, error) {
-	lisIfc, ok := r.lm.get(lisID)
+	lisIfc, ok := r.lm.Get(lisID)
 	if !ok {
 		return nil, fmt.Errorf("no listener with key %d", lisID)
 	}
 
-	return assertListener(lisIfc)
+	return idmanager.AssertListener(lisIfc)
 }
 
 // getConn gets conn from the manager by `connID`. Handles type assertion.
 func (r *RPCGateway) getConn(connID uint16) (net.Conn, error) {
-	connIfc, ok := r.cm.get(connID)
+	connIfc, ok := r.cm.Get(connID)
 	if !ok {
 		return nil, fmt.Errorf("no conn with key %d", connID)
 	}
 
-	return assertConn(connIfc)
+	return idmanager.AssertConn(connIfc)
 }

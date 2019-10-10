@@ -1,4 +1,4 @@
-package app2
+package idmanager
 
 import (
 	"errors"
@@ -11,24 +11,24 @@ var (
 	errValueAlreadyExists    = errors.New("value already exists")
 )
 
-// idManager manages allows to store and retrieve arbitrary values
+// Manager manages allows to store and retrieve arbitrary values
 // associated with the `uint16` key in a thread-safe manner.
 // Provides method to generate key.
-type idManager struct {
+type Manager struct {
 	values map[uint16]interface{}
 	mx     sync.RWMutex
 	lstID  uint16
 }
 
-// newIDManager constructs new `idManager`.
-func newIDManager() *idManager {
-	return &idManager{
+// NewIDManager constructs new `Manager`.
+func New() *Manager {
+	return &Manager{
 		values: make(map[uint16]interface{}),
 	}
 }
 
-// `reserveNextID` reserves next free slot for the value and returns the id for it.
-func (m *idManager) reserveNextID() (id *uint16, free func(), err error) {
+// `ReserveNextID` reserves next free slot for the value and returns the id for it.
+func (m *Manager) ReserveNextID() (id *uint16, free func(), err error) {
 	m.mx.Lock()
 
 	nxtID := m.lstID + 1
@@ -52,7 +52,7 @@ func (m *idManager) reserveNextID() (id *uint16, free func(), err error) {
 
 // pop removes value specified by `id` from the idManager instance and
 // returns it.
-func (m *idManager) pop(id uint16) (interface{}, error) {
+func (m *Manager) Pop(id uint16) (interface{}, error) {
 	m.mx.Lock()
 	v, ok := m.values[id]
 	if !ok {
@@ -72,7 +72,7 @@ func (m *idManager) pop(id uint16) (interface{}, error) {
 }
 
 // add adds the new value `v` associated with `id`.
-func (m *idManager) add(id uint16, v interface{}) (free func(), err error) {
+func (m *Manager) Add(id uint16, v interface{}) (free func(), err error) {
 	m.mx.Lock()
 
 	if _, ok := m.values[id]; ok {
@@ -87,7 +87,7 @@ func (m *idManager) add(id uint16, v interface{}) (free func(), err error) {
 }
 
 // set sets value `v` associated with `id`.
-func (m *idManager) set(id uint16, v interface{}) error {
+func (m *Manager) Set(id uint16, v interface{}) error {
 	m.mx.Lock()
 
 	l, ok := m.values[id]
@@ -107,7 +107,7 @@ func (m *idManager) set(id uint16, v interface{}) error {
 }
 
 // get gets the value associated with the `id`.
-func (m *idManager) get(id uint16) (interface{}, bool) {
+func (m *Manager) Get(id uint16) (interface{}, bool) {
 	m.mx.RLock()
 	lis, ok := m.values[id]
 	m.mx.RUnlock()
@@ -119,7 +119,7 @@ func (m *idManager) get(id uint16) (interface{}, bool) {
 
 // doRange performs range over the manager contents. Loop stops when
 // `next` returns false.
-func (m *idManager) doRange(next func(id uint16, v interface{}) bool) {
+func (m *Manager) DoRange(next func(id uint16, v interface{}) bool) {
 	m.mx.RLock()
 	for id, v := range m.values {
 		if !next(id, v) {
@@ -131,7 +131,7 @@ func (m *idManager) doRange(next func(id uint16, v interface{}) bool) {
 
 // constructFreeFunc constructs new func responsible for clearing
 // a slot with the specified `id`.
-func (m *idManager) constructFreeFunc(id uint16) func() {
+func (m *Manager) constructFreeFunc(id uint16) func() {
 	return func() {
 		m.mx.Lock()
 		delete(m.values, id)
