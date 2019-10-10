@@ -2,6 +2,11 @@ package app2
 
 import (
 	"net"
+	"net/rpc"
+
+	"github.com/pkg/errors"
+
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -16,24 +21,30 @@ type Client struct {
 	pk  cipher.PubKey
 	pid ProcID
 	rpc RPCClient
-	lm  *idManager // contains listeners associated with their IDs
-	cm  *idManager // contains connections associated with their IDs
+	lm  *idmanager.Manager // contains listeners associated with their IDs
+	cm  *idmanager.Manager // contains connections associated with their IDs
 }
 
 // NewClient creates a new `Client`. The `Client` needs to be provided with:
 // - log: logger instance
 // - localPK: The local public key of the parent skywire visor.
 // - pid: The procID assigned for the process that Client is being used by.
-// - rpc: RPC client to communicate with the server.
-func NewClient(log *logging.Logger, localPK cipher.PubKey, pid ProcID, rpc RPCClient) *Client {
+// - sockFile: unix socket file to connect to the app server.
+// - appKey: application key to authenticate within app server.
+func NewClient(log *logging.Logger, localPK cipher.PubKey, pid ProcID, sockFile, appKey string) (*Client, error) {
+	rpcCl, err := rpc.Dial("unix", sockFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "error connectin to the app server")
+	}
+
 	return &Client{
 		log: log,
 		pk:  localPK,
 		pid: pid,
-		rpc: rpc,
-		lm:  newIDManager(),
-		cm:  newIDManager(),
-	}
+		rpc: NewRPCClient(rpcCl, appKey),
+		lm:  idmanager.New(),
+		cm:  idmanager.New(),
+	}, nil
 }
 
 // Dial dials the remote node using `remote`.
@@ -54,7 +65,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		remote: remote,
 	}
 
-	free, err := c.cm.add(connID, conn)
+	free, err := c.cm.Add(connID, conn)
 	if err != nil {
 		if err := conn.Close(); err != nil {
 			c.log.WithError(err).Error("error closing conn")
@@ -88,10 +99,10 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 		id:   lisID,
 		rpc:  c.rpc,
 		addr: local,
-		cm:   newIDManager(),
+		cm:   idmanager.New(),
 	}
 
-	freeLis, err := c.lm.add(lisID, listener)
+	freeLis, err := c.lm.Add(lisID, listener)
 	if err != nil {
 		if err := listener.Close(); err != nil {
 			c.log.WithError(err).Error("error closing listener")
@@ -111,8 +122,8 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 // listeners and connections.
 func (c *Client) Close() {
 	var listeners []net.Listener
-	c.lm.doRange(func(_ uint16, v interface{}) bool {
-		lis, err := assertListener(v)
+	c.lm.DoRange(func(_ uint16, v interface{}) bool {
+		lis, err := idmanager.AssertListener(v)
 		if err != nil {
 			c.log.Error(err)
 			return true
@@ -123,8 +134,8 @@ func (c *Client) Close() {
 	})
 
 	var conns []net.Conn
-	c.cm.doRange(func(_ uint16, v interface{}) bool {
-		conn, err := assertConn(v)
+	c.cm.DoRange(func(_ uint16, v interface{}) bool {
+		conn, err := idmanager.AssertConn(v)
 		if err != nil {
 			c.log.Error(err)
 			return true

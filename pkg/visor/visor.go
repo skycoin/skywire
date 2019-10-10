@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/appserver"
 
 	"github.com/skycoin/skywire/pkg/snet"
 
@@ -112,7 +112,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	appServer *app2.Server
+	appServer *appserver.Server
 }
 
 // NewNode constructs new Node.
@@ -121,7 +121,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 	node := &Node{
 		config:      config,
-		executer:    newOSExecuter(),
+		executer:    appserver.NewProcManager(),
 		startedApps: make(map[string]*appBind),
 	}
 
@@ -220,7 +220,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 		})
 	}
 
-	node.appServer = app2.NewServer(logging.MustGetLogger("app_server"), node.config.AppServerSockFile)
+	node.appServer = appserver.New(logging.MustGetLogger("app_server"), node.config.AppServerSockFile)
 
 	return node, err
 }

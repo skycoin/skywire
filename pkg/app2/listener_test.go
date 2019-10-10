@@ -2,6 +2,7 @@ package app2
 
 import (
 	"errors"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
 	"testing"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -40,7 +41,7 @@ func TestListener_Accept(t *testing.T) {
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   newIDManager(),
+			cm:   idmanager.newIDManager(),
 		}
 
 		wantConn := &Conn{
@@ -89,13 +90,13 @@ func TestListener_Accept(t *testing.T) {
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   newIDManager(),
+			cm:   idmanager.newIDManager(),
 		}
 
 		lis.cm.values[acceptConnID] = nil
 
 		conn, err := lis.Accept()
-		require.Equal(t, err, errValueAlreadyExists)
+		require.Equal(t, err, idmanager.errValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -120,13 +121,13 @@ func TestListener_Accept(t *testing.T) {
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   newIDManager(),
+			cm:   idmanager.newIDManager(),
 		}
 
 		lis.cm.values[acceptConnID] = nil
 
 		conn, err := lis.Accept()
-		require.Equal(t, err, errValueAlreadyExists)
+		require.Equal(t, err, idmanager.errValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -142,7 +143,7 @@ func TestListener_Accept(t *testing.T) {
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   newIDManager(),
+			cm:   idmanager.newIDManager(),
 		}
 
 		conn, err := lis.Accept()
@@ -169,7 +170,7 @@ func TestListener_Close(t *testing.T) {
 		rpc := &MockRPCClient{}
 		rpc.On("CloseListener", lisID).Return(closeNoErr)
 
-		cm := newIDManager()
+		cm := idmanager.newIDManager()
 
 		connID1 := uint16(1)
 		connID2 := uint16(2)
@@ -227,7 +228,7 @@ func TestListener_Close(t *testing.T) {
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   newIDManager(),
+			cm:   idmanager.newIDManager(),
 		}
 
 		err := lis.Close()

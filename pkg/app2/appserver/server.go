@@ -1,4 +1,4 @@
-package app2
+package appserver
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ type Server struct {
 }
 
 // NewServer constructs server.
-func NewServer(log *logging.Logger, sockFile string) *Server {
+func New(log *logging.Logger, sockFile string) *Server {
 	return &Server{
 		log:      log,
 		sockFile: sockFile,
