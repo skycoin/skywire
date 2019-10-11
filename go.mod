@@ -28,11 +28,11 @@ require (
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.3
-	golang.org/x/crypto v0.0.0-20190911031432-227b76d455e7
-	golang.org/x/net v0.0.0-20190918130420-a8b05e9114ab
+	golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad
+	golang.org/x/net v0.0.0-20190926025831-c00fd9afed17
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect
-	golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3 // indirect
-	golang.org/x/tools v0.0.0-20190918181022-2c18af7e64b2 // indirect
+	golang.org/x/sys v0.0.0-20190927073244-c990c680b611 // indirect
+	golang.org/x/tools v0.0.0-20190929041059-e7abfedfabcf // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'

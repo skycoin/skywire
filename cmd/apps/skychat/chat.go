@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -22,7 +24,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-var addr = flag.String("addr", ":8000", "address to bind")
+var addr = flag.String("addr", skyenv.SkychatAddr, "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
@@ -34,11 +36,10 @@ var (
 )
 
 func main() {
-	appName := "skychat"
-	log = app.NewLogger(appName)
+	log = app.NewLogger(skyenv.SkychatName)
 	flag.Parse()
 
-	a, err := app.Setup(&app.Config{AppName: appName, AppVersion: "1.0", ProtocolVersion: "0.0.1"})
+	a, err := app.Setup(&app.Config{AppName: skyenv.SkychatName, AppVersion: skyenv.SkychatVersion, ProtocolVersion: skyenv.AppProtocolVersion})
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}

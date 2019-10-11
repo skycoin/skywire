@@ -1,12 +1,10 @@
-package tpdisc
+package node
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"text/tabwriter"
-	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
@@ -14,24 +12,24 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
+func init() {
+	RootCmd.AddCommand(discTpCmd)
+}
+
 var (
-	addr string
 	tpID transportID
 	tpPK cipher.PubKey
 )
 
 func init() {
-	RootCmd.Flags().StringVar(&addr, "addr", "https://transport.discovery.skywire.skycoin.net", "address of transport discovery")
-	RootCmd.Flags().Var(&tpID, "id", "if specified, obtains a single transport of given ID")
-	RootCmd.Flags().Var(&tpPK, "pk", "if specified, obtains transports associated with given public key")
+	discTpCmd.Flags().Var(&tpID, "id", "if specified, obtains a single transport of given ID")
+	discTpCmd.Flags().Var(&tpPK, "pk", "if specified, obtains transports associated with given public key")
 }
 
-// RootCmd is the command that queries the transport-discovery.
-var RootCmd = &cobra.Command{
-	Use:   "tpdisc (--id=<transport-id> | --pk=<edge-public-key>)",
+var discTpCmd = &cobra.Command{
+	Use:   "disc-tp (--id=<transport-id> | --pk=<edge-public-key>)",
 	Short: "Queries the Transport Discovery to find transport(s) of given transport ID or edge public key",
 	Args: func(_ *cobra.Command, _ []string) error {
 		var (
@@ -47,17 +45,13 @@ var RootCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		pk, sk := cipher.GenerateKeyPair()
-		c, err := client.NewHTTP(addr, pk, sk)
-		internal.Catch(err)
-		if tpPK.Null() {
-			entry, err := c.GetTransportByID(ctx, uuid.UUID(tpID))
+
+		if rc := rpcClient(); tpPK.Null() {
+			entry, err := rc.DiscoverTransportByID(uuid.UUID(tpID))
 			internal.Catch(err)
 			printTransportEntries(entry)
 		} else {
-			entries, err := c.GetTransportsByEdge(ctx, pk)
+			entries, err := rc.DiscoverTransportsByPK(tpPK)
 			internal.Catch(err)
 			printTransportEntries(entries...)
 		}
