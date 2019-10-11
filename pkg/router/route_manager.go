@@ -134,9 +134,12 @@ func (rm *routeManager) handleSetupConn(conn net.Conn) error {
 
 	if err != nil {
 		rm.Logger.Infof("Setup request with type %s failed: %s", t, err)
-		return proto.WritePacket(setup.RespFailure, err.Error())
+		_ = proto.WritePacket(setup.RespFailure, err.Error()) //nolint:errcheck
+		return err
 	}
-	return proto.WritePacket(setup.RespSuccess, respBody)
+
+	_ = proto.WritePacket(setup.RespSuccess, respBody) //nolint:errcheck
+	return nil
 }
 
 func (rm *routeManager) rtGarbageCollectLoop() {
@@ -225,6 +228,9 @@ func (rm *routeManager) setRoutingRules(data []byte) error {
 	if err := json.Unmarshal(data, &rules); err != nil {
 		return err
 	}
+
+	jb, _ := json.MarshalIndent(rules, "", "\t") //nolint:errcheck
+	rm.Logger.Infof("Adding rules: %s", string(jb))
 
 	for _, rule := range rules {
 		routeID := rule.RequestRouteID()

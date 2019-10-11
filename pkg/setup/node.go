@@ -238,7 +238,7 @@ func (sn *Node) reserveRouteIDs(ctx context.Context, fwd, rev routing.Route) (*i
 		sn.Logger.WithError(err).Warnf("Failed to reserve route IDs.")
 		return nil, err
 	}
-	sn.Logger.Infof("Successfully reserved route IDs.")
+	sn.Logger.Infof("Successfully reserved route IDs: %s", idc.String())
 	return idc, err
 }
 

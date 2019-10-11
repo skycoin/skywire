@@ -8,6 +8,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
@@ -16,19 +18,17 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-const socksPort = 3
-
 var r = netutil.NewRetrier(time.Second, 0, 1)
 
 func main() {
-	log := app.NewLogger("socksproxy-client")
-	therealproxy.Log = log.PackageLogger("therealproxy")
+	log := app.NewLogger(skyenv.SkyproxyClientName)
+	therealproxy.Log = log.PackageLogger(skyenv.SkyproxyClientName)
 
-	var addr = flag.String("addr", ":1080", "Client address to listen on")
+	var addr = flag.String("addr", skyenv.SkyproxyClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
-	config := &app.Config{AppName: "socksproxy-client", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+	config := &app.Config{AppName: skyenv.SkyproxyClientName, AppVersion: skyenv.SkyproxyClientVersion, ProtocolVersion: skyenv.AppProtocolVersion}
 	socksApp, err := app.Setup(config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
@@ -50,7 +50,7 @@ func main() {
 
 	var conn net.Conn
 	err = r.Do(func() error {
-		conn, err = socksApp.Dial(routing.Addr{PubKey: pk, Port: routing.Port(socksPort)})
+		conn, err = socksApp.Dial(routing.Addr{PubKey: pk, Port: routing.Port(skyenv.SkyproxyPort)})
 		return err
 	})
 	if err != nil {

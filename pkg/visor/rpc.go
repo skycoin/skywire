@@ -296,6 +296,38 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) error {
 }
 
 /*
+	<<< AVAILABLE TRANSPORTS >>>
+*/
+
+// DiscoverTransportsByPK obtains available transports via the transport discovery via given public key.
+func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) error {
+	tpD, err := r.node.config.TransportDiscovery()
+	if err != nil {
+		return err
+	}
+	entries, err := tpD.GetTransportsByEdge(context.Background(), *pk)
+	if err != nil {
+		return err
+	}
+	*out = entries
+	return nil
+}
+
+// DiscoverTransportByID obtains available transports via the transport discovery via a given transport ID.
+func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) error {
+	tpD, err := r.node.config.TransportDiscovery()
+	if err != nil {
+		return err
+	}
+	entry, err := tpD.GetTransportByID(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	*out = *entry
+	return nil
+}
+
+/*
 	<<< ROUTES MANAGEMENT >>>
 */
 

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/creack/pty"
 
@@ -19,7 +21,7 @@ import (
 )
 
 // Port reserved for SSH app
-const Port = 2
+const Port = routing.Port(skyenv.SkysshPort)
 
 // Debug enables debug messages.
 var Debug = false
