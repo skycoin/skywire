@@ -78,6 +78,13 @@ func (idr *idReservoir) PopID(pk cipher.PubKey) (routing.RouteID, bool) {
 	return ids[0], true
 }
 
+func (idr *idReservoir) String() string {
+	idr.mx.Lock()
+	defer idr.mx.Unlock()
+	b, _ := json.MarshalIndent(idr.ids, "", "\t") //nolint:errcheck
+	return string(b)
+}
+
 // RulesMap associates a slice of rules to a visor's public key.
 type RulesMap map[cipher.PubKey][]routing.Rule
 
@@ -117,9 +124,9 @@ func GenerateRules(idc *idReservoir, ld routing.LoopDescriptor) (rules RulesMap,
 	}
 
 	rules[src.PubKey] = append(rules[src.PubKey],
-		routing.AppRule(ld.KeepAlive, firstRevRID, lastFwdRID, dst.PubKey, src.Port, dst.Port))
+		routing.AppRule(ld.KeepAlive, lastRevRID, firstFwdRID, dst.PubKey, src.Port, dst.Port))
 	rules[dst.PubKey] = append(rules[dst.PubKey],
-		routing.AppRule(ld.KeepAlive, firstFwdRID, lastRevRID, src.PubKey, dst.Port, src.Port))
+		routing.AppRule(ld.KeepAlive, lastFwdRID, firstRevRID, src.PubKey, dst.Port, src.Port))
 
 	return rules, firstFwdRID, firstRevRID, nil
 }
