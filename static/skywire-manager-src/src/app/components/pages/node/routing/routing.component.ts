@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { NodeService } from '../../../../services/node.service';
-import { Node, Transport } from '../../../../app.datatypes';
+import { Node, Transport, Route } from '../../../../app.datatypes';
 
 @Component({
   selector: 'app-routing',
@@ -9,10 +9,7 @@ import { Node, Transport } from '../../../../app.datatypes';
 })
 export class RoutingComponent implements OnInit {
   transports: Transport[];
-  routes = [
-    { key: 1, rule: '0sad76ds876a56fs86g9d7h9dfg676sa' },
-    { key: 2, rule: '7g6f89s7sfs0sf7g97d6h5g4h434h3jj' },
-  ];
+  routes: Route[];
 
   constructor(
     private nodeService: NodeService,
@@ -21,7 +18,7 @@ export class RoutingComponent implements OnInit {
   ngOnInit() {
     this.nodeService.node().subscribe((node: Node) => {
       this.transports = node.transports;
+      this.routes = node.routes;
     });
   }
-
 }

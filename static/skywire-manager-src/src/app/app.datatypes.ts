@@ -4,6 +4,7 @@ export interface Node {
   apps: Application[];
   transports: Transport[];
   routes_count: number;
+  routes?: Route[];
 }
 
 export interface Application {

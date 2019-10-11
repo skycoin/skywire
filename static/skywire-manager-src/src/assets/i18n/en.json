@@ -214,7 +214,36 @@
 
   "routes": {
     "key": "Key",
-    "rule": "Rule"
+    "rule": "Rule",
+    "delete": "Delete route",
+    "deleted": "Route deleted",
+    "error-deleting": "It was not possible to delete the route",
+    "details": {
+      "title": "Details",
+      "basic": {
+        "title": "Basic info",
+        "key": "Key:",
+        "rule": "Rule:"
+      },
+      "summary": {
+        "title": "Rule summary",
+        "keep-alive": "Keep alive:",
+        "type": "Rule type:",
+        "request-route-id": "Request route ID:"
+      },
+      "app": {
+        "title": "App fields",
+        "route-id": "Route ID:",
+        "remote-pk": "Remote public key:",
+        "remote-port": "Remote port:",
+        "local-port": "Local port:"
+      },
+      "forward": {
+        "title": "Forward fields",
+        "route-id": "Next route ID:",
+        "transport-id": "Next transport ID:"
+      }
+    }
   },
 
   "copy": {

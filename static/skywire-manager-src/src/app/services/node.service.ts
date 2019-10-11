@@ -6,7 +6,7 @@ import {
   timer,
   Unsubscribable
 } from 'rxjs';
-import { Node, Transport } from '../app.datatypes';
+import { Node, Transport, Route } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { flatMap } from 'rxjs/operators';
 
@@ -66,10 +66,14 @@ export class NodeService {
         flatMap((node: Node) => {
           currentNode = node;
           return this.getTransports();
+        }),
+        flatMap((transports: Transport[]) => {
+          currentNode.transports = transports;
+          return this.getRoutes();
         })
       ).subscribe(
-        (transports: Transport[]) => {
-          currentNode.transports = transports;
+        (routes: Route[]) => {
+          currentNode.routes = routes;
           this.currentNode.next(currentNode);
         },
         errorCallback,
@@ -90,5 +94,9 @@ export class NodeService {
 
   private getTransports() {
     return this.apiService.get(`visors/${this.currentNodeKey}/transports`, { api2: true });
+  }
+
+  private getRoutes() {
+    return this.apiService.get(`visors/${this.currentNodeKey}/routes`, { api2: true });
   }
 }

@@ -87,6 +87,7 @@ import { SidenavComponent } from './components/layout/sidenav/sidenav.component'
 import { SidenavContentComponent } from './components/layout/sidenav/sidenav-content/sidenav-content.component';
 import { LanguageComponent } from './components/pages/settings/language/language.component';
 import { BasicTerminalComponent } from './components/pages/node/actions/basic-terminal/basic-terminal.component';
+import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
 
 @NgModule({
   declarations: [
@@ -146,6 +147,7 @@ import { BasicTerminalComponent } from './components/pages/node/actions/basic-te
     SidenavContentComponent,
     LanguageComponent,
     BasicTerminalComponent,
+    RouteDetailsComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -163,6 +165,7 @@ import { BasicTerminalComponent } from './components/pages/node/actions/basic-te
     UpdateNodeComponent,
     CreateTransportComponent,
     BasicTerminalComponent,
+    RouteDetailsComponent,
   ],
   imports: [
     BrowserModule,
