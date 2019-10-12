@@ -21,6 +21,10 @@ export class ApiService {
     return this.request('POST', url, body, options);
   }
 
+  put(url: string, body: any = {}, options: any = {}): Observable<any> {
+    return this.request('PUT', url, body, options);
+  }
+
   delete(url: string, options: any = {}): Observable<any> {
     return this.request('DELETE', url, {}, options);
   }

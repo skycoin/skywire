@@ -1,12 +1,10 @@
 <app-dialog [headline]="'apps.log.title' | translate">
   <mat-dialog-content>
-    <div *ngFor="let message of logMessages" style="margin-top: 15px;">
+    <div *ngFor="let message of logMessages" class="app-log-message">
       <span class="app-log-timestamp">
-        [{{ message.time * 1000 | date:'yyyy-MM-dd HH:mm:ss' }}]
+        {{ message.time }}
       </span>
-      <span class="app-log-message">
-        {{ message.msg }}
-      </span>
+      {{ message.msg }}
     </div>
     <div class="app-log-empty mt-3" *ngIf="!loading && (!logMessages || logMessages.length === 0)">
       {{ 'apps.log.empty' | translate }}

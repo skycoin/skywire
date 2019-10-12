@@ -1,34 +1,60 @@
-import { Component, HostBinding, Inject, OnInit } from '@angular/core';
+import { Component, HostBinding, Inject, OnInit, OnDestroy } from '@angular/core';
 import { AppsService } from '../../../../../../services/apps.service';
-import { LogMessage } from '../../../../../../app.datatypes';
+import { LogMessage, Application } from '../../../../../../app.datatypes';
 import { MAT_DIALOG_DATA } from '@angular/material';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-log',
   templateUrl: './log.component.html',
   styleUrls: ['./log.component.scss'],
 })
-export class LogComponent implements OnInit {
+export class LogComponent implements OnInit, OnDestroy {
+
   @HostBinding('attr.class') hostClass = 'app-log-container';
-  app;
+  app: Application;
   logMessages: LogMessage[] = [];
   loading = false;
 
+  subscription: Subscription;
+
   constructor(
-    @Inject(MAT_DIALOG_DATA) private data: any,
+    @Inject(MAT_DIALOG_DATA) data: Application,
     private appsService: AppsService,
   ) {
-    this.app = data.app;
+    this.app = data;
   }
 
   ngOnInit() {
     this.loading = true;
-    // this.appsService.getLogMessages(this.app.key).subscribe((log) => this.onLogsReceived(log), this.onLogsError.bind(this));
+    this.subscription = this.appsService.getLogMessages(this.app.name).subscribe(
+      (log) => this.onLogsReceived(log),
+      this.onLogsError.bind(this)
+    );
   }
 
-  private onLogsReceived(log: LogMessage[] = []) {
+  ngOnDestroy(): void {
+    this.subscription.unsubscribe();
+  }
+
+  private onLogsReceived(logs: string[] = []) {
     this.loading = false;
-    this.logMessages = log;
+    logs.forEach(log => {
+      const dateStart = log.startsWith('[') ? 0 : -1;
+      const dateEnd = dateStart !== -1 ? log.indexOf(']') : -1;
+
+      if (dateStart !== -1 && dateEnd !== -1) {
+        this.logMessages.push({
+          time: log.substr(dateStart, dateEnd + 1),
+          msg: log.substr(dateEnd + 1),
+        });
+      } else {
+        this.logMessages.push({
+          time: '',
+          msg: log,
+        });
+      }
+    });
   }
 
   private onLogsError() {

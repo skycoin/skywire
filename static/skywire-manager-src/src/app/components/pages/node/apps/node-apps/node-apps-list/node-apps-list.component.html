@@ -1,6 +1,5 @@
 <div class="mt-4.5 d-flex justify-content-between">
   <div class="font-mini uppercase ml-3.5">Applications</div>
-  <mat-icon class="ic-mini mr-3.5 table-create-record">add</mat-icon>
 </div>
 
 <div class="container-elevated-translucid mt-3 mb-5">
@@ -29,7 +28,7 @@
     <ng-container matColumnDef="status">
       <th mat-header-cell *matHeaderCellDef class="bold">Status</th>
       <td *matCellDef="let app;let i=index;" mat-cell>
-        <i class="dot-green"></i>
+        <i [class]="app.status === 1 ? 'dot-green' : 'dot-red'"></i>
       </td>
     </ng-container>
     <ng-container matColumnDef="autostart">
@@ -38,10 +37,20 @@
         <mat-icon class="ic-mini">done</mat-icon>
       </td>
     </ng-container>
-    <ng-container matColumnDef="x">
-      <th mat-header-cell *matHeaderCellDef class="bold"></th>
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef class="bold text-right">Actions</th>
       <td *matCellDef="let app;let i=index;" mat-cell class="text-right">
-        <mat-icon class="table-delete-record ic-mini">close</mat-icon>
+        <mat-icon
+          class="table-delete-record"
+          (click)="viewLogs(app)"
+          [matTooltip]="'apps.view-logs' | translate"
+          >list</mat-icon>
+        &nbsp;
+        <mat-icon
+          class="table-delete-record"
+          (click)="changeAppState(app)"
+          [matTooltip]="('apps.' + (app.status === 1 ? 'stop-app' : 'start-app')) | translate"
+          >{{ app.status === 1 ? 'stop' : 'play_arrow' }}</mat-icon>
       </td>
     </ng-container>
 

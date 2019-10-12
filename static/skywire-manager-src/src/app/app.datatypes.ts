@@ -54,7 +54,7 @@ export interface ClientConnection {
 }
 
 export interface LogMessage {
-  time: number;
+  time: string;
   msg: string;
 }
 
