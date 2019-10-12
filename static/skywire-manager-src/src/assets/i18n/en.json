@@ -39,8 +39,8 @@
     "statuses": {
       "discovered": "Online",
       "discovered-tooltip": "Node is online and discovered by the Skywire network",
-      "online": "Online*",
-      "online-tooltip": "Node is online, but not discovered by the Skywire network",
+      "online": "Online",
+      "online-tooltip": "Node is online",
       "offline": "Offline",
       "offline-tooltip": "Node is offline",
       "unknown-tooltip": "Node status is unknown"
@@ -68,6 +68,7 @@
     "settings": "Settings",
     "logout": "Logout",
     "running": "Running",
+    "label": "Label",
     "edit-label": "Edit label",
     "view-node": "View node",
     "delete-node": "Delete node",

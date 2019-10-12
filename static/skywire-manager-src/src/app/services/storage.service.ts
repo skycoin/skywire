@@ -2,7 +2,12 @@ import { Injectable } from '@angular/core';
 
 const KEY_REFRESH_SECONDS = 'KEY_REFRESH_SECONDS';
 const KEY_DEFAULT_LANG = 'KEY_DEFAULT_LANG';
-const KEY_NODES = 'KEY_NODES';
+const KEY_NODES = 'nodesData';
+
+export class NodeInfo {
+  publicKey: string;
+  label: string;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -19,7 +24,15 @@ export class StorageService {
   }
 
   setNodeLabel(nodeKey: string, nodeLabel: string): void {
-    this.storage.setItem(StorageService.nodeLabelNamespace(nodeKey), nodeLabel);
+    const nodes = this.getNodes().map(node => {
+      if (node.publicKey === nodeKey) {
+        node.label = nodeLabel;
+      }
+
+      return node;
+    });
+
+    this.setNodes(nodes);
   }
 
   getNodeLabel(nodeKey: string): string {
@@ -42,23 +55,22 @@ export class StorageService {
     return this.storage.getItem(KEY_DEFAULT_LANG) || 'en';
   }
 
-  addNode(nodeKey: string) {
-    const nodes = new Set<string>(this.getNodes());
-
-    nodes.add(nodeKey);
+  addNode(nodeInfo: NodeInfo) {
+    const nodes = this.getNodes();
+    nodes.push(nodeInfo);
 
     this.setNodes(Array.from(nodes));
   }
 
   removeNode(nodeKey: string) {
-    this.setNodes(this.getNodes().filter(n => n !== nodeKey));
+    this.setNodes(this.getNodes().filter(n => n.publicKey !== nodeKey));
   }
 
-  getNodes(): string[] {
+  getNodes(): NodeInfo[] {
     return JSON.parse(this.storage.getItem(KEY_NODES)) || [];
   }
 
-  private setNodes(nodes: string[]) {
+  private setNodes(nodes: NodeInfo[]) {
     this.storage.setItem(KEY_NODES, JSON.stringify(nodes));
   }
 }

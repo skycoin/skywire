@@ -1,10 +1,12 @@
-export interface Node {
+export class Node {
   tcp_addr: string;
   local_pk: string;
   apps: Application[];
   transports: Transport[];
   routes_count: number;
   routes?: Route[];
+  label?: string;
+  online?: boolean;
 }
 
 export interface Application {

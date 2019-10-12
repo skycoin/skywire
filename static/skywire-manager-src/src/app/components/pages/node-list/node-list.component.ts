@@ -8,6 +8,8 @@ import { ButtonComponent } from '../../layout/button/button.component';
 import { TranslateService } from '@ngx-translate/core';
 import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 import { AuthService } from '../../../services/auth.service';
+import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
+import { StorageService } from '../../../services/storage.service';
 
 @Component({
   selector: 'app-node-list',
@@ -19,7 +21,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
   dataSource = new MatTableDataSource<Node>();
   displayedColumns: string[] = ['enabled', 'index', 'label', 'key', 'actions'];
 
-  private subscriptions: Subscription;
+  private nodesSubscription: Subscription;
+  private refreshSubscription: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -28,10 +31,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private translate: TranslateService,
     private authService: AuthService,
+    private storageService: StorageService,
   ) { }
 
   ngOnInit() {
-    this.subscriptions = this.nodeService.nodes().subscribe(allNodes => {
+    this.nodesSubscription = this.nodeService.nodes().subscribe(allNodes => {
       this.dataSource.data = allNodes.sort((a, b) => a.local_pk.localeCompare(b.local_pk));
     });
 
@@ -39,16 +43,37 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.subscriptions.unsubscribe();
+    this.nodesSubscription.unsubscribe();
+    this.refreshSubscription.unsubscribe();
+  }
+
+  nodeStatusClass(node: Node): string {
+    switch (node.online) {
+      case true:
+        return 'dot-green';
+      default:
+        return 'dot-red';
+    }
+  }
+
+  nodeStatusTooltip(node: Node): string {
+    switch (node.online) {
+      case true:
+        return 'node.statuses.online-tooltip';
+      default:
+        return 'node.statuses.offline-tooltip';
+    }
   }
 
   refresh() {
     // this.refreshButton.loading();
-    this.subscriptions.add(
-      this.nodeService.refreshNodes(
-        this.onSuccess.bind(this),
-        this.onError.bind(this),
-      )
+    if (this.refreshSubscription) {
+      this.refreshSubscription.unsubscribe();
+    }
+
+    this.refreshSubscription = this.nodeService.refreshNodes(
+      this.onSuccess.bind(this),
+      this.onError.bind(this),
     );
   }
 
@@ -63,8 +88,30 @@ export class NodeListComponent implements OnInit, OnDestroy {
     );
   }
 
+  showEditLabelDialog(node: Node) {
+    this.dialog.open(EditLabelComponent, {
+      data: { label: node.label },
+    }).afterClosed().subscribe((label: string) => {
+      label = label.trim();
+      if (label) {
+        this.storageService.setNodeLabel(node.local_pk, label);
+      } else if (label === '') {
+        this.storageService.setNodeLabel(node.local_pk, node.tcp_addr);
+      }
+
+      this.refresh();
+    });
+  }
+
+  deleteNode(node: Node) {
+    this.storageService.removeNode(node.local_pk);
+    this.refresh();
+  }
+
   open(node: Node) {
-    this.router.navigate(['nodes', node.local_pk]);
+    if (node.online) {
+      this.router.navigate(['nodes', node.local_pk]);
+    }
   }
 
   private onSuccess() {
@@ -72,7 +119,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   private onError(error: string) {
-    console.log(error);
     this.translate.get('nodes.error-load', { error }).subscribe(str => {
       this.errorSnackBar.open(str);
     });
