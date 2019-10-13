@@ -4,6 +4,11 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"sync"
+
+	"github.com/pkg/errors"
+
+	"github.com/skycoin/skywire/pkg/app2"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 )
@@ -11,17 +16,28 @@ import (
 // Server is a server for app/visor communication.
 type Server struct {
 	log      *logging.Logger
+	lis      net.Listener
 	sockFile string
 	rpcS     *rpc.Server
+	apps     map[app2.Key]*App
+	done     sync.WaitGroup
+	stopCh   chan struct{}
 }
 
 // NewServer constructs server.
-func New(log *logging.Logger, sockFile string) *Server {
+func New(log *logging.Logger, sockFile string, appKey app2.Key) (*Server, error) {
+	rpcS := rpc.NewServer()
+	gateway := newRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_server_%s", appKey)))
+	if err := rpcS.RegisterName(string(appKey), gateway); err != nil {
+		return nil, errors.Wrap(err, "error registering RPC server for app")
+	}
+
 	return &Server{
 		log:      log,
 		sockFile: sockFile,
-		rpcS:     rpc.NewServer(),
-	}
+		rpcS:     rpcS,
+		stopCh:   make(chan struct{}),
+	}, nil
 }
 
 // ListenAndServe starts listening for incoming app connections via unix socket.
@@ -31,13 +47,30 @@ func (s *Server) ListenAndServe() error {
 		return err
 	}
 
-	s.rpcS.Accept(l)
+	s.lis = l
 
-	return nil
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return err
+		}
+
+		s.done.Add(1)
+		go s.serveConn(conn)
+	}
 }
 
-// AllowApp allows app with the key `appKey` to do RPC calls.
-func (s *Server) AllowApp(appKey string) error {
-	gateway := newRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_gateway_%s", appKey)))
-	return s.rpcS.RegisterName(appKey, gateway)
+func (s *Server) Close() error {
+	err := s.lis.Close()
+	close(s.stopCh)
+	return err
+}
+
+func (s *Server) serveConn(conn net.Conn) {
+	go s.rpcS.ServeConn(conn)
+	<-s.stopCh
+	if err := conn.Close(); err != nil {
+		s.log.WithError(err).Error("error closing conn")
+	}
+	s.done.Done()
 }
