@@ -28,7 +28,6 @@ import (
 	"github.com/skycoin/dmsg/noise"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -67,17 +66,6 @@ type AppState struct {
 	Status    AppStatus    `json:"status"`
 }
 
-type appExecuter interface {
-	Start(cmd *exec.Cmd) (int, error)
-	Stop(pid int) error
-	Wait(cmd *exec.Cmd) error
-}
-
-type appBind struct {
-	conn net.Conn
-	pid  int
-}
-
 // PacketRouter performs routing of the skywire packets.
 type PacketRouter interface {
 	io.Closer
@@ -85,15 +73,16 @@ type PacketRouter interface {
 	SetupIsTrusted(sPK cipher.PubKey) bool
 }
 
+type appKey string
+
 // Node provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Node struct {
-	config   *Config
-	router   router.Router
-	n        *snet.Network
-	tm       *transport.Manager
-	rt       routing.Table
-	executer appExecuter
+	config *Config
+	router router.Router
+	n      *snet.Network
+	tm     *transport.Manager
+	rt     routing.Table
 
 	Logger *logging.MasterLogger
 	logger *logging.Logger
@@ -103,7 +92,7 @@ type Node struct {
 	appsConf  []AppConfig
 
 	startedMu   sync.RWMutex
-	startedApps map[string]*appBind
+	startedApps map[string]appKey
 
 	startedAt time.Time
 
@@ -112,7 +101,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	appServer *appserver.Server
+	appManager *appserver.AppManager
 }
 
 // NewNode constructs new Node.
@@ -121,8 +110,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 	node := &Node{
 		config:      config,
-		executer:    appserver.NewProcManager(),
-		startedApps: make(map[string]*appBind),
+		startedApps: make(map[string]appKey),
 	}
 
 	node.Logger = masterLogger
@@ -220,7 +208,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 		})
 	}
 
-	node.appServer = appserver.New(logging.MustGetLogger("app_server"), node.config.AppServerSockFile)
+	node.appManager = appserver.NewAppManager()
 
 	return node, err
 }
@@ -232,11 +220,6 @@ func (node *Node) Start() error {
 
 	pathutil.EnsureDir(node.dir())
 	node.closePreviousApps()
-
-	node.logger.Info("Starting app server")
-	if err := node.appServer.ListenAndServe(); err != nil {
-		return fmt.Errorf("failed to start app server: %s", err)
-	}
 
 	for _, ac := range node.appsConf {
 		if !ac.AutoStart {
@@ -353,8 +336,8 @@ func (node *Node) Close() (err error) {
 		}
 	}
 	node.startedMu.Lock()
-	for a, bind := range node.startedApps {
-		if err = node.stopApp(a, bind); err != nil {
+	for a, key := range node.startedApps {
+		if err = node.stopApp(a, key); err != nil {
 			node.logger.WithError(err).Errorf("(%s) failed to stop app", a)
 		} else {
 			node.logger.Infof("(%s) app stopped successfully", a)
@@ -417,36 +400,18 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	node.logger.Infof("Starting %s.v%s", config.App, config.Version)
 	node.logger.Warnf("here: config.Args: %+v, with len %d", config.Args, len(config.Args))
 
-	appKey := node.generateAppKey()
-	if err := node.appServer.AllowApp(appKey); err != nil {
-		return fmt.Errorf("failed to start communication server: %s", err)
-	}
-
-	conn, cmd, err := app.Command(
-		&app.Config{ProtocolVersion: supportedProtocolVersion, AppName: config.App, AppVersion: config.Version},
-		node.appsPath,
-		append([]string{filepath.Join(node.dir(), config.App)}, config.Args...),
-		[]string{
-			fmt.Sprintf("APP_KEY=%s", appKey),
-			fmt.Sprintf("SW_UNIX=%s", node.config.AppServerSockFile),
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to initialize App server: %s", err)
-	}
-
-	bind := &appBind{conn, -1}
 	if app, ok := reservedPorts[config.Port]; ok && app != config.App {
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
 	}
 
-	node.startedMu.Lock()
-	if node.startedApps[config.App] != nil {
-		node.startedMu.Unlock()
+	app := appserver.NewApp(logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)))
+
+	if err := node.appManager.Add()
+	if node.appManager.Exists(config.App) {
 		return fmt.Errorf("app %s is already started", config.App)
 	}
 
-	node.startedApps[config.App] = bind
+	node.startedApps[config.App] = appKey
 	node.startedMu.Unlock()
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
@@ -472,9 +437,10 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 			return
 		}
 
-		node.startedMu.Lock()
+		// TODO: control pid the other way
+		/*node.startedMu.Lock()
 		bind.pid = pid
-		node.startedMu.Unlock()
+		node.startedMu.Unlock()*/
 
 		node.pidMu.Lock()
 		node.logger.Infof("storing app %s pid %d", config.App, pid)
@@ -514,14 +480,14 @@ func (node *Node) persistPID(name string, pid int) {
 // StopApp stops running App.
 func (node *Node) StopApp(appName string) error {
 	node.startedMu.Lock()
-	bind := node.startedApps[appName]
+	appKey, ok := node.startedApps[appName]
 	node.startedMu.Unlock()
 
-	if bind == nil {
+	if !ok {
 		return ErrUnknownApp
 	}
 
-	return node.stopApp(appName, bind)
+	return node.stopApp(appName, appKey)
 }
 
 // SetAutoStart sets an app to auto start or not.
@@ -535,23 +501,14 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 	return ErrUnknownApp
 }
 
-func (node *Node) stopApp(app string, bind *appBind) (err error) {
+func (node *Node) stopApp(app string, key appKey) (err error) {
 	node.logger.Infof("Stopping app %s and closing ports", app)
 
-	if excErr := node.executer.Stop(bind.pid); excErr != nil {
+	// TODO: stop app, move this func
+	/*if excErr := node.executer.Stop(bind.pid); excErr != nil {
 		node.logger.Warn("Failed to stop app: ", excErr)
 		err = excErr
-	}
-
-	if srvErr := bind.conn.Close(); srvErr != nil && err == nil {
-		node.logger.Warnf("Failed to close App conn: %s", srvErr)
-		err = srvErr
-	}
+	}*/
 
 	return err
-}
-
-func (node *Node) generateAppKey() string {
-	raw, _ := cipher.GenerateKeyPair()
-	return raw.Hex()
 }

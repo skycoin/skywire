@@ -34,7 +34,7 @@ type Client struct {
 func NewClient(log *logging.Logger, localPK cipher.PubKey, pid ProcID, sockFile, appKey string) (*Client, error) {
 	rpcCl, err := rpc.Dial("unix", sockFile)
 	if err != nil {
-		return nil, errors.Wrap(err, "error connectin to the app server")
+		return nil, errors.Wrap(err, "error connecting to the app server")
 	}
 
 	return &Client{
