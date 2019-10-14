@@ -1,6 +1,7 @@
 package app2
 
 import (
+	"errors"
 	"net"
 	"sync"
 
@@ -18,7 +19,7 @@ type Listener struct {
 	rpc       RPCClient
 	addr      appnet.Addr
 	cm        *idmanager.Manager // contains conns associated with their IDs
-	freeLis   func()
+	freeLis   func() bool
 	freeLisMx sync.RWMutex
 }
 
@@ -35,6 +36,13 @@ func (l *Listener) Accept() (net.Conn, error) {
 		remote: remote,
 	}
 
+	// TODO: discuss
+	// lock is needed, since the conn is already added to the manager,
+	// but has no `freeConn`. It shouldn't really happen under usual
+	// circumstances, but the data race is possible. If we try to close
+	// the conn without `freeConn` while the next few lines are running,
+	// the panic may raise without this lock
+	conn.freeConnMx.Lock()
 	free, err := l.cm.Add(connID, conn)
 	if err != nil {
 		if err := conn.Close(); err != nil {
@@ -43,14 +51,6 @@ func (l *Listener) Accept() (net.Conn, error) {
 
 		return nil, err
 	}
-
-	// TODO: discuss
-	// lock is needed, since the conn is already added to the manager,
-	// but has no `freeConn`. It shouldn't really happen under usual
-	// circumstances, but the data race is possible. If we try to close
-	// the conn without `freeConn` while the next few lines are running,
-	// the panic may raise without this lock
-	conn.freeConnMx.Lock()
 	conn.freeConn = free
 	conn.freeConnMx.Unlock()
 
@@ -58,11 +58,11 @@ func (l *Listener) Accept() (net.Conn, error) {
 }
 
 func (l *Listener) Close() error {
-	defer func() {
-		l.freeLisMx.RLock()
-		defer l.freeLisMx.RUnlock()
-		if l.freeLis != nil {
-			l.freeLis()
+	l.freeLisMx.RLock()
+	defer l.freeLisMx.RUnlock()
+	if l.freeLis != nil {
+		if freed := l.freeLis(); !freed {
+			return errors.New("listener is already closed")
 		}
 
 		var conns []net.Conn
@@ -82,9 +82,11 @@ func (l *Listener) Close() error {
 				l.log.WithError(err).Error("error closing listener")
 			}
 		}
-	}()
 
-	return l.rpc.CloseListener(l.id)
+		return l.rpc.CloseListener(l.id)
+	}
+
+	return nil
 }
 
 func (l *Listener) Addr() net.Addr {
