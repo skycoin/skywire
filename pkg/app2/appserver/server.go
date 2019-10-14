@@ -19,7 +19,7 @@ type Server struct {
 	lis      net.Listener
 	sockFile string
 	rpcS     *rpc.Server
-	apps     map[app2.Key]*App
+	apps     map[app2.Key]*app2.App
 	done     sync.WaitGroup
 	stopCh   chan struct{}
 }
