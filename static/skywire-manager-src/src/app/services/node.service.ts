@@ -6,10 +6,12 @@ import {
   timer,
   Subscription
 } from 'rxjs';
-import { Node, Transport, Route } from '../app.datatypes';
+import { Node, Transport, Route, Application } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { flatMap } from 'rxjs/operators';
 import { StorageService, NodeInfo } from './storage.service';
+import { TransportService } from './transport.service';
+import { RouteService } from './route.service';
 
 @Injectable({
   providedIn: 'root'
@@ -24,6 +26,8 @@ export class NodeService {
   constructor(
     private apiService: ApiService,
     private storageService: StorageService,
+    private transportService: TransportService,
+    private routeService: RouteService,
   ) {}
 
   nodes(): Observable<Node[]> {
@@ -39,10 +43,10 @@ export class NodeService {
     this.storageService.getNodes().forEach(node => savedNodes.set(node.publicKey, node));
 
     this.allNodesSubscription = timer(0, 10000)
-      .pipe(
-        flatMap(() => this.getNodes()))
+      .pipe(flatMap(() => this.getNodes()))
       .subscribe((nodes: Node[]|null) => {
         nodes = nodes || [];
+
         const processedNodes = new Map<string, boolean>();
         let nodesAdded = false;
         nodes.forEach(node => {
@@ -52,12 +56,19 @@ export class NodeService {
             node.online = true;
           } else {
             nodesAdded = true;
+
+            const addressParts = node.tcp_addr.split(':');
+            let defaultLabel = node.tcp_addr;
+            if (addressParts && addressParts.length === 2) {
+              defaultLabel = ':' + addressParts[1];
+            }
+
             this.storageService.addNode({
               publicKey: node.local_pk,
-              label: node.tcp_addr,
+              label: defaultLabel,
             });
 
-            node.label = node.tcp_addr;
+            node.label = defaultLabel;
             node.online = true;
           }
         });
@@ -100,20 +111,35 @@ export class NodeService {
 
     let currentNode: Node;
 
-    return timer(0, 10000000)
+    return timer(0, 10000)
       .pipe(
         flatMap(() => this.getNode()),
         flatMap((node: Node) => {
           currentNode = node;
-          return this.getTransports();
+          return this.transportService.getTransports(this.currentNodeKey);
         }),
         flatMap((transports: Transport[]) => {
           currentNode.transports = transports;
-          return this.getRoutes();
+          return this.routeService.getRoutes(this.currentNodeKey);
         })
       ).subscribe(
         (routes: Route[]) => {
           currentNode.routes = routes;
+
+          const startedApps: Application[] = [];
+          const stoppedApps: Application[] = [];
+          currentNode.apps.forEach(app => {
+            if (app.status === 1) {
+              startedApps.push(app);
+            } else {
+              stoppedApps.push(app);
+            }
+          });
+
+          startedApps.sort((a, b) => a.name.localeCompare(b.name));
+          stoppedApps.sort((a, b) => a.name.localeCompare(b.name));
+          currentNode.apps = startedApps.concat(stoppedApps);
+
           this.currentNode.next(currentNode);
         },
         errorCallback,
@@ -130,13 +156,5 @@ export class NodeService {
 
   private getNode(): Observable<Node> {
     return this.apiService.get(`visors/${this.currentNodeKey}`, { api2: true });
-  }
-
-  private getTransports() {
-    return this.apiService.get(`visors/${this.currentNodeKey}/transports`, { api2: true });
-  }
-
-  private getRoutes() {
-    return this.apiService.get(`visors/${this.currentNodeKey}/routes`, { api2: true });
   }
 }

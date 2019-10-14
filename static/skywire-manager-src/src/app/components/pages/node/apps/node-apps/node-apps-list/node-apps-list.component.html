@@ -87,4 +87,8 @@
     <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
     <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
   </table>
+
+  <div *ngIf="!dataSource.data || dataSource.data.length === 0">
+    <span class="text">Node doesn't have any apps.</span>
+  </div>
 </div>
