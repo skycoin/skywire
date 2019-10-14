@@ -31,7 +31,8 @@ import {
   ShowOnDirtyErrorStateMatcher,
   MatProgressBarModule,
   MatProgressSpinnerModule,
-  MatSelectModule
+  MatSelectModule,
+  MatCheckboxModule
 } from '@angular/material';
 import {FooterComponent} from './components/layout/footer/footer.component';
 import { TransportListComponent } from './components/pages/node/routing/transport-list/transport-list.component';
@@ -195,6 +196,7 @@ import { RouteDetailsComponent } from './components/pages/node/routing/route-lis
     MatProgressBarModule,
     MatSelectModule,
     MatProgressSpinnerModule,
+    MatCheckboxModule,
   ],
   providers: [
     ClipboardService,

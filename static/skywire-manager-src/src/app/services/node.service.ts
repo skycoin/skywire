@@ -100,7 +100,7 @@ export class NodeService {
 
     let currentNode: Node;
 
-    return timer(0, 10000)
+    return timer(0, 10000000)
       .pipe(
         flatMap(() => this.getNode()),
         flatMap((node: Node) => {

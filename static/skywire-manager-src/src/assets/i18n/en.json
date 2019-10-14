@@ -256,5 +256,13 @@
     "click-to-see": "Click to see full text",
     "tooltip": "Copy to clipboard",
     "copied": "Copied!"
+  },
+
+  "selection": {
+    "select-all": "Select all",
+    "unselect-all": "Unselect all",
+    "delete-all": "Delete all selected elements",
+    "start-all": "Start all selected apps",
+    "stop-all": "Stop all selected apps"
   }
 }

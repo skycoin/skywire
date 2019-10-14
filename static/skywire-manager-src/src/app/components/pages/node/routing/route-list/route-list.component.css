@@ -1,4 +1,12 @@
+.title {
+  margin-right: auto;
+}
+
 .text {
   font-size: 14px;
   font-weight: 300;
+}
+
+.selection-col {
+  width: 30px;
 }
