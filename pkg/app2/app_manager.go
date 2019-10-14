@@ -1,4 +1,4 @@
-package appserver
+package app2
 
 import (
 	"sync"
@@ -21,19 +21,49 @@ func NewAppManager() *AppManager {
 
 func (m *AppManager) Add(a *App) error {
 	m.mx.Lock()
+	defer m.mx.Unlock()
+
 	if _, ok := m.apps[a.config.Name]; ok {
-		m.mx.Unlock()
 		return ErrAppExists
 	}
+
 	m.apps[a.config.Name] = a
-	m.mx.Unlock()
 
 	return nil
 }
 
 func (m *AppManager) App(name string) (*App, bool) {
 	m.mx.RLock()
+	defer m.mx.RUnlock()
+
 	a, ok := m.apps[name]
-	m.mx.RUnlock()
+
 	return a, ok
+}
+
+func (m *AppManager) Exists(name string) bool {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
+	_, ok := m.apps[name]
+
+	return ok
+}
+
+func (m *AppManager) Remove(name string) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	delete(m.apps, name)
+}
+
+func (m *AppManager) Range(next func(name string, app *App) bool) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
+	for name, app := range m.apps {
+		if !next(name, app) {
+			return
+		}
+	}
 }

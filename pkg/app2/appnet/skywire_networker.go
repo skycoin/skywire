@@ -11,7 +11,6 @@ import (
 	"github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -45,11 +44,10 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn
 		return nil, err
 	}
 
-	_, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions)
+	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions)
 	if err != nil {
 		return nil, err
 	}
-	rg := &app2.MockConn{}
 
 	return &skywireConn{
 		Conn:     rg,
@@ -94,19 +92,17 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 // serve accepts and serves routes.
 func (r *SkywireNetworker) serve() error {
 	for {
-		_, err := r.r.AcceptRoutes()
+		rg, err := r.r.AcceptRoutes()
 		if err != nil {
 			return err
 		}
-		rg := &app2.MockConn{}
 
 		go r.serveRG(rg)
 	}
 }
 
-// TODO: change to `*router.RouterGroup`
 // serveRG passes accepted router group to the corresponding listener.
-func (r *SkywireNetworker) serveRG(rg net.Conn) {
+func (r *SkywireNetworker) serveRG(rg *router.RouteGroup) {
 	localAddr, ok := rg.LocalAddr().(routing.Addr)
 	if !ok {
 		r.closeRG(rg)
@@ -131,9 +127,8 @@ func (r *SkywireNetworker) serveRG(rg net.Conn) {
 	lis.putConn(rg)
 }
 
-// TODO: change to `*router.RouterGroup`
 // closeRG closes router group and logs error if any.
-func (r *SkywireNetworker) closeRG(rg net.Conn) {
+func (r *SkywireNetworker) closeRG(rg *router.RouteGroup) {
 	if err := rg.Close(); err != nil {
 		r.log.Error(err)
 	}
@@ -184,7 +179,6 @@ func (l *skywireListener) putConn(conn net.Conn) {
 
 // skywireConn is a connection wrapper for skynet.
 type skywireConn struct {
-	// TODO: change to `*router.RouterGroup`
 	net.Conn
 	freePort   func()
 	freePortMx sync.RWMutex
