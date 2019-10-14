@@ -28,7 +28,7 @@ func New() *Manager {
 }
 
 // `ReserveNextID` reserves next free slot for the value and returns the id for it.
-func (m *Manager) ReserveNextID() (id *uint16, free func(), err error) {
+func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 	m.mx.Lock()
 
 	nxtID := m.lstID + 1
@@ -72,7 +72,7 @@ func (m *Manager) Pop(id uint16) (interface{}, error) {
 }
 
 // add adds the new value `v` associated with `id`.
-func (m *Manager) Add(id uint16, v interface{}) (free func(), err error) {
+func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 	m.mx.Lock()
 
 	if _, ok := m.values[id]; ok {
@@ -131,10 +131,16 @@ func (m *Manager) DoRange(next func(id uint16, v interface{}) bool) {
 
 // constructFreeFunc constructs new func responsible for clearing
 // a slot with the specified `id`.
-func (m *Manager) constructFreeFunc(id uint16) func() {
-	return func() {
-		m.mx.Lock()
-		delete(m.values, id)
-		m.mx.Unlock()
+func (m *Manager) constructFreeFunc(id uint16) func() bool {
+	var once sync.Once
+	return func() bool {
+		var freed bool
+		once.Do(func() {
+			freed = true
+			m.mx.Lock()
+			delete(m.values, id)
+			m.mx.Unlock()
+		})
+		return freed
 	}
 }
