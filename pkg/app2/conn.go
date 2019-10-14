@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/skycoin/skywire/pkg/app2/appnet"
 )
 
@@ -15,7 +17,7 @@ type Conn struct {
 	rpc        RPCClient
 	local      appnet.Addr
 	remote     appnet.Addr
-	freeConn   func()
+	freeConn   func() bool
 	freeConnMx sync.RWMutex
 }
 
@@ -33,15 +35,17 @@ func (c *Conn) Write(b []byte) (int, error) {
 }
 
 func (c *Conn) Close() error {
-	defer func() {
-		c.freeConnMx.RLock()
-		defer c.freeConnMx.RUnlock()
-		if c.freeConn != nil {
-			c.freeConn()
+	c.freeConnMx.RLock()
+	defer c.freeConnMx.RUnlock()
+	if c.freeConn != nil {
+		if freed := c.freeConn(); !freed {
+			return errors.New("conn is already closed")
 		}
-	}()
 
-	return c.rpc.CloseConn(c.id)
+		return c.rpc.CloseConn(c.id)
+	}
+
+	return nil
 }
 
 func (c *Conn) LocalAddr() net.Addr {

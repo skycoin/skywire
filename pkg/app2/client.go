@@ -65,6 +65,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		remote: remote,
 	}
 
+	conn.freeConnMx.Lock()
 	free, err := c.cm.Add(connID, conn)
 	if err != nil {
 		if err := conn.Close(); err != nil {
@@ -73,8 +74,6 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 
 		return nil, err
 	}
-
-	conn.freeConnMx.Lock()
 	conn.freeConn = free
 	conn.freeConnMx.Unlock()
 
@@ -102,6 +101,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 		cm:   idmanager.New(),
 	}
 
+	listener.freeLisMx.Lock()
 	freeLis, err := c.lm.Add(lisID, listener)
 	if err != nil {
 		if err := listener.Close(); err != nil {
@@ -110,8 +110,6 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 
 		return nil, err
 	}
-
-	listener.freeLisMx.Lock()
 	listener.freeLis = freeLis
 	listener.freeLisMx.Unlock()
 
