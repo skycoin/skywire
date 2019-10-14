@@ -13,8 +13,22 @@ type Proc struct {
 	mx  sync.RWMutex
 }
 
-func NewProc(c Config, dir string, args []string) *Proc {
-	cmd := cmd(c, dir, args)
+func NewProc(c Config, args []string, key Key) *Proc {
+	binaryPath := getBinaryPath(c.BinaryDir, c.Name, c.Version)
+
+	const (
+		appKeyEnvFormat   = "APP_KEY=%s"
+		sockFileEnvFormat = "SW_UNIX=%s"
+	)
+
+	env := make([]string, 0, 2)
+	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
+	env = append(env, fmt.Sprintf(sockFileEnvFormat, c.SockFile))
+
+	cmd := exec.Command(binaryPath, args...) // nolint:gosec
+
+	cmd.Env = env
+	cmd.Dir = c.WorkDir
 
 	return &Proc{
 		cmd: cmd,
@@ -46,24 +60,6 @@ func (p *Proc) Stop() error {
 
 func (p *Proc) Wait() error {
 	return p.cmd.Wait()
-}
-
-func cmd(config Config, dir string, args []string) *exec.Cmd {
-	binaryPath := getBinaryPath(dir, config.Name, config.Version)
-	cmd := exec.Command(binaryPath, args...) // nolint:gosec
-
-	const (
-		appKeyEnvFormat   = "APP_KEY=%s"
-		sockFileEnvFormat = "SW_UNIX=%s"
-	)
-
-	env := make([]string, 0, 2)
-	env = append(env, fmt.Sprintf(appKeyEnvFormat, config.Key))
-	env = append(env, fmt.Sprintf(sockFileEnvFormat, config.SockFile))
-
-	cmd.Env = env
-
-	return cmd
 }
 
 func getBinaryPath(dir, name, ver string) string {

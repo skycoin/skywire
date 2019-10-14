@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2/appserver"
+	"github.com/skycoin/skywire/pkg/app2"
 
 	"github.com/skycoin/skywire/pkg/snet"
 
@@ -73,8 +73,6 @@ type PacketRouter interface {
 	SetupIsTrusted(sPK cipher.PubKey) bool
 }
 
-type appKey string
-
 // Node provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Node struct {
@@ -91,9 +89,6 @@ type Node struct {
 	localPath string
 	appsConf  []AppConfig
 
-	startedMu   sync.RWMutex
-	startedApps map[string]appKey
-
 	startedAt time.Time
 
 	pidMu sync.Mutex
@@ -101,7 +96,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	appManager *appserver.AppManager
+	appManager *app2.AppManager
 }
 
 // NewNode constructs new Node.
@@ -109,8 +104,8 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	ctx := context.Background()
 
 	node := &Node{
-		config:      config,
-		startedApps: make(map[string]appKey),
+		config:     config,
+		appManager: app2.NewAppManager(),
 	}
 
 	node.Logger = masterLogger
@@ -207,8 +202,6 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 			Initiator: true,
 		})
 	}
-
-	node.appManager = appserver.NewAppManager()
 
 	return node, err
 }
@@ -335,15 +328,23 @@ func (node *Node) Close() (err error) {
 			node.logger.Infof("(%d) RPC dialer closed successfully", i)
 		}
 	}
-	node.startedMu.Lock()
-	for a, key := range node.startedApps {
-		if err = node.stopApp(a, key); err != nil {
+
+	apps := make(map[string]*app2.App)
+	node.appManager.Range(func(name string, app *app2.App) bool {
+		apps[name] = app
+		return true
+	})
+
+	for name, a := range apps {
+		node.appManager.Remove(name)
+		if err := a.Stop(); err != nil {
 			node.logger.WithError(err).Errorf("(%s) failed to stop app", a)
-		} else {
-			node.logger.Infof("(%s) app stopped successfully", a)
+			break
 		}
+
+		node.logger.Infof("(%s) app stopped successfully", a)
 	}
-	node.startedMu.Unlock()
+
 	if err = node.router.Close(); err != nil {
 		node.logger.WithError(err).Error("failed to stop router")
 	} else {
@@ -361,14 +362,14 @@ func (node *Node) Exec(command string) ([]byte, error) {
 
 // Apps returns list of AppStates for all registered apps.
 func (node *Node) Apps() []*AppState {
+	// TODO: move app states to the app module
 	res := make([]*AppState, 0)
 	for _, app := range node.appsConf {
 		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
-		node.startedMu.RLock()
-		if node.startedApps[app.App] != nil {
+
+		if node.appManager.Exists(app.App) {
 			state.Status = AppStatusRunning
 		}
-		node.startedMu.RUnlock()
 
 		res = append(res, state)
 	}
@@ -404,70 +405,71 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
 	}
 
-	app := appserver.NewApp(logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)))
-
-	if err := node.appManager.Add()
-	if node.appManager.Exists(config.App) {
-		return fmt.Errorf("app %s is already started", config.App)
+	appCfg := app2.Config{
+		Name:      config.App,
+		Version:   config.Version,
+		BinaryDir: node.appsPath,
+		WorkDir:   filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
 	}
 
-	node.startedApps[config.App] = appKey
-	node.startedMu.Unlock()
+	if _, err := ensureDir(appCfg.WorkDir); err != nil {
+		return err
+	}
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
-	logger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
+	/*logger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
 	defer func() {
 		if logErr := logger.Close(); err == nil && logErr != nil {
 			err = logErr
 		}
 	}()
 
+	// TODO: pass this guy correctly
 	cmd.Stdout = logger
 	cmd.Stderr = logger
-	cmd.Dir = filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version))
-	if _, err := ensureDir(cmd.Dir); err != nil {
-		return err
+	*/
+
+	app := app2.New(
+		logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)),
+		appCfg,
+		append([]string{filepath.Join(node.dir(), config.App)}, config.Args...),
+	)
+
+	if err := node.appManager.Add(app); err != nil {
+		return fmt.Errorf("app %s is already started", config.App)
 	}
+	defer node.appManager.Remove(appCfg.Name)
 
-	appCh := make(chan error)
-	go func() {
-		pid, err := node.executer.Start(cmd)
-		if err != nil {
-			appCh <- err
-			return
-		}
-
-		// TODO: control pid the other way
-		/*node.startedMu.Lock()
-		bind.pid = pid
-		node.startedMu.Unlock()*/
-
-		node.pidMu.Lock()
-		node.logger.Infof("storing app %s pid %d", config.App, pid)
-		node.persistPID(config.App, pid)
-		node.pidMu.Unlock()
-		appCh <- node.executer.Wait(cmd)
-	}()
+	if err := app.Run(); err != nil {
+		return node.wrapAppErr(err)
+	}
 
 	if startCh != nil {
 		startCh <- struct{}{}
 	}
 
-	var appErr error
-	if err := <-appCh; err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
-			appErr = fmt.Errorf("failed to run app executable: %s", err)
-		}
+	pid := app.PID()
+	node.pidMu.Lock()
+	node.logger.Infof("storing app %s pid %d", config.App, pid)
+	node.persistPID(config.App, app.PID())
+	node.pidMu.Unlock()
+
+	if err := app.Wait(); err != nil {
+		return node.wrapAppErr(err)
 	}
 
-	node.startedMu.Lock()
-	delete(node.startedApps, config.App)
-	node.startedMu.Unlock()
-
-	return appErr
+	return nil
 }
 
-func (node *Node) persistPID(name string, pid int) {
+func (node *Node) wrapAppErr(err error) error {
+	if _, ok := err.(*exec.ExitError); !ok {
+		return fmt.Errorf("failed to run app executable: %s", err)
+	}
+
+	return err
+}
+
+func (node *Node) persistPID(name string, pid app2.ProcID) {
 	pidF := node.pidFile()
 	pidFName := pidF.Name()
 	if err := pidF.Close(); err != nil {
@@ -479,15 +481,19 @@ func (node *Node) persistPID(name string, pid int) {
 
 // StopApp stops running App.
 func (node *Node) StopApp(appName string) error {
-	node.startedMu.Lock()
-	appKey, ok := node.startedApps[appName]
-	node.startedMu.Unlock()
+	node.logger.Infof("Stopping app %s and closing ports", appName)
 
+	app, ok := node.appManager.App(appName)
 	if !ok {
 		return ErrUnknownApp
 	}
 
-	return node.stopApp(appName, appKey)
+	if err := app.Stop(); err != nil {
+		node.logger.Warn("Failed to stop app: ", err)
+		return err
+	}
+
+	return nil
 }
 
 // SetAutoStart sets an app to auto start or not.
@@ -499,16 +505,4 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 		}
 	}
 	return ErrUnknownApp
-}
-
-func (node *Node) stopApp(app string, key appKey) (err error) {
-	node.logger.Infof("Stopping app %s and closing ports", app)
-
-	// TODO: stop app, move this func
-	/*if excErr := node.executer.Stop(bind.pid); excErr != nil {
-		node.logger.Warn("Failed to stop app: ", excErr)
-		err = excErr
-	}*/
-
-	return err
 }

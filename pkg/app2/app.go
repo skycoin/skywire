@@ -1,50 +1,52 @@
-package appserver
+package app2
 
 import (
 	"fmt"
 
+	"github.com/skycoin/skywire/pkg/app2/appserver"
+
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire/pkg/app2"
 )
 
 type App struct {
-	config app2.Config
+	config Config
 	log    *logging.Logger
-	proc   *app2.Proc
-	rpcS   *Server
+	proc   *Proc
+	rpcS   *appserver.Server
 }
 
-func NewApp(log *logging.Logger, c app2.Config, dir string, args []string) (*App, error) {
-	appKey := app2.GenerateAppKey()
-
-	rpcS, err := New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", appKey)), c.SockFile, appKey)
-	if err != nil {
-		return nil, err
-	}
-
-	p := app2.NewProc(c, dir, args)
+func New(log *logging.Logger, c Config, args []string) *App {
+	p := NewProc(c, args)
 
 	return &App{
 		config: c,
 		log:    log,
 		proc:   p,
-		rpcS:   rpcS,
-	}, nil
+	}
 }
 
-func (a *App) PID() app2.ProcID {
+func (a *App) PID() ProcID {
 	return a.proc.ID()
 }
 
 func (a *App) Run() error {
+	appKey := GenerateAppKey()
+
+	rpcS, err := appserver.New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", appKey)),
+		a.config.SockFile, appKey)
+	if err != nil {
+		return err
+	}
+
+	a.rpcS = rpcS
+
 	go func() {
 		if err := a.rpcS.ListenAndServe(); err != nil {
 			a.log.WithError(err).Error("error serving RPC")
 		}
 	}()
 
-	err := a.proc.Run()
-	if err != nil {
+	if err := a.proc.Run(); err != nil {
 		a.closeRPCServer()
 		return err
 	}
@@ -59,8 +61,9 @@ func (a *App) Stop() error {
 }
 
 func (a *App) Wait() error {
-
-	return a.proc.Wait()
+	err := a.proc.Wait()
+	a.closeRPCServer()
+	return err
 }
 
 func (a *App) closeRPCServer() {
