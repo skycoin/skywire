@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pkg/errors"
+
 	"github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -144,18 +146,27 @@ type skywireListener struct {
 	connsCh    chan net.Conn
 	freePort   func()
 	freePortMx sync.RWMutex
+	once       sync.Once
 }
 
 // Accept accepts incoming connection.
 func (l *skywireListener) Accept() (net.Conn, error) {
-	return <-l.connsCh, nil
+	conn, ok := <-l.connsCh
+	if !ok {
+		return nil, errors.New("listening on closed connection")
+	}
+
+	return conn, nil
 }
 
 // Close closes listener.
 func (l *skywireListener) Close() error {
-	l.freePortMx.RLock()
-	defer l.freePortMx.RUnlock()
-	l.freePort()
+	l.once.Do(func() {
+		l.freePortMx.RLock()
+		defer l.freePortMx.RUnlock()
+		l.freePort()
+		close(l.connsCh)
+	})
 
 	return nil
 }
@@ -177,17 +188,23 @@ type skywireConn struct {
 	net.Conn
 	freePort   func()
 	freePortMx sync.RWMutex
+	once       sync.Once
 }
 
 // Close closes connection.
 func (c *skywireConn) Close() error {
-	defer func() {
-		c.freePortMx.RLock()
-		defer c.freePortMx.RUnlock()
-		if c.freePort != nil {
-			c.freePort()
-		}
-	}()
+	var err error
+	c.once.Do(func() {
+		defer func() {
+			c.freePortMx.RLock()
+			defer c.freePortMx.RUnlock()
+			if c.freePort != nil {
+				c.freePort()
+			}
+		}()
 
-	return c.Conn.Close()
+		err = c.Conn.Close()
+	})
+
+	return err
 }
