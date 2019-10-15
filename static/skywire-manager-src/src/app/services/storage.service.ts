@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-const KEY_REFRESH_SECONDS = 'KEY_REFRESH_SECONDS';
+const KEY_REFRESH_SECONDS = 'refreshSeconds';
 const KEY_DEFAULT_LANG = 'KEY_DEFAULT_LANG';
 const KEY_NODES = 'nodesData';
 
@@ -14,9 +14,11 @@ export class NodeInfo {
 })
 export class StorageService {
   private storage: Storage;
+  private currentRefreshTime: number;
 
   constructor() {
     this.storage = localStorage;
+    this.currentRefreshTime = parseInt(this.storage.getItem(KEY_REFRESH_SECONDS), 10) || 10;
   }
 
   private static nodeLabelNamespace(nodeKey: string): string {
@@ -41,10 +43,11 @@ export class StorageService {
 
   setRefreshTime(seconds: number) {
     this.storage.setItem(KEY_REFRESH_SECONDS, seconds.toString());
+    this.currentRefreshTime = seconds;
   }
 
   getRefreshTime(): number {
-    return parseInt(this.storage.getItem(KEY_REFRESH_SECONDS), 10) || 5;
+    return this.currentRefreshTime;
   }
 
   setDefaultLanguage(lang: string): void {

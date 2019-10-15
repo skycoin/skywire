@@ -14,7 +14,11 @@ export class TransportService {
 
   getTransports(nodeKey: string): Observable<Transport[]> {
     return this.apiService.get(`visors/${nodeKey}/transports`, { api2: true }).pipe(map((response: Transport[]) => {
-      return response.sort((a, b) => a.remote_pk.localeCompare(b.remote_pk));
+      if (response) {
+        response = response.sort((a, b) => a.remote_pk.localeCompare(b.remote_pk));
+      }
+
+      return response;
     }));
   }
 

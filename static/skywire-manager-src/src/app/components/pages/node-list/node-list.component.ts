@@ -1,7 +1,7 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, NgZone } from '@angular/core';
 import { NodeService } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
-import { Subscription } from 'rxjs';
+import { Subscription, of } from 'rxjs';
 import { MatDialog, MatTableDataSource } from '@angular/material';
 import { Router } from '@angular/router';
 import { ButtonComponent } from '../../layout/button/button.component';
@@ -10,6 +10,7 @@ import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService } from '../../../services/storage.service';
+import { delay, flatMap } from 'rxjs/operators';
 
 @Component({
   selector: 'app-node-list',
@@ -21,8 +22,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   dataSource = new MatTableDataSource<Node>();
   displayedColumns: string[] = ['enabled', 'index', 'label', 'key', 'actions'];
 
-  private nodesSubscription: Subscription;
-  private refreshSubscription: Subscription;
+  private dataSubscription: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -32,19 +32,15 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private translate: TranslateService,
     private authService: AuthService,
     private storageService: StorageService,
+    private ngZone: NgZone,
   ) { }
 
   ngOnInit() {
-    this.nodesSubscription = this.nodeService.nodes().subscribe(allNodes => {
-      this.dataSource.data = allNodes.sort((a, b) => a.local_pk.localeCompare(b.local_pk));
-    });
-
-    this.refresh();
+    this.refresh(0);
   }
 
   ngOnDestroy() {
-    this.nodesSubscription.unsubscribe();
-    this.refreshSubscription.unsubscribe();
+    this.dataSubscription.unsubscribe();
   }
 
   nodeStatusClass(node: Node): string {
@@ -65,16 +61,33 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
   }
 
-  refresh() {
-    // this.refreshButton.loading();
-    if (this.refreshSubscription) {
-      this.refreshSubscription.unsubscribe();
+  private refresh(delayMilliseconds: number) {
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
     }
 
-    this.refreshSubscription = this.nodeService.refreshNodes(
-      this.onSuccess.bind(this),
-      this.onError.bind(this),
-    );
+    this.ngZone.runOutsideAngular(() => {
+      this.dataSubscription = of(1).pipe(delay(delayMilliseconds), flatMap(() => this.nodeService.getNodes())).subscribe(
+        (nodes: Node[]) => {
+          this.ngZone.run(() => {
+            this.refreshButton.reset();
+            this.dataSource.data = nodes;
+
+            this.refresh(this.storageService.getRefreshTime() * 1000);
+          });
+        }, error => {
+          this.ngZone.run(() => {
+            this.translate.get('nodes.error-load', { error }).subscribe(str => {
+              this.errorSnackBar.open(str);
+            });
+
+            this.refreshButton.error(error);
+
+            this.refresh(this.storageService.getRefreshTime() * 1000);
+          });
+        }
+      );
+    });
   }
 
   settings() {
@@ -105,30 +118,18 @@ export class NodeListComponent implements OnInit, OnDestroy {
         this.storageService.setNodeLabel(node.local_pk, defaultLabel);
       }
 
-      this.refresh();
+      this.refresh(0);
     });
   }
 
   deleteNode(node: Node) {
     this.storageService.removeNode(node.local_pk);
-    this.refresh();
+    this.refresh(0);
   }
 
   open(node: Node) {
     if (node.online) {
       this.router.navigate(['nodes', node.local_pk]);
     }
-  }
-
-  private onSuccess() {
-    this.refreshButton.reset();
-  }
-
-  private onError(error: string) {
-    this.translate.get('nodes.error-load', { error }).subscribe(str => {
-      this.errorSnackBar.open(str);
-    });
-
-    this.refreshButton.error(error);
   }
 }

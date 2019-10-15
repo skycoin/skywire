@@ -1,6 +1,5 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { TransportService } from '../../../../../../services/transport.service';
-import { NodeService } from '../../../../../../services/node.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatSnackBar } from '@angular/material';
 import { TranslateService } from '@ngx-translate/core';
@@ -18,7 +17,6 @@ export class CreateTransportComponent implements OnInit {
   form: FormGroup;
 
   constructor(
-    private nodeService: NodeService,
     private transportService: TransportService,
     private formBuilder: FormBuilder,
     private snackbar: MatSnackBar,
@@ -27,7 +25,7 @@ export class CreateTransportComponent implements OnInit {
   ) { }
 
   ngOnInit() {
-    this.transportService.types(this.nodeService.getCurrentNodeKey()).subscribe(types => this.types = types);
+    this.transportService.types(NodeComponent.getCurrentNodeKey()).subscribe(types => this.types = types);
 
     this.form = this.formBuilder.group({
       'remoteKey': ['', Validators.compose([
@@ -48,7 +46,7 @@ export class CreateTransportComponent implements OnInit {
     this.button.loading();
 
     this.transportService.create(
-      this.nodeService.getCurrentNodeKey(),
+      NodeComponent.getCurrentNodeKey(),
       this.form.get('remoteKey').value,
       this.form.get('type').value,
     )
@@ -59,7 +57,7 @@ export class CreateTransportComponent implements OnInit {
   }
 
   private onSuccess() {
-    NodeComponent.refreshDisplayedData();
+    NodeComponent.refreshCurrentDisplayedData();
     this.snackbar.open(this.translate.instant('transports.dialog.success'));
     this.dialogRef.close();
   }

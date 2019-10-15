@@ -1,20 +1,23 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Application } from '../../../../app.datatypes';
-import { NodeService } from '../../../../services/node.service';
+import { NodeComponent } from '../node.component';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-apps',
   templateUrl: './apps.component.html',
   styleUrls: ['./apps.component.css']
 })
-export class AppsComponent implements OnInit {
+export class AppsComponent implements OnInit, OnDestroy {
   apps: Application[];
 
-  constructor(
-    private nodeService: NodeService,
-  ) { }
+  private dataSubscription: Subscription;
 
   ngOnInit() {
-    this.nodeService.node().subscribe(node => this.apps = node.apps);
+    this.dataSubscription = NodeComponent.currentNode.subscribe(node => this.apps = node.apps);
+  }
+
+  ngOnDestroy() {
+    this.dataSubscription.unsubscribe();
   }
 }

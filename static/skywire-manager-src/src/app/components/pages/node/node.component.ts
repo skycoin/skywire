@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { NodeService } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -6,6 +6,9 @@ import { MatDialog } from '@angular/material';
 import { Subscription } from 'rxjs/internal/Subscription';
 import { TranslateService } from '@ngx-translate/core';
 import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
+import { of, Observable, ReplaySubject } from 'rxjs';
+import { delay, flatMap } from 'rxjs/operators';
+import { StorageService } from '../../../services/storage.service';
 
 @Component({
   selector: 'app-node',
@@ -14,17 +17,26 @@ import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 })
 export class NodeComponent implements OnInit, OnDestroy {
   private static currentInstanceInternal: NodeComponent;
+  private static currentNodeKey: string;
+  private static nodeSubject: ReplaySubject<Node>;
 
   showMenu = false;
   node: Node;
 
   private dataSubscription: Subscription;
-  private refreshingSubscription: Subscription;
 
-  public static refreshDisplayedData() {
+  public static refreshCurrentDisplayedData() {
     if (NodeComponent.currentInstanceInternal) {
-      NodeComponent.currentInstanceInternal.startRefreshingData();
+      NodeComponent.currentInstanceInternal.refresh(0);
     }
+  }
+
+  public static getCurrentNodeKey(): string {
+    return NodeComponent.currentNodeKey;
+  }
+
+  public static get currentNode(): Observable<Node> {
+    return NodeComponent.nodeSubject.asObservable();
   }
 
   constructor(
@@ -34,43 +46,56 @@ export class NodeComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private errorSnackBar: ErrorsnackbarService,
     private translate: TranslateService,
+    private storageService: StorageService,
+    private ngZone: NgZone,
   ) {
+    NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
     NodeComponent.currentInstanceInternal = this;
   }
 
   ngOnInit() {
-    this.dataSubscription = this.nodeService.node().subscribe(
-      (node: Node) => this.node = node,
-      this.onError.bind(this),
-    );
-
-    this.startRefreshingData();
+    NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
+    this.refresh(0);
   }
 
-  private startRefreshingData() {
-    if (this.refreshingSubscription) {
-      this.refreshingSubscription.unsubscribe();
+  private refresh(delayMilliseconds: number) {
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
     }
 
-    const key: string = this.route.snapshot.params['key'];
-    this.refreshingSubscription = this.nodeService.refreshNode(key, this.onError.bind(this));
+    this.ngZone.runOutsideAngular(() => {
+      this.dataSubscription = of(1).pipe(delay(delayMilliseconds), flatMap(() => this.nodeService.getNode(NodeComponent.currentNodeKey)))
+        .subscribe((node: Node) => {
+          this.ngZone.run(() => {
+            this.node = node;
+            NodeComponent.nodeSubject.next(node);
+
+            this.refresh(this.storageService.getRefreshTime() * 1000);
+          });
+        }, () => {
+          this.ngZone.run(() => {
+            this.translate.get('node.error-load').subscribe(str => {
+              this.errorSnackBar.open(str);
+              this.router.navigate(['nodes']);
+            });
+
+            this.refresh(this.storageService.getRefreshTime() * 1000);
+          });
+        });
+    });
   }
 
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
-    this.refreshingSubscription.unsubscribe();
 
     NodeComponent.currentInstanceInternal = undefined;
+    NodeComponent.currentNodeKey = undefined;
+
+    NodeComponent.nodeSubject.complete();
+    NodeComponent.nodeSubject = undefined;
   }
 
   toggleMenu() {
     this.showMenu = !this.showMenu;
-  }
-
-  private onError() {
-    this.translate.get('node.error-load').subscribe(str => {
-      this.errorSnackBar.open(str);
-      this.router.navigate(['nodes']);
-    });
   }
 }

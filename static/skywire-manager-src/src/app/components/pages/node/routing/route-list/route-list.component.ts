@@ -1,7 +1,6 @@
 import { Component, OnInit, Input, OnChanges } from '@angular/core';
 import { MatTableDataSource, MatDialog, MatDialogConfig } from '@angular/material';
 import { Route } from 'src/app/app.datatypes';
-import { NodeService } from '../../../../../services/node.service';
 import { RouteService } from '../../../../../services/route.service';
 import { ErrorsnackbarService } from '../../../../../services/errorsnackbar.service';
 import { TranslateService } from '@ngx-translate/core';
@@ -21,7 +20,6 @@ export class RouteListComponent implements OnInit, OnChanges {
   selections = new Map<number, boolean>();
 
   constructor(
-    private nodeService: NodeService,
     private routeService: RouteService,
     private errorSnackBar: ErrorsnackbarService,
     private translate: TranslateService,
@@ -107,7 +105,7 @@ export class RouteListComponent implements OnInit, OnChanges {
 
   delete(routeKey: number) {
     this.startDeleting(routeKey).subscribe(() => {
-      NodeComponent.refreshDisplayedData();
+      NodeComponent.refreshCurrentDisplayedData();
       this.errorSnackBar.open(this.translate.instant('routes.deleted'));
     }, () => {
       this.errorSnackBar.open(this.translate.instant('routes.error-deleting'));
@@ -115,20 +113,20 @@ export class RouteListComponent implements OnInit, OnChanges {
   }
 
   private startDeleting(routeKey: number): Observable<any> {
-    return this.routeService.delete(this.nodeService.getCurrentNodeKey(), routeKey.toString());
+    return this.routeService.delete(NodeComponent.getCurrentNodeKey(), routeKey.toString());
   }
 
   deleteRecursively(ids: number[]) {
     this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
-        NodeComponent.refreshDisplayedData();
+        NodeComponent.refreshCurrentDisplayedData();
         this.errorSnackBar.open(this.translate.instant('routes.deleted'));
       } else {
         this.deleteRecursively(ids);
       }
     }, () => {
-      NodeComponent.refreshDisplayedData();
+      NodeComponent.refreshCurrentDisplayedData();
       this.errorSnackBar.open(this.translate.instant('routes.error-deleting'));
     });
   }

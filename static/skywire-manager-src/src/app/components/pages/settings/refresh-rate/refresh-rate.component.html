@@ -1,0 +1,11 @@
+<div class="container-elevated-white">
+  <form [formGroup]="form">
+    <mat-form-field class="solo-input">
+      <mat-select formControlName="refreshRate" [placeholder]="'settings.refresh-rate' | translate">
+        <mat-option *ngFor="let time of timesList" value="{{time}}">
+          {{ time }} {{ 'settings.seconds' | translate }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </form>
+</div>

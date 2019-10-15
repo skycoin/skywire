@@ -1,10 +1,8 @@
 import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
-import { NodeService } from '../../../../../../services/node.service';
-import { FormBuilder } from '@angular/forms';
-import { MatDialogRef, MatSnackBar, MAT_DIALOG_DATA } from '@angular/material';
-import { TranslateService } from '@ngx-translate/core';
+import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material';
 import { Subscription } from 'rxjs';
 import { RouteService } from '../../../../../../services/route.service';
+import { NodeComponent } from '../../../node.component';
 
 class RouteRule {
   key:  string;
@@ -48,13 +46,12 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: string,
-    private nodeService: NodeService,
     private routeService: RouteService,
     private dialogRef: MatDialogRef<RouteDetailsComponent>,
   ) { }
 
   ngOnInit() {
-    this.dataSubscription = this.routeService.get(this.nodeService.getCurrentNodeKey(), this.data).subscribe(
+    this.dataSubscription = this.routeService.get(NodeComponent.getCurrentNodeKey(), this.data).subscribe(
       (rule: RouteRule) => this.routeRule = rule,
       () => this.closePopup(),
     );

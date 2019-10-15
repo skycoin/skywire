@@ -102,10 +102,10 @@ export class NodeAppsListComponent implements OnChanges {
   changeAppState(app: Application): void {
     this.startChangingAppState(app.name, app.status === 0, app.autostart).subscribe(
       () => {
-        setTimeout(() => NodeComponent.refreshDisplayedData(), 50);
+        setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.errorSnackBar.open(this.translate.instant('apps.' + (app.status === 0 ? 'started' : 'stopped')));
       }, () => {
-        setTimeout(() => NodeComponent.refreshDisplayedData(), 50);
+        setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.errorSnackBar.open(this.translate.instant('apps.error'));
       }
     );
@@ -119,12 +119,12 @@ export class NodeAppsListComponent implements OnChanges {
   }
 
   private startChangingAppState(appName: string, startApp: boolean, autostart: boolean): Observable<any> {
-    return this.appsService.changeAppState(appName, startApp, autostart);
+    return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp, autostart);
   }
 
   private changeAppStateRecursively(names: string[], startApp: boolean) {
     if (!names || names.length === 0) {
-      setTimeout(() => NodeComponent.refreshDisplayedData(), 50);
+      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
       this.errorSnackBar.open(this.translate.instant('apps.' + (startApp ? 'started' : 'stopped')));
 
       return;
@@ -133,13 +133,13 @@ export class NodeAppsListComponent implements OnChanges {
     this.startChangingAppState(names[names.length - 1], startApp, this.appsMap.get(names[names.length - 1]).autostart).subscribe(() => {
       names.pop();
       if (names.length === 0) {
-        setTimeout(() => NodeComponent.refreshDisplayedData(), 50);
+        setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.errorSnackBar.open(this.translate.instant('apps.' + (startApp ? 'started' : 'stopped')));
       } else {
         this.changeAppStateRecursively(names, startApp);
       }
     }, () => {
-      setTimeout(() => NodeComponent.refreshDisplayedData(), 50);
+      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
       this.errorSnackBar.open(this.translate.instant('apps.error'));
     });
   }

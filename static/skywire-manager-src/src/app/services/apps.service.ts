@@ -1,8 +1,6 @@
 import { Injectable } from '@angular/core';
-import { NodeService } from './node.service';
 import { ClientConnectionService } from './client-connection.service';
-import {finalize, switchMap, map} from 'rxjs/operators';
-import {Observable} from 'rxjs';
+import { switchMap, map } from 'rxjs/operators';
 import { ApiService } from './api.service';
 
 @Injectable({
@@ -10,13 +8,12 @@ import { ApiService } from './api.service';
 })
 export class AppsService {
   constructor(
-    private nodeService: NodeService,
     private clientConnection: ClientConnectionService,
     private apiService: ApiService,
   ) { }
 
-  changeAppState(appName: string, startApp: boolean, autostart: boolean) {
-    return this.apiService.put(`visors/${this.nodeService.getCurrentNodeKey()}/apps/${encodeURIComponent(appName)}`,
+  changeAppState(nodeKey: string, appName: string, startApp: boolean, autostart: boolean) {
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`,
       { status: startApp ? 1 : 0, autostart: autostart },
       { api2: true, type: 'json' }
     );
@@ -26,8 +23,8 @@ export class AppsService {
     // return this.nodeService.nodeRequestWithRefresh('run/closeApp', {key}).pipe();
   }
 
-  getLogMessages(appName: string) {
-    return this.apiService.get(`visors/${this.nodeService.getCurrentNodeKey()}/apps/${encodeURIComponent(appName)}/logs`,
+  getLogMessages(nodeKey: string, appName: string) {
+    return this.apiService.get(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}/logs`,
       { api2: true }
     ).pipe(map(response => response.logs));
   }

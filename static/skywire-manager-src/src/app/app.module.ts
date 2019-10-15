@@ -89,6 +89,7 @@ import { SidenavContentComponent } from './components/layout/sidenav/sidenav-con
 import { LanguageComponent } from './components/pages/settings/language/language.component';
 import { BasicTerminalComponent } from './components/pages/node/actions/basic-terminal/basic-terminal.component';
 import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
+import { RefreshRateComponent } from './components/pages/settings/refresh-rate/refresh-rate.component';
 
 @NgModule({
   declarations: [
@@ -149,6 +150,7 @@ import { RouteDetailsComponent } from './components/pages/node/routing/route-lis
     LanguageComponent,
     BasicTerminalComponent,
     RouteDetailsComponent,
+    RefreshRateComponent,
   ],
   entryComponents: [
     ConfigurationComponent,

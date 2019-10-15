@@ -92,7 +92,9 @@
       }
     },
     "change-password": "Change password",
-    "language": "Language"
+    "language": "Language",
+    "refresh-rate": "Refresh rate",
+    "seconds": "seconds"
   },
 
   "login": {

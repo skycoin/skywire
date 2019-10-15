@@ -14,7 +14,11 @@ export class RouteService {
 
   getRoutes(nodeKey: string): Observable<Route[]> {
     return this.apiService.get(`visors/${nodeKey}/routes`, { api2: true }).pipe(map((response: Route[]) => {
-      return response.sort((a, b) => a.key - b.key);
+      if (response) {
+        response = response.sort((a, b) => a.key - b.key);
+      }
+
+      return response;
     }));
   }
 

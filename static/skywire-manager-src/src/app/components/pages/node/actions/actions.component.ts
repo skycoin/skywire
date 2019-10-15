@@ -1,15 +1,13 @@
 import { Component, Input, OnInit, ViewChild } from '@angular/core';
-import { NodeService } from '../../../../services/node.service';
 import { Node } from '../../../../app.datatypes';
 import { MatDialog, MatSnackBar } from '@angular/material';
 import { ConfigurationComponent } from './configuration/configuration.component';
-import { TerminalComponent } from './terminal/terminal.component';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import {UpdateNodeComponent} from './update-node/update-node.component';
-import { environment } from '../../../../../environments/environment';
 import { ButtonComponent } from '../../../layout/button/button.component';
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
+import { NodeComponent } from '../node.component';
 
 @Component({
   selector: 'app-actions',
@@ -20,10 +18,7 @@ export class ActionsComponent implements OnInit {
   @Input() node: Node;
   @ViewChild('updateButton') updateButton: ButtonComponent;
 
-  private nodeKey: string;
-
   constructor(
-    private nodeService: NodeService,
     private snackbar: MatSnackBar,
     private dialog: MatDialog,
     private router: Router,
@@ -39,16 +34,14 @@ export class ActionsComponent implements OnInit {
     //     this.updateButton.notify(hasUpdate);
     //   });
     // }
-
-    this.nodeKey = this.nodeService.getCurrentNodeKey();
   }
 
   applications() {
-    this.router.navigate(['nodes', this.nodeKey, 'apps']);
+    this.router.navigate(['nodes', NodeComponent.getCurrentNodeKey(), 'apps']);
   }
 
   routing() {
-    this.router.navigate(['nodes', this.nodeKey, 'routing']);
+    this.router.navigate(['nodes', NodeComponent.getCurrentNodeKey(), 'routing']);
   }
 
   reboot() {

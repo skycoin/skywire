@@ -3,6 +3,7 @@ import { AppsService } from '../../../../../../services/apps.service';
 import { LogMessage, Application } from '../../../../../../app.datatypes';
 import { MAT_DIALOG_DATA } from '@angular/material';
 import { Subscription } from 'rxjs';
+import { NodeComponent } from '../../../node.component';
 
 @Component({
   selector: 'app-log',
@@ -27,7 +28,7 @@ export class LogComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.loading = true;
-    this.subscription = this.appsService.getLogMessages(this.app.name).subscribe(
+    this.subscription = this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.app.name).subscribe(
       (log) => this.onLogsReceived(log),
       this.onLogsError.bind(this)
     );

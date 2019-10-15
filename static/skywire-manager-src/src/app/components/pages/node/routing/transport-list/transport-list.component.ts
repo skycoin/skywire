@@ -2,7 +2,6 @@ import { Component, Input, OnChanges } from '@angular/core';
 import { Transport } from '../../../../../app.datatypes';
 import { MatDialog, MatTableDataSource } from '@angular/material';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
-import { NodeService } from '../../../../../services/node.service';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
 import { ErrorsnackbarService } from '../../../../../services/errorsnackbar.service';
@@ -22,7 +21,6 @@ export class TransportListComponent implements OnChanges {
 
   constructor(
     private dialog: MatDialog,
-    private nodeService: NodeService,
     private transportService: TransportService,
     private errorSnackBar: ErrorsnackbarService,
     private translate: TranslateService,
@@ -100,7 +98,7 @@ export class TransportListComponent implements OnChanges {
 
   delete(id: string) {
     this.startDeleting(id).subscribe(() => {
-      NodeComponent.refreshDisplayedData();
+      NodeComponent.refreshCurrentDisplayedData();
       this.errorSnackBar.open(this.translate.instant('transports.deleted'));
     }, () => {
       this.errorSnackBar.open(this.translate.instant('transports.error-deleting'));
@@ -108,20 +106,20 @@ export class TransportListComponent implements OnChanges {
   }
 
   private startDeleting(id: string): Observable<any> {
-    return this.transportService.delete(this.nodeService.getCurrentNodeKey(), id);
+    return this.transportService.delete(NodeComponent.getCurrentNodeKey(), id);
   }
 
   deleteRecursively(ids: string[]) {
     this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
-        NodeComponent.refreshDisplayedData();
+        NodeComponent.refreshCurrentDisplayedData();
         this.errorSnackBar.open(this.translate.instant('transports.deleted'));
       } else {
         this.deleteRecursively(ids);
       }
     }, () => {
-      NodeComponent.refreshDisplayedData();
+      NodeComponent.refreshCurrentDisplayedData();
       this.errorSnackBar.open(this.translate.instant('transports.error-deleting'));
     });
   }
