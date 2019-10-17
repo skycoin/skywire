@@ -30,30 +30,30 @@ func TestMain(m *testing.M) {
 func RoutingTableSuite(t *testing.T, tbl Table) {
 	t.Helper()
 
-	id, err := tbl.ReserveKey()
+	id, err := tbl.ReserveKeys(1)
 	require.NoError(t, err)
 
-	rule := IntermediaryForwardRule(15*time.Minute, id, 2, uuid.New())
+	rule := IntermediaryForwardRule(15*time.Minute, id[0], 2, uuid.New())
 	err = tbl.SaveRule(rule)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, tbl.Count())
 
-	r, err := tbl.Rule(id)
+	r, err := tbl.Rule(id[0])
 	require.NoError(t, err)
 	assert.Equal(t, rule, r)
 
-	id2, err := tbl.ReserveKey()
+	id2, err := tbl.ReserveKeys(1)
 	require.NoError(t, err)
 
-	rule2 := IntermediaryForwardRule(15*time.Minute, id2, 3, uuid.New())
+	rule2 := IntermediaryForwardRule(15*time.Minute, id2[0], 3, uuid.New())
 	err = tbl.SaveRule(rule2)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, tbl.Count())
 	require.NoError(t, tbl.SaveRule(rule))
 
-	r, err = tbl.Rule(id)
+	r, err = tbl.Rule(id[0])
 	require.NoError(t, err)
 	assert.Equal(t, rule, r)
 
@@ -61,9 +61,9 @@ func RoutingTableSuite(t *testing.T, tbl Table) {
 	for _, rule := range tbl.AllRules() {
 		ids = append(ids, rule.KeyRouteID())
 	}
-	require.ElementsMatch(t, []RouteID{id, id2}, ids)
+	require.ElementsMatch(t, []RouteID{id[0], id2[0]}, ids)
 
-	tbl.DelRules([]RouteID{id, id2})
+	tbl.DelRules([]RouteID{id[0], id2[0]})
 	assert.Equal(t, 0, tbl.Count())
 }
 
@@ -78,19 +78,19 @@ func TestRoutingTableCleanup(t *testing.T) {
 		config:   Config{GCInterval: DefaultGCInterval},
 	}
 
-	id0, err := rt.ReserveKey()
+	id0, err := rt.ReserveKeys(1)
 	require.NoError(t, err)
-	err = rt.SaveRule(IntermediaryForwardRule(1*time.Hour, id0, 3, uuid.New()))
-	require.NoError(t, err)
-
-	id1, err := rt.ReserveKey()
-	require.NoError(t, err)
-	err = rt.SaveRule(IntermediaryForwardRule(1*time.Hour, id1, 3, uuid.New()))
+	err = rt.SaveRule(IntermediaryForwardRule(1*time.Hour, id0[0], 3, uuid.New()))
 	require.NoError(t, err)
 
-	id2, err := rt.ReserveKey()
+	id1, err := rt.ReserveKeys(1)
 	require.NoError(t, err)
-	err = rt.SaveRule(IntermediaryForwardRule(-1*time.Hour, id2, 3, uuid.New()))
+	err = rt.SaveRule(IntermediaryForwardRule(1*time.Hour, id1[0], 3, uuid.New()))
+	require.NoError(t, err)
+
+	id2, err := rt.ReserveKeys(1)
+	require.NoError(t, err)
+	err = rt.SaveRule(IntermediaryForwardRule(-1*time.Hour, id2[0], 3, uuid.New()))
 	require.NoError(t, err)
 
 	// rule should already be expired at this point due to the execution time.
@@ -99,15 +99,15 @@ func TestRoutingTableCleanup(t *testing.T) {
 
 	assert.Equal(t, 3, rt.Count())
 
-	_, err = rt.Rule(id1)
+	_, err = rt.Rule(id1[0])
 	require.NoError(t, err)
 
-	assert.NotNil(t, rt.activity[id1])
+	assert.NotNil(t, rt.activity[id1[0]])
 
 	rt.gc()
 	assert.Equal(t, 2, rt.Count())
 
-	rule, err := rt.Rule(id2)
+	rule, err := rt.Rule(id2[0])
 	require.Error(t, err)
 	assert.Nil(t, rule)
 }
