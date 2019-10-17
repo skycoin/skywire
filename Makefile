@@ -14,7 +14,7 @@ DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
 TEST_OPTS_NOCI?=-race -cover -timeout=5m -v
-BUILD_OPTS?=-race
+BUILD_OPTS?=
 
 check: lint test ## Run linters and tests
 
