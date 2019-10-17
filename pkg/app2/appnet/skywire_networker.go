@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
-
 	"github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 

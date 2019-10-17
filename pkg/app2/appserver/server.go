@@ -7,10 +7,9 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app2"
-
-	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Server is a server for app/visor communication.
@@ -60,12 +59,15 @@ func (s *Server) ListenAndServe() error {
 	}
 }
 
+// Close closes the server.
 func (s *Server) Close() error {
 	err := s.lis.Close()
 	close(s.stopCh)
+	s.done.Wait()
 	return err
 }
 
+// serveConn serves RPC on a single connection.
 func (s *Server) serveConn(conn net.Conn) {
 	go s.rpcS.ServeConn(conn)
 	<-s.stopCh

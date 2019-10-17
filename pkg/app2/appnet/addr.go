@@ -12,6 +12,8 @@ import (
 )
 
 var (
+	// ErrUnknownAddrType is returned when trying to convert the
+	// unknown addr type.
 	ErrUnknownAddrType = errors.New("addr type is unknown")
 )
 

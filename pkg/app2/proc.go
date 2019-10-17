@@ -7,12 +7,14 @@ import (
 	"sync"
 )
 
+// Proc is a wrapper for skywire app process.
 type Proc struct {
 	id  ProcID
 	cmd *exec.Cmd
 	mx  sync.RWMutex
 }
 
+// NewProc constructs `Proc`.
 func NewProc(c Config, args []string, key Key) *Proc {
 	binaryPath := getBinaryPath(c.BinaryDir, c.Name, c.Version)
 
@@ -35,6 +37,7 @@ func NewProc(c Config, args []string, key Key) *Proc {
 	}
 }
 
+// ID returns pid of the app.
 func (p *Proc) ID() ProcID {
 	p.mx.RLock()
 	id := p.id
@@ -42,6 +45,7 @@ func (p *Proc) ID() ProcID {
 	return id
 }
 
+// Run runs the app process.
 func (p *Proc) Run() error {
 	if err := p.cmd.Run(); err != nil {
 		return err
@@ -54,10 +58,12 @@ func (p *Proc) Run() error {
 	return nil
 }
 
+// Stop stops the app process.
 func (p *Proc) Stop() error {
 	return p.cmd.Process.Kill()
 }
 
+// Wait waits for the app process to exit.
 func (p *Proc) Wait() error {
 	return p.cmd.Wait()
 }
