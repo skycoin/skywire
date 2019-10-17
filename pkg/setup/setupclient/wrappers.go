@@ -11,10 +11,11 @@ import (
 	"github.com/skycoin/skywire/pkg/snet"
 )
 
-func DialRouteGroup(ctx context.Context, log *logging.Logger, n *snet.Network, nodes []cipher.PubKey,
+// DialRouteGroup is a wrapper for (*Client).DialRouteGroup.
+func DialRouteGroup(ctx context.Context, log *logging.Logger, n *snet.Network, setupNodes []cipher.PubKey,
 	req routing.BidirectionalRoute) (routing.EdgeRules, error) {
 
-	client, err := NewClient(ctx, log, n, nodes)
+	client, err := NewClient(ctx, log, n, setupNodes)
 	if err != nil {
 		return routing.EdgeRules{}, err
 	}

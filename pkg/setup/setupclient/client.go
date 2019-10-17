@@ -12,21 +12,23 @@ import (
 	"github.com/skycoin/skywire/pkg/snet"
 )
 
-const rpcName = "Gateway"
+const rpcName = "RPCGateway"
 
+// Client is an RPC client for setup node.
 type Client struct {
-	log   *logging.Logger
-	n     *snet.Network
-	nodes []cipher.PubKey
-	conn  *snet.Conn
-	rpc   *rpc.Client
+	log        *logging.Logger
+	n          *snet.Network
+	setupNodes []cipher.PubKey
+	conn       *snet.Conn
+	rpc        *rpc.Client
 }
 
-func NewClient(ctx context.Context, log *logging.Logger, n *snet.Network, nodes []cipher.PubKey) (*Client, error) {
+// NewClient creates a new Client.
+func NewClient(ctx context.Context, log *logging.Logger, n *snet.Network, setupNodes []cipher.PubKey) (*Client, error) {
 	client := &Client{
-		log:   log,
-		n:     n,
-		nodes: nodes,
+		log:        log,
+		n:          n,
+		setupNodes: setupNodes,
 	}
 
 	conn, err := client.dial(ctx)
@@ -41,7 +43,7 @@ func NewClient(ctx context.Context, log *logging.Logger, n *snet.Network, nodes 
 }
 
 func (c *Client) dial(ctx context.Context) (*snet.Conn, error) {
-	for _, sPK := range c.nodes {
+	for _, sPK := range c.setupNodes {
 		conn, err := c.n.Dial(ctx, snet.DmsgType, sPK, snet.SetupPort)
 		if err != nil {
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
@@ -52,6 +54,7 @@ func (c *Client) dial(ctx context.Context) (*snet.Conn, error) {
 	return nil, errors.New("failed to dial to a setup node")
 }
 
+// Close closes a Client.
 func (c *Client) Close() error {
 	if c == nil {
 		return nil
@@ -68,6 +71,7 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// DialRouteGroup generates rules for routes from a visor and sends them to visors.
 func (c *Client) DialRouteGroup(ctx context.Context, req routing.BidirectionalRoute) (routing.EdgeRules, error) {
 	var resp routing.EdgeRules
 	err := c.call(ctx, rpcName+".DialRouteGroup", req, &resp)

@@ -56,13 +56,16 @@ type DialOptions struct {
 	MaxConsumeRts int
 }
 
-var DefaultDialOptions = &DialOptions{
-	MinForwardRts: 1,
-	MaxForwardRts: 1,
-	MinConsumeRts: 1,
-	MaxConsumeRts: 1,
+func DefaultDialOptions() DialOptions {
+	return DialOptions{
+		MinForwardRts: 1,
+		MaxForwardRts: 1,
+		MinConsumeRts: 1,
+		MaxConsumeRts: 1,
+	}
 }
 
+// TODO(nkryuchkov): consider moving to visor package
 type Router interface {
 	io.Closer
 
@@ -80,7 +83,7 @@ type Router interface {
 	// Then the following should happen:
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return the RoutingGroup.
-	AcceptRoutes() (*RouteGroup, error)
+	AcceptRoutes(context.Context) (*RouteGroup, error)
 
 	Serve(context.Context) error
 
@@ -92,22 +95,24 @@ type Router interface {
 // rules and manages loops for apps.
 type router struct {
 	mx           sync.Mutex
+	once         sync.Once
+	done         chan struct{}
 	wg           sync.WaitGroup
 	conf         *Config
 	logger       *logging.Logger
 	n            *snet.Network
 	sl           *snet.Listener
-	accept       chan routing.EdgeRules
 	trustedNodes map[cipher.PubKey]struct{}
 	tm           *transport.Manager
 	rt           routing.Table
 	rfc          rfclient.Client                         // route finder client
 	rgs          map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
 	rpcSrv       *rpc.Server
+	accept       chan routing.EdgeRules
 }
 
 // New constructs a new Router.
-func New(n *snet.Network, config *Config) (*router, error) {
+func New(n *snet.Network, config *Config) (Router, error) {
 	config.SetDefaults()
 
 	sl, err := n.Listen(snet.DmsgType, snet.AwaitSetupPort)
@@ -183,8 +188,14 @@ func (r *router) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort
 // Then the following should happen:
 // - Save to routing.Table and internal RouteGroup map.
 // - Return the RoutingGroup.
-func (r *router) AcceptRoutes() (*RouteGroup, error) {
-	rules := <-r.accept
+func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
+	var rules routing.EdgeRules
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case rules = <-r.accept:
+		break
+	}
 
 	if err := r.saveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		return nil, err
@@ -268,8 +279,20 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 	return rg
 }
 
-// TODO(nkryuchkov): handle other packet types
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
+	switch packet.Type() {
+	case routing.DataPacket:
+		return r.handleDataPacket(ctx, packet)
+	case routing.ClosePacket:
+		return r.handleClosePacket(ctx, packet)
+	case routing.KeepAlivePacket:
+		return r.handleKeepAlivePacket(ctx, packet)
+	default:
+		return errors.New("unknown packet type")
+	}
+}
+
+func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
 		return err
@@ -301,10 +324,18 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 			case <-rg.done:
 				return io.ErrClosedPipe
 			}
-
 		}
 	}
+}
 
+func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) error {
+	// TODO(nkryuchkov): implement
+	return nil
+}
+
+func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
+	// TODO(nkryuchkov): implement
+	return nil
 }
 
 // GetRule gets routing rule.
@@ -332,7 +363,16 @@ func (r *router) Close() error {
 	if r == nil {
 		return nil
 	}
+
 	r.logger.Info("Closing all App connections and Loops")
+
+	r.once.Do(func() {
+		close(r.done)
+
+		r.mx.Lock()
+		close(r.accept)
+		r.mx.Unlock()
+	})
 
 	if err := r.sl.Close(); err != nil {
 		r.logger.WithError(err).Warnf("closing route_manager returned error")
@@ -374,7 +414,8 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 func (r *router) fetchBestRoutes(source, destination cipher.PubKey, opts *DialOptions) (fwd routing.Path, rev routing.Path, err error) {
 	// TODO(nkryuchkov): use opts
 	if opts == nil {
-		opts = DefaultDialOptions
+		defaultOpts := DefaultDialOptions()
+		opts = &defaultOpts
 	}
 
 	r.logger.Infof("Requesting new routes from %s to %s", source, destination)
@@ -420,22 +461,27 @@ func (r *router) saveRoutingRules(rules ...routing.Rule) error {
 	return nil
 }
 
-func (r *router) occupyRouteID(n uint8) ([]routing.RouteID, error) {
-	var ids = make([]routing.RouteID, n)
-	for i := range ids {
-		routeID, err := r.rt.ReserveKey()
-		if err != nil {
-			return nil, err
-		}
-		ids[i] = routeID
-	}
-	return ids, nil
-}
-
 func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
 	rg, ok := r.rgs[desc]
 	return rg, ok
+}
+
+func (r *router) IntroduceRules(rules routing.EdgeRules) error {
+	select {
+	case <-r.done:
+		return io.ErrClosedPipe
+	default:
+		r.mx.Lock()
+		defer r.mx.Unlock()
+
+		select {
+		case r.accept <- rules:
+			return nil
+		case <-r.done:
+			return io.ErrClosedPipe
+		}
+	}
 }
