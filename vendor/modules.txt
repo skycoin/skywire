@@ -1,12 +1,12 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20190918181704-b7cccca1451e
-github.com/SkycoinProject/dmsg/cipher
+# github.com/SkycoinProject/dmsg v0.0.0-20191015061558-709ec3a1f4f5
 github.com/SkycoinProject/dmsg
+github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
-github.com/SkycoinProject/dmsg/noise
 github.com/SkycoinProject/dmsg/ioutil
+github.com/SkycoinProject/dmsg/noise
 # github.com/SkycoinProject/skycoin v0.26.0
-github.com/SkycoinProject/skycoin/src/util/logging
 github.com/SkycoinProject/skycoin/src/cipher
+github.com/SkycoinProject/skycoin/src/util/logging
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 github.com/alecthomas/template
 github.com/alecthomas/template/parse
@@ -54,17 +54,17 @@ github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
 # github.com/prometheus/client_golang v1.1.0
-github.com/prometheus/client_golang/prometheus/promhttp
 github.com/prometheus/client_golang/prometheus
-github.com/prometheus/client_golang/prometheus/promauto
 github.com/prometheus/client_golang/prometheus/internal
+github.com/prometheus/client_golang/prometheus/promauto
+github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.6.0
-github.com/prometheus/common/log
 github.com/prometheus/common/expfmt
-github.com/prometheus/common/model
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
+github.com/prometheus/common/log
+github.com/prometheus/common/model
 # github.com/prometheus/procfs v0.0.3
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
@@ -81,12 +81,11 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
 # github.com/stretchr/testify v1.4.0
-github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
+github.com/stretchr/testify/require
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad
-golang.org/x/crypto/ssh/terminal
+# golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20poly1305
@@ -94,17 +93,18 @@ golang.org/x/crypto/curve25519
 golang.org/x/crypto/internal/chacha20
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
-# golang.org/x/net v0.0.0-20190926025831-c00fd9afed17
-golang.org/x/net/nettest
+golang.org/x/crypto/ssh/terminal
+# golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582
 golang.org/x/net/context
-golang.org/x/net/proxy
 golang.org/x/net/internal/socks
-# golang.org/x/sys v0.0.0-20190927073244-c990c680b611
+golang.org/x/net/nettest
+golang.org/x/net/proxy
+# golang.org/x/sys v0.0.0-20191010194322-b09406accb47
+golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/registry
-golang.org/x/sys/cpu
+golang.org/x/sys/windows/svc/eventlog
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 gopkg.in/alecthomas/kingpin.v2
 # gopkg.in/yaml.v2 v2.2.2

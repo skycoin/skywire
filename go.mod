@@ -3,7 +3,7 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.12
 
 require (
-	github.com/SkycoinProject/dmsg v0.0.0-20190918181704-b7cccca1451e
+	github.com/SkycoinProject/dmsg v0.0.0-20191015061558-709ec3a1f4f5
 	github.com/SkycoinProject/skycoin v0.26.0
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20190910110746-680d30ca3117 // indirect
@@ -17,8 +17,6 @@ require (
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.9 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/common v0.6.0
@@ -28,11 +26,8 @@ require (
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.3
-	golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad
-	golang.org/x/net v0.0.0-20190926025831-c00fd9afed17
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect
-	golang.org/x/sys v0.0.0-20190927073244-c990c680b611 // indirect
-	golang.org/x/tools v0.0.0-20190929041059-e7abfedfabcf // indirect
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
