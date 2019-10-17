@@ -8,8 +8,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/pkg/app2"
 )
 
 // Server is a server for app/visor communication.
@@ -18,13 +16,12 @@ type Server struct {
 	lis      net.Listener
 	sockFile string
 	rpcS     *rpc.Server
-	apps     map[app2.Key]*app2.App
 	done     sync.WaitGroup
 	stopCh   chan struct{}
 }
 
 // NewServer constructs server.
-func New(log *logging.Logger, sockFile string, appKey app2.Key) (*Server, error) {
+func New(log *logging.Logger, sockFile string, appKey Key) (*Server, error) {
 	rpcS := rpc.NewServer()
 	gateway := newRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_server_%s", appKey)))
 	if err := rpcS.RegisterName(string(appKey), gateway); err != nil {

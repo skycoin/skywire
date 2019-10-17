@@ -1,6 +1,6 @@
-package app2
+package appserver
 
-// Config defines configuration parameters for `App`.
+// Config defines configuration parameters for `Proc`.
 type Config struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`
