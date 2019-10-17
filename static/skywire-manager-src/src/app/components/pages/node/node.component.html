@@ -2,13 +2,23 @@
   <app-actions [node]="node"></app-actions>
 </app-sidenav-content>
 
+<div *ngIf="!node" class="row full-height full-width">
+  <app-loading-indicator></app-loading-indicator>
+</div>
+
 <div class="row" *ngIf="node">
   <div class="col-12 col-lg-8">
+    <div class="time-container">
+      <app-refresh-button
+        [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+        [showLoading]="updating"
+        [showAlert]="errorsUpdating"
+        [refeshRate]="storageService.getRefreshTime()"
+        (click)="refresh(0)"
+      ></app-refresh-button>
+    </div>
     <div class="d-flex flex-column h-100">
-      <!--<div class="mt-4">-->
-        <!--<app-status [nodeData]="nodeData"></app-status>-->
-      <!--</div>-->
-      <div class="container-elevated-translucid mt-4">
+      <div class="container-elevated-translucid">
         <div class="top-row align-items-center">
           <span class="row-title mr-2 flex-shrink-0">{{ 'common.public-key' | translate }}</span>
           <app-copy-to-clipboard-text

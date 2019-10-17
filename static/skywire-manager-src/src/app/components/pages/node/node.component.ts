@@ -6,8 +6,8 @@ import { MatDialog } from '@angular/material';
 import { Subscription } from 'rxjs/internal/Subscription';
 import { TranslateService } from '@ngx-translate/core';
 import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
-import { of, Observable, ReplaySubject } from 'rxjs';
-import { delay, flatMap } from 'rxjs/operators';
+import { of, Observable, ReplaySubject, timer } from 'rxjs';
+import { delay, flatMap, tap } from 'rxjs/operators';
 import { StorageService } from '../../../services/storage.service';
 
 @Component({
@@ -24,6 +24,12 @@ export class NodeComponent implements OnInit, OnDestroy {
   node: Node;
 
   private dataSubscription: Subscription;
+  private updateTimeSubscription: Subscription;
+
+  secondsSinceLastUpdate = 0;
+  private lastUpdate = Date.now();
+  updating = false;
+  errorsUpdating = false;
 
   public static refreshCurrentDisplayedData() {
     if (NodeComponent.currentInstanceInternal) {
@@ -46,7 +52,7 @@ export class NodeComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private errorSnackBar: ErrorsnackbarService,
     private translate: TranslateService,
-    private storageService: StorageService,
+    public storageService: StorageService,
     private ngZone: NgZone,
   ) {
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
@@ -56,6 +62,13 @@ export class NodeComponent implements OnInit, OnDestroy {
   ngOnInit() {
     NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     this.refresh(0);
+
+    this.ngZone.runOutsideAngular(() => {
+      this.updateTimeSubscription =
+        timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
+          this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
+        }));
+    });
   }
 
   private refresh(delayMilliseconds: number) {
@@ -64,29 +77,45 @@ export class NodeComponent implements OnInit, OnDestroy {
     }
 
     this.ngZone.runOutsideAngular(() => {
-      this.dataSubscription = of(1).pipe(delay(delayMilliseconds), flatMap(() => this.nodeService.getNode(NodeComponent.currentNodeKey)))
-        .subscribe((node: Node) => {
-          this.ngZone.run(() => {
-            this.node = node;
-            NodeComponent.nodeSubject.next(node);
+      this.dataSubscription = of(1).pipe(
+        delay(delayMilliseconds),
+        tap(() => this.ngZone.run(() => this.updating = true)),
+        delay(120),
+        flatMap(() => this.nodeService.getNode(NodeComponent.currentNodeKey))
+      ).subscribe((node: Node) => {
+        this.ngZone.run(() => {
+          this.node = node;
+          NodeComponent.nodeSubject.next(node);
 
-            this.refresh(this.storageService.getRefreshTime() * 1000);
-          });
-        }, () => {
-          this.ngZone.run(() => {
-            this.translate.get('node.error-load').subscribe(str => {
-              this.errorSnackBar.open(str);
-              this.router.navigate(['nodes']);
-            });
+          this.lastUpdate = Date.now();
+          this.secondsSinceLastUpdate = 0;
+          this.updating = false;
+          this.errorsUpdating = false;
 
-            this.refresh(this.storageService.getRefreshTime() * 1000);
-          });
+          this.refresh(this.storageService.getRefreshTime() * 1000);
         });
+      }, () => {
+        this.ngZone.run(() => {
+          if (!this.errorsUpdating) {
+            this.errorSnackBar.open(this.translate.instant('node.error-load'));
+          }
+
+          this.updating = false;
+          this.errorsUpdating = true;
+
+          if (!this.node) {
+            this.refresh(3000);
+          } else {
+            this.refresh(this.storageService.getRefreshTime() * 1000);
+          }
+        });
+      });
     });
   }
 
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
+    this.updateTimeSubscription.unsubscribe();
 
     NodeComponent.currentInstanceInternal = undefined;
     NodeComponent.currentNodeKey = undefined;

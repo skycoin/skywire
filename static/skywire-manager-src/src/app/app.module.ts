@@ -90,6 +90,8 @@ import { LanguageComponent } from './components/pages/settings/language/language
 import { BasicTerminalComponent } from './components/pages/node/actions/basic-terminal/basic-terminal.component';
 import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
 import { RefreshRateComponent } from './components/pages/settings/refresh-rate/refresh-rate.component';
+import { LoadingIndicatorComponent } from './components/layout/loading-indicator/loading-indicator.component';
+import { RefreshButtonComponent } from './components/layout/loading-button/refresh-button.component';
 
 @NgModule({
   declarations: [
@@ -151,6 +153,8 @@ import { RefreshRateComponent } from './components/pages/settings/refresh-rate/r
     BasicTerminalComponent,
     RouteDetailsComponent,
     RefreshRateComponent,
+    LoadingIndicatorComponent,
+    RefreshButtonComponent,
   ],
   entryComponents: [
     ConfigurationComponent,

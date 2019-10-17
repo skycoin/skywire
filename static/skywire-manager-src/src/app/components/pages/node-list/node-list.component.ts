@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild, NgZone } from '@angular/core';
 import { NodeService } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
-import { Subscription, of } from 'rxjs';
+import { Subscription, of, timer } from 'rxjs';
 import { MatDialog, MatTableDataSource } from '@angular/material';
 import { Router } from '@angular/router';
 import { ButtonComponent } from '../../layout/button/button.component';
@@ -10,7 +10,7 @@ import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService } from '../../../services/storage.service';
-import { delay, flatMap } from 'rxjs/operators';
+import { delay, flatMap, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'app-node-list',
@@ -18,11 +18,17 @@ import { delay, flatMap } from 'rxjs/operators';
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
-  @ViewChild('refreshButton') refreshButton: ButtonComponent;
+  loading = true;
   dataSource = new MatTableDataSource<Node>();
   displayedColumns: string[] = ['enabled', 'index', 'label', 'key', 'actions'];
 
   private dataSubscription: Subscription;
+  private updateTimeSubscription: Subscription;
+
+  secondsSinceLastUpdate = 0;
+  private lastUpdate = Date.now();
+  updating = false;
+  errorsUpdating = false;
 
   constructor(
     private nodeService: NodeService,
@@ -31,16 +37,24 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private translate: TranslateService,
     private authService: AuthService,
-    private storageService: StorageService,
+    public storageService: StorageService,
     private ngZone: NgZone,
   ) { }
 
   ngOnInit() {
     this.refresh(0);
+
+    this.ngZone.runOutsideAngular(() => {
+      this.updateTimeSubscription =
+        timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
+          this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
+        }));
+    });
   }
 
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
+    this.updateTimeSubscription.unsubscribe();
   }
 
   nodeStatusClass(node: Node): string {
@@ -67,23 +81,38 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
 
     this.ngZone.runOutsideAngular(() => {
-      this.dataSubscription = of(1).pipe(delay(delayMilliseconds), flatMap(() => this.nodeService.getNodes())).subscribe(
+      this.dataSubscription = of(1).pipe(
+        delay(delayMilliseconds),
+        tap(() => this.ngZone.run(() => this.updating = true)),
+        delay(120),
+        flatMap(() => this.nodeService.getNodes())
+      ).subscribe(
         (nodes: Node[]) => {
           this.ngZone.run(() => {
-            this.refreshButton.reset();
             this.dataSource.data = nodes;
+            this.loading = false;
+
+            this.lastUpdate = Date.now();
+            this.secondsSinceLastUpdate = 0;
+            this.updating = false;
+            this.errorsUpdating = false;
 
             this.refresh(this.storageService.getRefreshTime() * 1000);
           });
         }, error => {
           this.ngZone.run(() => {
-            this.translate.get('nodes.error-load', { error }).subscribe(str => {
-              this.errorSnackBar.open(str);
-            });
+            if (!this.errorsUpdating) {
+              this.errorSnackBar.open(this.translate.instant('nodes.error-load', { error }));
+            }
 
-            this.refreshButton.error(error);
+            this.updating = false;
+            this.errorsUpdating = true;
 
-            this.refresh(this.storageService.getRefreshTime() * 1000);
+            if (this.loading) {
+              this.refresh(3000);
+            } else {
+              this.refresh(this.storageService.getRefreshTime() * 1000);
+            }
           });
         }
       );

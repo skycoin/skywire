@@ -64,7 +64,6 @@
   },
 
   "nodes": {
-    "refresh": "Refresh",
     "settings": "Settings",
     "logout": "Logout",
     "running": "Running",
@@ -266,5 +265,14 @@
     "delete-all": "Delete all selected elements",
     "start-all": "Start all selected apps",
     "stop-all": "Stop all selected apps"
+  },
+
+  "refresh-button": {
+    "seconds": "Updated a few seconds ago",
+    "minute": "Updated 1 minute ago",
+    "minutes": "Updated {{ time }} minutes ago",
+    "hour": "Updated 1 hour ago",
+    "hours": "Updated {{ time }} hours ago",
+    "error-tooltip": "There was an error updating the data. Retrying automatically every {{ time }} seconds..."
   }
 }

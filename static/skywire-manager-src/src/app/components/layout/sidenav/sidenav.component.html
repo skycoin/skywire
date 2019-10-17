@@ -1,13 +1,15 @@
-<nav>
-  <div class="header">
-    <app-skycoin-logo></app-skycoin-logo>
-    <mat-icon class="menu-button d-md-none" (click)="toggleMenu()">menu</mat-icon>
-  </div>
+<div class="nav-container">
+  <nav>
+    <div class="header">
+      <app-skycoin-logo></app-skycoin-logo>
+      <mat-icon class="menu-button d-md-none" (click)="toggleMenu()">menu</mat-icon>
+    </div>
 
-  <div [ngClass]="{ hidden: !menuVisible }" class="menu-container">
-    <ng-container *ngTemplateOutlet="template"></ng-container>
-  </div>
-</nav>
+    <div [ngClass]="{ hidden: !menuVisible }" class="menu-container">
+      <ng-container *ngTemplateOutlet="template"></ng-container>
+    </div>
+  </nav>
+</div>
 
 <div class="content container-fluid">
   <router-outlet></router-outlet>

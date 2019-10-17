@@ -2,7 +2,8 @@ import {
   Component,
   HostListener,
   OnInit,
-  TemplateRef
+  TemplateRef,
+  HostBinding
 } from '@angular/core';
 import { SidenavService } from '../../../services/sidenav.service';
 
@@ -14,6 +15,8 @@ import { SidenavService } from '../../../services/sidenav.service';
 export class SidenavComponent implements OnInit {
   menuVisible = true;
   template: TemplateRef<any>;
+
+  @HostBinding('class') get class() { return 'full-height flex'; }
 
   constructor(
     private sidenavService: SidenavService,

@@ -1,0 +1,11 @@
+.container {
+  width: 100%;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  >mat-spinner {
+    opacity: 0.5;
+  }
+}
