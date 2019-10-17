@@ -5,13 +5,11 @@ import (
 	"net/rpc"
 
 	"github.com/pkg/errors"
-
-	"github.com/skycoin/skywire/pkg/app2/idmanager"
-
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 

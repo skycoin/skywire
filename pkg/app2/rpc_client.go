@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"net/rpc"
 
-	"github.com/skycoin/skywire/pkg/app2/appserver"
-
 	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/skycoin/skywire/pkg/app2/appserver"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
