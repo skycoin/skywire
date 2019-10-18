@@ -23,7 +23,7 @@ var (
 	output        string
 	replace       bool
 	configLocType = pathutil.WorkingDirLoc
-	testenv bool
+	testenv       bool
 )
 
 func init() {
@@ -114,13 +114,11 @@ func defaultConfig() *visor.Config {
 	conf.Transport.LogStore.Type = "file"
 	conf.Transport.LogStore.Location = "./skywire/transport_logs"
 
-
-	if testenv	{
+	if testenv {
 		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
 	} else {
 		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
 	}
-
 
 	var sPK cipher.PubKey
 	if err := sPK.UnmarshalText([]byte(skyenv.DefaultSetupPK)); err != nil {
