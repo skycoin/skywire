@@ -18,7 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/apputil"
+
 	"github.com/skycoin/skywire/pkg/app2/appserver"
 
 	"github.com/skycoin/skywire/pkg/snet"
@@ -452,7 +453,7 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	return nil
 }
 
-func (node *Node) persistPID(name string, pid app2.ProcID) {
+func (node *Node) persistPID(name string, pid apputil.ProcID) {
 	pidF := node.pidFile()
 	pidFName := pidF.Name()
 	if err := pidF.Close(); err != nil {
