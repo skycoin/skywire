@@ -2,8 +2,9 @@ package app2
 
 import (
 	"errors"
-	"github.com/skycoin/skywire/pkg/app2/idmanager"
 	"testing"
+
+	"github.com/skycoin/skywire/pkg/app2/apputil"
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -16,7 +17,7 @@ import (
 func TestClient_Dial(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
 	localPK, _ := cipher.GenerateKeyPair()
-	pid := ProcID(1)
+	pid := apputil.ProcID(1)
 
 	remotePK, _ := cipher.GenerateKeyPair()
 	remotePort := routing.Port(120)
@@ -127,7 +128,7 @@ func TestClient_Dial(t *testing.T) {
 func TestClient_Listen(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
 	localPK, _ := cipher.GenerateKeyPair()
-	pid := ProcID(1)
+	pid := apputil.ProcID(1)
 
 	port := routing.Port(1)
 	local := appnet.Addr{
@@ -220,7 +221,7 @@ func TestClient_Listen(t *testing.T) {
 func TestClient_Close(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
 	localPK, _ := cipher.GenerateKeyPair()
-	pid := ProcID(1)
+	pid := apputil.ProcID(1)
 
 	var closeNoErr error
 	closeErr := errors.New("close error")
