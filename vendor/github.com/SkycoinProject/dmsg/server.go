@@ -382,6 +382,12 @@ func (s *Server) Serve() error {
 			if s.isLisClosed() {
 				return nil
 			}
+			// Continue if error is temporary.
+			if err, ok := err.(net.Error); ok {
+				if err.Temporary() {
+					continue
+				}
+			}
 			return err
 		}
 		s.log.Infof("newConn: %v", rawConn.RemoteAddr())
