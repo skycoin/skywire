@@ -1,10 +1,8 @@
 [![Build Status](https://travis-ci.com/SkycoinProject/skywire-mainnet.svg?branch=master)](https://travis-ci.com/SkycoinProject/skywire-mainnet)
 
-# Skywire Mainnet - Public Test Phase
+# Skywire Mainnet
 
-- [Skywire Mainnet - Public Test Phase](#skywire-mainnet---public-test-phase)
-  - [Notes on this release](#notes-on-this-release)
-  - [Architecture](#architecture)
+- [Skywire Mainnet](#skywire-mainnet)
   - [Build and run](#build-and-run)
     - [Requirements](#requirements)
     - [Build](#build)
@@ -20,7 +18,6 @@
       - [$TEST_OPTS](#test_opts)
       - [$TEST_LOGGING_LEVEL](#test_logging_level)
       - [$SYSLOG_OPTS](#syslog_opts)
-  - [Updater](#updater)
   - [Running skywire in docker containers](#running-skywire-in-docker-containers)
     - [Run dockerized `skywire-visor`](#run-dockerized-skywire-visor)
       - [Structure of `./node`](#structure-of-node)
@@ -38,27 +35,7 @@
       - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
       - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
 
-## Notes on this release
-
-This is a public testing version of the Skywire mainnet and is intended for developers use to find bugs only. It is not yet intended to replace the testnet and miners should not install this software on their miners or they may lose their reward eligibility. 
-
-The software is still under heavy development and the current version is intended for public testing purposes only. A GUI interface and various guides on how to use Skywire, application development on Skywire and contribution policies will follow in the near future. For now this version of the software can be used by developers to test the functionality and file bug issues to help the development. 
-
-## Architecture 
-
-Skywire is a decentralized and private network. Skywire separates the data and control plane of the network and assigns the tasks of network coordination and administration to dedicated services, while the nodes follow the rules that were created by the control plane and execute them. 
-
-The core of Skywire is the Skywire visor which hosts applications and is the gateway to use the network. It establishes connections, called transports, to other nodes, requests the setup of routes and forwards packets for other nodes on a route. The Skywire visor exposes an API to applications for using the networking protocol of Skywire. 
-
-In order to detach control plane tasks from the network nodes, there are 3 other services that maintain a picture of the network topology, calculate routes (currently based on the number of hops, but will be extended to other metrics) and set the routing rules on the nodes. 
-
-The transport discovery maintains a picture of the network topology, by allowing Skywire visors to advertise transports that they established with other nodes. It also allows to upload a status to indicate whether a given transport is currently working or not.
-
-On the basis of this information the route finder calculates the most efficient route in the network. Nodes request a route to a given public key and the route finder will calculate the best route and return the transports that the packet will be sent over to reach the intended node. 
-
-This information is sent from a node to the Setup Node, which sets the routing rules in all nodes along a route. Skywire visors determine, which nodes they accept routing rules from, so only a whitelisted node can send routing rules to a node in the network. The only information the Skywire visor gets for routing is a Routing ID and an associated rule that defines which transport to send a packet to (or to consume the packet). Therefore nodes along a route only know the last and next hop along the route, but not where the packet originates from and where it is sent to. Skywire supports source routing, so nodes can specify a path that a packet is supposed to take in the network. 
-
-There are currently two types of transports that nodes can use. The messaging transport is a transport between two nodes that uses an intermediary messaging server to relay packets between them. The connection to a specific node and the connection to a messaging server is facilitated by a discovery service, that allows nodes to advertise the messaging servers over which they can be contacted. This transport is used by the setup node to send routing rules and can be used for other applications as well. It allows nodes behind NATs to communicate. The second transport type is TCP, which sets up a connection between two servers with a public IP. More transport types will be supported in the future and custom transport implementations can be written for specific use cases.
+**NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
 ## Build and run
 
@@ -101,6 +78,30 @@ $ make install  # compiles and installs all binaries
 ```bash
 $ skywire-cli node gen-config
 ```
+
+### `skywire-visor` config file
+
+#### `stcp` setup
+
+With `stcp`, you can directly connect to other skywire visors with the `tcp` protocol.
+
+As visors are identified with public keys and not IP addresses, we need to directly define the associations between IP address and public keys. This is done via the configuration file for `skywire-visor`.
+
+```json
+{
+  "stcp": {
+    "pk_table": {
+      "024a2dd77de324d543561a6d9e62791723be26ddf6b9587060a10b9ba498e096f1": "127.0.0.1:7031",
+      "0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08": "127.0.0.1:7032"
+    },
+    "local_address": "127.0.0.1:7033"
+  }
+}
+```
+
+In the above example, we have two other visors running on localhost (that we wish to connect to via `stcp`).
+- The field `stcp.pk_table` holds the associations of `<public_key>` to `<ip_address>:<port>`.
+- The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming `stcp` connection.
 
 ### Run `skywire-visor`
 
@@ -244,10 +245,6 @@ $ export SYSLOG_OPTS='--syslog localhost:514'
 $ make integration-run-messaging ## or other integration-run-* goal
 $ sudo cat /tmp/syslog/messages ## collected logs from NodeA, NodeB, NodeC instances
 ```
-
-## Updater
-
-This software comes with an updater, which is located in this repo: <https://github.com/SkycoinProject/skywire-updater>. Follow the instructions in the README.md for further information. It can be used with a CLI for now and will be usable with the manager interface.
 
 ## Running skywire in docker containers
 
