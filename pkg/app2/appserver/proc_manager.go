@@ -14,6 +14,7 @@ import (
 
 var (
 	errAppAlreadyExists = errors.New("app already exists")
+	errNoSuchApp        = errors.New("no such app")
 )
 
 // ProcManager allows to manage skywire applications.
@@ -117,7 +118,7 @@ func (m *ProcManager) pop(name string) (*Proc, error) {
 
 	p, ok := m.procs[name]
 	if !ok {
-		return nil, errors.New("no such app")
+		return nil, errNoSuchApp
 	}
 
 	delete(m.procs, name)
