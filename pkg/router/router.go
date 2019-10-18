@@ -56,6 +56,7 @@ type DialOptions struct {
 	MaxConsumeRts int
 }
 
+// TODO(nkryuchkov): return pointer, make struct val unexported
 func DefaultDialOptions() DialOptions {
 	return DialOptions{
 		MinForwardRts: 1,
