@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/rpc"
 
+	"github.com/skycoin/skywire/pkg/app2/apputil"
+
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -17,7 +19,7 @@ import (
 type Client struct {
 	log *logging.Logger
 	pk  cipher.PubKey
-	pid ProcID
+	pid apputil.ProcID
 	rpc RPCClient
 	lm  *idmanager.Manager // contains listeners associated with their IDs
 	cm  *idmanager.Manager // contains connections associated with their IDs
@@ -29,7 +31,7 @@ type Client struct {
 // - pid: The procID assigned for the process that Client is being used by.
 // - sockFile: unix socket file to connect to the app server.
 // - appKey: application key to authenticate within app server.
-func NewClient(log *logging.Logger, localPK cipher.PubKey, pid ProcID, sockFile, appKey string) (*Client, error) {
+func NewClient(log *logging.Logger, localPK cipher.PubKey, pid apputil.ProcID, sockFile, appKey string) (*Client, error) {
 	rpcCl, err := rpc.Dial("unix", sockFile)
 	if err != nil {
 		return nil, errors.Wrap(err, "error connecting to the app server")
