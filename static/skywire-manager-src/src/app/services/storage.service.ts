@@ -15,10 +15,12 @@ export class NodeInfo {
 export class StorageService {
   private storage: Storage;
   private currentRefreshTime: number;
+  private savedNodes = new Map<string, NodeInfo>();
 
   constructor() {
     this.storage = localStorage;
     this.currentRefreshTime = parseInt(this.storage.getItem(KEY_REFRESH_SECONDS), 10) || 10;
+    this.getNodes().forEach(node => this.savedNodes.set(node.publicKey, node));
   }
 
   private static nodeLabelNamespace(nodeKey: string): string {
@@ -35,10 +37,6 @@ export class StorageService {
     });
 
     this.setNodes(nodes);
-  }
-
-  getNodeLabel(nodeKey: string): string {
-    return this.storage.getItem(StorageService.nodeLabelNamespace(nodeKey));
   }
 
   setRefreshTime(seconds: number) {
@@ -62,15 +60,30 @@ export class StorageService {
     const nodes = this.getNodes();
     nodes.push(nodeInfo);
 
+    this.savedNodes.set(nodeInfo.publicKey, nodeInfo);
+
     this.setNodes(Array.from(nodes));
   }
 
   removeNode(nodeKey: string) {
+    this.savedNodes.delete(nodeKey);
     this.setNodes(this.getNodes().filter(n => n.publicKey !== nodeKey));
   }
 
   getNodes(): NodeInfo[] {
     return JSON.parse(this.storage.getItem(KEY_NODES)) || [];
+  }
+
+  getNodeLabel(nodeKey: string): string {
+    if (this.savedNodes.has(nodeKey)) {
+      return this.savedNodes.get(nodeKey).label;
+    }
+
+    return '';
+  }
+
+  isNodeSaved(nodeKey: string): boolean {
+    return this.savedNodes.has(nodeKey);
   }
 
   private setNodes(nodes: NodeInfo[]) {

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { Node, Transport, Route, Application } from '../app.datatypes';
+import { Node, Transport, Route, Application, HealthInfo } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { flatMap, map } from 'rxjs/operators';
 import { StorageService, NodeInfo } from './storage.service';
@@ -28,6 +28,8 @@ export class NodeService {
       const processedNodes = new Map<string, boolean>();
       let nodesAdded = false;
       nodes.forEach(node => {
+        node.port = this.getPort(node.tcp_addr);
+
         processedNodes.set(node.local_pk, true);
         if (savedNodes.has(node.local_pk)) {
           node.label = savedNodes.get(node.local_pk).label;
@@ -35,18 +37,12 @@ export class NodeService {
         } else {
           nodesAdded = true;
 
-          const addressParts = node.tcp_addr.split(':');
-          let defaultLabel = node.tcp_addr;
-          if (addressParts && addressParts.length === 2) {
-            defaultLabel = ':' + addressParts[1];
-          }
-
           this.storageService.addNode({
             publicKey: node.local_pk,
-            label: defaultLabel,
+            label: ':' + node.port,
           });
 
-          node.label = defaultLabel;
+          node.label = ':' + node.port;
           node.online = true;
         }
       });
@@ -79,11 +75,25 @@ export class NodeService {
 
     return this.apiService.get(`visors/${nodeKey}`, { api2: true }).pipe(
       flatMap((node: Node) => {
+        node.port = this.getPort(node.tcp_addr);
+        node.label = this.storageService.getNodeLabel(node.local_pk);
         currentNode = node;
+
+        return this.apiService.get(`visors/${nodeKey}/health`, { api2: true });
+      }),
+      flatMap((health: HealthInfo) => {
+        currentNode.health = health;
+
+        return this.apiService.get(`visors/${nodeKey}/uptime`, { api2: true });
+      }),
+      flatMap((secondsOnline: string) => {
+        currentNode.seconds_online = Math.floor(Number.parseFloat(secondsOnline));
+
         return this.transportService.getTransports(nodeKey);
       }),
       flatMap((transports: Transport[]) => {
         currentNode.transports = transports;
+
         return this.routeService.getRoutes(nodeKey);
       }),
       map((routes: Route[]) => {
@@ -108,5 +118,16 @@ export class NodeService {
         return currentNode;
       })
     );
+  }
+
+  private getPort(tcpAddr: string): string {
+    const addressParts = tcpAddr.split(':');
+    let port = tcpAddr;
+
+    if (addressParts && addressParts.length === 2) {
+      port = addressParts[1];
+    }
+
+    return port;
   }
 }

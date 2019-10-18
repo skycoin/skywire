@@ -50,7 +50,34 @@
     "last-ping": "LAST PING",
     "running": "RUNNING",
     "details": {
-      "node-info": "Node Info",
+      "node-info": {
+        "title": "Node Info",
+        "label": "Label:",
+        "public-key": "Public key:",
+        "port": "Port:",
+        "node-version": "Node version:",
+        "app-protocol-version": "App protocol version:",
+        "time": {
+          "title": "Time online:",
+          "seconds": "a few seconds",
+          "minute": "1 minute",
+          "minutes": "{{ time }} minutes",
+          "hour": "1 hour",
+          "hours": "{{ time }} hours",
+          "day": "1 day",
+          "days": "{{ time }} days",
+          "week": "1 week",
+          "weeks": "{{ time }} weeks"
+        }
+      },
+      "node-health": {
+        "title": "Health info",
+        "status": "Status:",
+        "transport-discovery": "Transport discovery:",
+        "route-finder": "Route finder:",
+        "setup-node": "Setup node:",
+        "element-offline": "offline"
+      },
       "manager-info": "Manager Info",
       "manager-ip-not-found": "Manager not found",
       "connection": "Connection",
@@ -273,6 +300,10 @@
     "minutes": "Updated {{ time }} minutes ago",
     "hour": "Updated 1 hour ago",
     "hours": "Updated {{ time }} hours ago",
+    "day": "Updated 1 day ago",
+    "days": "Updated {{ time }} days ago",
+    "week": "Updated 1 week ago",
+    "weeks": "Updated {{ time }} weeks ago",
     "error-tooltip": "There was an error updating the data. Retrying automatically every {{ time }} seconds..."
   }
 }

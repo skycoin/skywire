@@ -9,6 +9,7 @@ import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 import { of, Observable, ReplaySubject, timer } from 'rxjs';
 import { delay, flatMap, tap } from 'rxjs/operators';
 import { StorageService } from '../../../services/storage.service';
+import TimeUtils from '../../../utils/timeUtils';
 
 @Component({
   selector: 'app-node',
@@ -22,6 +23,7 @@ export class NodeComponent implements OnInit, OnDestroy {
 
   showMenu = false;
   node: Node;
+  onlineTimeTextElements = ['seconds', ''];
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -86,6 +88,7 @@ export class NodeComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           this.node = node;
           NodeComponent.nodeSubject.next(node);
+          this.onlineTimeTextElements = TimeUtils.getElapsedTimeElements(node.seconds_online);
 
           this.lastUpdate = Date.now();
           this.secondsSinceLastUpdate = 0;

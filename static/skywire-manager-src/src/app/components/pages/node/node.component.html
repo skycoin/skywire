@@ -18,62 +18,78 @@
       ></app-refresh-button>
     </div>
     <div class="d-flex flex-column h-100">
-      <div class="container-elevated-translucid">
-        <div class="top-row align-items-center">
-          <span class="row-title mr-2 flex-shrink-0">{{ 'common.public-key' | translate }}</span>
-          <app-copy-to-clipboard-text
-            class="row-content font-smaller text-truncate mw-0"
-            [text]="node.local_pk">
-          </app-copy-to-clipboard-text>
-        </div>
-        <div class="top-row align-items-center">
-          <span class="row-title mr-2 flex-shrink-0">{{ 'common.ip' | translate }}</span>
-          <app-copy-to-clipboard-text
-            class="row-content font-smaller text-truncate mw-0"
-            [text]="node.tcp_addr">
-          </app-copy-to-clipboard-text>
-        </div>
-      </div>
-
       <router-outlet></router-outlet>
     </div>
   </div>
   <div class="col-12 col-lg-4">
-    <div class="node-right font-smaller d-flex flex-column h-100 mt-4">
+    <div class="node-right font-smaller d-flex flex-column h-100">
       <div class="node-ips-container d-flex flex-column justify-content-between">
         <div class="section">
-          <span class="section-title">{{ 'node.details.node-info' | translate }}</span>
-          <span class="font-smaller">
-            qwertyuiop | asdfghjkl | zxcvbnm
+          <span class="section-title">{{ 'node.details.node-info.title' | translate }}</span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-info.label' | translate }}</span>
+            {{ node.label }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-info.public-key' | translate }}</span>
+            {{ node.local_pk }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-info.port' | translate }}</span>
+            {{ node.port }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>
+            {{ node.node_version }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-info.app-protocol-version' | translate }}</span>
+            {{ node.app_protocol_version }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
+            {{ ('node.details.node-info.time.' + onlineTimeTextElements[0]) | translate:{time: onlineTimeTextElements[1]} }}
+            <mat-icon
+              *ngIf="onlineTimeTextElements[2]"
+              [inline]="true"
+              [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: onlineTimeTextElements[2]}"
+              >
+              info
+            </mat-icon>
           </span>
         </div>
         <hr>
         <div class="section">
-          <span class="section-title">{{ 'node.details.manager-info' | translate }}</span>
-          <span class="font-smaller">
-            {{ '123' }}
-            |
-            <app-copy-to-clipboard-text
-              [short]="true"
-              [text]="'123123123123123'"
-              class="d-inline-block">
-            </app-copy-to-clipboard-text>
+          <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-health.status' | translate }}</span>
+            <i *ngIf="node.health.status && node.health.status === 200" class="dot-green"></i>
+            <i *ngIf="!node.health.status || node.health.status !== 200" class="dot-red"></i>
+            {{ node.health.status ? node.health.status : ('node.details.node-health.element-offline' | translate) }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-health.transport-discovery' | translate }}</span>
+            <i *ngIf="node.health.transport_discovery && node.health.transport_discovery === 200" class="dot-green"></i>
+            <i *ngIf="!node.health.transport_discovery || node.health.transport_discovery !== 200" class="dot-red"></i>
+            {{ node.health.transport_discovery ? node.health.transport_discovery : ('node.details.node-health.element-offline' | translate) }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-health.route-finder' | translate }}</span>
+            <i *ngIf="node.health.route_finder && node.health.route_finder === 200" class="dot-green"></i>
+            <i *ngIf="!node.health.route_finder || node.health.route_finder !== 200" class="dot-red"></i>
+            {{ node.health.route_finder ? node.health.route_finder : ('node.details.node-health.element-offline' | translate) }}
+          </span>
+          <span class="font-smaller info-line">
+            <span class="title">{{ 'node.details.node-health.setup-node' | translate }}</span>
+            <i *ngIf="node.health.setup_node && node.health.setup_node === 200" class="dot-green"></i>
+            <i *ngIf="!node.health.setup_node || node.health.setup_node !== 200" class="dot-red"></i>
+            {{ node.health.setup_node ? node.health.setup_node : ('node.details.node-health.element-offline' | translate) }}
           </span>
         </div>
         <hr>
-        <div class="section" matTooltip="{{ 'node.details.operational-nodes-tooltip' | translate: {value: operationalNodesCount} }}">
-          <span class="section-title">
-            <i class="dot-green"></i>
-            {{ 'node.details.nodes' | translate }}
-          </span>
-          <span
-            class="font-smaller">
-            1/1 <span class="text-capitalize">{{ 'node.details.operational-nodes' | translate }}</span>
-          </span>
-        </div>
       </div>
       <app-charts
-        class="d-flex flex-column justify-content-end mt-5"
+        class="d-flex flex-column justify-content-end"
         [transports]="node.transports"
       ></app-charts>
     </div>

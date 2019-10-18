@@ -1,4 +1,5 @@
 import { Component, Input } from '@angular/core';
+import TimeUtils from '../../../utils/timeUtils';
 
 @Component({
   selector: 'app-refresh-button',
@@ -7,21 +8,11 @@ import { Component, Input } from '@angular/core';
 })
 export class RefreshButtonComponent {
   @Input() set secondsSinceLastUpdate(val: number) {
-    if (val < 60) {
-      this.updateTextElements = ['seconds', ''];
-    } else if (val >= 60 && val < 120) {
-      this.updateTextElements = ['minute', ''];
-    } else if (val >= 120 && val < 3600) {
-      this.updateTextElements = ['minutes', Math.floor(val / 60).toString()];
-    } else if (val >= 3600 && val < 7200) {
-      this.updateTextElements = ['hour', ''];
-    } else {
-      this.updateTextElements = ['hours', Math.floor(val / 3600).toString()];
-    }
+    this.updateTextElements = TimeUtils.getElapsedTimeElements(val);
   }
   @Input() showLoading: boolean;
   @Input() showAlert: boolean;
   @Input() refeshRate = -1;
 
-  updateTextElements = ['seconds', ''];
+  updateTextElements = ['seconds', '', ''];
 }
