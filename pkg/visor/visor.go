@@ -4,7 +4,6 @@ package visor
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,8 +19,11 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/appserver"
 
 	"github.com/skycoin/skywire/pkg/snet"
+
+	"github.com/pkg/errors"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -96,7 +98,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	appManager *app2.AppManager
+	procManager *appserver.ProcManager
 }
 
 // NewNode constructs new Node.
@@ -104,8 +106,8 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	ctx := context.Background()
 
 	node := &Node{
-		config:     config,
-		appManager: app2.NewAppManager(),
+		config:      config,
+		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager")),
 	}
 
 	node.Logger = masterLogger
@@ -329,20 +331,19 @@ func (node *Node) Close() (err error) {
 		}
 	}
 
-	apps := make(map[string]*app2.App)
-	node.appManager.Range(func(name string, app *app2.App) bool {
-		apps[name] = app
+	var procs []string
+	node.procManager.Range(func(name string, _ *appserver.Proc) bool {
+		procs = append(procs, name)
 		return true
 	})
 
-	for name, a := range apps {
-		node.appManager.Remove(name)
-		if err := a.Stop(); err != nil {
-			node.logger.WithError(err).Errorf("(%s) failed to stop app", a)
+	for _, name := range procs {
+		if err := node.procManager.Stop(name); err != nil {
+			node.logger.WithError(err).Errorf("(%s) failed to stop app", name)
 			break
 		}
 
-		node.logger.Infof("(%s) app stopped successfully", a)
+		node.logger.Infof("(%s) app stopped successfully", name)
 	}
 
 	if err = node.router.Close(); err != nil {
@@ -367,7 +368,7 @@ func (node *Node) Apps() []*AppState {
 	for _, app := range node.appsConf {
 		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
 
-		if node.appManager.Exists(app.App) {
+		if node.procManager.Exists(app.App) {
 			state.Status = AppStatusRunning
 		}
 
@@ -405,7 +406,7 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
 	}
 
-	appCfg := app2.Config{
+	appCfg := appserver.Config{
 		Name:      config.App,
 		Version:   config.Version,
 		BinaryDir: node.appsPath,
@@ -429,44 +430,26 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	cmd.Stderr = logger
 	*/
 
-	app := app2.New(
-		logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)),
-		appCfg,
-		append([]string{filepath.Join(node.dir(), config.App)}, config.Args...),
-	)
-
-	if err := node.appManager.Add(app); err != nil {
-		return fmt.Errorf("app %s is already started", config.App)
-	}
-	defer node.appManager.Remove(appCfg.Name)
-
-	if err := app.Run(); err != nil {
-		return node.wrapAppErr(err)
+	pid, err := node.procManager.Run(logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)),
+		appCfg, append([]string{filepath.Join(node.dir(), config.App)}, config.Args...))
+	if err != nil {
+		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}
 
 	if startCh != nil {
 		startCh <- struct{}{}
 	}
 
-	pid := app.PID()
 	node.pidMu.Lock()
 	node.logger.Infof("storing app %s pid %d", config.App, pid)
-	node.persistPID(config.App, app.PID())
+	node.persistPID(config.App, pid)
 	node.pidMu.Unlock()
 
-	if err := app.Wait(); err != nil {
-		return node.wrapAppErr(err)
+	if err := node.procManager.Wait(config.App); err != nil {
+		return err
 	}
 
 	return nil
-}
-
-func (node *Node) wrapAppErr(err error) error {
-	if _, ok := err.(*exec.ExitError); !ok {
-		return fmt.Errorf("failed to run app executable: %s", err)
-	}
-
-	return err
 }
 
 func (node *Node) persistPID(name string, pid app2.ProcID) {
@@ -483,12 +466,7 @@ func (node *Node) persistPID(name string, pid app2.ProcID) {
 func (node *Node) StopApp(appName string) error {
 	node.logger.Infof("Stopping app %s and closing ports", appName)
 
-	app, ok := node.appManager.App(appName)
-	if !ok {
-		return ErrUnknownApp
-	}
-
-	if err := app.Stop(); err != nil {
+	if err := node.procManager.Stop(appName); err != nil {
 		node.logger.Warn("Failed to stop app: ", err)
 		return err
 	}
