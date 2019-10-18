@@ -43,7 +43,8 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn
 		return nil, err
 	}
 
-	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions)
+	dialOpts := router.DefaultDialOptions()
+	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, &dialOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
 		go func() {
-			if err := r.serve(); err != nil {
+			if err := r.serve(ctx); err != nil {
 				r.log.WithError(err).Error("error serving")
 			}
 		}()
@@ -89,9 +90,9 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 }
 
 // serve accepts and serves routes.
-func (r *SkywireNetworker) serve() error {
+func (r *SkywireNetworker) serve(ctx context.Context) error {
 	for {
-		rg, err := r.r.AcceptRoutes()
+		rg, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
 			return err
 		}
