@@ -79,6 +79,30 @@ $ make install  # compiles and installs all binaries
 $ skywire-cli node gen-config
 ```
 
+### `skywire-visor` config file
+
+#### `stcp` setup
+
+With `stcp`, you can directly connect to other skywire visors with the `tcp` protocol.
+
+As visors are identified with public keys and not IP addresses, we need to directly define the associations between IP address and public keys. This is done via the configuration file for `skywire-visor`.
+
+```json
+{
+  "stcp": {
+    "pk_table": {
+      "024a2dd77de324d543561a6d9e62791723be26ddf6b9587060a10b9ba498e096f1": "127.0.0.1:7031",
+      "0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08": "127.0.0.1:7032"
+    },
+    "local_address": "127.0.0.1:7033"
+  }
+}
+```
+
+In the above example, we have two other visors running on localhost (that we wish to connect to via `stcp`).
+- The field `stcp.pk_table` holds the associations of `<public_key>` to `<ip_address>:<port>`.
+- The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming `stcp` connection.
+
 ### Run `skywire-visor`
 
 `skywire-visor` hosts apps, proxies app's requests to remote nodes and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the node, communication between node and app is performed via unix pipes provided on app startup.
