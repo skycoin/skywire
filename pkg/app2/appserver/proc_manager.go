@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/apputil"
 
 	"github.com/pkg/errors"
 
@@ -32,7 +32,7 @@ func NewProcManager(log *logging.Logger) *ProcManager {
 }
 
 // Run runs the application according to its config and additional args.
-func (m *ProcManager) Run(log *logging.Logger, c Config, args []string) (app2.ProcID, error) {
+func (m *ProcManager) Run(log *logging.Logger, c Config, args []string) (apputil.ProcID, error) {
 	if m.Exists(c.Name) {
 		return 0, errAppAlreadyExists
 	}
@@ -57,7 +57,7 @@ func (m *ProcManager) Run(log *logging.Logger, c Config, args []string) (app2.Pr
 	m.procs[c.Name] = p
 	m.mx.Unlock()
 
-	return app2.ProcID(p.cmd.Process.Pid), nil
+	return apputil.ProcID(p.cmd.Process.Pid), nil
 }
 
 // Exists check whether app exists in the manager instance.
