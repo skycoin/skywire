@@ -36,14 +36,6 @@ export class ActionsComponent implements OnInit {
     // }
   }
 
-  applications() {
-    this.router.navigate(['nodes', NodeComponent.getCurrentNodeKey(), 'apps']);
-  }
-
-  routing() {
-    this.router.navigate(['nodes', NodeComponent.getCurrentNodeKey(), 'routing']);
-  }
-
   reboot() {
     // this.nodeService.reboot().subscribe(
     //   () => {

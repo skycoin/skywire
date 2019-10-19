@@ -24,9 +24,11 @@ export class NodeComponent implements OnInit, OnDestroy {
   showMenu = false;
   node: Node;
   onlineTimeTextElements = ['seconds', ''];
+  showingRoutes = true;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
+  private navigationsSubscription: Subscription;
 
   secondsSinceLastUpdate = 0;
   private lastUpdate = Date.now();
@@ -59,6 +61,12 @@ export class NodeComponent implements OnInit, OnDestroy {
   ) {
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
     NodeComponent.currentInstanceInternal = this;
+
+    this.navigationsSubscription = router.events.subscribe(event => {
+      if (event['urlAfterRedirects']) {
+        this.showingRoutes = (event['urlAfterRedirects'] as string).includes('/routing');
+      }
+    });
   }
 
   ngOnInit() {
@@ -119,6 +127,7 @@ export class NodeComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
+    this.navigationsSubscription.unsubscribe();
 
     NodeComponent.currentInstanceInternal = undefined;
     NodeComponent.currentNodeKey = undefined;
