@@ -11,11 +11,13 @@ import { Subscription } from 'rxjs';
 export class RoutingComponent implements OnInit, OnDestroy {
   transports: Transport[];
   routes: Route[];
+  nodePK: string;
 
   private dataSubscription: Subscription;
 
   ngOnInit() {
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
+      this.nodePK = node.local_pk;
       this.transports = node.transports;
       this.routes = node.routes;
     });

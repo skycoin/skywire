@@ -1,15 +1,15 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Application, Node } from '../../../../app.datatypes';
-import { NodeComponent } from '../node.component';
+import { Node, Transport } from '../../../../../app.datatypes';
+import { NodeComponent } from '../../node.component';
 import { Subscription } from 'rxjs';
 
 @Component({
-  selector: 'app-apps',
-  templateUrl: './apps.component.html',
-  styleUrls: ['./apps.component.css']
+  selector: 'app-all-transports',
+  templateUrl: './all-transports.component.html',
+  styleUrls: ['./all-transports.component.scss']
 })
-export class AppsComponent implements OnInit, OnDestroy {
-  apps: Application[];
+export class AllTransportsComponent implements OnInit, OnDestroy {
+  transports: Transport[];
   nodePK: string;
 
   private dataSubscription: Subscription;
@@ -17,7 +17,7 @@ export class AppsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.local_pk;
-      this.apps = node.apps;
+      this.transports = node.transports;
     });
   }
 

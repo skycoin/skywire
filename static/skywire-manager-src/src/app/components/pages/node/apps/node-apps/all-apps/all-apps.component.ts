@@ -1,14 +1,14 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Application, Node } from '../../../../app.datatypes';
-import { NodeComponent } from '../node.component';
+import { Node, Application } from '../../../../../../app.datatypes';
+import { NodeComponent } from '../../../node.component';
 import { Subscription } from 'rxjs';
 
 @Component({
-  selector: 'app-apps',
-  templateUrl: './apps.component.html',
-  styleUrls: ['./apps.component.css']
+  selector: 'app-all-apps',
+  templateUrl: './all-apps.component.html',
+  styleUrls: ['./all-apps.component.scss']
 })
-export class AppsComponent implements OnInit, OnDestroy {
+export class AllAppsComponent implements OnInit, OnDestroy {
   apps: Application[];
   nodePK: string;
 

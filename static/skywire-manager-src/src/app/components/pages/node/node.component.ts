@@ -25,6 +25,7 @@ export class NodeComponent implements OnInit, OnDestroy {
   node: Node;
   onlineTimeTextElements = ['seconds', ''];
   showingRoutes = true;
+  showTabs = true;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -64,7 +65,14 @@ export class NodeComponent implements OnInit, OnDestroy {
 
     this.navigationsSubscription = router.events.subscribe(event => {
       if (event['urlAfterRedirects']) {
-        this.showingRoutes = (event['urlAfterRedirects'] as string).includes('/routing');
+
+        this.showingRoutes = false;
+        this.showTabs = true;
+        if ((event['urlAfterRedirects'] as string).includes('/routing')) {
+          this.showingRoutes = true;
+        } else if (!(event['urlAfterRedirects'] as string).includes('/apps')) {
+          this.showTabs = false;
+        }
       }
     });
   }

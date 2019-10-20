@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges } from '@angular/core';
+import { Component, Input, OnDestroy } from '@angular/core';
 import { Transport } from '../../../../../app.datatypes';
 import { MatDialog, MatTableDataSource } from '@angular/material';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
@@ -6,50 +6,63 @@ import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
 import { ErrorsnackbarService } from '../../../../../services/errorsnackbar.service';
 import { TranslateService } from '@ngx-translate/core';
-import { Observable } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
+import { AppConfig } from '../../../../../app.config';
+import { ActivatedRoute } from '@angular/router';
 
 @Component({
   selector: 'app-transport-list',
   templateUrl: './transport-list.component.html',
   styleUrls: ['./transport-list.component.scss']
 })
-export class TransportListComponent implements OnChanges {
-  @Input() transports: Transport[];
-  displayedColumns: string[] = ['selection', 'index', 'remote', 'type', 'upload_total', 'download_total', 'x'];
+export class TransportListComponent implements OnDestroy {
+  @Input() nodePK: string;
+
+  displayedColumns: string[] = ['selection', 'remote', 'type', 'upload_total', 'download_total', 'x'];
   dataSource = new MatTableDataSource<Transport>();
   selections = new Map<string, boolean>();
+
+  showShortList_: boolean;
+  @Input() set showShortList(val: boolean) {
+    this.showShortList_ = val;
+    this.recalculateElementsToShow();
+  }
+
+  allTransports: Transport[];
+  transportsToShow: Transport[];
+  numberOfPages = 1;
+  currentPage = 1;
+  currentPageInUrl = 1;
+  @Input() set transports(val: Transport[]) {
+    this.allTransports = val;
+    this.recalculateElementsToShow();
+  }
+
+  private navigationsSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
     private transportService: TransportService,
     private errorSnackBar: ErrorsnackbarService,
     private translate: TranslateService,
-  ) { }
-
-  ngOnChanges(): void {
-    this.dataSource.data = this.transports;
-
-    if (this.transports) {
-      const obtainedElementsMap = new Map<string, boolean>();
-      this.transports.forEach(transport => {
-        obtainedElementsMap.set(transport.id, true);
-
-        if (!this.selections.has(transport.id)) {
-          this.selections.set(transport.id, false);
+    private route: ActivatedRoute,
+  ) {
+    this.navigationsSubscription = this.route.paramMap.subscribe(params => {
+      if (params.has('page')) {
+        let selectedPage = Number.parseInt(params.get('page'));
+        if (selectedPage === NaN || selectedPage < 0) {
+          selectedPage = 0;
         }
-      });
 
-      const keysToRemove: string[] = [];
-      this.selections.forEach((val, key) => {
-        if (!obtainedElementsMap.has(key)) {
-          keysToRemove.push(key);
-        }
-      });
+        this.currentPageInUrl = selectedPage;
 
-      keysToRemove.forEach(key => {
-        this.selections.delete(key);
-      });
-    }
+        this.recalculateElementsToShow();
+      }
+    });
+  }
+
+  ngOnDestroy() {
+    this.navigationsSubscription.unsubscribe();
   }
 
   changeSelection(transport: Transport) {
@@ -103,6 +116,48 @@ export class TransportListComponent implements OnChanges {
     }, () => {
       this.errorSnackBar.open(this.translate.instant('transports.error-deleting'));
     });
+  }
+
+  private recalculateElementsToShow() {
+    this.currentPage = this.currentPageInUrl;
+
+    if (this.allTransports) {
+      const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
+
+      this.numberOfPages = Math.ceil(this.allTransports.length / maxElements);
+      if (this.currentPage > this.numberOfPages) {
+        this.currentPage = this.numberOfPages;
+      }
+
+      const start = maxElements * (this.currentPage - 1);
+      const end = start + maxElements;
+      this.transportsToShow = this.allTransports.slice(start, end);
+
+      const currentElementsMap = new Map<string, boolean>();
+      this.transportsToShow.forEach(transport => {
+        currentElementsMap.set(transport.id, true);
+
+        if (!this.selections.has(transport.id)) {
+          this.selections.set(transport.id, false);
+        }
+      });
+
+      const keysToRemove: string[] = [];
+      this.selections.forEach((value, key) => {
+        if (!currentElementsMap.has(key)) {
+          keysToRemove.push(key);
+        }
+      });
+
+      keysToRemove.forEach(key => {
+        this.selections.delete(key);
+      });
+    } else {
+      this.transportsToShow = null;
+      this.selections = new Map<string, boolean>();
+    }
+
+    this.dataSource.data = this.transportsToShow;
   }
 
   private startDeleting(id: string): Observable<any> {

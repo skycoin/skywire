@@ -15,6 +15,7 @@
           [disabled]="showingRoutes"
           [disableRipple]="true"
           [routerLink]="['/nodes', node.local_pk, 'routing']"
+          [ngClass]="{'hidden': !showTabs}"
           >
           <mat-icon [inline]="true">shuffle</mat-icon>
           <span>{{ 'actions.menu.routing' | translate }}</span>
@@ -25,6 +26,7 @@
           [disabled]="!showingRoutes"
           [disableRipple]="true"
           [routerLink]="['/nodes', node.local_pk, 'apps']"
+          [ngClass]="{'hidden': !showTabs}"
           >
           <mat-icon [inline]="true">apps</mat-icon>
           <span>{{ 'actions.menu.apps' | translate }}</span>

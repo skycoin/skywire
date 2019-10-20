@@ -74,7 +74,20 @@
     <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
   </table>
 
+  <app-view-all-link
+    [numberOfElements]="allRoutes.length"
+    [linkParts]="['/nodes', nodePK, 'routes']"
+    *ngIf="showShortList_ && numberOfPages > 1 && dataSource.data"
+  ></app-view-all-link>
+
   <div *ngIf="!dataSource.data || dataSource.data.length === 0">
     <span class="text">Node doesn't have any routes.</span>
   </div>
 </div>
+
+<app-paginator
+  *ngIf="!showShortList_ && numberOfPages > 1 && dataSource.data"
+  [currentPage]="currentPage"
+  [numberOfPages]="numberOfPages"
+  [linkParts]="['/nodes', nodePK, 'routes']">
+</app-paginator>

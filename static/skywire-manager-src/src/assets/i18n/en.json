@@ -305,5 +305,14 @@
     "week": "Updated 1 week ago",
     "weeks": "Updated {{ time }} weeks ago",
     "error-tooltip": "There was an error updating the data. Retrying automatically every {{ time }} seconds..."
+  },
+
+  "view-all-link": {
+    "label": "View all {{ number }} elements"
+  },
+
+  "paginator": {
+    "first": "First",
+    "last": "Last"
   }
 }
