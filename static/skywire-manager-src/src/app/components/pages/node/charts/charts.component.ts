@@ -13,12 +13,23 @@ export class ChartsComponent implements OnChanges {
   sendingHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   receivingHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
+  private initialized = false;
+
   ngOnChanges(changes: SimpleChanges) {
     const transports: Transport[] = changes.transports.currentValue;
 
     if (transports) {
       this.sendingTotal = transports.reduce((total, transport) => total + transport.log.sent, 0);
       this.receivingTotal = transports.reduce((total, transport) => total + transport.log.recv, 0);
+
+      if (!this.initialized) {
+        for (let i = 0; i < 10; i++) {
+          this.sendingHistory[i] = this.sendingTotal;
+          this.receivingHistory[i] = this.receivingTotal;
+        }
+
+        this.initialized = true;
+      }
     } else {
       this.sendingTotal = 0;
       this.receivingTotal = 0;

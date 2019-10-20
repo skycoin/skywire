@@ -32,11 +32,17 @@ export class LineChartComponent implements OnInit, DoCheck {
         }],
       },
       options: {
+        maintainAspectRatio: false,
         events: [],
         legend: { display: false },
         tooltips: { enabled: false },
         scales: {
-          yAxes: [{ display: false }],
+          yAxes: [{
+            display: false,
+            ticks: {
+              suggestedMin: 0,
+            },
+          }],
           xAxes: [{ display: false }],
         },
         elements: { point: { radius: 0 } },
