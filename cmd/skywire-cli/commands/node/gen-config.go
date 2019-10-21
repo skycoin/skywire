@@ -23,12 +23,14 @@ var (
 	output        string
 	replace       bool
 	configLocType = pathutil.WorkingDirLoc
+	testenv       bool
 )
 
 func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
+	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -84,7 +86,12 @@ func defaultConfig() *visor.Config {
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
 
-	conf.Messaging.Discovery = skyenv.DefaultDmsgDiscAddr
+	if testenv {
+		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
+	} else {
+		conf.Messaging.Discovery = skyenv.DefaultDmsgDiscAddr
+	}
+
 	conf.Messaging.ServerCount = 1
 
 	// TODO(evanlinjin): We have disabled skyproxy passcode by default for now - We should make a cli arg for this.
@@ -98,11 +105,20 @@ func defaultConfig() *visor.Config {
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
 
-	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	if testenv {
+		conf.Transport.Discovery = skyenv.TestTpDiscAddr
+	} else {
+		conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	}
+
 	conf.Transport.LogStore.Type = "file"
 	conf.Transport.LogStore.Location = "./skywire/transport_logs"
 
-	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	if testenv {
+		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+	} else {
+		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	}
 
 	var sPK cipher.PubKey
 	if err := sPK.UnmarshalText([]byte(skyenv.DefaultSetupPK)); err != nil {
