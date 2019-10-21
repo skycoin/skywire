@@ -8,8 +8,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/sirupsen/logrus"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 )
