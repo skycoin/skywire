@@ -3,7 +3,7 @@ package skyenv
 // Constants for default services.
 const (
 	DefaultTpDiscAddr      = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr    = "http://messaging.discovery.skywire.skycoin.com"
+	DefaultDmsgDiscAddr    = "http://dmsg.discovery.skywire.skycoin.com"
 	DefaultRouteFinderAddr = "http://routefinder.skywire.skycoin.com"
 	DefaultSetupPK         = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
 )
