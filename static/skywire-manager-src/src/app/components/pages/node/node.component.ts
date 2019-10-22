@@ -10,6 +10,7 @@ import { of, Observable, ReplaySubject, timer } from 'rxjs';
 import { delay, flatMap, tap } from 'rxjs/operators';
 import { StorageService } from '../../../services/storage.service';
 import TimeUtils from '../../../utils/timeUtils';
+import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 
 @Component({
   selector: 'app-node',
@@ -24,8 +25,11 @@ export class NodeComponent implements OnInit, OnDestroy {
   showMenu = false;
   node: Node;
   onlineTimeTextElements = ['seconds', ''];
-  showingRoutes = true;
-  showTabs = true;
+
+  private lastUrl: string;
+  titleParts = [];
+  tabsData: TabButtonData[] = [];
+  selectedTabIndex = -1;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -65,14 +69,8 @@ export class NodeComponent implements OnInit, OnDestroy {
 
     this.navigationsSubscription = router.events.subscribe(event => {
       if (event['urlAfterRedirects']) {
-
-        this.showingRoutes = false;
-        this.showTabs = true;
-        if ((event['urlAfterRedirects'] as string).includes('/routing')) {
-          this.showingRoutes = true;
-        } else if (!(event['urlAfterRedirects'] as string).includes('/apps')) {
-          this.showTabs = false;
-        }
+        this.lastUrl = event['urlAfterRedirects'] as string;
+        this.updateTabBar();
       }
     });
   }
@@ -87,6 +85,56 @@ export class NodeComponent implements OnInit, OnDestroy {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
     });
+  }
+
+  private updateTabBar() {
+    if (this.lastUrl && (this.lastUrl.includes('/routing') || (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
+      this.titleParts = ['nodes.title', 'node.title'];
+
+      this.tabsData = [
+        {
+          icon: 'shuffle',
+          label: 'actions.menu.routing',
+          linkParts: this.node ? ['/nodes', this.node.local_pk, 'routing'] : null,
+        },
+        {
+          icon: 'apps',
+          label: 'actions.menu.apps',
+          linkParts: this.node ? ['/nodes', this.node.local_pk, 'apps'] : null,
+        }
+      ];
+
+      this.selectedTabIndex = 0;
+      if (this.lastUrl.includes('/apps')) {
+        this.selectedTabIndex = 1;
+      }
+    } else if (
+      this.lastUrl && (this.lastUrl.includes('/transports') ||
+      this.lastUrl.includes('/routes') ||
+      this.lastUrl.includes('/apps-list'))) {
+
+      let prefix = 'transports';
+      if (this.lastUrl.includes('/routes')) {
+        prefix = 'routes';
+      } else if (this.lastUrl.includes('/apps-list')) {
+        prefix = 'apps.apps-list';
+      }
+
+      this.titleParts = ['nodes.title', 'node.title', prefix + '.title'];
+
+      this.tabsData = [
+        {
+          icon: 'view_headline',
+          label: prefix + '.list-title',
+          linkParts: this.node ? [] : null,
+        }
+      ];
+
+      this.selectedTabIndex = 0;
+    } else {
+      this.titleParts = [];
+      this.tabsData = [];
+    }
   }
 
   private refresh(delayMilliseconds: number) {
@@ -105,6 +153,8 @@ export class NodeComponent implements OnInit, OnDestroy {
           this.node = node;
           NodeComponent.nodeSubject.next(node);
           this.onlineTimeTextElements = TimeUtils.getElapsedTimeElements(node.seconds_online);
+
+          this.updateTabBar();
 
           this.lastUpdate = Date.now();
           this.secondsSinceLastUpdate = 0;

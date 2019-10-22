@@ -35,7 +35,12 @@
     }
   },
 
+  "start": {
+    "title": "Start"
+  },
+
   "node": {
+    "title": "Visor details",
     "statuses": {
       "discovered": "Online",
       "discovered-tooltip": "Node is online and discovered by the Skywire network",
@@ -91,6 +96,7 @@
   },
 
   "nodes": {
+    "title": "Visor list",
     "settings": "Settings",
     "logout": "Logout",
     "running": "Running",
@@ -104,6 +110,7 @@
   },
 
   "settings": {
+    "title": "Settings",
     "password" : {
       "old-password": "Old password",
       "new-password": "New password",
@@ -211,6 +218,15 @@
       "log": "Log messages",
       "whitelist": "Whitelist"
     },
+    "apps-list": {
+      "title": "Applications",
+      "list-title": "Application list",
+      "app-name": "App name",
+      "port": "Port",
+      "status": "Status",
+      "auto-start": "Auto start",
+      "actions": "Actions"
+    },
     "stop-app": "Stop",
     "start-app": "Start",
     "view-logs": "View logs",
@@ -226,6 +242,8 @@
   },
 
   "transports": {
+    "title": "Transports",
+    "list-title": "Transport list",
     "remote": "Remote node",
     "type": "Type",
     "create": "Create transport",
@@ -246,6 +264,8 @@
   },
 
   "routes": {
+    "title": "Routes",
+    "list-title": "Route list",
     "key": "Key",
     "rule": "Rule",
     "delete": "Delete route",

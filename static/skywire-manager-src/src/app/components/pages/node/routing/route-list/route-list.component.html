@@ -1,7 +1,9 @@
-<div class="mt-4.5 d-flex justify-content-between">
-  <div class="title font-mini uppercase ml-3.5">Routes</div>
+<div class="title-container mt-4.5 d-flex justify-content-between">
+  <div class="title font-mini uppercase ml-3.5">
+    <span *ngIf="showShortList_">{{ 'routes.title' | translate }}</span>
+  </div>
   <mat-icon
-    class="ic-mini-plus mr-3.5 table-create-record"
+    class="ic-mini-plus table-create-record"
     [matMenuTriggerFor]="selectionMenu"
     *ngIf="dataSource.data && dataSource.data.length > 0"
   >more_horiz</mat-icon>

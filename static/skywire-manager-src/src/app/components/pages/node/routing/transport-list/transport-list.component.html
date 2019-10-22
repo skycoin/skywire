@@ -1,12 +1,14 @@
-<div class="mt-4.5 d-flex justify-content-between">
-  <div class="title font-mini uppercase ml-3.5">Transports</div>
+<div class="title-container mt-4.5 d-flex justify-content-between">
+  <div class="title font-mini uppercase ml-3.5">
+    <span *ngIf="showShortList_">{{ 'transports.title' | translate }}</span>
+  </div>
   <mat-icon
     (click)="create()"
     [matTooltip]="'transports.create' | translate"
-    class="ic-mini-plus mr-3 table-create-record"
+    class="ic-mini-plus table-create-record"
   >add</mat-icon>
   <mat-icon
-    class="ic-mini-plus mr-3.5 table-create-record"
+    class="ic-mini-plus table-create-record"
     [matMenuTriggerFor]="selectionMenu"
     *ngIf="dataSource.data && dataSource.data.length > 0"
   >more_horiz</mat-icon>

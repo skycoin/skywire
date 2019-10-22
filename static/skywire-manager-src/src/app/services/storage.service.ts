@@ -79,7 +79,13 @@ export class StorageService {
       return this.savedNodes.get(nodeKey).label;
     }
 
-    return '';
+    const newLabel = nodeKey.substr(0, 8);
+    this.addNode({
+      publicKey: nodeKey,
+      label: newLabel,
+    });
+
+    return newLabel;
   }
 
   isNodeSaved(nodeKey: string): boolean {

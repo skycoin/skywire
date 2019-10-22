@@ -1,5 +1,13 @@
-.title {
-  margin-right: auto;
+.title-container {
+  padding-right: 5px;
+
+  .title {
+    margin-right: auto;
+  }
+
+  mat-icon {
+    margin-right: 15px;
+  }
 }
 
 .text {

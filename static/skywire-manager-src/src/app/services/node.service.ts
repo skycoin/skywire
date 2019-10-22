@@ -19,41 +19,20 @@ export class NodeService {
   ) {}
 
   getNodes(): Observable<Node[]> {
-    const savedNodes = new Map<string, NodeInfo>();
-    this.storageService.getNodes().forEach(node => savedNodes.set(node.publicKey, node));
-
     return this.apiService.get('visors', { api2: true }).pipe(map((nodes: Node[]) => {
       nodes = nodes || [];
-
-      const processedNodes = new Map<string, boolean>();
-      let nodesAdded = false;
+      const obtainedNodes = new Map<string, boolean>();
       nodes.forEach(node => {
         node.port = this.getPort(node.tcp_addr);
+        node.label = this.storageService.getNodeLabel(node.local_pk);
+        node.online = true;
 
-        processedNodes.set(node.local_pk, true);
-        if (savedNodes.has(node.local_pk)) {
-          node.label = savedNodes.get(node.local_pk).label;
-          node.online = true;
-        } else {
-          nodesAdded = true;
-
-          this.storageService.addNode({
-            publicKey: node.local_pk,
-            label: ':' + node.port,
-          });
-
-          node.label = ':' + node.port;
-          node.online = true;
-        }
+        obtainedNodes.set(node.local_pk, true);
       });
 
-      if (nodesAdded) {
-        this.storageService.getNodes().forEach(node => savedNodes.set(node.publicKey, node));
-      }
-
       const offlineNodes: Node[] = [];
-      savedNodes.forEach(node => {
-        if (!processedNodes.has(node.publicKey)) {
+      this.storageService.getNodes().forEach(node => {
+        if (!obtainedNodes.has(node.publicKey)) {
           const newNode: Node = new Node();
           newNode.local_pk = node.publicKey;
           newNode.label = node.label;

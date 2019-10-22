@@ -1,16 +1,16 @@
-import { Component, OnDestroy, OnInit, ViewChild, NgZone } from '@angular/core';
+import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { NodeService } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { Subscription, of, timer } from 'rxjs';
 import { MatDialog, MatTableDataSource } from '@angular/material';
 import { Router } from '@angular/router';
-import { ButtonComponent } from '../../layout/button/button.component';
 import { TranslateService } from '@ngx-translate/core';
 import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService } from '../../../services/storage.service';
 import { delay, flatMap, tap } from 'rxjs/operators';
+import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 
 @Component({
   selector: 'app-node-list',
@@ -21,6 +21,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   loading = true;
   dataSource = new MatTableDataSource<Node>();
   displayedColumns: string[] = ['enabled', 'index', 'label', 'key', 'actions'];
+  tabsData: TabButtonData[] = [];
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -39,7 +40,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     public storageService: StorageService,
     private ngZone: NgZone,
-  ) { }
+  ) {
+    this.tabsData = [
+      {
+        icon: 'view_headline',
+        label: 'nodes.title',
+        linkParts: ['/nodes'],
+      },
+      {
+        icon: 'settings',
+        label: 'settings.title',
+        linkParts: ['/settings'],
+      }
+    ];
+  }
 
   ngOnInit() {
     this.refresh(0);

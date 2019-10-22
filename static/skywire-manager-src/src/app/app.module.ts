@@ -91,12 +91,13 @@ import { BasicTerminalComponent } from './components/pages/node/actions/basic-te
 import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
 import { RefreshRateComponent } from './components/pages/settings/refresh-rate/refresh-rate.component';
 import { LoadingIndicatorComponent } from './components/layout/loading-indicator/loading-indicator.component';
-import { RefreshButtonComponent } from './components/layout/loading-button/refresh-button.component';
+import { RefreshButtonComponent } from './components/layout/refresh-button/refresh-button.component';
 import { ViewAllLinkComponent } from './components/layout/view-all-link/view-all-link.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { PaginatorComponent } from './components/layout/paginator/paginator.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/node-apps/all-apps/all-apps.component';
+import { TabBarComponent } from './components/layout/tab-bar/tab-bar.component';
 
 @NgModule({
   declarations: [
@@ -165,6 +166,7 @@ import { AllAppsComponent } from './components/pages/node/apps/node-apps/all-app
     AllRoutesComponent,
     AllAppsComponent,
     PaginatorComponent,
+    TabBarComponent,
   ],
   entryComponents: [
     ConfigurationComponent,

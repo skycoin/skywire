@@ -10,17 +10,20 @@
 </div>
 
 <div *ngIf="!loading" class="row">
-  <div class="col-12 time-container">
-    <app-refresh-button
-      [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+  <div class="col-12">
+    <app-tab-bar
+      [titleParts]="['start.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="0"
+      [secondsSinceLastUpdate]="secondsSinceLastUpdate" 
       [showLoading]="updating"
       [showAlert]="errorsUpdating"
       [refeshRate]="storageService.getRefreshTime()"
-      (click)="refresh(0)"
-    ></app-refresh-button>
+      (refreshRequested)="refresh(0)"
+    ></app-tab-bar>
   </div>
   <div class="col-12">
-    <div class="node-list-container">
+    <div class="node-list-container mt-4.5">
       <table
         class="table-white container-elevated-white"
         mat-table

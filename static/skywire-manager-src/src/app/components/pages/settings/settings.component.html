@@ -7,7 +7,15 @@
 </app-sidenav-content>
 
 <div class="row">
-  <div class="col-12 col-lg-8">
+  <div class="col-12">
+    <app-tab-bar
+      [titleParts]="['start.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="1"
+      [showUpdateButton]="false" 
+    ></app-tab-bar>
+  </div>
+  <div class="col-12 col-lg-8 mt-4.5">
     <app-language class="block mb-4"></app-language>
     <app-refresh-rate class="block mb-4"></app-refresh-rate>
     <app-password></app-password>

@@ -1,7 +1,9 @@
-<div class="mt-4.5 d-flex justify-content-between">
-  <div class="title font-mini uppercase ml-3.5">Applications</div>
+<div class="title-container mt-4.5 d-flex justify-content-between">
+  <div class="title font-mini uppercase ml-3.5">
+    <span *ngIf="showShortList_">{{ 'apps.apps-list.title' | translate }}</span>
+  </div>
   <mat-icon
-    class="ic-mini-plus mr-3.5 table-create-record"
+    class="ic-mini-plus table-create-record"
     [matMenuTriggerFor]="selectionMenu"
     *ngIf="dataSource.data && dataSource.data.length > 0"
   >more_horiz</mat-icon>
@@ -40,31 +42,31 @@
       </td>
     </ng-container>
     <ng-container matColumnDef="name">
-      <th mat-header-cell *matHeaderCellDef class="bold">App name</th>
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'apps.apps-list.app-name' | translate }}</th>
       <td *matCellDef="let app;let i=index;" mat-cell>
         {{ app.name }}
       </td>
     </ng-container>
     <ng-container matColumnDef="port">
-      <th mat-header-cell *matHeaderCellDef class="bold">Port</th>
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'apps.apps-list.port' | translate }}</th>
       <td *matCellDef="let app;let i=index;" mat-cell>
         {{ app.port }}
       </td>
     </ng-container>
     <ng-container matColumnDef="status">
-      <th mat-header-cell *matHeaderCellDef class="bold">Status</th>
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'apps.apps-list.status' | translate }}</th>
       <td *matCellDef="let app;let i=index;" mat-cell>
         <i [class]="app.status === 1 ? 'dot-green' : 'dot-red'"></i>
       </td>
     </ng-container>
     <ng-container matColumnDef="autostart">
-      <th mat-header-cell *matHeaderCellDef class="bold">Auto start</th>
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'apps.apps-list.auto-start' | translate }}</th>
       <td *matCellDef="let app;let i=index;" mat-cell>
         <mat-icon class="ic-mini">done</mat-icon>
       </td>
     </ng-container>
     <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef class="bold text-right">Actions</th>
+      <th mat-header-cell *matHeaderCellDef class="bold text-right">{{ 'apps.apps-list.actions' | translate }}</th>
       <td *matCellDef="let app;let i=index;" mat-cell class="text-right">
         <mat-icon
           class="table-delete-record"

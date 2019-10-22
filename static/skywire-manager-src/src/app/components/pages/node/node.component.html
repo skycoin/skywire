@@ -8,38 +8,16 @@
   
   <div class="row" *ngIf="node">
     <div class="col-12">
-      <div class="time-container">
-        <a
-          mat-button
-          class="tab-button white-theme"
-          [disabled]="showingRoutes"
-          [disableRipple]="true"
-          [routerLink]="['/nodes', node.local_pk, 'routing']"
-          [ngClass]="{'hidden': !showTabs}"
-          >
-          <mat-icon [inline]="true">shuffle</mat-icon>
-          <span>{{ 'actions.menu.routing' | translate }}</span>
-        </a>
-        <a
-          mat-button
-          class="tab-button white-theme"
-          [disabled]="!showingRoutes"
-          [disableRipple]="true"
-          [routerLink]="['/nodes', node.local_pk, 'apps']"
-          [ngClass]="{'hidden': !showTabs}"
-          >
-          <mat-icon [inline]="true">apps</mat-icon>
-          <span>{{ 'actions.menu.apps' | translate }}</span>
-        </a>
-        <div class="blank-space"></div>
-        <app-refresh-button
-          [secondsSinceLastUpdate]="secondsSinceLastUpdate"
-          [showLoading]="updating"
-          [showAlert]="errorsUpdating"
-          [refeshRate]="storageService.getRefreshTime()"
-          (click)="refresh(0)"
-        ></app-refresh-button>
-      </div>
+      <app-tab-bar
+        [titleParts]="titleParts"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="selectedTabIndex"
+        [secondsSinceLastUpdate]="secondsSinceLastUpdate" 
+        [showLoading]="updating"
+        [showAlert]="errorsUpdating"
+        [refeshRate]="storageService.getRefreshTime()"
+        (refreshRequested)="refresh(0)"
+      ></app-tab-bar>
     </div>
     <div class="col-12 col-lg-8">
       <div class="d-flex flex-column h-100">
