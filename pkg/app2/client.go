@@ -76,11 +76,8 @@ type Client struct {
 }
 
 // NewClient creates a new `Client`. The `Client` needs to be provided with:
-// - log: logger instance
-// - visorPK: The local public key of the parent skywire visor.
-// - pid: The procID assigned for the process that Client is being used by.
-// - sockFile: unix socket file to connect to the app server.
-// - appKey: application key to authenticate within app server.
+// - log: logger instance.
+// - config: client configuration.
 func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
 	rpcCl, err := rpc.Dial("unix", config.SockFile)
 	if err != nil {
