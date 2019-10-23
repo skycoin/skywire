@@ -33,12 +33,16 @@ func prepareConns(t *testing.T) (*Conn, *Conn, func()) {
 
 	var b *Conn
 	var respErr error
+	done := make(chan struct{})
 	go func() {
 		b, respErr = newConn(bConn, time.Now().Add(HandshakeTimeout), rhs, nil)
+		close(done)
 	}()
 
 	a, err := newConn(aConn, time.Now().Add(HandshakeTimeout), ihs, nil)
 	require.NoError(t, err)
+
+	<-done
 	require.NoError(t, respErr)
 
 	closeFunc := func() {
