@@ -19,32 +19,32 @@ import (
 
 // Client is used by skywire apps.
 type Client struct {
-	log *logging.Logger
-	pk  cipher.PubKey
-	pid apputil.ProcID
-	rpc RPCClient
-	lm  *idmanager.Manager // contains listeners associated with their IDs
-	cm  *idmanager.Manager // contains connections associated with their IDs
+	log     *logging.Logger
+	visorPK cipher.PubKey
+	pid     apputil.ProcID
+	rpc     RPCClient
+	lm      *idmanager.Manager // contains listeners associated with their IDs
+	cm      *idmanager.Manager // contains connections associated with their IDs
 }
 
 // NewClient creates a new `Client`. The `Client` needs to be provided with:
 // - log: logger instance
-// - localPK: The local public key of the parent skywire visor.
+// - visorPK: The local public key of the parent skywire visor.
 // - pid: The procID assigned for the process that Client is being used by.
 // - sockFile: unix socket file to connect to the app server.
 // - appKey: application key to authenticate within app server.
-func NewClient(log *logging.Logger, localPK cipher.PubKey, sockFile string, appKey appserver.Key) (*Client, error) {
+func NewClient(log *logging.Logger, visorPK cipher.PubKey, sockFile string, appKey appserver.Key) (*Client, error) {
 	rpcCl, err := rpc.Dial("unix", sockFile)
 	if err != nil {
 		return nil, errors.Wrap(err, "error connecting to the app server")
 	}
 
 	return &Client{
-		log: log,
-		pk:  localPK,
-		rpc: NewRPCClient(rpcCl, appKey),
-		lm:  idmanager.New(),
-		cm:  idmanager.New(),
+		log:     log,
+		visorPK: visorPK,
+		rpc:     NewRPCClient(rpcCl, appKey),
+		lm:      idmanager.New(),
+		cm:      idmanager.New(),
 	}, nil
 }
 
@@ -60,7 +60,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		rpc: c.rpc,
 		local: appnet.Addr{
 			Net:    remote.Net,
-			PubKey: c.pk,
+			PubKey: c.visorPK,
 			Port:   localPort,
 		},
 		remote: remote,
@@ -85,7 +85,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) {
 	local := appnet.Addr{
 		Net:    n,
-		PubKey: c.pk,
+		PubKey: c.visorPK,
 		Port:   port,
 	}
 
