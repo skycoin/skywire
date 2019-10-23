@@ -98,6 +98,8 @@ import { PaginatorComponent } from './components/layout/paginator/paginator.comp
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/node-apps/all-apps/all-apps.component';
 import { TabBarComponent } from './components/layout/tab-bar/tab-bar.component';
+import { RouteReuseStrategy } from '@angular/router';
+import { AppReuseStrategy } from './app.reuse-strategy';
 
 @NgModule({
   declarations: [
@@ -222,6 +224,7 @@ import { TabBarComponent } from './components/layout/tab-bar/tab-bar.component';
     {provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: {duration: 3000, verticalPosition: 'top'}},
     {provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: {width: '600px', hasBackdrop: true}},
     {provide: ErrorStateMatcher, useClass: ShowOnDirtyErrorStateMatcher},
+    {provide: RouteReuseStrategy, useClass: AppReuseStrategy},
   ],
   bootstrap: [AppComponent]
 })

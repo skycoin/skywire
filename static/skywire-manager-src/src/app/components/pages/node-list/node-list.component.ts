@@ -145,17 +145,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       data: { label: node.label },
     }).afterClosed().subscribe((label: string) => {
       label = label.trim();
-      if (label) {
-        this.storageService.setNodeLabel(node.local_pk, label);
-      } else if (label === '') {
-        const addressParts = node.tcp_addr.split(':');
-        let defaultLabel = node.tcp_addr;
-        if (addressParts && addressParts.length === 2) {
-          defaultLabel = ':' + addressParts[1];
-        }
-
-        this.storageService.setNodeLabel(node.local_pk, defaultLabel);
-      }
+      this.storageService.setNodeLabel(node.local_pk, label);
 
       this.refresh(0);
     });

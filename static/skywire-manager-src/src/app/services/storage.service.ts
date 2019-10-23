@@ -27,18 +27,6 @@ export class StorageService {
     return `${nodeKey}-label`;
   }
 
-  setNodeLabel(nodeKey: string, nodeLabel: string): void {
-    const nodes = this.getNodes().map(node => {
-      if (node.publicKey === nodeKey) {
-        node.label = nodeLabel;
-      }
-
-      return node;
-    });
-
-    this.setNodes(nodes);
-  }
-
   setRefreshTime(seconds: number) {
     this.storage.setItem(KEY_REFRESH_SECONDS, seconds.toString());
     this.currentRefreshTime = seconds;
@@ -65,6 +53,27 @@ export class StorageService {
     this.setNodes(Array.from(nodes));
   }
 
+  setNodeLabel(nodeKey: string, nodeLabel: string): void {
+    if (!nodeLabel) {
+      nodeLabel = this.getDefaultNodeLabel(nodeKey);
+    }
+
+    const nodes = this.getNodes().map(node => {
+      if (node.publicKey === nodeKey) {
+        node.label = nodeLabel;
+
+        this.savedNodes.set(node.publicKey, {
+          label: nodeLabel,
+          publicKey: node.publicKey,
+        });
+      }
+
+      return node;
+    });
+
+    this.setNodes(nodes);
+  }
+
   removeNode(nodeKey: string) {
     this.savedNodes.delete(nodeKey);
     this.setNodes(this.getNodes().filter(n => n.publicKey !== nodeKey));
@@ -79,7 +88,7 @@ export class StorageService {
       return this.savedNodes.get(nodeKey).label;
     }
 
-    const newLabel = nodeKey.substr(0, 8);
+    const newLabel = this.getDefaultNodeLabel(nodeKey);
     this.addNode({
       publicKey: nodeKey,
       label: newLabel,
@@ -90,6 +99,10 @@ export class StorageService {
 
   isNodeSaved(nodeKey: string): boolean {
     return this.savedNodes.has(nodeKey);
+  }
+
+  private getDefaultNodeLabel(nodeKey: string): string {
+    return nodeKey.substr(0, 8);
   }
 
   private setNodes(nodes: NodeInfo[]) {
