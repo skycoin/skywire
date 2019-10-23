@@ -6,5 +6,5 @@ import { Component, HostBinding } from '@angular/core';
   styleUrls: ['./loading-indicator.component.scss']
 })
 export class LoadingIndicatorComponent {
-  @HostBinding('class') get class() { return 'full-width flex'; }
+  @HostBinding('class') get class() { return 'full-width full-height flex'; }
 }

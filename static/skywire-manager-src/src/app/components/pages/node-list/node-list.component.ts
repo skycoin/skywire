@@ -133,10 +133,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
   }
 
-  settings() {
-    this.router.navigate(['settings']);
-  }
-
   logout() {
     this.authService.logout().subscribe(
       () => this.router.navigate(['login']),

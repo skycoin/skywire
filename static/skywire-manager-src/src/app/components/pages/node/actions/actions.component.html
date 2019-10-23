@@ -1,12 +1,12 @@
 <div class="node-actions">
   <div class="button-group">
-    <app-button (action)="terminal()" icon="laptop">{{ 'actions.menu.terminal' | translate }}</app-button>
-    <app-button (action)="configuration()" icon="settings">{{ 'actions.menu.config' | translate }}</app-button>
-    <app-button #updateButton (action)="update()" icon="get_app">{{ 'actions.menu.update' | translate }}</app-button>
-    <app-button (action)="reboot()" icon="rotate_right">{{ 'actions.menu.reboot' | translate }}</app-button>
+    <app-button (action)="terminal()" icon="laptop" [disabled]="!(!!node)">{{ 'actions.menu.terminal' | translate }}</app-button>
+    <app-button (action)="configuration()" icon="settings" [disabled]="!(!!node)">{{ 'actions.menu.config' | translate }}</app-button>
+    <app-button #updateButton (action)="update()" icon="get_app" disabled="true">{{ 'actions.menu.update' | translate }}</app-button>
+    <app-button (action)="reboot()" icon="rotate_right" disabled="true">{{ 'actions.menu.reboot' | translate }}</app-button>
   </div>
 </div>
 
 <div class="manager-actions">
-  <app-button (action)="back()" icon="chevron_left">{{ 'actions.menu.nodes' | translate }}</app-button>
+  <app-button (action)="back()" icon="chevron_left">{{ 'nodes.title' | translate }}</app-button>
 </div>

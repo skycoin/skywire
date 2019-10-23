@@ -12,6 +12,8 @@ export interface TabButtonData {
   styleUrls: ['./tab-bar.component.scss']
 })
 export class TabBarComponent {
+  @Input() disableMouse = false;
+
   @Input() titleParts: string[];
   @Input() tabsData: TabButtonData[];
   @Input() selectedTabIndex = 0;

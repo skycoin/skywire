@@ -108,6 +108,9 @@ export class NodeComponent implements OnInit, OnDestroy {
       if (this.lastUrl.includes('/apps')) {
         this.selectedTabIndex = 1;
       }
+      if (!this.node) {
+        this.selectedTabIndex = -1;
+      }
     } else if (
       this.lastUrl && (this.lastUrl.includes('/transports') ||
       this.lastUrl.includes('/routes') ||

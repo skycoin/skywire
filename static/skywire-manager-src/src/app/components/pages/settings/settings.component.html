@@ -1,9 +1,7 @@
 <app-sidenav-content>
   <div>
-    <app-button icon="translate">{{ 'settings.language' | translate }}</app-button>
-    <app-button icon="security">{{ 'login.password' | translate }}</app-button>
+    <app-button (action)="logout()" icon="power_settings_new">{{ 'nodes.logout' | translate }}</app-button>
   </div>
-  <app-button (action)="back()" icon="chevron_left">{{ 'common.back' | translate }}</app-button>
 </app-sidenav-content>
 
 <div class="row">

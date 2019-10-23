@@ -1,12 +1,20 @@
 <app-sidenav-content>
   <div>
-    <app-button (action)="settings()" icon="settings">{{ 'nodes.settings' | translate }}</app-button>
+    <app-button (action)="logout()" icon="power_settings_new">{{ 'nodes.logout' | translate }}</app-button>
   </div>
-  <app-button (action)="logout()" icon="power_settings_new">{{ 'nodes.logout' | translate }}</app-button>
 </app-sidenav-content>
 
-<div *ngIf="loading" class="row full-height full-width">
-  <app-loading-indicator></app-loading-indicator>
+<div *ngIf="loading" class="flex-column full-height full-width">
+  <div>
+    <app-tab-bar
+      [titleParts]="['start.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="-1"
+      [showUpdateButton]="false"
+      [disableMouse]="true"
+    ></app-tab-bar>
+  </div>
+  <app-loading-indicator class="full-height"></app-loading-indicator>
 </div>
 
 <div *ngIf="!loading" class="row">

@@ -14,6 +14,7 @@
       [disableRipple]="true"
       [routerLink]="tabData.linkParts"
       replaceUrl
+      [ngClass]="{'mouse-disabled' : disableMouse}"
       >
       <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
       <span>{{ tabData.label | translate }}</span>
