@@ -7,8 +7,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app2/appserver"
 
-	skycoinCipher "github.com/skycoin/skycoin/src/cipher"
-
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -53,14 +51,13 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 		return ClientConfig{}, ErrVisorPKNotProvided
 	}
 
-	// TODO: provide this func with the `dmsg/cipher`
-	visorPK, err := skycoinCipher.PubKeyFromHex(visorPKStr)
-	if err != nil {
+	var visorPK cipher.PubKey
+	if err := visorPK.UnmarshalText([]byte(visorPKStr)); err != nil {
 		return ClientConfig{}, ErrVisorPKInvalid
 	}
 
 	return ClientConfig{
-		VisorPK:  cipher.PubKey(visorPK),
+		VisorPK:  visorPK,
 		SockFile: sockFile,
 		AppKey:   appserver.Key(appKey),
 	}, nil
