@@ -3,10 +3,11 @@ package app2
 import (
 	"net"
 	"net/rpc"
+	"os"
 
 	"github.com/skycoin/skywire/pkg/app2/appserver"
 
-	"github.com/skycoin/skywire/pkg/app2/apputil"
+	skycoinCipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg/cipher"
@@ -17,11 +18,58 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+var (
+	// ErrVisorPKNotProvided is returned when the visor PK is not provided.
+	ErrVisorPKNotProvided = errors.New("visor PK is not provided")
+	// ErrVisorPKInvalid is returned when the visor PK is invalid.
+	ErrVisorPKInvalid = errors.New("visor PK is invalid")
+	// ErrSockFileNotProvided is returned when the sock file is not provided.
+	ErrSockFileNotProvided = errors.New("sock file is not provided")
+	// ErrAppKeyNotProvided is returned when the app key is not provided.
+	ErrAppKeyNotProvided = errors.New("app key is not provided")
+)
+
+// ClientConfig is a configuration for `Client`.
+type ClientConfig struct {
+	VisorPK  cipher.PubKey
+	SockFile string
+	AppKey   appserver.Key
+}
+
+// ClientConfigFromEnv creates client config from the ENV args.
+func ClientConfigFromEnv() (ClientConfig, error) {
+	appKey := os.Getenv("APP_KEY")
+	if appKey == "" {
+		return ClientConfig{}, ErrAppKeyNotProvided
+	}
+
+	sockFile := os.Getenv("SW_UNIX")
+	if sockFile == "" {
+		return ClientConfig{}, ErrSockFileNotProvided
+	}
+
+	visorPKStr := os.Getenv("VISOR_PK")
+	if visorPKStr == "" {
+		return ClientConfig{}, ErrVisorPKNotProvided
+	}
+
+	// TODO: provide this func with the `dmsg/cipher`
+	visorPK, err := skycoinCipher.PubKeyFromHex(visorPKStr)
+	if err != nil {
+		return ClientConfig{}, ErrVisorPKInvalid
+	}
+
+	return ClientConfig{
+		VisorPK:  cipher.PubKey(visorPK),
+		SockFile: sockFile,
+		AppKey:   appserver.Key(appKey),
+	}, nil
+}
+
 // Client is used by skywire apps.
 type Client struct {
 	log     *logging.Logger
 	visorPK cipher.PubKey
-	pid     apputil.ProcID
 	rpc     RPCClient
 	lm      *idmanager.Manager // contains listeners associated with their IDs
 	cm      *idmanager.Manager // contains connections associated with their IDs
@@ -33,16 +81,16 @@ type Client struct {
 // - pid: The procID assigned for the process that Client is being used by.
 // - sockFile: unix socket file to connect to the app server.
 // - appKey: application key to authenticate within app server.
-func NewClient(log *logging.Logger, visorPK cipher.PubKey, sockFile string, appKey appserver.Key) (*Client, error) {
-	rpcCl, err := rpc.Dial("unix", sockFile)
+func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
+	rpcCl, err := rpc.Dial("unix", config.SockFile)
 	if err != nil {
 		return nil, errors.Wrap(err, "error connecting to the app server")
 	}
 
 	return &Client{
 		log:     log,
-		visorPK: visorPK,
-		rpc:     NewRPCClient(rpcCl, appKey),
+		visorPK: config.VisorPK,
+		rpc:     NewRPCClient(rpcCl, config.AppKey),
 		lm:      idmanager.New(),
 		cm:      idmanager.New(),
 	}, nil
