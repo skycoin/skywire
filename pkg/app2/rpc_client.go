@@ -25,11 +25,11 @@ type RPCClient interface {
 // rpcClient implements `RPCClient`.
 type rpcCLient struct {
 	rpc    *rpc.Client
-	appKey string
+	appKey appserver.Key
 }
 
 // NewRPCClient constructs new `rpcClient`.
-func NewRPCClient(rpc *rpc.Client, appKey string) RPCClient {
+func NewRPCClient(rpc *rpc.Client, appKey appserver.Key) RPCClient {
 	return &rpcCLient{
 		rpc:    rpc,
 		appKey: appKey,

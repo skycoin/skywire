@@ -7,13 +7,35 @@ import (
 	"log"
 	"os"
 
+	"github.com/skycoin/skywire/pkg/app2/appserver"
+
+	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/app2"
+
 	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
 func main() {
+	pk, _ := cipher.GenerateKeyPair()
+
+	// TODO(darkrengarius): make this elegant
+	appKey := os.Getenv("APP_KEY")
+	if appKey == "" {
+		log.Fatalf("App key env is not set")
+	}
+
+	sockFile := os.Getenv("SW_UNIX")
+	if sockFile == "" {
+		log.Fatalf("Sock file env is not set")
+	}
+
+	app, err := app2.NewClient(logging.MustGetLogger("helloworld"), pk, sockFile, appserver.Key(appKey))
+	if err != nil {
+		log.Fatalf("Error creating app client: %v\n", err)
+	}
+
 	helloworldApp, err := app.Setup(&app.Config{AppName: "helloworld", AppVersion: "1.0", ProtocolVersion: "0.0.1"})
 	if err != nil {
 		log.Fatal("Setup failure:", err)
