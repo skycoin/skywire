@@ -15,6 +15,10 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+const (
+	netType = appnet.TypeDMSG
+)
+
 func main() {
 	clientConfig, err := app2.ClientConfigFromEnv()
 	if err != nil {
@@ -25,17 +29,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating app client: %v\n", err)
 	}
-	defer func() {
-		app.Close()
-	}()
-
-	netType := appnet.TypeDMSG
+	defer app.Close()
 
 	if len(os.Args) == 1 {
 		port := routing.Port(1024)
 		l, err := app.Listen(netType, port)
 		if err != nil {
-			log.Fatalf("Error listening network %v on port %d\n", netType, port)
+			log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
 		}
 
 		log.Println("listening for incoming connections")
