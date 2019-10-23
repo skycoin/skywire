@@ -49,7 +49,7 @@ type ServerConn struct {
 	mx         sync.RWMutex
 }
 
-// NewServerConn creates a new connection from the perspective of a dms_server.
+// NewServerConn creates a new connection from the perspective of a dmsg_server.
 func NewServerConn(log *logging.Logger, conn net.Conn, remoteClient cipher.PubKey) *ServerConn {
 	return &ServerConn{
 		log:          log,
@@ -102,7 +102,7 @@ func (c *ServerConn) addNext(ctx context.Context, r *NextConn) (uint16, error) {
 	return id, nil
 }
 
-// PK returns the remote dms_client's public key.
+// PK returns the remote dmsg_client's public key.
 func (c *ServerConn) PK() cipher.PubKey {
 	return c.remoteClient
 }
@@ -252,7 +252,7 @@ func (c *ServerConn) handleRequest(ctx context.Context, getLink getConnFunc, id 
 	return next, 0, true
 }
 
-// Server represents a dms_server.
+// Server represents a dmsg_server.
 type Server struct {
 	log *logging.Logger
 
@@ -271,7 +271,7 @@ type Server struct {
 	doneOnce sync.Once
 }
 
-// NewServer creates a new dms_server.
+// NewServer creates a new dmsg_server.
 func NewServer(pk cipher.PubKey, sk cipher.SecKey, addr string, l net.Listener, dc disc.APIClient) (*Server, error) {
 	if addr == "" {
 		addr = l.Addr().String()
@@ -282,7 +282,7 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, addr string, l net.Listener, 
 	}
 
 	return &Server{
-		log:   logging.MustGetLogger("dms_server"),
+		log:   logging.MustGetLogger("dmsg_server"),
 		pk:    pk,
 		sk:    sk,
 		addr:  addr,
@@ -345,7 +345,7 @@ func (s *Server) close() (closed bool, err error) {
 	return closed, err
 }
 
-// Close closes the dms_server.
+// Close closes the dmsg_server.
 func (s *Server) Close() error {
 	closed, err := s.close()
 	if !closed {
