@@ -127,7 +127,7 @@ run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
 	-rm -rf /tmp/syslog
 	-mkdir -p /tmp/syslog
 	-docker container rm syslog-ng -f
-docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest
+	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest
 
 
 mod-comm: ## Comments the 'replace' rule in go.mod
