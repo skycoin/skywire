@@ -133,7 +133,7 @@ func (c *Client) connCount() int {
 	return n
 }
 
-// InitiateServerConnections initiates connections with dms_servers.
+// InitiateServerConnections initiates connections with dmsg_servers.
 func (c *Client) InitiateServerConnections(ctx context.Context, min int) error {
 	if min == 0 {
 		return nil
@@ -142,7 +142,7 @@ func (c *Client) InitiateServerConnections(ctx context.Context, min int) error {
 	if err != nil {
 		return err
 	}
-	c.log.Info("found dms_server entries:", entries)
+	c.log.Info("found dmsg_server entries:", entries)
 	if err := c.findOrConnectToServers(ctx, entries, min); err != nil {
 		return err
 	}
@@ -155,10 +155,10 @@ func (c *Client) findServerEntries(ctx context.Context) ([]*disc.Entry, error) {
 		if err != nil || len(entries) == 0 {
 			select {
 			case <-ctx.Done():
-				return nil, fmt.Errorf("dms_servers are not available: %s", err)
+				return nil, fmt.Errorf("dmsg_servers are not available: %s", err)
 			default:
 				retry := time.Second
-				c.log.WithError(err).Warnf("no dms_servers found: trying again in %v...", retry)
+				c.log.WithError(err).Warnf("no dmsg_servers found: trying again in %v...", retry)
 				time.Sleep(retry)
 				continue
 			}
@@ -251,7 +251,7 @@ func (c *Client) Listen(port uint16) (*Listener, error) {
 	return l, nil
 }
 
-// Dial dials a transport to remote dms_client.
+// Dial dials a transport to remote dmsg_client.
 func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Transport, error) {
 	entry, err := c.dc.Entry(ctx, remote)
 	if err != nil {
@@ -271,10 +271,10 @@ func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*
 		}
 		return conn.DialTransport(ctx, remote, port)
 	}
-	return nil, errors.New("failed to find dms_servers for given client pk")
+	return nil, errors.New("failed to find dmsg_servers for given client pk")
 }
 
-// Addr returns the local dms_client's public key.
+// Addr returns the local dmsg_client's public key.
 func (c *Client) Addr() net.Addr {
 	return Addr{
 		PK: c.pk,
@@ -286,7 +286,7 @@ func (c *Client) Type() string {
 	return Type
 }
 
-// Close closes the dms_client and associated connections.
+// Close closes the dmsg_client and associated connections.
 // TODO(evaninjin): proper error handling.
 func (c *Client) Close() error {
 	if c == nil {
