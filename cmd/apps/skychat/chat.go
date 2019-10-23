@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2/appnet"
+
 	"github.com/skycoin/skywire/pkg/app2"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -21,6 +23,11 @@ import (
 
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
+)
+
+const (
+	netType = appnet.TypeDMSG
+	port    = routing.Port(1024)
 )
 
 var addr = flag.String("addr", ":8000", "address to bind")
@@ -36,18 +43,20 @@ var (
 
 func main() {
 	appName := "skychat"
-	log = app.NewLogger(appName)
+	log = app2.NewLogger(appName)
 	flag.Parse()
 
-	a, err := app.Setup(&app.Config{AppName: appName, AppVersion: "1.0", ProtocolVersion: "0.0.1"})
+	clientConfig, err := app2.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
+	}
+
+	// TODO: pass `log`?
+	a, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), clientConfig)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
-	defer func() {
-		if err := a.Close(); err != nil {
-			log.Println("Failed to close app:", err)
-		}
-	}()
+	defer a.Close()
 
 	chatApp = a
 
@@ -66,14 +75,20 @@ func main() {
 }
 
 func listenLoop() {
+	l, err := chatApp.Listen(netType, port)
+	if err != nil {
+		log.Printf("Error listening network %v on port %d: %v\n", netType, port)
+		return
+	}
+
 	for {
-		conn, err := chatApp.Accept()
+		conn, err := l.Accept()
 		if err != nil {
-			log.Println("failed to accept conn:", err)
+			log.Println("Failed to accept conn:", err)
 			return
 		}
 
-		raddr := conn.RemoteAddr().(routing.Addr)
+		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
 		chatConns[raddr.PubKey] = conn
 		connsMu.Unlock()
@@ -83,12 +98,12 @@ func listenLoop() {
 }
 
 func handleConn(conn net.Conn) {
-	raddr := conn.RemoteAddr().(routing.Addr)
+	raddr := conn.RemoteAddr().(appnet.Addr)
 	for {
 		buf := make([]byte, 32*1024)
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Println("failed to read packet:", err)
+			log.Println("Failed to read packet:", err)
 			return
 		}
 
@@ -98,9 +113,9 @@ func handleConn(conn net.Conn) {
 		}
 		select {
 		case clientCh <- string(clientMsg):
-			log.Printf("received and sent to ui: %s\n", clientMsg)
+			log.Printf("Received and sent to ui: %s\n", clientMsg)
 		default:
-			log.Printf("received and trashed: %s\n", clientMsg)
+			log.Printf("Received and trashed: %s\n", clientMsg)
 		}
 	}
 }
@@ -118,7 +133,11 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	addr := routing.Addr{PubKey: pk, Port: 1}
+	addr := appnet.Addr{
+		Net:    netType,
+		PubKey: pk,
+		Port:   1,
+	}
 	connsMu.Lock()
 	conn, ok := chatConns[pk]
 	connsMu.Unlock()
