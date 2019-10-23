@@ -7,63 +7,56 @@ import (
 	"log"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/app2/appserver"
-
-	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire/pkg/app2"
-
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
 func main() {
-	pk, _ := cipher.GenerateKeyPair()
-
-	// TODO(darkrengarius): make this elegant
-	appKey := os.Getenv("APP_KEY")
-	if appKey == "" {
-		log.Fatalf("App key env is not set")
+	clientConfig, err := app2.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
-	sockFile := os.Getenv("SW_UNIX")
-	if sockFile == "" {
-		log.Fatalf("Sock file env is not set")
-	}
-
-	app, err := app2.NewClient(logging.MustGetLogger("helloworld"), pk, sockFile, appserver.Key(appKey))
+	app, err := app2.NewClient(logging.MustGetLogger("helloworld"), clientConfig)
 	if err != nil {
 		log.Fatalf("Error creating app client: %v\n", err)
 	}
-
-	helloworldApp, err := app.Setup(&app.Config{AppName: "helloworld", AppVersion: "1.0", ProtocolVersion: "0.0.1"})
-	if err != nil {
-		log.Fatal("Setup failure:", err)
-	}
 	defer func() {
-		if err := helloworldApp.Close(); err != nil {
-			log.Println("Failed to close app: ", err)
-		}
+		app.Close()
 	}()
 
+	netType := appnet.TypeDMSG
+
 	if len(os.Args) == 1 {
+		port := routing.Port(1024)
+		l, err := app.Listen(netType, port)
+		if err != nil {
+			log.Fatalf("Error listening network %v on port %d\n", netType, port)
+		}
+
 		log.Println("listening for incoming connections")
 		for {
-			conn, err := helloworldApp.Accept()
+			conn, err := l.Accept()
 			if err != nil {
-				log.Fatal("Failed to accept conn: ", err)
+				log.Fatalf("Failed to accept conn: %v\n", err)
 			}
 
-			log.Println("got new connection from:", conn.RemoteAddr())
+			log.Printf("got new connection from: %v\n", conn.RemoteAddr())
 			go func() {
 				buf := make([]byte, 4)
 				if _, err := conn.Read(buf); err != nil {
-					log.Println("Failed to read remote data:", err)
+					log.Printf("Failed to read remote data: %v\n", err)
+					// TODO: close conn
 				}
 
-				log.Printf("Message from %s: %s", conn.RemoteAddr().String(), string(buf))
+				log.Printf("Message from %s: %s\n", conn.RemoteAddr().String(), string(buf))
 				if _, err := conn.Write([]byte("pong")); err != nil {
-					log.Println("Failed to write to a remote node:", err)
+					log.Printf("Failed to write to a remote node: %v\n", err)
+					// TODO: close conn
 				}
 			}()
 		}
@@ -74,18 +67,22 @@ func main() {
 		log.Fatal("Failed to construct PubKey: ", err, os.Args[1])
 	}
 
-	conn, err := helloworldApp.Dial(routing.Addr{PubKey: remotePK, Port: 10})
+	conn, err := app.Dial(appnet.Addr{
+		Net:    netType,
+		PubKey: remotePK,
+		Port:   10,
+	})
 	if err != nil {
-		log.Fatal("Failed to open remote conn: ", err)
+		log.Fatalf("Failed to open remote conn: %v\n", err)
 	}
 
 	if _, err := conn.Write([]byte("ping")); err != nil {
-		log.Fatal("Failed to write to a remote node: ", err)
+		log.Fatalf("Failed to write to a remote node: %v\n", err)
 	}
 
 	buf := make([]byte, 4)
 	if _, err = conn.Read(buf); err != nil {
-		log.Fatal("Failed to read remote data: ", err)
+		log.Fatalf("Failed to read remote data: %v\n", err)
 	}
 
 	log.Printf("Message from %s: %s", conn.RemoteAddr().String(), string(buf))
