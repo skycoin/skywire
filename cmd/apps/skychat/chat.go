@@ -14,11 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2"
+
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -26,7 +27,7 @@ var addr = flag.String("addr", ":8000", "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
-	chatApp   *app.App
+	chatApp   *app2.Client
 	clientCh  chan string
 	chatConns map[cipher.PubKey]net.Conn
 	connsMu   sync.Mutex
