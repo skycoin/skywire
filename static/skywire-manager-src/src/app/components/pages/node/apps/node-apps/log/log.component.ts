@@ -1,9 +1,12 @@
-import { Component, HostBinding, Inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { AppsService } from '../../../../../../services/apps.service';
 import { LogMessage, Application } from '../../../../../../app.datatypes';
 import { MAT_DIALOG_DATA } from '@angular/material';
-import { Subscription } from 'rxjs';
+import { Subscription, of } from 'rxjs';
 import { NodeComponent } from '../../../node.component';
+import { delay, flatMap } from 'rxjs/operators';
+import { TranslateService } from '@ngx-translate/core';
+import { ErrorsnackbarService } from '../../../../../../services/errorsnackbar.service';
 
 @Component({
   selector: 'app-log',
@@ -11,31 +14,46 @@ import { NodeComponent } from '../../../node.component';
   styleUrls: ['./log.component.scss'],
 })
 export class LogComponent implements OnInit, OnDestroy {
+  @ViewChild('content') content: ElementRef;
 
-  @HostBinding('attr.class') hostClass = 'app-log-container';
-  app: Application;
   logMessages: LogMessage[] = [];
   loading = false;
 
-  subscription: Subscription;
+  private shouldShowError = true;
+  private subscription: Subscription;
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) data: Application,
+    @Inject(MAT_DIALOG_DATA) private data: Application,
     private appsService: AppsService,
-  ) {
-    this.app = data;
-  }
+    private translate: TranslateService,
+    private errorSnackBar: ErrorsnackbarService,
+  ) { }
 
   ngOnInit() {
+    this.loadData(0);
+  }
+
+  ngOnDestroy(): void {
+    this.removeSubscription();
+  }
+
+  private loadData(delayMilliseconds: number) {
+    this.removeSubscription();
+
     this.loading = true;
-    this.subscription = this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.app.name).subscribe(
+    this.subscription = of(1).pipe(
+      delay(delayMilliseconds),
+      flatMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name))
+    ).subscribe(
       (log) => this.onLogsReceived(log),
       this.onLogsError.bind(this)
     );
   }
 
-  ngOnDestroy(): void {
-    this.subscription.unsubscribe();
+  private removeSubscription() {
+    if (this.subscription) {
+      this.subscription.unsubscribe();
+    }
   }
 
   private onLogsReceived(logs: string[] = []) {
@@ -56,9 +74,18 @@ export class LogComponent implements OnInit, OnDestroy {
         });
       }
     });
+
+    setTimeout(() => {
+      (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
+    });
   }
 
   private onLogsError() {
-    this.loading = false;
+    if (this.shouldShowError) {
+      this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+      this.shouldShowError = false;
+    }
+
+    this.loadData(3000);
   }
 }

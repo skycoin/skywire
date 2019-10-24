@@ -1,8 +1,11 @@
 import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material';
-import { Subscription } from 'rxjs';
+import { Subscription, of } from 'rxjs';
 import { RouteService } from '../../../../../../services/route.service';
 import { NodeComponent } from '../../../node.component';
+import { delay, flatMap } from 'rxjs/operators';
+import { TranslateService } from '@ngx-translate/core';
+import { ErrorsnackbarService } from '../../../../../../services/errorsnackbar.service';
 
 class RouteRule {
   key:  string;
@@ -37,6 +40,7 @@ class ForwardRuleSumary {
 export class RouteDetailsComponent implements OnInit, OnDestroy {
   routeRule: RouteRule;
 
+  private shouldShowError = true;
   private dataSubscription: Subscription;
 
   private ruleTypes = new Map<number, string>([
@@ -48,13 +52,12 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) private data: string,
     private routeService: RouteService,
     private dialogRef: MatDialogRef<RouteDetailsComponent>,
+    private translate: TranslateService,
+    private errorSnackBar: ErrorsnackbarService,
   ) { }
 
   ngOnInit() {
-    this.dataSubscription = this.routeService.get(NodeComponent.getCurrentNodeKey(), this.data).subscribe(
-      (rule: RouteRule) => this.routeRule = rule,
-      () => this.closePopup(),
-    );
+    this.loadData(0);
   }
 
   ngOnDestroy() {
@@ -71,5 +74,26 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
 
   closePopup() {
     this.dialogRef.close();
+  }
+
+  private loadData(delayMilliseconds: number) {
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+    }
+
+    this.dataSubscription = of(1).pipe(
+      delay(delayMilliseconds),
+      flatMap(() => this.routeService.get(NodeComponent.getCurrentNodeKey(), this.data))
+    ).subscribe(
+      (rule: RouteRule) => this.routeRule = rule,
+      () => {
+        if (this.shouldShowError) {
+          this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+          this.shouldShowError = false;
+        }
+
+        this.loadData(3000);
+      },
+    );
   }
 }

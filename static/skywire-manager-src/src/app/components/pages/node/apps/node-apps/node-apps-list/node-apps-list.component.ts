@@ -166,6 +166,7 @@ export class NodeAppsListComponent implements OnDestroy {
     const config = new MatDialogConfig();
     config.data = app;
     config.autoFocus = false;
+    config.width = '1000px';
     this.dialog.open(LogComponent, config);
   }
 

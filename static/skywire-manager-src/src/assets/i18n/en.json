@@ -18,7 +18,8 @@
     "download": "Download",
     "upload": "Upload",
     "delete": "Delete",
-    "none": "None"
+    "none": "None",
+    "loading-error": "There was an error getting the data. Retrying..."
   },
 
   "inputs": {
@@ -102,6 +103,7 @@
     "running": "Running",
     "label": "Label",
     "edit-label": "Edit label",
+    "default-label-warning": "The default label has been used",
     "view-node": "View node",
     "delete-node": "Delete node",
     "error-load": "An error occurred while refreshing nodes: {{error}}",
@@ -207,8 +209,7 @@
     },
     "log": {
       "title": "Log",
-      "empty": "There are no log messages",
-      "loading": "Loading log messages..."
+      "empty": "There are no log messages"
     },
     "config": {
       "title": "Startup configuration"

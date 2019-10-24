@@ -1,5 +1,5 @@
 <app-dialog [headline]="'apps.log.title' | translate">
-  <mat-dialog-content>
+  <mat-dialog-content #content>
     <div *ngFor="let message of logMessages" class="app-log-message">
       <span class="app-log-timestamp">
         {{ message.time }}
@@ -9,12 +9,6 @@
     <div class="app-log-empty mt-3" *ngIf="!loading && (!logMessages || logMessages.length === 0)">
       {{ 'apps.log.empty' | translate }}
     </div>
-    <div class="app-log-empty mt-4 d-flex flex-row justify-content-center" *ngIf="loading">
-      {{ 'apps.log.loading' | translate }}
-      <mat-spinner
-        class="ml-4"
-        [diameter]="30"
-      ></mat-spinner>
-    </div>
+    <app-loading-indicator [showWhite]="false" *ngIf="loading"></app-loading-indicator>
   </mat-dialog-content>
 </app-dialog>

@@ -51,8 +51,7 @@ export class NodeAppButtonComponent implements OnChanges {
     this.dialog.open(LogComponent, {
       data: {
         app: this.app,
-      },
-      panelClass: 'app-log-dialog'
+      }
     });
   }
 

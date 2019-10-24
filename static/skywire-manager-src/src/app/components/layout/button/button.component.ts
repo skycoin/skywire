@@ -60,6 +60,7 @@ export class ButtonComponent {
   error(error: string) {
     this.state = BUTTON_STATE.ERROR;
     this.tooltip = error;
+    this.disabled = false;
   }
 
   notify(notification: boolean) {

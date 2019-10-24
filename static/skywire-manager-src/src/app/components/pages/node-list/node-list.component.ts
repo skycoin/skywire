@@ -147,6 +147,10 @@ export class NodeListComponent implements OnInit, OnDestroy {
       label = label.trim();
       this.storageService.setNodeLabel(node.local_pk, label);
 
+      if (!label) {
+        this.errorSnackBar.open(this.translate.instant('nodes.default-label-warning'));
+      }
+
       this.refresh(0);
     });
   }

@@ -117,6 +117,7 @@ export class RouteListComponent implements OnDestroy {
     const config = new MatDialogConfig();
     config.data = route;
     config.autoFocus = false;
+    config.width = '1000px';
     this.dialog.open(RouteDetailsComponent, config);
   }
 

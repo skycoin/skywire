@@ -1,8 +1,10 @@
 <app-dialog [headline]="'nodes.edit-label' | translate">
-  <div class="wrapper">
-    <mat-form-field>
-      <input [placeholder]="'nodes.label' | translate" [(ngModel)]="label" class="input-label" maxlength="66" matInput>
-    </mat-form-field>
-    <app-button color="primary" type="mat-raised-button" (action)="save()">{{ 'common.save' | translate }}</app-button>
-  </div>
+  <mat-dialog-content>
+    <form [formGroup]="form" class="wrapper">
+      <mat-form-field>
+        <input #firstInput [placeholder]="'nodes.label' | translate" formControlName="label" class="input-label" maxlength="66" matInput>
+      </mat-form-field>
+      <app-button color="primary" type="mat-raised-button" (action)="save()">{{ 'common.save' | translate }}</app-button>
+    </form>
+  </mat-dialog-content>
 </app-dialog>
