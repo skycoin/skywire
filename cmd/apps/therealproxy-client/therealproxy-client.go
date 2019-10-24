@@ -8,6 +8,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2"
+
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/netutil"
@@ -21,14 +23,20 @@ const socksPort = 3
 var r = netutil.NewRetrier(time.Second, 0, 1)
 
 func main() {
-	log := app.NewLogger("socksproxy-client")
+	appName := "socksproxy-client"
+
+	log := app2.NewLogger(appName)
 	therealproxy.Log = log.PackageLogger("therealproxy")
 
 	var addr = flag.String("addr", ":1080", "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
-	config := &app.Config{AppName: "socksproxy-client", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+	config, err := app2.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
+	}
+
 	socksApp, err := app.Setup(config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
