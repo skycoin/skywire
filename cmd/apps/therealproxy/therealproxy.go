@@ -5,27 +5,41 @@ package main
 
 import (
 	"flag"
+	"fmt"
+
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/therealproxy"
-	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
+)
+
+const (
+	netType = appnet.TypeDMSG
+	port    = routing.Port(1024)
 )
 
 func main() {
-	log := app.NewLogger("socksproxy")
+	appName := "socksproxy"
+
+	log := app2.NewLogger(appName)
 	therealproxy.Log = log.PackageLogger("therealproxy")
 
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
 	flag.Parse()
 
-	config := &app.Config{AppName: "socksproxy", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
-	socksApp, err := app.Setup(config)
+	config, err := app2.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
+	}
+
+	socksApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
 	defer func() {
-		if err := socksApp.Close(); err != nil {
-			log.Println("Failed to close app:", err)
-		}
+		socksApp.Close()
 	}()
 
 	srv, err := therealproxy.NewServer(*passcode, log)
@@ -33,5 +47,10 @@ func main() {
 		log.Fatal("Failed to create a new server: ", err)
 	}
 
-	log.Fatal(srv.Serve(socksApp))
+	l, err := socksApp.Listen(netType, port)
+	if err != nil {
+		log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
+	}
+
+	log.Fatal(srv.Serve(l))
 }

@@ -14,14 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-
-	"github.com/skycoin/skywire/pkg/app2"
-
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
