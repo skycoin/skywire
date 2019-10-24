@@ -1,6 +1,6 @@
 <div class="header" mat-dialog-title>
   <span>{{ headline }}</span>
-  <button mat-dialog-close mat-icon-button>
+  <button mat-dialog-close mat-icon-button *ngIf="!disableDismiss">
     <mat-icon>close</mat-icon>
   </button>
 </div>

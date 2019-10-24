@@ -1,6 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Application } from '../../../../../../app.datatypes';
-import {MatTableDataSource, MatDialogConfig, MatDialog} from '@angular/material';
+import {MatTableDataSource, MatDialogConfig, MatDialog, MatDialogRef} from '@angular/material';
 import {AppsService} from '../../../../../../services/apps.service';
 import { LogComponent } from '../log/log.component';
 import { NodeComponent } from '../../../node.component';
@@ -9,6 +9,8 @@ import { TranslateService } from '@ngx-translate/core';
 import { Observable, Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { AppConfig } from '../../../../../../app.config';
+import GeneralUtils from '../../../../../../utils/generalUtils';
+import { ConfirmationComponent } from '../../../../../layout/confirmation/confirmation.component';
 
 @Component({
   selector: 'app-node-app-list',
@@ -105,7 +107,17 @@ export class NodeAppsListComponent implements OnDestroy {
       }
     });
 
-    this.changeAppStateRecursively(elementsToChange, startApps);
+    if (startApps) {
+      this.changeAppStateRecursively(elementsToChange, startApps);
+    } else {
+      const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'apps.stop-selected-confirmation');
+
+      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+        confirmationDialog.componentInstance.showProcessing();
+
+        this.changeAppStateRecursively(elementsToChange, startApps, confirmationDialog);
+      });
+    }
   }
 
   onCloseAppClicked(appName: string): void {
@@ -113,13 +125,39 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   changeAppState(app: Application): void {
-    this.startChangingAppState(app.name, app.status === 0, app.autostart).subscribe(
+    if (app.status === 0) {
+      this.changeSingleAppState(app.name, app.status === 0, app.autostart);
+    } else {
+      const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'apps.stop-confirmation');
+
+      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+        confirmationDialog.componentInstance.showProcessing();
+
+        this.changeSingleAppState(app.name, app.status === 0, app.autostart, confirmationDialog);
+      });
+    }
+  }
+
+  private changeSingleAppState(
+    appName: string,
+    startApp: boolean,
+    autostart: boolean,
+    confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
+
+    this.startChangingAppState(appName, startApp, autostart).subscribe(
       () => {
+        if (confirmationDialog) {
+          confirmationDialog.close();
+        }
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-        this.errorSnackBar.open(this.translate.instant('apps.' + (app.status === 0 ? 'started' : 'stopped')));
+        this.errorSnackBar.open(this.translate.instant('apps.operation-completed'));
       }, () => {
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-        this.errorSnackBar.open(this.translate.instant('apps.error'));
+        if (confirmationDialog) {
+          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
+        } else {
+          this.errorSnackBar.open(this.translate.instant('apps.error'));
+        }
       }
     );
   }
@@ -177,10 +215,14 @@ export class NodeAppsListComponent implements OnDestroy {
     return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp, autostart);
   }
 
-  private changeAppStateRecursively(names: string[], startApp: boolean) {
+  private changeAppStateRecursively(
+    names: string[],
+    startApp: boolean,
+    confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
+
     if (!names || names.length === 0) {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-      this.errorSnackBar.open(this.translate.instant('apps.' + (startApp ? 'started' : 'stopped')));
+      this.errorSnackBar.open(this.translate.instant('apps.operation-completed'));
 
       return;
     }
@@ -188,14 +230,21 @@ export class NodeAppsListComponent implements OnDestroy {
     this.startChangingAppState(names[names.length - 1], startApp, this.appsMap.get(names[names.length - 1]).autostart).subscribe(() => {
       names.pop();
       if (names.length === 0) {
+        if (confirmationDialog) {
+          confirmationDialog.close();
+        }
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-        this.errorSnackBar.open(this.translate.instant('apps.' + (startApp ? 'started' : 'stopped')));
+        this.errorSnackBar.open(this.translate.instant('apps.operation-completed'));
       } else {
-        this.changeAppStateRecursively(names, startApp);
+        this.changeAppStateRecursively(names, startApp, confirmationDialog);
       }
     }, () => {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-      this.errorSnackBar.open(this.translate.instant('apps.error'));
+      if (confirmationDialog) {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
+      } else {
+        this.errorSnackBar.open(this.translate.instant('apps.error'));
+      }
     });
   }
 }

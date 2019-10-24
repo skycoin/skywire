@@ -8,4 +8,5 @@ import { MatDialogRef } from '@angular/material';
 })
 export class DialogComponent {
   @Input() headline: string;
+  @Input() disableDismiss: boolean;
 }

@@ -1,4 +1,4 @@
-import { Component, HostBinding } from '@angular/core';
+import { Component, HostBinding, Input } from '@angular/core';
 
 @Component({
   selector: 'app-loading-indicator',
@@ -7,4 +7,6 @@ import { Component, HostBinding } from '@angular/core';
 })
 export class LoadingIndicatorComponent {
   @HostBinding('class') get class() { return 'full-width full-height flex'; }
+
+  @Input() showWhite = true;
 }

@@ -100,6 +100,7 @@ import { AllAppsComponent } from './components/pages/node/apps/node-apps/all-app
 import { TabBarComponent } from './components/layout/tab-bar/tab-bar.component';
 import { RouteReuseStrategy } from '@angular/router';
 import { AppReuseStrategy } from './app.reuse-strategy';
+import { ConfirmationComponent } from './components/layout/confirmation/confirmation.component';
 
 @NgModule({
   declarations: [
@@ -169,6 +170,7 @@ import { AppReuseStrategy } from './app.reuse-strategy';
     AllAppsComponent,
     PaginatorComponent,
     TabBarComponent,
+    ConfirmationComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -187,6 +189,7 @@ import { AppReuseStrategy } from './app.reuse-strategy';
     CreateTransportComponent,
     BasicTerminalComponent,
     RouteDetailsComponent,
+    ConfirmationComponent,
   ],
   imports: [
     BrowserModule,

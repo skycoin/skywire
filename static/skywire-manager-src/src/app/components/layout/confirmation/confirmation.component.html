@@ -1,0 +1,30 @@
+<app-dialog [headline]="(state !== confirmationStates.Done ? data.headerText : doneTitle) | translate" [disableDismiss]="disableDismiss">
+  <ng-container *ngIf="state === confirmationStates.Asking">
+    <div class="text-container">
+      {{ data.text | translate }}
+    </div>
+
+    <div class="buttons">
+      <app-button type="mat-raised-button" color="primary" (action)="closeModal()" *ngIf="data.cancelButtonText">
+        {{ data.cancelButtonText | translate }}
+      </app-button>
+      <app-button type="mat-raised-button" color="primary" (action)="sendOperationAcceptedEvent()">
+        {{ data.confirmButtonText | translate }}
+      </app-button>
+    </div>
+  </ng-container>
+  <ng-container *ngIf="state === confirmationStates.Processing">
+    <app-loading-indicator [showWhite]="false"></app-loading-indicator>
+  </ng-container>
+  <ng-container *ngIf="state === confirmationStates.Done">
+    <div class="text-container">
+      {{ doneText | translate }}
+    </div>
+
+    <div class="buttons">
+      <app-button type="mat-raised-button" color="primary" (action)="closeModal()">
+        {{ 'confirmation.close' | translate }}
+      </app-button>
+    </div>
+  </ng-container>
+</app-dialog>

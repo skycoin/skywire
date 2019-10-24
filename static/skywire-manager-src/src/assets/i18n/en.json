@@ -231,7 +231,9 @@
     "start-app": "Start",
     "view-logs": "View logs",
     "error": "An error has occured and it was not possible to perform the operation",
-    "started": "The app has been started",
+    "stop-confirmation": "Are you sure you want to stop the app?",
+    "stop-selected-confirmation": "Are you sure you want to stop the selected apps?",
+    "operation-completed": "Operation completed",
     "stopped": "The app has been stopped",
     "status-running": "Running",
     "status-stopped": "Stopped",
@@ -247,9 +249,11 @@
     "remote": "Remote node",
     "type": "Type",
     "create": "Create transport",
+    "delete-confirmation": "Are you sure you want to delete the transport?",
+    "delete-selected-confirmation": "Are you sure you want to delete the selected transports?",
     "delete": "Delete transport",
-    "deleted": "Transport deleted",
-    "error-deleting": "It was not possible to delete the transport",
+    "deleted": "Delete operation completed",
+    "error-deleting": "It was not possible to complete the delete operation",
     "dialog": {
       "remote-key": "Remote public key",
       "transport-type": "Transport type",
@@ -268,9 +272,11 @@
     "list-title": "Route list",
     "key": "Key",
     "rule": "Rule",
+    "delete-confirmation": "Are you sure you want to delete the route?",
+    "delete-selected-confirmation": "Are you sure you want to delete the selected routes?",
     "delete": "Delete route",
-    "deleted": "Route deleted",
-    "error-deleting": "It was not possible to delete the route",
+    "deleted": "Delete operation completed",
+    "error-deleting": "It was not possible to complete the delete operation",
     "details": {
       "title": "Details",
       "basic": {
@@ -334,5 +340,13 @@
   "paginator": {
     "first": "First",
     "last": "Last"
+  },
+
+  "confirmation" : {
+    "header-text": "Confirmation",
+    "confirm-button": "Yes",
+    "cancel-button": "No",
+    "close": "Close",
+    "error-header-text": "Error"
   }
 }
