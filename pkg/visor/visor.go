@@ -419,20 +419,15 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	}
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
-	/*logger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
+	logger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
 	defer func() {
 		if logErr := logger.Close(); err == nil && logErr != nil {
 			err = logErr
 		}
 	}()
 
-	// TODO: pass this guy correctly
-	cmd.Stdout = logger
-	cmd.Stderr = logger
-	*/
-
 	pid, err := node.procManager.Run(logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)),
-		appCfg, append([]string{filepath.Join(node.dir(), config.App)}, config.Args...))
+		appCfg, append([]string{filepath.Join(node.dir(), config.App)}, config.Args...), logger, logger)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}
