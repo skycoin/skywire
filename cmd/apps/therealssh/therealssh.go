@@ -21,7 +21,7 @@ var log *logging.MasterLogger
 
 const (
 	appName = "SSH"
-	netType = appnet.TypeDMSG
+	netType = appnet.TypeSkynet
 	port    = routing.Port(1000)
 )
 
