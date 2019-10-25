@@ -5,19 +5,29 @@ package main
 
 import (
 	"flag"
+	"fmt"
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/pkg/app"
 	ssh "github.com/skycoin/skywire/pkg/therealssh"
+
+	"github.com/skycoin/skywire/pkg/app2"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 var log *logging.MasterLogger
 
+const (
+	netType = appnet.TypeDMSG
+	port    = routing.Port(1000)
+)
+
 func main() {
-	log = app.NewLogger("SSH")
+	appName := "SSH"
+
+	log = app2.NewLogger(appName)
 	ssh.Log = log.PackageLogger("therealssh")
 
 	var authFile = flag.String("auth", "~/.therealssh/authorized_keys", "Auth file location. Should contain one PubKey per line.")
@@ -25,15 +35,17 @@ func main() {
 
 	flag.Parse()
 
-	config := &app.Config{AppName: "SSH", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
-	sshApp, err := app.Setup(config)
+	config, err := app2.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
+	}
+
+	sshApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
 	defer func() {
-		if err := sshApp.Close(); err != nil {
-			log.Println("Failed to close app:", err)
-		}
+		sshApp.Close()
 	}()
 
 	path, err := homedir.Expand(*authFile)
@@ -58,8 +70,13 @@ func main() {
 		}
 	}()
 
+	l, err := sshApp.Listen(netType, port)
+	if err != nil {
+		log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
+	}
+
 	for {
-		conn, err := sshApp.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			log.Fatal("failed to receive packet: ", err)
 		}
