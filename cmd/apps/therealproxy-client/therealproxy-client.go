@@ -5,8 +5,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/app2/appnet"
+
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app2"
 
@@ -14,11 +19,13 @@ import (
 
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/internal/therealproxy"
-	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-const socksPort = 3
+const (
+	netType   = appnet.TypeDMSG
+	socksPort = routing.Port(3)
+)
 
 var r = netutil.NewRetrier(time.Second, 0, 1)
 
@@ -37,14 +44,12 @@ func main() {
 		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
-	socksApp, err := app.Setup(config)
+	socksApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
 	defer func() {
-		if err := socksApp.Close(); err != nil {
-			log.Println("Failed to close app:", err)
-		}
+		socksApp.Close()
 	}()
 
 	if *serverPK == "" {
@@ -58,7 +63,11 @@ func main() {
 
 	var conn net.Conn
 	err = r.Do(func() error {
-		conn, err = socksApp.Dial(routing.Addr{PubKey: pk, Port: routing.Port(socksPort)})
+		conn, err = socksApp.Dial(appnet.Addr{
+			Net:    netType,
+			PubKey: pk,
+			Port:   socksPort,
+		})
 		return err
 	})
 	if err != nil {
