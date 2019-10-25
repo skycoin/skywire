@@ -16,13 +16,12 @@ import (
 )
 
 const (
+	appName = "socksproxy"
 	netType = appnet.TypeDMSG
 	port    = routing.Port(1024)
 )
 
 func main() {
-	appName := "socksproxy"
-
 	log := app2.NewLogger(appName)
 	therealproxy.Log = log.PackageLogger("therealproxy")
 

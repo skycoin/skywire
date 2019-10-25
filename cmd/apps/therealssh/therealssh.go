@@ -20,13 +20,12 @@ import (
 var log *logging.MasterLogger
 
 const (
+	appName = "SSH"
 	netType = appnet.TypeDMSG
 	port    = routing.Port(1000)
 )
 
 func main() {
-	appName := "SSH"
-
 	log = app2.NewLogger(appName)
 	ssh.Log = log.PackageLogger("therealssh")
 

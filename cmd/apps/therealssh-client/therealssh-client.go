@@ -5,34 +5,41 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app2"
 	ssh "github.com/skycoin/skywire/pkg/therealssh"
+)
+
+const (
+	appName = "SSH-client"
 )
 
 var log *logging.MasterLogger
 
 func main() {
-	log = app.NewLogger("SSH-client")
+	log = app2.NewLogger(appName)
 	ssh.Log = log.PackageLogger("therealssh")
 
 	var rpcAddr = flag.String("rpc", ":2222", "Client RPC address to listen on")
 	var debug = flag.Bool("debug", false, "enable debug messages")
 	flag.Parse()
 
-	config := &app.Config{AppName: "SSH-client", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
-	sshApp, err := app.Setup(config)
+	config, err := app2.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
+	}
+
+	sshApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
 	defer func() {
-		if err := sshApp.Close(); err != nil {
-			log.Println("Failed to close app:", err)
-		}
+		sshApp.Close()
 	}()
 
 	ssh.Debug = *debug

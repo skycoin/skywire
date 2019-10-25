@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -83,7 +84,7 @@ type PipeDialer struct {
 	dialConn, acceptConn net.Conn
 }
 
-func (p PipeDialer) Dial(raddr routing.Addr) (c net.Conn, err error) {
+func (p PipeDialer) Dial(raddr appnet.Addr) (c net.Conn, err error) {
 	return p.dialConn, nil
 }
 
