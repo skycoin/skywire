@@ -2,6 +2,7 @@ package appserver
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 
@@ -20,7 +21,7 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(log *logging.Logger, c Config, args []string) (*Proc, error) {
+func NewProc(log *logging.Logger, c Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
 	key := GenerateAppKey()
 
 	binaryPath := getBinaryPath(c.BinaryDir, c.Name, c.Version)
@@ -38,6 +39,9 @@ func NewProc(log *logging.Logger, c Config, args []string) (*Proc, error) {
 
 	cmd.Env = env
 	cmd.Dir = c.WorkDir
+
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	rpcS, err := New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", key)),
 		c.SockFile, key)
