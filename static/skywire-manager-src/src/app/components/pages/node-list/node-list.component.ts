@@ -116,7 +116,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
         }, error => {
           this.ngZone.run(() => {
             if (!this.errorsUpdating) {
-              this.errorSnackBar.open(this.translate.instant('nodes.error-load', { error }));
+              if (this.loading) {
+                this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+              } else {
+                this.errorSnackBar.open(this.translate.instant('nodes.error-load', { error }));
+              }
             }
 
             this.updating = false;

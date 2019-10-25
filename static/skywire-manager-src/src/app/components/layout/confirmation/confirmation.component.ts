@@ -1,5 +1,6 @@
-import { Component, Inject, Output, EventEmitter, OnDestroy } from '@angular/core';
+import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, OnInit } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material';
+import { ButtonComponent } from '../button/button.component';
 
 export interface ConfirmationData {
   text: string;
@@ -20,7 +21,10 @@ enum ConfirmationStates {
   templateUrl: './confirmation.component.html',
   styleUrls: ['./confirmation.component.scss'],
 })
-export class ConfirmationComponent implements OnDestroy {
+export class ConfirmationComponent implements OnInit, OnDestroy {
+  @ViewChild('cancelButton') cancelButton: ButtonComponent;
+  @ViewChild('confirmButton') confirmButton: ButtonComponent;
+
   disableDismiss = false;
   state = ConfirmationStates.Asking;
   confirmationStates = ConfirmationStates;
@@ -38,6 +42,14 @@ export class ConfirmationComponent implements OnDestroy {
     this.dialogRef.disableClose = this.disableDismiss;
   }
 
+  ngOnInit() {
+    if (this.data.cancelButtonText) {
+      setTimeout(() => this.cancelButton.focus());
+    } else {
+      setTimeout(() => this.confirmButton.focus());
+    }
+  }
+
   ngOnDestroy() {
     this.operationAccepted.complete();
   }
@@ -52,11 +64,19 @@ export class ConfirmationComponent implements OnDestroy {
 
   showProcessing() {
     this.state = ConfirmationStates.Processing;
+    this.confirmButton.loading();
+
+    if (this.cancelButton) {
+      this.cancelButton.disable();
+    }
   }
 
   showDone(newTitle: string, newText: string) {
     this.doneTitle = newTitle;
     this.doneText = newText;
+
+    this.confirmButton.reset();
+    setTimeout(() => this.confirmButton.focus());
 
     this.state = ConfirmationStates.Done;
     this.dialogRef.disableClose = false;
