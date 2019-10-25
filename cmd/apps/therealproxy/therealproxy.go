@@ -17,8 +17,8 @@ import (
 
 const (
 	appName = "socksproxy"
-	netType = appnet.TypeDMSG
-	port    = routing.Port(1024)
+	netType = appnet.TypeSkynet
+	port    = routing.Port(3)
 )
 
 func main() {
