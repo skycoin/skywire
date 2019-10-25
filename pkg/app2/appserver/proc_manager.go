@@ -2,6 +2,7 @@ package appserver
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 	"sync"
 
@@ -33,12 +34,13 @@ func NewProcManager(log *logging.Logger) *ProcManager {
 }
 
 // Run runs the application according to its config and additional args.
-func (m *ProcManager) Run(log *logging.Logger, c Config, args []string) (apputil.ProcID, error) {
+func (m *ProcManager) Run(log *logging.Logger, c Config, args []string,
+	stdout, stderr io.Writer) (apputil.ProcID, error) {
 	if m.Exists(c.Name) {
 		return 0, errAppAlreadyExists
 	}
 
-	p, err := NewProc(log, c, args)
+	p, err := NewProc(log, c, args, stdout, stderr)
 	if err != nil {
 		return 0, err
 	}
