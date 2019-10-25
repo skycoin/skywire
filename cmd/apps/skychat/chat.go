@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	appName = "skychat"
 	netType = appnet.TypeDMSG
 	port    = routing.Port(1024)
 )
@@ -40,7 +41,6 @@ var (
 )
 
 func main() {
-	appName := "skychat"
 	log = app2.NewLogger(appName)
 	flag.Parse()
 

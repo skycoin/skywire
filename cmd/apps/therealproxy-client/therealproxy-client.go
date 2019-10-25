@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	appName   = "socksproxy-client"
 	netType   = appnet.TypeDMSG
 	socksPort = routing.Port(3)
 )
@@ -27,8 +28,6 @@ const (
 var r = netutil.NewRetrier(time.Second, 0, 1)
 
 func main() {
-	appName := "socksproxy-client"
-
 	log := app2.NewLogger(appName)
 	therealproxy.Log = log.PackageLogger("therealproxy")
 
