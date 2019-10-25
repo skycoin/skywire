@@ -25,8 +25,8 @@ import (
 
 const (
 	appName = "skychat"
-	netType = appnet.TypeDMSG
-	port    = routing.Port(1024)
+	netType = appnet.TypeSkynet
+	port    = routing.Port(1)
 )
 
 var addr = flag.String("addr", ":8000", "address to bind")
