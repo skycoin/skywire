@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -91,7 +92,7 @@ func newPipeDialer() (net.Conn, *pipeDialer) {
 	return out, &pipeDialer{in}
 }
 
-func (d *pipeDialer) Dial(raddr routing.Addr) (net.Conn, error) {
+func (d *pipeDialer) Dial(raddr appnet.Addr) (net.Conn, error) {
 	return d.conn, nil
 }
 
