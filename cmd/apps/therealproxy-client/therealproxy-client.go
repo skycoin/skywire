@@ -21,7 +21,7 @@ import (
 
 const (
 	appName   = "socksproxy-client"
-	netType   = appnet.TypeDMSG
+	netType   = appnet.TypeSkynet
 	socksPort = routing.Port(3)
 )
 

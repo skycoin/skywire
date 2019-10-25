@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -48,7 +49,11 @@ func (c *Client) OpenChannel(remotePK cipher.PubKey) (localID uint32, sshCh *SSH
 	var err error
 
 	err = r.Do(func() error {
-		conn, err = c.dialer.Dial(routing.Addr{PubKey: remotePK, Port: Port})
+		conn, err = c.dialer.Dial(appnet.Addr{
+			Net:    appnet.TypeSkynet,
+			PubKey: remotePK,
+			Port:   Port,
+		})
 		return err
 	})
 	if err != nil {

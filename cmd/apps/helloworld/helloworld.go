@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	netType = appnet.TypeDMSG
+	netType = appnet.TypeSkynet
 )
 
 func main() {
