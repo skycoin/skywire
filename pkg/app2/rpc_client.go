@@ -2,6 +2,7 @@ package app2
 
 import (
 	"fmt"
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 	"net/rpc"
 
 	"github.com/skycoin/skywire/pkg/app2/appnet"
@@ -25,11 +26,11 @@ type RPCClient interface {
 // rpcClient implements `RPCClient`.
 type rpcCLient struct {
 	rpc    *rpc.Client
-	appKey appserver.Key
+	appKey appcommon.Key
 }
 
 // NewRPCClient constructs new `rpcClient`.
-func NewRPCClient(rpc *rpc.Client, appKey appserver.Key) RPCClient {
+func NewRPCClient(rpc *rpc.Client, appKey appcommon.Key) RPCClient {
 	return &rpcCLient{
 		rpc:    rpc,
 		appKey: appKey,

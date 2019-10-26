@@ -1,7 +1,8 @@
-package appserver
+package appcommon
 
 import (
 	"fmt"
+	"github.com/skycoin/skywire/pkg/app2/appserver"
 	"io"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +17,7 @@ type Proc struct {
 	key    Key
 	config Config
 	log    *logging.Logger
-	rpcS   *Server
+	rpcS   *appserver.Server
 	cmd    *exec.Cmd
 }
 
@@ -43,7 +44,7 @@ func NewProc(log *logging.Logger, c Config, args []string, stdout, stderr io.Wri
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	rpcS, err := New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", key)),
+	rpcS, err := appserver.New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", key)),
 		c.SockFile, key)
 	if err != nil {
 		return nil, err
