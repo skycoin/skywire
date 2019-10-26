@@ -18,9 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2/apputil"
-
-	"github.com/skycoin/skywire/pkg/app2/appserver"
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 
 	"github.com/skycoin/skywire/pkg/snet"
 
@@ -99,7 +97,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	procManager *appserver.ProcManager
+	procManager *appcommon.ProcManager
 }
 
 // NewNode constructs new Node.
@@ -108,7 +106,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 	node := &Node{
 		config:      config,
-		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager")),
+		procManager: appcommon.NewProcManager(logging.MustGetLogger("proc_manager")),
 	}
 
 	node.Logger = masterLogger
@@ -333,7 +331,7 @@ func (node *Node) Close() (err error) {
 	}
 
 	var procs []string
-	node.procManager.Range(func(name string, _ *appserver.Proc) bool {
+	node.procManager.Range(func(name string, _ *appcommon.Proc) bool {
 		procs = append(procs, name)
 		return true
 	})
@@ -407,7 +405,7 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
 	}
 
-	appCfg := appserver.Config{
+	appCfg := appcommon.Config{
 		Name:      config.App,
 		Version:   config.Version,
 		BinaryDir: node.appsPath,
@@ -448,7 +446,7 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	return nil
 }
 
-func (node *Node) persistPID(name string, pid apputil.ProcID) {
+func (node *Node) persistPID(name string, pid appcommon.ProcID) {
 	pidF := node.pidFile()
 	pidFName := pidF.Name()
 	if err := pidF.Close(); err != nil {
