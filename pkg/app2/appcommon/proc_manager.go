@@ -1,4 +1,4 @@
-package appserver
+package appcommon
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ func NewProcManager(log *logging.Logger) *ProcManager {
 
 // Run runs the application according to its config and additional args.
 func (m *ProcManager) Run(log *logging.Logger, c Config, args []string,
-	stdout, stderr io.Writer) (apputil.ProcID, error) {
+	stdout, stderr io.Writer) (ProcID, error) {
 	if m.Exists(c.Name) {
 		return 0, errAppAlreadyExists
 	}

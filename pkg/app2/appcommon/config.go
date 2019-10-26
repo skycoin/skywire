@@ -1,4 +1,4 @@
-package appserver
+package appcommon
 
 // Config defines configuration parameters for `Proc`.
 type Config struct {

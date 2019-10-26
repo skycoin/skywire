@@ -1,11 +1,10 @@
 package app2
 
 import (
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 	"net"
 	"net/rpc"
 	"os"
-
-	"github.com/skycoin/skywire/pkg/app2/appserver"
 
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg/cipher"
@@ -31,7 +30,7 @@ var (
 type ClientConfig struct {
 	VisorPK  cipher.PubKey
 	SockFile string
-	AppKey   appserver.Key
+	AppKey   appcommon.Key
 }
 
 // ClientConfigFromEnv creates client config from the ENV args.
@@ -59,7 +58,7 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 	return ClientConfig{
 		VisorPK:  visorPK,
 		SockFile: sockFile,
-		AppKey:   appserver.Key(appKey),
+		AppKey:   appcommon.Key(appKey),
 	}, nil
 }
 

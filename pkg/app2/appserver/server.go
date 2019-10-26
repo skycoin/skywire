@@ -2,6 +2,7 @@ package appserver
 
 import (
 	"fmt"
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 	"net"
 	"net/rpc"
 	"sync"
@@ -21,7 +22,7 @@ type Server struct {
 }
 
 // NewServer constructs server.
-func New(log *logging.Logger, sockFile string, appKey Key) (*Server, error) {
+func New(log *logging.Logger, sockFile string, appKey appcommon.Key) (*Server, error) {
 	rpcS := rpc.NewServer()
 	gateway := newRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_server_%s", appKey)))
 	if err := rpcS.RegisterName(string(appKey), gateway); err != nil {

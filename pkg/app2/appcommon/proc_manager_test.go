@@ -1,4 +1,4 @@
-package appserver
+package appcommon
 
 import (
 	"sort"
