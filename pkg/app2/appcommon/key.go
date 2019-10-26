@@ -1,4 +1,4 @@
-package appserver
+package appcommon
 
 import "github.com/skycoin/dmsg/cipher"
 
