@@ -20,7 +20,7 @@ import { ConfirmationComponent } from '../../../../layout/confirmation/confirmat
 export class RouteListComponent implements OnDestroy {
   @Input() nodePK: string;
 
-  displayedColumns: string[] = ['selection', 'key', 'rule', 'details', 'x'];
+  displayedColumns: string[] = ['selection', 'key', 'rule', 'actions'];
   dataSource = new MatTableDataSource<Route>();
   selections = new Map<number, boolean>();
 

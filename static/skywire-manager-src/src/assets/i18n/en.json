@@ -247,6 +247,7 @@
   "transports": {
     "title": "Transports",
     "list-title": "Transport list",
+    "id": "ID",
     "remote": "Remote node",
     "type": "Type",
     "create": "Create transport",
@@ -255,6 +256,21 @@
     "delete": "Delete transport",
     "deleted": "Delete operation completed",
     "error-deleting": "It was not possible to complete the delete operation",
+    "details": {
+      "title": "Details",
+      "basic": {
+        "title": "Basic info",
+        "id": "ID:",
+        "local-pk": "Local public key:",
+        "remote-pk": "Remote public key:",
+        "type": "Type:"
+      },
+      "data": {
+        "title": "Data transmission",
+        "uploaded": "Uploaded data:",
+        "downloaded": "Downloaded data:"
+      }
+    },
     "dialog": {
       "remote-key": "Remote public key",
       "transport-type": "Transport type",

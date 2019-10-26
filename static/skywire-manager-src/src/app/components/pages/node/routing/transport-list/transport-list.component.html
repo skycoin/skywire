@@ -43,6 +43,12 @@
         </mat-checkbox>
       </td>
     </ng-container>
+    <ng-container matColumnDef="id">
+      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'transports.id' | translate }}</th>
+      <td mat-cell *matCellDef="let transport;">
+        <app-copy-to-clipboard-text [short]="true" text="{{ transport.id }}"></app-copy-to-clipboard-text>
+      </td>
+    </ng-container>
     <ng-container matColumnDef="remote">
       <th mat-header-cell *matHeaderCellDef class="bold">{{ 'transports.remote' | translate }}</th>
       <td mat-cell *matCellDef="let transport;">
@@ -67,9 +73,16 @@
         {{ transport.log.recv | autoScale }}
       </td>
     </ng-container>
-    <ng-container matColumnDef="x">
+    <ng-container matColumnDef="actions">
       <th mat-header-cell *matHeaderCellDef class="bold"></th>
       <td mat-cell *matCellDef="let transport;" class="text-right">
+        <mat-icon
+          class="table-delete-record ic-mini"
+          [matTooltip]="'routes.details.title' | translate"
+          (click)="details(transport)">
+          visibility
+        </mat-icon>
+        &nbsp;
         <mat-icon
           class="table-delete-record ic-mini"
           [matTooltip]="'transports.delete' | translate"

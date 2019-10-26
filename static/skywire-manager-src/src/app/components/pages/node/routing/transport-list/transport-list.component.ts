@@ -1,6 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Transport } from '../../../../../app.datatypes';
-import { MatDialog, MatTableDataSource, MatDialogRef } from '@angular/material';
+import { MatDialog, MatTableDataSource, MatDialogRef, MatDialogConfig } from '@angular/material';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
@@ -11,6 +11,7 @@ import { AppConfig } from '../../../../../app.config';
 import { ActivatedRoute } from '@angular/router';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
 import GeneralUtils from '../../../../../utils/generalUtils';
+import { TransportDetailsComponent } from './transport-details/transport-details.component';
 
 @Component({
   selector: 'app-transport-list',
@@ -20,7 +21,7 @@ import GeneralUtils from '../../../../../utils/generalUtils';
 export class TransportListComponent implements OnDestroy {
   @Input() nodePK: string;
 
-  displayedColumns: string[] = ['selection', 'remote', 'type', 'upload_total', 'download_total', 'x'];
+  displayedColumns: string[] = ['selection', 'id', 'remote', 'type', 'upload_total', 'download_total', 'actions'];
   dataSource = new MatTableDataSource<Transport>();
   selections = new Map<string, boolean>();
 
@@ -115,6 +116,14 @@ export class TransportListComponent implements OnDestroy {
 
   create() {
     this.dialog.open(CreateTransportComponent);
+  }
+
+  details(transport: Transport) {
+    const config = new MatDialogConfig();
+    config.data = transport;
+    config.autoFocus = false;
+    config.width = '1000px';
+    this.dialog.open(TransportDetailsComponent, config);
   }
 
   delete(id: string) {

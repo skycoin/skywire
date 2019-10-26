@@ -101,6 +101,7 @@ import { TabBarComponent } from './components/layout/tab-bar/tab-bar.component';
 import { RouteReuseStrategy } from '@angular/router';
 import { AppReuseStrategy } from './app.reuse-strategy';
 import { ConfirmationComponent } from './components/layout/confirmation/confirmation.component';
+import { TransportDetailsComponent } from './components/pages/node/routing/transport-list/transport-details/transport-details.component';
 
 @NgModule({
   declarations: [
@@ -171,6 +172,7 @@ import { ConfirmationComponent } from './components/layout/confirmation/confirma
     PaginatorComponent,
     TabBarComponent,
     ConfirmationComponent,
+    TransportDetailsComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -190,6 +192,7 @@ import { ConfirmationComponent } from './components/layout/confirmation/confirma
     BasicTerminalComponent,
     RouteDetailsComponent,
     ConfirmationComponent,
+    TransportDetailsComponent,
   ],
   imports: [
     BrowserModule,
