@@ -9,49 +9,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIDManager_ReserveNextID(t *testing.T) {
+func TestManager_ReserveNextID(t *testing.T) {
 	t.Run("simple call", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
-		nextID, free, err := reserveNextID()
+		nextID, free, err := m.ReserveNextID()
 		require.NoError(t, err)
 		require.NotNil(t, free)
-		v, ok := values[*nextID]
+		v, ok := m.values[*nextID]
 		require.True(t, ok)
 		require.Nil(t, v)
 		require.Equal(t, *nextID, uint16(1))
-		require.Equal(t, *nextID, lstID)
+		require.Equal(t, *nextID, m.lstID)
 
-		nextID, free, err = reserveNextID()
+		nextID, free, err = m.ReserveNextID()
 		require.NoError(t, err)
 		require.NotNil(t, free)
-		v, ok = values[*nextID]
+		v, ok = m.values[*nextID]
 		require.True(t, ok)
 		require.Nil(t, v)
 		require.Equal(t, *nextID, uint16(2))
-		require.Equal(t, *nextID, lstID)
+		require.Equal(t, *nextID, m.lstID)
 	})
 
 	t.Run("call on full manager", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 		for i := uint16(0); i < math.MaxUint16; i++ {
-			values[i] = nil
+			m.values[i] = nil
 		}
-		values[math.MaxUint16] = nil
+		m.values[math.MaxUint16] = nil
 
-		_, _, err := reserveNextID()
+		_, _, err := m.ReserveNextID()
 		require.Error(t, err)
 	})
 
 	t.Run("concurrent run", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
 		valsToReserve := 10000
 
 		errs := make(chan error)
 		for i := 0; i < valsToReserve; i++ {
 			go func() {
-				_, _, err := reserveNextID()
+				_, _, err := m.ReserveNextID()
 				errs <- err
 			}()
 		}
@@ -61,60 +61,60 @@ func TestIDManager_ReserveNextID(t *testing.T) {
 		}
 		close(errs)
 
-		require.Equal(t, lstID, uint16(valsToReserve))
+		require.Equal(t, m.lstID, uint16(valsToReserve))
 		for i := uint16(1); i < uint16(valsToReserve); i++ {
-			v, ok := values[i]
+			v, ok := m.values[i]
 			require.True(t, ok)
 			require.Nil(t, v)
 		}
 	})
 }
 
-func TestIDManager_Pop(t *testing.T) {
+func TestManager_Pop(t *testing.T) {
 	t.Run("simple call", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
 		v := "value"
 
-		values[1] = v
+		m.values[1] = v
 
-		gotV, err := pop(1)
+		gotV, err := m.Pop(1)
 		require.NoError(t, err)
 		require.NotNil(t, gotV)
 		require.Equal(t, gotV, v)
 
-		_, ok := values[1]
+		_, ok := m.values[1]
 		require.False(t, ok)
 	})
 
 	t.Run("no value", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
-		_, err := pop(1)
+		_, err := m.Pop(1)
 		require.Error(t, err)
 		require.True(t, strings.Contains(err.Error(), "no value"))
 	})
 
 	t.Run("value not set", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
-		values[1] = nil
+		m.values[1] = nil
 
-		_, err := pop(1)
+		_, err := m.Pop(1)
 		require.Error(t, err)
 		require.True(t, strings.Contains(err.Error(), "is not set"))
 	})
 
 	t.Run("concurrent run", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
-		values[1] = "value"
+		m.values[1] = "value"
 
 		concurrency := 1000
 		errs := make(chan error, concurrency)
 		for i := uint16(0); i < uint16(concurrency); i++ {
 			go func() {
-				_, err := pop(1)
+				_, err := m.Pop(1)
 				errs <- err
 			}()
 		}
@@ -129,39 +129,39 @@ func TestIDManager_Pop(t *testing.T) {
 		close(errs)
 		require.Equal(t, errsCount, concurrency-1)
 
-		_, ok := values[1]
+		_, ok := m.values[1]
 		require.False(t, ok)
 	})
 }
 
-func TestIDManager_Add(t *testing.T) {
+func TestManager_Add(t *testing.T) {
 	t.Run("simple call", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
 		id := uint16(1)
 		v := "value"
 
-		free, err := add(id, v)
+		free, err := m.Add(id, v)
 		require.Nil(t, err)
 		require.NotNil(t, free)
 
-		gotV, ok := values[id]
+		gotV, ok := m.values[id]
 		require.True(t, ok)
 		require.Equal(t, gotV, v)
 
 		v2 := "value2"
 
-		free, err = add(id, v2)
-		require.Equal(t, err, errValueAlreadyExists)
+		free, err = m.Add(id, v2)
+		require.Equal(t, err, ErrValueAlreadyExists)
 		require.Nil(t, free)
 
-		gotV, ok = values[id]
+		gotV, ok = m.values[id]
 		require.True(t, ok)
 		require.Equal(t, gotV, v)
 	})
 
 	t.Run("concurrent run", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
 		id := uint16(1)
 
@@ -171,7 +171,7 @@ func TestIDManager_Add(t *testing.T) {
 		errs := make(chan error)
 		for i := 0; i < concurrency; i++ {
 			go func(v int) {
-				_, err := add(id, v)
+				_, err := m.Add(id, v)
 				errs <- err
 				if err == nil {
 					addV <- v
@@ -192,59 +192,59 @@ func TestIDManager_Add(t *testing.T) {
 
 		require.Equal(t, concurrency-1, errsCount)
 
-		gotV, ok := values[id]
+		gotV, ok := m.values[id]
 		require.True(t, ok)
 		require.Equal(t, gotV, v)
 	})
 }
 
-func TestIDManager_Set(t *testing.T) {
+func TestManager_Set(t *testing.T) {
 	t.Run("simple call", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
-		nextID, _, err := reserveNextID()
+		nextID, _, err := m.ReserveNextID()
 		require.NoError(t, err)
 
 		v := "value"
 
-		err = set(*nextID, v)
+		err = m.Set(*nextID, v)
 		require.NoError(t, err)
-		gotV, ok := values[*nextID]
+		gotV, ok := m.values[*nextID]
 		require.True(t, ok)
 		require.Equal(t, gotV, v)
 	})
 
 	t.Run("id is not reserved", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
-		err := set(1, "value")
+		err := m.Set(1, "value")
 		require.Error(t, err)
 		require.True(t, strings.Contains(err.Error(), "not reserved"))
 
-		_, ok := values[1]
+		_, ok := m.values[1]
 		require.False(t, ok)
 	})
 
 	t.Run("value already exists", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
 		v := "value"
 
-		values[1] = v
+		m.values[1] = v
 
-		err := set(1, "value2")
+		err := m.Set(1, "value2")
 		require.Error(t, err)
-		gotV, ok := values[1]
+		gotV, ok := m.values[1]
 		require.True(t, ok)
 		require.Equal(t, gotV, v)
 	})
 
 	t.Run("concurrent run", func(t *testing.T) {
-		m := newIDManager()
+		m := New()
 
 		concurrency := 1000
 
-		nextIDPtr, _, err := reserveNextID()
+		nextIDPtr, _, err := m.ReserveNextID()
 		require.NoError(t, err)
 
 		nextID := *nextIDPtr
@@ -253,7 +253,7 @@ func TestIDManager_Set(t *testing.T) {
 		setV := make(chan int)
 		for i := 0; i < concurrency; i++ {
 			go func(v int) {
-				err := set(nextID, v)
+				err := m.Set(nextID, v)
 				errs <- err
 				if err == nil {
 					setV <- v
@@ -275,20 +275,20 @@ func TestIDManager_Set(t *testing.T) {
 
 		require.Equal(t, concurrency-1, errsCount)
 
-		gotV, ok := values[nextID]
+		gotV, ok := m.values[nextID]
 		require.True(t, ok)
 		require.Equal(t, gotV, v)
 	})
 }
 
-func TestIDManager_Get(t *testing.T) {
-	prepManagerWithVal := func(v interface{}) (*idManager, uint16) {
-		m := newIDManager()
+func TestManager_Get(t *testing.T) {
+	prepManagerWithVal := func(v interface{}) (*Manager, uint16) {
+		m := New()
 
-		nextID, _, err := reserveNextID()
+		nextID, _, err := m.ReserveNextID()
 		require.NoError(t, err)
 
-		err = set(*nextID, v)
+		err = m.Set(*nextID, v)
 		require.NoError(t, err)
 
 		return m, *nextID
@@ -299,15 +299,15 @@ func TestIDManager_Get(t *testing.T) {
 
 		m, id := prepManagerWithVal(v)
 
-		gotV, ok := get(id)
+		gotV, ok := m.Get(id)
 		require.True(t, ok)
 		require.Equal(t, gotV, v)
 
-		_, ok = get(100)
+		_, ok = m.Get(100)
 		require.False(t, ok)
 
-		values[2] = nil
-		gotV, ok = get(2)
+		m.values[2] = nil
+		gotV, ok = m.Get(2)
 		require.False(t, ok)
 		require.Nil(t, gotV)
 	})
@@ -325,7 +325,7 @@ func TestIDManager_Get(t *testing.T) {
 		res := make(chan getRes)
 		for i := 0; i < concurrency; i++ {
 			go func() {
-				val, ok := get(id)
+				val, ok := m.Get(id)
 				res <- getRes{
 					v:  val,
 					ok: ok,
@@ -342,8 +342,8 @@ func TestIDManager_Get(t *testing.T) {
 	})
 }
 
-func TestIDManager_DoRange(t *testing.T) {
-	m := newIDManager()
+func TestManager_DoRange(t *testing.T) {
+	m := New()
 
 	valsCount := 5
 
@@ -353,13 +353,13 @@ func TestIDManager_DoRange(t *testing.T) {
 	}
 
 	for i, v := range vals {
-		_, err := add(uint16(i), v)
+		_, err := m.Add(uint16(i), v)
 		require.NoError(t, err)
 	}
 
 	// run full range
 	gotVals := make([]int, 0, valsCount)
-	doRange(func(_ uint16, v interface{}) bool {
+	m.DoRange(func(_ uint16, v interface{}) bool {
 		val, ok := v.(int)
 		require.True(t, ok)
 
@@ -373,7 +373,7 @@ func TestIDManager_DoRange(t *testing.T) {
 	// run part range
 	var gotVal int
 	gotValsCount := 0
-	doRange(func(_ uint16, v interface{}) bool {
+	m.DoRange(func(_ uint16, v interface{}) bool {
 		if gotValsCount == 1 {
 			return false
 		}
@@ -397,19 +397,19 @@ func TestIDManager_DoRange(t *testing.T) {
 	require.True(t, found)
 }
 
-func TestIDManager_ConstructFreeFunc(t *testing.T) {
-	m := newIDManager()
+func TestManager_constructFreeFunc(t *testing.T) {
+	m := New()
 
 	id := uint16(1)
 	v := "value"
 
-	free, err := add(id, v)
+	free, err := m.Add(id, v)
 	require.NoError(t, err)
 	require.NotNil(t, free)
 
 	free()
 
-	gotV, ok := values[id]
+	gotV, ok := m.values[id]
 	require.False(t, ok)
 	require.Nil(t, gotV)
 }
