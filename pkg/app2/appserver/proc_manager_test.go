@@ -1,12 +1,11 @@
-package appcommon
+package appserver
 
 import (
 	"sort"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcManager_Exists(t *testing.T) {

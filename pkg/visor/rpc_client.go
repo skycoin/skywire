@@ -9,11 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2"
+
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -211,7 +212,7 @@ type mockRPCClient struct {
 	s         *Summary
 	tpTypes   []string
 	rt        routing.Table
-	appls     app.LogStore
+	appls     app2.LogStore
 	sync.RWMutex
 }
 

@@ -1,11 +1,12 @@
-package appcommon
+package appserver
 
 import (
 	"fmt"
-	"github.com/skycoin/skywire/pkg/app2/appserver"
 	"io"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 )
@@ -14,16 +15,16 @@ import (
 // the running proccess itself and the RPC server for
 // app/visor communication.
 type Proc struct {
-	key    Key
-	config Config
+	key    appcommon.Key
+	config appcommon.Config
 	log    *logging.Logger
-	rpcS   *appserver.Server
+	rpcS   *Server
 	cmd    *exec.Cmd
 }
 
 // NewProc constructs `Proc`.
-func NewProc(log *logging.Logger, c Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
-	key := GenerateAppKey()
+func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
+	key := appcommon.GenerateAppKey()
 
 	binaryPath := getBinaryPath(c.BinaryDir, c.Name, c.Version)
 
@@ -44,7 +45,7 @@ func NewProc(log *logging.Logger, c Config, args []string, stdout, stderr io.Wri
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	rpcS, err := appserver.New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", key)),
+	rpcS, err := New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", key)),
 		c.SockFile, key)
 	if err != nil {
 		return nil, err
