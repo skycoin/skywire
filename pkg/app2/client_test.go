@@ -1,6 +1,7 @@
 package app2
 
 import (
+	"os"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -13,6 +14,90 @@ import (
 	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 )
+
+func TestClientConfigFromEnv(t *testing.T) {
+	resetEnv := func(t *testing.T) {
+		err := os.Setenv("APP_KEY", "")
+		require.NoError(t, err)
+
+		err = os.Setenv("SW_UNIX", "")
+		require.NoError(t, err)
+
+		err = os.Setenv("VISOR_PK", "")
+		require.NoError(t, err)
+	}
+
+	t.Run("ok", func(t *testing.T) {
+		resetEnv(t)
+
+		visorPK, _ := cipher.GenerateKeyPair()
+
+		wantCfg := ClientConfig{
+			VisorPK:  visorPK,
+			SockFile: "sock.unix",
+			AppKey:   "key",
+		}
+
+		err := os.Setenv("APP_KEY", string(wantCfg.AppKey))
+		require.NoError(t, err)
+
+		err = os.Setenv("SW_UNIX", wantCfg.SockFile)
+		require.NoError(t, err)
+
+		err = os.Setenv("VISOR_PK", wantCfg.VisorPK.Hex())
+		require.NoError(t, err)
+
+		gotCfg, err := ClientConfigFromEnv()
+		require.NoError(t, err)
+		require.Equal(t, wantCfg, gotCfg)
+	})
+
+	t.Run("no app key", func(t *testing.T) {
+		resetEnv(t)
+
+		_, err := ClientConfigFromEnv()
+		require.Equal(t, err, ErrAppKeyNotProvided)
+	})
+
+	t.Run("no sock file", func(t *testing.T) {
+		resetEnv(t)
+
+		err := os.Setenv("APP_KEY", "val")
+		require.NoError(t, err)
+
+		_, err = ClientConfigFromEnv()
+		require.Equal(t, err, ErrSockFileNotProvided)
+	})
+
+	t.Run("no visor PK", func(t *testing.T) {
+		resetEnv(t)
+
+		err := os.Setenv("APP_KEY", "val")
+		require.NoError(t, err)
+
+		err = os.Setenv("SW_UNIX", "val")
+		require.NoError(t, err)
+
+		_, err = ClientConfigFromEnv()
+		require.Equal(t, err, ErrVisorPKNotProvided)
+	})
+
+	t.Run("invalid visor PK", func(t *testing.T) {
+		resetEnv(t)
+
+		err := os.Setenv("APP_KEY", "val")
+		require.NoError(t, err)
+
+		err = os.Setenv("SW_UNIX", "val")
+		require.NoError(t, err)
+
+		err = os.Setenv("VISOR_PK", "val")
+		require.NoError(t, err)
+
+		_, err = ClientConfigFromEnv()
+		require.Equal(t, err, ErrVisorPKInvalid)
+	})
+}
 
 func TestClient_Dial(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
