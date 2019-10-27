@@ -1,13 +1,27 @@
 package app2
 
-/*func TestListener_Accept(t *testing.T) {
+import (
+	"testing"
+
+	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/pkg/errors"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
+
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/stretchr/testify/require"
+)
+
+func TestListener_Accept(t *testing.T) {
 	l := logging.MustGetLogger("app2_listener")
 
 	lisID := uint16(1)
-	localPK, _ := cipher.GenerateKeyPair()
+	visorPK, _ := cipher.GenerateKeyPair()
 	local := appnet.Addr{
 		Net:    appnet.TypeDMSG,
-		PubKey: localPK,
+		PubKey: visorPK,
 		Port:   routing.Port(100),
 	}
 
@@ -28,7 +42,7 @@ package app2
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   idmanager.newIDManager(),
+			cm:   idmanager.New(),
 		}
 
 		wantConn := &Conn{
@@ -49,7 +63,7 @@ package app2
 		require.Equal(t, wantConn.remote, appConn.remote)
 		require.NotNil(t, appConn.freeConn)
 
-		connIfc, ok := lis.cm.values[acceptConnID]
+		connIfc, ok := lis.cm.Get(acceptConnID)
 		require.True(t, ok)
 
 		appConn, ok = connIfc.(*Conn)
@@ -77,13 +91,14 @@ package app2
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   idmanager.newIDManager(),
+			cm:   idmanager.New(),
 		}
 
-		lis.cm.values[acceptConnID] = nil
+		_, err := lis.cm.Add(acceptConnID, nil)
+		require.NoError(t, err)
 
 		conn, err := lis.Accept()
-		require.Equal(t, err, idmanager.errValueAlreadyExists)
+		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -108,13 +123,14 @@ package app2
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   idmanager.newIDManager(),
+			cm:   idmanager.New(),
 		}
 
-		lis.cm.values[acceptConnID] = nil
+		_, err := lis.cm.Add(acceptConnID, nil)
+		require.NoError(t, err)
 
 		conn, err := lis.Accept()
-		require.Equal(t, err, idmanager.errValueAlreadyExists)
+		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -130,7 +146,7 @@ package app2
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
-			cm:   idmanager.newIDManager(),
+			cm:   idmanager.New(),
 		}
 
 		conn, err := lis.Accept()
@@ -157,7 +173,7 @@ func TestListener_Close(t *testing.T) {
 		rpc := &MockRPCClient{}
 		rpc.On("CloseListener", lisID).Return(closeNoErr)
 
-		cm := idmanager.newIDManager()
+		cm := idmanager.New()
 
 		connID1 := uint16(1)
 		connID2 := uint16(2)
@@ -168,17 +184,17 @@ func TestListener_Close(t *testing.T) {
 		rpc.On("CloseConn", connID3).Return(closeNoErr)
 
 		conn1 := &Conn{id: connID1, rpc: rpc}
-		free1, err := cm.add(connID1, conn1)
+		free1, err := cm.Add(connID1, conn1)
 		require.NoError(t, err)
 		conn1.freeConn = free1
 
 		conn2 := &Conn{id: connID2, rpc: rpc}
-		free2, err := cm.add(connID2, conn2)
+		free2, err := cm.Add(connID2, conn2)
 		require.NoError(t, err)
 		conn2.freeConn = free2
 
 		conn3 := &Conn{id: connID3, rpc: rpc}
-		free3, err := cm.add(connID3, conn3)
+		free3, err := cm.Add(connID3, conn3)
 		require.NoError(t, err)
 		conn3.freeConn = free3
 
@@ -188,19 +204,19 @@ func TestListener_Close(t *testing.T) {
 			rpc:     rpc,
 			addr:    local,
 			cm:      cm,
-			freeLis: func() {},
+			freeLis: func() bool { return true },
 		}
 
 		err = lis.Close()
 		require.NoError(t, err)
 
-		_, ok := lis.cm.values[connID1]
+		_, ok := lis.cm.Get(connID1)
 		require.False(t, ok)
 
-		_, ok = lis.cm.values[connID2]
+		_, ok = lis.cm.Get(connID2)
 		require.False(t, ok)
 
-		_, ok = lis.cm.values[connID3]
+		_, ok = lis.cm.Get(connID3)
 		require.False(t, ok)
 	})
 
@@ -211,15 +227,35 @@ func TestListener_Close(t *testing.T) {
 		rpc.On("CloseListener", lisID).Return(lisCloseErr)
 
 		lis := &Listener{
-			log:  l,
-			id:   lisID,
-			rpc:  rpc,
-			addr: local,
-			cm:   idmanager.newIDManager(),
+			log:     l,
+			id:      lisID,
+			rpc:     rpc,
+			addr:    local,
+			cm:      idmanager.New(),
+			freeLis: func() bool { return true },
 		}
 
 		err := lis.Close()
 		require.Equal(t, err, lisCloseErr)
 	})
+
+	t.Run("already closed", func(t *testing.T) {
+		var noErr error
+
+		rpc := &MockRPCClient{}
+		rpc.On("CloseListener", lisID).Return(noErr)
+
+		lis := &Listener{
+			log:     l,
+			id:      lisID,
+			rpc:     rpc,
+			addr:    local,
+			cm:      idmanager.New(),
+			freeLis: func() bool { return false },
+		}
+
+		err := lis.Close()
+		require.Error(t, err)
+		require.Equal(t, "listener is already closed", err.Error())
+	})
 }
-*/
