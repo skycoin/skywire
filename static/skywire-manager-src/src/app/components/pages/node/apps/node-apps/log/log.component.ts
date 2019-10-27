@@ -1,12 +1,13 @@
 import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { AppsService } from '../../../../../../services/apps.service';
 import { LogMessage, Application } from '../../../../../../app.datatypes';
-import { MAT_DIALOG_DATA } from '@angular/material';
+import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog } from '@angular/material';
 import { Subscription, of } from 'rxjs';
 import { NodeComponent } from '../../../node.component';
 import { delay, flatMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 import { ErrorsnackbarService } from '../../../../../../services/errorsnackbar.service';
+import { LogFilterComponent, LogsFilter } from './log-filter/log-filter.component';
 
 @Component({
   selector: 'app-log',
@@ -18,6 +19,10 @@ export class LogComponent implements OnInit, OnDestroy {
 
   logMessages: LogMessage[] = [];
   loading = false;
+  currentFilter: LogsFilter = {
+    text: 'apps.log.filter.7-days',
+    days: 7
+  };
 
   private shouldShowError = true;
   private subscription: Subscription;
@@ -27,6 +32,7 @@ export class LogComponent implements OnInit, OnDestroy {
     private appsService: AppsService,
     private translate: TranslateService,
     private errorSnackBar: ErrorsnackbarService,
+    private dialog: MatDialog,
   ) { }
 
   ngOnInit() {
@@ -37,13 +43,28 @@ export class LogComponent implements OnInit, OnDestroy {
     this.removeSubscription();
   }
 
+  filter() {
+    const config = new MatDialogConfig();
+    config.data = this.currentFilter;
+    config.autoFocus = false;
+    config.width = '480px';
+    this.dialog.open(LogFilterComponent, config).afterClosed().subscribe(result => {
+      if (result) {
+        this.currentFilter = result;
+        this.logMessages = [];
+
+        this.loadData(0);
+      }
+    });
+  }
+
   private loadData(delayMilliseconds: number) {
     this.removeSubscription();
 
     this.loading = true;
     this.subscription = of(1).pipe(
       delay(delayMilliseconds),
-      flatMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name))
+      flatMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name, this.currentFilter.days))
     ).subscribe(
       (log) => this.onLogsReceived(log),
       this.onLogsError.bind(this)

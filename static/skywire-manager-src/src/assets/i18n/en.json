@@ -209,7 +209,18 @@
     },
     "log": {
       "title": "Log",
-      "empty": "There are no log messages"
+      "empty": "There are no log messages for the selected time range.",
+      "filter-button": "Only showing logs generated since:",
+      "filter": {
+        "title": "Filter",
+        "filter": "Only show logs generated since",
+        "7-days": "The last 7 days",
+        "1-month": "The last 30 days",
+        "3-months": "The last 3 months",
+        "6-months": "The last 6 months",
+        "1-year": "The last year",
+        "all": "Show all"
+      }
     },
     "config": {
       "title": "Startup configuration"

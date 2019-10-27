@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { ClientConnectionService } from './client-connection.service';
 import { switchMap, map } from 'rxjs/operators';
 import { ApiService } from './api.service';
+import { formatDate } from '@angular/common';
 
 @Injectable({
   providedIn: 'root'
@@ -23,8 +24,11 @@ export class AppsService {
     // return this.nodeService.nodeRequestWithRefresh('run/closeApp', {key}).pipe();
   }
 
-  getLogMessages(nodeKey: string, appName: string) {
-    return this.apiService.get(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}/logs`,
+  getLogMessages(nodeKey: string, appName: string, days: number) {
+    const since = days !== -1 ? Date.now() - (days * 86400000) : 0;
+    const sinceString = formatDate(since, 'yyyy-MM-ddTHH:mm:ssZZZZZ', 'en-US');
+
+    return this.apiService.get(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}/logs?since=${sinceString}`,
       { api2: true }
     ).pipe(map(response => response.logs));
   }

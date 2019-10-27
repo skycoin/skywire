@@ -102,6 +102,7 @@ import { RouteReuseStrategy } from '@angular/router';
 import { AppReuseStrategy } from './app.reuse-strategy';
 import { ConfirmationComponent } from './components/layout/confirmation/confirmation.component';
 import { TransportDetailsComponent } from './components/pages/node/routing/transport-list/transport-details/transport-details.component';
+import { LogFilterComponent } from './components/pages/node/apps/node-apps/log/log-filter/log-filter.component';
 
 @NgModule({
   declarations: [
@@ -173,6 +174,7 @@ import { TransportDetailsComponent } from './components/pages/node/routing/trans
     TabBarComponent,
     ConfirmationComponent,
     TransportDetailsComponent,
+    LogFilterComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -193,6 +195,7 @@ import { TransportDetailsComponent } from './components/pages/node/routing/trans
     RouteDetailsComponent,
     ConfirmationComponent,
     TransportDetailsComponent,
+    LogFilterComponent,
   ],
   imports: [
     BrowserModule,
