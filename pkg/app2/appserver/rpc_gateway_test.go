@@ -2,12 +2,15 @@ package appserver
 
 import (
 	"context"
-	"errors"
 	"math"
 	"net"
 	"strings"
 	"testing"
 
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
+
+	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -29,7 +32,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 		localPort := routing.Port(100)
 
 		dialCtx := context.Background()
-		dialConn := dmsg.NewTransport(nil, nil, dmsg.Addr{Port: uint16(localPort)}, dmsg.Addr{}, 0, func(_ uint16) {})
+		dialConn := dmsg.NewTransport(nil, nil, dmsg.Addr{Port: uint16(localPort)}, dmsg.Addr{}, 0, 10, func() {})
 		var dialErr error
 
 		n := &appnet.MockNetworker{}
@@ -49,14 +52,19 @@ func TestRPCGateway_Dial(t *testing.T) {
 
 	t.Run("no more slots for a new conn", func(t *testing.T) {
 		rpc := newRPCGateway(l)
-		for i := uint16(0); i < math.MaxUint16; i++ {
-			rpc.cm.values[i] = nil
+		for i, _, err := rpc.cm.ReserveNextID(); i == nil || *i != 0; i, _, err = rpc.cm.ReserveNextID() {
+			require.NoError(t, err)
 		}
-		rpc.cm.values[math.MaxUint16] = nil
+
+		for i := uint16(0); i < math.MaxUint16; i++ {
+			err := rpc.cm.Set(i, nil)
+			require.NoError(t, err)
+		}
+		err := rpc.cm.Set(math.MaxUint16, nil)
 
 		var resp DialResp
-		err := rpc.Dial(&dialAddr, &resp)
-		require.Equal(t, err, idmanager.errNoMoreAvailableValues)
+		err = rpc.Dial(&dialAddr, &resp)
+		require.Equal(t, err, idmanager.ErrNoMoreAvailableValues)
 	})
 
 	t.Run("dial error", func(t *testing.T) {
@@ -82,10 +90,12 @@ func TestRPCGateway_Dial(t *testing.T) {
 	t.Run("error wrapping conn", func(t *testing.T) {
 		appnet.ClearNetworkers()
 
+		remoteAddr, localAddr := &appcommon.MockAddr{}, &appcommon.MockAddr{}
+
 		dialCtx := context.Background()
-		dialConn := &MockConn{}
-		dialConn.On("LocalAddr").Return(routing.Addr{})
-		dialConn.On("RemoteAddr").Return(routing.Addr{})
+		dialConn := &appcommon.MockConn{}
+		dialConn.On("LocalAddr").Return(localAddr)
+		dialConn.On("RemoteAddr").Return(remoteAddr)
 		var dialErr error
 
 		n := &appnet.MockNetworker{}
@@ -132,15 +142,21 @@ func TestRPCGateway_Listen(t *testing.T) {
 
 	t.Run("no more slots for a new listener", func(t *testing.T) {
 		rpc := newRPCGateway(l)
-		for i := uint16(0); i < math.MaxUint16; i++ {
-			rpc.lm.values[i] = nil
+		for i, _, err := rpc.lm.ReserveNextID(); i == nil || *i != 0; i, _, err = rpc.lm.ReserveNextID() {
+			require.NoError(t, err)
 		}
-		rpc.lm.values[math.MaxUint16] = nil
+
+		for i := uint16(0); i < math.MaxUint16; i++ {
+			err := rpc.lm.Set(i, nil)
+			require.NoError(t, err)
+		}
+		err := rpc.lm.Set(math.MaxUint16, nil)
+		require.NoError(t, err)
 
 		var lisID uint16
 
-		err := rpc.Listen(&listenAddr, &lisID)
-		require.Equal(t, err, idmanager.errNoMoreAvailableValues)
+		err = rpc.Listen(&listenAddr, &lisID)
+		require.Equal(t, err, idmanager.ErrNoMoreAvailableValues)
 	})
 
 	t.Run("listen error", func(t *testing.T) {
@@ -174,7 +190,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 		acceptConn := &dmsg.Transport{}
 		var acceptErr error
 
-		lis := &MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Accept").Return(acceptConn, acceptErr)
 
 		lisID := addListener(t, rpc, lis)
@@ -209,27 +225,36 @@ func TestRPCGateway_Accept(t *testing.T) {
 
 	t.Run("no more slots for a new conn", func(t *testing.T) {
 		rpc := newRPCGateway(l)
-		for i := uint16(0); i < math.MaxUint16; i++ {
-			rpc.cm.values[i] = nil
-		}
-		rpc.cm.values[math.MaxUint16] = nil
 
-		lisID := addListener(t, rpc, &MockListener{})
+		for i, _, err := rpc.cm.ReserveNextID(); i == nil || *i != 0; i, _, err = rpc.cm.ReserveNextID() {
+			require.NoError(t, err)
+		}
+
+		for i := uint16(0); i < math.MaxUint16; i++ {
+			err := rpc.cm.Set(i, nil)
+			require.NoError(t, err)
+		}
+		err := rpc.cm.Set(math.MaxUint16, nil)
+		require.NoError(t, err)
+
+		lisID := addListener(t, rpc, &appcommon.MockListener{})
 
 		var resp AcceptResp
-		err := rpc.Accept(&lisID, &resp)
-		require.Equal(t, err, idmanager.errNoMoreAvailableValues)
+		err = rpc.Accept(&lisID, &resp)
+		require.Equal(t, err, idmanager.ErrNoMoreAvailableValues)
 	})
 
 	t.Run("error wrapping conn", func(t *testing.T) {
 		rpc := newRPCGateway(l)
 
-		acceptConn := &MockConn{}
-		acceptConn.On("LocalAddr").Return(routing.Addr{})
-		acceptConn.On("RemoteAddr").Return(routing.Addr{})
+		remoteAddr, localAddr := &appcommon.MockAddr{}, &appcommon.MockAddr{}
+
+		acceptConn := &appcommon.MockConn{}
+		acceptConn.On("LocalAddr").Return(localAddr)
+		acceptConn.On("RemoteAddr").Return(remoteAddr)
 		var acceptErr error
 
-		lis := &MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Accept").Return(acceptConn, acceptErr)
 
 		lisID := addListener(t, rpc, lis)
@@ -245,7 +270,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 		var acceptConn net.Conn
 		acceptErr := errors.New("accept error")
 
-		lis := &MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Accept").Return(acceptConn, acceptErr)
 
 		lisID := addListener(t, rpc, lis)
@@ -267,7 +292,7 @@ func TestRPCGateway_Write(t *testing.T) {
 
 		var writeErr error
 
-		conn := &MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Write", writeBuff).Return(writeN, writeErr)
 
 		connID := addConn(t, rpc, conn)
@@ -320,7 +345,7 @@ func TestRPCGateway_Write(t *testing.T) {
 
 		writeErr := errors.New("write error")
 
-		conn := &MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Write", writeBuff).Return(writeN, writeErr)
 
 		connID := addConn(t, rpc, conn)
@@ -349,7 +374,7 @@ func TestRPCGateway_Read(t *testing.T) {
 		readN := 10
 		var readErr error
 
-		conn := &MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Read", readBuf).Return(readN, readErr)
 
 		connID := addConn(t, rpc, conn)
@@ -408,7 +433,7 @@ func TestRPCGateway_Read(t *testing.T) {
 		readN := 0
 		readErr := errors.New("read error")
 
-		conn := &MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Read", readBuf).Return(readN, readErr)
 
 		connID := addConn(t, rpc, conn)
@@ -432,14 +457,14 @@ func TestRPCGateway_CloseConn(t *testing.T) {
 
 		var closeErr error
 
-		conn := &MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Close").Return(closeErr)
 
 		connID := addConn(t, rpc, conn)
 
 		err := rpc.CloseConn(&connID, nil)
 		require.NoError(t, err)
-		_, ok := rpc.cm.values[connID]
+		_, ok := rpc.cm.Get(connID)
 		require.False(t, ok)
 	})
 
@@ -468,7 +493,7 @@ func TestRPCGateway_CloseConn(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		conn := &MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Close").Return(closeErr)
 
 		connID := addConn(t, rpc, conn)
@@ -486,14 +511,14 @@ func TestRPCGateway_CloseListener(t *testing.T) {
 
 		var closeErr error
 
-		lis := &MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Close").Return(closeErr)
 
 		lisID := addListener(t, rpc, lis)
 
 		err := rpc.CloseListener(&lisID, nil)
 		require.NoError(t, err)
-		_, ok := rpc.lm.values[lisID]
+		_, ok := rpc.cm.Get(lisID)
 		require.False(t, ok)
 	})
 
@@ -522,7 +547,7 @@ func TestRPCGateway_CloseListener(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		lis := &MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Close").Return(closeErr)
 
 		lisID := addListener(t, rpc, lis)
@@ -544,20 +569,20 @@ func prepAddr(nType appnet.Type) appnet.Addr {
 }
 
 func addConn(t *testing.T, rpc *RPCGateway, conn net.Conn) uint16 {
-	connID, _, err := rpc.cm.reserveNextID()
+	connID, _, err := rpc.cm.ReserveNextID()
 	require.NoError(t, err)
 
-	err = rpc.cm.set(*connID, conn)
+	err = rpc.cm.Set(*connID, conn)
 	require.NoError(t, err)
 
 	return *connID
 }
 
 func addListener(t *testing.T, rpc *RPCGateway, lis net.Listener) uint16 {
-	lisID, _, err := rpc.lm.reserveNextID()
+	lisID, _, err := rpc.lm.ReserveNextID()
 	require.NoError(t, err)
 
-	err = rpc.lm.set(*lisID, lis)
+	err = rpc.lm.Set(*lisID, lis)
 	require.NoError(t, err)
 
 	return *lisID

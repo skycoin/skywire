@@ -1,4 +1,4 @@
-package appcommon
+package appserver
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/app2/apputil"
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 
 	"github.com/pkg/errors"
 
@@ -34,8 +34,8 @@ func NewProcManager(log *logging.Logger) *ProcManager {
 }
 
 // Run runs the application according to its config and additional args.
-func (m *ProcManager) Run(log *logging.Logger, c Config, args []string,
-	stdout, stderr io.Writer) (ProcID, error) {
+func (m *ProcManager) Run(log *logging.Logger, c appcommon.Config, args []string,
+	stdout, stderr io.Writer) (appcommon.ProcID, error) {
 	if m.Exists(c.Name) {
 		return 0, errAppAlreadyExists
 	}
@@ -60,12 +60,12 @@ func (m *ProcManager) Run(log *logging.Logger, c Config, args []string,
 	m.procs[c.Name] = p
 	m.mx.Unlock()
 
-	return apputil.ProcID(p.cmd.Process.Pid), nil
+	return appcommon.ProcID(p.cmd.Process.Pid), nil
 }
 
 // Exists check whether app exists in the manager instance.
 func (m *ProcManager) Exists(name string) bool {
-	m.mx.RUnlock()
+	m.mx.RLock()
 	defer m.mx.RUnlock()
 
 	_, ok := m.procs[name]
