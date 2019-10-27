@@ -1,7 +1,8 @@
 <div class="cursor-pointer wrapper"
      [clipboard]="text"
      (copyEvent)="onCopyToClipboardClicked()"
-     [matTooltip]="'copy.tooltip' | translate"
+     [matTooltip]="(!short ? 'copy.tooltip' : 'copy.tooltip-with-text') | translate:{ text: text }"
+     [matTooltipClass]="{ 'tooltip-word-break': true }"
 >
   <ng-container *ngIf="short">
     <span class="nowrap">{{ shortText }}</span>

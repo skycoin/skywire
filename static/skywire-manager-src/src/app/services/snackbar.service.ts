@@ -9,15 +9,15 @@ export class SnackbarService {
   constructor(private snackBar: MatSnackBar) { }
 
   public showError(text: string, textTranslationParams: any = null) {
-    this.show(text, textTranslationParams, SnackbarIcons.Error, SnackbarColors.Red, 10000000);
+    this.show(text, textTranslationParams, SnackbarIcons.Error, SnackbarColors.Red, 10000);
   }
 
   public showWarning(text: string, textTranslationParams: any = null) {
-    this.show(text, textTranslationParams, SnackbarIcons.Warning, SnackbarColors.Yellow, 10000000);
+    this.show(text, textTranslationParams, SnackbarIcons.Warning, SnackbarColors.Yellow, 10000);
   }
 
   public showDone(text: string, textTranslationParams: any = null) {
-    this.show(text, textTranslationParams, SnackbarIcons.Done, SnackbarColors.Green, 5000000);
+    this.show(text, textTranslationParams, SnackbarIcons.Done, SnackbarColors.Green, 5000);
   }
 
   private show(text: string, textTranslationParams: any, icon: SnackbarIcons, color: SnackbarColors, duration: number) {

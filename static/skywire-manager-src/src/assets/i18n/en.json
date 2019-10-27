@@ -334,9 +334,8 @@
   },
 
   "copy": {
-    "click-to-copy": "Click to copy",
-    "click-to-see": "Click to see full text",
-    "tooltip": "Copy to clipboard",
+    "tooltip": "Click to copy",
+    "tooltip-with-text": "{{ text }} (Click to copy)",
     "copied": "Copied!"
   },
 

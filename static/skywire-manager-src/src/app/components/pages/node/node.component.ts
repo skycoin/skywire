@@ -65,6 +65,7 @@ export class NodeComponent implements OnInit, OnDestroy {
 
     this.navigationsSubscription = router.events.subscribe(event => {
       if (event['urlAfterRedirects']) {
+        NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
         this.lastUrl = event['urlAfterRedirects'] as string;
         this.updateTabBar();
       }
@@ -72,7 +73,6 @@ export class NodeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     this.refresh(0);
 
     this.ngZone.runOutsideAngular(() => {
@@ -91,21 +91,18 @@ export class NodeComponent implements OnInit, OnDestroy {
         {
           icon: 'shuffle',
           label: 'actions.menu.routing',
-          linkParts: this.node ? ['/nodes', this.node.local_pk, 'routing'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'routing'] : null,
         },
         {
           icon: 'apps',
           label: 'actions.menu.apps',
-          linkParts: this.node ? ['/nodes', this.node.local_pk, 'apps'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
         }
       ];
 
       this.selectedTabIndex = 0;
       if (this.lastUrl.includes('/apps')) {
         this.selectedTabIndex = 1;
-      }
-      if (!this.node) {
-        this.selectedTabIndex = -1;
       }
     } else if (
       this.lastUrl && (this.lastUrl.includes('/transports') ||

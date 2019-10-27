@@ -1,12 +1,12 @@
 import { Component, Input, OnInit, ViewChild } from '@angular/core';
-import { Node } from '../../../../app.datatypes';
 import { MatDialog } from '@angular/material';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { Router } from '@angular/router';
-import {UpdateNodeComponent} from './update-node/update-node.component';
+import { UpdateNodeComponent } from './update-node/update-node.component';
 import { ButtonComponent } from '../../../layout/button/button.component';
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
 import { SnackbarService } from '../../../../services/snackbar.service';
+import { NodeComponent } from '../node.component';
 
 @Component({
   selector: 'app-actions',
@@ -14,7 +14,6 @@ import { SnackbarService } from '../../../../services/snackbar.service';
   styleUrls: ['./actions.component.scss']
 })
 export class ActionsComponent implements OnInit {
-  @Input() node: Node;
   @ViewChild('updateButton') updateButton: ButtonComponent;
 
   constructor(
@@ -60,8 +59,7 @@ export class ActionsComponent implements OnInit {
     this.dialog.open(BasicTerminalComponent, {
       width: '1000px',
       data: {
-        addr: this.node.tcp_addr,
-        pk: this.node.local_pk,
+        pk: NodeComponent.getCurrentNodeKey(),
       },
     });
   }

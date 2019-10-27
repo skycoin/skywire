@@ -74,7 +74,7 @@ export class BasicTerminalComponent implements OnInit, OnDestroy {
   }
 
   private waitForInput() {
-    this.terminal.input(this.translate.instant('actions.terminal.input-start', { address: this.data.addr }), (input) => {
+    this.terminal.input(this.translate.instant('actions.terminal.input-start', { address: this.data.pk }), (input) => {
       this.history.push(input);
       this.historyIndex = this.history.length;
       this.currentInputText = '';

@@ -1,5 +1,5 @@
 <app-sidenav-content>
-  <app-actions [node]="node"></app-actions>
+  <app-actions></app-actions>
 </app-sidenav-content>
 
 <div *ngIf="!node" class="flex-column full-height full-width">
@@ -9,7 +9,6 @@
       [tabsData]="tabsData"
       [selectedTabIndex]="selectedTabIndex"
       [showUpdateButton]="false"
-      [disableMouse]="true"
     ></app-tab-bar>
   </div>
   <app-loading-indicator></app-loading-indicator>

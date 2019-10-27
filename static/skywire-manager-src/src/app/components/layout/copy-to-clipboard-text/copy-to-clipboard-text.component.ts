@@ -1,4 +1,4 @@
-import {Component, Input, OnInit} from '@angular/core';
+import {Component, Input} from '@angular/core';
 import { SnackbarService } from '../../../services/snackbar.service';
 
 @Component({
@@ -6,12 +6,11 @@ import { SnackbarService } from '../../../services/snackbar.service';
   templateUrl: './copy-to-clipboard-text.component.html',
   styleUrls: ['./copy-to-clipboard-text.component.css']
 })
-export class CopyToClipboardTextComponent implements OnInit {
+export class CopyToClipboardTextComponent {
   @Input() public short = false;
   @Input() text: string;
   @Input() shortTextLength = 6;
   // @ViewChild(MatMenuTrigger) trigger: MatMenuTrigger;
-  tooltipText: string;
 
   get shortText() {
     const lastTextIndex = this.text.length,
@@ -24,14 +23,6 @@ export class CopyToClipboardTextComponent implements OnInit {
   constructor(
     private snackbarService: SnackbarService,
   ) {}
-
-  ngOnInit() {
-    if (this.short) {
-      this.tooltipText = 'copy.click-to-see';
-    } else {
-      this.tooltipText = 'copy.click-to-copy';
-    }
-  }
 
   // @HostListener('click') onClick() {
   //   this.trigger.openMenu();
