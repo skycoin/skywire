@@ -1,19 +1,6 @@
 package app2
 
-import (
-	"errors"
-	"github.com/skycoin/skywire/pkg/app2/idmanager"
-	"testing"
-
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/stretchr/testify/require"
-
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/routing"
-)
-
-func TestListener_Accept(t *testing.T) {
+/*func TestListener_Accept(t *testing.T) {
 	l := logging.MustGetLogger("app2_listener")
 
 	lisID := uint16(1)
@@ -235,3 +222,4 @@ func TestListener_Close(t *testing.T) {
 		require.Equal(t, err, lisCloseErr)
 	})
 }
+*/

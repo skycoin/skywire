@@ -110,6 +110,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	conn.freeConnMx.Lock()
 	free, err := c.cm.Add(connID, conn)
 	if err != nil {
+		conn.freeConnMx.Unlock()
 		if err := conn.Close(); err != nil {
 			c.log.WithError(err).Error("error closing conn")
 		}
@@ -146,6 +147,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 	listener.freeLisMx.Lock()
 	freeLis, err := c.lm.Add(lisID, listener)
 	if err != nil {
+		listener.freeLisMx.Unlock()
 		if err := listener.Close(); err != nil {
 			c.log.WithError(err).Error("error closing listener")
 		}
