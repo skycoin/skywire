@@ -45,6 +45,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 	conn.freeConnMx.Lock()
 	free, err := l.cm.Add(connID, conn)
 	if err != nil {
+		conn.freeConnMx.Unlock()
 		if err := conn.Close(); err != nil {
 			l.log.WithError(err).Error("error closing listener")
 		}

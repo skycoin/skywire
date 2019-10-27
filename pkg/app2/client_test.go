@@ -1,10 +1,10 @@
 package app2
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
+	"github.com/pkg/errors"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -16,8 +16,7 @@ import (
 
 func TestClient_Dial(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
-	localPK, _ := cipher.GenerateKeyPair()
-	pid := appcommon.ProcID(1)
+	visorPK, _ := cipher.GenerateKeyPair()
 
 	remotePK, _ := cipher.GenerateKeyPair()
 	remotePort := routing.Port(120)
@@ -35,14 +34,14 @@ func TestClient_Dial(t *testing.T) {
 		rpc := &MockRPCClient{}
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
 		wantConn := &Conn{
 			id:  dialConnID,
 			rpc: rpc,
 			local: appnet.Addr{
 				Net:    remote.Net,
-				PubKey: localPK,
+				PubKey: visorPK,
 				Port:   dialLocalPort,
 			},
 			remote: remote,
@@ -60,7 +59,7 @@ func TestClient_Dial(t *testing.T) {
 		require.Equal(t, wantConn.remote, appConn.remote)
 		require.NotNil(t, appConn.freeConn)
 
-		cmConnIfc, ok := cl.cm.values[appConn.id]
+		cmConnIfc, ok := cl.cm.Get(appConn.id)
 		require.True(t, ok)
 		require.NotNil(t, cmConnIfc)
 
@@ -80,13 +79,13 @@ func TestClient_Dial(t *testing.T) {
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 		rpc.On("CloseConn", dialConnID).Return(closeErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
-		_, err := cl.cm.add(dialConnID, nil)
+		_, err := cl.cm.Add(dialConnID, nil)
 		require.NoError(t, err)
 
 		conn, err := cl.Dial(remote)
-		require.Equal(t, err, idmanager.errValueAlreadyExists)
+		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -101,13 +100,13 @@ func TestClient_Dial(t *testing.T) {
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 		rpc.On("CloseConn", dialConnID).Return(closeErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
-		_, err := cl.cm.add(dialConnID, nil)
+		_, err := cl.cm.Add(dialConnID, nil)
 		require.NoError(t, err)
 
 		conn, err := cl.Dial(remote)
-		require.Equal(t, err, idmanager.errValueAlreadyExists)
+		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, conn)
 	})
 
@@ -117,7 +116,7 @@ func TestClient_Dial(t *testing.T) {
 		rpc := &MockRPCClient{}
 		rpc.On("Dial", remote).Return(uint16(0), routing.Port(0), dialErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
 		conn, err := cl.Dial(remote)
 		require.Equal(t, dialErr, err)
@@ -127,13 +126,12 @@ func TestClient_Dial(t *testing.T) {
 
 func TestClient_Listen(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
-	localPK, _ := cipher.GenerateKeyPair()
-	pid := appcommon.ProcID(1)
+	visorPK, _ := cipher.GenerateKeyPair()
 
 	port := routing.Port(1)
 	local := appnet.Addr{
 		Net:    appnet.TypeDMSG,
-		PubKey: localPK,
+		PubKey: visorPK,
 		Port:   port,
 	}
 
@@ -144,7 +142,7 @@ func TestClient_Listen(t *testing.T) {
 		rpc := &MockRPCClient{}
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
 		wantListener := &Listener{
 			id:   listenLisID,
@@ -174,13 +172,13 @@ func TestClient_Listen(t *testing.T) {
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 		rpc.On("CloseListener", listenLisID).Return(closeErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
-		_, err := cl.lm.add(listenLisID, nil)
+		_, err := cl.lm.Add(listenLisID, nil)
 		require.NoError(t, err)
 
 		listener, err := cl.Listen(appnet.TypeDMSG, port)
-		require.Equal(t, err, idmanager.errValueAlreadyExists)
+		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, listener)
 	})
 
@@ -194,13 +192,13 @@ func TestClient_Listen(t *testing.T) {
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 		rpc.On("CloseListener", listenLisID).Return(closeErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
-		_, err := cl.lm.add(listenLisID, nil)
+		_, err := cl.lm.Add(listenLisID, nil)
 		require.NoError(t, err)
 
 		listener, err := cl.Listen(appnet.TypeDMSG, port)
-		require.Equal(t, err, idmanager.errValueAlreadyExists)
+		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, listener)
 	})
 
@@ -210,7 +208,7 @@ func TestClient_Listen(t *testing.T) {
 		rpc := &MockRPCClient{}
 		rpc.On("Listen", local).Return(uint16(0), listenErr)
 
-		cl := NewClient(l, localPK, pid, rpc)
+		cl := prepClient(l, visorPK, rpc)
 
 		listener, err := cl.Listen(appnet.TypeDMSG, port)
 		require.Equal(t, listenErr, err)
@@ -220,8 +218,7 @@ func TestClient_Listen(t *testing.T) {
 
 func TestClient_Close(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
-	localPK, _ := cipher.GenerateKeyPair()
-	pid := appcommon.ProcID(1)
+	visorPK, _ := cipher.GenerateKeyPair()
 
 	var closeNoErr error
 	closeErr := errors.New("close error")
@@ -234,15 +231,15 @@ func TestClient_Close(t *testing.T) {
 	rpc.On("CloseListener", lisID1).Return(closeNoErr)
 	rpc.On("CloseListener", lisID2).Return(closeErr)
 
-	lm := idmanager.newIDManager()
+	lm := idmanager.New()
 
-	lis1 := &Listener{id: lisID1, rpc: rpc, cm: idmanager.newIDManager()}
-	freeLis1, err := lm.add(lisID1, lis1)
+	lis1 := &Listener{id: lisID1, rpc: rpc, cm: idmanager.New()}
+	freeLis1, err := lm.Add(lisID1, lis1)
 	require.NoError(t, err)
 	lis1.freeLis = freeLis1
 
-	lis2 := &Listener{id: lisID2, rpc: rpc, cm: idmanager.newIDManager()}
-	freeLis2, err := lm.add(lisID2, lis2)
+	lis2 := &Listener{id: lisID2, rpc: rpc, cm: idmanager.New()}
+	freeLis2, err := lm.Add(lisID2, lis2)
 	require.NoError(t, err)
 	lis2.freeLis = freeLis2
 
@@ -252,31 +249,41 @@ func TestClient_Close(t *testing.T) {
 	rpc.On("CloseConn", connID1).Return(closeNoErr)
 	rpc.On("CloseConn", connID2).Return(closeErr)
 
-	cm := idmanager.newIDManager()
+	cm := idmanager.New()
 
 	conn1 := &Conn{id: connID1, rpc: rpc}
-	freeConn1, err := cm.add(connID1, conn1)
+	freeConn1, err := cm.Add(connID1, conn1)
 	require.NoError(t, err)
 	conn1.freeConn = freeConn1
 
 	conn2 := &Conn{id: connID2, rpc: rpc}
-	freeConn2, err := cm.add(connID2, conn2)
+	freeConn2, err := cm.Add(connID2, conn2)
 	require.NoError(t, err)
 	conn2.freeConn = freeConn2
 
-	cl := NewClient(l, localPK, pid, rpc)
+	cl := prepClient(l, visorPK, rpc)
 	cl.cm = cm
 	cl.lm = lm
 
 	cl.Close()
 
-	_, ok := lm.values[lisID1]
+	_, ok := lm.Get(lisID1)
 	require.False(t, ok)
-	_, ok = lm.values[lisID2]
+	_, ok = lm.Get(lisID2)
 	require.False(t, ok)
 
-	_, ok = cm.values[connID1]
+	_, ok = cm.Get(connID1)
 	require.False(t, ok)
-	_, ok = cm.values[connID2]
+	_, ok = cm.Get(connID2)
 	require.False(t, ok)
+}
+
+func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc RPCClient) *Client {
+	return &Client{
+		log:     l,
+		visorPK: visorPK,
+		rpc:     rpc,
+		lm:      idmanager.New(),
+		cm:      idmanager.New(),
+	}
 }
