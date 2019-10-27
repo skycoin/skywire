@@ -4,13 +4,12 @@ import { Node } from '../../../app.datatypes';
 import { Subscription, of, timer } from 'rxjs';
 import { MatDialog, MatTableDataSource } from '@angular/material';
 import { Router } from '@angular/router';
-import { TranslateService } from '@ngx-translate/core';
-import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService } from '../../../services/storage.service';
 import { delay, flatMap, tap } from 'rxjs/operators';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
+import { SnackbarService } from '../../../services/snackbar.service';
 
 @Component({
   selector: 'app-node-list',
@@ -34,12 +33,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
   constructor(
     private nodeService: NodeService,
     private router: Router,
-    private errorSnackBar: ErrorsnackbarService,
     private dialog: MatDialog,
-    private translate: TranslateService,
     private authService: AuthService,
     public storageService: StorageService,
     private ngZone: NgZone,
+    private snackbarService: SnackbarService,
   ) {
     this.tabsData = [
       {
@@ -117,9 +115,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.ngZone.run(() => {
             if (!this.errorsUpdating) {
               if (this.loading) {
-                this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+                this.snackbarService.showError('common.loading-error');
               } else {
-                this.errorSnackBar.open(this.translate.instant('nodes.error-load', { error }));
+                this.snackbarService.showError('nodes.error-load', { error });
               }
             }
 
@@ -140,7 +138,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   logout() {
     this.authService.logout().subscribe(
       () => this.router.navigate(['login']),
-      () => this.errorSnackBar.open(this.translate.instant('nodes.logout-error'))
+      () => this.snackbarService.showError('nodes.logout-error')
     );
   }
 
@@ -152,7 +150,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.storageService.setNodeLabel(node.local_pk, label);
 
       if (!label) {
-        this.errorSnackBar.open(this.translate.instant('nodes.default-label-warning'));
+        this.snackbarService.showWarning('nodes.default-label-warning');
       }
 
       this.refresh(0);

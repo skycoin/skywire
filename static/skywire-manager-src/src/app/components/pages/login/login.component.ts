@@ -2,8 +2,7 @@ import {Component, OnInit} from '@angular/core';
 import {AuthService} from '../../../services/auth.service';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
 import {Router} from '@angular/router';
-import {TranslateService} from '@ngx-translate/core';
-import {ErrorsnackbarService} from '../../../services/errorsnackbar.service';
+import { SnackbarService } from '../../../services/snackbar.service';
 
 @Component({
   selector: 'app-login',
@@ -16,9 +15,8 @@ export class LoginComponent implements OnInit {
 
   constructor(
     private authService: AuthService,
-    private translate: TranslateService,
     private router: Router,
-    private snackbar: ErrorsnackbarService,
+    private snackbarService: SnackbarService,
   ) { }
 
   ngOnInit() {
@@ -27,17 +25,13 @@ export class LoginComponent implements OnInit {
     });
   }
 
-  setError(error: string) {
-    this.snackbar.open(error, null);
-  }
-
   onLoginSuccess() {
     this.router.navigate(['nodes']);
   }
 
   onLoginError() {
     this.loading = false;
-    this.setError(this.translate.instant('login.incorrect-password'));
+    this.snackbarService.showError('login.incorrect-password');
   }
 
   login() {

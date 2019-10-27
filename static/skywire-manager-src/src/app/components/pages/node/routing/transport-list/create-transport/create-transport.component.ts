@@ -2,12 +2,11 @@ import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/co
 import { TransportService } from '../../../../../../services/transport.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatSnackBar } from '@angular/material';
-import { TranslateService } from '@ngx-translate/core';
 import { ButtonComponent } from '../../../../../layout/button/button.component';
 import { NodeComponent } from '../../../node.component';
 import { Subscription, of } from 'rxjs';
 import { delay, flatMap } from 'rxjs/operators';
-import { ErrorsnackbarService } from '../../../../../../services/errorsnackbar.service';
+import { SnackbarService } from '../../../../../../services/snackbar.service';
 
 @Component({
   selector: 'app-create-transport',
@@ -28,8 +27,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     private formBuilder: FormBuilder,
     private snackbar: MatSnackBar,
     private dialogRef: MatDialogRef<CreateTransportComponent>,
-    private translate: TranslateService,
-    private errorSnackBar: ErrorsnackbarService,
+    private snackbarService: SnackbarService,
   ) { }
 
   ngOnInit() {
@@ -69,13 +67,13 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
   private onSuccess() {
     NodeComponent.refreshCurrentDisplayedData();
-    this.snackbar.open(this.translate.instant('transports.dialog.success'));
+    this.snackbarService.showDone('transports.dialog.success');
     this.dialogRef.close();
   }
 
   private onError(error: string) {
     this.button.error('');
-    this.snackbar.open(this.translate.instant('transports.dialog.error', { error }));
+    this.snackbarService.showError('transports.dialog.error');
   }
 
   private loadData(delayMilliseconds: number) {
@@ -93,7 +91,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       },
       () => {
         if (this.shouldShowError) {
-          this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+          this.snackbarService.showError('common.loading-error');
           this.shouldShowError = false;
         }
 

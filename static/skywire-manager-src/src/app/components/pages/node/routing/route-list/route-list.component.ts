@@ -2,8 +2,6 @@ import { Component, Input, OnDestroy } from '@angular/core';
 import { MatTableDataSource, MatDialog, MatDialogConfig, MatDialogRef } from '@angular/material';
 import { Route } from 'src/app/app.datatypes';
 import { RouteService } from '../../../../../services/route.service';
-import { ErrorsnackbarService } from '../../../../../services/errorsnackbar.service';
-import { TranslateService } from '@ngx-translate/core';
 import { NodeComponent } from '../../node.component';
 import { RouteDetailsComponent } from './route-details/route-details.component';
 import { Observable, Subscription } from 'rxjs';
@@ -11,6 +9,7 @@ import { ActivatedRoute } from '@angular/router';
 import { AppConfig } from '../../../../../app.config';
 import GeneralUtils from '../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
+import { SnackbarService } from '../../../../../services/snackbar.service';
 
 @Component({
   selector: 'app-route-list',
@@ -44,10 +43,9 @@ export class RouteListComponent implements OnDestroy {
 
   constructor(
     private routeService: RouteService,
-    private errorSnackBar: ErrorsnackbarService,
-    private translate: TranslateService,
     private dialog: MatDialog,
     private route: ActivatedRoute,
+    private snackbarService: SnackbarService,
   ) {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
@@ -130,7 +128,7 @@ export class RouteListComponent implements OnDestroy {
       this.startDeleting(routeKey).subscribe(() => {
         confirmationDialog.close();
         NodeComponent.refreshCurrentDisplayedData();
-        this.errorSnackBar.open(this.translate.instant('routes.deleted'));
+        this.snackbarService.showDone('routes.deleted');
       }, () => {
         confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'routes.error-deleting');
       });
@@ -189,7 +187,7 @@ export class RouteListComponent implements OnDestroy {
       if (ids.length === 0) {
         confirmationDialog.close();
         NodeComponent.refreshCurrentDisplayedData();
-        this.errorSnackBar.open(this.translate.instant('routes.deleted'));
+        this.snackbarService.showDone('routes.deleted');
       } else {
         this.deleteRecursively(ids, confirmationDialog);
       }

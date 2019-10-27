@@ -4,13 +4,12 @@ import {MatTableDataSource, MatDialogConfig, MatDialog, MatDialogRef} from '@ang
 import {AppsService} from '../../../../../../services/apps.service';
 import { LogComponent } from '../log/log.component';
 import { NodeComponent } from '../../../node.component';
-import { ErrorsnackbarService } from '../../../../../../services/errorsnackbar.service';
-import { TranslateService } from '@ngx-translate/core';
 import { Observable, Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { AppConfig } from '../../../../../../app.config';
 import GeneralUtils from '../../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../../layout/confirmation/confirmation.component';
+import { SnackbarService } from '../../../../../../services/snackbar.service';
 
 @Component({
   selector: 'app-node-app-list',
@@ -46,9 +45,8 @@ export class NodeAppsListComponent implements OnDestroy {
   constructor(
     private appsService: AppsService,
     private dialog: MatDialog,
-    private errorSnackBar: ErrorsnackbarService,
-    private translate: TranslateService,
     private route: ActivatedRoute,
+    private snackbarService: SnackbarService,
   ) {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
@@ -150,13 +148,13 @@ export class NodeAppsListComponent implements OnDestroy {
           confirmationDialog.close();
         }
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-        this.errorSnackBar.open(this.translate.instant('apps.operation-completed'));
+        this.snackbarService.showDone('apps.operation-completed');
       }, () => {
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         if (confirmationDialog) {
           confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
         } else {
-          this.errorSnackBar.open(this.translate.instant('apps.error'));
+          this.snackbarService.showError('apps.error');
         }
       }
     );
@@ -223,7 +221,7 @@ export class NodeAppsListComponent implements OnDestroy {
 
     if (!names || names.length === 0) {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-      this.errorSnackBar.open(this.translate.instant('apps.operation-completed'));
+      this.snackbarService.showDone('apps.operation-completed');
 
       return;
     }
@@ -235,7 +233,7 @@ export class NodeAppsListComponent implements OnDestroy {
           confirmationDialog.close();
         }
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-        this.errorSnackBar.open(this.translate.instant('apps.operation-completed'));
+        this.snackbarService.showDone('apps.operation-completed');
       } else {
         this.changeAppStateRecursively(names, startApp, confirmationDialog);
       }
@@ -244,7 +242,7 @@ export class NodeAppsListComponent implements OnDestroy {
       if (confirmationDialog) {
         confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
       } else {
-        this.errorSnackBar.open(this.translate.instant('apps.error'));
+        this.snackbarService.showError('apps.error');
       }
     });
   }

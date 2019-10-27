@@ -2,15 +2,13 @@ import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { NodeService } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MatDialog } from '@angular/material';
 import { Subscription } from 'rxjs/internal/Subscription';
-import { TranslateService } from '@ngx-translate/core';
-import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
 import { of, Observable, ReplaySubject, timer } from 'rxjs';
 import { delay, flatMap, tap } from 'rxjs/operators';
 import { StorageService } from '../../../services/storage.service';
 import TimeUtils from '../../../utils/timeUtils';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
+import { SnackbarService } from '../../../services/snackbar.service';
 
 @Component({
   selector: 'app-node',
@@ -58,11 +56,9 @@ export class NodeComponent implements OnInit, OnDestroy {
     private nodeService: NodeService,
     private route: ActivatedRoute,
     private router: Router,
-    private dialog: MatDialog,
-    private errorSnackBar: ErrorsnackbarService,
-    private translate: TranslateService,
     public storageService: StorageService,
     private ngZone: NgZone,
+    private snackbarService: SnackbarService,
   ) {
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
     NodeComponent.currentInstanceInternal = this;
@@ -170,9 +166,9 @@ export class NodeComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           if (!this.errorsUpdating) {
             if (!this.node) {
-              this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+              this.snackbarService.showError('common.loading-error');
             } else {
-              this.errorSnackBar.open(this.translate.instant('node.error-load'));
+              this.snackbarService.showError('node.error-load');
             }
           }
 

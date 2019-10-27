@@ -1,13 +1,12 @@
 import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { Node } from '../../../../app.datatypes';
-import { MatDialog, MatSnackBar } from '@angular/material';
+import { MatDialog } from '@angular/material';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { Router } from '@angular/router';
-import { TranslateService } from '@ngx-translate/core';
 import {UpdateNodeComponent} from './update-node/update-node.component';
 import { ButtonComponent } from '../../../layout/button/button.component';
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
-import { NodeComponent } from '../node.component';
+import { SnackbarService } from '../../../../services/snackbar.service';
 
 @Component({
   selector: 'app-actions',
@@ -19,10 +18,9 @@ export class ActionsComponent implements OnInit {
   @ViewChild('updateButton') updateButton: ButtonComponent;
 
   constructor(
-    private snackbar: MatSnackBar,
     private dialog: MatDialog,
     private router: Router,
-    private translate: TranslateService
+    private snackbarService: SnackbarService,
   ) { }
 
   ngOnInit() {
@@ -39,21 +37,17 @@ export class ActionsComponent implements OnInit {
   reboot() {
     // this.nodeService.reboot().subscribe(
     //   () => {
-    //     this.translate.get('actions.config.success').subscribe(str => {
-    //       this.snackbar.open(str);
-    //       this.router.navigate(['nodes']);
-    //     });
+    //     this.snackbarService.showDone('actions.config.success');
+    //     this.router.navigate(['nodes']);
     //   },
-    //   (e) => this.snackbar.open(e.message),
+    //   (e) => this.snackbarService.showError(e.message),
     // );
   }
 
   update() {
     this.dialog.open(UpdateNodeComponent).afterClosed().subscribe((updated) => {
       if (updated) {
-        this.snackbar.open(this.translate.instant('actions.update.update-success'), undefined, {
-          duration: 10000,
-        });
+        this.snackbarService.showDone('actions.update.update-success');
       }
     });
   }

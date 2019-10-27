@@ -103,6 +103,7 @@ import { AppReuseStrategy } from './app.reuse-strategy';
 import { ConfirmationComponent } from './components/layout/confirmation/confirmation.component';
 import { TransportDetailsComponent } from './components/pages/node/routing/transport-list/transport-details/transport-details.component';
 import { LogFilterComponent } from './components/pages/node/apps/node-apps/log/log-filter/log-filter.component';
+import { SnackbarComponent } from './components/layout/snack-bar/snack-bar.component';
 
 @NgModule({
   declarations: [
@@ -175,6 +176,7 @@ import { LogFilterComponent } from './components/pages/node/apps/node-apps/log/l
     ConfirmationComponent,
     TransportDetailsComponent,
     LogFilterComponent,
+    SnackbarComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -196,6 +198,7 @@ import { LogFilterComponent } from './components/pages/node/apps/node-apps/log/l
     ConfirmationComponent,
     TransportDetailsComponent,
     LogFilterComponent,
+    SnackbarComponent,
   ],
   imports: [
     BrowserModule,

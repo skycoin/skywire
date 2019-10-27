@@ -2,8 +2,7 @@ import { Component } from '@angular/core';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { AuthService } from '../../../services/auth.service';
 import { Router } from '@angular/router';
-import { ErrorsnackbarService } from '../../../services/errorsnackbar.service';
-import { TranslateService } from '@ngx-translate/core';
+import { SnackbarService } from '../../../services/snackbar.service';
 
 @Component({
   selector: 'app-settings',
@@ -16,8 +15,7 @@ export class SettingsComponent {
   constructor(
     private authService: AuthService,
     private router: Router,
-    private errorSnackBar: ErrorsnackbarService,
-    private translate: TranslateService,
+    private snackbarService: SnackbarService,
   ) {
     this.tabsData = [
       {
@@ -36,7 +34,7 @@ export class SettingsComponent {
   logout() {
     this.authService.logout().subscribe(
       () => this.router.navigate(['login']),
-      () => this.errorSnackBar.open(this.translate.instant('nodes.logout-error'))
+      () => this.snackbarService.showError('nodes.logout-error')
     );
   }
 }

@@ -1,6 +1,5 @@
-import {Component, HostListener, Input, OnInit, ViewChild} from '@angular/core';
-import {MatMenuTrigger, MatSnackBar} from '@angular/material';
-import { TranslateService } from '@ngx-translate/core';
+import {Component, Input, OnInit} from '@angular/core';
+import { SnackbarService } from '../../../services/snackbar.service';
 
 @Component({
   selector: 'app-copy-to-clipboard-text',
@@ -23,15 +22,8 @@ export class CopyToClipboardTextComponent implements OnInit {
   }
 
   constructor(
-    public snackBar: MatSnackBar,
-    private translate: TranslateService,
+    private snackbarService: SnackbarService,
   ) {}
-
-  openSnackBar(message: string) {
-    this.snackBar.open(message, null, {
-      duration: 2000,
-    });
-  }
 
   ngOnInit() {
     if (this.short) {
@@ -46,8 +38,6 @@ export class CopyToClipboardTextComponent implements OnInit {
   // }
 
   public onCopyToClipboardClicked() {
-    this.translate.get('copy.copied').subscribe(str => {
-      this.openSnackBar(str);
-    });
+    this.snackbarService.showDone('copy.copied');
   }
 }

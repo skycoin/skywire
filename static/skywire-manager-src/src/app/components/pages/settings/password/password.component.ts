@@ -3,9 +3,7 @@ import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../services/auth.service';
 import { Location } from '@angular/common';
-import { MatSnackBar } from '@angular/material';
-import {ErrorsnackbarService} from '../../../../services/errorsnackbar.service';
-import {TranslateService} from '@ngx-translate/core';
+import { SnackbarService } from '../../../../services/snackbar.service';
 
 @Component({
   selector: 'app-password',
@@ -19,9 +17,7 @@ export class PasswordComponent implements OnInit {
     private authService: AuthService,
     private router: Router,
     private location: Location,
-    private snackbar: MatSnackBar,
-    private translate: TranslateService,
-    private errorSnack: ErrorsnackbarService
+    private snackbarService: SnackbarService,
   ) { }
 
   ngOnInit() {
@@ -40,10 +36,10 @@ export class PasswordComponent implements OnInit {
         .subscribe(
           () => {
             this.router.navigate(['nodes']);
-            this.snackbar.open('Password changed');
+            this.snackbarService.showDone('Password changed');
           },
           (err) => {
-            this.errorSnack.open(err);
+            this.snackbarService.showError(err);
           },
         );
     }

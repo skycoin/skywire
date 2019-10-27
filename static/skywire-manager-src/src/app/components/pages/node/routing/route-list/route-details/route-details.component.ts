@@ -4,8 +4,7 @@ import { Subscription, of } from 'rxjs';
 import { RouteService } from '../../../../../../services/route.service';
 import { NodeComponent } from '../../../node.component';
 import { delay, flatMap } from 'rxjs/operators';
-import { TranslateService } from '@ngx-translate/core';
-import { ErrorsnackbarService } from '../../../../../../services/errorsnackbar.service';
+import { SnackbarService } from '../../../../../../services/snackbar.service';
 
 class RouteRule {
   key:  string;
@@ -52,8 +51,7 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) private data: string,
     private routeService: RouteService,
     private dialogRef: MatDialogRef<RouteDetailsComponent>,
-    private translate: TranslateService,
-    private errorSnackBar: ErrorsnackbarService,
+    private snackbarService: SnackbarService,
   ) { }
 
   ngOnInit() {
@@ -88,7 +86,7 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
       (rule: RouteRule) => this.routeRule = rule,
       () => {
         if (this.shouldShowError) {
-          this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+          this.snackbarService.showError('common.loading-error');
           this.shouldShowError = false;
         }
 

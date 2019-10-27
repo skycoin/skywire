@@ -5,9 +5,8 @@ import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog } from '@angular/material';
 import { Subscription, of } from 'rxjs';
 import { NodeComponent } from '../../../node.component';
 import { delay, flatMap } from 'rxjs/operators';
-import { TranslateService } from '@ngx-translate/core';
-import { ErrorsnackbarService } from '../../../../../../services/errorsnackbar.service';
 import { LogFilterComponent, LogsFilter } from './log-filter/log-filter.component';
+import { SnackbarService } from '../../../../../../services/snackbar.service';
 
 @Component({
   selector: 'app-log',
@@ -30,9 +29,8 @@ export class LogComponent implements OnInit, OnDestroy {
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: Application,
     private appsService: AppsService,
-    private translate: TranslateService,
-    private errorSnackBar: ErrorsnackbarService,
     private dialog: MatDialog,
+    private snackbarService: SnackbarService,
   ) { }
 
   ngOnInit() {
@@ -103,7 +101,7 @@ export class LogComponent implements OnInit, OnDestroy {
 
   private onLogsError() {
     if (this.shouldShowError) {
-      this.errorSnackBar.open(this.translate.instant('common.loading-error'));
+      this.snackbarService.showError('common.loading-error');
       this.shouldShowError = false;
     }
 
