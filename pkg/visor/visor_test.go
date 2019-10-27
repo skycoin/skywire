@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"context"
 	"errors"
 	"io/ioutil"
 	"net"
@@ -18,8 +17,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -249,7 +246,7 @@ func (exc *MockExecuter) Wait(cmd *exec.Cmd) error {
 	return nil
 }
 
-type mockRouter struct {
+/*type mockRouter struct {
 	sync.Mutex
 
 	ports []routing.Port
@@ -318,3 +315,4 @@ func (r *mockRouter) IsSetupTransport(*transport.ManagedTransport) bool {
 func (r *mockRouter) SetupIsTrusted(cipher.PubKey) bool {
 	return true
 }
+*/

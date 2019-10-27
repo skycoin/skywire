@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2"
+
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
@@ -20,7 +22,6 @@ import (
 	"github.com/skycoin/dmsg/noise"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -356,7 +357,7 @@ func (m *Node) appLogsSince() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: app.TimestampFromLog(logs[len(logs)-1]),
+			LastLogTimestamp: app2.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
 	})

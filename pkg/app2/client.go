@@ -1,7 +1,6 @@
 package app2
 
 import (
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
 	"net"
 	"net/rpc"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 
 	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/app2/idmanager"

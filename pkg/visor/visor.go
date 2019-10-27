@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2/appserver"
+
 	"github.com/skycoin/skywire/pkg/app2/appcommon"
 
 	"github.com/skycoin/skywire/pkg/snet"
@@ -97,7 +99,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	procManager *appcommon.ProcManager
+	procManager *appserver.ProcManager
 }
 
 // NewNode constructs new Node.
@@ -106,7 +108,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 	node := &Node{
 		config:      config,
-		procManager: appcommon.NewProcManager(logging.MustGetLogger("proc_manager")),
+		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager")),
 	}
 
 	node.Logger = masterLogger
@@ -331,7 +333,7 @@ func (node *Node) Close() (err error) {
 	}
 
 	var procs []string
-	node.procManager.Range(func(name string, _ *appcommon.Proc) bool {
+	node.procManager.Range(func(name string, _ *appserver.Proc) bool {
 		procs = append(procs, name)
 		return true
 	})
