@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2"
+
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -93,7 +94,7 @@ type AppLogsRequest struct {
 
 // LogsSince returns all logs from an specific app since the timestamp
 func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) error {
-	ls, err := app.NewLogStore(filepath.Join(r.node.dir(), in.AppName), in.AppName, "bbolt")
+	ls, err := app2.NewLogStore(filepath.Join(r.node.dir(), in.AppName), in.AppName, "bbolt")
 	if err != nil {
 		return err
 	}

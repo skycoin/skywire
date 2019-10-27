@@ -7,8 +7,11 @@ import (
 )
 
 var (
-	errNoMoreAvailableValues = errors.New("no more available values")
-	errValueAlreadyExists    = errors.New("value already exists")
+	// ErrNoMoreAvailableValues is returned when all the slots are reserved.
+	ErrNoMoreAvailableValues = errors.New("no more available values")
+	// ErrValueAlreadyExists is returned when value associated with the specified
+	// key already exists.
+	ErrValueAlreadyExists = errors.New("value already exists")
 )
 
 // Manager manages allows to store and retrieve arbitrary values
@@ -40,7 +43,7 @@ func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 
 	if nxtID == m.lstID {
 		m.mx.Unlock()
-		return nil, nil, errNoMoreAvailableValues
+		return nil, nil, ErrNoMoreAvailableValues
 	}
 
 	m.values[nxtID] = nil
@@ -77,7 +80,7 @@ func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 
 	if _, ok := m.values[id]; ok {
 		m.mx.Unlock()
-		return nil, errValueAlreadyExists
+		return nil, ErrValueAlreadyExists
 	}
 
 	m.values[id] = v
@@ -97,7 +100,7 @@ func (m *Manager) Set(id uint16, v interface{}) error {
 	}
 	if l != nil {
 		m.mx.Unlock()
-		return errValueAlreadyExists
+		return ErrValueAlreadyExists
 	}
 
 	m.values[id] = v
