@@ -86,31 +86,50 @@ func TestConn_Write(t *testing.T) {
 func TestConn_Close(t *testing.T) {
 	connID := uint16(1)
 
-	tt := []struct {
-		name     string
-		closeErr error
-	}{
-		{
-			name: "ok",
-		},
-		{
-			name:     "close error",
-			closeErr: errors.New("close error"),
-		},
-	}
+	var noErr error
 
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			rpc := &MockRPCClient{}
-			rpc.On("CloseConn", connID).Return(tc.closeErr)
+	t.Run("ok", func(t *testing.T) {
+		rpc := &MockRPCClient{}
+		rpc.On("CloseConn", connID).Return(noErr)
 
-			conn := &Conn{
-				id:  connID,
-				rpc: rpc,
-			}
+		conn := &Conn{
+			id:       connID,
+			rpc:      rpc,
+			freeConn: func() bool { return true },
+		}
 
-			err := conn.Close()
-			require.Equal(t, tc.closeErr, err)
-		})
-	}
+		err := conn.Close()
+		require.NoError(t, err)
+	})
+
+	t.Run("close error", func(t *testing.T) {
+		closeErr := errors.New("close error")
+
+		rpc := &MockRPCClient{}
+		rpc.On("CloseConn", connID).Return(closeErr)
+
+		conn := &Conn{
+			id:       connID,
+			rpc:      rpc,
+			freeConn: func() bool { return true },
+		}
+
+		err := conn.Close()
+		require.Equal(t, closeErr, err)
+	})
+
+	t.Run("already closed", func(t *testing.T) {
+		rpc := &MockRPCClient{}
+		rpc.On("CloseConn", connID).Return(noErr)
+
+		conn := &Conn{
+			id:       connID,
+			rpc:      rpc,
+			freeConn: func() bool { return false },
+		}
+
+		err := conn.Close()
+		require.Error(t, err)
+		require.Equal(t, "conn is already closed", err.Error())
+	})
 }
