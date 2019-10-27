@@ -33,6 +33,8 @@ type ClientConfig struct {
 	AppKey   appcommon.Key
 }
 
+// TODO: move env names to constants
+
 // ClientConfigFromEnv creates client config from the ENV args.
 func ClientConfigFromEnv() (ClientConfig, error) {
 	appKey := os.Getenv("APP_KEY")
