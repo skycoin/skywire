@@ -6,20 +6,18 @@ import (
 	"net/rpc"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
-
-	"github.com/skycoin/skywire/pkg/app2/appserver"
-
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
-
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/app2/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
+
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
+	"github.com/skycoin/skywire/pkg/app2/appserver"
 )
 
 func TestRPCClient_Dial(t *testing.T) {
