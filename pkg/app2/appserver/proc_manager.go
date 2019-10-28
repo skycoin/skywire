@@ -6,11 +6,10 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
-
 	"github.com/pkg/errors"
 
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 )
 
 var (

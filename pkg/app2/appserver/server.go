@@ -6,10 +6,10 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
-
 	"github.com/pkg/errors"
 	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 )
 
 // Server is a server for app/visor communication.
