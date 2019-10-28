@@ -7,16 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
-	"github.com/skycoin/skywire/pkg/app2/idmanager"
-
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
 	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/skycoin/skywire/pkg/app2/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
