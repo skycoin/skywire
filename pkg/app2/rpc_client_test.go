@@ -1,46 +1,51 @@
 package app2
 
-/*func TestRPCClient_Dial(t *testing.T) {
+import (
+	"context"
+	"net"
+	"net/rpc"
+	"testing"
+
+	"github.com/stretchr/testify/mock"
+
+	"github.com/skycoin/skywire/pkg/app2/appserver"
+
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
+
+	"github.com/pkg/errors"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
+)
+
+func TestRPCClient_Dial(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		s := prepRPCServer(t, prepGateway())
 		rpcL, lisCleanup := prepListener(t)
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		remoteNet := appnet.TypeDMSG
-		remotePK, _ := cipher.GenerateKeyPair()
-		remotePort := routing.Port(100)
-		remote := appnet.Addr{
-			Net:    remoteNet,
-			PubKey: remotePK,
-			Port:   remotePort,
-		}
-
-		localPK, _ := cipher.GenerateKeyPair()
-		dmsgLocal := dmsg.Addr{
-			PK:   localPK,
-			Port: 101,
-		}
-		dmsgRemote := dmsg.Addr{
-			PK:   remotePK,
-			Port: uint16(remotePort),
-		}
+		dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 		dialCtx := context.Background()
-		dialConn := dmsg.NewTransport(&app2.MockConn{}, logging.MustGetLogger("dmsg_tp"),
-			dmsgLocal, dmsgRemote, 0, func(_ uint16) {})
+		dialConn := dmsg.NewTransport(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
+			dmsgLocal, dmsgRemote, 0, 1024, func() {})
 		var noErr error
 
 		n := &appnet.MockNetworker{}
 		n.On("DialContext", dialCtx, remote).Return(dialConn, noErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(remoteNet, n)
+		err := appnet.AddNetworker(appnet.TypeDMSG, n)
 		require.NoError(t, err)
 
-		connID, localPort, err := Dial(remote)
+		connID, localPort, err := cl.Dial(remote)
 		require.NoError(t, err)
 		require.Equal(t, connID, uint16(1))
 		require.Equal(t, localPort, routing.Port(dmsgLocal.Port))
@@ -53,16 +58,9 @@ package app2
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		remoteNet := appnet.TypeDMSG
-		remotePK, _ := cipher.GenerateKeyPair()
-		remotePort := routing.Port(100)
-		remote := appnet.Addr{
-			Net:    remoteNet,
-			PubKey: remotePK,
-			Port:   remotePort,
-		}
+		_, _, _, remote := prepAddrs()
 
 		dialCtx := context.Background()
 		var dialConn net.Conn
@@ -72,10 +70,10 @@ package app2
 		n.On("DialContext", dialCtx, remote).Return(dialConn, dialErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(remoteNet, n)
+		err := appnet.AddNetworker(appnet.TypeDMSG, n)
 		require.NoError(t, err)
 
-		connID, localPort, err := Dial(remote)
+		connID, localPort, err := cl.Dial(remote)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), dialErr.Error())
 		require.Equal(t, connID, uint16(0))
@@ -90,16 +88,9 @@ func TestRPCClient_Listen(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		localNet := appnet.TypeDMSG
-		localPK, _ := cipher.GenerateKeyPair()
-		localPort := routing.Port(100)
-		local := appnet.Addr{
-			Net:    localNet,
-			PubKey: localPK,
-			Port:   localPort,
-		}
+		_, _, local, _ := prepAddrs()
 
 		listenCtx := context.Background()
 		var listenLis net.Listener
@@ -109,10 +100,10 @@ func TestRPCClient_Listen(t *testing.T) {
 		n.On("ListenContext", listenCtx, local).Return(listenLis, noErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(localNet, n)
+		err := appnet.AddNetworker(appnet.TypeDMSG, n)
 		require.NoError(t, err)
 
-		lisID, err := Listen(local)
+		lisID, err := cl.Listen(local)
 		require.NoError(t, err)
 		require.Equal(t, lisID, uint16(1))
 	})
@@ -123,16 +114,9 @@ func TestRPCClient_Listen(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		localNet := appnet.TypeDMSG
-		localPK, _ := cipher.GenerateKeyPair()
-		localPort := routing.Port(100)
-		local := appnet.Addr{
-			Net:    localNet,
-			PubKey: localPK,
-			Port:   localPort,
-		}
+		_, _, local, _ := prepAddrs()
 
 		listenCtx := context.Background()
 		var listenLis net.Listener
@@ -142,10 +126,10 @@ func TestRPCClient_Listen(t *testing.T) {
 		n.On("ListenContext", listenCtx, local).Return(listenLis, listenErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(localNet, n)
+		err := appnet.AddNetworker(appnet.TypeDMSG, n)
 		require.NoError(t, err)
 
-		lisID, err := Listen(local)
+		lisID, err := cl.Listen(local)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), listenErr.Error())
 		require.Equal(t, lisID, uint16(0))
@@ -153,31 +137,22 @@ func TestRPCClient_Listen(t *testing.T) {
 }
 
 func TestRPCClient_Accept(t *testing.T) {
+	dmsgLocal, dmsgRemote, local, _ := prepAddrs()
+
 	t.Run("ok", func(t *testing.T) {
 		gateway := prepGateway()
 
-		localPK, _ := cipher.GenerateKeyPair()
-		localPort := uint16(100)
-		dmsgLocal := dmsg.Addr{
-			PK:   localPK,
-			Port: localPort,
-		}
-		remotePK, _ := cipher.GenerateKeyPair()
-		remotePort := uint16(101)
-		dmsgRemote := dmsg.Addr{
-			PK:   remotePK,
-			Port: remotePort,
-		}
-		lisConn := dmsg.NewTransport(&app2.MockConn{}, logging.MustGetLogger("dmsg_tp"),
-			dmsgLocal, dmsgRemote, 0, func(_ uint16) {})
+		lisConn := dmsg.NewTransport(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
+			dmsgLocal, dmsgRemote, 0, 1024, func() {})
 		var noErr error
 
-		lis := &app2.MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Accept").Return(lisConn, noErr)
 
-		lisID := uint16(1)
+		prepNetworkerWithListener(t, lis, local)
 
-		_, err := gateway.lm.add(lisID, lis)
+		var lisID uint16
+		err := gateway.Listen(&local, &lisID)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -185,15 +160,15 @@ func TestRPCClient_Accept(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
 		wantRemote := appnet.Addr{
 			Net:    appnet.TypeDMSG,
-			PubKey: remotePK,
-			Port:   routing.Port(remotePort),
+			PubKey: dmsgRemote.PK,
+			Port:   routing.Port(dmsgRemote.Port),
 		}
 
-		connID, remote, err := Accept(lisID)
+		connID, remote, err := cl.Accept(lisID)
 		require.NoError(t, err)
 		require.Equal(t, connID, uint16(1))
 		require.Equal(t, remote, wantRemote)
@@ -205,12 +180,13 @@ func TestRPCClient_Accept(t *testing.T) {
 		var lisConn net.Conn
 		listenErr := errors.New("accept error")
 
-		lis := &app2.MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Accept").Return(lisConn, listenErr)
 
-		lisID := uint16(1)
+		prepNetworkerWithListener(t, lis, local)
 
-		_, err := gateway.lm.add(lisID, lis)
+		var lisID uint16
+		err := gateway.Listen(&local, &lisID)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -218,9 +194,9 @@ func TestRPCClient_Accept(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		connID, remote, err := Accept(lisID)
+		connID, remote, err := cl.Accept(lisID)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), listenErr.Error())
 		require.Equal(t, connID, uint16(0))
@@ -229,6 +205,8 @@ func TestRPCClient_Accept(t *testing.T) {
 }
 
 func TestRPCClient_Write(t *testing.T) {
+	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
+
 	t.Run("ok", func(t *testing.T) {
 		gateway := prepGateway()
 
@@ -236,12 +214,15 @@ func TestRPCClient_Write(t *testing.T) {
 		writeN := 10
 		var noErr error
 
-		conn := &app2.MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Write", writeBuf).Return(writeN, noErr)
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
 
-		connID := uint16(1)
+		prepNetworkerWithConn(t, conn, remote)
 
-		_, err := gateway.cm.add(connID, conn)
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -249,9 +230,9 @@ func TestRPCClient_Write(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		n, err := Write(connID, writeBuf)
+		n, err := cl.Write(dialResp.ConnID, writeBuf)
 		require.NoError(t, err)
 		require.Equal(t, n, writeN)
 	})
@@ -263,12 +244,15 @@ func TestRPCClient_Write(t *testing.T) {
 		writeN := 0
 		writeErr := errors.New("write error")
 
-		conn := &app2.MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Write", writeBuf).Return(writeN, writeErr)
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
 
-		connID := uint16(1)
+		prepNetworkerWithConn(t, conn, remote)
 
-		_, err := gateway.cm.add(connID, conn)
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -276,9 +260,9 @@ func TestRPCClient_Write(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		n, err := Write(connID, writeBuf)
+		n, err := cl.Write(dialResp.ConnID, writeBuf)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), writeErr.Error())
 		require.Equal(t, n, 0)
@@ -286,6 +270,8 @@ func TestRPCClient_Write(t *testing.T) {
 }
 
 func TestRPCClient_Read(t *testing.T) {
+	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
+
 	t.Run("ok", func(t *testing.T) {
 		gateway := prepGateway()
 
@@ -294,12 +280,15 @@ func TestRPCClient_Read(t *testing.T) {
 		readN := 5
 		var noErr error
 
-		conn := &app2.MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Read", readBuf).Return(readN, noErr)
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
 
-		connID := uint16(1)
+		prepNetworkerWithConn(t, conn, remote)
 
-		_, err := gateway.cm.add(connID, conn)
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -307,9 +296,9 @@ func TestRPCClient_Read(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		n, err := Read(connID, readBuf)
+		n, err := cl.Read(dialResp.ConnID, readBuf)
 		require.NoError(t, err)
 		require.Equal(t, n, readN)
 	})
@@ -322,12 +311,15 @@ func TestRPCClient_Read(t *testing.T) {
 		readN := 0
 		readErr := errors.New("read error")
 
-		conn := &app2.MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Read", readBuf).Return(readN, readErr)
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
 
-		connID := uint16(1)
+		prepNetworkerWithConn(t, conn, remote)
 
-		_, err := gateway.cm.add(connID, conn)
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -335,9 +327,9 @@ func TestRPCClient_Read(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		n, err := Read(connID, readBuf)
+		n, err := cl.Read(dialResp.ConnID, readBuf)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), readErr.Error())
 		require.Equal(t, n, readN)
@@ -345,17 +337,22 @@ func TestRPCClient_Read(t *testing.T) {
 }
 
 func TestRPCClient_CloseConn(t *testing.T) {
+	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
+
 	t.Run("ok", func(t *testing.T) {
 		gateway := prepGateway()
 
 		var noErr error
 
-		conn := &app2.MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Close").Return(noErr)
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
 
-		connID := uint16(1)
+		prepNetworkerWithConn(t, conn, remote)
 
-		_, err := gateway.cm.add(connID, conn)
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -363,9 +360,9 @@ func TestRPCClient_CloseConn(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		err = CloseConn(connID)
+		err = cl.CloseConn(dialResp.ConnID)
 		require.NoError(t, err)
 	})
 
@@ -374,12 +371,15 @@ func TestRPCClient_CloseConn(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		conn := &app2.MockConn{}
+		conn := &appcommon.MockConn{}
 		conn.On("Close").Return(closeErr)
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
 
-		connID := uint16(1)
+		prepNetworkerWithConn(t, conn, remote)
 
-		_, err := gateway.cm.add(connID, conn)
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -387,26 +387,29 @@ func TestRPCClient_CloseConn(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		err = CloseConn(connID)
+		err = cl.CloseConn(dialResp.ConnID)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), closeErr.Error())
 	})
 }
 
 func TestRPCClient_CloseListener(t *testing.T) {
+	_, _, local, _ := prepAddrs()
+
 	t.Run("ok", func(t *testing.T) {
 		gateway := prepGateway()
 
 		var noErr error
 
-		lis := &app2.MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Close").Return(noErr)
 
-		lisID := uint16(1)
+		prepNetworkerWithListener(t, lis, local)
 
-		_, err := gateway.lm.add(lisID, lis)
+		var lisID uint16
+		err := gateway.Listen(&local, &lisID)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -414,9 +417,9 @@ func TestRPCClient_CloseListener(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		err = CloseListener(lisID)
+		err = cl.CloseListener(lisID)
 		require.NoError(t, err)
 	})
 
@@ -425,12 +428,13 @@ func TestRPCClient_CloseListener(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		lis := &app2.MockListener{}
+		lis := &appcommon.MockListener{}
 		lis.On("Close").Return(closeErr)
 
-		lisID := uint16(1)
+		prepNetworkerWithListener(t, lis, local)
 
-		_, err := gateway.lm.add(lisID, lis)
+		var lisID uint16
+		err := gateway.Listen(&local, &lisID)
 		require.NoError(t, err)
 
 		s := prepRPCServer(t, gateway)
@@ -438,20 +442,42 @@ func TestRPCClient_CloseListener(t *testing.T) {
 		defer lisCleanup()
 		go s.Accept(rpcL)
 
-		cl := prepClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
-		err = CloseListener(lisID)
+		err = cl.CloseListener(lisID)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), closeErr.Error())
 	})
 }
 
-func prepGateway() *RPCGateway {
-	l := logging.MustGetLogger("rpc_gateway")
-	return newRPCGateway(l)
+func prepNetworkerWithListener(t *testing.T, lis *appcommon.MockListener, local appnet.Addr) {
+	var noErr error
+
+	appnet.ClearNetworkers()
+	n := &appnet.MockNetworker{}
+	n.On("ListenContext", mock.Anything, local).Return(lis, noErr)
+
+	err := appnet.AddNetworker(appnet.TypeDMSG, n)
+	require.NoError(t, err)
 }
 
-func prepRPCServer(t *testing.T, gateway *RPCGateway) *rpc.Server {
+func prepNetworkerWithConn(t *testing.T, conn *appcommon.MockConn, remote appnet.Addr) {
+	var noErr error
+
+	networker := &appnet.MockNetworker{}
+	networker.On("DialContext", mock.Anything, remote).Return(conn, noErr)
+
+	appnet.ClearNetworkers()
+	err := appnet.AddNetworker(appnet.TypeDMSG, networker)
+	require.NoError(t, err)
+}
+
+func prepGateway() *appserver.RPCGateway {
+	l := logging.MustGetLogger("rpc_gateway")
+	return appserver.NewRPCGateway(l)
+}
+
+func prepRPCServer(t *testing.T, gateway *appserver.RPCGateway) *rpc.Server {
 	s := rpc.NewServer()
 	err := s.Register(gateway)
 	require.NoError(t, err)
@@ -469,9 +495,37 @@ func prepListener(t *testing.T) (lis net.Listener, cleanup func()) {
 	}
 }
 
-func prepClient(t *testing.T, network, addr string) RPCClient {
+func prepRPCClient(t *testing.T, network, addr string) RPCClient {
 	rpcCl, err := rpc.Dial(network, addr)
 	require.NoError(t, err)
 
 	return NewRPCClient(rpcCl, "RPCGateway")
-}*/
+}
+
+func prepAddrs() (dmsgLocal, dmsgRemote dmsg.Addr, local, remote appnet.Addr) {
+	localPK, _ := cipher.GenerateKeyPair()
+	localPort := uint16(10)
+	dmsgLocal = dmsg.Addr{
+		PK:   localPK,
+		Port: localPort,
+	}
+	local = appnet.Addr{
+		Net:    appnet.TypeDMSG,
+		PubKey: localPK,
+		Port:   routing.Port(localPort),
+	}
+
+	remotePK, _ := cipher.GenerateKeyPair()
+	remotePort := uint16(11)
+	dmsgRemote = dmsg.Addr{
+		PK:   remotePK,
+		Port: remotePort,
+	}
+	remote = appnet.Addr{
+		Net:    appnet.TypeDMSG,
+		PubKey: remotePK,
+		Port:   routing.Port(remotePort),
+	}
+
+	return
+}

@@ -18,8 +18,8 @@ type RPCGateway struct {
 	log *logging.Logger
 }
 
-// newRPCGateway constructs new server RPC interface.
-func newRPCGateway(log *logging.Logger) *RPCGateway {
+// NewRPCGateway constructs new server RPC interface.
+func NewRPCGateway(log *logging.Logger) *RPCGateway {
 	return &RPCGateway{
 		lm:  idmanager.New(),
 		cm:  idmanager.New(),
