@@ -41,7 +41,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 		err := appnet.AddNetworker(nType, n)
 		require.NoError(t, err)
 
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var resp DialResp
 		err = rpc.Dial(&dialAddr, &resp)
@@ -51,7 +51,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 	})
 
 	t.Run("no more slots for a new conn", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 		for i, _, err := rpc.cm.ReserveNextID(); i == nil || *i != 0; i, _, err = rpc.cm.ReserveNextID() {
 			require.NoError(t, err)
 		}
@@ -80,7 +80,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 		err := appnet.AddNetworker(nType, n)
 		require.NoError(t, err)
 
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var resp DialResp
 		err = rpc.Dial(&dialAddr, &resp)
@@ -104,7 +104,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 		err := appnet.AddNetworker(nType, n)
 		require.NoError(t, err)
 
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var resp DialResp
 		err = rpc.Dial(&dialAddr, &resp)
@@ -131,7 +131,7 @@ func TestRPCGateway_Listen(t *testing.T) {
 		err := appnet.AddNetworker(nType, n)
 		require.Equal(t, err, listenErr)
 
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var lisID uint16
 
@@ -141,7 +141,7 @@ func TestRPCGateway_Listen(t *testing.T) {
 	})
 
 	t.Run("no more slots for a new listener", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 		for i, _, err := rpc.lm.ReserveNextID(); i == nil || *i != 0; i, _, err = rpc.lm.ReserveNextID() {
 			require.NoError(t, err)
 		}
@@ -172,7 +172,7 @@ func TestRPCGateway_Listen(t *testing.T) {
 		err := appnet.AddNetworker(nType, n)
 		require.NoError(t, err)
 
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var lisID uint16
 
@@ -185,7 +185,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 
 	t.Run("ok", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		acceptConn := &dmsg.Transport{}
 		var acceptErr error
@@ -202,7 +202,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 	})
 
 	t.Run("no such listener", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		lisID := uint16(1)
 
@@ -213,7 +213,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 	})
 
 	t.Run("listener is not set", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		lisID := addListener(t, rpc, nil)
 
@@ -224,7 +224,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 	})
 
 	t.Run("no more slots for a new conn", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		for i, _, err := rpc.cm.ReserveNextID(); i == nil || *i != 0; i, _, err = rpc.cm.ReserveNextID() {
 			require.NoError(t, err)
@@ -245,7 +245,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 	})
 
 	t.Run("error wrapping conn", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		remoteAddr, localAddr := &appcommon.MockAddr{}, &appcommon.MockAddr{}
 
@@ -265,7 +265,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 	})
 
 	t.Run("accept error", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var acceptConn net.Conn
 		acceptErr := errors.New("accept error")
@@ -288,7 +288,7 @@ func TestRPCGateway_Write(t *testing.T) {
 	writeN := 10
 
 	t.Run("ok", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var writeErr error
 
@@ -309,7 +309,7 @@ func TestRPCGateway_Write(t *testing.T) {
 	})
 
 	t.Run("no such conn", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		connID := uint16(1)
 
@@ -325,7 +325,7 @@ func TestRPCGateway_Write(t *testing.T) {
 	})
 
 	t.Run("conn is not set", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		connID := addConn(t, rpc, nil)
 
@@ -341,7 +341,7 @@ func TestRPCGateway_Write(t *testing.T) {
 	})
 
 	t.Run("write error", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		writeErr := errors.New("write error")
 
@@ -369,7 +369,7 @@ func TestRPCGateway_Read(t *testing.T) {
 	readBuf := make([]byte, readBufLen)
 
 	t.Run("ok", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		readN := 10
 		var readErr error
@@ -396,7 +396,7 @@ func TestRPCGateway_Read(t *testing.T) {
 	})
 
 	t.Run("no such conn", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		connID := uint16(1)
 
@@ -412,7 +412,7 @@ func TestRPCGateway_Read(t *testing.T) {
 	})
 
 	t.Run("conn is not set", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		connID := addConn(t, rpc, nil)
 
@@ -428,7 +428,7 @@ func TestRPCGateway_Read(t *testing.T) {
 	})
 
 	t.Run("read error", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		readN := 0
 		readErr := errors.New("read error")
@@ -453,7 +453,7 @@ func TestRPCGateway_CloseConn(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 
 	t.Run("ok", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var closeErr error
 
@@ -469,7 +469,7 @@ func TestRPCGateway_CloseConn(t *testing.T) {
 	})
 
 	t.Run("no such conn", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		connID := uint16(1)
 
@@ -479,7 +479,7 @@ func TestRPCGateway_CloseConn(t *testing.T) {
 	})
 
 	t.Run("conn is not set", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		connID := addConn(t, rpc, nil)
 
@@ -489,7 +489,7 @@ func TestRPCGateway_CloseConn(t *testing.T) {
 	})
 
 	t.Run("close error", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		closeErr := errors.New("close error")
 
@@ -507,7 +507,7 @@ func TestRPCGateway_CloseListener(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 
 	t.Run("ok", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		var closeErr error
 
@@ -523,7 +523,7 @@ func TestRPCGateway_CloseListener(t *testing.T) {
 	})
 
 	t.Run("no such listener", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		lisID := uint16(1)
 
@@ -533,7 +533,7 @@ func TestRPCGateway_CloseListener(t *testing.T) {
 	})
 
 	t.Run("listener is not set", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		lisID := addListener(t, rpc, nil)
 
@@ -543,7 +543,7 @@ func TestRPCGateway_CloseListener(t *testing.T) {
 	})
 
 	t.Run("close error", func(t *testing.T) {
-		rpc := newRPCGateway(l)
+		rpc := NewRPCGateway(l)
 
 		closeErr := errors.New("close error")
 
