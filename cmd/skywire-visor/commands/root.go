@@ -141,7 +141,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 	if err := json.NewDecoder(rdr).Decode(&cfg.conf); err != nil {
 		cfg.logger.Fatalf("Failed to decode %s: %s", rdr, err)
 	}
-	fmt.Println("TCP Factory conf:", cfg.conf.TCPTransport)
+	fmt.Println("TCP Factory conf:", cfg.conf.STCP)
 	return cfg
 }
 
