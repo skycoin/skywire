@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app2/appnet"
+
 	"github.com/skycoin/skywire/pkg/app2/appserver"
 
 	"github.com/skycoin/skywire/pkg/app2/appcommon"
@@ -211,6 +213,12 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 // Start spawns auto-started Apps, starts router and RPC interfaces .
 func (node *Node) Start() error {
+	skywireNetworker := appnet.NewSkywireNetworker(logging.MustGetLogger("skynet"), node.router)
+	appnet.ClearNetworkers()
+	if err := appnet.AddNetworker(appnet.TypeSkynet, skywireNetworker); err != nil {
+		return errors.Wrap(err, "error adding skywire networker")
+	}
+
 	ctx := context.Background()
 	node.startedAt = time.Now()
 
