@@ -43,6 +43,7 @@
 
   "node": {
     "title": "Visor details",
+    "not-found": "Visor not found",
     "statuses": {
       "discovered": "Online",
       "discovered-tooltip": "Node is online and discovered by the Skywire network",
@@ -107,7 +108,7 @@
     "default-label-warning": "The default label has been used",
     "view-node": "View node",
     "delete-node": "Delete node",
-    "error-load": "An error occurred while refreshing nodes: {{error}}",
+    "error-load": "An error occurred while refreshing nodes",
     "empty": "There aren't any nodes connected to this manager.",
     "logout-error": "Error logging out."
   },
@@ -118,6 +119,8 @@
       "old-password": "Old password",
       "new-password": "New password",
       "repeat-password": "Repeat password",
+      "password-changed": "Password changed",
+      "error-changing": "Error changing password",
       "errors": {
         "bad-old-password": "The provided old password is not correct.",
         "old-password-required": "Old password is required",

@@ -27,7 +27,10 @@ export class AppComponent {
     translate.use(storage.getDefaultLanguage());
     translate.onDefaultLangChange.subscribe(({lang}) => storage.setDefaultLanguage(lang));
 
-    location.subscribe(() => snackbarService.closeCurrent());
+    location.subscribe(() => {
+      snackbarService.closeCurrent();
+      dialog.closeAll();
+    });
     dialog.afterOpen.subscribe(() => snackbarService.closeCurrent());
 
     router.events.subscribe(() => {

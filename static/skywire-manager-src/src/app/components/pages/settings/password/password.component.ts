@@ -36,10 +36,14 @@ export class PasswordComponent implements OnInit {
         .subscribe(
           () => {
             this.router.navigate(['nodes']);
-            this.snackbarService.showDone('Password changed');
+            this.snackbarService.showDone('settings.password.password-changed');
           },
           (err) => {
-            this.snackbarService.showError(err);
+            if (err.message) {
+              this.snackbarService.showError(err.message);
+            } else {
+              this.snackbarService.showError('settings.password.error-changing');
+            }
           },
         );
     }

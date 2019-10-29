@@ -99,7 +99,7 @@ export class NodeAppsListComponent implements OnDestroy {
     const elementsToChange: string[] = [];
     this.selections.forEach((val, key) => {
       if (val) {
-        if ((startApps && this.appsMap.get(key).status === 0) || (!startApps && this.appsMap.get(key).status === 1)) {
+        if ((startApps && this.appsMap.get(key).status !== 1) || (!startApps && this.appsMap.get(key).status === 1)) {
           elementsToChange.push(key);
         }
       }
@@ -123,15 +123,15 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   changeAppState(app: Application): void {
-    if (app.status === 0) {
-      this.changeSingleAppState(app.name, app.status === 0, app.autostart);
+    if (app.status !== 1) {
+      this.changeSingleAppState(app.name, app.status !== 1, app.autostart);
     } else {
       const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'apps.stop-confirmation');
 
       confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
         confirmationDialog.componentInstance.showProcessing();
 
-        this.changeSingleAppState(app.name, app.status === 0, app.autostart, confirmationDialog);
+        this.changeSingleAppState(app.name, app.status !== 1, app.autostart, confirmationDialog);
       });
     }
   }

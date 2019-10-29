@@ -118,7 +118,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
               if (this.loading) {
                 this.snackbarService.showError('common.loading-error', null, true);
               } else {
-                this.snackbarService.showError('nodes.error-load', { error }, true);
+                this.snackbarService.showError('nodes.error-load', null, true);
               }
             }
 

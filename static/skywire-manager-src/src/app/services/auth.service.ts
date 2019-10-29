@@ -67,7 +67,7 @@ export class AuthService {
   changePassword(oldPass: string, newPass: string): Observable<boolean> {
     return this.apiService.post('change-password',
       {old_password: oldPass, new_password: newPass},
-      { responseType: 'text', type: 'json', api2: true })
+      { responseType: 'text', type: 'json', api2: true, ignoreAuth: true })
       .pipe(map(result => {
         if (typeof result === 'string' && result.trim() === 'true') {
           return true;

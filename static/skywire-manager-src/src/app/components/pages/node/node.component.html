@@ -11,7 +11,13 @@
       [showUpdateButton]="false"
     ></app-tab-bar>
   </div>
-  <app-loading-indicator></app-loading-indicator>
+  <app-loading-indicator *ngIf="!notFound"></app-loading-indicator>
+  <div *ngIf="notFound" class="full-width full-height flex not-found-label">
+    <div>
+      <mat-icon [inline]="true">error</mat-icon>
+      {{ 'node.not-found' | translate }}
+    </div>
+  </div>
 </div>
 
 <div class="row" *ngIf="node">

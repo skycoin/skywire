@@ -90,3 +90,17 @@
     opacity: 0.75;
   }
 }
+
+.not-found-label {
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+
+  mat-icon {
+    position: relative;
+    top: 5px;
+    font-size: 22px;
+    opacity: 0.5;
+    margin-right: 3px;
+  }
+}

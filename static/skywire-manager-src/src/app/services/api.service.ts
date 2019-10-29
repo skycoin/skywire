@@ -35,11 +35,10 @@ export class ApiService {
       responseType: options.responseType ? options.responseType : 'json',
       withCredentials: true,
       body: this.getPostBody(body, options),
-    })
-      .pipe(
-        map(result => this.successHandler(result)),
-        catchError(error => this.errorHandler(error, options)),
-      );
+    }).pipe(
+      map(result => this.successHandler(result)),
+      catchError(error => this.errorHandler(error, options)),
+    );
   }
 
   private getUrl(url: string, options: any) {

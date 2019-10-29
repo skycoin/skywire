@@ -9,6 +9,7 @@ import { StorageService } from '../../../services/storage.service';
 import TimeUtils from '../../../utils/timeUtils';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
+import { HttpErrorResponse } from '@angular/common/http';
 
 @Component({
   selector: 'app-node',
@@ -23,6 +24,7 @@ export class NodeComponent implements OnInit, OnDestroy {
   showMenu = false;
   node: Node;
   onlineTimeTextElements = ['seconds', ''];
+  notFound = false;
 
   private lastUrl: string;
   titleParts = [];
@@ -160,8 +162,14 @@ export class NodeComponent implements OnInit, OnDestroy {
 
           this.refresh(this.storageService.getRefreshTime() * 1000);
         });
-      }, () => {
+      }, (err: HttpErrorResponse) => {
         this.ngZone.run(() => {
+          if (err.status && (err.status === 400 || err.status === 404)) {
+            this.notFound = true;
+
+            return;
+          }
+
           if (!this.errorsUpdating) {
             if (!this.node) {
               this.snackbarService.showError('common.loading-error', null, true);
