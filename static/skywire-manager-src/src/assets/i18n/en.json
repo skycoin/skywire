@@ -19,7 +19,8 @@
     "upload": "Upload",
     "delete": "Delete",
     "none": "None",
-    "loading-error": "There was an error getting the data. Retrying..."
+    "loading-error": "There was an error getting the data. Retrying...",
+    "window-size-error": "The window is too narrow for the content"
   },
 
   "inputs": {
