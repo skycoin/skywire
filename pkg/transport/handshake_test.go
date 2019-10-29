@@ -7,7 +7,7 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
@@ -21,7 +21,7 @@ func TestSettlementHS(t *testing.T) {
 
 	// TEST: Perform a handshake between two snet.Network instances.
 	t.Run("Do", func(t *testing.T) {
-		lis1, err := nEnv.Nets[1].Listen(dmsg.Type, snet.TransportPort)
+		lis1, err := nEnv.Nets[1].Listen(dmsg.Type, skyenv.DmsgTransportPort)
 		require.NoError(t, err)
 
 		errCh1 := make(chan error, 1)
@@ -38,7 +38,7 @@ func TestSettlementHS(t *testing.T) {
 			require.NoError(t, <-errCh1)
 		}()
 
-		conn0, err := nEnv.Nets[0].Dial(dmsg.Type, keys[1].PK, snet.TransportPort)
+		conn0, err := nEnv.Nets[0].Dial(dmsg.Type, keys[1].PK, skyenv.DmsgTransportPort)
 		require.NoError(t, err)
 		require.NoError(t, transport.MakeSettlementHS(true).Do(context.TODO(), tpDisc, conn0, keys[0].SK), "fucked up")
 	})
