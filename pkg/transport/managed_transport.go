@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 
@@ -227,7 +229,7 @@ func (mt *ManagedTransport) Dial(ctx context.Context) error {
 }
 
 func (mt *ManagedTransport) dial(ctx context.Context) error {
-	tp, err := mt.n.Dial(mt.netName, mt.rPK, snet.TransportPort)
+	tp, err := mt.n.Dial(mt.netName, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
 		return err
 	}

@@ -20,7 +20,21 @@ const (
 	AppProtocolVersion = "0.0.1"
 )
 
-// Default skywire apps.
+// Default dmsg ports.
+const (
+	DmsgSetupPort      = uint16(36)  // Listening port of a setup node.
+	DmsgAwaitSetupPort = uint16(136) // Listening port of a visor node for setup operations.
+	DmsgTransportPort  = uint16(45)  // Listening port of a visor node for incoming transports.
+)
+
+// Default dmsgpty constants.
+const (
+	DefaultDmsgPtyPort    = uint16(233)
+	DefaultDmsgPtyCLINet  = "unix"
+	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
+)
+
+// Default skywire app constants.
 const (
 	SkychatName    = "skychat"
 	SkychatVersion = "1.0"
