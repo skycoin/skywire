@@ -38,6 +38,7 @@ export class LogComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.snackbarService.closeCurrentIfTemporalError();
     this.removeSubscription();
   }
 
@@ -77,6 +78,8 @@ export class LogComponent implements OnInit, OnDestroy {
 
   private onLogsReceived(logs: string[] = []) {
     this.loading = false;
+    this.snackbarService.closeCurrentIfTemporalError();
+
     logs.forEach(log => {
       const dateStart = log.startsWith('[') ? 0 : -1;
       const dateEnd = dateStart !== -1 ? log.indexOf(']') : -1;
@@ -101,7 +104,7 @@ export class LogComponent implements OnInit, OnDestroy {
 
   private onLogsError() {
     if (this.shouldShowError) {
-      this.snackbarService.showError('common.loading-error');
+      this.snackbarService.showError('common.loading-error', null, true);
       this.shouldShowError = false;
     }
 

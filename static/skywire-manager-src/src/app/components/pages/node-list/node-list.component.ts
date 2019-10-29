@@ -103,6 +103,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.ngZone.run(() => {
             this.dataSource.data = nodes;
             this.loading = false;
+            this.snackbarService.closeCurrentIfTemporalError();
 
             this.lastUpdate = Date.now();
             this.secondsSinceLastUpdate = 0;
@@ -115,9 +116,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.ngZone.run(() => {
             if (!this.errorsUpdating) {
               if (this.loading) {
-                this.snackbarService.showError('common.loading-error');
+                this.snackbarService.showError('common.loading-error', null, true);
               } else {
-                this.snackbarService.showError('nodes.error-load', { error });
+                this.snackbarService.showError('nodes.error-load', { error }, true);
               }
             }
 

@@ -45,6 +45,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.snackbarService.closeCurrentIfTemporalError();
     this.dataSubscription.unsubscribe();
   }
 
@@ -86,12 +87,13 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       flatMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey()))
     ).subscribe(
       types => {
+        this.snackbarService.closeCurrentIfTemporalError();
         setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
         this.types = types;
       },
       () => {
         if (this.shouldShowError) {
-          this.snackbarService.showError('common.loading-error');
+          this.snackbarService.showError('common.loading-error', null, true);
           this.shouldShowError = false;
         }
 

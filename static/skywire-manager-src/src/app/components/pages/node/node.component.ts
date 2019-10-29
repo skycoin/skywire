@@ -150,6 +150,7 @@ export class NodeComponent implements OnInit, OnDestroy {
           NodeComponent.nodeSubject.next(node);
           this.onlineTimeTextElements = TimeUtils.getElapsedTimeElements(node.seconds_online);
 
+          this.snackbarService.closeCurrentIfTemporalError();
           this.updateTabBar();
 
           this.lastUpdate = Date.now();
@@ -163,9 +164,9 @@ export class NodeComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           if (!this.errorsUpdating) {
             if (!this.node) {
-              this.snackbarService.showError('common.loading-error');
+              this.snackbarService.showError('common.loading-error', null, true);
             } else {
-              this.snackbarService.showError('node.error-load');
+              this.snackbarService.showError('node.error-load', null, true);
             }
           }
 

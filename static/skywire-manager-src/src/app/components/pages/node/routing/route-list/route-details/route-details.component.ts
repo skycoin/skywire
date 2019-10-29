@@ -59,6 +59,7 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.snackbarService.closeCurrentIfTemporalError();
     this.dataSubscription.unsubscribe();
   }
 
@@ -83,10 +84,13 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
       delay(delayMilliseconds),
       flatMap(() => this.routeService.get(NodeComponent.getCurrentNodeKey(), this.data))
     ).subscribe(
-      (rule: RouteRule) => this.routeRule = rule,
+      (rule: RouteRule) => {
+        this.snackbarService.closeCurrentIfTemporalError();
+        this.routeRule = rule;
+      },
       () => {
         if (this.shouldShowError) {
-          this.snackbarService.showError('common.loading-error');
+          this.snackbarService.showError('common.loading-error', null, true);
           this.shouldShowError = false;
         }
 
