@@ -14,32 +14,43 @@ import (
 // Increment this on every revision.
 const Version = "1.0"
 
+// CLI request types.
 const (
 	CfgReqType byte = iota
 	PtyReqType
 )
 
+// Request represents a request from CLI to host.
 type Request interface {
 	Type() byte
 	SetVersion(version string)
 }
 
+// CfgReq represents a 'Cfg' type request.
 type CfgReq struct {
 	Version string
 }
 
-func (CfgReq) Type() byte                   { return CfgReqType }
+// Type implements Request.
+func (CfgReq) Type() byte { return CfgReqType }
+
+// SetVersion implements Request.
 func (r *CfgReq) SetVersion(version string) { r.Version = version }
 
+// PtyReq represents a 'Pty' type request.
 type PtyReq struct {
 	Version string
 	DstPK   cipher.PubKey
 	DstPort uint16
 }
 
-func (PtyReq) Type() byte                   { return PtyReqType }
+// Type implements Request.
+func (PtyReq) Type() byte { return PtyReqType }
+
+// SetVersion implements Request.
 func (r *PtyReq) SetVersion(version string) { r.Version = version }
 
+// WriteRequest writes a request.
 func WriteRequest(w io.Writer, req Request) error {
 	req.SetVersion(Version)
 
@@ -57,6 +68,7 @@ func WriteRequest(w io.Writer, req Request) error {
 	return err
 }
 
+// ReadRequest reads a request.
 func ReadRequest(r io.Reader) (Request, error) {
 	reqT, err := readReqType(r)
 	if err != nil {

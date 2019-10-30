@@ -9,6 +9,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
+// Whitelist represents a whitelist of public keys.
 type Whitelist interface {
 	Get(pk cipher.PubKey) (bool, error)
 	All() (map[cipher.PubKey]bool, error)
@@ -16,7 +17,8 @@ type Whitelist interface {
 	Remove(pks ...cipher.PubKey) error
 }
 
-func NewJsonFileWhiteList(fileName string) (Whitelist, error) {
+// NewJSONFileWhiteList represents a JSON file implementation of a whitelist.
+func NewJSONFileWhiteList(fileName string) (Whitelist, error) {
 	fileName, err := filepath.Abs(fileName)
 	if err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ func (w *jsonFileWhitelist) Remove(pks ...cipher.PubKey) error {
 }
 
 func (w *jsonFileWhitelist) open(perm int, fn func(pkMap map[cipher.PubKey]bool, f *os.File) error) error {
-	f, err := os.OpenFile(w.fileName, perm, 0755)
+	f, err := os.OpenFile(w.fileName, perm, 0600)
 	if err != nil {
 		return err
 	}
