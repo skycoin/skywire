@@ -34,7 +34,7 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor ./SSH-cli
 
 install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
-	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/therealssh-cli
+	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/therealssh-cli ./cmd/dmsgpty
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -102,6 +102,7 @@ bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./messaging-server ./cmd/messaging-server
 	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 	${OPTS} go build ${BUILD_OPTS} -o ./SSH-cli ./cmd/therealssh-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./dmsgpty ./cmd/dmsgpty
 
 
 release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli` and apps without -race flag
