@@ -104,7 +104,6 @@ bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./SSH-cli ./cmd/therealssh-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./dmsgpty ./cmd/dmsgpty
 
-
 release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli` and apps without -race flag
 	${OPTS} go build -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build -o ./skywire-cli  ./cmd/skywire-cli
