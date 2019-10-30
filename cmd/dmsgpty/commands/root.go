@@ -75,6 +75,7 @@ func readDstAddr() error {
 	}
 }
 
+// Execute executes the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
