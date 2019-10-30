@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 
@@ -125,6 +126,12 @@ func NewHostFromDmsgClient(
 		authFile)
 	if err != nil {
 		return nil, err
+	}
+	// Ensure directory exists for socket file (if unix connection).
+	if cliNet == "unix" {
+		if err := ensureDir(cliAddr); err != nil {
+			return nil, err
+		}
 	}
 	cliL, err := net.Listen(cliNet, cliAddr)
 	if err != nil {
@@ -292,4 +299,8 @@ func (h *Host) cleanup() {
 			WithError(os.Remove(h.cliAddr)).
 			Debug("deleted unix file")
 	}
+}
+
+func ensureDir(path string) error {
+	return os.MkdirAll(filepath.Dir(path), os.FileMode(0700))
 }
