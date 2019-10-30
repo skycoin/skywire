@@ -41,3 +41,7 @@ automatically reload if you change any of the source files.
 ## Build
 
 Run `npm run build` to build the project. The build artifacts will be stored in the `dist/` directory.
+
+## Translations
+
+You can find information about how to work with translation files in the [Translations README](/static/skywire-manager-src/src/assets/i18n/README.md).

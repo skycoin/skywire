@@ -1,0 +1,29 @@
+.options-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+
+  .button {
+    width: 118px;
+    margin: 20px;
+    font-size: 12px;
+    line-height: unset;
+    padding: 0;
+    color: unset;
+
+    img {
+      width: 64px;
+      height: 64px;
+      margin: 10px 0px;
+    }
+
+    .label {
+      background-color: #eeeeee;
+      padding: 4px 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+}

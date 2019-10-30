@@ -388,5 +388,9 @@
     "cancel-button": "No",
     "close": "Close",
     "error-header-text": "Error"
+  },
+
+  "language" : {
+    "title": "Select language"
   }
 }

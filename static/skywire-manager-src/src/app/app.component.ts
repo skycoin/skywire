@@ -6,6 +6,7 @@ import { Router } from '@angular/router';
 import { Location } from '@angular/common';
 import { SnackbarService } from './services/snackbar.service';
 import { MatDialog } from '@angular/material';
+import { LanguageService } from './services/language.service';
 
 @Component({
   selector: 'app-root',
@@ -22,6 +23,7 @@ export class AppComponent {
     private router: Router,
     snackbarService: SnackbarService,
     dialog: MatDialog,
+    languageService: LanguageService,
   ) {
     translate.addLangs(getLangs());
     translate.use(storage.getDefaultLanguage());
@@ -36,5 +38,7 @@ export class AppComponent {
     router.events.subscribe(() => {
       this.showFooter = !location.isCurrentPathEqualTo('/login');
     });
+
+    languageService.loadLanguageSettings();
   }
 }

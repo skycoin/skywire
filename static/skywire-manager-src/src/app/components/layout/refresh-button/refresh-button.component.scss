@@ -3,6 +3,7 @@
 .time-button {
   color: $white;
   border-radius: $mat-dialog-radius;
+  height: $header-buttons-height;
 
   &[disabled] {
     opacity: 0.7;

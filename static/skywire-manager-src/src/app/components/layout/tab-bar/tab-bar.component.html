@@ -1,32 +1,36 @@
 <div class="main-container">
-  <div>
-    <div class="title">
-      <span *ngFor="let titlePart of titleParts; let i = index" [ngClass]="{'old': i !== titleParts.length - 1}">
-        {{ titlePart | translate }}
-        <span *ngIf="i !== titleParts.length - 1" class="separator">/</span>
-      </span>
-    </div>
-    <a
-      *ngFor="let tabData of tabsData; let i = index"
-      mat-button
-      class="tab-button white-theme"
-      [disabled]="i === selectedTabIndex"
-      [disableRipple]="true"
-      [routerLink]="tabData.linkParts"
-      replaceUrl
-      [ngClass]="{'mouse-disabled' : disableMouse}"
-      >
-      <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
-      <span>{{ tabData.label | translate }}</span>
-    </a>
+  <div class="title">
+    <span *ngFor="let titlePart of titleParts; let i = index" [ngClass]="{'old': i !== titleParts.length - 1}">
+      {{ titlePart | translate }}
+      <span *ngIf="i !== titleParts.length - 1" class="separator">/</span>
+    </span>
   </div>
-  <div class="blank-space"></div>
-  <app-refresh-button
-    *ngIf="showUpdateButton"
-    [secondsSinceLastUpdate]="secondsSinceLastUpdate"
-    [showLoading]="showLoading"
-    [showAlert]="showAlert"
-    [refeshRate]="refeshRate"
-    (click)="sendRefreshEvent()"
-  ></app-refresh-button>
+  <div class="lower-container">
+    <div *ngFor="let tabData of tabsData; let i = index" class="button-container">
+      <a
+        mat-button
+        class="tab-button white-theme"
+        [disabled]="i === selectedTabIndex"
+        [disableRipple]="true"
+        [routerLink]="tabData.linkParts"
+        replaceUrl
+        [ngClass]="{'mouse-disabled' : disableMouse}"
+        >
+        <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
+        <span>{{ tabData.label | translate }}</span>
+      </a>
+    </div>
+    <div class="blank-space"></div>
+    <div>
+      <app-refresh-button
+        *ngIf="showUpdateButton"
+        [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+        [showLoading]="showLoading"
+        [showAlert]="showAlert"
+        [refeshRate]="refeshRate"
+        (click)="sendRefreshEvent()"
+      ></app-refresh-button>
+      <app-lang-button></app-lang-button>
+    </div>
+  </div>
 </div>

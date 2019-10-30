@@ -86,7 +86,6 @@ import { CreateTransportComponent } from './components/pages/node/routing/transp
 import { AutoScalePipe } from './pipes/auto-scale.pipe';
 import { SidenavComponent } from './components/layout/sidenav/sidenav.component';
 import { SidenavContentComponent } from './components/layout/sidenav/sidenav-content/sidenav-content.component';
-import { LanguageComponent } from './components/pages/settings/language/language.component';
 import { BasicTerminalComponent } from './components/pages/node/actions/basic-terminal/basic-terminal.component';
 import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
 import { RefreshRateComponent } from './components/pages/settings/refresh-rate/refresh-rate.component';
@@ -105,6 +104,8 @@ import { TransportDetailsComponent } from './components/pages/node/routing/trans
 import { LogFilterComponent } from './components/pages/node/apps/node-apps/log/log-filter/log-filter.component';
 import { SnackbarComponent } from './components/layout/snack-bar/snack-bar.component';
 import { InitialSetupComponent } from './components/pages/login/initial-setup/initial-setup.component';
+import { SelectLanguageComponent } from './components/layout/select-language/select-language.component';
+import { LangButtonComponent } from './components/layout/lang-button/lang-button.component';
 
 @NgModule({
   declarations: [
@@ -162,7 +163,6 @@ import { InitialSetupComponent } from './components/pages/login/initial-setup/in
     NodeAppsComponent,
     SidenavComponent,
     SidenavContentComponent,
-    LanguageComponent,
     BasicTerminalComponent,
     RouteDetailsComponent,
     RefreshRateComponent,
@@ -179,6 +179,8 @@ import { InitialSetupComponent } from './components/pages/login/initial-setup/in
     LogFilterComponent,
     SnackbarComponent,
     InitialSetupComponent,
+    SelectLanguageComponent,
+    LangButtonComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -202,6 +204,7 @@ import { InitialSetupComponent } from './components/pages/login/initial-setup/in
     LogFilterComponent,
     SnackbarComponent,
     InitialSetupComponent,
+    SelectLanguageComponent,
   ],
   imports: [
     BrowserModule,
