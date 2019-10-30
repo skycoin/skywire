@@ -86,4 +86,23 @@ export class AuthService {
         throw new Error(this.translateService.instant('settings.password.errors.bad-old-password'));
       }));
   }
+
+  initialConfig(pass: string): Observable<boolean> {
+    return this.apiService.post('create-account',
+      {username: 'admin', password: pass},
+      { responseType: 'text', type: 'json', api2: true, ignoreAuth: true })
+      .pipe(map(result => {
+        if (typeof result === 'string' && result.trim() === 'true') {
+          return true;
+        } else {
+          throw new Error(result);
+        }
+      }), catchError(err => {
+        if ((err as HttpErrorResponse).status === 400) {
+          throw new Error(this.translateService.instant('settings.password.errors.invalid-password-format'));
+        }
+
+        throw new Error(this.translateService.instant('settings.password.initial-config.error'));
+      }));
+  }
 }

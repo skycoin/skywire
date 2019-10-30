@@ -121,6 +121,14 @@
       "repeat-password": "Repeat password",
       "password-changed": "Password changed",
       "error-changing": "Error changing password",
+      "initial-config": {
+        "title": "Set initial password",
+        "password": "Password",
+        "repeat-password": "Repeat password",
+        "set-password": "Set password",
+        "done": "Password set. Please use it to access the system",
+        "error": "Error. Please make sure you have not already set the password"
+      },
       "errors": {
         "bad-old-password": "The provided old password is not correct.",
         "old-password-required": "Old password is required",
@@ -139,7 +147,8 @@
   "login": {
     "login": "Login",
     "password": "Password",
-    "incorrect-password": "Incorrect password"
+    "incorrect-password": "Incorrect password",
+    "initial-config": "Configure initial launch"
   },
 
   "actions": {

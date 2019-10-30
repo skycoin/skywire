@@ -104,6 +104,7 @@ import { ConfirmationComponent } from './components/layout/confirmation/confirma
 import { TransportDetailsComponent } from './components/pages/node/routing/transport-list/transport-details/transport-details.component';
 import { LogFilterComponent } from './components/pages/node/apps/node-apps/log/log-filter/log-filter.component';
 import { SnackbarComponent } from './components/layout/snack-bar/snack-bar.component';
+import { InitialSetupComponent } from './components/pages/login/initial-setup/initial-setup.component';
 
 @NgModule({
   declarations: [
@@ -177,6 +178,7 @@ import { SnackbarComponent } from './components/layout/snack-bar/snack-bar.compo
     TransportDetailsComponent,
     LogFilterComponent,
     SnackbarComponent,
+    InitialSetupComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -199,6 +201,7 @@ import { SnackbarComponent } from './components/layout/snack-bar/snack-bar.compo
     TransportDetailsComponent,
     LogFilterComponent,
     SnackbarComponent,
+    InitialSetupComponent,
   ],
   imports: [
     BrowserModule,

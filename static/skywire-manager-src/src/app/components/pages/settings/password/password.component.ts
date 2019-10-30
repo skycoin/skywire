@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Input, ViewChild, ElementRef } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../services/auth.service';
-import { Location } from '@angular/common';
 import { SnackbarService } from '../../../../services/snackbar.service';
+import { MatDialog } from '@angular/material';
+import { ButtonComponent } from '../../../layout/button/button.component';
 
 @Component({
   selector: 'app-password',
@@ -11,34 +12,42 @@ import { SnackbarService } from '../../../../services/snackbar.service';
   styleUrls: ['./password.component.scss']
 })
 export class PasswordComponent implements OnInit {
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
+
+  @Input() forInitialConfig = false;
+
   form: FormGroup;
 
   constructor(
     private authService: AuthService,
     private router: Router,
-    private location: Location,
     private snackbarService: SnackbarService,
+    private dialog: MatDialog,
   ) { }
 
   ngOnInit() {
     this.form = new FormGroup({
-      'oldPassword': new FormControl('', Validators.required),
+      'oldPassword': new FormControl('', !this.forInitialConfig ? Validators.required : null),
       'newPassword': new FormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
       'newPasswordConfirmation': new FormControl('', [this.validatePasswords.bind(this)]),
     }, {
       validators: [this.validatePasswords.bind(this)],
     });
+
+    if (this.forInitialConfig) {
+      setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
+    }
   }
 
   changePassword() {
     if (this.form.valid) {
-      this.authService.changePassword(this.form.get('oldPassword').value, this.form.get('newPassword').value)
-        .subscribe(
+      if (!this.forInitialConfig) {
+        this.authService.changePassword(this.form.get('oldPassword').value, this.form.get('newPassword').value).subscribe(
           () => {
             this.router.navigate(['nodes']);
             this.snackbarService.showDone('settings.password.password-changed');
-          },
-          (err) => {
+          }, (err) => {
             if (err.message) {
               this.snackbarService.showError(err.message);
             } else {
@@ -46,11 +55,24 @@ export class PasswordComponent implements OnInit {
             }
           },
         );
-    }
-  }
+      } else {
+        this.button.loading();
 
-  back() {
-    this.location.back();
+        this.authService.initialConfig(this.form.get('newPassword').value).subscribe(
+          () => {
+            this.dialog.closeAll();
+            this.snackbarService.showDone('settings.password.initial-config.done');
+          }, err => {
+            this.button.error('');
+            if (err.message) {
+              this.snackbarService.showError(err.message);
+            } else {
+              this.snackbarService.showError('settings.password.initial-config.error');
+            }
+          },
+        );
+      }
+    }
   }
 
   private validatePasswords() {
