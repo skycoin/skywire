@@ -23,6 +23,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty/ptyutil"
 )
 
+// HostConfig configures a dmsgpty host.
 type HostConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
 	SecKey cipher.SecKey `json:"secret_key"`
@@ -37,6 +38,7 @@ type HostConfig struct {
 	CLIAddr string `json:"cli_address"`
 }
 
+// SetDefaults sets nil-valued fields to default values.
 func (c *HostConfig) SetDefaults() {
 	if c.DmsgDiscAddr == "" {
 		c.DmsgDiscAddr = skyenv.DefaultDmsgDiscAddr
@@ -61,7 +63,7 @@ func (c *HostConfig) SetDefaults() {
 // Host hosts a dmsgpty server.
 // TODO(evanlinjin): Change this to use `snet.Network` instead of `dmsg.Client` directly.
 type Host struct {
-	log  logrus.FieldLogger
+	log logrus.FieldLogger
 
 	pk      cipher.PubKey
 	cliNet  string
@@ -73,11 +75,9 @@ type Host struct {
 
 	cliL net.Listener // Listens for CLI connections.
 	cliI int32        // CLI index.
-
-	done chan struct{}
-	once sync.Once
 }
 
+// NewHost instantiates a new host with a given configuration.
 func NewHost(ctx context.Context, log logrus.FieldLogger, conf HostConfig) (*Host, error) {
 	conf.SetDefaults()
 
@@ -102,6 +102,7 @@ func NewHost(ctx context.Context, log logrus.FieldLogger, conf HostConfig) (*Hos
 		conf.CLIAddr)
 }
 
+// NewHostFromDmsgClient instantiates a new host with a given dmsg client (and additional arguments).
 func NewHostFromDmsgClient(
 	log logrus.FieldLogger,
 	dmsgC *dmsg.Client,
@@ -138,14 +139,14 @@ func NewHostFromDmsgClient(
 		return nil, err
 	}
 	return &Host{
-		log:   log,
-		pk: pk,
-		cliNet: cliNet,
+		log:     log,
+		pk:      pk,
+		cliNet:  cliNet,
 		cliAddr: cliAddr,
-		dmsgC: dmsgC,
-		dmsgL: dmsgL,
-		ptyS:  ptyS,
-		cliL:  cliL,
+		dmsgC:   dmsgC,
+		dmsgL:   dmsgL,
+		ptyS:    ptyS,
+		cliL:    cliL,
 	}, nil
 }
 
@@ -222,7 +223,7 @@ func (h *Host) handleCLIConn(ctx context.Context, cliConn net.Conn) {
 
 	switch req.Type() {
 	case CfgReqType:
-		rpcSrv, err = h.handleCfgReq(ctx, log)
+		rpcSrv, err = h.handleCfgReq(ctx)
 	case PtyReqType:
 		rpcSrv, err = h.handlePtyReq(ctx, log, req.(*PtyReq))
 	}
@@ -234,7 +235,7 @@ func (h *Host) handleCLIConn(ctx context.Context, cliConn net.Conn) {
 	rpcSrv.ServeConn(cliConn)
 }
 
-func (h *Host) handleCfgReq(ctx context.Context, log logrus.FieldLogger) (*rpc.Server, error) {
+func (h *Host) handleCfgReq(ctx context.Context) (*rpc.Server, error) {
 	rpcS := rpc.NewServer()
 	if err := rpcS.RegisterName(ptycfg.GatewayName, ptycfg.NewGateway(ctx, h.ptyS.Auth())); err != nil {
 		return nil, fmt.Errorf("failed to register 'CfgGateway': %v", err)

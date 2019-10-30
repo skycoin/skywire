@@ -6,8 +6,6 @@ import (
 	"net/rpc"
 	"os"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/creack/pty"
 	"github.com/sirupsen/logrus"
@@ -15,12 +13,14 @@ import (
 
 var empty = &struct{}{}
 
+// Client is a pty client.
 type Client struct {
 	ctx  context.Context
 	log  logrus.FieldLogger
 	rpcC *rpc.Client
 }
 
+// NewPtyClient creates a new pty client.
 func NewPtyClient(ctx context.Context, log logrus.FieldLogger, conn io.ReadWriteCloser) *Client {
 	if log == nil {
 		log = logging.MustGetLogger("dmsgpty-client")
@@ -32,33 +32,35 @@ func NewPtyClient(ctx context.Context, log logrus.FieldLogger, conn io.ReadWrite
 	}
 }
 
-func NewPtyClientWithTp(log logrus.FieldLogger, _ cipher.SecKey, tp *dmsg.Transport) (*Client, error) {
-	if log == nil {
-		log = logging.MustGetLogger("dmsgpty-client")
-	}
+// TODO(evanlinjin): determine if needed.
+//func NewPtyClientWithTp(log logrus.FieldLogger, _ cipher.SecKey, tp *dmsg.Transport) (*Client, error) {
+//	if log == nil {
+//		log = logging.MustGetLogger("dmsgpty-client")
+//	}
+//
+//	// TODO(evanlinjin): Wrap connection with noise.
+//	//ns, err := noise.New(noise.HandshakeXK, noise.Config{
+//	//	LocalPK:   tp.LocalPK(),
+//	//	LocalSK:   sk,
+//	//	RemotePK:  tp.RemotePK(),
+//	//	Initiator: true,
+//	//})
+//	//if err != nil {
+//	//	log.WithError(err).Fatal("NewPtyClientWithTp: failed to init noise")
+//	//	return nil, err
+//	//}
+//	//conn, err := noise.WrapConn(tp, ns, noise.AcceptHandshakeTimeout)
+//	//if err != nil {
+//	//	return nil, err
+//	//}
+//
+//	return &Client{
+//		log:  log,
+//		rpcC: rpc.NewClient(tp),
+//	}, nil
+//}
 
-	// TODO(evanlinjin): Wrap connection with noise.
-	//ns, err := noise.New(noise.HandshakeXK, noise.Config{
-	//	LocalPK:   tp.LocalPK(),
-	//	LocalSK:   sk,
-	//	RemotePK:  tp.RemotePK(),
-	//	Initiator: true,
-	//})
-	//if err != nil {
-	//	log.WithError(err).Fatal("NewPtyClientWithTp: failed to init noise")
-	//	return nil, err
-	//}
-	//conn, err := noise.WrapConn(tp, ns, noise.AcceptHandshakeTimeout)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	return &Client{
-		log:  log,
-		rpcC: rpc.NewClient(tp),
-	}, nil
-}
-
+// Close closes the pty and closes the connection to the remote.
 func (c *Client) Close() error {
 	if err := c.Stop(); err != nil {
 		c.log.WithError(err).Warn("failed to stop remote pty")
@@ -66,6 +68,7 @@ func (c *Client) Close() error {
 	return c.rpcC.Close()
 }
 
+// Start starts the pty.
 func (c *Client) Start(name string, arg ...string) error {
 	size, err := pty.GetsizeFull(os.Stdin)
 	if err != nil {
@@ -75,10 +78,12 @@ func (c *Client) Start(name string, arg ...string) error {
 	return c.call("Start", &CommandReq{Name: name, Arg: arg, Size: size}, empty)
 }
 
+// Stop stops the pty.
 func (c *Client) Stop() error {
 	return c.call("Stop", empty, empty)
 }
 
+// Read reads from the pty.
 func (c *Client) Read(b []byte) (int, error) {
 	reqN := len(b)
 	var respB []byte
@@ -86,12 +91,14 @@ func (c *Client) Read(b []byte) (int, error) {
 	return copy(b, respB), processRPCError(err)
 }
 
+// Write writes to the pty.
 func (c *Client) Write(b []byte) (int, error) {
 	var n int
 	err := c.call("Write", &b, &n)
 	return n, processRPCError(err)
 }
 
+// SetPtySize sets the pty size.
 func (c *Client) SetPtySize(size *pty.Winsize) error {
 	return c.call("SetPtySize", size, empty)
 }
@@ -110,6 +117,7 @@ func ptyMethod(m string) string {
 	return GatewayName + "." + m
 }
 
+// GetPtySize obtains the size of the local terminal.
 func GetPtySize(t *os.File) (*pty.Winsize, error) { return pty.GetsizeFull(t) }
 
 func processRPCError(err error) error {

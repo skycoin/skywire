@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"sort"
 
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
 
