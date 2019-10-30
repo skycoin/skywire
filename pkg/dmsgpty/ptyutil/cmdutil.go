@@ -33,6 +33,8 @@ func MakeSignalCtx() (context.Context, context.CancelFunc) {
 	return ctx, cancel
 }
 
+// SignalDial dials a net.Conn with the given network and address.
+// If the context is canceled, the connection also closes.
 func SignalDial(network, addr string, fn func(conn net.Conn)) {
 	ctx, cancel := MakeSignalCtx()
 	defer cancel()
@@ -50,6 +52,7 @@ func SignalDial(network, addr string, fn func(conn net.Conn)) {
 	fn(conn)
 }
 
+// SignalDialE performs the same as SignalDial, expect it returns an error.
 func SignalDialE(network, addr string, fn func(conn net.Conn) error) error {
 	ctx, cancel := MakeSignalCtx()
 	defer cancel()
@@ -67,9 +70,13 @@ func SignalDialE(network, addr string, fn func(conn net.Conn) error) error {
 	return fn(conn)
 }
 
+// Path constants.
 const (
 	ConfDir = ".dmsgpty"
 )
 
-func DefaultKeysPath() string { return filepath.Join(pathutil.HomeDir(), ConfDir, "keys.json") }
+// TODO(evanlinjin): Determine if this is still needed.
+//func DefaultKeysPath() string { return filepath.Join(pathutil.HomeDir(), ConfDir, "keys.json") }
+
+// DefaultAuthPath returns the default auth path.
 func DefaultAuthPath() string { return filepath.Join(pathutil.HomeDir(), ConfDir, "whitelist.json") }

@@ -94,6 +94,7 @@ func (c *Config) MessagingConfig() (*DmsgConfig, error) {
 	}, nil
 }
 
+// DmsgPtyHost instantiates a host from the dmsgpty config.
 func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	if c.DmsgPty == nil {
 		return nil, errors.New("'dmsg_pty' config field not defined")
@@ -200,6 +201,7 @@ type DmsgConfig struct {
 	RetryDelay time.Duration
 }
 
+// DmsgPtyConfig configures the dmsgpty-host.
 type DmsgPtyConfig struct {
 	Port     uint16 `json:"port"`
 	AuthFile string `json:"authorization_file"`

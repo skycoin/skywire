@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// CLI represents the command line interface for communicating with the dmsgpty-host.
 type CLI struct {
 	Log logrus.FieldLogger `json:"-"`
 
@@ -33,6 +34,7 @@ type CLI struct {
 	Arg []string `json:"command_arguments"`
 }
 
+// SetDefaults sets the fields with nil-values to default values.
 func (c *CLI) SetDefaults() {
 	if c.Log == nil {
 		c.Log = logging.MustGetLogger("dmsgpty-cli")
@@ -51,6 +53,7 @@ func (c *CLI) SetDefaults() {
 	}
 }
 
+// dials to the dmsgpty-host with a given request.
 func (c *CLI) dial(req Request) (net.Conn, error) {
 	conn, err := net.Dial(c.Net, c.Addr)
 	if err != nil {
@@ -68,10 +71,12 @@ func (c *CLI) dial(req Request) (net.Conn, error) {
 	return conn, nil
 }
 
+// RequestCfg dials a request of type 'Cfg'.
 func (c *CLI) RequestCfg() (net.Conn, error) {
 	return c.dial(new(CfgReq))
 }
 
+// RequestPty dials a request of type 'Pty'.
 func (c *CLI) RequestPty() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -136,6 +141,7 @@ func (c *CLI) RequestPty() error {
 	return nil
 }
 
+// Loop that informs the remote of changes to the local CLI terminal window size.
 func (c *CLI) ptyResizeLoop(ctx context.Context, ptyC *pty.Client) error {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)

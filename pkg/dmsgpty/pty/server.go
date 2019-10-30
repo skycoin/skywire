@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Server represents the dmsgpty-server.
 type Server struct {
 	log logrus.FieldLogger
 
@@ -23,11 +24,12 @@ type Server struct {
 	auth ptycfg.Whitelist
 }
 
+// NewServer instantiates a dmsgpty-server.
 func NewServer(log logrus.FieldLogger, pk cipher.PubKey, sk cipher.SecKey, authFile string) (*Server, error) {
 	if log == nil {
 		log = logging.MustGetLogger("dmsgpty-server")
 	}
-	auth, err := ptycfg.NewJsonFileWhiteList(authFile)
+	auth, err := ptycfg.NewJSONFileWhiteList(authFile)
 	if err != nil {
 		return nil, err
 	}
@@ -45,8 +47,10 @@ func NewServer(log logrus.FieldLogger, pk cipher.PubKey, sk cipher.SecKey, authF
 	}, nil
 }
 
+// Auth returns the internal whitelist used by dmsgpty-server.
 func (s *Server) Auth() ptycfg.Whitelist { return s.auth }
 
+// Serve serves the dmsgpty-server for remote requests over dmsg.
 func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 	wg := new(sync.WaitGroup)
 	defer wg.Wait()
@@ -101,8 +105,8 @@ func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 	}
 }
 
-// handles connection (assumes remote party is authorised to connect).
-func (s *Server) handleConn(log logrus.FieldLogger, rPK cipher.PubKey, conn net.Conn) {
+// handles connection (assumes remote party is authorized to connect).
+func (s *Server) handleConn(log logrus.FieldLogger, _ cipher.PubKey, conn net.Conn) {
 
 	// TODO(evanlinjin): Wrap connection with noise.
 	//ns, err := noise.New(noise.HandshakeXK, noise.Config{
@@ -132,6 +136,7 @@ func (s *Server) handleConn(log logrus.FieldLogger, rPK cipher.PubKey, conn net.
 	rpcS.ServeConn(conn)
 }
 
+// RequestPty requests a remote pty over dmsg.
 func (s *Server) RequestPty(ctx context.Context, rPK cipher.PubKey, conn net.Conn) Gateway {
 	log := logging.MustGetLogger("dmsgpty-client:" + rPK.String())
 	return NewProxyGateway(NewPtyClient(ctx, log, conn))
