@@ -214,7 +214,6 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 // Start spawns auto-started Apps, starts router and RPC interfaces .
 func (node *Node) Start() error {
 	skywireNetworker := appnet.NewSkywireNetworker(logging.MustGetLogger("skynet"), node.router)
-	appnet.ClearNetworkers()
 	if err := appnet.AddNetworker(appnet.TypeSkynet, skywireNetworker); err != nil {
 		return errors.Wrap(err, "error adding skywire networker")
 	}
@@ -418,6 +417,8 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	appCfg := appcommon.Config{
 		Name:      config.App,
 		Version:   config.Version,
+		SockFile:  node.config.AppServerSockFile,
+		VisorPK:   node.config.Node.StaticPubKey.Hex(),
 		BinaryDir: node.appsPath,
 		WorkDir:   filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
 	}
