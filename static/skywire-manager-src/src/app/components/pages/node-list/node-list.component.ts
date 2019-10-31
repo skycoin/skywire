@@ -11,15 +11,27 @@ import { delay, flatMap, tap } from 'rxjs/operators';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 
+enum SortableColumns {
+  Label,
+  Key,
+}
+
 @Component({
   selector: 'app-node-list',
   templateUrl: './node-list.component.html',
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
+  sortableColumns = SortableColumns;
+  sortBy = SortableColumns.Key;
+  sortReverse = false;
+  get sortingArrow(): string {
+    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
+  }
+
   loading = true;
   dataSource = new MatTableDataSource<Node>();
-  displayedColumns: string[] = ['enabled', 'index', 'label', 'key', 'actions'];
+  displayedColumns: string[] = ['enabled', 'label', 'key', 'actions'];
   tabsData: TabButtonData[] = [];
 
   private dataSubscription: Subscription;
@@ -87,6 +99,17 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
   }
 
+  changeSortingOrder(column: SortableColumns) {
+    if (this.sortBy !== column) {
+      this.sortBy = column;
+      this.sortReverse = false;
+    } else {
+      this.sortReverse = !this.sortReverse;
+    }
+
+    this.sortList();
+  }
+
   private refresh(delayMilliseconds: number) {
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
@@ -102,6 +125,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         (nodes: Node[]) => {
           this.ngZone.run(() => {
             this.dataSource.data = nodes;
+            this.sortList();
             this.loading = false;
             this.snackbarService.closeCurrentIfTemporalError();
 
@@ -133,6 +157,23 @@ export class NodeListComponent implements OnInit, OnDestroy {
           });
         }
       );
+    });
+  }
+
+  private sortList() {
+    this.dataSource.data = this.dataSource.data.sort((a, b) => {
+      const defaultOrder = a.local_pk.localeCompare(b.local_pk);
+
+      let response: number;
+      if (this.sortBy === SortableColumns.Key) {
+        response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
+      } else if (this.sortBy === SortableColumns.Label) {
+        response = !this.sortReverse ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
+      } else {
+        response = defaultOrder;
+      }
+
+      return response !== 0 ? response : defaultOrder;
     });
   }
 

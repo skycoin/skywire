@@ -11,6 +11,13 @@ import GeneralUtils from '../../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 
+enum SortableColumns {
+  Name,
+  Port,
+  Status,
+  AutoStart,
+}
+
 @Component({
   selector: 'app-node-app-list',
   templateUrl: './node-apps-list.component.html',
@@ -18,6 +25,13 @@ import { SnackbarService } from '../../../../../../services/snackbar.service';
 })
 export class NodeAppsListComponent implements OnDestroy {
   @Input() nodePK: string;
+  sortableColumns = SortableColumns;
+
+  sortBy = SortableColumns.Name;
+  sortReverse = false;
+  get sortingArrow(): string {
+    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
+  }
 
   displayedColumns: string[] = ['selection', 'name', 'port', 'status', 'autostart', 'actions'];
   dataSource = new MatTableDataSource<Application>();
@@ -168,10 +182,40 @@ export class NodeAppsListComponent implements OnDestroy {
     this.dialog.open(LogComponent, config);
   }
 
+  changeSortingOrder(column: SortableColumns) {
+    if (this.sortBy !== column) {
+      this.sortBy = column;
+      this.sortReverse = false;
+    } else {
+      this.sortReverse = !this.sortReverse;
+    }
+
+    this.recalculateElementsToShow();
+  }
+
   private recalculateElementsToShow() {
     this.currentPage = this.currentPageInUrl;
 
     if (this.allApps) {
+      this.allApps.sort((a, b) => {
+        const defaultOrder = a.name.localeCompare(b.name);
+
+        let response: number;
+        if (this.sortBy === SortableColumns.Name) {
+          response = !this.sortReverse ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+        } else if (this.sortBy === SortableColumns.Port) {
+          response = !this.sortReverse ? a.port - b.port : b.port - a.port;
+        } else if (this.sortBy === SortableColumns.Status) {
+          response = !this.sortReverse ? b.status - a.status : a.status - b.status;
+        } else if (this.sortBy === SortableColumns.AutoStart) {
+          response = !this.sortReverse ? (b.autostart ? 1 : 0) - (a.autostart ? 1 : 0) : (a.autostart ? 1 : 0) - (b.autostart ? 1 : 0);
+        } else {
+          response = defaultOrder;
+        }
+
+        return response !== 0 ? response : defaultOrder;
+      });
+
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
 
       this.numberOfPages = Math.ceil(this.allApps.length / maxElements);

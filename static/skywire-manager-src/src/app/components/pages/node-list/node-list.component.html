@@ -44,20 +44,21 @@
           </td>
         </ng-container>
 
-        <ng-container matColumnDef="index">
-          <th mat-header-cell *matHeaderCellDef class="bold">#</th>
-          <td id="nodeIndex" mat-cell *matCellDef="let node;let i=index;" class="bold">{{i+1}}</td>
-        </ng-container>
-
         <ng-container matColumnDef="label">
-          <th mat-header-cell *matHeaderCellDef class="bold">{{ 'nodes.label' | translate }}</th>
+          <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
+            {{ 'nodes.label' | translate }}
+            <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
+          </th>
           <td id="nodeLabel" mat-cell *matCellDef="let node;">
             {{ node.label }}
           </td>
         </ng-container>
 
         <ng-container matColumnDef="key">
-          <th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.key' | translate }}</th>
+          <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
+            {{ 'common.key' | translate }}
+            <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
+          </th>
           <td class="node-key" mat-cell *matCellDef="let node;">
             <div class="cover"></div>
             <app-copy-to-clipboard-text [text]="node.local_pk"></app-copy-to-clipboard-text>

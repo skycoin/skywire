@@ -11,6 +11,11 @@ import GeneralUtils from '../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
 
+enum SortableColumns {
+  Key,
+  Rule,
+}
+
 @Component({
   selector: 'app-route-list',
   templateUrl: './route-list.component.html',
@@ -18,6 +23,13 @@ import { SnackbarService } from '../../../../../services/snackbar.service';
 })
 export class RouteListComponent implements OnDestroy {
   @Input() nodePK: string;
+  sortableColumns = SortableColumns;
+
+  sortBy = SortableColumns.Key;
+  sortReverse = false;
+  get sortingArrow(): string {
+    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
+  }
 
   displayedColumns: string[] = ['selection', 'key', 'rule', 'actions'];
   dataSource = new MatTableDataSource<Route>();
@@ -135,10 +147,36 @@ export class RouteListComponent implements OnDestroy {
     });
   }
 
+  changeSortingOrder(column: SortableColumns) {
+    if (this.sortBy !== column) {
+      this.sortBy = column;
+      this.sortReverse = false;
+    } else {
+      this.sortReverse = !this.sortReverse;
+    }
+
+    this.recalculateElementsToShow();
+  }
+
   private recalculateElementsToShow() {
     this.currentPage = this.currentPageInUrl;
 
     if (this.allRoutes) {
+      this.allRoutes.sort((a, b) => {
+        const defaultOrder = a.key - b.key;
+
+        let response: number;
+        if (this.sortBy === SortableColumns.Key) {
+          response = !this.sortReverse ? a.key - b.key : b.key - a.key;
+        } else if (this.sortBy === SortableColumns.Rule) {
+          response = !this.sortReverse ? a.rule.localeCompare(b.rule) : b.rule.localeCompare(a.rule);
+        } else {
+          response = defaultOrder;
+        }
+
+        return response !== 0 ? response : defaultOrder;
+      });
+
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
 
       this.numberOfPages = Math.ceil(this.allRoutes.length / maxElements);

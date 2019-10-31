@@ -12,6 +12,14 @@ import GeneralUtils from '../../../../../utils/generalUtils';
 import { TransportDetailsComponent } from './transport-details/transport-details.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
 
+enum SortableColumns {
+  Id,
+  RemotePk,
+  Type,
+  Uploaded,
+  Downloaded,
+}
+
 @Component({
   selector: 'app-transport-list',
   templateUrl: './transport-list.component.html',
@@ -19,6 +27,13 @@ import { SnackbarService } from '../../../../../services/snackbar.service';
 })
 export class TransportListComponent implements OnDestroy {
   @Input() nodePK: string;
+  sortableColumns = SortableColumns;
+
+  sortBy = SortableColumns.Id;
+  sortReverse = false;
+  get sortingArrow(): string {
+    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
+  }
 
   displayedColumns: string[] = ['selection', 'id', 'remote', 'type', 'upload_total', 'download_total', 'actions'];
   dataSource = new MatTableDataSource<Transport>();
@@ -140,10 +155,42 @@ export class TransportListComponent implements OnDestroy {
     });
   }
 
+  changeSortingOrder(column: SortableColumns) {
+    if (this.sortBy !== column) {
+      this.sortBy = column;
+      this.sortReverse = false;
+    } else {
+      this.sortReverse = !this.sortReverse;
+    }
+
+    this.recalculateElementsToShow();
+  }
+
   private recalculateElementsToShow() {
     this.currentPage = this.currentPageInUrl;
 
     if (this.allTransports) {
+      this.allTransports.sort((a, b) => {
+        const defaultOrder = a.id.localeCompare(b.id);
+
+        let response: number;
+        if (this.sortBy === SortableColumns.Id) {
+          response = !this.sortReverse ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+        } else if (this.sortBy === SortableColumns.RemotePk) {
+          response = !this.sortReverse ? a.remote_pk.localeCompare(b.remote_pk) : b.remote_pk.localeCompare(a.remote_pk);
+        } else if (this.sortBy === SortableColumns.Type) {
+          response = !this.sortReverse ? a.type.localeCompare(b.type) : b.type.localeCompare(a.type);
+        } else if (this.sortBy === SortableColumns.Uploaded) {
+          response = !this.sortReverse ? b.log.sent - a.log.sent : a.log.sent - b.log.sent;
+        } else if (this.sortBy === SortableColumns.Downloaded) {
+          response = !this.sortReverse ? b.log.recv - a.log.recv : a.log.recv - b.log.recv;
+        } else {
+          response = defaultOrder;
+        }
+
+        return response !== 0 ? response : defaultOrder;
+      });
+
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
 
       this.numberOfPages = Math.ceil(this.allTransports.length / maxElements);

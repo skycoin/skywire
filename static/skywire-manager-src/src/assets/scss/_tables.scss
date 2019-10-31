@@ -17,6 +17,11 @@ $tables-colors: (
     width: 30px;
   }
 
+  .mat-column-actions
+  {
+    width: 80px;
+  }
+
   .table-#{$name}
   {
     background: nth($colors, 1) !important;
@@ -116,5 +121,14 @@ $tables-colors: (
         font-size: 14px;
       }
     }
+  }
+}
+
+.sortable-column {
+  cursor: pointer;
+
+  mat-icon {
+    position: relative;
+    top: 2px;
   }
 }

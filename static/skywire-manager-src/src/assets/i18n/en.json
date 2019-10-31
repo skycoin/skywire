@@ -249,8 +249,7 @@
       "app-name": "App name",
       "port": "Port",
       "status": "Status",
-      "auto-start": "Auto start",
-      "actions": "Actions"
+      "auto-start": "Auto start"
     },
     "stop-app": "Stop",
     "start-app": "Start",

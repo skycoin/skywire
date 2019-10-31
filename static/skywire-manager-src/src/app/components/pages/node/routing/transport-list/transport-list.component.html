@@ -44,31 +44,46 @@
       </td>
     </ng-container>
     <ng-container matColumnDef="id">
-      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'transports.id' | translate }}</th>
+      <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Id)">
+        {{ 'transports.id' | translate }}
+        <mat-icon *ngIf="sortBy === sortableColumns.Id" [inline]="true">{{ sortingArrow }}</mat-icon>
+      </th>
       <td mat-cell *matCellDef="let transport;">
         <app-copy-to-clipboard-text [short]="true" text="{{ transport.id }}"></app-copy-to-clipboard-text>
       </td>
     </ng-container>
     <ng-container matColumnDef="remote">
-      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'transports.remote' | translate }}</th>
+      <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.RemotePk)">
+        {{ 'transports.remote' | translate }}
+        <mat-icon *ngIf="sortBy === sortableColumns.RemotePk" [inline]="true">{{ sortingArrow }}</mat-icon>
+      </th>
       <td mat-cell *matCellDef="let transport;">
         <app-copy-to-clipboard-text [short]="true" text="{{ transport.remote_pk }}"></app-copy-to-clipboard-text>
       </td>
     </ng-container>
     <ng-container matColumnDef="type">
-      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'transports.type' | translate }}</th>
+      <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Type)">
+        {{ 'transports.type' | translate }}
+        <mat-icon *ngIf="sortBy === sortableColumns.Type" [inline]="true">{{ sortingArrow }}</mat-icon>
+      </th>
       <td mat-cell *matCellDef="let transport;">
         {{ transport.type }}
       </td>
     </ng-container>
     <ng-container matColumnDef="upload_total">
-      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.upload' | translate }}</th>
+      <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Uploaded)">
+        {{ 'common.upload' | translate }}
+        <mat-icon *ngIf="sortBy === sortableColumns.Uploaded" [inline]="true">{{ sortingArrow }}</mat-icon>
+      </th>
       <td mat-cell *matCellDef="let transport;">
         {{ transport.log.sent | autoScale }}
       </td>
     </ng-container>
     <ng-container matColumnDef="download_total">
-      <th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.download' | translate }}</th>
+      <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Downloaded)">
+        {{ 'common.download' | translate }}
+        <mat-icon *ngIf="sortBy === sortableColumns.Downloaded" [inline]="true">{{ sortingArrow }}</mat-icon>
+      </th>
       <td mat-cell *matCellDef="let transport;">
         {{ transport.log.recv | autoScale }}
       </td>
