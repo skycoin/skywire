@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/skycoin/skywire/pkg/app2/appcommon"
+
 	"github.com/pkg/errors"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -16,13 +18,13 @@ import (
 
 func TestClientConfigFromEnv(t *testing.T) {
 	resetEnv := func(t *testing.T) {
-		err := os.Setenv("APP_KEY", "")
+		err := os.Setenv(appcommon.EnvAppKey, "")
 		require.NoError(t, err)
 
-		err = os.Setenv("SW_UNIX", "")
+		err = os.Setenv(appcommon.EnvSockFile, "")
 		require.NoError(t, err)
 
-		err = os.Setenv("VISOR_PK", "")
+		err = os.Setenv(appcommon.EnvVisorPK, "")
 		require.NoError(t, err)
 	}
 
@@ -37,13 +39,13 @@ func TestClientConfigFromEnv(t *testing.T) {
 			AppKey:   "key",
 		}
 
-		err := os.Setenv("APP_KEY", string(wantCfg.AppKey))
+		err := os.Setenv(appcommon.EnvAppKey, string(wantCfg.AppKey))
 		require.NoError(t, err)
 
-		err = os.Setenv("SW_UNIX", wantCfg.SockFile)
+		err = os.Setenv(appcommon.EnvSockFile, wantCfg.SockFile)
 		require.NoError(t, err)
 
-		err = os.Setenv("VISOR_PK", wantCfg.VisorPK.Hex())
+		err = os.Setenv(appcommon.EnvVisorPK, wantCfg.VisorPK.Hex())
 		require.NoError(t, err)
 
 		gotCfg, err := ClientConfigFromEnv()
@@ -61,7 +63,7 @@ func TestClientConfigFromEnv(t *testing.T) {
 	t.Run("no sock file", func(t *testing.T) {
 		resetEnv(t)
 
-		err := os.Setenv("APP_KEY", "val")
+		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
 		_, err = ClientConfigFromEnv()
@@ -71,10 +73,10 @@ func TestClientConfigFromEnv(t *testing.T) {
 	t.Run("no visor PK", func(t *testing.T) {
 		resetEnv(t)
 
-		err := os.Setenv("APP_KEY", "val")
+		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv("SW_UNIX", "val")
+		err = os.Setenv(appcommon.EnvSockFile, "val")
 		require.NoError(t, err)
 
 		_, err = ClientConfigFromEnv()
@@ -84,13 +86,13 @@ func TestClientConfigFromEnv(t *testing.T) {
 	t.Run("invalid visor PK", func(t *testing.T) {
 		resetEnv(t)
 
-		err := os.Setenv("APP_KEY", "val")
+		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv("SW_UNIX", "val")
+		err = os.Setenv(appcommon.EnvSockFile, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv("VISOR_PK", "val")
+		err = os.Setenv(appcommon.EnvVisorPK, "val")
 		require.NoError(t, err)
 
 		_, err = ClientConfigFromEnv()
