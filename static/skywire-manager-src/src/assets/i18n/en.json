@@ -104,8 +104,6 @@
     "logout": "Logout",
     "running": "Running",
     "label": "Label",
-    "edit-label": "Edit label",
-    "default-label-warning": "The default label has been used",
     "view-node": "View node",
     "delete-node": "Delete node",
     "error-load": "An error occurred while refreshing nodes",
@@ -113,9 +111,17 @@
     "logout-error": "Error logging out."
   },
 
+  "edit-label": {
+    "title": "Edit label",
+    "label": "Label",
+    "done": "Label saved",
+    "default-label-warning": "The default label has been used"
+  },
+
   "settings": {
     "title": "Settings",
     "password" : {
+      "help": "Options for changing your password.",
       "old-password": "Old password",
       "new-password": "New password",
       "repeat-password": "Repeat password",
@@ -139,8 +145,8 @@
       }
     },
     "change-password": "Change password",
-    "language": "Language",
     "refresh-rate": "Refresh rate",
+    "refresh-rate-help": "Time the system waits to update the data automatically.",
     "seconds": "seconds"
   },
 

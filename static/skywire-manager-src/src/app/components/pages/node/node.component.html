@@ -46,6 +46,7 @@
           <span class="font-smaller info-line">
             <span class="title">{{ 'node.details.node-info.label' | translate }}</span>
             {{ node.label }}
+            <mat-icon [inline]="true" (click)="showEditLabelDialog()" class="edit-label-icon">edit</mat-icon>
           </span>
           <span class="font-smaller info-line">
             <span class="title">{{ 'node.details.node-info.public-key' | translate }}</span>

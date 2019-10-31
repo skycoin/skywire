@@ -1,3 +1,5 @@
+@import "variables";
+
 mat-form-field ::ng-deep {
   width: 50%;
 
@@ -8,4 +10,10 @@ mat-form-field ::ng-deep {
   .mat-form-field-underline {
     bottom: 0 !important;
   }
+}
+
+.help-container {
+  color: $light-gray;
+  height: 0px;
+  text-align: right;
 }

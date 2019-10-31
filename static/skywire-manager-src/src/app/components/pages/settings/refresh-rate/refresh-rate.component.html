@@ -1,4 +1,9 @@
 <div class="container-elevated-white">
+  <div class="help-container">
+    <mat-icon [inline]="true" [matTooltip]="'settings.refresh-rate-help' | translate">
+      help
+    </mat-icon>
+  </div>
   <form [formGroup]="form">
     <mat-form-field class="solo-input">
       <mat-select formControlName="refreshRate" [placeholder]="'settings.refresh-rate' | translate">

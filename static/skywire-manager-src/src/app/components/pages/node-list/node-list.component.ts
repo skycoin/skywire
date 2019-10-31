@@ -186,16 +186,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   showEditLabelDialog(node: Node) {
     this.dialog.open(EditLabelComponent, {
-      data: { label: node.label },
-    }).afterClosed().subscribe((label: string) => {
-      label = label.trim();
-      this.storageService.setNodeLabel(node.local_pk, label);
-
-      if (!label) {
-        this.snackbarService.showWarning('nodes.default-label-warning');
+      data: node,
+    }).afterClosed().subscribe((changed: boolean) => {
+      if (changed) {
+        this.refresh(0);
       }
-
-      this.refresh(0);
     });
   }
 

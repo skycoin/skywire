@@ -10,6 +10,8 @@ import TimeUtils from '../../../utils/timeUtils';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { HttpErrorResponse } from '@angular/common/http';
+import { MatDialog } from '@angular/material';
+import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 
 @Component({
   selector: 'app-node',
@@ -61,6 +63,7 @@ export class NodeComponent implements OnInit, OnDestroy {
     public storageService: StorageService,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
+    private dialog: MatDialog,
   ) {
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
     NodeComponent.currentInstanceInternal = this;
@@ -82,6 +85,16 @@ export class NodeComponent implements OnInit, OnDestroy {
         timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
+    });
+  }
+
+  showEditLabelDialog() {
+    this.dialog.open(EditLabelComponent, {
+      data: this.node,
+    }).afterClosed().subscribe((changed: boolean) => {
+      if (changed) {
+        this.refresh(0);
+      }
     });
   }
 
