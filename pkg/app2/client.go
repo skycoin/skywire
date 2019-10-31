@@ -37,17 +37,17 @@ type ClientConfig struct {
 
 // ClientConfigFromEnv creates client config from the ENV args.
 func ClientConfigFromEnv() (ClientConfig, error) {
-	appKey := os.Getenv("APP_KEY")
+	appKey := os.Getenv(appcommon.EnvAppKey)
 	if appKey == "" {
 		return ClientConfig{}, ErrAppKeyNotProvided
 	}
 
-	sockFile := os.Getenv("SW_UNIX")
+	sockFile := os.Getenv(appcommon.EnvSockFile)
 	if sockFile == "" {
 		return ClientConfig{}, ErrSockFileNotProvided
 	}
 
-	visorPKStr := os.Getenv("VISOR_PK")
+	visorPKStr := os.Getenv(appcommon.EnvVisorPK)
 	if visorPKStr == "" {
 		return ClientConfig{}, ErrVisorPKNotProvided
 	}
