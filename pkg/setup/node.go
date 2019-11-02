@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )

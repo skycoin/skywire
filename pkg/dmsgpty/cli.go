@@ -9,15 +9,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty/pty"
-
-	"golang.org/x/crypto/ssh/terminal"
-
 	"github.com/SkycoinProject/dmsg/cipher"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ssh/terminal"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty/pty"
 )
 
 // CLI represents the command line interface for communicating with the dmsgpty-host.
