@@ -114,12 +114,16 @@ Here is an example configuration for enabling the `dmsgpty` server within `skywi
 ```json5
 {
   "dmsg_pty": {
+  
     // "port" provides the dmsg port to listen for remote pty requests.
     "port": 233, 
+    
     // "authorization_file" is the path to a JSON file containing an array of whitelisted public keys.
     "authorization_file": "./dmsgpty/whitelist.json",
+    
     // "cli_network" is the network to host the dmsgpty CLI.
     "cli_network": "unix",
+    
     // "cli_address" is the address to host the dmsgpty CLI.
     "cli_address": "/tmp/dmsgpty.sock"
   }
