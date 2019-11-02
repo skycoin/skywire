@@ -73,17 +73,19 @@ $ OPTS="GSO111MODULE=on GOOS=linux GOARCH=arm" make
 $ make install  # compiles and installs all binaries
 ```
 
-**Generate default json config**
+### `skywire-visor` configuration file
+
+The configuration file provides the configuration for `skywire-visor`. It is a text file in JSON format.
+
+You can generate a default configuration file by running:
 
 ```bash
 $ skywire-cli node gen-config
 ```
 
-### `skywire-visor` config file
-
 #### `stcp` setup
 
-With `stcp`, you can directly connect to other skywire visors with the `tcp` protocol.
+With `stcp`, you can establish *skywire transports* to other skywire visors with the `tcp` protocol.
 
 As visors are identified with public keys and not IP addresses, we need to directly define the associations between IP address and public keys. This is done via the configuration file for `skywire-visor`.
 
@@ -102,6 +104,33 @@ As visors are identified with public keys and not IP addresses, we need to direc
 In the above example, we have two other visors running on localhost (that we wish to connect to via `stcp`).
 - The field `stcp.pk_table` holds the associations of `<public_key>` to `<ip_address>:<port>`.
 - The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming `stcp` connection.
+
+#### `dmsgpty` setup
+
+With `dmsgpty`, you can access a remote `pty` on a remote `skywire-visor`. Note that `dmsgpty` can only access remote visors that have a dmsg transport directly established with the client visor. Having a route connecting two visors together does not allow `dmsgpty` to function between the two visors.
+
+Here is an example configuration for enabling the `dmsgpty` server within `skywire-visor`:
+
+```json5
+{
+  "dmsg_pty": {
+    // "port" provides the dmsg port to listen for remote pty requests.
+    "port": 233, 
+    // "authorization_file" is the path to a JSON file containing an array of whitelisted public keys.
+    "authorization_file": "./dmsgpty/whitelist.json",
+    // "cli_network" is the network to host the dmsgpty CLI.
+    "cli_network": "unix",
+    // "cli_address" is the address to host the dmsgpty CLI.
+    "cli_address": "/tmp/dmsgpty.sock"
+  }
+}
+```
+
+Note that one can add public key entries to the `"authorization_file"` via the `dmsgpty whitelist-add` command:
+
+```bash
+$ dmsgpty whitelist-add --pk 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08
+```
 
 ### Run `skywire-visor`
 
