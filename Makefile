@@ -33,7 +33,7 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor ./SSH-cli
 
-install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
+install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`, `dmsgpty`
 	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/therealssh-cli ./cmd/dmsgpty
 
 rerun: stop
