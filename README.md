@@ -6,34 +6,37 @@
   - [Build and run](#build-and-run)
     - [Requirements](#requirements)
     - [Build](#build)
+    - [Configure](#configure)
+      - [`stcp` setup](#stcp-setup)
+      - [`dmsgpty` setup](#dmsgpty-setup)
     - [Run `skywire-visor`](#run-skywire-visor)
-    - [Run `skywire-visor` in docker container](#run-skywire-visor-in-docker-container)
     - [Run `skywire-cli`](#run-skywire-cli)
+    - [Run `dmsgpty`](#run-dmsgpty)
     - [Apps](#apps)
     - [Transports](#transports)
   - [App programming API](#app-programming-api)
   - [Testing](#testing)
     - [Testing with default settings](#testing-with-default-settings)
     - [Customization with environment variables](#customization-with-environment-variables)
-      - [$TEST_OPTS](#test_opts)
-      - [$TEST_LOGGING_LEVEL](#test_logging_level)
-      - [$SYSLOG_OPTS](#syslog_opts)
+      - [$TEST_OPTS](#testopts)
+      - [$TEST_LOGGING_LEVEL](#testlogginglevel)
+      - [$SYSLOG_OPTS](#syslogopts)
   - [Running skywire in docker containers](#running-skywire-in-docker-containers)
     - [Run dockerized `skywire-visor`](#run-dockerized-skywire-visor)
       - [Structure of `./node`](#structure-of-node)
     - [Refresh and restart `SKY01`](#refresh-and-restart-sky01)
     - [Customization of dockers](#customization-of-dockers)
-      - [1. DOCKER_IMAGE](#1-docker_image)
-      - [2. DOCKER_NETWORK](#2-docker_network)
-      - [3. DOCKER_NODE](#3-docker_node)
-      - [4. DOCKER_OPTS](#4-docker_opts)
+      - [1. DOCKER_IMAGE](#1-dockerimage)
+      - [2. DOCKER_NETWORK](#2-dockernetwork)
+      - [3. DOCKER_NODE](#3-dockernode)
+      - [4. DOCKER_OPTS](#4-dockeropts)
     - [Dockerized `skywire-visor` recipes](#dockerized-skywire-visor-recipes)
       - [1. Get Public Key of docker-node](#1-get-public-key-of-docker-node)
       - [2. Get an IP of node](#2-get-an-ip-of-node)
       - [3. Open in browser containerized `skychat` application](#3-open-in-browser-containerized-skychat-application)
-      - [4. Create new dockerized `skywire-visors`](#4-create-new-dockerized-skywire-visors)
+      - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
       - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
-      - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
+      - [6. "Hello-Mike-Hello-Joe" test](#6-%22hello-mike-hello-joe%22-test)
 
 **NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
@@ -50,8 +53,11 @@ Skywire requires a version of [golang](https://golang.org/) with [go modules](ht
 $ git clone https://github.com/SkycoinProject/skywire-mainnet.git
 $ cd skywire-mainnet
 
-# Build
-$ make build # installs all dependencies, build binaries and apps
+# Build.
+$ make build # installs all dependencies, build binaries and skywire apps
+
+# Install skywire-visor, skywire-cli, dmsgpty, hypervisor and app CLI execs.
+$ make install
 ```
 
 **Note: Environment variable OPTS**
@@ -67,13 +73,7 @@ $ make
 $ OPTS="GSO111MODULE=on GOOS=linux GOARCH=arm" make
 ```
 
-**Install skywire-visor, skywire-cli, hypervisor and SSH-cli**
-
-```bash
-$ make install  # compiles and installs all binaries
-```
-
-### `skywire-visor` configuration file
+### Configure
 
 The configuration file provides the configuration for `skywire-visor`. It is a text file in JSON format.
 
@@ -82,6 +82,10 @@ You can generate a default configuration file by running:
 ```bash
 $ skywire-cli node gen-config
 ```
+
+Additional options are displayed when `skywire-cli node gen-config -h` is run.
+
+We will cover certain fields of the configuration file below.
 
 #### `stcp` setup
 
@@ -130,25 +134,17 @@ Here is an example configuration for enabling the `dmsgpty` server within `skywi
 }
 ```
 
-Note that one can add public key entries to the `"authorization_file"` via the `dmsgpty whitelist-add` command:
-
-```bash
-$ dmsgpty whitelist-add --pk 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08
-```
+For `dmsgpty` usage, refer to [#run-dmsgpty](#run-dmsgpty).
 
 ### Run `skywire-visor`
 
 `skywire-visor` hosts apps, proxies app's requests to remote nodes and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the node, communication between node and app is performed via unix pipes provided on app startup.
 
+Note that `skywire-visor` requires a valid configuration file in order to execute.
+
 ```bash
 # Run skywire-visor. It takes one argument; the path of a configuration file (`skywire-config.json` if unspecified).
 $ skywire-visor skywire-config.json
-```
-
-### Run `skywire-visor` in docker container
-
-```bash
-make docker-run
 ```
 
 ### Run `skywire-cli`
@@ -157,24 +153,30 @@ The `skywire-cli` tool is used to control the `skywire-visor`. Refer to the help
 
 ```bash
 $ skywire-cli -h
+```
 
-# Command Line Interface for skywire
-#
-# Usage:
-#   skywire-cli [command]
-#
-# Available Commands:
-#   help        Help about any command
-#   mdisc       Contains sub-commands that interact with a remote Messaging Discovery
-#   node        Contains sub-commands that interact with the local Skywire Visor
-#   rtfind      Queries the Route Finder for available routes between two nodes
-#   tpdisc      Queries the Transport Discovery to find transport(s) of given transport ID or edge public key
-#
-# Flags:
-#   -h, --help   help for skywire-cli
-#
-# Use "skywire-cli [command] --help" for more information about a command.
+### Run `dmsgpty`
 
+`dmsgpty` allows the user to access local and remote pty sessions via the `skywire-visor`. To use `dmsgpty`, one needs to have a `skywire-visor` up and running with the `dmsgpty-server` properly configured (as specified here: [#dmsgpty-setup](#dmsgpty-setup)).
+
+To access a remote pty, the local `skywire-visor` needs to have a direct dmsg transport with the remote visor, and the remote visor needs to have the local visor's public key included in it's dmsgpty whitelist.
+
+One can add public key entries to the `"authorization_file"` via the following command:
+
+```bash
+$ dmsgpty whitelist-add --pk 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08
+```
+
+To open an interactive pty shell on a remote visor, who's public key is `0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08`, run the following command:
+
+```bash
+$ dmsgpty -a 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08 
+```
+
+To open a non-interactive shell and run a command:
+
+```bash
+$ dmsgpty --addr='0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08' --cmd='echo' --arg='hello world'
 ```
 
 ### Apps
