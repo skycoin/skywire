@@ -91,8 +91,10 @@ func defaultConfig() *visor.Config {
 	} else {
 		conf.Messaging.Discovery = skyenv.DefaultDmsgDiscAddr
 	}
-
 	conf.Messaging.ServerCount = 1
+
+	ptyConf := defaultDmsgPtyConfig()
+	conf.DmsgPty = &ptyConf
 
 	// TODO(evanlinjin): We have disabled skyproxy passcode by default for now - We should make a cli arg for this.
 	//passcode := base64.StdEncoding.Strict().EncodeToString(cipher.RandByte(8))
@@ -143,6 +145,15 @@ func defaultConfig() *visor.Config {
 	conf.Interfaces.RPCAddress = "localhost:3435"
 
 	return conf
+}
+
+func defaultDmsgPtyConfig() visor.DmsgPtyConfig {
+	return visor.DmsgPtyConfig{
+		Port:     skyenv.DefaultDmsgPtyPort,
+		AuthFile: "./skywire/dmsgpty/whitelist.json",
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	}
 }
 
 func defaultSkychatConfig() visor.AppConfig {
