@@ -1,5 +1,6 @@
 package commands
 
+// NOTE: "net/http/pprof" is used for profiling.
 import (
 	"bufio"
 	"context"
@@ -10,7 +11,7 @@ import (
 	"log"
 	"log/syslog"
 	"net/http"
-	_ "net/http/pprof" // used for HTTP profiling
+	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"os/signal"
 	"path/filepath"
