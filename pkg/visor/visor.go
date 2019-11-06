@@ -24,12 +24,12 @@ import (
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
 	routeFinder "github.com/SkycoinProject/skywire-mainnet/pkg/route-finder/client"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
@@ -43,7 +43,7 @@ const (
 	// AppStatusStopped represents status of a stopped App.
 	AppStatusStopped AppStatus = iota
 
-	// AppStatusRunning  represents status of a running App.
+	// AppStatusRunning represents status of a running App.
 	AppStatusRunning
 )
 
@@ -87,12 +87,13 @@ type PacketRouter interface {
 // Node provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Node struct {
-	config   *Config
-	router   PacketRouter
-	n        *snet.Network
-	tm       *transport.Manager
-	rt       routing.Table
-	executer appExecuter
+	conf   *Config
+	router PacketRouter
+	n      *snet.Network
+	tm     *transport.Manager
+	rt     routing.Table
+	exec   appExecuter
+	pty    *dmsgpty.Host // TODO(evanlinjin): Complete.
 
 	Logger *logging.MasterLogger
 	logger *logging.Logger
@@ -103,8 +104,7 @@ type Node struct {
 
 	startedMu   sync.RWMutex
 	startedApps map[string]*appBind
-
-	startedAt time.Time
+	startedAt   time.Time
 
 	pidMu sync.Mutex
 
@@ -117,8 +117,8 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	ctx := context.Background()
 
 	node := &Node{
-		config:      config,
-		executer:    newOSExecuter(),
+		conf:        config,
+		exec:        newOSExecuter(),
 		startedApps: make(map[string]*appBind),
 	}
 
@@ -135,12 +135,21 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 		TpNetworks:    []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
 		DmsgDiscAddr:  config.Messaging.Discovery,
 		DmsgMinSrvs:   config.Messaging.ServerCount,
-		STCPLocalAddr: config.TCPTransport.LocalAddr,
-		STCPTable:     config.TCPTransport.PubKeyTable,
+		STCPLocalAddr: config.STCP.LocalAddr,
+		STCPTable:     config.STCP.PubKeyTable,
 	})
 	if err := node.n.Init(ctx); err != nil {
 		return nil, fmt.Errorf("failed to init network: %v", err)
 	}
+
+	if config.DmsgPty != nil {
+		pty, err := config.DmsgPtyHost(node.n.Dmsg())
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup pty: %v", err)
+		}
+		node.pty = pty
+	}
+	masterLogger.Info("'dmsgpty' is not configured, skipping...")
 
 	trDiscovery, err := config.TransportDiscovery()
 	if err != nil {
@@ -222,8 +231,16 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 // Start spawns auto-started Apps, starts router and RPC interfaces .
 func (node *Node) Start() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	node.startedAt = time.Now()
+
+	// Start pty.
+	if node.pty != nil {
+		go node.pty.ServeRemoteRequests(ctx)
+		go node.pty.ServeCLIRequests(ctx)
+	}
 
 	pathutil.EnsureDir(node.dir())
 	node.closePreviousApps()
@@ -231,7 +248,6 @@ func (node *Node) Start() error {
 		if !ac.AutoStart {
 			continue
 		}
-
 		go func(a AppConfig) {
 			if err := node.SpawnApp(&a, nil); err != nil {
 				node.logger.Warnf("Failed to start %s: %s\n", a.App, err)
@@ -264,7 +280,7 @@ func (node *Node) Start() error {
 }
 
 func (node *Node) dir() string {
-	return pathutil.NodeDir(node.config.Node.StaticPubKey)
+	return pathutil.NodeDir(node.conf.Node.StaticPubKey)
 }
 
 func (node *Node) pidFile() *os.File {
@@ -445,7 +461,7 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 
 	appCh := make(chan error)
 	go func() {
-		pid, err := node.executer.Start(cmd)
+		pid, err := node.exec.Start(cmd)
 		if err != nil {
 			appCh <- err
 			return
@@ -459,7 +475,7 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 		node.logger.Infof("storing app %s pid %d", config.App, pid)
 		node.persistPID(config.App, pid)
 		node.pidMu.Unlock()
-		appCh <- node.executer.Wait(cmd)
+		appCh <- node.exec.Wait(cmd)
 	}()
 
 	srvCh := make(chan error)
@@ -529,7 +545,7 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 func (node *Node) stopApp(app string, bind *appBind) (err error) {
 	node.logger.Infof("Stopping app %s and closing ports", app)
 
-	if excErr := node.executer.Stop(bind.pid); excErr != nil {
+	if excErr := node.exec.Stop(bind.pid); excErr != nil {
 		node.logger.Warn("Failed to stop app: ", excErr)
 		err = excErr
 	}
