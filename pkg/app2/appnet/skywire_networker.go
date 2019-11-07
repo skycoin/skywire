@@ -6,12 +6,12 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/SkycoinProject/dmsg/netutil"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/errors"
-	"github.com/skycoin/dmsg/netutil"
-	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 // SkywireNetworker implements `Networker` for skynet.

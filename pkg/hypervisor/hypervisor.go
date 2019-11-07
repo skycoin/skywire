@@ -13,18 +13,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2"
-
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/noise"
-	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/httputil"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
 var (
@@ -467,7 +466,7 @@ func (m *Node) getRoutes() http.HandlerFunc {
 		}
 		resp := make([]routingRuleResp, len(rules))
 		for i, rule := range rules {
-			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
+			resp[i] = makeRoutingRuleResp(rule.Key, rule.Value, qSummary)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
 	})

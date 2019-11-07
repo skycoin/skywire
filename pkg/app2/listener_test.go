@@ -3,14 +3,15 @@ package app2
 import (
 	"testing"
 
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/errors"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/app2/idmanager"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/idmanager"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 func TestListener_Accept(t *testing.T) {

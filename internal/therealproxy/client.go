@@ -5,8 +5,8 @@ import (
 	"io"
 	"net"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/hashicorp/yamux"
-	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Log is therealproxy package level logger, it can be replaced with a different one from outside the package

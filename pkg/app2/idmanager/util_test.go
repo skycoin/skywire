@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
 )
 
 func TestAssertListener(t *testing.T) {

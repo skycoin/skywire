@@ -14,7 +14,7 @@ DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
 TEST_OPTS_NOCI?=-race -cover -timeout=5m -v
-BUILD_OPTS?=-race
+BUILD_OPTS?=
 
 check: lint test ## Run linters and tests
 
@@ -33,8 +33,8 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor ./SSH-cli
 
-install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
-	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/therealssh-cli
+install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`, `dmsgpty`
+	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/therealssh-cli ./cmd/dmsgpty
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -70,7 +70,7 @@ test-no-ci: ## Run no_ci tests
 	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
 
 install-linters: ## Install linters
-	- VERSION=1.17.1 ./ci_scripts/install-golangci-lint.sh 
+	- VERSION=1.21.0 ./ci_scripts/install-golangci-lint.sh
 	# GO111MODULE=off go get -u github.com/FiloSottile/vendorcheck
 	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
 	# However, they suggest `curl ... | bash` which we should not do
@@ -78,9 +78,9 @@ install-linters: ## Install linters
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
 
 format: ## Formats the code. Must have goimports installed (use make install-linters).
-	${OPTS} goimports -w -local github.com/skycoin/skywire ./pkg
-	${OPTS} goimports -w -local github.com/skycoin/skywire ./cmd
-	${OPTS} goimports -w -local github.com/skycoin/skywire ./internal
+	${OPTS} goimports -w -local github.com/SkycoinProject/skywire ./pkg
+	${OPTS} goimports -w -local github.com/SkycoinProject/skywire ./cmd
+	${OPTS} goimports -w -local github.com/SkycoinProject/skywire ./internal
 
 dep: ## Sorts dependencies
 	${OPTS} go mod vendor -v
@@ -102,7 +102,7 @@ bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./messaging-server ./cmd/messaging-server
 	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 	${OPTS} go build ${BUILD_OPTS} -o ./SSH-cli ./cmd/therealssh-cli
-
+	${OPTS} go build ${BUILD_OPTS} -o ./dmsgpty ./cmd/dmsgpty
 
 release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli` and apps without -race flag
 	${OPTS} go build -o ./skywire-visor ./cmd/skywire-visor

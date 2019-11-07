@@ -15,16 +15,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/skycoin/skywire/pkg/metrics"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 func TestMain(m *testing.M) {
@@ -81,9 +84,9 @@ func TestNode(t *testing.T) {
 			var port uint16
 			// setup node
 			if i == 0 {
-				port = snet.SetupPort
+				port = skyenv.DmsgSetupPort
 			} else {
-				port = snet.AwaitSetupPort
+				port = skyenv.DmsgAwaitSetupPort
 			}
 			pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte{byte(i)})
 			require.NoError(t, err)

@@ -10,14 +10,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/setup/setupclient"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
 const (
@@ -116,7 +117,7 @@ type router struct {
 func New(n *snet.Network, config *Config) (Router, error) {
 	config.SetDefaults()
 
-	sl, err := n.Listen(snet.DmsgType, snet.AwaitSetupPort)
+	sl, err := n.Listen(snet.DmsgType, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}

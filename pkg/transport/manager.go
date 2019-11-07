@@ -7,12 +7,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/google/uuid"
 )
 
 // ManagerConfig configures a Manager.
@@ -70,10 +72,10 @@ func (tm *Manager) serve(ctx context.Context) {
 	var listeners []*snet.Listener
 
 	for _, netType := range tm.n.TransportNetworks() {
-		lis, err := tm.n.Listen(netType, snet.TransportPort)
+		lis, err := tm.n.Listen(netType, skyenv.DmsgTransportPort)
 		if err != nil {
 			tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
-				netType, snet.TransportPort)
+				netType, skyenv.DmsgTransportPort)
 			continue
 		}
 		tm.Logger.Infof("listening on network: %s", netType)

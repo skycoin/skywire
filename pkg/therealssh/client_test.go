@@ -5,12 +5,12 @@ import (
 	"net"
 	"testing"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 func TestClientOpenChannel(t *testing.T) {
