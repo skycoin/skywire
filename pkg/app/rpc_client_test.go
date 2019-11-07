@@ -1,4 +1,4 @@
-package app2
+package app
 
 import (
 	"context"
@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appserver"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 )
 
 func TestRPCClient_Dial(t *testing.T) {

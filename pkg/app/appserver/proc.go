@@ -8,7 +8,7 @@ import (
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 )
 
 // Proc is a wrapper for a skywire app. Encapsulates
