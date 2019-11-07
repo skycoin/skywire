@@ -51,6 +51,7 @@ func TestProcManager_Pop(t *testing.T) {
 
 	app, err := m.pop(appName)
 	require.Equal(t, err, errNoSuchApp)
+	require.Nil(t, app)
 
 	m.procs[appName] = nil
 
