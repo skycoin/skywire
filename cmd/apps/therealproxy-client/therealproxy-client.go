@@ -6,19 +6,14 @@ package main
 import (
 	"flag"
 	"net"
-	"time"
-
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/internal/therealproxy"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
-
-var r = netutil.NewRetrier(time.Second, 0, 1)
 
 func main() {
 	log := app.NewLogger(skyenv.SkyproxyClientName)
@@ -48,23 +43,20 @@ func main() {
 		log.Fatal("Invalid server PubKey: ", err)
 	}
 
-	var conn net.Conn
-	err = r.Do(func() error {
-		conn, err = socksApp.Dial(routing.Addr{PubKey: pk, Port: routing.Port(skyenv.SkyproxyPort)})
-		return err
-	})
+	log.Printf("Serving on %v", *addr)
+	l, err := net.Listen("tcp", *addr)
 	if err != nil {
-		log.Fatal("Failed to dial to a server: ", err)
+		log.Fatal("Failed to listen on %v: %v", *addr, err)
 	}
 
-	log.Printf("Connected to %v\n", pk)
+	remote := routing.Addr{PubKey: pk, Port: routing.Port(skyenv.SkyproxyPort)}
 
-	client, err := therealproxy.NewClient(conn)
+	client, err := therealproxy.NewClient(l, socksApp, remote)
 	if err != nil {
 		log.Fatal("Failed to create a new client: ", err)
 	}
 
-	log.Printf("Serving  %v\n", addr)
-
-	log.Fatal(client.ListenAndServe(*addr))
+	if err := client.Serve(); err != nil {
+		log.Warnf("Failed to serve: %v", err)
+	}
 }
