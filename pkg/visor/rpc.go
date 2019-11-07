@@ -53,16 +53,16 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) error {
 	out.RouteFinder = http.StatusOK
 	out.SetupNode = http.StatusOK
 
-	_, err := r.node.config.TransportDiscovery()
+	_, err := r.node.conf.TransportDiscovery()
 	if err != nil {
 		out.TransportDiscovery = http.StatusNotFound
 	}
 
-	if r.node.config.Routing.RouteFinder == "" {
+	if r.node.conf.Routing.RouteFinder == "" {
 		out.RouteFinder = http.StatusNotFound
 	}
 
-	if len(r.node.config.Routing.SetupNodes) == 0 {
+	if len(r.node.conf.Routing.SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
 	}
 
@@ -156,7 +156,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.node.config.Node.StaticPubKey,
+		PubKey:          r.node.conf.Node.StaticPubKey,
 		NodeVersion:     Version,
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.node.Apps(),
@@ -301,7 +301,7 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) error {
 
 // DiscoverTransportsByPK obtains available transports via the transport discovery via given public key.
 func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) error {
-	tpD, err := r.node.config.TransportDiscovery()
+	tpD, err := r.node.conf.TransportDiscovery()
 	if err != nil {
 		return err
 	}
@@ -315,7 +315,7 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 
 // DiscoverTransportByID obtains available transports via the transport discovery via a given transport ID.
 func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) error {
-	tpD, err := r.node.config.TransportDiscovery()
+	tpD, err := r.node.conf.TransportDiscovery()
 	if err != nil {
 		return err
 	}
