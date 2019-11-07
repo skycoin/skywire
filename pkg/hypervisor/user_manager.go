@@ -145,6 +145,7 @@ func (s *UserManager) ChangePassword() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusForbidden, ErrUserNotFound)
 			return
 		}
+		s.delAllSessionsOfUser(user.Name)
 		httputil.WriteJSON(w, r, http.StatusOK, true)
 	}
 }
@@ -243,6 +244,16 @@ func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 		SameSite: s.c.SameSite,
 	})
 	return nil
+}
+
+func (s *UserManager) delAllSessionsOfUser(userName string) {
+	s.mu.Lock()
+	for sid, session := range s.sessions {
+		if session.User == userName {
+			delete(s.sessions, sid)
+		}
+	}
+	s.mu.Unlock()
 }
 
 func (s *UserManager) session(r *http.Request) (User, Session, bool) {
