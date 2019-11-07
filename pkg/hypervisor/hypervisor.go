@@ -466,7 +466,7 @@ func (m *Node) getRoutes() http.HandlerFunc {
 		}
 		resp := make([]routingRuleResp, len(rules))
 		for i, rule := range rules {
-			resp[i] = makeRoutingRuleResp(rule.Key, rule.Value, qSummary)
+			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
 	})
