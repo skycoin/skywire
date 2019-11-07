@@ -4,6 +4,7 @@ package visor
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -18,26 +19,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2/appserver"
-
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
-
-	"github.com/skycoin/skywire/pkg/snet"
-
-	"github.com/pkg/errors"
-
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/noise"
-	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
-	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appserver"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
 var log = logging.MustGetLogger("node")
@@ -49,7 +45,7 @@ const (
 	// AppStatusStopped represents status of a stopped App.
 	AppStatusStopped AppStatus = iota
 
-	// AppStatusRunning  represents status of a running App.
+	// AppStatusRunning represents status of a running App.
 	AppStatusRunning
 )
 
@@ -81,11 +77,12 @@ type PacketRouter interface {
 // Node provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Node struct {
-	config *Config
-	router router.Router
+	conf   *Config
+	router PacketRouter
 	n      *snet.Network
 	tm     *transport.Manager
 	rt     routing.Table
+	pty    *dmsgpty.Host // TODO(evanlinjin): Complete.
 
 	Logger *logging.MasterLogger
 	logger *logging.Logger
@@ -109,7 +106,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	ctx := context.Background()
 
 	node := &Node{
-		config:      config,
+		conf:        config,
 		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager")),
 	}
 
@@ -126,12 +123,21 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 		TpNetworks:    []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
 		DmsgDiscAddr:  config.Messaging.Discovery,
 		DmsgMinSrvs:   config.Messaging.ServerCount,
-		STCPLocalAddr: config.TCPTransport.LocalAddr,
-		STCPTable:     config.TCPTransport.PubKeyTable,
+		STCPLocalAddr: config.STCP.LocalAddr,
+		STCPTable:     config.STCP.PubKeyTable,
 	})
 	if err := node.n.Init(ctx); err != nil {
 		return nil, fmt.Errorf("failed to init network: %v", err)
 	}
+
+	if config.DmsgPty != nil {
+		pty, err := config.DmsgPtyHost(node.n.Dmsg())
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup pty: %v", err)
+		}
+		node.pty = pty
+	}
+	masterLogger.Info("'dmsgpty' is not configured, skipping...")
 
 	trDiscovery, err := config.TransportDiscovery()
 	if err != nil {
@@ -215,11 +221,19 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 func (node *Node) Start() error {
 	skywireNetworker := appnet.NewSkywireNetworker(logging.MustGetLogger("skynet"), node.router)
 	if err := appnet.AddNetworker(appnet.TypeSkynet, skywireNetworker); err != nil {
-		return errors.Wrap(err, "error adding skywire networker")
+		return fmt.Errorf("failed to add skywire networker: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	node.startedAt = time.Now()
+
+	// Start pty.
+	if node.pty != nil {
+		go node.pty.ServeRemoteRequests(ctx)
+		go node.pty.ServeCLIRequests(ctx)
+	}
 
 	pathutil.EnsureDir(node.dir())
 	node.closePreviousApps()
@@ -228,7 +242,6 @@ func (node *Node) Start() error {
 		if !ac.AutoStart {
 			continue
 		}
-
 		go func(a AppConfig) {
 			if err := node.SpawnApp(&a, nil); err != nil {
 				node.logger.Warnf("Failed to start %s: %s\n", a.App, err)
@@ -261,7 +274,7 @@ func (node *Node) Start() error {
 }
 
 func (node *Node) dir() string {
-	return pathutil.NodeDir(node.config.Node.StaticPubKey)
+	return pathutil.NodeDir(node.conf.Node.StaticPubKey)
 }
 
 func (node *Node) pidFile() *os.File {

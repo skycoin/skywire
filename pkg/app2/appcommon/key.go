@@ -1,6 +1,6 @@
 package appcommon
 
-import "github.com/skycoin/dmsg/cipher"
+import "github.com/SkycoinProject/dmsg/cipher"
 
 // Key is an app key to authenticate within the
 // app server.

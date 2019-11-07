@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/app2/idmanager"
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/idmanager"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 // RPCGateway is a RPC interface for the app server.

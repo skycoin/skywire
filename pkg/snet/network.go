@@ -8,21 +8,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/snet/stcp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
-)
-
-// Default ports.
-// TODO(evanlinjin): Define these properly. These are currently random.
-const (
-	SetupPort      = uint16(36)  // Listening port of a setup node.
-	AwaitSetupPort = uint16(136) // Listening port of a visor node for setup operations.
-	TransportPort  = uint16(45)  // Listening port of a visor node for incoming transports.
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/disc"
 )
 
 // Network types.

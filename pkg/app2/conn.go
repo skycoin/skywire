@@ -7,7 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
 )
 
 // Conn is a connection from app client to the server.

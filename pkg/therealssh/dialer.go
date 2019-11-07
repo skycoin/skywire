@@ -3,7 +3,7 @@ package therealssh
 import (
 	"net"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
 )
 
 // dialer dials to a remote node.

@@ -9,14 +9,15 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/internal/therealproxy"
-	"github.com/skycoin/skywire/pkg/app2"
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/internal/therealproxy"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 const (
@@ -31,7 +32,7 @@ func main() {
 	log := app2.NewLogger(appName)
 	therealproxy.Log = log.PackageLogger("therealproxy")
 
-	var addr = flag.String("addr", ":1080", "Client address to listen on")
+	var addr = flag.String("addr", skyenv.SkyproxyClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
@@ -41,6 +42,7 @@ func main() {
 	}
 
 	socksApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
+
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}

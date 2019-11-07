@@ -10,17 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
 var masterLogger *logging.MasterLogger
@@ -86,7 +86,7 @@ func TestNodeStartClose(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	node := &Node{config: &Config{}, router: r, executer: executer, appsConf: conf,
+	node := &Node{conf: &Config{}, router: r, exec: executer, appsConf: conf,
 		startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test")}
 
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock())
@@ -128,9 +128,9 @@ func TestNodeSpawnApp(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 	apps := []AppConfig{{App: "skychat", Version: "1.0", AutoStart: false, Port: 10, Args: []string{"foo"}}}
-	node := &Node{router: r, executer: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"),
-		config: &Config{}}
-	node.config.Node.StaticPubKey = pk
+	node := &Node{router: r, exec: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"),
+		conf: &Config{}}
+	node.conf.Node.StaticPubKey = pk
 	pathutil.EnsureDir(node.dir())
 	defer func() {
 		require.NoError(t, os.RemoveAll(node.dir()))
@@ -166,10 +166,10 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 	}()
 	c := &Config{}
 	c.Node.StaticPubKey = pk
-	node := &Node{router: r, executer: executer,
+	node := &Node{router: r, exec: executer,
 		startedApps: map[string]*appBind{"skychat": {conn, 10}},
 		logger:      logging.MustGetLogger("test"),
-		config:      c,
+		conf:        c,
 	}
 	defer os.Remove(node.dir()) // nolint
 

@@ -3,18 +3,15 @@ package setup
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
-
-var ErrNoKey = errors.New("id reservoir has no key")
 
 type idReservoir struct {
 	rec map[cipher.PubKey]uint8
@@ -46,6 +43,7 @@ func newIDReservoir(paths ...routing.Path) (*idReservoir, int) {
 type reserveFunc func(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, pk cipher.PubKey, n uint8) ([]routing.RouteID, error)
 
 func (idr *idReservoir) ReserveIDs(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, reserve reserveFunc) error {
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -81,6 +79,13 @@ func (idr *idReservoir) PopID(pk cipher.PubKey) (routing.RouteID, bool) {
 
 	idr.ids[pk] = ids[1:]
 	return ids[0], true
+}
+
+func (idr *idReservoir) String() string {
+	idr.mx.Lock()
+	defer idr.mx.Unlock()
+	b, _ := json.MarshalIndent(idr.ids, "", "\t") //nolint:errcheck
+	return string(b)
 }
 
 // RulesMap associates a slice of rules to a visor's public key.

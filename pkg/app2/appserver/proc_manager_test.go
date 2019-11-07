@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 )
 
