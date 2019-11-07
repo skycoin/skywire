@@ -33,7 +33,7 @@ func TestRPCClient_Dial(t *testing.T) {
 		dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 		dialCtx := context.Background()
-		dialConn := dmsg.NewTransport(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
+		dialConn := dmsg.NewStream(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
 			dmsgLocal, dmsgRemote, 0, 1024, func() {})
 		var noErr error
 
@@ -141,7 +141,7 @@ func TestRPCClient_Accept(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		gateway := prepGateway()
 
-		lisConn := dmsg.NewTransport(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
+		lisConn := dmsg.NewStream(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
 			dmsgLocal, dmsgRemote, 0, 1024, func() {})
 		var noErr error
 

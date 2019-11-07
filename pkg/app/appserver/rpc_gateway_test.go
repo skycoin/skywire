@@ -31,7 +31,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 		localPort := routing.Port(100)
 
 		dialCtx := context.Background()
-		dialConn := dmsg.NewTransport(nil, nil, dmsg.Addr{Port: uint16(localPort)}, dmsg.Addr{}, 0, 10, func() {})
+		dialConn := dmsg.NewStream(nil, nil, dmsg.Addr{Port: uint16(localPort)}, dmsg.Addr{}, 0, 10, func() {})
 		var dialErr error
 
 		n := &appnet.MockNetworker{}
@@ -186,7 +186,7 @@ func TestRPCGateway_Accept(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		rpc := NewRPCGateway(l)
 
-		acceptConn := &dmsg.Transport{}
+		acceptConn := &dmsg.Stream{}
 		var acceptErr error
 
 		lis := &appcommon.MockListener{}
