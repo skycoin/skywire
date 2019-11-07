@@ -46,7 +46,7 @@ func main() {
 	log.Printf("Serving on %v", *addr)
 	l, err := net.Listen("tcp", *addr)
 	if err != nil {
-		log.Fatal("Failed to listen on %v: %v", *addr, err)
+		log.Fatalf("Failed to listen on %v: %v", *addr, err)
 	}
 
 	remote := routing.Addr{PubKey: pk, Port: routing.Port(skyenv.SkyproxyPort)}
