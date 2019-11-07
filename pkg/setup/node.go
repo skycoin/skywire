@@ -78,7 +78,7 @@ func (sn *Node) Serve() error {
 	sn.logger.Info("Serving setup node")
 
 	for {
-		conn, err := sn.dmsgL.AcceptTransport()
+		conn, err := sn.dmsgL.AcceptStream()
 		if err != nil {
 			return err
 		}
