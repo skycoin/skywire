@@ -5,8 +5,10 @@ go 1.12
 require (
 	github.com/SkycoinProject/skycoin v0.26.0
 	github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
+	github.com/mattn/go-colorable v0.1.4 // indirect
+	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/sirupsen/logrus v1.4.2
-	github.com/skycoin/dmsg v0.0.0-20190805065636-70f4c32a994f
+	github.com/skycoin/skycoin v0.26.0 // indirect
 	github.com/stretchr/testify v1.3.0
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
 	golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582
