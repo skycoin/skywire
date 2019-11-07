@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/rpc"
 	"os"
@@ -20,7 +19,6 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -67,18 +65,11 @@ type AppState struct {
 	Status    AppStatus    `json:"status"`
 }
 
-// PacketRouter performs routing of the skywire packets.
-type PacketRouter interface {
-	io.Closer
-	Serve(ctx context.Context) error
-	SetupIsTrusted(sPK cipher.PubKey) bool
-}
-
 // Node provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Node struct {
 	conf   *Config
-	router PacketRouter
+	router router.Router
 	n      *snet.Network
 	tm     *transport.Manager
 	rt     routing.Table
@@ -430,8 +421,8 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	appCfg := appcommon.Config{
 		Name:      config.App,
 		Version:   config.Version,
-		SockFile:  node.config.AppServerSockFile,
-		VisorPK:   node.config.Node.StaticPubKey.Hex(),
+		SockFile:  node.conf.AppServerSockFile,
+		VisorPK:   node.conf.Node.StaticPubKey.Hex(),
 		BinaryDir: node.appsPath,
 		WorkDir:   filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
 	}
