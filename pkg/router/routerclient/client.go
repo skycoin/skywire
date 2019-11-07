@@ -15,7 +15,7 @@ const rpcName = "RPCGateway"
 
 // Client is an RPC client for router.
 type Client struct {
-	s  *dmsg.Stream
+	s   *dmsg.Stream
 	rpc *rpc.Client
 }
 
@@ -27,7 +27,7 @@ func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Clie
 	}
 
 	client := &Client{
-		s:  s,
+		s:   s,
 		rpc: rpc.NewClient(s.Conn),
 	}
 	return client, nil
