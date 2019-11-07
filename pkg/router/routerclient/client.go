@@ -15,20 +15,20 @@ const rpcName = "RPCGateway"
 
 // Client is an RPC client for router.
 type Client struct {
-	tr  *dmsg.Transport
+	s  *dmsg.Stream
 	rpc *rpc.Client
 }
 
 // NewClient creates a new Client.
 func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Client, error) {
-	tr, err := dmsgC.Dial(ctx, pk, snet.AwaitSetupPort)
+	s, err := dmsgC.Dial(ctx, pk, snet.AwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}
 
 	client := &Client{
-		tr:  tr,
-		rpc: rpc.NewClient(tr.Conn),
+		s:  s,
+		rpc: rpc.NewClient(s.Conn),
 	}
 	return client, nil
 }
@@ -39,7 +39,7 @@ func (c *Client) Close() error {
 		return nil
 	}
 
-	if err := c.tr.Close(); err != nil {
+	if err := c.s.Close(); err != nil {
 		return err
 	}
 
