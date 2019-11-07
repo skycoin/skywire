@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -12,6 +13,8 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
+
+var ErrNoKey = errors.New("id reservoir has no key")
 
 type idReservoir struct {
 	rec map[cipher.PubKey]uint8
