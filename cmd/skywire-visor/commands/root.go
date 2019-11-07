@@ -10,7 +10,7 @@ import (
 	"log"
 	"log/syslog"
 	"net/http"
-	_ "net/http/pprof" // used for HTTP profiling
+	_ "net/http/pprof" // nolint:gosec // TODO: consider removing for security reasons
 	"os"
 	"os/signal"
 	"path/filepath"

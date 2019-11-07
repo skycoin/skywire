@@ -62,6 +62,7 @@ func (c *Client) connect() error {
 	return nil
 }
 
+// Serve proxies incoming connection to a remote proxy server.
 func (c *Client) Serve() error {
 	var stream net.Conn
 
@@ -116,8 +117,9 @@ func (c *Client) Serve() error {
 	}
 }
 
-// ListenAndServe start tcp listener on addr and proxies incoming
+// ListenAndServe starts tcp listener on addr and proxies incoming
 // connection to a remote proxy server.
+// TODO: get rid of it
 func (c *Client) ListenAndServe(addr string) error {
 	var stream net.Conn
 	var err error
