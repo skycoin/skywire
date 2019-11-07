@@ -17,14 +17,6 @@ import (
 	"github.com/SkycoinProject/dmsg/disc"
 )
 
-// Default ports.
-// TODO(evanlinjin): Define these properly. These are currently random.
-const (
-	SetupPort      = uint16(36)  // Listening port of a setup node.
-	AwaitSetupPort = uint16(136) // Listening port of a visor node for setup operations.
-	TransportPort  = uint16(45)  // Listening port of a visor node for incoming transports.
-)
-
 // Network types.
 const (
 	DmsgType = "dmsg"
