@@ -15,8 +15,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/internal/therealproxy"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
@@ -29,19 +29,19 @@ const (
 var r = netutil.NewRetrier(time.Second, 0, 1)
 
 func main() {
-	log := app2.NewLogger(appName)
+	log := app.NewLogger(appName)
 	therealproxy.Log = log.PackageLogger("therealproxy")
 
 	var addr = flag.String("addr", skyenv.SkyproxyClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
-	config, err := app2.ClientConfigFromEnv()
+	config, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
-	socksApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
+	socksApp, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 
 	if err != nil {
 		log.Fatal("Setup failure: ", err)

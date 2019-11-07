@@ -7,14 +7,14 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
 )
 
@@ -27,7 +27,7 @@ const (
 )
 
 func main() {
-	log = app2.NewLogger(appName)
+	log = app.NewLogger(appName)
 	ssh.Log = log.PackageLogger("therealssh")
 
 	var authFile = flag.String("auth", "~/.therealssh/authorized_keys", "Auth file location. Should contain one PubKey per line.")
@@ -35,12 +35,12 @@ func main() {
 
 	flag.Parse()
 
-	config, err := app2.ClientConfigFromEnv()
+	config, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
-	sshApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
+	sshApp, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 
 	if err != nil {
 		log.Fatal("Setup failure: ", err)

@@ -9,7 +9,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/errors"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 )
 
 // Server is a server for app/visor communication.

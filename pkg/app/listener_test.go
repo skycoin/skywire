@@ -1,4 +1,4 @@
-package app2
+package app
 
 import (
 	"testing"
@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/idmanager"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
