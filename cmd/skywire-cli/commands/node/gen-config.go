@@ -1,16 +1,18 @@
 package node
 
 import (
-	"encoding/base64"
 	"fmt"
 	"path/filepath"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/util/pathutil"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
 func init() {
@@ -21,12 +23,14 @@ var (
 	output        string
 	replace       bool
 	configLocType = pathutil.WorkingDirLoc
+	testenv       bool
 )
 
 func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
+	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -80,27 +84,45 @@ func defaultConfig() *visor.Config {
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
 
-	conf.Messaging.Discovery = "https://messaging.discovery.skywire.skycoin.net"
+	if testenv {
+		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
+	} else {
+		conf.Messaging.Discovery = skyenv.DefaultDmsgDiscAddr
+	}
 	conf.Messaging.ServerCount = 1
 
-	passcode := base64.StdEncoding.EncodeToString(cipher.RandByte(8))
+	ptyConf := defaultDmsgPtyConfig()
+	conf.DmsgPty = &ptyConf
+
+	// TODO(evanlinjin): We have disabled skyproxy passcode by default for now - We should make a cli arg for this.
+	//passcode := base64.StdEncoding.Strict().EncodeToString(cipher.RandByte(8))
 	conf.Apps = []visor.AppConfig{
-		{App: "skychat", Version: "1.0", Port: 1, AutoStart: true, Args: []string{}},
-		{App: "SSH", Version: "1.0", Port: 2, AutoStart: true, Args: []string{}},
-		{App: "socksproxy", Version: "1.0", Port: 3, AutoStart: true, Args: []string{"-passcode", passcode}},
+		defaultSkychatConfig(),
+		defaultSkysshConfig(),
+		defaultSkyproxyConfig(""),
+		defaultSkysshClientConfig(),
+		defaultSkyproxyClientConfig(),
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
 
-	conf.Transport.Discovery = "https://transport.discovery.skywire.skycoin.net"
+	if testenv {
+		conf.Transport.Discovery = skyenv.TestTpDiscAddr
+	} else {
+		conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	}
+
 	conf.Transport.LogStore.Type = "file"
 	conf.Transport.LogStore.Location = "./skywire/transport_logs"
 
-	conf.Routing.RouteFinder = "https://routefinder.skywire.skycoin.net/"
+	if testenv {
+		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+	} else {
+		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	}
 
-	const defaultSetupNodePK = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
-	sPK := cipher.PubKey{}
-	if err := sPK.UnmarshalText([]byte(defaultSetupNodePK)); err != nil {
-		log.WithError(err).Warnf("Failed to unmarshal default setup node public key %s", defaultSetupNodePK)
+	var sPK cipher.PubKey
+	if err := sPK.UnmarshalText([]byte(skyenv.DefaultSetupPK)); err != nil {
+		log.WithError(err).Warnf("Failed to unmarshal default setup node public key %s", skyenv.DefaultSetupPK)
 	}
 	conf.Routing.SetupNodes = []cipher.PubKey{sPK}
 	conf.Routing.RouteFinderTimeout = visor.Duration(10 * time.Second)
@@ -121,4 +143,64 @@ func defaultConfig() *visor.Config {
 	conf.AppServerSockFile = "app_server.sock"
 
 	return conf
+}
+
+func defaultDmsgPtyConfig() visor.DmsgPtyConfig {
+	return visor.DmsgPtyConfig{
+		Port:     skyenv.DefaultDmsgPtyPort,
+		AuthFile: "./skywire/dmsgpty/whitelist.json",
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	}
+}
+
+func defaultSkychatConfig() visor.AppConfig {
+	return visor.AppConfig{
+		App:       skyenv.SkychatName,
+		Version:   skyenv.SkychatVersion,
+		AutoStart: true,
+		Port:      routing.Port(skyenv.SkychatPort),
+		Args:      []string{"-addr", skyenv.SkychatAddr},
+	}
+}
+
+func defaultSkysshConfig() visor.AppConfig {
+	return visor.AppConfig{
+		App:       skyenv.SkysshName,
+		Version:   skyenv.SkysshVersion,
+		AutoStart: true,
+		Port:      routing.Port(skyenv.SkysshPort),
+	}
+}
+
+func defaultSkyproxyConfig(passcode string) visor.AppConfig {
+	var args []string
+	if passcode != "" {
+		args = []string{"-passcode", passcode}
+	}
+	return visor.AppConfig{
+		App:       skyenv.SkyproxyName,
+		Version:   skyenv.SkyproxyVersion,
+		AutoStart: true,
+		Port:      routing.Port(skyenv.SkyproxyPort),
+		Args:      args,
+	}
+}
+
+func defaultSkysshClientConfig() visor.AppConfig {
+	return visor.AppConfig{
+		App:       skyenv.SkysshClientName,
+		Version:   skyenv.SkysshVersion,
+		AutoStart: true,
+		Port:      routing.Port(skyenv.SkysshClientPort),
+	}
+}
+
+func defaultSkyproxyClientConfig() visor.AppConfig {
+	return visor.AppConfig{
+		App:       skyenv.SkyproxyClientName,
+		Version:   skyenv.SkyproxyClientVersion,
+		AutoStart: false,
+		Port:      routing.Port(skyenv.SkyproxyClientPort),
+	}
 }

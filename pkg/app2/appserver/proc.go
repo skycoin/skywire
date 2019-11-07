@@ -6,9 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
 )
 
 // Proc is a wrapper for a skywire app. Encapsulates

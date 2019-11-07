@@ -8,15 +8,19 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/disc"
 
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/transport"
-	trClient "github.com/skycoin/skywire/pkg/transport-discovery/client"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
 // Config defines configuration parameters for Node.
+// TODO(evanlinjin): Instead of having nested structs, make separate types for each field.
+// TODO(evanlinjin): Use pointers to allow nil-configs for non-crucial fields.
 type Config struct {
 	Version string `json:"version"`
 
@@ -25,7 +29,7 @@ type Config struct {
 		StaticSecKey cipher.SecKey `json:"static_secret_key"`
 	} `json:"node"`
 
-	TCPTransport struct {
+	STCP struct {
 		PubKeyTable map[cipher.PubKey]string `json:"pk_table"`
 		LocalAddr   string                   `json:"local_address"`
 	} `json:"stcp"`
@@ -34,6 +38,8 @@ type Config struct {
 		Discovery   string `json:"discovery"`
 		ServerCount int    `json:"server_count"`
 	} `json:"messaging"`
+
+	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
 
 	Transport struct {
 		Discovery string `json:"discovery"`
@@ -84,6 +90,22 @@ func (c *Config) MessagingConfig() (*DmsgConfig, error) {
 		Retries:    5,
 		RetryDelay: time.Second,
 	}, nil
+}
+
+// DmsgPtyHost instantiates a host from the dmsgpty config.
+func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
+	if c.DmsgPty == nil {
+		return nil, errors.New("'dmsg_pty' config field not defined")
+	}
+	return dmsgpty.NewHostFromDmsgClient(
+		nil,
+		dmsgC,
+		c.Node.StaticPubKey,
+		c.Node.StaticSecKey,
+		c.DmsgPty.AuthFile,
+		c.DmsgPty.Port,
+		c.DmsgPty.CLINet,
+		c.DmsgPty.CLIAddr)
 }
 
 // TransportDiscovery returns transport discovery client.
@@ -172,6 +194,14 @@ type DmsgConfig struct {
 	Discovery  disc.APIClient
 	Retries    int
 	RetryDelay time.Duration
+}
+
+// DmsgPtyConfig configures the dmsgpty-host.
+type DmsgPtyConfig struct {
+	Port     uint16 `json:"port"`
+	AuthFile string `json:"authorization_file"`
+	CLINet   string `json:"cli_network"`
+	CLIAddr  string `json:"cli_address"`
 }
 
 // AppConfig defines app startup parameters.

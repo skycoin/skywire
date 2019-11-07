@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/armon/go-socks5"
 	"github.com/hashicorp/yamux"
-	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Server implements multiplexing proxy server using yamux.
@@ -65,5 +65,8 @@ func (s *Server) Close() error {
 type passcodeCredentials string
 
 func (s passcodeCredentials) Valid(user, password string) bool {
+	if len(s) == 0 {
+		return true
+	}
 	return user == string(s) || password == string(s)
 }

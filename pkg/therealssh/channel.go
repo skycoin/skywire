@@ -12,14 +12,16 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/creack/pty"
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/creack/pty"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 // Port reserved for SSH app
-const Port = 2
+const Port = routing.Port(skyenv.SkysshPort)
 
 // Debug enables debug messages.
 var Debug = false

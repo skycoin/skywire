@@ -7,13 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app2"
-
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
 const (
@@ -54,16 +53,16 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) error {
 	out.RouteFinder = http.StatusOK
 	out.SetupNode = http.StatusOK
 
-	_, err := r.node.config.TransportDiscovery()
+	_, err := r.node.conf.TransportDiscovery()
 	if err != nil {
 		out.TransportDiscovery = http.StatusNotFound
 	}
 
-	if r.node.config.Routing.RouteFinder == "" {
+	if r.node.conf.Routing.RouteFinder == "" {
 		out.RouteFinder = http.StatusNotFound
 	}
 
-	if len(r.node.config.Routing.SetupNodes) == 0 {
+	if len(r.node.conf.Routing.SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
 	}
 
@@ -157,7 +156,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.node.config.Node.StaticPubKey,
+		PubKey:          r.node.conf.Node.StaticPubKey,
 		NodeVersion:     Version,
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.node.Apps(),
@@ -297,14 +296,40 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) error {
 }
 
 /*
-	<<< ROUTES MANAGEMENT >>>
+	<<< AVAILABLE TRANSPORTS >>>
 */
 
-// RoutingEntry represents an RoutingTable's entry.
-type RoutingEntry struct {
-	Key   routing.RouteID
-	Value routing.Rule
+// DiscoverTransportsByPK obtains available transports via the transport discovery via given public key.
+func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) error {
+	tpD, err := r.node.conf.TransportDiscovery()
+	if err != nil {
+		return err
+	}
+	entries, err := tpD.GetTransportsByEdge(context.Background(), *pk)
+	if err != nil {
+		return err
+	}
+	*out = entries
+	return nil
 }
+
+// DiscoverTransportByID obtains available transports via the transport discovery via a given transport ID.
+func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) error {
+	tpD, err := r.node.conf.TransportDiscovery()
+	if err != nil {
+		return err
+	}
+	entry, err := tpD.GetTransportByID(context.Background(), *id)
+	if err != nil {
+		return err
+	}
+	*out = *entry
+	return nil
+}
+
+/*
+	<<< ROUTES MANAGEMENT >>>
+*/
 
 // RoutingRules obtains all routing rules of the RoutingTable.
 func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) error {

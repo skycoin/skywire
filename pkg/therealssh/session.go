@@ -11,8 +11,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/creack/pty"
-	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Log is the package level logger, which can be replaced from outside

@@ -1,64 +1,44 @@
-[![Build Status](https://travis-ci.com/watercompany/skywire.svg?token=QxVQj6gVZDzoFxD2YG65&branch=master)](https://travis-ci.com/watercompany/skywire)
+[![Build Status](https://travis-ci.com/SkycoinProject/skywire-mainnet.svg?branch=master)](https://travis-ci.com/SkycoinProject/skywire-mainnet)
 
-# Skywire Mainnet - Public Test Phase
+# Skywire Mainnet
 
-- [Skywire Mainnet - Public Test Phase](#skywire-mainnet---public-test-phase)
-  - [Notes on this release](#notes-on-this-release)
-  - [Architecture](#architecture)
+- [Skywire Mainnet](#skywire-mainnet)
   - [Build and run](#build-and-run)
     - [Requirements](#requirements)
     - [Build](#build)
+    - [Configure](#configure)
+      - [`stcp` setup](#stcp-setup)
+      - [`dmsgpty` setup](#dmsgpty-setup)
     - [Run `skywire-visor`](#run-skywire-visor)
-    - [Run `skywire-visor` in docker container](#run-skywire-visor-in-docker-container)
     - [Run `skywire-cli`](#run-skywire-cli)
+    - [Run `dmsgpty`](#run-dmsgpty)
     - [Apps](#apps)
     - [Transports](#transports)
   - [App programming API](#app-programming-api)
   - [Testing](#testing)
     - [Testing with default settings](#testing-with-default-settings)
     - [Customization with environment variables](#customization-with-environment-variables)
-      - [$TEST_OPTS](#test_opts)
-      - [$TEST_LOGGING_LEVEL](#test_logging_level)
-      - [$SYSLOG_OPTS](#syslog_opts)
-  - [Updater](#updater)
+      - [$TEST_OPTS](#testopts)
+      - [$TEST_LOGGING_LEVEL](#testlogginglevel)
+      - [$SYSLOG_OPTS](#syslogopts)
   - [Running skywire in docker containers](#running-skywire-in-docker-containers)
     - [Run dockerized `skywire-visor`](#run-dockerized-skywire-visor)
       - [Structure of `./node`](#structure-of-node)
     - [Refresh and restart `SKY01`](#refresh-and-restart-sky01)
     - [Customization of dockers](#customization-of-dockers)
-      - [1. DOCKER_IMAGE](#1-docker_image)
-      - [2. DOCKER_NETWORK](#2-docker_network)
-      - [3. DOCKER_NODE](#3-docker_node)
-      - [4. DOCKER_OPTS](#4-docker_opts)
+      - [1. DOCKER_IMAGE](#1-dockerimage)
+      - [2. DOCKER_NETWORK](#2-dockernetwork)
+      - [3. DOCKER_NODE](#3-dockernode)
+      - [4. DOCKER_OPTS](#4-dockeropts)
     - [Dockerized `skywire-visor` recipes](#dockerized-skywire-visor-recipes)
       - [1. Get Public Key of docker-node](#1-get-public-key-of-docker-node)
       - [2. Get an IP of node](#2-get-an-ip-of-node)
       - [3. Open in browser containerized `skychat` application](#3-open-in-browser-containerized-skychat-application)
-      - [4. Create new dockerized `skywire-visors`](#4-create-new-dockerized-skywire-visors)
+      - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
       - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
-      - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
+      - [6. "Hello-Mike-Hello-Joe" test](#6-%22hello-mike-hello-joe%22-test)
 
-## Notes on this release
-
-This is a public testing version of the Skywire mainnet and is intended for developers use to find bugs only. It is not yet intended to replace the testnet and miners should not install this software on their miners or they may lose their reward eligibility. 
-
-The software is still under heavy development and the current version is intended for public testing purposes only. A GUI interface and various guides on how to use Skywire, application development on Skywire and contribution policies will follow in the near future. For now this version of the software can be used by developers to test the functionality and file bug issues to help the development. 
-
-## Architecture 
-
-Skywire is a decentralized and private network. Skywire separates the data and control plane of the network and assigns the tasks of network coordination and administration to dedicated services, while the nodes follow the rules that were created by the control plane and execute them. 
-
-The core of Skywire is the Skywire visor which hosts applications and is the gateway to use the network. It establishes connections, called transports, to other nodes, requests the setup of routes and forwards packets for other nodes on a route. The Skywire visor exposes an API to applications for using the networking protocol of Skywire. 
-
-In order to detach control plane tasks from the network nodes, there are 3 other services that maintain a picture of the network topology, calculate routes (currently based on the number of hops, but will be extended to other metrics) and set the routing rules on the nodes. 
-
-The transport discovery maintains a picture of the network topology, by allowing Skywire visors to advertise transports that they established with other nodes. It also allows to upload a status to indicate whether a given transport is currently working or not.
-
-On the basis of this information the route finder calculates the most efficient route in the network. Nodes request a route to a given public key and the route finder will calculate the best route and return the transports that the packet will be sent over to reach the intended node. 
-
-This information is sent from a node to the Setup Node, which sets the routing rules in all nodes along a route. Skywire visors determine, which nodes they accept routing rules from, so only a whitelisted node can send routing rules to a node in the network. The only information the Skywire visor gets for routing is a Routing ID and an associated rule that defines which transport to send a packet to (or to consume the packet). Therefore nodes along a route only know the last and next hop along the route, but not where the packet originates from and where it is sent to. Skywire supports source routing, so nodes can specify a path that a packet is supposed to take in the network. 
-
-There are currently two types of transports that nodes can use. The messaging transport is a transport between two nodes that uses an intermediary messaging server to relay packets between them. The connection to a specific node and the connection to a messaging server is facilitated by a discovery service, that allows nodes to advertise the messaging servers over which they can be contacted. This transport is used by the setup node to send routing rules and can be used for other applications as well. It allows nodes behind NATs to communicate. The second transport type is TCP, which sets up a connection between two servers with a public IP. More transport types will be supported in the future and custom transport implementations can be written for specific use cases.
+**NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
 ## Build and run
 
@@ -70,11 +50,14 @@ Skywire requires a version of [golang](https://golang.org/) with [go modules](ht
 
 ```bash
 # Clone.
-$ git clone https://github.com/skycoin/skywire
-$ cd skywire
-$ git checkout mainnet
-# Build
-$ make build # installs all dependencies, build binaries and apps
+$ git clone https://github.com/SkycoinProject/skywire-mainnet.git
+$ cd skywire-mainnet
+
+# Build.
+$ make build # installs all dependencies, build binaries and skywire apps
+
+# Install skywire-visor, skywire-cli, dmsgpty, hypervisor and app CLI execs.
+$ make install
 ```
 
 **Note: Environment variable OPTS**
@@ -90,31 +73,78 @@ $ make
 $ OPTS="GSO111MODULE=on GOOS=linux GOARCH=arm" make
 ```
 
-**Install skywire-visor, skywire-cli, hypervisor and SSH-cli**
+### Configure
 
-```bash
-$ make install  # compiles and installs all binaries
-```
+The configuration file provides the configuration for `skywire-visor`. It is a text file in JSON format.
 
-**Generate default json config**
+You can generate a default configuration file by running:
 
 ```bash
 $ skywire-cli node gen-config
 ```
 
+Additional options are displayed when `skywire-cli node gen-config -h` is run.
+
+We will cover certain fields of the configuration file below.
+
+#### `stcp` setup
+
+With `stcp`, you can establish *skywire transports* to other skywire visors with the `tcp` protocol.
+
+As visors are identified with public keys and not IP addresses, we need to directly define the associations between IP address and public keys. This is done via the configuration file for `skywire-visor`.
+
+```json
+{
+  "stcp": {
+    "pk_table": {
+      "024a2dd77de324d543561a6d9e62791723be26ddf6b9587060a10b9ba498e096f1": "127.0.0.1:7031",
+      "0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08": "127.0.0.1:7032"
+    },
+    "local_address": "127.0.0.1:7033"
+  }
+}
+```
+
+In the above example, we have two other visors running on localhost (that we wish to connect to via `stcp`).
+- The field `stcp.pk_table` holds the associations of `<public_key>` to `<ip_address>:<port>`.
+- The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming `stcp` connection.
+
+#### `dmsgpty` setup
+
+With `dmsgpty`, you can access a remote `pty` on a remote `skywire-visor`. Note that `dmsgpty` can only access remote visors that have a dmsg transport directly established with the client visor. Having a route connecting two visors together does not allow `dmsgpty` to function between the two visors.
+
+Here is an example configuration for enabling the `dmsgpty` server within `skywire-visor`:
+
+```json5
+{
+  "dmsg_pty": {
+  
+    // "port" provides the dmsg port to listen for remote pty requests.
+    "port": 233, 
+    
+    // "authorization_file" is the path to a JSON file containing an array of whitelisted public keys.
+    "authorization_file": "./dmsgpty/whitelist.json",
+    
+    // "cli_network" is the network to host the dmsgpty CLI.
+    "cli_network": "unix",
+    
+    // "cli_address" is the address to host the dmsgpty CLI.
+    "cli_address": "/tmp/dmsgpty.sock"
+  }
+}
+```
+
+For `dmsgpty` usage, refer to [#run-dmsgpty](#run-dmsgpty).
+
 ### Run `skywire-visor`
 
 `skywire-visor` hosts apps, proxies app's requests to remote nodes and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the node, communication between node and app is performed via unix pipes provided on app startup.
 
+Note that `skywire-visor` requires a valid configuration file in order to execute.
+
 ```bash
 # Run skywire-visor. It takes one argument; the path of a configuration file (`skywire-config.json` if unspecified).
 $ skywire-visor skywire-config.json
-```
-
-### Run `skywire-visor` in docker container
-
-```bash
-make docker-run
 ```
 
 ### Run `skywire-cli`
@@ -123,24 +153,30 @@ The `skywire-cli` tool is used to control the `skywire-visor`. Refer to the help
 
 ```bash
 $ skywire-cli -h
+```
 
-# Command Line Interface for skywire
-#
-# Usage:
-#   skywire-cli [command]
-#
-# Available Commands:
-#   help        Help about any command
-#   mdisc       Contains sub-commands that interact with a remote Messaging Discovery
-#   node        Contains sub-commands that interact with the local Skywire Visor
-#   rtfind      Queries the Route Finder for available routes between two nodes
-#   tpdisc      Queries the Transport Discovery to find transport(s) of given transport ID or edge public key
-#
-# Flags:
-#   -h, --help   help for skywire-cli
-#
-# Use "skywire-cli [command] --help" for more information about a command.
+### Run `dmsgpty`
 
+`dmsgpty` allows the user to access local and remote pty sessions via the `skywire-visor`. To use `dmsgpty`, one needs to have a `skywire-visor` up and running with the `dmsgpty-server` properly configured (as specified here: [#dmsgpty-setup](#dmsgpty-setup)).
+
+To access a remote pty, the local `skywire-visor` needs to have a direct dmsg transport with the remote visor, and the remote visor needs to have the local visor's public key included in it's dmsgpty whitelist.
+
+One can add public key entries to the `"authorization_file"` via the following command:
+
+```bash
+$ dmsgpty whitelist-add --pk 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08
+```
+
+To open an interactive pty shell on a remote visor, who's public key is `0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08`, run the following command:
+
+```bash
+$ dmsgpty -a 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08 
+```
+
+To open a non-interactive shell and run a command:
+
+```bash
+$ dmsgpty --addr='0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08' --cmd='echo' --arg='hello world'
 ```
 
 ### Apps
@@ -244,10 +280,6 @@ $ export SYSLOG_OPTS='--syslog localhost:514'
 $ make integration-run-messaging ## or other integration-run-* goal
 $ sudo cat /tmp/syslog/messages ## collected logs from NodeA, NodeB, NodeC instances
 ```
-
-## Updater
-
-This software comes with an updater, which is located in this repo: <https://github.com/skycoin/skywire-updater>. Follow the instructions in the README.md for further information. It can be used with a CLI for now and will be usable with the manager interface.
 
 ## Running skywire in docker containers
 

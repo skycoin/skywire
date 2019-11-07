@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"net/rpc"
 
-	"github.com/skycoin/skywire/pkg/app2/appcommon"
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/app2/appserver"
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appserver"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 //go:generate mockery -name RPCClient -case underscore -inpkg
