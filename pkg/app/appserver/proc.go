@@ -12,7 +12,7 @@ import (
 )
 
 // Proc is a wrapper for a skywire app. Encapsulates
-// the running proccess itself and the RPC server for
+// the running process itself and the RPC server for
 // app/visor communication.
 type Proc struct {
 	key    appcommon.Key

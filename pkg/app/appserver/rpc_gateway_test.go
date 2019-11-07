@@ -60,6 +60,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 			require.NoError(t, err)
 		}
 		err := rpc.cm.Set(math.MaxUint16, nil)
+		require.NoError(t, err)
 
 		var resp DialResp
 		err = rpc.Dial(&dialAddr, &resp)
