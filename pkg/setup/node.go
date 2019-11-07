@@ -12,9 +12,9 @@ import (
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
 
 // Node performs routes setup operations over messaging channel.
@@ -48,9 +48,9 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	}
 	log.Info("connected to dmsg servers")
 
-	dmsgL, err := dmsgC.Listen(snet.SetupPort)
+	dmsgL, err := dmsgC.Listen(skyenv.DmsgSetupPort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on dmsg port %d: %v", snet.SetupPort, dmsgL)
+		return nil, fmt.Errorf("failed to listen on dmsg port %d: %v", skyenv.DmsgSetupPort, dmsgL)
 	}
 	log.Info("started listening for dmsg connections")
 
@@ -258,7 +258,7 @@ func (sn *Node) handleCloseLoop(ctx context.Context, on cipher.PubKey, ld routin
 }
 
 func (sn *Node) dialAndCreateProto(ctx context.Context, pk cipher.PubKey) (*Protocol, error) {
-	tr, err := sn.dmsgC.Dial(ctx, pk, snet.AwaitSetupPort)
+	tr, err := sn.dmsgC.Dial(ctx, pk, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
 		return nil, fmt.Errorf("transport: %s", err)
 	}
