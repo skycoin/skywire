@@ -23,14 +23,14 @@ type Manager struct {
 	lstID  uint16
 }
 
-// NewIDManager constructs new `Manager`.
+// New constructs new `Manager`.
 func New() *Manager {
 	return &Manager{
 		values: make(map[uint16]interface{}),
 	}
 }
 
-// `ReserveNextID` reserves next free slot for the value and returns the id for it.
+// ReserveNextID reserves next free slot for the value and returns the id for it.
 func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 	m.mx.Lock()
 
@@ -53,7 +53,7 @@ func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 	return &nxtID, m.constructFreeFunc(nxtID), nil
 }
 
-// pop removes value specified by `id` from the idManager instance and
+// Pop removes value specified by `id` from the idManager instance and
 // returns it.
 func (m *Manager) Pop(id uint16) (interface{}, error) {
 	m.mx.Lock()
@@ -74,7 +74,7 @@ func (m *Manager) Pop(id uint16) (interface{}, error) {
 	return v, nil
 }
 
-// add adds the new value `v` associated with `id`.
+// Add adds the new value `v` associated with `id`.
 func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 	m.mx.Lock()
 
@@ -89,7 +89,7 @@ func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 	return m.constructFreeFunc(id), nil
 }
 
-// set sets value `v` associated with `id`.
+// Set sets value `v` associated with `id`.
 func (m *Manager) Set(id uint16, v interface{}) error {
 	m.mx.Lock()
 
@@ -109,7 +109,7 @@ func (m *Manager) Set(id uint16, v interface{}) error {
 	return nil
 }
 
-// get gets the value associated with the `id`.
+// Get gets the value associated with the `id`.
 func (m *Manager) Get(id uint16) (interface{}, bool) {
 	m.mx.RLock()
 	lis, ok := m.values[id]
@@ -120,7 +120,7 @@ func (m *Manager) Get(id uint16) (interface{}, bool) {
 	return lis, ok
 }
 
-// doRange performs range over the manager contents. Loop stops when
+// DoRange performs range over the manager contents. Loop stops when
 // `next` returns false.
 func (m *Manager) DoRange(next func(id uint16, v interface{}) bool) {
 	m.mx.RLock()
