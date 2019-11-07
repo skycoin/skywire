@@ -64,57 +64,62 @@ func (c *Client) connect() error {
 
 // Serve proxies incoming connection to a remote proxy server.
 func (c *Client) Serve() error {
-	var stream net.Conn
-
 	for {
 		conn, err := c.listener.Accept()
 		if err != nil {
 			return fmt.Errorf("accept: %s", err)
 		}
 
-		for {
-			stream, err = c.session.Open()
-			if err == nil {
-				break
-			}
+		stream := c.createStream()
+		c.handleStream(conn, stream)
+	}
+}
 
-			Log.Warnf("Failed to open yamux session: %v", err)
-
-			delay := 1 * time.Second
-			Log.Warnf("Restarting in %v", delay)
-			time.Sleep(delay)
-
-			if err := c.connect(); err != nil {
-				Log.Warnf("Failed to reconnect, trying again")
-			}
+func (c *Client) createStream() net.Conn {
+	for {
+		stream, err := c.session.Open()
+		if err == nil {
+			return stream
 		}
 
-		go func() {
-			errCh := make(chan error, 2)
-			go func() {
-				_, err := io.Copy(stream, conn)
-				errCh <- err
-			}()
+		Log.Warnf("Failed to open yamux session: %v", err)
 
-			go func() {
-				_, err := io.Copy(conn, stream)
-				errCh <- err
-			}()
+		delay := 1 * time.Second
+		Log.Warnf("Restarting in %v", delay)
+		time.Sleep(delay)
 
-			for err := range errCh {
-				if err := conn.Close(); err != nil {
-					Log.WithError(err).Warn("Failed to close connection")
-				}
-				if err := stream.Close(); err != nil {
-					Log.WithError(err).Warn("Failed to close stream")
-				}
-
-				if err != nil {
-					Log.Error("Copy error:", err)
-				}
-			}
-		}()
+		if err := c.connect(); err != nil {
+			Log.Warnf("Failed to reconnect, trying again")
+		}
 	}
+}
+
+func (c *Client) handleStream(in, out net.Conn) {
+	go func() {
+		errCh := make(chan error, 2)
+		go func() {
+			_, err := io.Copy(out, in)
+			errCh <- err
+		}()
+
+		go func() {
+			_, err := io.Copy(in, out)
+			errCh <- err
+		}()
+
+		for err := range errCh {
+			if err := in.Close(); err != nil {
+				Log.WithError(err).Warn("Failed to close connection")
+			}
+			if err := out.Close(); err != nil {
+				Log.WithError(err).Warn("Failed to close stream")
+			}
+
+			if err != nil {
+				Log.Error("Copy error:", err)
+			}
+		}
+	}()
 }
 
 // ListenAndServe starts tcp listener on addr and proxies incoming
