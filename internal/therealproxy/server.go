@@ -43,7 +43,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 		session, err := yamux.Server(conn, nil)
 		if err != nil {
-			return fmt.Errorf("yamux: %s", err)
+			return fmt.Errorf("yamux server failure: %s", err)
 		}
 
 		go func() {
