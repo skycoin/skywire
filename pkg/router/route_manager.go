@@ -12,6 +12,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
@@ -47,7 +48,7 @@ type routeManager struct {
 
 // newRouteManager creates a new route manager.
 func newRouteManager(n *snet.Network, rt routing.Table, config RMConfig) (*routeManager, error) {
-	sl, err := n.Listen(snet.DmsgType, snet.AwaitSetupPort)
+	sl, err := n.Listen(snet.DmsgType, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +163,7 @@ func (rm *routeManager) rtGarbageCollectLoop() {
 
 func (rm *routeManager) dialSetupConn(_ context.Context) (*snet.Conn, error) {
 	for _, sPK := range rm.conf.SetupPKs {
-		conn, err := rm.n.Dial(snet.DmsgType, sPK, snet.SetupPort)
+		conn, err := rm.n.Dial(snet.DmsgType, sPK, skyenv.DmsgSetupPort)
 		if err != nil {
 			rm.Logger.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
 			continue

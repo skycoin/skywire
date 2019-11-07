@@ -27,7 +27,7 @@ func TestHealth(t *testing.T) {
 	c.Routing.RouteFinder = "foo"
 
 	t.Run("Report all the services as available", func(t *testing.T) {
-		rpc := &RPC{&Node{config: c}}
+		rpc := &RPC{&Node{conf: c}}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestHealth(t *testing.T) {
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
-		rpc := &RPC{&Node{config: &Config{}}}
+		rpc := &RPC{&Node{conf: &Config{}}}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -95,8 +95,8 @@ func TestStartStopApp(t *testing.T) {
 	}()
 
 	apps := []AppConfig{{App: "foo", Version: "1.0", AutoStart: false, Port: 10}}
-	node := &Node{router: router, executer: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"), config: &Config{}}
-	node.config.Node.StaticPubKey = pk
+	node := &Node{router: router, exec: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"), conf: &Config{}}
+	node.conf.Node.StaticPubKey = pk
 	pathutil.EnsureDir(node.dir())
 	defer func() {
 		require.NoError(t, os.RemoveAll(node.dir()))
