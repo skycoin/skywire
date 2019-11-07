@@ -10,8 +10,8 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/therealproxy"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
@@ -22,18 +22,18 @@ const (
 )
 
 func main() {
-	log := app2.NewLogger(appName)
+	log := app.NewLogger(appName)
 	therealproxy.Log = log.PackageLogger("therealproxy")
 
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
 	flag.Parse()
 
-	config, err := app2.ClientConfigFromEnv()
+	config, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
-	socksApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
+	socksApp, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}

@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appserver"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
@@ -28,7 +28,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 	require.NoError(t, err)
 
 	visorPK, _ := cipher.GenerateKeyPair()
-	clientConfig := app2.ClientConfig{
+	clientConfig := app.ClientConfig{
 		VisorPK:  visorPK,
 		SockFile: sockFile,
 		AppKey:   appKey,
@@ -61,7 +61,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 	err = appnet.AddNetworker(appnet.TypeDMSG, n)
 	require.NoError(t, err)
 
-	cl, err := app2.NewClient(logging.MustGetLogger("app_client"), clientConfig)
+	cl, err := app.NewClient(logging.MustGetLogger("app_client"), clientConfig)
 	require.NoError(t, err)
 
 	gotConn, err := cl.Dial(remote)
