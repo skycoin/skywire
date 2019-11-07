@@ -14,13 +14,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/pkg/app2"
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 const (

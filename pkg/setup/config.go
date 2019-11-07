@@ -3,13 +3,13 @@ package setup
 import (
 	"time"
 
-	"github.com/skycoin/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 // Various timeouts for setup node.
 const (
-	RequestTimeout = time.Second * 30
-	ReadTimeout    = time.Second * 10
+	RequestTimeout = time.Second * 60
+	ReadTimeout    = time.Second * 30
 )
 
 // Config defines configuration parameters for setup Node.

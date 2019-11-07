@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
-	"github.com/skycoin/dmsg/cipher"
 )
 
 // Entry is the unsigned representation of a Transport.

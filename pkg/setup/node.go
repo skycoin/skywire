@@ -6,14 +6,14 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/skycoin/dmsg"
-	"github.com/skycoin/dmsg/disc"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/metrics"
-	"github.com/skycoin/skywire/pkg/router/routerclient"
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router/routerclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 // Node performs routes setup operations over messaging channel.
@@ -47,9 +47,9 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	}
 	log.Info("connected to dmsg servers")
 
-	dmsgL, err := dmsgC.Listen(snet.SetupPort)
+	dmsgL, err := dmsgC.Listen(skyenv.DmsgSetupPort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on dmsg port %d: %v", snet.SetupPort, dmsgL)
+		return nil, fmt.Errorf("failed to listen on dmsg port %d: %v", skyenv.DmsgSetupPort, dmsgL)
 	}
 	log.Info("started listening for dmsg connections")
 
@@ -112,6 +112,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 
 	// Determine the rules to send to visors using loop descriptor and reserved route IDs.
 	forwardRules, consumeRules, intermediaryRules, err := idr.GenerateRules(forwardRoute, reverseRoute)
+
 	if err != nil {
 		return routing.EdgeRules{}, err
 	}
@@ -166,6 +167,7 @@ func (sn *Node) reserveRouteIDs(ctx context.Context, route routing.Bidirectional
 	sn.logger.Infof("There are %d route IDs to reserve.", total)
 
 	err := reservoir.ReserveIDs(ctx, sn.logger, sn.dmsgC, routerclient.ReserveIDs)
+
 	if err != nil {
 		sn.logger.WithError(err).Warnf("Failed to reserve route IDs.")
 		return nil, err

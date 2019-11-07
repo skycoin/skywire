@@ -5,10 +5,10 @@ import (
 	"net"
 	"sync"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/app2/idmanager"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/idmanager"
 )
 
 // Listener is a listener for app server connections.

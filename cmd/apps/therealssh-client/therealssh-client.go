@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 
-	"github.com/skycoin/skywire/pkg/app2"
-	ssh "github.com/skycoin/skywire/pkg/therealssh"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
 )
 
 const (
@@ -25,7 +27,8 @@ func main() {
 	log = app2.NewLogger(appName)
 	ssh.Log = log.PackageLogger("therealssh")
 
-	var rpcAddr = flag.String("rpc", ":2222", "Client RPC address to listen on")
+	// TODO(evanlinjin): Change "rpc" to "addr".
+	var rpcAddr = flag.String("rpc", skyenv.SkysshClientAddr, "Client RPC address to listen on")
 	var debug = flag.Bool("debug", false, "enable debug messages")
 	flag.Parse()
 

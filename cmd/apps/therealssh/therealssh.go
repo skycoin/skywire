@@ -7,14 +7,15 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
-	ssh "github.com/skycoin/skywire/pkg/therealssh"
 
-	"github.com/skycoin/skywire/pkg/app2"
-	"github.com/skycoin/skywire/pkg/app2/appnet"
-	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
 )
 
 var log *logging.MasterLogger
@@ -40,6 +41,7 @@ func main() {
 	}
 
 	sshApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
+
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}

@@ -10,7 +10,6 @@ import (
 	"log"
 	"log/syslog"
 	"net/http"
-	_ "net/http/pprof" // used for HTTP profiling
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,15 +17,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/internal/utclient"
-	"github.com/skycoin/skywire/pkg/util/pathutil"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
+
+// TODO(evanlinjin): Determine if this is still needed.
+//import _ "net/http/pprof" // used for HTTP profiling
 
 const configEnv = "SW_CONFIG"
 const defaultShutdownTimeout = visor.Duration(10 * time.Second)
@@ -141,7 +143,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 	if err := json.NewDecoder(rdr).Decode(&cfg.conf); err != nil {
 		cfg.logger.Fatalf("Failed to decode %s: %s", rdr, err)
 	}
-	fmt.Println("TCP Factory conf:", cfg.conf.TCPTransport)
+	fmt.Println("TCP Factory conf:", cfg.conf.STCP)
 	return cfg
 }
 
