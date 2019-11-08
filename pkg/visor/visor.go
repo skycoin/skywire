@@ -89,7 +89,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	procManager *appserver.ProcManager
+	procManager appserver.ProcManager
 }
 
 // NewNode constructs new Node.
