@@ -21,6 +21,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
+//go:generate mockery -name Router -case underscore -inpkg
+
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes
 	DefaultRouteKeepAlive = 2 * time.Hour // TODO(nkryuchkov): change
