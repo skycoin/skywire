@@ -33,23 +33,18 @@ integration
 │   ├── env-vars.sh                    #
 │   ├── nodeA.json                     #
 │   └── nodeC.json                     #
-├── ssh                                #  ssh testing environment
-│   ├── env-vars.sh                    #
-│   ├── nodeA.json                     #
-│   └── nodeC.json                     #
 ├── InteractiveEnvironments.md         #  You're reading it
 ├── intermediary-nodeB.json            #  NodeB configurationS
 ├── run-base-env.sh                    #  base environment in detached tmux session
 ├── run-generic-env.sh                 #  generic environment in tmux
 ├── run-proxy-env.sh                   #  proxy  environment in tmux
-├── run-ssh-env.sh                     #  ssh  environment in tmux
 ├── start-restart-nodeB.sh             #  script for restart in cycle NodeB
 ├── startup.sh                         #  add transports between nodes
 ├── tear-down.sh                       #  tear down everything
 ├── test-messaging-loop.sh             #  Test script for messaging in infinite loop
 ├── test-messaging.sh                  #  Test one message between NodeA-NodeC, NodeC-NodeA
 ├── test-proxy.sh                      #  Test script for proxy
-├── test-ssh.sh                        #  Test script for ssh
+
 ```
 
 ## Dependencies
@@ -161,56 +156,15 @@ The following steps will be performed:
    4. $CHAT_A, $CHAT_B - addresses and ports for `skychat`-apps on node_A and node_C
 4. Aliases in shell-window: `CLI_A`, `CLI_B`, `CLI_C`
 
-### SSH Test Environment
-
-The SSH Test Environment will define the following:
-
-- skywire-services running on localhost
-- 3 `skywire-visor`s:
-  - NodeA - running  `SSH` app
-  - NodeB - intermediary node without apps
-  - NodeC - running `SSH-client` app
-
-**Run**
-
-```bash
-# Tear down everything
-$ make integration-teardown
-
-# Prerequisite
-$ echo $PK_C > ~/.therealssh/authorized_keys
-
-# Start all services and nodes
-$ make integration-run-ssh
-
-# Adds pre-defined transports
-$ make integration-startup
-```
-
-**Tests**
-
-- **TEST 1**
-  1. Run `./integration/run-ssh-env.sh` - it will run:
-     1. skywire-services on localhost
-     2. NodeA with configured `SSH` app 
-     3. NodeB - intermediary
-     4. NodeC with configured `SSH-client` app
-  2. Run `./integration/test-ssh.sh` which will run in cycle:
-     1. `./SSH-cli $PK_A "export n=1; loop -n $n echo A"`
-     2. kill all `skywire-visor`s
-     3. Collect logs
-     4. Increase n by power of 2
-     5. Repeat
-
 ### Proxy test environment
 
 The proxy test environment will define the following:
 
 - skywire-services running on localhost
 - 3 `skywire-visor`s:
-  - NodeA - running  `SSH` app
+  - NodeA - running  `proxy` app
   - NodeB - intermediary node without apps
-  - NodeC - running `SSH-client` app
+  - NodeC - running `proxy-client` app
 
 #### Preparation
 
@@ -248,7 +202,7 @@ It's possible that a service could start earlier or later than needed.
 Examine windows,  in case of failed service - restart it (E.g. `KeyUp`-`Enter`)
 
 Problem still exists in proxy test environment:
-  - NodeC cannot start `SSH-client` when NodeA is still starting `SSH`
+  - NodeC cannot start `proxy-client` when NodeA is still starting `proxy`
 
 ### Tmux for new users
 
