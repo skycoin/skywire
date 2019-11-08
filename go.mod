@@ -32,4 +32,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-//replace github.com/SkycoinProject/skywire-mainnet => ../skywire-mainnet
+//replace github.com/SkycoinProject/dmsg => ../dmsg
