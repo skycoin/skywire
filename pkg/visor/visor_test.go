@@ -4,6 +4,22 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/mock"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
@@ -60,20 +76,36 @@ func TestMain(m *testing.M) {
 //}
 
 // TODO (Darkren): fix tests
-/*func TestNodeStartClose(t *testing.T) {
-	r := new(mockRouter)
-	executer := &MockExecuter{}
+func TestNodeStartClose(t *testing.T) {
+	r := &router.MockRouter{}
+	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
+	r.On("Close").Return(testhelpers.NoErr)
+
 	conf := []AppConfig{
-		{App: "skychat", Version: "1.0", AutoStart: true, Port: 1},
-		{App: "foo", Version: "1.0", AutoStart: false},
+		{
+			App:       "skychat",
+			Version:   "1.0",
+			AutoStart: true,
+			Port:      1,
+		},
+		{
+			App:       "foo",
+			Version:   "1.0",
+			AutoStart: false,
+		},
 	}
 
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	node := &Node{conf: &Config{}, router: r, exec: executer, appsConf: conf,
-		startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test")}
+	node := &Node{
+		conf:        &Config{},
+		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager_test")),
+		router:      r,
+		appsConf:    conf,
+		logger:      logging.MustGetLogger("test"),
+	}
 
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock())
 	netConf := snet.Config{
@@ -85,7 +117,10 @@ func TestMain(m *testing.M) {
 	}
 
 	network := snet.NewRaw(netConf, dmsgC, nil)
-	tmConf := &transport.ManagerConfig{PubKey: cipher.PubKey{}, DiscoveryClient: transport.NewDiscoveryMock()}
+	tmConf := &transport.ManagerConfig{
+		PubKey:          cipher.PubKey{},
+		DiscoveryClient: transport.NewDiscoveryMock(),
+	}
 
 	tm, err := transport.NewManager(network, tmConf)
 	node.tm = tm
@@ -96,17 +131,15 @@ func TestMain(m *testing.M) {
 		errCh <- node.Start()
 	}()
 
+	require.NoError(t, <-errCh)
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, node.Close())
-	require.True(t, r.didClose)
-	require.NoError(t, <-errCh)
 
-	require.Len(t, executer.cmds, 1)
-	assert.Equal(t, "skychat.v1.0", executer.cmds[0].Path)
-	assert.Equal(t, "skychat/v1.0", executer.cmds[0].Dir)
+	require.False(t, node.procManager.Exists(conf[0].App))
+	require.False(t, node.procManager.Exists(conf[1].App))
 }
 
-func TestNodeSpawnApp(t *testing.T) {
+/*func TestNodeSpawnApp(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	r := new(mockRouter)
 	executer := &MockExecuter{}
