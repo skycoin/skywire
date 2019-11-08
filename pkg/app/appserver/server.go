@@ -60,7 +60,10 @@ func (s *Server) ListenAndServe() error {
 
 // Close closes the server.
 func (s *Server) Close() error {
-	err := s.lis.Close()
+	var err error
+	if s.lis != nil {
+		err = s.lis.Close()
+	}
 	close(s.stopCh)
 	s.done.Wait()
 	return err
