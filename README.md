@@ -308,7 +308,7 @@ This will:
 │   ├── socksproxy.v1.0             #
 ├── local                           # **Created inside docker**
 │   ├── skychat                     #  according to "local_path" in skywire-config.json
-│   ├── socksproxy                  #                       #
+│   ├── socksproxy                  #
 ├── PK                              # contains public key of node
 ├── skywire                         # db & logs. **Created inside docker**
 │   ├── routing.db                  #

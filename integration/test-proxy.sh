@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-echo Starting ssh test
+echo Starting proxy test
 echo Press Ctrl-C to exit
 
 source ./integration/proxy/env-vars.sh
