@@ -111,7 +111,7 @@ bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./dmsgpty ./cmd/dmsgpty
 
 release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli` and apps without -race flag
-    ${OPTS} go build -o ${TMP_BUILD_DIR}/skywire-visor ./cmd/skywire-visor
+	${OPTS} go build -o ${TMP_BUILD_DIR}/skywire-visor ./cmd/skywire-visor
 	${OPTS} go build -o ${TMP_BUILD_DIR}/skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build -o ${TMP_BUILD_DIR}/setup-node ./cmd/setup-node
 	${OPTS} go build -o ${TMP_BUILD_DIR}/hypervisor ./cmd/hypervisor
