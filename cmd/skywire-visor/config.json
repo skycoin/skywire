@@ -23,13 +23,6 @@
       "ports": [
         1
       ]
-    },
-    {
-      "app": "SSH-server",
-      "auto_start": true,
-      "ports": [
-        2
-      ]
     }
   ],
   "messaging_path": "./messaging",
