@@ -434,8 +434,6 @@ $ docker run -it -v /tmp/SKYNODE:/sky --network=SKYNET --name=SKYNODE skywire-ru
 # [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skychat",# "app-version":"1.0","protocol-version":"0.0.1"}
 # [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skychat.v1.0
 # [2019-03-15T13:55:10Z] INFO [skychat.v1.0]: 2019/03/15 13:55:10 Serving HTTP on :8000
-# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"SSH",# "app-version":"1.0","protocol-version":"0.0.1"}
-# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app SSH.v1.0
 # [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"socksproxy",# "app-version":"1.0","protocol-version":"0.0.1"}
 # [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app socksproxy.v1.0
 ```
