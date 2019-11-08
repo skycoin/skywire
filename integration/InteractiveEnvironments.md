@@ -9,7 +9,6 @@
   - [Environments & scenarios](#environments--scenarios)
     - [Base Environment](#base-environment)
     - [Generic Test Environment](#generic-test-environment)
-    - [SSH Test Environment](#ssh-test-environment)
     - [Proxy test environment](#proxy-test-environment)
       - [Preparation](#preparation)
       - [Scenario. Proxy test #1](#scenario-proxy-test-1)
