@@ -10,6 +10,9 @@ import (
 
 const timeout = 5 * time.Second
 
+// NoErr is used with the mock interface to return from its methods.
+var NoErr error
+
 // WithinTimeout tries to read an error from error channel within timeout and returns it.
 // If timeout exceeds, nil value is returned.
 func WithinTimeout(ch <-chan error) error {
