@@ -1,0 +1,11 @@
+{
+  "/api": {
+    "target": "http://192.168.0.104:8080",
+    "secure": false,
+    "changeOrigin": true
+  },
+  "/": {
+    "target": "http://192.168.0.104:8000",
+    "secure": false
+  }
+}

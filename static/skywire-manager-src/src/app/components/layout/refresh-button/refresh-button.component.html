@@ -1,0 +1,14 @@
+<button
+  mat-button
+  class="time-button white-theme"
+  [disableRipple]="true"
+  [disabled]="showLoading"
+  [matTooltip]="showAlert ? ('refresh-button.error-tooltip' | translate:{time: refeshRate}) : ''"
+  >
+  <mat-spinner *ngIf="showLoading" class="icon" [diameter]="14"></mat-spinner>
+  <ng-container *ngIf="!showLoading">
+    <mat-icon *ngIf="!showAlert" class="icon" [inline]="true">refresh</mat-icon>
+    <mat-icon *ngIf="showAlert" class="icon alert" [inline]="true">warning</mat-icon>
+  </ng-container>
+  <span>{{ ('refresh-button.' + updateTextElements[0]) | translate:{time: updateTextElements[1]} }}</span>
+</button>

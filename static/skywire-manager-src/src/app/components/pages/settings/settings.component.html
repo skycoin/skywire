@@ -1,0 +1,20 @@
+<app-sidenav-content>
+  <div>
+    <app-button (action)="logout()" icon="power_settings_new">{{ 'nodes.logout' | translate }}</app-button>
+  </div>
+</app-sidenav-content>
+
+<div class="row">
+  <div class="col-12">
+    <app-tab-bar
+      [titleParts]="['start.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="1"
+      [showUpdateButton]="false" 
+    ></app-tab-bar>
+  </div>
+  <div class="col-12 col-lg-8 mt-4.5">
+    <app-refresh-rate class="block mb-4"></app-refresh-rate>
+    <app-password></app-password>
+  </div>
+</div>

@@ -1,0 +1,20 @@
+@import 'variables';
+
+.main-container {
+  margin-top: 16px;
+  padding-top: 10px;
+  margin-bottom: -6px;
+  border-top: rgba(0, 0, 0, 0.12) solid 1px;
+  text-align: right;
+  font-size: 14px;
+
+  a {
+    color: $white;
+    text-decoration: none;
+
+    mat-icon {
+      position: relative;
+      top: 3px;
+    }
+  }
+}

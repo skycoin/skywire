@@ -1,0 +1,15 @@
+@import "bootstrap_overrides";
+@import "~bootstrap/scss/mixins/breakpoints";
+
+:host {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.node-actions {
+  .button-group {
+    margin-bottom: 30px;
+  }
+}

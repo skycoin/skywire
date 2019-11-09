@@ -1,0 +1,17 @@
+<app-dialog [headline]="'language.title' | translate">
+  <mat-dialog-content>
+    <div class="options-container">
+      <button
+        mat-button
+        color="accent"
+        [disableRipple]="true"
+        class="button"
+        *ngFor="let language of languages"
+        (click)="closePopup(language)"
+        >
+        <img [src]="'assets/img/lang/' + language.iconName">
+        <div class="label">{{ language.name }}</div>
+      </button>
+    </div>
+  </mat-dialog-content>
+</app-dialog>

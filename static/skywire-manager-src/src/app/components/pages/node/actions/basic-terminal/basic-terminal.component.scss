@@ -1,0 +1,19 @@
+@import "variables";
+
+.mat-dialog-content {
+    padding: 0;
+    margin-bottom: -$mat-dialog-padding;
+    background: black;
+    height: 100000px; }
+
+:host::ng-deep {
+  .wrapper {
+    padding: 20px;
+  }
+}
+
+.wrapper {
+  div {
+    word-break: break-all;
+  }
+}

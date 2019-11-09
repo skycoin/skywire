@@ -1,0 +1,29 @@
+@import 'variables';
+
+button {
+  color: $white;
+  border-radius: $mat-dialog-radius;
+
+  mat-spinner ::ng-deep circle {
+    stroke: $white;
+  }
+
+  &.dark {
+    color: $black;
+
+    mat-spinner ::ng-deep circle {
+      stroke: $black;
+    }
+  }
+
+  .dot-red {
+    margin-left: 10px;
+  }
+}
+
+mat-icon, mat-spinner {
+  display: inline-block;
+  margin-right: 20px;
+  position: relative;
+  top: -2px;
+}

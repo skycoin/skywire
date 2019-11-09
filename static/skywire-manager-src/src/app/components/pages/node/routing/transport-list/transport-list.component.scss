@@ -1,0 +1,32 @@
+@import 'variables';
+
+.title-container {
+  padding-right: 5px;
+
+  .title {
+    margin-right: auto;
+  }
+
+  mat-icon {
+    margin-right: 15px;
+  }
+}
+
+.overflow {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+
+  table {
+    width: 100%;
+  }
+}
+
+.text {
+  font-size: 14px;
+  font-weight: 300;
+}
+
+.selection-col {
+  width: 30px;
+}
