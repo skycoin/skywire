@@ -66,6 +66,11 @@ func (_m *MockProcManager) Stop(name string) error {
 	return r0
 }
 
+// StopAll provides a mock function with given fields:
+func (_m *MockProcManager) StopAll() {
+	_m.Called()
+}
+
 // Wait provides a mock function with given fields: name
 func (_m *MockProcManager) Wait(name string) error {
 	ret := _m.Called(name)

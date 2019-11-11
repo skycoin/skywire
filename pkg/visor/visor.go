@@ -343,20 +343,7 @@ func (node *Node) Close() (err error) {
 		}
 	}
 
-	var procs []string
-	node.procManager.Range(func(name string, _ *appserver.Proc) bool {
-		procs = append(procs, name)
-		return true
-	})
-
-	for _, name := range procs {
-		if err := node.procManager.Stop(name); err != nil {
-			node.logger.WithError(err).Errorf("(%s) failed to stop app", name)
-			break
-		}
-
-		node.logger.Infof("(%s) app stopped successfully", name)
-	}
+	node.procManager.StopAll()
 
 	if err = node.router.Close(); err != nil {
 		node.logger.WithError(err).Error("failed to stop router")
