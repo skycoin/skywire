@@ -41,18 +41,9 @@ const (
 	SkychatPort    = uint16(1)
 	SkychatAddr    = ":8000"
 
-	SkysshName    = "SSH"
-	SkysshVersion = "1.0"
-	SkysshPort    = uint16(2)
-
 	SkyproxyName    = "socksproxy"
 	SkyproxyVersion = "1.0"
 	SkyproxyPort    = uint16(3)
-
-	SkysshClientName    = "SSH-client"
-	SkysshClientVersion = "1.0"
-	SkysshClientPort    = uint16(12)
-	SkysshClientAddr    = ":2222"
 
 	SkyproxyClientName    = "socksproxy-client"
 	SkyproxyClientVersion = "1.0"
