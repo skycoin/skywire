@@ -402,25 +402,16 @@ func (node *Node) Apps() []*AppState {
 func (node *Node) StartApp(appName string) error {
 	for _, app := range node.appsConf {
 		if app.App == appName {
-			startCh := make(chan struct{})
-			go func(app AppConfig) {
-				if err := node.SpawnApp(&app, startCh); err != nil {
-					node.logger.Warnf("Failed to start app %s: %s", appName, err)
-				}
-			}(app)
-
-			<-startCh
-			return nil
+			return node.SpawnApp(&app, nil)
 		}
 	}
-
 	return ErrUnknownApp
 }
 
 // SpawnApp configures and starts new App.
 func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
 	node.logger.Infof("Starting %s.v%s", config.App, config.Version)
-	node.logger.Warnf("here: config.Args: %+v, with len %d", config.Args, len(config.Args))
+
 	conn, cmd, err := app.Command(
 		&app.Config{ProtocolVersion: supportedProtocolVersion, AppName: config.App, AppVersion: config.Version},
 		node.appsPath,
@@ -440,7 +431,6 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 		node.startedMu.Unlock()
 		return fmt.Errorf("app %s is already started", config.App)
 	}
-
 	node.startedApps[config.App] = bind
 	node.startedMu.Unlock()
 
