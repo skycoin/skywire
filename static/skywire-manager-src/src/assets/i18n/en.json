@@ -263,8 +263,11 @@
     "error": "An error has occured and it was not possible to perform the operation",
     "stop-confirmation": "Are you sure you want to stop the app?",
     "stop-selected-confirmation": "Are you sure you want to stop the selected apps?",
+    "disable-autostart-confirmation": "Are you sure you want to disable autostart for the app?",
+    "enable-autostart-confirmation": "Are you sure you want to enable autostart for the app?",
+    "disable-autostart-selected-confirmation": "Are you sure you want to disable autostart for the selected apps?",
+    "enable-autostart-selected-confirmation": "Are you sure you want to enable autostart for the selected apps?",
     "operation-completed": "Operation completed",
-    "stopped": "The app has been stopped",
     "status-running": "Running",
     "status-stopped": "Stopped",
     "status-failed": "Failed",
@@ -362,7 +365,9 @@
     "unselect-all": "Unselect all",
     "delete-all": "Delete all selected elements",
     "start-all": "Start all selected apps",
-    "stop-all": "Stop all selected apps"
+    "stop-all": "Stop all selected apps",
+    "enable-autostart-all": "Enable autostart for all selected apps",
+    "disable-autostart-all": "Disable autostart for all selected apps"
   },
 
   "refresh-button": {

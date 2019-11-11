@@ -65,7 +65,7 @@ export class NodeAppsListComponent implements OnDestroy {
   ) {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
-        let selectedPage = Number.parseInt(params.get('page'));
+        let selectedPage = Number.parseInt(params.get('page'), 10);
         if (selectedPage === NaN || selectedPage < 0) {
           selectedPage = 0;
         }
@@ -121,16 +121,37 @@ export class NodeAppsListComponent implements OnDestroy {
     });
 
     if (startApps) {
-      this.changeAppStateRecursively(elementsToChange, startApps);
+      this.changeAppsValRecursively(elementsToChange, false, startApps);
     } else {
       const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'apps.stop-selected-confirmation');
 
       confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
         confirmationDialog.componentInstance.showProcessing();
 
-        this.changeAppStateRecursively(elementsToChange, startApps, confirmationDialog);
+        this.changeAppsValRecursively(elementsToChange, false, startApps, confirmationDialog);
       });
     }
+  }
+
+  changeAutostartOfSelected(autostart: boolean) {
+    const elementsToChange: string[] = [];
+    this.selections.forEach((val, key) => {
+      if (val) {
+        if ((autostart && !this.appsMap.get(key).autostart) || (!autostart && this.appsMap.get(key).autostart)) {
+          elementsToChange.push(key);
+        }
+      }
+    });
+
+    const confirmationDialog = GeneralUtils.createDeleteConfirmation(
+      this.dialog, autostart ? 'apps.disable-autostart-selected-confirmation' : 'apps.enable-autostart-selected-confirmation'
+    );
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.changeAppsValRecursively(elementsToChange, true, autostart, confirmationDialog);
+    });
   }
 
   onCloseAppClicked(appName: string): void {
@@ -139,25 +160,43 @@ export class NodeAppsListComponent implements OnDestroy {
 
   changeAppState(app: Application): void {
     if (app.status !== 1) {
-      this.changeSingleAppState(app.name, app.status !== 1, app.autostart);
+      this.changeSingleAppVal(
+        this.startChangingAppState(app.name, app.status !== 1)
+      );
     } else {
       const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'apps.stop-confirmation');
 
       confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
         confirmationDialog.componentInstance.showProcessing();
 
-        this.changeSingleAppState(app.name, app.status !== 1, app.autostart, confirmationDialog);
+        this.changeSingleAppVal(
+          this.startChangingAppState(app.name, app.status !== 1),
+          confirmationDialog
+        );
       });
     }
   }
 
-  private changeSingleAppState(
-    appName: string,
-    startApp: boolean,
-    autostart: boolean,
+  changeAppAutostart(app: Application): void {
+    const confirmationDialog = GeneralUtils.createDeleteConfirmation(
+      this.dialog, app.autostart ? 'apps.disable-autostart-confirmation' : 'apps.enable-autostart-confirmation'
+    );
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.changeSingleAppVal(
+        this.startChangingAppAutostart(app.name, !app.autostart),
+        confirmationDialog
+      );
+    });
+  }
+
+  private changeSingleAppVal(
+    observable: Observable<any>,
     confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
 
-    this.startChangingAppState(appName, startApp, autostart).subscribe(
+    observable.subscribe(
       () => {
         if (confirmationDialog) {
           confirmationDialog.close();
@@ -255,23 +294,39 @@ export class NodeAppsListComponent implements OnDestroy {
     this.dataSource.data = this.appsToShow;
   }
 
-  private startChangingAppState(appName: string, startApp: boolean, autostart: boolean): Observable<any> {
-    return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp, autostart);
+  private startChangingAppState(appName: string, startApp: boolean): Observable<any> {
+    return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp);
   }
 
-  private changeAppStateRecursively(
+  private startChangingAppAutostart(appName: string, autostart: boolean): Observable<any> {
+    return this.appsService.changeAppAutostart(NodeComponent.getCurrentNodeKey(), appName, autostart);
+  }
+
+  private changeAppsValRecursively(
     names: string[],
-    startApp: boolean,
+    changingAutostart: boolean,
+    newVal: boolean,
     confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
 
     if (!names || names.length === 0) {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
       this.snackbarService.showDone('apps.operation-completed');
 
+      if (confirmationDialog) {
+        confirmationDialog.close();
+      }
+
       return;
     }
 
-    this.startChangingAppState(names[names.length - 1], startApp, this.appsMap.get(names[names.length - 1]).autostart).subscribe(() => {
+    let observable: Observable<any>;
+    if (changingAutostart) {
+      observable = this.startChangingAppAutostart(names[names.length - 1], newVal);
+    } else {
+      observable = this.startChangingAppState(names[names.length - 1], newVal);
+    }
+
+    observable.subscribe(() => {
       names.pop();
       if (names.length === 0) {
         if (confirmationDialog) {
@@ -280,7 +335,7 @@ export class NodeAppsListComponent implements OnDestroy {
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.snackbarService.showDone('apps.operation-completed');
       } else {
-        this.changeAppStateRecursively(names, startApp, confirmationDialog);
+        this.changeAppsValRecursively(names, changingAutostart, newVal, confirmationDialog);
       }
     }, () => {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);

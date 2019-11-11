@@ -25,7 +25,6 @@ export class NodeService {
       nodes.forEach(node => {
         node.port = this.getPort(node.tcp_addr);
         node.label = this.storageService.getNodeLabel(node.local_pk);
-        node.online = true;
 
         obtainedNodes.set(node.local_pk, true);
       });

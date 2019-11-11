@@ -20,6 +20,12 @@
     <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeStateOfSelected(false)">
       {{ 'selection.stop-all' | translate }}
     </div>
+    <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeAutostartOfSelected(true)">
+      {{ 'selection.enable-autostart-all' | translate }}
+    </div>
+    <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeAutostartOfSelected(false)">
+      {{ 'selection.disable-autostart-all' | translate }}
+    </div>
   </mat-menu>
 </div>
 
@@ -74,7 +80,9 @@
         <mat-icon *ngIf="sortBy === sortableColumns.AutoStart" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
       <td *matCellDef="let app;let i=index;" mat-cell>
-        <mat-icon class="ic-mini">{{ app.autostart ? 'done' : 'close' }}</mat-icon>
+        <mat-icon class="ic-mini table-delete-record" (click)="changeAppAutostart(app)">
+          {{ app.autostart ? 'done' : 'close' }}
+        </mat-icon>
       </td>
     </ng-container>
     <ng-container matColumnDef="actions">

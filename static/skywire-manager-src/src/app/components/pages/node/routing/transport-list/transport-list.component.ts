@@ -66,7 +66,7 @@ export class TransportListComponent implements OnDestroy {
   ) {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
-        let selectedPage = Number.parseInt(params.get('page'));
+        let selectedPage = Number.parseInt(params.get('page'), 10);
         if (selectedPage === NaN || selectedPage < 0) {
           selectedPage = 0;
         }
