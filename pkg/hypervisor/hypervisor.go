@@ -650,7 +650,7 @@ func (m *Node) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
 }
 
 func (m *Node) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := m.appCtx(w, r)
+	ctx, ok := m.nodeCtx(w, r)
 	if !ok {
 		return nil, false
 	}
