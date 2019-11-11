@@ -3,11 +3,24 @@ package visor
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,16 +67,30 @@ func TestUptime(t *testing.T) {
 }
 
 // TODO (Darkren): fix tests
-/*func TestListApps(t *testing.T) {
+func TestListApps(t *testing.T) {
 	apps := []AppConfig{
-		{App: "foo", AutoStart: false, Port: 10},
-		{App: "bar", AutoStart: true, Port: 11},
+		{
+			App:       "foo",
+			AutoStart: false,
+			Port:      10,
+		},
+		{
+			App:       "bar",
+			AutoStart: true,
+			Port:      11,
+		},
 	}
 
-	sApps := map[string]*appBind{
-		"bar": {},
+	pm := &appserver.MockProcManager{}
+	pm.On("Exists", apps[0].App).Return(false)
+	pm.On("Exists", apps[1].App).Return(true)
+
+	n := Node{
+		appsConf:    apps,
+		procManager: pm,
 	}
-	rpc := &RPC{&Node{appsConf: apps, startedApps: sApps}}
+
+	rpc := &RPC{node: &n}
 
 	var reply []*AppState
 	require.NoError(t, rpc.Apps(nil, &reply))
@@ -84,23 +111,60 @@ func TestUptime(t *testing.T) {
 
 func TestStartStopApp(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	router := new(mockRouter)
-	executer := new(MockExecuter)
+	r := &router.MockRouter{}
+	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
+	r.On("Close").Return(testhelpers.NoErr)
+
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	apps := []AppConfig{{App: "foo", Version: "1.0", AutoStart: false, Port: 10}}
-	node := &Node{router: router, exec: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"), conf: &Config{}}
-	node.conf.Node.StaticPubKey = pk
+	apps := []AppConfig{
+		{
+			App:       "foo",
+			Version:   "1.0",
+			AutoStart: false,
+			Port:      10,
+		},
+	}
+
+	unknownApp := "bar"
+	app := apps[0].App
+
+	nodeCfg := Config{}
+	nodeCfg.Node.StaticPubKey = pk
+
+	node := &Node{
+		router:   r,
+		appsConf: apps,
+		logger:   logging.MustGetLogger("test"),
+		conf:     &nodeCfg,
+	}
 	pathutil.EnsureDir(node.dir())
 	defer func() {
 		require.NoError(t, os.RemoveAll(node.dir()))
 	}()
 
+	pm := &appserver.MockProcManager{}
+	appCfg1 := appcommon.Config{
+		Name:     app,
+		Version:  apps[0].Version,
+		SockFile: nodeCfg.AppServerSockFile,
+		VisorPK:  nodeCfg.Node.StaticPubKey.Hex(),
+		WorkDir:  filepath.Join("", app, fmt.Sprintf("v%s", apps[0].Version)),
+	}
+	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps[0].Args...)
+	appPID1 := appcommon.ProcID(10)
+	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+		Return(appPID1, testhelpers.NoErr)
+	pm.On("Wait", app).Return(testhelpers.NoErr)
+	pm.On("Stop", app).Return(testhelpers.NoErr)
+	pm.On("Exists", app).Return(true)
+	pm.On("Exists", unknownApp).Return(false)
+
+	node.procManager = pm
+
 	rpc := &RPC{node: node}
-	unknownApp := "bar"
-	app := "foo"
 
 	err := rpc.StartApp(&unknownApp, nil)
 	require.Error(t, err)
@@ -109,25 +173,12 @@ func TestStartStopApp(t *testing.T) {
 	require.NoError(t, rpc.StartApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
 
-	executer.Lock()
-	require.Len(t, executer.cmds, 1)
-	assert.Equal(t, "foo.v1.0", executer.cmds[0].Path)
-	assert.Equal(t, "foo/v1.0", executer.cmds[0].Dir)
-	executer.Unlock()
-	node.startedMu.Lock()
-	assert.NotNil(t, node.startedApps["foo"])
-	node.startedMu.Unlock()
-
 	err = rpc.StopApp(&unknownApp, nil)
 	require.Error(t, err)
 	assert.Equal(t, ErrUnknownApp, err)
 
 	require.NoError(t, rpc.StopApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
-
-	node.startedMu.Lock()
-	assert.Nil(t, node.startedApps["foo"])
-	node.startedMu.Unlock()
 }
 
 /*
