@@ -6,6 +6,7 @@ package main
 import (
 	"flag"
 	"net"
+	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 
@@ -18,9 +19,11 @@ import (
 func main() {
 	log := app.NewLogger(skyenv.SkyproxyClientName)
 	therealproxy.Log = log.PackageLogger(skyenv.SkyproxyClientName)
+	defaultTimeout := skyenv.SkyproxyClientTimeout
 
 	var addr = flag.String("addr", skyenv.SkyproxyClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
+	var timeout = flag.String("timeout", defaultTimeout.String(), "Connection timeout duration")
 	flag.Parse()
 
 	config := &app.Config{AppName: skyenv.SkyproxyClientName, AppVersion: skyenv.SkyproxyClientVersion, ProtocolVersion: skyenv.AppProtocolVersion}
@@ -51,7 +54,13 @@ func main() {
 
 	remote := routing.Addr{PubKey: pk, Port: routing.Port(skyenv.SkyproxyPort)}
 
-	client, err := therealproxy.NewClient(l, socksApp, remote)
+	clientTimeout, err := time.ParseDuration(*timeout)
+	if err != nil {
+		log.Warnf("Bad duration format, using default (%v)", defaultTimeout)
+		clientTimeout = defaultTimeout
+	}
+
+	client, err := therealproxy.NewClient(clientTimeout, l, socksApp, remote)
 	if err != nil {
 		log.Fatal("Failed to create a new client: ", err)
 	}
