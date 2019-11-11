@@ -27,6 +27,7 @@ type ProcManager interface {
 	Stop(name string) error
 	Wait(name string) error
 	Range(next func(name string, proc *Proc) bool)
+	StopAll()
 }
 
 // procManager allows to manage skywire applications.
@@ -123,6 +124,20 @@ func (m *procManager) Range(next func(name string, proc *Proc) bool) {
 			break
 		}
 	}
+}
+
+// StopAll stops all the apps run with this manager instance.
+func (m *procManager) StopAll() {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	for name, proc := range m.procs {
+		if err := proc.Stop(); err != nil {
+			m.log.Errorf("Failed to stop app %s: %v", name, err)
+		}
+	}
+
+	m.procs = make(map[string]*Proc)
 }
 
 // pop removes application from the manager instance and returns it.
