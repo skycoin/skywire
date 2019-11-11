@@ -16,8 +16,9 @@ import (
 //go:generate mockery -name ProcManager -case underscore -inpkg
 
 var (
-	errAppAlreadyExists = errors.New("app already exists")
-	errNoSuchApp        = errors.New("no such app")
+	// ErrAppAlreadyStarted is returned when trying to run the already running app.
+	ErrAppAlreadyStarted = errors.New("app already started")
+	errNoSuchApp         = errors.New("no such app")
 )
 
 // ProcManager allows to manage skywire applications.
@@ -50,7 +51,7 @@ func NewProcManager(log *logging.Logger) ProcManager {
 func (m *procManager) Run(log *logging.Logger, c appcommon.Config, args []string,
 	stdout, stderr io.Writer) (appcommon.ProcID, error) {
 	if m.Exists(c.Name) {
-		return 0, errAppAlreadyExists
+		return 0, ErrAppAlreadyStarted
 	}
 
 	p, err := NewProc(log, c, args, stdout, stderr)
@@ -68,7 +69,7 @@ func (m *procManager) Run(log *logging.Logger, c appcommon.Config, args []string
 		if err := p.Stop(); err != nil {
 			m.log.WithError(err).Error("error stopping app")
 		}
-		return 0, errAppAlreadyExists
+		return 0, ErrAppAlreadyStarted
 	}
 	m.procs[c.Name] = p
 	m.mx.Unlock()
@@ -104,7 +105,7 @@ func (m *procManager) Wait(name string) error {
 
 	if err := p.Wait(); err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
-			err = fmt.Errorf("failed to run app executable: %s", err)
+			err = fmt.Errorf("failed to run app executable %s: %v", name, err)
 		}
 
 		return err
@@ -133,7 +134,9 @@ func (m *procManager) StopAll() {
 
 	for name, proc := range m.procs {
 		if err := proc.Stop(); err != nil {
-			m.log.Errorf("Failed to stop app %s: %v", name, err)
+			m.log.WithError(err).Errorf("(%s) failed to stop app", name)
+		} else {
+			m.log.Infof("(%s) app stopped successfully", name)
 		}
 	}
 
