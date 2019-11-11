@@ -5,7 +5,7 @@ import {getLangs} from './utils/languageUtils';
 import { Router } from '@angular/router';
 import { Location } from '@angular/common';
 import { SnackbarService } from './services/snackbar.service';
-import { MatDialog } from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
 import { LanguageService } from './services/language.service';
 
 @Component({

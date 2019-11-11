@@ -1,5 +1,5 @@
 import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
-import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material';
+import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
 import { RouteService } from '../../../../../../services/route.service';
 import { NodeComponent } from '../../../node.component';

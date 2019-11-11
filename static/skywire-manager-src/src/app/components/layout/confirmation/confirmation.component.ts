@@ -1,5 +1,5 @@
-import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, OnInit } from '@angular/core';
-import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material';
+import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, AfterViewInit } from '@angular/core';
+import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { ButtonComponent } from '../button/button.component';
 
 export interface ConfirmationData {
@@ -21,9 +21,9 @@ enum ConfirmationStates {
   templateUrl: './confirmation.component.html',
   styleUrls: ['./confirmation.component.scss'],
 })
-export class ConfirmationComponent implements OnInit, OnDestroy {
-  @ViewChild('cancelButton') cancelButton: ButtonComponent;
-  @ViewChild('confirmButton') confirmButton: ButtonComponent;
+export class ConfirmationComponent implements AfterViewInit, OnDestroy {
+  @ViewChild('cancelButton', { static: false }) cancelButton: ButtonComponent;
+  @ViewChild('confirmButton', { static: false }) confirmButton: ButtonComponent;
 
   disableDismiss = false;
   state = ConfirmationStates.Asking;
@@ -42,7 +42,7 @@ export class ConfirmationComponent implements OnInit, OnDestroy {
     this.dialogRef.disableClose = this.disableDismiss;
   }
 
-  ngOnInit() {
+  ngAfterViewInit() {
     if (this.data.cancelButtonText) {
       setTimeout(() => this.cancelButton.focus());
     } else {

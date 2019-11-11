@@ -1,5 +1,5 @@
-import { Component, Input, OnInit, ViewChild } from '@angular/core';
-import { MatDialog } from '@angular/material';
+import { Component, ViewChild, AfterViewInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { Router } from '@angular/router';
 import { UpdateNodeComponent } from './update-node/update-node.component';
@@ -13,8 +13,8 @@ import { NodeComponent } from '../node.component';
   templateUrl: './actions.component.html',
   styleUrls: ['./actions.component.scss']
 })
-export class ActionsComponent implements OnInit {
-  @ViewChild('updateButton') updateButton: ButtonComponent;
+export class ActionsComponent implements AfterViewInit {
+  @ViewChild('updateButton', { static: false }) updateButton: ButtonComponent;
 
   constructor(
     private dialog: MatDialog,
@@ -22,7 +22,7 @@ export class ActionsComponent implements OnInit {
     private snackbarService: SnackbarService,
   ) { }
 
-  ngOnInit() {
+  ngAfterViewInit() {
     // if (environment.production) {
     //   this.updateButton.loading();
     //

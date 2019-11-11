@@ -4,7 +4,8 @@ import {
   Keypair,
 } from '../../../../../../app.datatypes';
 import { ClientConnectionService } from '../../../../../../services/client-connection.service';
-import { MatDialog, MatTableDataSource } from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
+import { MatTableDataSource } from '@angular/material/table';
 import { EditLabelComponent } from '../../../../../layout/edit-label/edit-label.component';
 
 @Component({

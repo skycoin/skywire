@@ -10,30 +10,25 @@ import { NodeComponent } from './components/pages/node/node.component';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RelativeTimePipe } from './pipes/relative-time.pipe';
 import { FormsModule } from '@angular/forms';
-import {
-  MatTabsModule,
-  MatToolbarModule,
-  MatTableModule,
-  MatButtonModule,
-  MatIconModule,
-  MatTooltipModule,
-  MatChipsModule,
-  MatMenuModule,
-  MatSnackBarModule,
-  MatSlideToggleModule,
-  MatListModule,
-  ErrorStateMatcher,
-  MAT_DIALOG_DEFAULT_OPTIONS,
-  MAT_SNACK_BAR_DEFAULT_OPTIONS,
-  MatDialogModule,
-  MatFormFieldModule,
-  MatInputModule,
-  ShowOnDirtyErrorStateMatcher,
-  MatProgressBarModule,
-  MatProgressSpinnerModule,
-  MatSelectModule,
-  MatCheckboxModule
-} from '@angular/material';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatChipsModule } from '@angular/material/chips';
+import { ErrorStateMatcher, ShowOnDirtyErrorStateMatcher } from '@angular/material/core';
+import { MAT_DIALOG_DEFAULT_OPTIONS, MatDialogModule } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSnackBarModule, MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
+import { MatTableModule } from '@angular/material/table';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import {FooterComponent} from './components/layout/footer/footer.component';
 import { TransportListComponent } from './components/pages/node/routing/transport-list/transport-list.component';
 import { NodeAppsListComponent } from './components/pages/node/apps/node-apps/node-apps-list/node-apps-list.component';

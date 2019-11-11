@@ -1,9 +1,9 @@
-import { Component, OnInit, Input, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, Input, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../../services/auth.service';
 import { SnackbarService } from '../../../../services/snackbar.service';
-import { MatDialog } from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
 import { ButtonComponent } from '../../../layout/button/button.component';
 
 @Component({
@@ -11,9 +11,9 @@ import { ButtonComponent } from '../../../layout/button/button.component';
   templateUrl: './password.component.html',
   styleUrls: ['./password.component.scss']
 })
-export class PasswordComponent implements OnInit {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
+export class PasswordComponent implements OnInit, AfterViewInit {
+  @ViewChild('button', { static: false }) button: ButtonComponent;
+  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
 
   @Input() forInitialConfig = false;
 
@@ -34,7 +34,9 @@ export class PasswordComponent implements OnInit {
     }, {
       validators: [this.validatePasswords.bind(this)],
     });
+  }
 
+  ngAfterViewInit() {
     if (this.forInitialConfig) {
       setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
     }

@@ -11,8 +11,7 @@ import {
 } from '@angular/core';
 import {publicKeyValidator} from '../../../forms/validators';
 import {FormControl} from '@angular/forms';
-import {MatInput} from '@angular/material';
-import {Observable} from 'rxjs';
+import { MatInput } from '@angular/material/input';
 
 export interface KeyInputEvent {
   value: string;
@@ -33,7 +32,7 @@ export class KeyInputComponent implements OnInit, AfterViewInit, OnChanges {
   @Input() autofocus = false;
   validator: FormControl;
 
-  @ViewChild(MatInput) keyInput: MatInput;
+  @ViewChild(MatInput, { static: false }) keyInput: MatInput;
 
   ngAfterViewInit() {
     if (this.autofocus) {

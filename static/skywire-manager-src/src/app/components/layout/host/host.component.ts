@@ -1,4 +1,4 @@
-import {Component, ComponentFactoryResolver, Input, OnInit, Type, ViewChild, ViewContainerRef} from '@angular/core';
+import {Component, ComponentFactoryResolver, Input, Type, ViewChild, AfterViewInit} from '@angular/core';
 import {ComponentHostDirective} from '../../../directives/component-host.directive';
 
 @Component({
@@ -6,16 +6,16 @@ import {ComponentHostDirective} from '../../../directives/component-host.directi
   templateUrl: './host.component.html',
   styleUrls: ['./host.component.css']
 })
-export class HostComponent implements OnInit {
+export class HostComponent implements AfterViewInit {
   @Input() componentClass: Type<any>;
   @Input() data: any;
-  @ViewChild(ComponentHostDirective) host: ComponentHostDirective;
+  @ViewChild(ComponentHostDirective, { static: false }) host: ComponentHostDirective;
 
   constructor(
     private componentFactoryResolver: ComponentFactoryResolver
   ) { }
 
-  ngOnInit() {
+  ngAfterViewInit() {
     const componentFactory = this.componentFactoryResolver.resolveComponentFactory(this.componentClass);
 
     const viewContainerRef = this.host.viewContainerRef;

@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
-import { MatButton } from '@angular/material';
+import { MatButton } from '@angular/material/button';
 
 enum BUTTON_STATE {
   NORMAL, SUCCESS, ERROR, LOADING
@@ -11,8 +11,8 @@ enum BUTTON_STATE {
   styleUrls: ['./button.component.scss']
 })
 export class ButtonComponent {
-  @ViewChild('button1') button1: MatButton;
-  @ViewChild('button2') button2: MatButton;
+  @ViewChild('button1', { static: false }) button1: MatButton;
+  @ViewChild('button2', { static: false }) button2: MatButton;
 
   @Input() type = 'mat-button';
   @Input() disabled = false;

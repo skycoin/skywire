@@ -1,6 +1,6 @@
-import { Component, ElementRef, Inject, OnDestroy, OnInit, ViewChild, Renderer2, HostListener } from '@angular/core';
+import { Component, ElementRef, Inject, OnDestroy, ViewChild, Renderer2, HostListener, AfterViewInit } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { ApiService } from '../../../../../services/api.service';
 
@@ -11,9 +11,9 @@ declare const Terminal: any;
   templateUrl: './basic-terminal.component.html',
   styleUrls: ['./basic-terminal.component.scss']
 })
-export class BasicTerminalComponent implements OnInit, OnDestroy {
-  @ViewChild('terminal') terminalElement: ElementRef<HTMLDivElement>;
-  @ViewChild('dialogContent') dialogContentElement: ElementRef<HTMLDivElement>;
+export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
+  @ViewChild('terminal', { static: false }) terminalElement: ElementRef<HTMLDivElement>;
+  @ViewChild('dialogContent', { static: false }) dialogContentElement: ElementRef<HTMLDivElement>;
   private terminal: any;
   private subscription: Subscription;
 
@@ -52,7 +52,7 @@ export class BasicTerminalComponent implements OnInit, OnDestroy {
     private translate: TranslateService,
   ) { }
 
-  ngOnInit() {
+  ngAfterViewInit() {
     this.terminal = new Terminal(null);
     this.terminal.setWidth('100%');
     this.terminal.setBackgroundColor('black');

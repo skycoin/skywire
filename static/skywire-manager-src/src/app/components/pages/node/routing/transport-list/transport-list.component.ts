@@ -1,6 +1,7 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Transport } from '../../../../../app.datatypes';
-import { MatDialog, MatTableDataSource, MatDialogRef, MatDialogConfig } from '@angular/material';
+import { MatDialog, MatDialogRef, MatDialogConfig } from '@angular/material/dialog';
+import { MatTableDataSource } from '@angular/material/table';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';

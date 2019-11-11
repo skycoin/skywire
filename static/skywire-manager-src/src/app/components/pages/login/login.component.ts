@@ -3,7 +3,7 @@ import {AuthService} from '../../../services/auth.service';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
 import {Router} from '@angular/router';
 import { SnackbarService } from '../../../services/snackbar.service';
-import { MatDialog, MatDialogConfig } from '@angular/material';
+import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { InitialSetupComponent } from './initial-setup/initial-setup.component';
 
 @Component({

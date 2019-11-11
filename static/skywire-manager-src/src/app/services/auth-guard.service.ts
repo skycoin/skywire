@@ -3,7 +3,7 @@ import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot } from
 import { Observable, of } from 'rxjs';
 import { AUTH_STATE, AuthService } from './auth.service';
 import { map } from 'rxjs/operators';
-import { MatDialog } from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
 
 @Injectable({
   providedIn: 'root'

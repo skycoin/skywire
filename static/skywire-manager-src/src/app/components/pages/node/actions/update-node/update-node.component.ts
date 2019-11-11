@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import {NodeService} from '../../../../../services/node.service';
-import {MatDialogRef} from '@angular/material';
+import { MatDialogRef } from '@angular/material/dialog';
 
 @Component({
   selector: 'app-update-node',

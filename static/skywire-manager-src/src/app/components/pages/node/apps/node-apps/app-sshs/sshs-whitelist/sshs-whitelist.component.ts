@@ -1,5 +1,5 @@
 import {Component, Inject, OnInit} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { AppsService } from '../../../../../../../services/apps.service';
 import {KeyInputComponent} from '../../../../../../layout/key-input/key-input.component';
 import {EditableKeyComponent} from '../../../../../../layout/editable-key/editable-key.component';

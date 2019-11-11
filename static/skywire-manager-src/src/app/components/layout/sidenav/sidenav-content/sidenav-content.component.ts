@@ -7,7 +7,7 @@ import { SidenavService } from '../../../../services/sidenav.service';
   styleUrls: ['./sidenav-content.component.css']
 })
 export class SidenavContentComponent implements OnInit {
-  @ViewChild('sidenav') sidenavContent: TemplateRef<any>;
+  @ViewChild('sidenav', { static: true }) sidenavContent: TemplateRef<any>;
 
   constructor(
     private sidenavService: SidenavService,

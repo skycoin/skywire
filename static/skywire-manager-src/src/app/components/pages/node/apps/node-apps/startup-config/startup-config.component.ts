@@ -1,5 +1,6 @@
 import {Component, Input, OnInit} from '@angular/core';
-import {MatDialogRef, MatSlideToggleChange} from '@angular/material';
+import { MatDialogRef } from '@angular/material/dialog';
+import { MatSlideToggleChange } from '@angular/material/slide-toggle';
 import {NodeService} from '../../../../../../services/node.service';
 import {AutoStartConfig, Keypair} from '../../../../../../app.datatypes';
 import {KeyPairState} from '../../../../../layout/keypair/keypair.component';

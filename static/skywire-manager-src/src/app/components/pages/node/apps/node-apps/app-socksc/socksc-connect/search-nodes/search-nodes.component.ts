@@ -1,7 +1,7 @@
 import {Component, EventEmitter, Input, OnInit, Output} from '@angular/core';
 import {Keypair, SearchResult, SearchResultItem} from '../../../../../../../../app.datatypes';
 import {NodeService} from '../../../../../../../../services/node.service';
-import {MatTableDataSource} from '@angular/material';
+import { MatTableDataSource } from '@angular/material/table';
 
 @Component({
   selector: 'app-search-nodes',

@@ -1,7 +1,8 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/core';
 import { TransportService } from '../../../../../../services/transport.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatDialogRef, MatSnackBar } from '@angular/material';
+import { MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { ButtonComponent } from '../../../../../layout/button/button.component';
 import { NodeComponent } from '../../../node.component';
 import { Subscription, of } from 'rxjs';
@@ -14,8 +15,8 @@ import { SnackbarService } from '../../../../../../services/snackbar.service';
   styleUrls: ['./create-transport.component.css']
 })
 export class CreateTransportComponent implements OnInit, OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('button', { static: false }) button: ButtonComponent;
+  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
   types: string[];
   form: FormGroup;
 

@@ -1,5 +1,5 @@
-import { Component, Inject, Input, ViewChild, ElementRef, OnInit } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material';
+import { Component, Inject, Input, ViewChild, ElementRef, AfterViewInit, OnInit } from '@angular/core';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormGroup, FormBuilder } from '@angular/forms';
 import { StorageService } from '../../../services/storage.service';
 import { SnackbarService } from '../../../services/snackbar.service';
@@ -9,8 +9,8 @@ import { SnackbarService } from '../../../services/snackbar.service';
   templateUrl: './edit-label.component.html',
   styleUrls: ['./edit-label.component.scss']
 })
-export class EditLabelComponent implements OnInit {
-  @ViewChild('firstInput') firstInput: ElementRef;
+export class EditLabelComponent implements OnInit, AfterViewInit {
+  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
 
   form: FormGroup;
 
@@ -26,7 +26,9 @@ export class EditLabelComponent implements OnInit {
     this.form = this.formBuilder.group({
       'label': [this.data.label],
     });
+  }
 
+  ngAfterViewInit() {
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 

@@ -1,5 +1,5 @@
 import {Component, EventEmitter, Input, OnInit, Output, Type} from '@angular/core';
-import {MatTableDataSource} from '@angular/material';
+import { MatTableDataSource } from '@angular/material/table';
 
 @Component({
   selector: 'app-datatable',

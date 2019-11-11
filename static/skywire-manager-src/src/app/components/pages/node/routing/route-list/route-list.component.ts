@@ -1,5 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
-import { MatTableDataSource, MatDialog, MatDialogConfig, MatDialogRef } from '@angular/material';
+import { MatDialog, MatDialogConfig, MatDialogRef } from '@angular/material/dialog';
+import { MatTableDataSource } from '@angular/material/table';
 import { Route } from 'src/app/app.datatypes';
 import { RouteService } from '../../../../../services/route.service';
 import { NodeComponent } from '../../node.component';

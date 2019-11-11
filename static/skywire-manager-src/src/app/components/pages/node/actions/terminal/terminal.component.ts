@@ -1,8 +1,8 @@
-import { Component, ElementRef, Inject, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, Inject, OnDestroy, ViewChild, AfterViewInit } from '@angular/core';
 import { NodeService } from '../../../../../services/node.service';
 import { forkJoin } from 'rxjs';
 import { AuthService } from '../../../../../services/auth.service';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Terminal } from 'xterm';
 import { proposeGeometry } from 'xterm/lib/addons/fit/fit';
 import { TranslateService } from '@ngx-translate/core';
@@ -12,8 +12,8 @@ import { TranslateService } from '@ngx-translate/core';
   templateUrl: './terminal.component.html',
   styleUrls: ['./terminal.component.scss']
 })
-export class TerminalComponent implements OnInit, OnDestroy {
-  @ViewChild('terminal') terminalElement: ElementRef;
+export class TerminalComponent implements AfterViewInit, OnDestroy {
+  @ViewChild('terminal', { static: false }) terminalElement: ElementRef;
   ws: WebSocket;
   xterm: Terminal;
   decoder = new TextDecoder('utf-8');
@@ -30,11 +30,12 @@ export class TerminalComponent implements OnInit, OnDestroy {
     private translate: TranslateService,
   ) { }
 
-  ngOnInit() {
+  ngAfterViewInit() {
     forkJoin(
       // this.nodeService.getManagerPort(),
       this.authService.authToken(),
     ).subscribe(res => {
+      /*
       this.ws = new WebSocket(this.buildUrl(res[0], res[1]));
       this.ws.binaryType = 'arraybuffer';
       this.ws.onerror = this.ws.onclose = this.close.bind(this);
@@ -42,6 +43,7 @@ export class TerminalComponent implements OnInit, OnDestroy {
       this.ws.onmessage = (event: MessageEvent) => {
         this.xterm.write(this.decoder.decode(event.data));
       };
+      */
     });
   }
 

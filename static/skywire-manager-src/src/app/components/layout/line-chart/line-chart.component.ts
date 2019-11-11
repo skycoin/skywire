@@ -1,4 +1,4 @@
-import { Component, DoCheck, ElementRef, Input, IterableDiffers, OnInit, ViewChild } from '@angular/core';
+import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit } from '@angular/core';
 import { Chart } from 'chart.js';
 
 @Component({
@@ -6,20 +6,20 @@ import { Chart } from 'chart.js';
   templateUrl: './line-chart.component.html',
   styleUrls: ['./line-chart.component.scss']
 })
-export class LineChartComponent implements OnInit, DoCheck {
-  @ViewChild('chart') chartElement: ElementRef;
+export class LineChartComponent implements AfterViewInit, DoCheck {
+  @ViewChild('chart', { static: false }) chartElement: ElementRef;
   @Input() data: number[];
   chart: any;
 
   private differ: any;
 
   constructor(
-    private differs: IterableDiffers,
+    differs: IterableDiffers,
   ) {
     this.differ = differs.find([]).create(null);
   }
 
-  ngOnInit() {
+  ngAfterViewInit() {
     this.chart = new Chart(this.chartElement.nativeElement, {
       type: 'line',
       data: {

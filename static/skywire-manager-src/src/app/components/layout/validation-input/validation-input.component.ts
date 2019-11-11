@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, EventEmitter, HostBinding, Input, Output, ViewChild } from '@angular/core';
-import {MatInput} from '@angular/material';
+import { MatInput } from '@angular/material/input';
 import {FormControl} from '@angular/forms';
 
 export interface InputState {
@@ -15,7 +15,7 @@ export interface InputState {
 export class ValidationInputComponent implements AfterViewInit {
   @HostBinding('attr.class') hostClass = 'validation-input-container';
   @Output() valueChanged = new EventEmitter<InputState>();
-  @ViewChild(MatInput) inputElement: MatInput;
+  @ViewChild(MatInput, { static: false }) inputElement: MatInput;
   @Input() value: string;
   @Input() required: boolean;
   @Input() placeHolder: string;

@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, OnInit } from '@angular/core';
-import { MatTableDataSource } from '@angular/material';
+import { MatTableDataSource } from '@angular/material/table';
 import { Route } from '../../../../../app.datatypes';
 
 @Component({

@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
 import {Node, NodeFeedback} from '../../../../../../app.datatypes';
 import {LogComponent} from '../log/log.component';
-import {MatDialog} from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
 import {AppsService} from '../../../../../../services/apps.service';
 import { TranslateService } from '@ngx-translate/core';
 import { ButtonComponent } from '../../../../../layout/button/button.component';
@@ -19,7 +19,7 @@ export class NodeAppButtonComponent implements OnChanges {
   @Input() node: Node;
   @Input() app: null;
   @Input() appFeedback: NodeFeedback | null;
-  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('button', { static: false }) button: ButtonComponent;
   title: string;
   name: string;
   containerClass: string;

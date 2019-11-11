@@ -1,4 +1,4 @@
-import { MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material';
+import { MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { ConfirmationComponent, ConfirmationData } from '../components/layout/confirmation/confirmation.component';
 
 export default class GeneralUtils {

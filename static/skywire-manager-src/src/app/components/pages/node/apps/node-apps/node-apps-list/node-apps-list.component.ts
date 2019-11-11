@@ -1,6 +1,7 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Application } from '../../../../../../app.datatypes';
-import {MatTableDataSource, MatDialogConfig, MatDialog, MatDialogRef} from '@angular/material';
+import { MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatTableDataSource } from '@angular/material/table';
 import {AppsService} from '../../../../../../services/apps.service';
 import { LogComponent } from '../log/log.component';
 import { NodeComponent } from '../../../node.component';

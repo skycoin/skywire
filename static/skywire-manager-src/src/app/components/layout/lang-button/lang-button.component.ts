@@ -1,7 +1,7 @@
 import { Component, Input, OnDestroy, OnInit, HostBinding } from '@angular/core';
 import { LanguageService, LanguageData } from '../../../services/language.service';
 import { Subscription } from 'rxjs';
-import { MatDialogConfig, MatDialog } from '@angular/material';
+import { MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { SelectLanguageComponent } from '../select-language/select-language.component';
 
 @Component({

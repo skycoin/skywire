@@ -10,7 +10,7 @@ import TimeUtils from '../../../utils/timeUtils';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { HttpErrorResponse } from '@angular/common/http';
-import { MatDialog } from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 
 @Component({

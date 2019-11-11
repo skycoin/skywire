@@ -1,7 +1,7 @@
 import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { AppsService } from '../../../../../../services/apps.service';
 import { LogMessage, Application } from '../../../../../../app.datatypes';
-import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog } from '@angular/material';
+import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
 import { NodeComponent } from '../../../node.component';
 import { delay, flatMap } from 'rxjs/operators';
@@ -14,7 +14,7 @@ import { SnackbarService } from '../../../../../../services/snackbar.service';
   styleUrls: ['./log.component.scss'],
 })
 export class LogComponent implements OnInit, OnDestroy {
-  @ViewChild('content') content: ElementRef;
+  @ViewChild('content', { static: false }) content: ElementRef;
 
   logMessages: LogMessage[] = [];
   loading = false;
