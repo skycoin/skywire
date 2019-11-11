@@ -20,8 +20,6 @@ RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
 	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld &&\
 	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy &&\
 	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client &&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/SSH.v1.0  ./cmd/apps/therealssh &&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/SSH-client.v1.0  ./cmd/apps/therealssh-client
 
 
 ## Resulting image
