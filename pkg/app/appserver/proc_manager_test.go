@@ -9,11 +9,13 @@ import (
 )
 
 func TestProcManager_Exists(t *testing.T) {
-	m := NewProcManager(logging.MustGetLogger("proc_manager"))
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"))
+	m, ok := mIfc.(*procManager)
+	require.True(t, ok)
 
 	appName := "app"
 
-	ok := m.Exists(appName)
+	ok = m.Exists(appName)
 	require.False(t, ok)
 
 	m.procs[appName] = nil
@@ -23,7 +25,9 @@ func TestProcManager_Exists(t *testing.T) {
 }
 
 func TestProcManager_Range(t *testing.T) {
-	m := NewProcManager(logging.MustGetLogger("proc_manager"))
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"))
+	m, ok := mIfc.(*procManager)
+	require.True(t, ok)
 
 	wantAppNames := []string{"app1", "app2", "app3"}
 
@@ -45,7 +49,9 @@ func TestProcManager_Range(t *testing.T) {
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	m := NewProcManager(logging.MustGetLogger("proc_manager"))
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"))
+	m, ok := mIfc.(*procManager)
+	require.True(t, ok)
 
 	appName := "app"
 
@@ -58,6 +64,6 @@ func TestProcManager_Pop(t *testing.T) {
 	app, err = m.pop(appName)
 	require.NoError(t, err)
 	require.Nil(t, app)
-	_, ok := m.procs[appName]
+	_, ok = m.procs[appName]
 	require.False(t, ok)
 }
