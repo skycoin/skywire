@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
@@ -19,18 +20,20 @@ var Log = logging.MustGetLogger("therealproxy")
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
-	session  *yamux.Session
 	listener net.Listener
 	app      *app.App
 	addr     routing.Addr
+	timeout  time.Duration
+	session  *yamux.Session
 }
 
 // NewClient constructs a new Client.
-func NewClient(lis net.Listener, app *app.App, addr routing.Addr) (*Client, error) {
+func NewClient(lis net.Listener, app *app.App, addr routing.Addr, timeout time.Duration) (*Client, error) {
 	c := &Client{
 		listener: lis,
 		app:      app,
 		addr:     addr,
+		timeout:  timeout,
 	}
 	if err := c.connect(); err != nil {
 		return nil, err
@@ -40,7 +43,7 @@ func NewClient(lis net.Listener, app *app.App, addr routing.Addr) (*Client, erro
 }
 
 func (c *Client) connect() error {
-	r := netutil.NewRetrier(time.Second, 0, 1)
+	r := netutil.NewRetrier(skyenv.SkyproxyReconnectInterval, skyenv.SkyproxyRetryTimes, skyenv.SkyproxyRetryFactor)
 
 	var conn net.Conn
 	err := r.Do(func() error {
@@ -52,7 +55,12 @@ func (c *Client) connect() error {
 		return fmt.Errorf("failed to dial to a server: %v", err)
 	}
 
-	session, err := yamux.Client(conn, nil)
+	// If connection fails, yamux client doesn't wait, fails early and reconnects.
+	yamuxCfg := yamux.DefaultConfig()
+	yamuxCfg.KeepAliveInterval = c.timeout
+	yamuxCfg.ConnectionWriteTimeout = c.timeout
+
+	session, err := yamux.Client(conn, yamuxCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %s", err)
 	}
@@ -84,7 +92,7 @@ func (c *Client) createStream() net.Conn {
 
 		Log.Warnf("Failed to open yamux session: %v", err)
 
-		delay := 1 * time.Second
+		delay := skyenv.SkyproxyReconnectInterval
 		Log.Warnf("Restarting in %v", delay)
 		time.Sleep(delay)
 
