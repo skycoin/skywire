@@ -60,7 +60,7 @@ func main() {
 		clientTimeout = defaultTimeout
 	}
 
-	client, err := therealproxy.NewClient(clientTimeout, l, socksApp, remote)
+	client, err := therealproxy.NewClient(l, socksApp, remote, clientTimeout)
 	if err != nil {
 		log.Fatal("Failed to create a new client: ", err)
 	}

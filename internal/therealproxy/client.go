@@ -20,20 +20,20 @@ var Log = logging.MustGetLogger("therealproxy")
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
-	timeout  time.Duration
-	session  *yamux.Session
 	listener net.Listener
 	app      *app.App
 	addr     routing.Addr
+	timeout  time.Duration
+	session  *yamux.Session
 }
 
 // NewClient constructs a new Client.
-func NewClient(timeout time.Duration, lis net.Listener, app *app.App, addr routing.Addr) (*Client, error) {
+func NewClient(lis net.Listener, app *app.App, addr routing.Addr, timeout time.Duration) (*Client, error) {
 	c := &Client{
-		timeout:  timeout,
 		listener: lis,
 		app:      app,
 		addr:     addr,
+		timeout:  timeout,
 	}
 	if err := c.connect(); err != nil {
 		return nil, err
