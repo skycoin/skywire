@@ -248,10 +248,14 @@ type RouteDescriptor [routeDescriptorSize]byte
 func NewRouteDescriptor(srcPK, dstPK cipher.PubKey, srcPort, dstPort Port) RouteDescriptor {
 	var desc RouteDescriptor
 
-	desc.setSrcPK(srcPK)
+	p := copy(desc[:pkSize], srcPK[:])
+	p = copy(desc[p:p+pkSize], dstPK[:])
+	binary.BigEndian.PutUint16(desc[p:p+2], uint16(srcPort))
+	binary.BigEndian.PutUint16(desc[p+2:p+2*2], uint16(dstPort))
+	/*desc.setSrcPK(srcPK)
 	desc.setDstPK(dstPK)
 	desc.setSrcPort(srcPort)
-	desc.setDstPort(dstPort)
+	desc.setDstPort(dstPort)*/
 
 	return desc
 }
