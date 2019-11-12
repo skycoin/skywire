@@ -1,5 +1,9 @@
 package skyenv
 
+import (
+	"time"
+)
+
 // Constants for default services.
 const (
 	DefaultTpDiscAddr      = "http://transport.discovery.skywire.skycoin.com"
@@ -45,9 +49,12 @@ const (
 	SkyproxyVersion = "1.0"
 	SkyproxyPort    = uint16(3)
 
-	SkyproxyClientName    = "socksproxy-client"
-	SkyproxyClientVersion = "1.0"
-	SkyproxyClientPort    = uint16(13)
-	SkyproxyClientAddr    = ":1080"
-	// TODO(evanlinjin): skyproxy-client requires
+	SkyproxyClientName        = "socksproxy-client"
+	SkyproxyClientVersion     = "1.0"
+	SkyproxyClientPort        = uint16(13)
+	SkyproxyClientAddr        = ":1080"
+	SkyproxyClientTimeout     = 5 * time.Second
+	SkyproxyReconnectInterval = 1 * time.Second
+	SkyproxyRetryTimes        = 0
+	SkyproxyRetryFactor       = 1
 )
