@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -125,7 +124,7 @@ func TestStartStopApp(t *testing.T) {
 
 	err = rpc.StopApp(&unknownApp, nil)
 	require.Error(t, err)
-	assert.Equal(t, errors.New("app is either non-existent, or is already stopped"), err)
+	assert.Equal(t, ErrAppNotRunning, err)
 
 	require.NoError(t, rpc.StopApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)

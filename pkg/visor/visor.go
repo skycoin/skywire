@@ -50,6 +50,9 @@ const (
 // ErrUnknownApp represents lookup error for App related calls.
 var ErrUnknownApp = errors.New("unknown app")
 
+// ErrAppNotRunning occurs when an app is attempted to be stopped when it was not running.
+var ErrAppNotRunning = errors.New("app is not running")
+
 // Version is the node version.
 const Version = "0.0.1"
 
@@ -532,7 +535,7 @@ func (node *Node) StopApp(appName string) error {
 	node.startedMu.Unlock()
 
 	if bind == nil {
-		return ErrUnknownApp
+		return ErrAppNotRunning
 	}
 
 	return node.stopApp(appName, bind)
