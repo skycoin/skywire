@@ -7,7 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/SkycoinProject/dmsg"
+	cipher "github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -165,7 +168,7 @@ func TestRouter_Serve(t *testing.T) {
 }
 
 // TODO (Darkren): fix tests
-/*func TestRouter_Rules(t *testing.T) {
+func TestRouter_Rules(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 
 	env := snettest.NewEnv(t, []snettest.KeyPair{{PK: pk, SK: sk}})
@@ -255,7 +258,7 @@ func TestRouter_Serve(t *testing.T) {
 	})
 
 	// TEST: Ensure AddRule and DeleteRule requests from a SetupNode does as expected.
-	t.Run("AddRemoveRule", func(t *testing.T) {
+	/*t.Run("AddRemoveRule", func(t *testing.T) {
 		clearRules()
 
 		// Add/Remove rules multiple times.
@@ -441,8 +444,8 @@ func TestRouter_Serve(t *testing.T) {
 		assert.Equal(t, routing.Port(2), inLoop.Local.Port)
 		assert.Equal(t, routing.Port(3), inLoop.Remote.Port)
 		assert.Equal(t, pk, inLoop.Remote.PubKey)
-	})
-}*/
+	})*/
+}
 
 type TestEnv struct {
 	TpD transport.DiscoveryClient
