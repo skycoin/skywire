@@ -190,11 +190,7 @@ func (r *RPC) StartApp(name *string, _ *struct{}) error {
 
 // StopApp stops App with provided name.
 func (r *RPC) StopApp(name *string, _ *struct{}) error {
-	err := r.node.StopApp(*name)
-	if err == ErrUnknownApp {
-		err = errors.New("app is either non-existent, or is already stopped")
-	}
-	return err
+	return r.node.StopApp(*name)
 }
 
 // SetAutoStartIn is input for SetAutoStart.
