@@ -50,12 +50,15 @@ const (
 // ErrUnknownApp represents lookup error for App related calls.
 var ErrUnknownApp = errors.New("unknown app")
 
+// ErrAppNotRunning occurs when an app is attempted to be stopped when it was not running.
+var ErrAppNotRunning = errors.New("app is not running")
+
 // Version is the node version.
 const Version = "0.0.1"
 
 const supportedProtocolVersion = "0.0.1"
 
-var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "SSH", 3: "socksproxy"}
+var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "socksproxy"}
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
@@ -400,18 +403,25 @@ func (node *Node) Apps() []*AppState {
 
 // StartApp starts registered App.
 func (node *Node) StartApp(appName string) error {
-	for _, app := range node.appsConf {
-		if app.App == appName {
-			startCh := make(chan struct{})
-			go func(app AppConfig) {
-				if err := node.SpawnApp(&app, startCh); err != nil {
-					node.logger.Warnf("Failed to start app %s: %s", appName, err)
-				}
-			}(app)
-
-			<-startCh
-			return nil
+	for _, appC := range node.appsConf {
+		if appC.App != appName {
+			continue
 		}
+
+		done := make(chan struct{}, 1)
+		var err error
+
+		go func(appC AppConfig) {
+			if err = node.SpawnApp(&appC, done); err != nil {
+				done <- struct{}{}
+				node.logger.Warnf("Failed to start app %s: %s", appName, err)
+			}
+		}(appC)
+
+		<-done
+		close(done)
+
+		return err
 	}
 
 	return ErrUnknownApp
@@ -525,7 +535,7 @@ func (node *Node) StopApp(appName string) error {
 	node.startedMu.Unlock()
 
 	if bind == nil {
-		return ErrUnknownApp
+		return ErrAppNotRunning
 	}
 
 	return node.stopApp(appName, bind)

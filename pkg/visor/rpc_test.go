@@ -124,7 +124,7 @@ func TestStartStopApp(t *testing.T) {
 
 	err = rpc.StopApp(&unknownApp, nil)
 	require.Error(t, err)
-	assert.Equal(t, ErrUnknownApp, err)
+	assert.Equal(t, ErrAppNotRunning, err)
 
 	require.NoError(t, rpc.StopApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
