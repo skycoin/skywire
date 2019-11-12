@@ -179,7 +179,7 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 		conf *AppConfig
 		err  string
 	}{
-		{&AppConfig{App: "skychat", Version: "1.0", Port: 2}, "can't bind to reserved port 2"},
+		{&AppConfig{App: "skychat", Version: "1.0", Port: 3}, "can't bind to reserved port 3"},
 		{&AppConfig{App: "skychat", Version: "1.0", Port: 10}, "app skychat is already started"},
 		{&AppConfig{App: "foo", Version: "1.0", Port: 11}, "failed to run app executable: foo"},
 	}
