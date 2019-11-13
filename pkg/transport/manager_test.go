@@ -141,9 +141,8 @@ func TestNewManager(t *testing.T) {
 		assert.True(t, entry.IsUp)
 
 		m2.DeleteTransport(tp2.Entry.ID)
-		entry, err = tpDisc.GetTransportByID(context.TODO(), tpID)
-		require.NoError(t, err)
-		assert.False(t, entry.IsUp)
+		_, err = tpDisc.GetTransportByID(context.TODO(), tpID)
+		require.Contains(t, err.Error(), "not found")
 	})
 }
 
