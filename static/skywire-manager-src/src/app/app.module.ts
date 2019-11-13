@@ -80,7 +80,6 @@ import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { CreateTransportComponent } from './components/pages/node/routing/transport-list/create-transport/create-transport.component';
 import { AutoScalePipe } from './pipes/auto-scale.pipe';
 import { SidenavComponent } from './components/layout/sidenav/sidenav.component';
-import { SidenavContentComponent } from './components/layout/sidenav/sidenav-content/sidenav-content.component';
 import { BasicTerminalComponent } from './components/pages/node/actions/basic-terminal/basic-terminal.component';
 import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
 import { RefreshRateComponent } from './components/pages/settings/refresh-rate/refresh-rate.component';
@@ -157,7 +156,6 @@ import { LangButtonComponent } from './components/layout/lang-button/lang-button
     CreateTransportComponent,
     NodeAppsComponent,
     SidenavComponent,
-    SidenavContentComponent,
     BasicTerminalComponent,
     RouteDetailsComponent,
     RefreshRateComponent,

@@ -1,17 +1,48 @@
-import { Injectable, TemplateRef } from '@angular/core';
-import { Observable, ReplaySubject } from 'rxjs';
+import { Injectable } from '@angular/core';
+import { Observable, Subject } from 'rxjs';
+
+export interface SidenavOption {
+  name: string;
+  icon: string;
+  actionName: string;
+  disabled?: boolean;
+}
+
+export interface SidenavContents {
+  upperContents: SidenavOption[];
+  lowerContents: SidenavOption[];
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class SidenavService {
-  private template = new ReplaySubject<TemplateRef<any>>(1);
+  private upperContentsInternal: SidenavOption[];
+  private lowerContentsInternal: SidenavOption[];
+  private actionsSubject: Subject<string>;
 
-  getTemplate(): Observable<TemplateRef<any>> {
-    return this.template.asObservable();
+  get upperContents(): SidenavOption[] {
+    return this.upperContentsInternal;
+  }
+  get lowerContents(): SidenavOption[] {
+    return this.lowerContentsInternal;
   }
 
-  setTemplate(template: TemplateRef<any>) {
-    this.template.next(template);
+  setContents(upperContents: SidenavOption[], lowerContents: SidenavOption[]): Observable<string> {
+    if (this.actionsSubject) {
+      this.actionsSubject.complete();
+    }
+
+    this.upperContentsInternal = upperContents;
+    this.lowerContentsInternal = lowerContents;
+
+    this.actionsSubject = new Subject<string>();
+    return this.actionsSubject.asObservable();
+  }
+
+  requestAction(name: string) {
+    if (this.actionsSubject) {
+      this.actionsSubject.next(name);
+    }
   }
 }

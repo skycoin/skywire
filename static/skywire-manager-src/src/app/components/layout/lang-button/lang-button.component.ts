@@ -10,11 +10,9 @@ import { SelectLanguageComponent } from '../select-language/select-language.comp
   styleUrls: ['./lang-button.component.scss']
 })
 export class LangButtonComponent implements OnInit, OnDestroy {
-  @HostBinding('class') get class() { return this.hide ? 'd-none' : ''; }
   language: LanguageData;
 
-  private subscriptionsGroup: Subscription[] = [];
-  private hide = true;
+  private subscription: Subscription;
 
   constructor(
     private languageService: LanguageService,
@@ -22,21 +20,13 @@ export class LangButtonComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
-    this.subscriptionsGroup.push(this.languageService.currentLanguage.subscribe(lang => {
+    this.subscription = this.languageService.currentLanguage.subscribe(lang => {
       this.language = lang;
-    }));
-
-    this.subscriptionsGroup.push(this.languageService.languages.subscribe(langs => {
-      if (langs.length > 1) {
-        this.hide = false;
-      } else {
-        this.hide = true;
-      }
-    }));
+    });
   }
 
   ngOnDestroy() {
-    this.subscriptionsGroup.forEach(sub => sub.unsubscribe());
+    this.subscription.unsubscribe();
   }
 
   openLanguageWindow() {

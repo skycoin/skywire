@@ -30,7 +30,7 @@
         [refeshRate]="refeshRate"
         (click)="sendRefreshEvent()"
       ></app-refresh-button>
-      <app-lang-button></app-lang-button>
+      <app-lang-button *ngIf="!hideLanguageButton" class="d-none d-lg-inline"></app-lang-button>
     </div>
   </div>
 </div>

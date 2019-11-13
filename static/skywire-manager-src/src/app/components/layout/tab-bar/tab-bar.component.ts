@@ -1,4 +1,6 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { LanguageService } from 'src/app/services/language.service';
+import { Subscription } from 'rxjs';
 
 export interface TabButtonData {
   linkParts: string[];
@@ -11,7 +13,7 @@ export interface TabButtonData {
   templateUrl: './tab-bar.component.html',
   styleUrls: ['./tab-bar.component.scss']
 })
-export class TabBarComponent {
+export class TabBarComponent implements OnInit, OnDestroy {
   @Input() disableMouse = false;
 
   @Input() titleParts: string[];
@@ -25,6 +27,28 @@ export class TabBarComponent {
   @Input() showUpdateButton = true;
 
   @Output() refreshRequested = new EventEmitter();
+
+  hideLanguageButton = true;
+
+  private langSubscription: Subscription;
+
+  constructor(
+    private languageService: LanguageService,
+  ) { }
+
+  ngOnInit() {
+    this.langSubscription = this.languageService.languages.subscribe(langs => {
+      if (langs.length > 1) {
+        this.hideLanguageButton = false;
+      } else {
+        this.hideLanguageButton = true;
+      }
+    });
+  }
+
+  ngOnDestroy() {
+    this.langSubscription.unsubscribe();
+  }
 
   sendRefreshEvent() {
     this.refreshRequested.emit();

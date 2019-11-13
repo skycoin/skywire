@@ -1,16 +1,84 @@
-<div class="nav-container">
-  <nav>
-    <div class="header">
-      <app-skycoin-logo></app-skycoin-logo>
-      <mat-icon class="menu-button d-md-none" (click)="toggleMenu()">menu</mat-icon>
+<div class="fixed-container d-lg-none">
+  <div class="top-bar">
+    <div class="logo-container">
+      <img src="/assets/img/logo-sup.png" />
     </div>
-
-    <div [ngClass]="{ hidden: !menuVisible }" class="menu-container">
-      <ng-container *ngTemplateOutlet="template"></ng-container>
+    <div class="button-container">
+      <button
+        mat-icon-button
+        [matMenuTriggerFor]="menu"
+      >
+        <mat-icon>menu</mat-icon>
+      </button>
+      <mat-menu #menu="matMenu" [overlapTrigger]="false">
+        <ng-container *ngIf="sidenavService.upperContents">
+          <ng-container *ngFor="let content of sidenavService.upperContents">
+            <div mat-menu-item (click)="requestAction(content.actionName)" [disabled]="content.disabled">
+              <mat-icon>{{ content.icon }}</mat-icon> {{ content.name | translate }}
+            </div>
+          </ng-container>
+        </ng-container>
+        <div *ngIf="sidenavService.upperContents && sidenavService.lowerContents" class="menu-separator"></div>
+        <ng-container *ngIf="sidenavService.lowerContents">
+          <ng-container *ngFor="let content of sidenavService.lowerContents">
+            <div mat-menu-item (click)="requestAction(content.actionName)" [disabled]="content.disabled">
+              <mat-icon>{{ content.icon }}</mat-icon> {{ content.name | translate }}
+            </div>
+          </ng-container>
+        </ng-container>
+        <div *ngIf="!hideLanguageButton && (sidenavService.upperContents || sidenavService.lowerContents)" class="menu-separator"></div>
+        <div *ngIf="!hideLanguageButton" mat-menu-item (click)="openLanguageWindow()">
+          <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag"> {{ (language ? language.name : '') | translate }}
+        </div>
+      </mat-menu>
     </div>
-  </nav>
+  </div>
 </div>
 
-<div class="content container-fluid">
-  <router-outlet></router-outlet>
+<div class="top-bar-margin d-lg-none"></div>
+<div class="full-height flex">
+  
+  <div class="nav-container d-none d-lg-block">
+    <div class="nav-internal-container">
+      <div class="top-bar-margin d-lg-none"></div>
+      <nav>
+        <div class="header">
+          <app-skycoin-logo></app-skycoin-logo>
+        </div>
+
+        <div class="menu-container">
+          <div class="upper-actions">
+            <div class="button-group">
+              <ng-container *ngIf="sidenavService.upperContents">
+                <ng-container *ngFor="let content of sidenavService.upperContents">
+                  <app-button
+                    (action)="requestAction(content.actionName)"
+                    [icon]="content.icon"
+                    [disabled]="content.disabled"
+                  >{{ content.name | translate }}</app-button>
+                </ng-container>
+              </ng-container>
+            </div>
+          </div>
+          
+          <div>
+            <ng-container *ngIf="sidenavService.lowerContents">
+              <ng-container *ngFor="let content of sidenavService.lowerContents">
+                <app-button
+                  (action)="requestAction(content.actionName)"
+                  [icon]="content.icon"
+                  [disabled]="content.disabled"
+                >{{ content.name | translate }}</app-button>
+              </ng-container>
+            </ng-container>
+          </div>
+        </div>
+
+      </nav>
+    </div>
+  </div>
+
+  <div class="content container-fluid">
+    <router-outlet></router-outlet>
+  </div>
 </div>

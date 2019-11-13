@@ -11,6 +11,7 @@ import { StorageService } from '../../../services/storage.service';
 import { delay, flatMap, tap } from 'rxjs/operators';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
+import { SidenavService } from 'src/app/services/sidenav.service';
 
 enum SortableColumns {
   Label,
@@ -37,6 +38,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
+  private menuSubscription: Subscription;
 
   secondsSinceLastUpdate = 0;
   private lastUpdate = Date.now();
@@ -51,6 +53,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     public storageService: StorageService,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
+    private sidenavService: SidenavService,
   ) {
     this.tabsData = [
       {
@@ -75,11 +78,29 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
     });
+
+    setTimeout(() => {
+      this.menuSubscription = this.sidenavService.setContents([
+        {
+          name: 'nodes.logout',
+          actionName: 'logout',
+          icon: 'power_settings_new'
+        }], null).subscribe(actionName => {
+          if (actionName === 'logout') {
+            this.logout();
+          }
+        }
+      );
+    });
   }
 
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
+
+    if (this.menuSubscription) {
+      this.menuSubscription.unsubscribe();
+    }
   }
 
   nodeStatusClass(node: Node): string {

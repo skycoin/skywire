@@ -1,45 +1,60 @@
 import {
   Component,
-  HostListener,
   OnInit,
-  TemplateRef,
-  HostBinding
+  HostBinding,
+  OnDestroy
 } from '@angular/core';
 import { SidenavService } from '../../../services/sidenav.service';
+import { LanguageService, LanguageData } from 'src/app/services/language.service';
+import { Subscription } from 'rxjs';
+import { MatDialogConfig, MatDialog } from '@angular/material/dialog';
+import { SelectLanguageComponent } from '../select-language/select-language.component';
 
 @Component({
   selector: 'app-sidenav',
   templateUrl: './sidenav.component.html',
   styleUrls: ['./sidenav.component.scss']
 })
-export class SidenavComponent implements OnInit {
-  menuVisible = true;
-  template: TemplateRef<any>;
+export class SidenavComponent implements OnInit, OnDestroy {
+  language: LanguageData;
+  hideLanguageButton = true;
 
-  @HostBinding('class') get class() { return 'full-height flex'; }
+  private langSubscriptionsGroup: Subscription[] = [];
+
+  @HostBinding('class') get class() { return 'full-height flex-column'; }
 
   constructor(
-    private sidenavService: SidenavService,
+    public sidenavService: SidenavService,
+    private languageService: LanguageService,
+    private dialog: MatDialog,
   ) { }
 
   ngOnInit() {
-    this.sidenavService.getTemplate().subscribe(content => {
-      setTimeout(() => this.template = content);
-    });
+    this.langSubscriptionsGroup.push(this.languageService.currentLanguage.subscribe(lang => {
+      this.language = lang;
+    }));
 
-    this.updateMenuVisibility();
+    this.langSubscriptionsGroup.push(this.languageService.languages.subscribe(langs => {
+      if (langs.length > 1) {
+        this.hideLanguageButton = false;
+      } else {
+        this.hideLanguageButton = true;
+      }
+    }));
   }
 
-  toggleMenu() {
-    this.menuVisible = !this.menuVisible;
+  ngOnDestroy() {
+    this.langSubscriptionsGroup.forEach(sub => sub.unsubscribe());
   }
 
-  @HostListener('window:resize')
-  onWindowResize() {
-    this.updateMenuVisibility();
+  requestAction(name: string) {
+    this.sidenavService.requestAction(name);
   }
 
-  private updateMenuVisibility() {
-    this.menuVisible = !window.matchMedia('(max-width: 768px)').matches;
+  openLanguageWindow() {
+    const config = new MatDialogConfig();
+    config.autoFocus = false;
+    config.width = '600px';
+    this.dialog.open(SelectLanguageComponent, config);
   }
 }
