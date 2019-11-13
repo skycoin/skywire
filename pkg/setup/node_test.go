@@ -15,20 +15,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 func TestMain(m *testing.M) {
