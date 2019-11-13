@@ -91,6 +91,8 @@ type Router interface {
 
 	SaveRoutingRules(rules ...routing.Rule) error
 
+	ReserveKeys(n int) ([]routing.RouteID, error)
+
 	IntroduceRules(rules routing.EdgeRules) error
 
 	Serve(context.Context) error
@@ -468,6 +470,10 @@ func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
 	}
 
 	return nil
+}
+
+func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
+	return r.rt.ReserveKeys(n)
 }
 
 func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
