@@ -75,7 +75,7 @@ func main() {
 func listenLoop() {
 	l, err := chatApp.Listen(netType, port)
 	if err != nil {
-		log.Printf("Error listening network %v on port %d: %v\n", netType, port)
+		log.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
 		return
 	}
 
