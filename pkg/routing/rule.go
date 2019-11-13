@@ -325,23 +325,24 @@ func (r Rule) Summary() *RuleSummary {
 		Type:       r.Type(),
 		KeyRouteID: r.KeyRouteID(),
 	}
+	rd := r.RouteDescriptor()
 	switch t := summary.Type; t {
 	case RuleConsume:
 		summary.ConsumeFields = &RuleConsumeFields{
 			RouteDescriptor: RouteDescriptorFields{
-				DstPK:   r.RouteDescriptor().DstPK(),
-				SrcPK:   r.RouteDescriptor().SrcPK(),
-				DstPort: r.RouteDescriptor().DstPort(),
-				SrcPort: r.RouteDescriptor().SrcPort(),
+				DstPK:   rd.DstPK(),
+				SrcPK:   rd.SrcPK(),
+				DstPort: rd.DstPort(),
+				SrcPort: rd.SrcPort(),
 			},
 		}
 	case RuleForward:
 		summary.ForwardFields = &RuleForwardFields{
 			RouteDescriptor: RouteDescriptorFields{
-				DstPK:   r.RouteDescriptor().DstPK(),
-				SrcPK:   r.RouteDescriptor().SrcPK(),
-				DstPort: r.RouteDescriptor().DstPort(),
-				SrcPort: r.RouteDescriptor().SrcPort(),
+				DstPK:   rd.DstPK(),
+				SrcPK:   rd.SrcPK(),
+				DstPort: rd.DstPort(),
+				SrcPort: rd.SrcPort(),
 			},
 			NextRID: r.NextRouteID(),
 			NextTID: r.NextTransportID(),
