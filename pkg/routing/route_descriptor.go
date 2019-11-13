@@ -14,10 +14,6 @@ type RouteDescriptor [routeDescriptorSize]byte
 func NewRouteDescriptor(srcPK, dstPK cipher.PubKey, srcPort, dstPort Port) RouteDescriptor {
 	var desc RouteDescriptor
 
-	// p := copy(desc[:pkSize], srcPK[:])
-	// p = copy(desc[p:p+pkSize], dstPK[:])
-	// binary.BigEndian.PutUint16(desc[p:p+2], uint16(srcPort))
-	// binary.BigEndian.PutUint16(desc[p+2:p+2*2], uint16(dstPort))
 	desc.setSrcPK(srcPK)
 	desc.setDstPK(dstPK)
 	desc.setSrcPort(srcPort)
@@ -27,7 +23,7 @@ func NewRouteDescriptor(srcPK, dstPK cipher.PubKey, srcPort, dstPort Port) Route
 }
 
 // Src returns source Addr from RouteDescriptor.
-func (rd RouteDescriptor) Src() Addr {
+func (rd *RouteDescriptor) Src() Addr {
 	return Addr{
 		PubKey: rd.SrcPK(),
 		Port:   rd.SrcPort(),
@@ -35,7 +31,7 @@ func (rd RouteDescriptor) Src() Addr {
 }
 
 // Dst returns destination Addr from RouteDescriptor.
-func (rd RouteDescriptor) Dst() Addr {
+func (rd *RouteDescriptor) Dst() Addr {
 	return Addr{
 		PubKey: rd.DstPK(),
 		Port:   rd.DstPort(),
@@ -43,7 +39,7 @@ func (rd RouteDescriptor) Dst() Addr {
 }
 
 // SrcPK returns source public key from RouteDescriptor.
-func (rd RouteDescriptor) SrcPK() cipher.PubKey {
+func (rd *RouteDescriptor) SrcPK() cipher.PubKey {
 	var pk cipher.PubKey
 	copy(pk[:], rd[0:pkSize])
 	return pk
@@ -55,7 +51,7 @@ func (rd *RouteDescriptor) setSrcPK(pk cipher.PubKey) {
 }
 
 // DstPK returns destination public key from RouteDescriptor.
-func (rd RouteDescriptor) DstPK() cipher.PubKey {
+func (rd *RouteDescriptor) DstPK() cipher.PubKey {
 	var pk cipher.PubKey
 	copy(pk[:], rd[pkSize:pkSize*2])
 	return pk
@@ -67,7 +63,7 @@ func (rd *RouteDescriptor) setDstPK(pk cipher.PubKey) {
 }
 
 // SrcPort returns source port from RouteDescriptor.
-func (rd RouteDescriptor) SrcPort() Port {
+func (rd *RouteDescriptor) SrcPort() Port {
 	return Port(binary.BigEndian.Uint16(rd[pkSize*2 : pkSize*2+2]))
 }
 
@@ -77,7 +73,7 @@ func (rd *RouteDescriptor) setSrcPort(port Port) {
 }
 
 // DstPort returns destination port from RouteDescriptor.
-func (rd RouteDescriptor) DstPort() Port {
+func (rd *RouteDescriptor) DstPort() Port {
 	return Port(binary.BigEndian.Uint16(rd[pkSize*2+2 : pkSize*2+2*2]))
 }
 
@@ -87,10 +83,10 @@ func (rd *RouteDescriptor) setDstPort(port Port) {
 }
 
 // Invert inverts source and destination.
-func (rd RouteDescriptor) Invert() RouteDescriptor {
+func (rd *RouteDescriptor) Invert() RouteDescriptor {
 	return NewRouteDescriptor(rd.DstPK(), rd.SrcPK(), rd.DstPort(), rd.SrcPort())
 }
 
-func (rd RouteDescriptor) String() string {
+func (rd *RouteDescriptor) String() string {
 	return fmt.Sprintf("rPK:%s, lPK:%s, rPort:%d, lPort:%d", rd.DstPK(), rd.SrcPK(), rd.DstPort(), rd.SrcPK())
 }
