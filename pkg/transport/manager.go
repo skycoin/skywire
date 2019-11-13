@@ -214,7 +214,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	return mTp, nil
 }
 
-// DeleteTransport disconnects and removes the Transport of Transport ID.
+// DeleteTransport deregisters the Transport of Transport ID.
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
@@ -225,15 +225,15 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	if tp, ok := tm.tps[id]; ok {
 		tp.Close()
 		delete(tm.tps, id)
-		tm.Logger.Infof("Unregistered transport %s from manager", id)
+		tm.Logger.Infof("Deregister transport %s from manager", id)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		err := tm.conf.DiscoveryClient.DeleteTransport(ctx, id)
 		if err != nil {
-			tm.Logger.Errorf("Unregister transport %s from discovery failed with error: %s", id, err)
+			tm.Logger.Errorf("Deregister transport %s from discovery failed with error: %s", id, err)
 		}
-		tm.Logger.Infof("Unregistered transport %s from discovery", id)
+		tm.Logger.Infof("Deregister transport %s from discovery", id)
 	}
 }
 
