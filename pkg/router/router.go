@@ -89,6 +89,10 @@ type Router interface {
 	// - Return the RoutingGroup.
 	AcceptRoutes(context.Context) (*RouteGroup, error)
 
+	SaveRoutingRules(rules ...routing.Rule) error
+
+	IntroduceRules(rules routing.EdgeRules) error
+
 	Serve(context.Context) error
 
 	SetupIsTrusted(cipher.PubKey) bool
@@ -178,7 +182,7 @@ func (r *router) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort
 		return nil, err
 	}
 
-	if err := r.saveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		return nil, err
 	}
 
@@ -201,7 +205,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
 		break
 	}
 
-	if err := r.saveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		return nil, err
 	}
 
@@ -453,7 +457,8 @@ func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
 	return ok
 }
 
-func (r *router) saveRoutingRules(rules ...routing.Rule) error {
+// Saves `rules` to the routing table.
+func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
 	for _, rule := range rules {
 		if err := r.rt.SaveRule(rule); err != nil {
 			return fmt.Errorf("routing table: %s", err)
