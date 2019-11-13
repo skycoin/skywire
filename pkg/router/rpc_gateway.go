@@ -9,10 +9,10 @@ import (
 
 type RPCGateway struct {
 	logger *logging.Logger
-	router *router
+	router Router
 }
 
-func NewRPCGateway(router *router) *RPCGateway {
+func NewRPCGateway(router Router) *RPCGateway {
 	return &RPCGateway{
 		logger: logging.MustGetLogger("router-gateway"),
 		router: router,
