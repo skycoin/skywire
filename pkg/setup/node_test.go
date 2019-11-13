@@ -3,11 +3,24 @@
 package setup
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"net/rpc"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -48,7 +61,7 @@ func TestMain(m *testing.M) {
 // 3. Hanging may be not the problem of the DMSG. Probably some of the communication part here is wrong.
 // The reason I think so is that - if we ensure read timeouts, why doesn't this test constantly fail?
 // Maybe some wrapper for DMSG is wrong, or some internal operations before the actual communication behave bad
-/*func TestNode(t *testing.T) {
+func TestNode(t *testing.T) {
 	// Prepare mock dmsg discovery.
 	discovery := disc.NewMock()
 
@@ -61,14 +74,22 @@ func TestMain(m *testing.M) {
 
 	type clientWithDMSGAddrAndListener struct {
 		*dmsg.Client
-		Addr     dmsg.Addr
-		Listener *dmsg.Listener
+		Addr      dmsg.Addr
+		Listener  *dmsg.Listener
+		RPCServer *rpc.Server
+		Router    router.Router
 	}
 
 	// CLOSURE: sets up dmsg clients.
-	prepClients := func(n int) ([]clientWithDMSGAddrAndListener, func()) {
+	prepClients := func(n, dstIdx int) ([]clientWithDMSGAddrAndListener, func()) {
+		if dstIdx >= n {
+			dstIdx = n - 1
+		}
+
 		clients := make([]clientWithDMSGAddrAndListener, n)
 		for i := 0; i < n; i++ {
+			r := &router.MockRouter{}
+
 			var port uint16
 			// setup node
 			if i == 0 {
@@ -170,6 +191,14 @@ func TestMain(m *testing.M) {
 
 		var addRuleDone sync.WaitGroup
 		var nextRouteID uint32
+		expectAddIntermediaryRules := func(client int, expRule routing.RuleType) {
+			conn, err := clients[client].Listener.Accept()
+			require.NoError(t, err)
+
+			fmt.Printf("client %v:%v accepted\n", client, clients[client].Addr)
+
+			go clients[client].RPCServer.ServeConn(conn)
+		}
 		// CLOSURE: emulates how a visor node should react when expecting an AddRules packet.
 		expectAddRules := func(client int, expRule routing.RuleType) {
 			conn, err := clients[client].Listener.Accept()
@@ -280,7 +309,7 @@ func TestMain(m *testing.M) {
 	// TEST: Emulates the communication between 2 visor nodes and a setup nodes,
 	// where a route is already established,
 	// and the first client attempts to tear it down.
-	t.Run("CloseLoop", func(t *testing.T) {
+	/*t.Run("CloseLoop", func(t *testing.T) {
 		// client index 0 is for setup node.
 		// clients index 1 and 2 are for visor nodes.
 		clients, closeClients := prepClients(3)
@@ -343,8 +372,8 @@ func TestMain(m *testing.M) {
 		// TODO: This error is not checked due to a bug in dmsg.
 		err = proto.WritePacket(RespSuccess, nil)
 		_ = err
-	})
-}*/
+	})*/
+}
 
 func createServer(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-chan error) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("s"))
