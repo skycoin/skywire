@@ -72,6 +72,63 @@ func (_m *MockRouter) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort r
 	return r0, r1
 }
 
+// IntroduceRules provides a mock function with given fields: rules
+func (_m *MockRouter) IntroduceRules(rules routing.EdgeRules) error {
+	ret := _m.Called(rules)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(routing.EdgeRules) error); ok {
+		r0 = rf(rules)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// ReserveKeys provides a mock function with given fields: n
+func (_m *MockRouter) ReserveKeys(n int) ([]routing.RouteID, error) {
+	ret := _m.Called(n)
+
+	var r0 []routing.RouteID
+	if rf, ok := ret.Get(0).(func(int) []routing.RouteID); ok {
+		r0 = rf(n)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]routing.RouteID)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int) error); ok {
+		r1 = rf(n)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// SaveRoutingRules provides a mock function with given fields: rules
+func (_m *MockRouter) SaveRoutingRules(rules ...routing.Rule) error {
+	_va := make([]interface{}, len(rules))
+	for _i := range rules {
+		_va[_i] = rules[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(...routing.Rule) error); ok {
+		r0 = rf(rules...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Serve provides a mock function with given fields: _a0
 func (_m *MockRouter) Serve(_a0 context.Context) error {
 	ret := _m.Called(_a0)
