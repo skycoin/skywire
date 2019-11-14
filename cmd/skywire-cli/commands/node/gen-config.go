@@ -131,7 +131,7 @@ func defaultConfig() *visor.Config {
 
 	conf.Hypervisors = []visor.HypervisorConfig{}
 
-	conf.Uptime.Tracker = ""
+	conf.Uptime.Tracker = "uptime-tracker.skywire.skycoin.com"
 
 	conf.AppsPath = "./apps"
 	conf.LocalPath = "./local"
