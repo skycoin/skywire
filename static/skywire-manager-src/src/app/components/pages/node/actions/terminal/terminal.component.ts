@@ -31,9 +31,9 @@ export class TerminalComponent implements AfterViewInit, OnDestroy {
   ) { }
 
   ngAfterViewInit() {
-    forkJoin(
+    forkJoin([
       // this.nodeService.getManagerPort(),
-      this.authService.authToken(),
+      this.authService.authToken()]
     ).subscribe(res => {
       /*
       this.ws = new WebSocket(this.buildUrl(res[0], res[1]));

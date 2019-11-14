@@ -12,14 +12,6 @@ export class CopyToClipboardTextComponent {
   @Input() shortTextLength = 6;
   // @ViewChild(MatMenuTrigger) trigger: MatMenuTrigger;
 
-  get shortText() {
-    const lastTextIndex = this.text.length,
-      prefix = this.text.slice(0, this.shortTextLength),
-      sufix = this.text.slice((lastTextIndex - this.shortTextLength), lastTextIndex);
-
-    return `${prefix}...${sufix}`;
-  }
-
   constructor(
     private snackbarService: SnackbarService,
   ) {}

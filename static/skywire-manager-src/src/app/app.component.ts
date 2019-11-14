@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import {StorageService} from './services/storage.service';
 import {getLangs} from './utils/languageUtils';
-import { Router } from '@angular/router';
+import { Router, NavigationEnd } from '@angular/router';
 import { Location } from '@angular/common';
 import { SnackbarService } from './services/snackbar.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -33,10 +33,14 @@ export class AppComponent {
       snackbarService.closeCurrent();
       dialog.closeAll();
     });
-    dialog.afterOpen.subscribe(() => snackbarService.closeCurrent());
+    dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
 
-    router.events.subscribe(() => {
+    router.events.subscribe(e => {
       this.showFooter = !location.isCurrentPathEqualTo('/login');
+
+      if (e instanceof NavigationEnd) {
+        window.scrollTo(0, 0);
+      }
     });
 
     languageService.loadLanguageSettings();

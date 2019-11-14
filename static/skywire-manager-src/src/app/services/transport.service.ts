@@ -22,7 +22,7 @@ export class TransportService {
     }));
   }
 
-  create(key: string, remoteKey: string, type: string) {
+  create(key: string, remoteKey: string, type: string): Observable<any> {
     return this.apiService.post(`nodes/${key}/transports`, {
       remote_pk: remoteKey,
       transport_type: type,

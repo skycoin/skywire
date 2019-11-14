@@ -307,7 +307,7 @@
       "remote-key": "Remote public key",
       "transport-type": "Transport type",
       "success": "Transport created",
-      "error": "Unable to create transport: {{error}}",
+      "error": "Unable to create transport",
       "errors": {
         "remote-key-length-error": "The remote public key must be 66 characters long",
         "remote-key-chars-error": "The remote public key must only contain hexadecimal characters",

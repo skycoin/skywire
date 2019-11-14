@@ -23,7 +23,7 @@ export class SshsWhitelistComponent implements DatatableProvider<string>, OnInit
   ) {}
 
   ngOnInit(): void {
-    this.dialogRef.beforeClose().subscribe(() => {
+    this.dialogRef.beforeClosed().subscribe(() => {
       this._save();
     });
   }

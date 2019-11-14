@@ -61,10 +61,10 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       NodeComponent.getCurrentNodeKey(),
       this.form.get('remoteKey').value,
       this.form.get('type').value,
-    ).subscribe(
-      this.onSuccess.bind(this),
-      this.onError.bind(this),
-    );
+    ).subscribe({
+      next: this.onSuccess.bind(this),
+      error: this.onError.bind(this)
+    });
   }
 
   private onSuccess() {

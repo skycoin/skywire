@@ -54,14 +54,15 @@
             <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
           <td class="node-key" mat-cell *matCellDef="let node;">
-            <app-copy-to-clipboard-text [text]="node.local_pk"></app-copy-to-clipboard-text>
+            <app-truncated-text [short]="false" [text]="node.local_pk" class="d-none d-md-block"></app-truncated-text>
+            <app-truncated-text [short]="true" [text]="node.local_pk" class="d-md-none nowrap"></app-truncated-text>
           </td>
         </ng-container>
 
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let node;" (click)="$event.stopPropagation()" class="actions">
-            <button (click)="showEditLabelDialog(node)" mat-icon-button [matTooltip]="'nodes.edit-label' | translate">
+            <button (click)="showEditLabelDialog(node)" mat-icon-button [matTooltip]="'edit-label.title' | translate">
               <mat-icon>short_text</mat-icon>
             </button>
             <button

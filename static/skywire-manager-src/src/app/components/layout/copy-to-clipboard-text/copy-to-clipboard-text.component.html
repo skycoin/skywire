@@ -5,11 +5,11 @@
      [matTooltipClass]="{ 'tooltip-word-break': true }"
 >
   <ng-container *ngIf="short">
-    <span class="nowrap">{{ shortText }}</span>
+    <app-truncated-text [short]="true" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text"></app-truncated-text>
   </ng-container>
   <ng-container *ngIf="!short">
-    <span class="d-none d-md-block">{{ text }}</span>
-    <span class="d-md-none nowrap">{{ shortText }}</span>
+    <app-truncated-text [short]="false" [text]="text" class="d-none d-md-block"></app-truncated-text>
+    <app-truncated-text [short]="true" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text" class="d-md-none"></app-truncated-text>
   </ng-container>
 </div>
 <!--<mat-menu [overlapTrigger]="false" #appMenu="matMenu">-->
