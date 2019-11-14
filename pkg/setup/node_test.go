@@ -4,30 +4,28 @@ package setup
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/rpc"
 	"os"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router/routerclient"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/net/nettest"
-
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
 )
 
 func TestMain(m *testing.M) {
@@ -73,22 +71,18 @@ func TestNode(t *testing.T) {
 
 	type clientWithDMSGAddrAndListener struct {
 		*dmsg.Client
-		Addr      dmsg.Addr
-		Listener  *dmsg.Listener
-		RPCServer *rpc.Server
-		Router    router.Router
+		Addr                     dmsg.Addr
+		Listener                 *dmsg.Listener
+		RPCServer                *rpc.Server
+		Router                   router.Router
+		AppliedIntermediaryRules []routing.Rule
+		AppliedEdgeRules         routing.EdgeRules
 	}
 
 	// CLOSURE: sets up dmsg clients.
-	prepClients := func(n, dstIdx int) ([]clientWithDMSGAddrAndListener, func()) {
-		if dstIdx >= n {
-			dstIdx = n - 1
-		}
-
+	prepClients := func(n int) ([]clientWithDMSGAddrAndListener, func()) {
 		clients := make([]clientWithDMSGAddrAndListener, n)
 		for i := 0; i < n; i++ {
-			r := &router.MockRouter{}
-
 			var port uint16
 			// setup node
 			if i == 0 {
@@ -110,6 +104,46 @@ func TestNode(t *testing.T) {
 					Port: port,
 				},
 				Listener: listener,
+			}
+
+			fmt.Printf("Client %d PK: %s\n", i, clients[i].Addr.PK)
+
+			r := &router.MockRouter{}
+			// for intermediary nodes and the destination one
+			if i > 1 {
+				// passing two rules to each node (forward and reverse routes)
+				r.On("SaveRoutingRules", mock.Anything, mock.Anything).
+					Return(func(rules ...routing.Rule) error {
+						clients[i].AppliedIntermediaryRules = append(clients[i].AppliedIntermediaryRules, rules...)
+						return nil
+					})
+
+				if i == (n - 1) {
+					r.On("IntroduceRules", mock.Anything).Return(func(rules routing.EdgeRules) error {
+						clients[i].AppliedEdgeRules = rules
+						return nil
+					})
+				}
+			}
+
+			clients[i].Router = r
+			if i != 0 {
+				rpcGateway := router.NewRPCGateway(r)
+				rpcServer := rpc.NewServer()
+				err = rpcServer.Register(rpcGateway)
+				require.NoError(t, err)
+				clients[i].RPCServer = rpcServer
+				/*go func() {
+					for {
+						_, err := listener.Accept()
+						if err != nil {
+							fmt.Printf("Error accepting: %v\n", err)
+						}
+
+						fmt.Println("Accepted")
+					}
+				}()*/
+				go clients[i].RPCServer.Accept(listener)
 			}
 		}
 		return clients, func() {
@@ -146,39 +180,73 @@ func TestNode(t *testing.T) {
 		clients, closeClients := prepClients(5)
 		defer closeClients()
 
+		_, err := routerclient.ReserveIDs(context.Background(), logging.MustGetLogger("dick"), clients[0].Client, clients[1].Addr.PK, 1)
+		require.NoError(t, err)
+		fmt.Println("Got IDs")
+
+		time.Sleep(1 * time.Hour)
+
 		// prepare and serve setup node (using client 0).
-		_, closeSetup := prepSetupNode(clients[0].Client, clients[0].Listener)
-		setupPK := clients[0].Addr.PK
-		setupPort := clients[0].Addr.Port
+		sn, closeSetup := prepSetupNode(clients[0].Client, clients[0].Listener)
+		//setupPK := clients[0].Addr.PK
+		//setupPort := clients[0].Addr.Port
 		defer closeSetup()
 
-		// prepare loop creation (client_1 will use this to request loop creation with setup node).
-		ld := routing.LoopDescriptor{
-			Loop: routing.Loop{
-				Local:  routing.Addr{PubKey: clients[1].Addr.PK, Port: 1},
-				Remote: routing.Addr{PubKey: clients[4].Addr.PK, Port: 1},
-			},
-			Reverse: routing.Route{
-				&routing.Hop{From: clients[1].Addr.PK, To: clients[2].Addr.PK, Transport: uuid.New()},
-				&routing.Hop{From: clients[2].Addr.PK, To: clients[3].Addr.PK, Transport: uuid.New()},
-				&routing.Hop{From: clients[3].Addr.PK, To: clients[4].Addr.PK, Transport: uuid.New()},
-			},
-			Forward: routing.Route{
-				&routing.Hop{From: clients[4].Addr.PK, To: clients[3].Addr.PK, Transport: uuid.New()},
-				&routing.Hop{From: clients[3].Addr.PK, To: clients[2].Addr.PK, Transport: uuid.New()},
-				&routing.Hop{From: clients[2].Addr.PK, To: clients[1].Addr.PK, Transport: uuid.New()},
-			},
-			KeepAlive: 1 * time.Hour,
-		}
-
 		// client_1 initiates loop creation with setup node.
-		iTp, err := clients[1].Dial(context.TODO(), setupPK, setupPort)
-		require.NoError(t, err)
-		iTpErrs := make(chan error, 2)
+		//iTp, err := clients[1].Dial(context.TODO(), setupPK, setupPort)
+		//require.NoError(t, err)
+		iTpErrs := make(chan error)
+		edgeRulesCh := make(chan routing.EdgeRules)
 		go func() {
-			iTpErrs <- CreateRoutes(context.TODO(), NewSetupProtocol(iTp), ld)
-			iTpErrs <- iTp.Close()
+			fwdRule := routing.Path{
+				{
+					TpID: uuid.New(),
+					From: clients[1].Addr.PK,
+					To:   clients[2].Addr.PK,
+				},
+				{
+					TpID: uuid.New(),
+					From: clients[2].Addr.PK,
+					To:   clients[3].Addr.PK,
+				},
+				{
+					TpID: uuid.New(),
+					From: clients[3].Addr.PK,
+					To:   clients[4].Addr.PK,
+				},
+			}
+			rvRule := routing.Path{
+				{
+					TpID: uuid.New(),
+					From: clients[4].Addr.PK,
+					To:   clients[3].Addr.PK,
+				},
+				{
+					TpID: uuid.New(),
+					From: clients[3].Addr.PK,
+					To:   clients[2].Addr.PK,
+				},
+				{
+					TpID: uuid.New(),
+					From: clients[2].Addr.PK,
+					To:   clients[1].Addr.PK,
+				},
+			}
+
+			ctx := context.Background()
+			desc := routing.NewRouteDescriptor(clients[1].Addr.PK, clients[4].Addr.PK, routing.Port(clients[1].Addr.Port), routing.Port(clients[4].Addr.Port))
+			route := routing.BidirectionalRoute{
+				Desc:      desc,
+				KeepAlive: 1 * time.Hour,
+				Forward:   fwdRule,
+				Reverse:   rvRule,
+			}
+
+			rules, err := sn.handleDialRouteGroup(ctx, route)
+			iTpErrs <- err
 			close(iTpErrs)
+			edgeRulesCh <- rules
+			close(edgeRulesCh)
 		}()
 		defer func() {
 			i := 0
@@ -186,123 +254,10 @@ func TestNode(t *testing.T) {
 				require.NoError(t, err, i)
 				i++
 			}
+
+			rules := <-edgeRulesCh
+			require.Equal(t, routing.NewRouteDescriptor(clients[1].Addr.PK, clients[4].Addr.PK, routing.Port(clients[1].Addr.Port), routing.Port(clients[4].Addr.Port)), rules.Desc)
 		}()
-
-		var addRuleDone sync.WaitGroup
-		var nextRouteID uint32
-		expectAddIntermediaryRules := func(client int, expRule routing.RuleType) {
-			conn, err := clients[client].Listener.Accept()
-			require.NoError(t, err)
-
-			fmt.Printf("client %v:%v accepted\n", client, clients[client].Addr)
-
-			go clients[client].RPCServer.ServeConn(conn)
-		}
-		// CLOSURE: emulates how a visor node should react when expecting an AddRules packet.
-		expectAddRules := func(client int, expRule routing.RuleType) {
-			conn, err := clients[client].Listener.Accept()
-			require.NoError(t, err)
-
-			fmt.Printf("client %v:%v accepted\n", client, clients[client].Addr)
-
-			proto := NewSetupProtocol(conn)
-
-			pt, _, err := proto.ReadPacket()
-			require.NoError(t, err)
-			require.Equal(t, PacketRequestRouteID, pt)
-
-			fmt.Printf("client %v:%v got PacketRequestRouteID\n", client, clients[client].Addr)
-
-			routeID := atomic.AddUint32(&nextRouteID, 1)
-
-			// TODO: This error is not checked due to a bug in dmsg.
-			_ = proto.WritePacket(RespSuccess, []routing.RouteID{routing.RouteID(routeID)}) // nolint:errcheck
-			require.NoError(t, err)
-
-			fmt.Printf("client %v:%v responded to with registration ID: %v\n", client, clients[client].Addr, routeID)
-
-			require.NoError(t, conn.Close())
-
-			conn, err = clients[client].Listener.Accept()
-			require.NoError(t, err)
-
-			fmt.Printf("client %v:%v accepted 2nd time\n", client, clients[client].Addr)
-
-			proto = NewSetupProtocol(conn)
-
-			pt, pp, err := proto.ReadPacket()
-			require.NoError(t, err)
-			require.Equal(t, PacketAddRules, pt)
-
-			fmt.Printf("client %v:%v got PacketAddRules\n", client, clients[client].Addr)
-
-			var rs []routing.Rule
-			require.NoError(t, json.Unmarshal(pp, &rs))
-
-			for _, r := range rs {
-				require.Equal(t, expRule, r.Type())
-			}
-
-			// TODO: This error is not checked due to a bug in dmsg.
-			err = proto.WritePacket(RespSuccess, nil)
-			_ = err
-
-			fmt.Printf("client %v:%v responded for PacketAddRules\n", client, clients[client].Addr)
-
-			require.NoError(t, conn.Close())
-
-			addRuleDone.Done()
-		}
-
-		// CLOSURE: emulates how a visor node should react when expecting an OnConfirmLoop packet.
-		expectConfirmLoop := func(client int) {
-			tp, err := clients[client].Listener.AcceptTransport()
-			require.NoError(t, err)
-
-			proto := NewSetupProtocol(tp)
-
-			pt, pp, err := proto.ReadPacket()
-			require.NoError(t, err)
-			require.Equal(t, PacketConfirmLoop, pt)
-
-			var d routing.LoopData
-			require.NoError(t, json.Unmarshal(pp, &d))
-
-			switch client {
-			case 1:
-				require.Equal(t, ld.Loop, d.Loop)
-			case 4:
-				require.Equal(t, ld.Loop.Local, d.Loop.Remote)
-				require.Equal(t, ld.Loop.Remote, d.Loop.Local)
-			default:
-				t.Fatalf("We shouldn't be receiving a OnConfirmLoop packet from client %d", client)
-			}
-
-			// TODO: This error is not checked due to a bug in dmsg.
-			err = proto.WritePacket(RespSuccess, nil)
-			_ = err
-
-			require.NoError(t, tp.Close())
-		}
-
-		// since the route establishment is asynchronous,
-		// we must expect all the messages in parallel
-		addRuleDone.Add(4)
-		go expectAddRules(4, routing.RuleApp)
-		go expectAddRules(3, routing.RuleForward)
-		go expectAddRules(2, routing.RuleForward)
-		go expectAddRules(1, routing.RuleForward)
-		addRuleDone.Wait()
-		fmt.Println("FORWARD ROUTE DONE")
-		addRuleDone.Add(4)
-		go expectAddRules(1, routing.RuleApp)
-		go expectAddRules(2, routing.RuleForward)
-		go expectAddRules(3, routing.RuleForward)
-		go expectAddRules(4, routing.RuleForward)
-		addRuleDone.Wait()
-		fmt.Println("REVERSE ROUTE DONE")
-		expectConfirmLoop(1)
-		expectConfirmLoop(4)
 	})
 
 	// TEST: Emulates the communication between 2 visor nodes and a setup nodes,
