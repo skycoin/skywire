@@ -1,0 +1,95 @@
+@import "variables";
+@import "utilities/theme";
+@import "~bootstrap/scss/functions";
+@import "~bootstrap/scss/mixins/text-truncate";
+
+$responsive-table-colors: (
+  // Background, background:hover, font color
+  white: (theme-color(white), theme-color(white-hover), theme-color(light-gray)),
+  translucid: (transparent, theme-color(translucid-hover), theme-color(white)),
+  abs-white: (white, theme-color(white-hover), theme-color(black))
+);
+
+@each $name, $colors in $responsive-table-colors {
+
+  .responsive-table-#{$name} {
+    background: nth($colors, 1) !important;
+    margin-left: auto;
+    margin-right: auto;
+    border-collapse: separate !important;
+    width: 100%;
+    word-break: break-all;
+    color: nth($colors, 3) !important;
+
+    td, th {
+      color: nth($colors, 3) !important;
+      padding: 12px 10px !important;
+      border-bottom: 1px solid $separator;
+    }
+
+    th {
+      @extend .font-title;
+      @include text-truncate;
+      height: 48px;
+    }
+
+    td {
+      @extend .font-smaller;
+    }
+
+    tr {
+      &:last-of-type {
+        td, th {
+          border-bottom: none;
+        }
+      }
+
+      .sortable-column {
+        @extend .selectable;
+      
+        mat-icon {
+          display: inline;
+          position: relative;
+          top: 2px;
+        }
+      }      
+    }
+
+    .selectable {
+      cursor: pointer;
+
+      &:hover
+      {
+        background: nth($colors, 2) !important;
+      }
+    }
+
+    .full-box {
+      &:first-of-type {
+        td {
+          border-top-left-radius: $mat-dialog-radius;
+          border-top-right-radius: $mat-dialog-radius;
+        }
+      }
+
+      &:last-of-type {
+        td {
+          border-bottom-left-radius: $mat-dialog-radius;
+          border-bottom-right-radius: $mat-dialog-radius;
+        }
+      }
+    }
+
+    .list-row {
+      margin-bottom: 5px;
+
+      &:last-of-type {
+        margin-bottom: 0px;
+      }
+
+      .title {
+        @extend .font-title;
+      }
+    }
+  }
+}

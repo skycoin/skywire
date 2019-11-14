@@ -103,21 +103,21 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
   }
 
-  nodeStatusClass(node: Node): string {
+  nodeStatusClass(node: Node, forTooltip: boolean): string {
     switch (node.online) {
       case true:
-        return 'dot-green';
+        return forTooltip ? 'dot-green' : 'green-text';
       default:
-        return 'dot-red';
+        return forTooltip ? 'dot-red' : 'red-text';
     }
   }
 
-  nodeStatusTooltip(node: Node): string {
+  nodeStatusText(node: Node, forTooltip: boolean): string {
     switch (node.online) {
       case true:
-        return 'node.statuses.online-tooltip';
+        return 'node.statuses.online' + (forTooltip ? '-tooltip' : '');
       default:
-        return 'node.statuses.offline-tooltip';
+        return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
     }
   }
 

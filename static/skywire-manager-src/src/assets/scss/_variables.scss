@@ -18,6 +18,8 @@ $light-gray: #777;
 
 $nav-bg: rgba(255, 255, 255, 0.1);
 
+$separator: rgba(0, 0, 0, 0.12);
+
 $theme-colors: (
   green:              $green,
   red:                $red,
@@ -29,7 +31,7 @@ $theme-colors: (
   translucid-white:   rgba(255, 255, 255, .44),
   translucid-dark:    rgba(21, 75, 108, .91),
   white:              $white,
-  white-hover:        darken($white, 5%),
+  white-hover:        darken($white, 2%),
   light-gray:         $light-gray,
   black:              $black,
   yellow:             #CAB862

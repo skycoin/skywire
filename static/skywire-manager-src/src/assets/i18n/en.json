@@ -102,7 +102,7 @@
     "title": "Visor list",
     "settings": "Settings",
     "logout": "Logout",
-    "running": "Running",
+    "state": "State",
     "label": "Label",
     "view-node": "View node",
     "delete-node": "Delete node",

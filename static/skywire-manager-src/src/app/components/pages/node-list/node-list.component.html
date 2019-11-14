@@ -9,7 +9,6 @@
   </div>
   <app-loading-indicator class="full-height"></app-loading-indicator>
 </div>
-
 <div *ngIf="!loading" class="row">
   <div class="col-12">
     <app-tab-bar
@@ -26,42 +25,35 @@
   <div class="col-12">
     <div class="node-list-container mt-4.5">
       <table
-        class="table-white container-elevated-white"
-        mat-table
-        [dataSource]="dataSource"
+        class="responsive-table-white container-elevated-white d-none d-md-table"
         *ngIf="dataSource.data.length > 0"
+        cellspacing="0" cellpadding="0"
       >
-        <ng-container matColumnDef="enabled">
-          <th mat-header-cell *matHeaderCellDef class="bold"></th>
-          <td mat-cell *matCellDef="let node;">
-            <span [class]="nodeStatusClass(node)" [matTooltip]="nodeStatusTooltip(node) | translate"></span>
-          </td>
-        </ng-container>
 
-        <ng-container matColumnDef="label">
-          <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
+        <tr>
+          <th></th>
+          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
             {{ 'nodes.label' | translate }}
             <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
-          <td id="nodeLabel" mat-cell *matCellDef="let node;">
-            {{ node.label }}
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="key">
-          <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
+          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
             {{ 'common.key' | translate }}
             <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
-          <td class="node-key" mat-cell *matCellDef="let node;">
-            <app-truncated-text [short]="false" [text]="node.local_pk" class="d-none d-md-block"></app-truncated-text>
-            <app-truncated-text [short]="true" [text]="node.local_pk" class="d-md-none nowrap"></app-truncated-text>
-          </td>
-        </ng-container>
+          <th class="actions"></th>
+        </tr>
 
-        <ng-container matColumnDef="actions">
-          <th mat-header-cell *matHeaderCellDef></th>
-          <td mat-cell *matCellDef="let node;" (click)="$event.stopPropagation()" class="actions">
+        <tr *ngFor="let node of dataSource.data" (click)="open(node)" class="selectable">
+          <td>
+            <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+          </td>
+          <td>
+            {{ node.label }}
+          </td>
+          <td>
+            {{ node.local_pk }}
+          </td>
+          <td (click)="$event.stopPropagation()" class="actions">
             <button (click)="showEditLabelDialog(node)" mat-icon-button [matTooltip]="'edit-label.title' | translate">
               <mat-icon>short_text</mat-icon>
             </button>
@@ -82,84 +74,43 @@
               <mat-icon>close</mat-icon>
             </button>
           </td>
-        </ng-container>
-
-        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-        <tr mat-row *matRowDef="let node; columns: displayedColumns;" (click)="open(node)" class="cursor-pointer"></tr>
+        </tr>
       </table>
 
-      <div class="nodes-empty table-white container-elevated-white" *ngIf="dataSource.data.length === 0">
+      <table
+        class="responsive-table-white container-elevated-white d-md-none nowrap"
+        *ngIf="dataSource.data.length > 0"
+        cellspacing="0" cellpadding="0"
+      >
+        <tr *ngFor="let node of dataSource.data" (click)="open(node)" class="selectable full-box"><td>
+          <div class="list-item-container">
+            <div class="left-part">
+              <div class="list-row">
+                <span class="title">{{ 'nodes.state' | translate }}</span>:
+                <span [class]="nodeStatusClass(node, false) + ' title'">{{ nodeStatusText(node, false) | translate }}</span>
+              </div>
+              <div class="list-row">
+                <span class="title">{{ 'nodes.label' | translate }}</span>:
+                {{ node.label }}
+              </div>
+              <div class="list-row">
+                <span class="title">{{ 'common.key' | translate }}</span>:
+                {{ node.local_pk }}
+              </div>
+            </div>
+            <div class="right-part">
+              <button (click)="$event.stopPropagation(); showEditLabelDialog(node)" mat-icon-button [matTooltip]="'edit-label.title' | translate">
+                <mat-icon>short_text</mat-icon>
+              </button>
+            </div>
+          </div>
+        </td></tr>
+      </table>
+
+      <div class="nodes-empty container-elevated-white" *ngIf="dataSource.data.length === 0">
         <i class="material-icons">warning</i>
-        {{ 'nodes.empty' | translate }}
+        <span>{{ 'nodes.empty' | translate }}</span>
       </div>
     </div>
   </div>
 </div>
-
-<!--<app-toolbar>-->
-<!--<app-button (action)="refresh()" icon="refresh" #refreshButton>{{ 'nodes.refresh' | translate }}</app-button>-->
-<!--</app-toolbar>-->
-<!--<div class="container-fluid mt-5">-->
-<!--<div class="row">-->
-  <!--<div class="col-md-1"></div>-->
-  <!--<div class="col-md-10">-->
-    <!--<div class="node-list-container">-->
-      <!--<table-->
-        <!--class="table-white container-elevated-white"-->
-        <!--mat-table-->
-        <!--[dataSource]="dataSource"-->
-        <!--*ngIf="dataSource.data.length > 0"-->
-      <!--&gt;-->
-        <!--<ng-container matColumnDef="enabled">-->
-          <!--<th mat-header-cell *matHeaderCellDef class="bold"></th>-->
-          <!--<td mat-cell *matCellDef="let node;">-->
-            <!--&lt;!&ndash;<span [class]="nodeStatusClass(node)" [matTooltip]="'node.statuses.' + node.status + '-tooltip' | translate"></span>&ndash;&gt;-->
-            <!--<span class="dot-green"></span>-->
-          <!--</td>-->
-        <!--</ng-container>-->
-
-        <!--<ng-container matColumnDef="index">-->
-          <!--<th mat-header-cell *matHeaderCellDef class="bold">#</th>-->
-          <!--<td id="nodeIndex" mat-cell *matCellDef="let node;let i=index;" class="bold">{{i+1}}</td>-->
-        <!--</ng-container>-->
-
-        <!--<ng-container matColumnDef="label">-->
-          <!--<th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.ip' | translate }}</th>-->
-          <!--<td id="nodeLabel" mat-cell *matCellDef="let node;">-->
-            <!--192.168.0.2-->
-          <!--</td>-->
-        <!--</ng-container>-->
-
-        <!--<ng-container matColumnDef="key">-->
-          <!--<th mat-header-cell *matHeaderCellDef class="bold">{{ 'common.key' | translate }}</th>-->
-          <!--<td class="node-key" mat-cell *matCellDef="let node;">-->
-            <!--<div class="cover"></div>-->
-            <!--<app-copy-to-clipboard-text [text]="node.local_pk"></app-copy-to-clipboard-text>-->
-          <!--</td>-->
-        <!--</ng-container>-->
-
-        <!--<ng-container matColumnDef="actions">-->
-          <!--<th mat-header-cell *matHeaderCellDef></th>-->
-          <!--<td mat-cell *matCellDef="let node;" (click)="$event.stopPropagation()" class="actions">-->
-            <!--<button-->
-              <!--(click)="open(node)"-->
-              <!--mat-icon-button-->
-              <!--[matTooltip]="'nodes.view-node' | translate"-->
-            <!--&gt;-->
-              <!--<mat-icon>chevron_right</mat-icon>-->
-            <!--</button>-->
-          <!--</td>-->
-        <!--</ng-container>-->
-
-        <!--<tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>-->
-        <!--<tr mat-row *matRowDef="let node; columns: displayedColumns;" (click)="open(node)" class="cursor-pointer"></tr>-->
-      <!--</table>-->
-
-      <!--<div class="nodes-empty table-white container-elevated-white" *ngIf="dataSource.data.length === 0">-->
-        <!--<i class="material-icons">warning</i>-->
-        <!--{{ 'nodes.empty' | translate }}-->
-      <!--</div>-->
-    <!--</div>-->
-  <!--</div>-->
-  <!--<div class="col-md-1"></div>-->
-<!--</div>-->

@@ -47,6 +47,12 @@ span
   @extend .font-weight-light;
 }
 
+.font-title
+{
+  @extend .font-size-sm;
+  font-weight: bold;
+}
+
 .font-smaller
 {
   @extend .font-size-smaller;

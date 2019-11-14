@@ -1,29 +1,12 @@
 @import "variables";
+@import "text";
 @import "utilities/theme";
 @import "~bootstrap/scss/functions";
 @import "bootstrap_overrides";
 
-.mat-app-background {
-  padding: 0;
-}
-
-.reload-icon {
-  width: 20px;
-  cursor: pointer;
-}
-
-.node-list-container
-{
+.node-list-container {
   width: 100%;
   overflow-x: auto;
-
-  .mat-form-field-infix{
-    width: 50px !important;
-  }
-
-  .bold {
-    font-weight: bold;
-  }
 
   table, .nodes-empty {
     box-shadow: none !important;
@@ -31,71 +14,67 @@
 
   .nodes-empty {
     color: theme-color(light-gray);
-    font-size: 13px;
+    @extend .font-size-sm;
 
     i {
       display: inline-block;
       vertical-align: middle;
       margin-right: 10px;
     }
-  }
-}
 
-.actions {
-  text-align: right;
-
-  button {
-    width: 24px;
-    height: 24px;
-    line-height: 24px;
-
-    &:last-child {
-      margin-left: 15px;
+    span {
+      position: relative;
+      top: 2px;
     }
   }
 }
 
-.table-white {
-  padding: 15px 30px;
+.responsive-table-white {
+  @media (max-width: map-get($grid-breakpoints, md)) {
+    & {
+      padding: 0;
+    }
+  }
+
+  .actions {
+    text-align: right;
+    width: 110px;
+  
+    button {
+      width: 32px;
+      height: 32px;
+      line-height: 24px;
+  
+      &:last-child {
+        margin-left: 15px;
+      }
+    }
+  }
 }
 
-.node-key {
-  position: relative;
-}
-
-.none {
-  color: lighten(theme-color(light-gray), 20%);
-}
-
-nav {
-  width: 285px;
-  height: 100vh;
-  position: fixed;
+.list-item-container {
   display: flex;
-  flex-direction: column;
-  padding: 15px;
-  background: $nav-bg;
+  padding: 10px 15px;
+  padding-right: 0px;
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
+  .left-part {
+    flex-grow: 1;
   }
 
-  @media (max-width: map-get($grid-breakpoints, md)) {
-    position: static;
-    width: 100%;
-    height: auto;
+  .right-part {
+    width: 60px;
+
+    button {
+      width: 60px;
+      height: 60px;
+    }
   }
 }
 
-.node-detail {
-  width: calc(100vw - 300px);
-  margin-left: 300px;
+.green-text {
+  color: $green;
+}
 
-  @media (max-width: map-get($grid-breakpoints, md)) {
-    width: 100%;
-    margin-left: 0;
-  }
+.reed-text {
+  color: $red;
 }
