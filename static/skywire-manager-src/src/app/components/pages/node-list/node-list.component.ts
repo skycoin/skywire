@@ -3,7 +3,6 @@ import { NodeService } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { Subscription, of, timer } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -32,8 +31,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   loading = true;
-  dataSource = new MatTableDataSource<Node>();
-  displayedColumns: string[] = ['enabled', 'label', 'key', 'actions'];
+  dataSource: Node[];
   tabsData: TabButtonData[] = [];
 
   private dataSubscription: Subscription;
@@ -146,7 +144,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       ).subscribe(
         (nodes: Node[]) => {
           this.ngZone.run(() => {
-            this.dataSource.data = nodes;
+            this.dataSource = nodes;
             this.sortList();
             this.loading = false;
             this.snackbarService.closeCurrentIfTemporalError();
@@ -183,7 +181,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   private sortList() {
-    this.dataSource.data = this.dataSource.data.sort((a, b) => {
+    this.dataSource = this.dataSource.sort((a, b) => {
       const defaultOrder = a.local_pk.localeCompare(b.local_pk);
 
       let response: number;

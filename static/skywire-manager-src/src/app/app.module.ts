@@ -101,6 +101,7 @@ import { InitialSetupComponent } from './components/pages/login/initial-setup/in
 import { SelectLanguageComponent } from './components/layout/select-language/select-language.component';
 import { LangButtonComponent } from './components/layout/lang-button/lang-button.component';
 import { TruncatedTextComponent } from './components/layout/truncated-text/truncated-text.component';
+import { SelectTabComponent } from './components/layout/tab-bar/select-tab/select-tab.component';
 
 @NgModule({
   declarations: [
@@ -176,6 +177,7 @@ import { TruncatedTextComponent } from './components/layout/truncated-text/trunc
     SelectLanguageComponent,
     LangButtonComponent,
     TruncatedTextComponent,
+    SelectTabComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -200,6 +202,7 @@ import { TruncatedTextComponent } from './components/layout/truncated-text/trunc
     SnackbarComponent,
     InitialSetupComponent,
     SelectLanguageComponent,
+    SelectTabComponent,
   ],
   imports: [
     BrowserModule,

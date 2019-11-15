@@ -6,7 +6,7 @@
     </span>
   </div>
   <div class="lower-container">
-    <div *ngFor="let tabData of tabsData; let i = index" class="button-container">
+    <div *ngFor="let tabData of tabsData; let i = index" class="button-container d-none d-md-inline-block">
       <a
         mat-button
         class="tab-button white-theme"
@@ -14,11 +14,24 @@
         [disableRipple]="true"
         [routerLink]="tabData.linkParts"
         replaceUrl
-        [ngClass]="{'mouse-disabled' : disableMouse}"
+        [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
         >
         <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
         <span>{{ tabData.label | translate }}</span>
       </a>
+    </div>
+    <div class="button-container d-md-none">
+      <button
+        mat-button
+        class="tab-button full-opacity white-theme"
+        [disableRipple]="true"
+        [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
+        (click)="openTabSelector()"
+        >
+        <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
+        <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
+        <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+      </button>
     </div>
     <div class="blank-space"></div>
     <div>

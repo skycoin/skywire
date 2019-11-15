@@ -1,6 +1,9 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { LanguageService } from 'src/app/services/language.service';
 import { Subscription } from 'rxjs';
+import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { SelectTabComponent } from './select-tab/select-tab.component';
+import { Router } from '@angular/router';
 
 export interface TabButtonData {
   linkParts: string[];
@@ -34,6 +37,8 @@ export class TabBarComponent implements OnInit, OnDestroy {
 
   constructor(
     private languageService: LanguageService,
+    private dialog: MatDialog,
+    private router: Router,
   ) { }
 
   ngOnInit() {
@@ -52,5 +57,20 @@ export class TabBarComponent implements OnInit, OnDestroy {
 
   sendRefreshEvent() {
     this.refreshRequested.emit();
+  }
+
+  openTabSelector() {
+    const config = new MatDialogConfig();
+    config.data = this.tabsData;
+    config.autoFocus = false;
+    config.width = '480px';
+    this.dialog.open(SelectTabComponent, config).afterClosed().subscribe((result: number) => {
+      if (result) {
+        result -= 1;
+        if (result !== this.selectedTabIndex) {
+          this.router.navigate(this.tabsData[result].linkParts, {replaceUrl: true});
+        }
+      }
+    });
   }
 }

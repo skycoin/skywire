@@ -26,7 +26,7 @@
     <div class="node-list-container mt-4.5">
       <table
         class="responsive-table-white container-elevated-white d-none d-md-table"
-        *ngIf="dataSource.data.length > 0"
+        *ngIf="dataSource.length > 0"
         cellspacing="0" cellpadding="0"
       >
 
@@ -43,7 +43,7 @@
           <th class="actions"></th>
         </tr>
 
-        <tr *ngFor="let node of dataSource.data" (click)="open(node)" class="selectable">
+        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable">
           <td>
             <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
           </td>
@@ -54,7 +54,12 @@
             {{ node.local_pk }}
           </td>
           <td (click)="$event.stopPropagation()" class="actions">
-            <button (click)="showEditLabelDialog(node)" mat-icon-button [matTooltip]="'edit-label.title' | translate">
+            <button
+              (click)="showEditLabelDialog(node)"
+              mat-icon-button [matTooltip]="'edit-label.title' | translate"
+              [disableRipple]="true"
+              class="grey-button-background"
+            >
               <mat-icon>short_text</mat-icon>
             </button>
             <button
@@ -62,6 +67,8 @@
               (click)="open(node)"
               mat-icon-button
               [matTooltip]="'nodes.view-node' | translate"
+              [disableRipple]="true"
+              class="grey-button-background"
             >
               <mat-icon>chevron_right</mat-icon>
             </button>
@@ -70,6 +77,8 @@
               (click)="deleteNode(node)"
               mat-icon-button
               [matTooltip]="'nodes.delete-node' | translate"
+              [disableRipple]="true"
+              class="grey-button-background"
             >
               <mat-icon>close</mat-icon>
             </button>
@@ -79,10 +88,10 @@
 
       <table
         class="responsive-table-white container-elevated-white d-md-none nowrap"
-        *ngIf="dataSource.data.length > 0"
+        *ngIf="dataSource.length > 0"
         cellspacing="0" cellpadding="0"
       >
-        <tr *ngFor="let node of dataSource.data" (click)="open(node)" class="selectable full-box"><td>
+        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable full-box"><td>
           <div class="list-item-container">
             <div class="left-part">
               <div class="list-row">
@@ -99,7 +108,13 @@
               </div>
             </div>
             <div class="right-part">
-              <button (click)="$event.stopPropagation(); showEditLabelDialog(node)" mat-icon-button [matTooltip]="'edit-label.title' | translate">
+              <button
+                (click)="$event.stopPropagation(); showEditLabelDialog(node)"
+                mat-icon-button
+                [matTooltip]="'edit-label.title' | translate"
+                [disableRipple]="true"
+                class="grey-button-background"
+              >
                 <mat-icon>short_text</mat-icon>
               </button>
             </div>
@@ -107,7 +122,7 @@
         </td></tr>
       </table>
 
-      <div class="nodes-empty container-elevated-white" *ngIf="dataSource.data.length === 0">
+      <div class="nodes-empty container-elevated-white" *ngIf="dataSource.length === 0">
         <i class="material-icons">warning</i>
         <span>{{ 'nodes.empty' | translate }}</span>
       </div>

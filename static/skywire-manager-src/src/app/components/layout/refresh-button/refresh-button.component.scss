@@ -1,4 +1,5 @@
 @import "variables";
+@import "bootstrap_overrides";
 
 .time-button {
   color: $white;
@@ -19,6 +20,14 @@
     margin-right: 5px;
     opacity: 0.5;
     display: inline-block;
+
+    @media (max-width: map-get($grid-breakpoints, md)) {
+      & {
+        font-size: 22px;
+        margin-right: 0;
+        opacity: 0.75;
+      }
+    }
   }
 
   .alert {

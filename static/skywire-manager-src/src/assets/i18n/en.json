@@ -402,5 +402,9 @@
 
   "language" : {
     "title": "Select language"
+  },
+
+  "tabs-window" : {
+    "title" : "Change tab"
   }
 }
