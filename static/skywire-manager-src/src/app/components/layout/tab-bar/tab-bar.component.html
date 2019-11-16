@@ -6,7 +6,11 @@
     </span>
   </div>
   <div class="lower-container">
-    <div *ngFor="let tabData of tabsData; let i = index" class="button-container d-none d-md-inline-block">
+    <div
+      *ngFor="let tabData of tabsData; let i = index"
+      class="button-container d-none d-md-inline-block"
+      [ngClass]="{'d-xl-none': tabData.notInXl}"
+    >
       <a
         mat-button
         class="tab-button white-theme"

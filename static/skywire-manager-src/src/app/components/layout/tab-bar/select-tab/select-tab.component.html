@@ -6,6 +6,7 @@
         [disableRipple]="true"
         class="grey-button-background"
         (click)="closePopup(i)"
+        [ngClass]="{'d-xl-none': tabData.notInXl}"
         >
         <div class="internal-ontainer">
           <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>

@@ -123,6 +123,7 @@ $top-bar-height: 56px;
 
 .content {
   padding: 20px !important;
+  overflow: hidden;
 
   @media (max-width: map-get($grid-breakpoints, md)) {
     width: 100%;

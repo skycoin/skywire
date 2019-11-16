@@ -102,6 +102,8 @@ import { SelectLanguageComponent } from './components/layout/select-language/sel
 import { LangButtonComponent } from './components/layout/lang-button/lang-button.component';
 import { TruncatedTextComponent } from './components/layout/truncated-text/truncated-text.component';
 import { SelectTabComponent } from './components/layout/tab-bar/select-tab/select-tab.component';
+import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
+import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 
 @NgModule({
   declarations: [
@@ -178,6 +180,8 @@ import { SelectTabComponent } from './components/layout/tab-bar/select-tab/selec
     LangButtonComponent,
     TruncatedTextComponent,
     SelectTabComponent,
+    NodeInfoContentComponent,
+    NodeInfoComponent,
   ],
   entryComponents: [
     ConfigurationComponent,

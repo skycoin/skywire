@@ -159,7 +159,8 @@
 
   "actions": {
     "menu": {
-      "apps": "Applications",
+      "info": "Info",
+      "apps": "Apps",
       "routing": "Routing",
       "nodes": "Nodes",
       "terminal": "Terminal",

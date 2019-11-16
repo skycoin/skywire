@@ -9,6 +9,7 @@ export interface TabButtonData {
   linkParts: string[];
   icon: string;
   label: string;
+  notInXl?: boolean;
 }
 
 @Component({

@@ -6,12 +6,9 @@ import { Subscription } from 'rxjs/internal/Subscription';
 import { of, Observable, ReplaySubject, timer } from 'rxjs';
 import { delay, flatMap, tap } from 'rxjs/operators';
 import { StorageService } from '../../../services/storage.service';
-import TimeUtils from '../../../utils/timeUtils';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { HttpErrorResponse } from '@angular/common/http';
-import { MatDialog } from '@angular/material/dialog';
-import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 
 @Component({
   selector: 'app-node',
@@ -25,13 +22,13 @@ export class NodeComponent implements OnInit, OnDestroy {
 
   showMenu = false;
   node: Node;
-  onlineTimeTextElements = ['seconds', ''];
   notFound = false;
 
   private lastUrl: string;
   titleParts = [];
   tabsData: TabButtonData[] = [];
   selectedTabIndex = -1;
+  showingInfo = false;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -63,7 +60,6 @@ export class NodeComponent implements OnInit, OnDestroy {
     public storageService: StorageService,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
-    private dialog: MatDialog,
   ) {
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
     NodeComponent.currentInstanceInternal = this;
@@ -88,19 +84,21 @@ export class NodeComponent implements OnInit, OnDestroy {
     });
   }
 
-  showEditLabelDialog() {
-    EditLabelComponent.openDialog(this.dialog, this.node).afterClosed().subscribe((changed: boolean) => {
-      if (changed) {
-        this.refresh(0);
-      }
-    });
-  }
-
   private updateTabBar() {
-    if (this.lastUrl && (this.lastUrl.includes('/routing') || (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
+    if (
+      this.lastUrl && (this.lastUrl.includes('/info') ||
+      this.lastUrl.includes('/routing') ||
+      (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
+
       this.titleParts = ['nodes.title', 'node.title'];
 
       this.tabsData = [
+        {
+          icon: 'info',
+          label: 'actions.menu.info',
+          notInXl: true,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'info'] : null,
+        },
         {
           icon: 'shuffle',
           label: 'actions.menu.routing',
@@ -113,9 +111,14 @@ export class NodeComponent implements OnInit, OnDestroy {
         }
       ];
 
-      this.selectedTabIndex = 0;
+      this.selectedTabIndex = 1;
+      this.showingInfo = false;
+      if (this.lastUrl.includes('/info')) {
+        this.selectedTabIndex = 0;
+        this.showingInfo = true;
+      }
       if (this.lastUrl.includes('/apps')) {
-        this.selectedTabIndex = 1;
+        this.selectedTabIndex = 2;
       }
     } else if (
       this.lastUrl && (this.lastUrl.includes('/transports') ||
@@ -161,7 +164,6 @@ export class NodeComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           this.node = node;
           NodeComponent.nodeSubject.next(node);
-          this.onlineTimeTextElements = TimeUtils.getElapsedTimeElements(node.seconds_online);
 
           this.snackbarService.closeCurrentIfTemporalError();
           this.updateTabBar();

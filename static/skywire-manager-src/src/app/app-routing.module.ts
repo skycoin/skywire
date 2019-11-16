@@ -12,6 +12,7 @@ import { SidenavComponent } from './components/layout/sidenav/sidenav.component'
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/node-apps/all-apps/all-apps.component';
+import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 
 const routes: Routes = [
   {
@@ -36,6 +37,10 @@ const routes: Routes = [
             path: '',
             redirectTo: 'routing',
             pathMatch: 'full'
+          },
+          {
+            path: 'info',
+            component: NodeInfoComponent
           },
           {
             path: 'routing',

@@ -45,52 +45,6 @@
   }
 }
 
-.separator
-{
-  width: 0;
-  height: 30px;
-  border: solid 1px theme-color(translucid-white);
-  align-self: center;
-}
-
-.node-right
-{
-  div
-  {
-    display: flex;
-    justify-content: space-between;
-  }
-
-  .section
-  {
-    flex-direction: column;
-
-    .section-title
-    {
-      font-weight: $font-weight-bold;
-      text-transform: uppercase;
-    }
-  }
-}
-
-.info-line {
-  word-break: break-all;
-  margin-top: 7px;
-
-  mat-icon {
-    position: relative;
-    top: 2px;
-  }
-
-  i {
-    margin-left: 7px;
-  }
-
-  .title {
-    opacity: 0.75;
-  }
-}
-
 .not-found-label {
   align-items: center;
   justify-content: center;
@@ -103,8 +57,4 @@
     opacity: 0.5;
     margin-right: 3px;
   }
-}
-
-.edit-label-icon {
-  cursor: pointer;
 }
