@@ -1,5 +1,5 @@
 import { Component, Input, OnDestroy } from '@angular/core';
-import { MatDialog, MatDialogConfig, MatDialogRef } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatTableDataSource } from '@angular/material/table';
 import { Route } from 'src/app/app.datatypes';
 import { RouteService } from '../../../../../services/route.service';
@@ -125,11 +125,7 @@ export class RouteListComponent implements OnDestroy {
   }
 
   details(route: string) {
-    const config = new MatDialogConfig();
-    config.data = route;
-    config.autoFocus = false;
-    config.width = '1000px';
-    this.dialog.open(RouteDetailsComponent, config);
+    RouteDetailsComponent.openDialog(this.dialog, route);
   }
 
   delete(routeKey: number) {

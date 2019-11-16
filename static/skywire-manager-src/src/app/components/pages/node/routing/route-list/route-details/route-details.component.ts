@@ -1,10 +1,11 @@
 import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
-import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
 import { RouteService } from '../../../../../../services/route.service';
 import { NodeComponent } from '../../../node.component';
 import { delay, flatMap } from 'rxjs/operators';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
+import { AppConfig } from 'src/app/app.config';
 
 class RouteRule {
   key:  string;
@@ -46,6 +47,15 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
     [0, 'App'],
     [1, 'Forward']
   ]);
+
+  public static openDialog(dialog: MatDialog, data: string): MatDialogRef<RouteDetailsComponent, any> {
+    const config = new MatDialogConfig();
+    config.data = data;
+    config.autoFocus = false;
+    config.width = AppConfig.largeModalWidth;
+
+    return dialog.open(RouteDetailsComponent, config);
+  }
 
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: string,

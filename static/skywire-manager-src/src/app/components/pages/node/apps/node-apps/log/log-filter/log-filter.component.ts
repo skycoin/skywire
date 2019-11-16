@@ -1,7 +1,8 @@
 import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
+import { AppConfig } from 'src/app/app.config';
 
 export interface LogsFilter {
   text: string;
@@ -18,6 +19,15 @@ export class LogFilterComponent implements OnInit, OnDestroy {
   form: FormGroup;
 
   private formSubscription: Subscription;
+
+  public static openDialog(dialog: MatDialog, data: LogsFilter): MatDialogRef<LogFilterComponent, any> {
+    const config = new MatDialogConfig();
+    config.data = data;
+    config.autoFocus = false;
+    config.width = AppConfig.smallModalWidth;
+
+    return dialog.open(LogFilterComponent, config);
+  }
 
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: LogsFilter,

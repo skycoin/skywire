@@ -1,12 +1,13 @@
 import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { AppsService } from '../../../../../../services/apps.service';
 import { LogMessage, Application } from '../../../../../../app.datatypes';
-import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
 import { NodeComponent } from '../../../node.component';
 import { delay, flatMap } from 'rxjs/operators';
 import { LogFilterComponent, LogsFilter } from './log-filter/log-filter.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
+import { AppConfig } from 'src/app/app.config';
 
 @Component({
   selector: 'app-log',
@@ -26,6 +27,15 @@ export class LogComponent implements OnInit, OnDestroy {
   private shouldShowError = true;
   private subscription: Subscription;
 
+  public static openDialog(dialog: MatDialog, data: Application): MatDialogRef<LogComponent, any> {
+    const config = new MatDialogConfig();
+    config.data = data;
+    config.autoFocus = false;
+    config.width = AppConfig.largeModalWidth;
+
+    return dialog.open(LogComponent, config);
+  }
+
   constructor(
     @Inject(MAT_DIALOG_DATA) private data: Application,
     private appsService: AppsService,
@@ -43,11 +53,7 @@ export class LogComponent implements OnInit, OnDestroy {
   }
 
   filter() {
-    const config = new MatDialogConfig();
-    config.data = this.currentFilter;
-    config.autoFocus = false;
-    config.width = '480px';
-    this.dialog.open(LogFilterComponent, config).afterClosed().subscribe(result => {
+    LogFilterComponent.openDialog(this.dialog, this.currentFilter).afterClosed().subscribe(result => {
       if (result) {
         this.currentFilter = result;
         this.logMessages = [];

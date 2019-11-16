@@ -1,8 +1,8 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Application } from '../../../../../../app.datatypes';
-import { MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatTableDataSource } from '@angular/material/table';
-import {AppsService} from '../../../../../../services/apps.service';
+import { AppsService } from '../../../../../../services/apps.service';
 import { LogComponent } from '../log/log.component';
 import { NodeComponent } from '../../../node.component';
 import { Observable, Subscription } from 'rxjs';
@@ -215,11 +215,7 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   viewLogs(app: Application): void {
-    const config = new MatDialogConfig();
-    config.data = app;
-    config.autoFocus = false;
-    config.width = '1000px';
-    this.dialog.open(LogComponent, config);
+    LogComponent.openDialog(this.dialog, app);
   }
 
   changeSortingOrder(column: SortableColumns) {

@@ -7,7 +7,7 @@ import {
 import { SidenavService } from '../../../services/sidenav.service';
 import { LanguageService, LanguageData } from 'src/app/services/language.service';
 import { Subscription } from 'rxjs';
-import { MatDialogConfig, MatDialog } from '@angular/material/dialog';
+import { MatDialog } from '@angular/material/dialog';
 import { SelectLanguageComponent } from '../select-language/select-language.component';
 
 @Component({
@@ -52,9 +52,6 @@ export class SidenavComponent implements OnInit, OnDestroy {
   }
 
   openLanguageWindow() {
-    const config = new MatDialogConfig();
-    config.autoFocus = false;
-    config.width = '600px';
-    this.dialog.open(SelectLanguageComponent, config);
+    SelectLanguageComponent.openDialog(this.dialog);
   }
 }

@@ -15,4 +15,8 @@ export const AppConfig = {
     },
   ],
   defaultLanguage: 'en',
+
+  smallModalWidth: '480px',
+  mediumModalWidth: '640px',
+  largeModalWidth: '900px',
 };

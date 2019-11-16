@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import {NodeService} from '../../../../../services/node.service';
-import { MatDialogRef } from '@angular/material/dialog';
+import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { AppConfig } from 'src/app/app.config';
 
 @Component({
   selector: 'app-update-node',
@@ -11,6 +12,14 @@ export class UpdateNodeComponent implements OnInit {
   updateError = false;
   isLoading = false;
   isUpdateAvailable = false;
+
+  public static openDialog(dialog: MatDialog): MatDialogRef<UpdateNodeComponent, any> {
+    const config = new MatDialogConfig();
+    config.autoFocus = false;
+    config.width = AppConfig.mediumModalWidth;
+
+    return dialog.open(UpdateNodeComponent, config);
+  }
 
   constructor(
     private nodeService: NodeService,

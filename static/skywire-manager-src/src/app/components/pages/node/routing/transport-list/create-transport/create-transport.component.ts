@@ -1,13 +1,14 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/core';
 import { TransportService } from '../../../../../../services/transport.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatDialogRef } from '@angular/material/dialog';
+import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ButtonComponent } from '../../../../../layout/button/button.component';
 import { NodeComponent } from '../../../node.component';
 import { Subscription, of } from 'rxjs';
 import { delay, flatMap } from 'rxjs/operators';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
+import { AppConfig } from 'src/app/app.config';
 
 @Component({
   selector: 'app-create-transport',
@@ -22,6 +23,14 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
   private shouldShowError = true;
   private dataSubscription: Subscription;
+
+  public static openDialog(dialog: MatDialog): MatDialogRef<CreateTransportComponent, any> {
+    const config = new MatDialogConfig();
+    config.autoFocus = false;
+    config.width = AppConfig.mediumModalWidth;
+
+    return dialog.open(CreateTransportComponent, config);
+  }
 
   constructor(
     private transportService: TransportService,

@@ -205,9 +205,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   showEditLabelDialog(node: Node) {
-    this.dialog.open(EditLabelComponent, {
-      data: node,
-    }).afterClosed().subscribe((changed: boolean) => {
+    EditLabelComponent.openDialog(this.dialog, node).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
         this.refresh(0);
       }

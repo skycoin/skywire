@@ -1,8 +1,8 @@
 import { Component, Input, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
-import {Node, NodeFeedback} from '../../../../../../app.datatypes';
-import {LogComponent} from '../log/log.component';
+import { Node, NodeFeedback } from '../../../../../../app.datatypes';
+import { LogComponent } from '../log/log.component';
 import { MatDialog } from '@angular/material/dialog';
-import {AppsService} from '../../../../../../services/apps.service';
+import { AppsService } from '../../../../../../services/apps.service';
 import { TranslateService } from '@ngx-translate/core';
 import { ButtonComponent } from '../../../../../layout/button/button.component';
 
@@ -48,11 +48,7 @@ export class NodeAppButtonComponent implements OnChanges {
   }
 
   showLog() {
-    this.dialog.open(LogComponent, {
-      data: {
-        app: this.app,
-      }
-    });
+    LogComponent.openDialog(this.dialog, this.app);
   }
 
   ngOnChanges(changes: SimpleChanges): void {

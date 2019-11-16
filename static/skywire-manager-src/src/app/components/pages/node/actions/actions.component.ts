@@ -98,7 +98,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   update() {
-    this.dialog.open(UpdateNodeComponent).afterClosed().subscribe((updated) => {
+    UpdateNodeComponent.openDialog(this.dialog).afterClosed().subscribe((updated) => {
       if (updated) {
         this.snackbarService.showDone('actions.update.update-success');
       }
@@ -106,15 +106,12 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   configuration() {
-    this.dialog.open(ConfigurationComponent, {data: {}});
+    ConfigurationComponent.openDialog(this.dialog, {});
   }
 
   terminal() {
-    this.dialog.open(BasicTerminalComponent, {
-      width: '1000px',
-      data: {
-        pk: NodeComponent.getCurrentNodeKey(),
-      },
+    BasicTerminalComponent.openDialog(this.dialog, {
+      pk: NodeComponent.getCurrentNodeKey(),
     });
   }
 

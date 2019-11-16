@@ -1,10 +1,15 @@
 import { Component, ElementRef, Inject, OnDestroy, ViewChild, Renderer2, HostListener, AfterViewInit } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { ApiService } from '../../../../../services/api.service';
+import { AppConfig } from 'src/app/app.config';
 
 declare const Terminal: any;
+
+export interface BasicTerminalData {
+  pk: string;
+}
 
 @Component({
   selector: 'app-basic-terminal',
@@ -20,6 +25,15 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
   private history: string[] = [];
   private historyIndex = 0;
   private currentInputText = '';
+
+  public static openDialog(dialog: MatDialog, data: BasicTerminalData): MatDialogRef<BasicTerminalComponent, any> {
+    const config = new MatDialogConfig();
+    config.data = data;
+    config.autoFocus = false;
+    config.width = AppConfig.largeModalWidth;
+
+    return dialog.open(BasicTerminalComponent, config);
+  }
 
   @HostListener('window:keyup', ['$event'])
   keyEvent(event: KeyboardEvent) {

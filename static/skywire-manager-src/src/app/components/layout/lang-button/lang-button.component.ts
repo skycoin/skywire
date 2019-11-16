@@ -1,7 +1,7 @@
-import { Component, Input, OnDestroy, OnInit, HostBinding } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { LanguageService, LanguageData } from '../../../services/language.service';
 import { Subscription } from 'rxjs';
-import { MatDialogConfig, MatDialog } from '@angular/material/dialog';
+import { MatDialog } from '@angular/material/dialog';
 import { SelectLanguageComponent } from '../select-language/select-language.component';
 
 @Component({
@@ -30,9 +30,6 @@ export class LangButtonComponent implements OnInit, OnDestroy {
   }
 
   openLanguageWindow() {
-    const config = new MatDialogConfig();
-    config.autoFocus = false;
-    config.width = '600px';
-    this.dialog.open(SelectLanguageComponent, config);
+    SelectLanguageComponent.openDialog(this.dialog);
   }
 }

@@ -1,6 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Transport } from '../../../../../app.datatypes';
-import { MatDialog, MatDialogRef, MatDialogConfig } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatTableDataSource } from '@angular/material/table';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
@@ -129,15 +129,11 @@ export class TransportListComponent implements OnDestroy {
   }
 
   create() {
-    this.dialog.open(CreateTransportComponent);
+    CreateTransportComponent.openDialog(this.dialog);
   }
 
   details(transport: Transport) {
-    const config = new MatDialogConfig();
-    config.data = transport;
-    config.autoFocus = false;
-    config.width = '1000px';
-    this.dialog.open(TransportDetailsComponent, config);
+    TransportDetailsComponent.openDialog(this.dialog, transport);
   }
 
   delete(id: string) {
