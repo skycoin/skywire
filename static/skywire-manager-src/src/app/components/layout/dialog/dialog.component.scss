@@ -1,4 +1,5 @@
 @import 'variables';
+@import "bootstrap_overrides";
 
 :host
 {
@@ -16,6 +17,12 @@
     align-items: center;
     background-color: white;
 
+    @media (max-width: map-get($grid-breakpoints, md)) {
+      & {
+        padding: 0px 2px 0px $mat-dialog-padding;
+      }
+    }
+
     span {
       line-height: 16px;
       text-overflow: ellipsis;
@@ -31,6 +38,13 @@
       height: 32px;
       line-height: 20px;
       margin-left: 10px;
+
+      @media (max-width: map-get($grid-breakpoints, md)) {
+        & {
+          width: 46px;
+          height: 46px;
+        }
+      }
     }
   }
 }

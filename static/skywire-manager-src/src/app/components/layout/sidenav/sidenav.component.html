@@ -14,7 +14,7 @@
         <ng-container *ngIf="sidenavService.upperContents">
           <ng-container *ngFor="let content of sidenavService.upperContents">
             <div mat-menu-item (click)="requestAction(content.actionName)" [disabled]="content.disabled">
-              <mat-icon>{{ content.icon }}</mat-icon> {{ content.name | translate }}
+              <mat-icon [ngClass]="{'transparent': content.disabled}">{{ content.icon }}</mat-icon> {{ content.name | translate }}
             </div>
           </ng-container>
         </ng-container>
