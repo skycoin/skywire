@@ -16,7 +16,6 @@ const rpcName = "RPCGateway"
 
 // Client is an RPC client for router.
 type Client struct {
-	s   *dmsg.Stream
 	rpc *rpc.Client
 }
 
@@ -30,7 +29,6 @@ func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Clie
 	fmt.Printf("Dialed to %s\n", pk) // TODO: remove debug logging
 
 	client := &Client{
-		s:   s,
 		rpc: rpc.NewClient(s.Conn),
 	}
 	return client, nil
@@ -40,10 +38,6 @@ func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Clie
 func (c *Client) Close() error {
 	if c == nil {
 		return nil
-	}
-
-	if err := c.s.Close(); err != nil {
-		return err
 	}
 
 	if err := c.rpc.Close(); err != nil {
