@@ -29,7 +29,7 @@ func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Clie
 	fmt.Printf("Dialed to %s\n", pk) // TODO: remove debug logging
 
 	client := &Client{
-		rpc: rpc.NewClient(s.Conn),
+		rpc: rpc.NewClient(s),
 	}
 	return client, nil
 }
