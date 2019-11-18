@@ -318,23 +318,23 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
-	switch t := rule.Type(); t {
-	case routing.RuleForward, routing.RuleIntermediaryForward:
+
+	if t := rule.Type(); t == routing.RuleForward || t == routing.RuleIntermediaryForward {
 		return r.forwardPacket(ctx, packet.Payload(), rule)
-	default: // TODO(nkryuchkov): try to simplify
-		select {
-		case <-rg.done:
-			return io.ErrClosedPipe
-		default:
-			rg.mu.Lock()
-			defer rg.mu.Unlock()
-			select {
-			case rg.readCh <- packet.Payload():
-				return nil
-			case <-rg.done:
-				return io.ErrClosedPipe
-			}
-		}
+	}
+
+	if rg.isClosing() {
+		return io.ErrClosedPipe
+	}
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	select {
+	case <-rg.done:
+		return io.ErrClosedPipe
+	case rg.readCh <- packet.Payload():
+		return nil
 	}
 }
 
