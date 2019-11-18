@@ -2,20 +2,23 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/SkycoinProject/dmsg"
-	cipher "github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/setup"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
@@ -81,7 +84,30 @@ func TestRouter_Serve(t *testing.T) {
 		defer clearRules(r0, r1)
 
 		// Add a FWD rule for r0.
-		fwdRtID, err := r0.rt.ReserveKeys(1)
+		fwdRtID, err := r0.ReserveKeys(1)
+		require.NoError(t, err)
+
+		fwdRule := routing.ForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(5), tp1.Entry.ID, keys[1].PK, 0, 0)
+		err = r0.rt.SaveRule(fwdRule)
+		require.NoError(t, err)
+
+		// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
+		packet := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+		require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
+
+		// r1 should receive the packet handled by r0.
+		recvPacket, err := r1.tm.ReadPacket()
+		assert.NoError(t, err)
+		assert.Equal(t, packet.Size(), recvPacket.Size())
+		assert.Equal(t, packet.Payload(), recvPacket.Payload())
+		assert.Equal(t, fwdRtID, packet.RouteID())
+	})
+
+	t.Run("handlePacket_intFwdRule", func(t *testing.T) {
+		defer clearRules(r0, r1)
+
+		// Add a FWD rule for r0.
+		fwdRtID, err := r0.ReserveKeys(1)
 		require.NoError(t, err)
 
 		fwdRule := routing.IntermediaryForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(5), tp1.Entry.ID)
@@ -101,70 +127,70 @@ func TestRouter_Serve(t *testing.T) {
 	})
 
 	// TODO(evanlinjin): I'm having so much trouble with this I officially give up.
-	//t.Run("handlePacket_appRule", func(t *testing.T) {
-	//	const duration = 10 * time.Second
-	//	// time.AfterFunc(duration, func() {
-	//	// 	panic("timeout")
-	//	// })
-	//
-	//	defer clearRules(r0, r1)
-	//
-	//	// prepare mock-app
-	//	localPort := routing.Port(9)
-	//	cConn, sConn := net.Pipe()
-	//
-	//	// mock-app config
-	//	appConf := &app.Config{
-	//		AppName:         "test_app",
-	//		AppVersion:      "1.0",
-	//		ProtocolVersion: supportedProtocolVersion,
-	//	}
-	//
-	//	// serve mock-app
-	//	// sErrCh := make(chan error, 1)
-	//	go func() {
-	//		// sErrCh <- r0.ServeApp(sConn, localPort, appConf)
-	//		_ = r0.ServeApp(sConn, localPort, appConf)
-	//		// close(sErrCh)
-	//	}()
-	//	// defer func() {
-	//	// 	assert.NoError(t, cConn.Close())
-	//	// 	assert.NoError(t, <-sErrCh)
-	//	// }()
-	//
-	//	a, err := app.New(cConn, appConf)
-	//	require.NoError(t, err)
-	//	// cErrCh := make(chan error, 1)
-	//	go func() {
-	//		conn, err := a.Accept()
-	//		if err == nil {
-	//			fmt.Println("ACCEPTED:", conn.RemoteAddr())
-	//		}
-	//		fmt.Println("FAILED TO ACCEPT")
-	//		// cErrCh <- err
-	//		// close(cErrCh)
-	//	}()
-	//	a.Dial(a.Addr().(routing.Addr))
-	//	// defer func() {
-	//	// 	assert.NoError(t, <-cErrCh)
-	//	// }()
-	//
-	//	// Add a APP rule for r0.
-	//	// port8 := routing.Port(8)
-	//	appRule := routing.AppRule(10*time.Minute, 0, routing.RouteID(7), keys[1].PK, localPort, localPort)
-	//	appRtID, err := r0.rm.rt.AddRule(appRule)
-	//	require.NoError(t, err)
-	//
-	//	// Call handleTransportPacket for r0.
-	//
-	//	// payload is prepended with two bytes to satisfy app.Proto.
-	//	// payload[0] = frame type, payload[1] = id
-	//	rAddr := routing.Addr{PubKey: keys[1].PK, Port: localPort}
-	//	rawRAddr, _ := json.Marshal(rAddr)
-	//	// payload := append([]byte{byte(app.FrameClose), 0}, rawRAddr...)
-	//	packet := routing.MakeDataPacket(appRtID, rawRAddr)
-	//	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
-	//})
+	t.Run("handlePacket_appRule", func(t *testing.T) {
+		const duration = 10 * time.Second
+		// time.AfterFunc(duration, func() {
+		// 	panic("timeout")
+		// })
+
+		defer clearRules(r0, r1)
+
+		// prepare mock-app
+		localPort := routing.Port(9)
+		cConn, sConn := net.Pipe()
+
+		// mock-app config
+		appConf := &app.Config{
+			AppName:         "test_app",
+			AppVersion:      "1.0",
+			ProtocolVersion: supportedProtocolVersion,
+		}
+
+		// serve mock-app
+		// sErrCh := make(chan error, 1)
+		go func() {
+			// sErrCh <- r0.ServeApp(sConn, localPort, appConf)
+			_ = r0.ServeApp(sConn, localPort, appConf)
+			// close(sErrCh)
+		}()
+		// defer func() {
+		// 	assert.NoError(t, cConn.Close())
+		// 	assert.NoError(t, <-sErrCh)
+		// }()
+
+		a, err := app.New(cConn, appConf)
+		require.NoError(t, err)
+		// cErrCh := make(chan error, 1)
+		go func() {
+			conn, err := a.Accept()
+			if err == nil {
+				fmt.Println("ACCEPTED:", conn.RemoteAddr())
+			}
+			fmt.Println("FAILED TO ACCEPT")
+			// cErrCh <- err
+			// close(cErrCh)
+		}()
+		a.Dial(a.Addr().(routing.Addr))
+		// defer func() {
+		// 	assert.NoError(t, <-cErrCh)
+		// }()
+
+		// Add a APP rule for r0.
+		// port8 := routing.Port(8)
+		appRule := routing.AppRule(10*time.Minute, 0, routing.RouteID(7), keys[1].PK, localPort, localPort)
+		appRtID, err := r0.rm.rt.AddRule(appRule)
+		require.NoError(t, err)
+
+		// Call handleTransportPacket for r0.
+
+		// payload is prepended with two bytes to satisfy app.Proto.
+		// payload[0] = frame type, payload[1] = id
+		rAddr := routing.Addr{PubKey: keys[1].PK, Port: localPort}
+		rawRAddr, _ := json.Marshal(rAddr)
+		// payload := append([]byte{byte(app.FrameClose), 0}, rawRAddr...)
+		packet := routing.MakeDataPacket(appRtID, rawRAddr)
+		require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
+	})
 }
 
 // TODO (Darkren): fix tests
@@ -258,7 +284,7 @@ func TestRouter_Rules(t *testing.T) {
 	})
 
 	// TEST: Ensure AddRule and DeleteRule requests from a SetupNode does as expected.
-	/*t.Run("AddRemoveRule", func(t *testing.T) {
+	t.Run("AddRemoveRule", func(t *testing.T) {
 		clearRules()
 
 		// Add/Remove rules multiple times.
@@ -311,38 +337,7 @@ func TestRouter_Rules(t *testing.T) {
 		}
 	})
 
-	// TEST: Ensure DeleteRule requests from SetupNode is handled properly.
-	t.Run("DeleteRules", func(t *testing.T) {
-		clearRules()
-
-		in, out := net.Pipe()
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- r.handleSetupConn(out)
-			close(errCh)
-		}()
-		defer func() {
-			require.NoError(t, in.Close())
-			require.NoError(t, <-errCh)
-		}()
-
-		proto := setup.NewSetupProtocol(in)
-
-		id, err := r.rt.ReserveKeys(1)
-		require.NoError(t, err)
-
-		rule := routing.IntermediaryForwardRule(10*time.Minute, id[0], 3, uuid.New())
-
-		err = r.rt.SaveRule(rule)
-		require.NoError(t, err)
-
-		assert.Equal(t, 1, rt.Count())
-
-		require.NoError(t, setup.DeleteRule(context.TODO(), proto, id[0]))
-		assert.Equal(t, 0, rt.Count())
-	})
-
-	// TEST: Ensure visorRoutesCreated request from SetupNode is handled properly.
+	// TEST: Ensure RoutesCreated request from SetupNode is handled properly.
 	t.Run("RoutesCreated", func(t *testing.T) {
 		clearRules()
 
@@ -395,56 +390,6 @@ func TestRouter_Rules(t *testing.T) {
 		assert.Equal(t, routing.Port(3), inLoop.Remote.Port)
 		assert.Equal(t, pk, inLoop.Remote.PubKey)
 	})
-
-	// TEST: Ensure LoopClosed request from SetupNode is handled properly.
-	t.Run("LoopClosed", func(t *testing.T) {
-		clearRules()
-
-		var inLoop routing.Loop
-
-		r.OnLoopClosed = func(loop routing.Loop) error {
-			inLoop = loop
-			return nil
-		}
-		defer func() { r.OnLoopClosed = nil }()
-
-		in, out := net.Pipe()
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- r.handleSetupConn(out)
-			close(errCh)
-		}()
-		defer func() {
-			require.NoError(t, in.Close())
-			require.NoError(t, <-errCh)
-		}()
-
-		proto := setup.NewSetupProtocol(in)
-		pk, _ := cipher.GenerateKeyPair()
-
-		rule := routing.ConsumeRule(10*time.Minute, 2, pk, 2, 3)
-		require.NoError(t, rt.SaveRule(rule))
-
-		rule = routing.IntermediaryForwardRule(10*time.Minute, 1, 3, uuid.New())
-		require.NoError(t, rt.SaveRule(rule))
-
-		ld := routing.LoopData{
-			Loop: routing.Loop{
-				Remote: routing.Addr{
-					PubKey: pk,
-					Port:   3,
-				},
-				Local: routing.Addr{
-					Port: 2,
-				},
-			},
-			RouteID: 1,
-		}
-		require.NoError(t, setup.LoopClosed(context.TODO(), proto, ld))
-		assert.Equal(t, routing.Port(2), inLoop.Local.Port)
-		assert.Equal(t, routing.Port(3), inLoop.Remote.Port)
-		assert.Equal(t, pk, inLoop.Remote.PubKey)
-	})*/
 }
 
 type TestEnv struct {
