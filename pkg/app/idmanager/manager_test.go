@@ -46,7 +46,7 @@ func TestManager_ReserveNextID(t *testing.T) {
 	t.Run("concurrent run", func(t *testing.T) {
 		m := New()
 
-		valsToReserve := 10000
+		valsToReserve := 8000
 
 		errs := make(chan error)
 		for i := 0; i < valsToReserve; i++ {
