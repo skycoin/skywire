@@ -68,12 +68,13 @@ func NewRouteGroup(rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
 	rg := &RouteGroup{
 		logger:  logging.MustGetLogger(fmt.Sprintf("RouteGroup %v", desc)),
 		desc:    desc,
+		rt:      rt,
+		tps:     make([]*transport.ManagedTransport, 0),
 		fwd:     make([]routing.Rule, 0),
 		rvs:     make([]routing.Rule, 0),
-		tps:     make([]*transport.ManagedTransport, 0),
 		readCh:  make(chan []byte, readChBufSize),
 		readBuf: bytes.Buffer{},
-		rt:      rt,
+		done:    make(chan struct{}),
 	}
 
 	go rg.keepAliveLoop()
