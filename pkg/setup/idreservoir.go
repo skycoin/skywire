@@ -55,7 +55,7 @@ func (idr *idReservoir) ReserveIDs(ctx context.Context, log *logging.Logger, dms
 
 	for pk, n := range idr.rec {
 		pk, n := pk, n
-		go func() {
+		/*go func() {
 			ids, err := reserve(ctx, log, dmsgC, pk, n)
 			if err != nil {
 				errCh <- fmt.Errorf("reserve routeID from %s failed: %v", pk, err)
@@ -65,7 +65,17 @@ func (idr *idReservoir) ReserveIDs(ctx context.Context, log *logging.Logger, dms
 			idr.ids[pk] = ids
 			idr.mx.Unlock()
 			errCh <- nil
-		}()
+		}()*/
+		fmt.Printf("Trying to ReserveIDs from %s\n", pk)
+		ids, err := reserve(ctx, log, dmsgC, pk, n)
+		if err != nil {
+			errCh <- fmt.Errorf("reserve routeID from %s failed: %v", pk, err)
+			continue
+		}
+		idr.mx.Lock()
+		idr.ids[pk] = ids
+		idr.mx.Unlock()
+		errCh <- nil
 	}
 
 	return finalError(len(idr.rec), errCh)
