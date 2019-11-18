@@ -59,10 +59,9 @@ func TestUptime(t *testing.T) {
 }
 
 func TestListApps(t *testing.T) {
-	apps := []AppConfig{
-		{App: "foo", AutoStart: false, Port: 10},
-		{App: "bar", AutoStart: true, Port: 11},
-	}
+	apps := make(map[string]AppConfig)
+	apps["foo"] = AppConfig{App: "foo", AutoStart: false, Port: 10}
+	apps["bar"] = AppConfig{App: "bar", AutoStart: true, Port: 11}
 
 	sApps := map[string]*appBind{
 		"bar": {},
@@ -94,7 +93,8 @@ func TestStartStopApp(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	apps := []AppConfig{{App: "foo", Version: "1.0", AutoStart: false, Port: 10}}
+	apps := make(map[string]AppConfig)
+	apps["foo"] = AppConfig{App: "foo", Version: "1.0", AutoStart: false, Port: 10}
 	node := &Node{router: router, exec: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"), conf: &Config{}}
 	node.conf.Node.StaticPubKey = pk
 	pathutil.EnsureDir(node.dir())
@@ -161,10 +161,9 @@ These tests have been commented out for the following reasons:
 //	_, err = tm2.SaveTransport(context.TODO(), pk1, snet.DmsgType)
 //	require.NoError(t, err)
 //
-//	apps := []AppConfig{
-//		{App: "foo", Version: "1.0", AutoStart: false, Port: 10},
-//		{App: "bar", Version: "2.0", AutoStart: false, Port: 20},
-//	}
+//	apps := make(map[string]AppConfig)
+//	apps["foo"] = AppConfig{App: "foo", Version: "1.0", AutoStart: false, Port: 10}
+//	apps["bar"] = AppConfig{App: "bar", Version: "2.0", AutoStart: false, Port: 20}
 //	conf := &Config{}
 //	conf.Node.StaticPubKey = pk1
 //	node := &Node{
@@ -284,10 +283,10 @@ These tests have been commented out for the following reasons:
 //		assert.Equal(t, ErrUnknownApp, err)
 //
 //		require.NoError(t, gateway.SetAutoStart(&in2, &struct{}{}))
-//		assert.True(t, node.appsConf[0].AutoStart)
+//		assert.True(t, node.appsConf["foo"].AutoStart)
 //
 //		require.NoError(t, gateway.SetAutoStart(&in3, &struct{}{}))
-//		assert.False(t, node.appsConf[0].AutoStart)
+//		assert.False(t, node.appsConf["foo"].AutoStart)
 //
 //		// Test with RPC Client
 //
