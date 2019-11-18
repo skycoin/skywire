@@ -18,8 +18,10 @@ func TestNewRouteGroup(t *testing.T) {
 	port2 := routing.Port(2)
 	desc := routing.NewRouteDescriptor(pk1, pk2, port1, port2)
 
-	rg := NewRouteGroup(rt, desc)
+	rg := NewRouteGroup(DefaultRouteGroupConfig(), rt, desc)
 	require.NotNil(t, rg)
+
+	require.False(t, rg.isClosed())
 
 	require.NoError(t, rg.Close())
 }

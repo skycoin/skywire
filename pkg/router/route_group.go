@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	readChBufSize = 1024
+	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
+	defaultReadChBufSize               = 1024
 )
 
 var (
@@ -31,15 +32,26 @@ var (
 	ErrBadTransport = errors.New("bad transport")
 )
 
+type RouteGroupConfig struct {
+	ReadChBufSize     int
+	KeepAliveInterval time.Duration
+}
+
+func DefaultRouteGroupConfig() *RouteGroupConfig {
+	return &RouteGroupConfig{
+		KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
+		ReadChBufSize:     defaultReadChBufSize,
+	}
+}
+
 // RouteGroup should implement 'io.ReadWriteCloser'.
 // It implements 'net.Conn'.
 type RouteGroup struct {
 	mu sync.RWMutex
 
 	logger *logging.Logger
-
-	desc routing.RouteDescriptor // describes the route group
-	rt   routing.Table
+	desc   routing.RouteDescriptor // describes the route group
+	rt     routing.Table
 
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
@@ -64,7 +76,11 @@ type RouteGroup struct {
 	once    sync.Once
 }
 
-func NewRouteGroup(rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
+func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
+	if cfg == nil {
+		cfg = DefaultRouteGroupConfig()
+	}
+
 	rg := &RouteGroup{
 		logger:  logging.MustGetLogger(fmt.Sprintf("RouteGroup %v", desc)),
 		desc:    desc,
@@ -72,12 +88,12 @@ func NewRouteGroup(rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
 		tps:     make([]*transport.ManagedTransport, 0),
 		fwd:     make([]routing.Rule, 0),
 		rvs:     make([]routing.Rule, 0),
-		readCh:  make(chan []byte, readChBufSize),
+		readCh:  make(chan []byte, cfg.ReadChBufSize),
 		readBuf: bytes.Buffer{},
 		done:    make(chan struct{}),
 	}
 
-	go rg.keepAliveLoop()
+	go rg.keepAliveLoop(cfg.KeepAliveInterval)
 
 	return rg
 }
@@ -104,7 +120,7 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 // Write writes payload to a RouteGroup
 // For the first version, only the first ForwardRule (fwd[0]) is used for writing.
 func (r *RouteGroup) Write(p []byte) (n int, err error) {
-	if r.isClosing() {
+	if r.isClosed() {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -192,16 +208,14 @@ func (r *RouteGroup) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-func (r *RouteGroup) keepAliveLoop() {
-	keepAlive := 1 * time.Minute // TODO: proper value
-
-	ticker := time.NewTicker(keepAlive / 2)
+func (r *RouteGroup) keepAliveLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		lastSent := time.Unix(0, atomic.LoadInt64(&r.lastSent))
 
-		if time.Since(lastSent) < keepAlive/2 {
+		if time.Since(lastSent) < interval {
 			continue
 		}
 
@@ -215,18 +229,16 @@ func (r *RouteGroup) sendKeepAlive() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if len(r.tps) == 0 {
-		return ErrNoTransports
-	}
-	if len(r.fwd) == 0 {
-		return ErrNoRules
+	if len(r.tps) == 0 || len(r.fwd) == 0 {
+		// if no transports, no rules, then no keepalive
+		return nil
 	}
 
 	tp := r.tps[0]
 	rule := r.fwd[0]
 
 	if tp == nil {
-		return errors.New("unknown transport")
+		return ErrBadTransport
 	}
 
 	packet := routing.MakeKeepAlivePacket(rule.KeyRouteID())
@@ -236,7 +248,7 @@ func (r *RouteGroup) sendKeepAlive() error {
 	return nil
 }
 
-func (r *RouteGroup) isClosing() bool {
+func (r *RouteGroup) isClosed() bool {
 	select {
 	case <-r.done:
 		return true
