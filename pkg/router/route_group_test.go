@@ -54,7 +54,7 @@ func TestRouteGroup_Read(t *testing.T) {
 	case err = <-errCh:
 	}
 	require.Equal(t, context.DeadlineExceeded, err)
-	// require.NoError(t, rg1.Close()) // TODO: fix hang
+	require.NoError(t, rg1.Close())
 
 	_, rg1 = prepare()
 	_, rg2 := prepare()
