@@ -74,7 +74,6 @@ func DefaultDialOptions() DialOptions {
 	}
 }
 
-// TODO(nkryuchkov): consider moving to visor package
 type Router interface {
 	io.Closer
 
