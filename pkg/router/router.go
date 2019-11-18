@@ -280,7 +280,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 	}
 
 	rg.fwd = append(rg.fwd, rules.Forward)
-	rg.rvs = append(rg.fwd, rules.Reverse)
+	rg.rvs = append(rg.rvs, rules.Reverse)
 
 	tp := r.tm.Transport(rules.Forward.NextTransportID())
 	rg.tps = append(rg.tps, tp)

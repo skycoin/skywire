@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
@@ -91,14 +92,20 @@ func TestRouteGroup_SetDeadline(t *testing.T) {
 	_, rg := prepare()
 	now := time.Now()
 
-	require.NoError(t, rg.SetDeadline(now))
-	require.Equal(t, now.UnixNano(), rg.readDeadline)
-	require.Equal(t, now.UnixNano(), rg.writeDeadline)
+	assert.NoError(t, rg.SetDeadline(now))
+	assert.Equal(t, now.UnixNano(), rg.readDeadline)
+	assert.Equal(t, now.UnixNano(), rg.writeDeadline)
 }
 
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
-		// TODO: implement
+		_, c1 = prepare()
+		_, c2 = prepare()
+		stop = func() {
+			assert.NoError(t, c1.Close())
+			assert.NoError(t, c2.Close())
+		}
+		err = nil
 		return
 	}
 	nettest.TestConn(t, mp)
