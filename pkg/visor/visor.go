@@ -103,7 +103,7 @@ type Node struct {
 
 	appsPath  string
 	localPath string
-	appsConf  []AppConfig
+	appsConf  map[string]AppConfig
 
 	startedMu   sync.RWMutex
 	startedApps map[string]*appBind
@@ -403,28 +403,25 @@ func (node *Node) Apps() []*AppState {
 
 // StartApp starts registered App.
 func (node *Node) StartApp(appName string) error {
-	for _, appC := range node.appsConf {
-		if appC.App != appName {
-			continue
-		}
-
-		done := make(chan struct{}, 1)
-		var err error
-
-		go func(appC AppConfig) {
-			if err = node.SpawnApp(&appC, done); err != nil {
-				done <- struct{}{}
-				node.logger.Warnf("Failed to start app %s: %s", appName, err)
-			}
-		}(appC)
-
-		<-done
-		close(done)
-
-		return err
+	appConf, ok := node.appsConf[appName]
+	if !ok {
+		return ErrUnknownApp
 	}
 
-	return ErrUnknownApp
+	done := make(chan struct{}, 1)
+	var err error
+
+	go func(appConf AppConfig) {
+		if err = node.SpawnApp(&appConf, done); err != nil {
+			done <- struct{}{}
+			node.logger.Warnf("Failed to start app %s: %s", appName, err)
+		}
+	}(appConf)
+
+	<-done
+	close(done)
+
+	return err
 }
 
 // SpawnApp configures and starts new App.
@@ -543,13 +540,14 @@ func (node *Node) StopApp(appName string) error {
 
 // SetAutoStart sets an app to auto start or not.
 func (node *Node) SetAutoStart(appName string, autoStart bool) error {
-	for i, ac := range node.appsConf {
-		if ac.App == appName {
-			node.appsConf[i].AutoStart = autoStart
-			return nil
-		}
+	appConf, ok := node.appsConf[appName]
+	if !ok {
+		return ErrUnknownApp
 	}
-	return ErrUnknownApp
+
+	appConf.AutoStart = autoStart
+	node.appsConf[appName] = appConf
+	return nil
 }
 
 func (node *Node) stopApp(app string, bind *appBind) (err error) {
