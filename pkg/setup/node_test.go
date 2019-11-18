@@ -12,7 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 
 	"github.com/SkycoinProject/dmsg"
@@ -87,6 +88,8 @@ func TestNode(t *testing.T) {
 
 	ctx := context.TODO()
 
+	reservedIDs := []routing.RouteID{1, 2}
+
 	// CLOSURE: sets up dmsg clients.
 	prepClients := func(n int) ([]clientWithDMSGAddrAndListener, func()) {
 		clients := make([]clientWithDMSGAddrAndListener, n)
@@ -117,13 +120,15 @@ func TestNode(t *testing.T) {
 
 			r := &router.MockRouter{}
 			// for intermediary nodes and the destination one
-			if i > 1 {
+			if i >= 1 {
 				// passing two rules to each node (forward and reverse routes)
 				r.On("SaveRoutingRules", mock.Anything, mock.Anything).
 					Return(func(rules ...routing.Rule) error {
 						clients[i].AppliedIntermediaryRules = append(clients[i].AppliedIntermediaryRules, rules...)
 						return nil
 					})
+
+				r.On("ReserveKeys", 2).Return(reservedIDs, testhelpers.NoErr)
 
 				if i == (n - 1) {
 					r.On("IntroduceRules", mock.Anything).Return(func(rules routing.EdgeRules) error {
@@ -140,17 +145,19 @@ func TestNode(t *testing.T) {
 				err = rpcServer.Register(rpcGateway)
 				require.NoError(t, err)
 				clients[i].RPCServer = rpcServer
-				/*go func() {
+				go func(idx int) {
 					for {
-						_, err := listener.Accept()
+						conn, err := listener.Accept()
 						if err != nil {
-							fmt.Printf("Error accepting: %v\n", err)
+							//fmt.Printf("Error accepting RPC conn: %v\n", err)
+							continue
 						}
 
-						fmt.Println("Accepted")
+						//fmt.Println("Accepted RPC conn")
+						go clients[idx].RPCServer.ServeConn(conn)
 					}
-				}()*/
-				go clients[i].RPCServer.Accept(listener)
+				}(i)
+				//go clients[i].RPCServer.Accept(listener)
 			}
 		}
 		return clients, func() {
@@ -188,10 +195,10 @@ func TestNode(t *testing.T) {
 		defer closeClients()
 
 		// prepare and serve setup node (using client 0).
-		_, closeSetup := prepSetupNode(clients[0].Client, clients[0].Listener)
+		sn, closeSetup := prepSetupNode(clients[0].Client, clients[0].Listener)
 		defer closeSetup()
 
-		setupPK := clients[0].Addr.PK
+		//setupPK := clients[0].Addr.PK
 
 		// prepare loop creation (client_1 will use this to request loop creation with setup node).
 		desc := routing.NewRouteDescriptor(clients[1].Addr.PK, clients[4].Addr.PK, 1, 1)
@@ -214,10 +221,19 @@ func TestNode(t *testing.T) {
 			Forward:   forwardHops,
 			Reverse:   reverseHops,
 		}
+		/////////////////////////////////////////////////////////////////
+		/*reservoir, total := newIDReservoir(route.Forward, route.Reverse)
+		sn.logger.Infof("There are %d route IDs to reserve.", total)
 
-		logger := logging.MustGetLogger("setup_client_test")
+		err := reservoir.ReserveIDs(ctx, sn.logger, sn.dmsgC, routerclient.ReserveIDs)
+		require.NoError(t, err)
 
-		gotEdgeRules, err := setupclient.DialRouteGroup(ctx, logger, nEnv.Nets[1], []cipher.PubKey{setupPK}, route)
+		sn.logger.Infof("Successfully reserved route IDs.")*/
+		///////////////////////////////////////////////////////////////////////////
+		//logger := logging.MustGetLogger("setup_client_test")
+
+		//gotEdgeRules, err := setupclient.DialRouteGroup(ctx, logger, nEnv.Nets[1], []cipher.PubKey{setupPK}, route)
+		gotEdgeRules, err := sn.handleDialRouteGroup(context.Background(), route)
 		require.NoError(t, err)
 
 		wantEdgeRules := routing.EdgeRules{ // TODO: fill with correct values
