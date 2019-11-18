@@ -206,6 +206,7 @@ func (r *RouteGroup) write(p []byte) (n int, err error) {
 // - Send Close packet for all ForwardRules.
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
 // - Close all go channels.
+// TODO: fix hang after read
 func (r *RouteGroup) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

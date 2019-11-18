@@ -12,6 +12,8 @@ import (
 	"golang.org/x/net/nettest"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
 func TestNewRouteGroup(t *testing.T) {
@@ -30,16 +32,18 @@ func TestRouteGroup_Close(t *testing.T) {
 
 // TODO: implement better tests
 func TestRouteGroup_Read(t *testing.T) {
-	_, rg := prepare()
-	require.NotNil(t, rg)
+	msg := []byte("hello")
+	buf := make([]byte, len(msg))
 
-	buf := make([]byte, defaultReadChBufSize)
+	_, rg1 := prepare()
+	require.NotNil(t, rg1)
+
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
 	defer cancel()
 
 	errCh := make(chan error, 1)
 	go func() {
-		_, err := rg.Read(buf)
+		_, err := rg1.Read(buf)
 		errCh <- err
 	}()
 
@@ -50,6 +54,40 @@ func TestRouteGroup_Read(t *testing.T) {
 	case err = <-errCh:
 	}
 	require.Equal(t, context.DeadlineExceeded, err)
+	// require.NoError(t, rg1.Close()) // TODO: fix hang
+
+	_, rg1 = prepare()
+	_, rg2 := prepare()
+
+	tpDisc := transport.NewDiscoveryMock()
+	keys := snettest.GenKeyPairs(2)
+	nEnv := snettest.NewEnv(t, keys)
+	defer nEnv.Teardown()
+
+	_, _, tp1, tp2, err := transport.CreateTransportPair(tpDisc, keys, nEnv)
+	require.NotNil(t, tp1)
+	require.NotNil(t, tp2)
+	require.NotNil(t, tp1.Entry)
+	require.NotNil(t, tp2.Entry)
+
+	keepAlive := 1 * time.Hour
+	id1 := routing.RouteID(1)
+	id2 := routing.RouteID(2)
+	port1 := routing.Port(1)
+	port2 := routing.Port(2)
+	rule1 := routing.ForwardRule(keepAlive, id1, id2, tp2.Entry.ID, keys[0].PK, port1, port2)
+	rule2 := routing.ForwardRule(keepAlive, id2, id1, tp1.Entry.ID, keys[1].PK, port2, port1)
+
+	rg1.tps = append(rg1.tps, tp1)
+	rg1.fwd = append(rg1.fwd, rule1)
+	rg2.tps = append(rg2.tps, tp2)
+	rg2.fwd = append(rg2.fwd, rule2)
+
+	_, err = rg1.Write(msg)
+	require.NoError(t, err)
+
+	_, err = rg2.Read(buf)
+	require.NoError(t, err)
 }
 
 // TODO: implement better tests
