@@ -25,11 +25,16 @@ import (
 
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes
-	DefaultRouteKeepAlive = 2 * time.Hour // TODO(nkryuchkov): change
+	DefaultRouteKeepAlive = 2 * time.Minute
 	acceptSize            = 1024
 
 	minHops = 0
 	maxHops = 50
+)
+
+var (
+	// ErrUnknownPacketType is returned when packet type is unknown.
+	ErrUnknownPacketType = errors.New("unknown packet type")
 )
 
 var log = logging.MustGetLogger("router")
@@ -88,15 +93,10 @@ type Router interface {
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return the RoutingGroup.
 	AcceptRoutes(context.Context) (*RouteGroup, error)
-
 	SaveRoutingRules(rules ...routing.Rule) error
-
 	ReserveKeys(n int) ([]routing.RouteID, error)
-
 	IntroduceRules(rules routing.EdgeRules) error
-
 	Serve(context.Context) error
-
 	SetupIsTrusted(cipher.PubKey) bool
 }
 
@@ -276,7 +276,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 
 	rg, ok := r.rgs[rules.Desc]
 	if !ok || rg == nil {
-		rg = NewRouteGroup(r.rt, rules.Desc)
+		rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
 		r.rgs[rules.Desc] = rg
 	}
 
@@ -298,7 +298,7 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 	case routing.KeepAlivePacket:
 		return r.handleKeepAlivePacket(ctx, packet)
 	default:
-		return errors.New("unknown packet type")
+		return ErrUnknownPacketType
 	}
 }
 
@@ -323,7 +323,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return r.forwardPacket(ctx, packet.Payload(), rule)
 	}
 
-	if rg.isClosing() {
+	if rg.isClosed() {
 		return io.ErrClosedPipe
 	}
 
