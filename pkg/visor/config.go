@@ -137,13 +137,13 @@ func (c *Config) RoutingTable() (routing.Table, error) {
 }
 
 // AppsConfig decodes AppsConfig from a local json config file.
-func (c *Config) AppsConfig() ([]AppConfig, error) {
-	apps := make([]AppConfig, 0)
+func (c *Config) AppsConfig() (map[string]AppConfig, error) {
+	apps := make(map[string]AppConfig)
 	for _, app := range c.Apps {
 		if app.Version == "" {
 			app.Version = c.Version
 		}
-		apps = append(apps, app)
+		apps[app.App] = app
 	}
 
 	return apps, nil
