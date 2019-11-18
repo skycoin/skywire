@@ -30,6 +30,8 @@ var (
 	ErrNoRules = errors.New("no rules")
 	// ErrNoTransport is returned when transport is nil.
 	ErrBadTransport = errors.New("bad transport")
+	// ErrTimeout happens if Read/Write times out.
+	ErrTimeout = errors.New("timeout")
 )
 
 type RouteGroupConfig struct {
@@ -65,7 +67,9 @@ type RouteGroup struct {
 	fwd []routing.Rule // forward rules (for writing)
 	rvs []routing.Rule // reverse rules (for reading)
 
-	lastSent int64
+	lastSent      int64
+	readDeadline  int64
+	writeDeadline int64
 
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
@@ -105,21 +109,68 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.readBuf.Len() > 0 {
-		return r.readBuf.Read(p)
+	var timeout <-chan time.Time
+	var timer *time.Timer
+
+	if deadline := atomic.LoadInt64(&r.readDeadline); deadline != 0 {
+		delay := time.Until(time.Unix(0, deadline))
+
+		if delay > time.Duration(0) && r.readBuf.Len() > 0 {
+			return r.readBuf.Read(p)
+		}
+
+		timer = time.NewTimer(delay)
+		timeout = timer.C
 	}
 
-	data, ok := <-r.readCh
-	if !ok {
-		return 0, io.ErrClosedPipe
+	select {
+	case data, ok := <-r.readCh:
+		if timer != nil {
+			timer.Stop()
+		}
+		if !ok {
+			return 0, io.ErrClosedPipe
+		}
+		return ioutil.BufRead(&r.readBuf, data, p)
+	case <-timeout:
+		return 0, ErrTimeout
 	}
-
-	return ioutil.BufRead(&r.readBuf, data, p)
 }
 
 // Write writes payload to a RouteGroup
 // For the first version, only the first ForwardRule (fwd[0]) is used for writing.
 func (r *RouteGroup) Write(p []byte) (n int, err error) {
+	var timeout <-chan time.Time
+	var timer *time.Timer
+	if deadline := atomic.LoadInt64(&r.writeDeadline); deadline != 0 {
+		delay := time.Until(time.Unix(0, deadline))
+		timer = time.NewTimer(delay)
+		timeout = timer.C
+	}
+
+	type values struct {
+		n   int
+		err error
+	}
+
+	ch := make(chan values, 1)
+	go func() {
+		n, err := r.write(p)
+		ch <- values{n, err}
+	}()
+
+	select {
+	case v := <-ch:
+		if timer != nil {
+			timer.Stop()
+		}
+		return v.n, v.err
+	case <-timeout:
+		return 0, ErrTimeout
+	}
+}
+
+func (r *RouteGroup) write(p []byte) (n int, err error) {
 	if r.isClosed() {
 		return 0, io.ErrClosedPipe
 	}
@@ -193,18 +244,20 @@ func (r *RouteGroup) RemoteAddr() net.Addr {
 	return r.desc.Dst()
 }
 
-// TODO(nkryuchkov): implement
 func (r *RouteGroup) SetDeadline(t time.Time) error {
-	return nil
+	if err := r.SetReadDeadline(t); err != nil {
+		return err
+	}
+	return r.SetWriteDeadline(t)
 }
 
-// TODO(nkryuchkov): implement
 func (r *RouteGroup) SetReadDeadline(t time.Time) error {
+	atomic.StoreInt64(&r.readDeadline, t.UnixNano())
 	return nil
 }
 
-// TODO(nkryuchkov): implement
 func (r *RouteGroup) SetWriteDeadline(t time.Time) error {
+	atomic.StoreInt64(&r.writeDeadline, t.UnixNano())
 	return nil
 }
 
