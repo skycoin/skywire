@@ -60,8 +60,8 @@ func TestRouteGroup_Read(t *testing.T) {
 	rg1 = createRouteGroup()
 	rg2 := createRouteGroup()
 
-	_, _, closeFunc := createTransports(t, rg1, rg2)
-	defer closeFunc()
+	_, _, teardown := createTransports(t, rg1, rg2)
+	defer teardown()
 
 	go func() {
 		rg1.readCh <- msg1
@@ -93,8 +93,8 @@ func TestRouteGroup_Write(t *testing.T) {
 	rg1 = createRouteGroup()
 	rg2 := createRouteGroup()
 
-	m1, m2, closeFunc := createTransports(t, rg1, rg2)
-	defer closeFunc()
+	m1, m2, teardown := createTransports(t, rg1, rg2)
+	defer teardown()
 
 	_, err = rg1.Write(msg1)
 	require.NoError(t, err)
@@ -109,6 +109,42 @@ func TestRouteGroup_Write(t *testing.T) {
 	recv, err = m2.ReadPacket()
 	require.NoError(t, err)
 	require.Equal(t, msg1, recv.Payload())
+}
+
+func TestRouteGroup_ReadWrite(t *testing.T) {
+	msg1 := []byte("hello1")
+	msg2 := []byte("hello2")
+
+	rg1 := createRouteGroup()
+	rg2 := createRouteGroup()
+
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+	defer teardownEnv()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go pushPackets(t, ctx, m1, rg1)
+	go pushPackets(t, ctx, m2, rg2)
+
+	_, err := rg1.Write(msg1)
+	require.NoError(t, err)
+
+	_, err = rg2.Write(msg2)
+	require.NoError(t, err)
+
+	buf1 := make([]byte, len(msg2))
+	_, err = rg1.Read(buf1)
+	require.NoError(t, err)
+	require.Equal(t, msg2, buf1)
+
+	buf2 := make([]byte, len(msg1))
+	_, err = rg2.Read(buf2)
+	require.NoError(t, err)
+	require.Equal(t, msg1, buf2)
+
+	assert.NoError(t, rg1.Close())
+	assert.NoError(t, rg2.Close())
+	return
 }
 
 func TestRouteGroup_LocalAddr(t *testing.T) {
@@ -148,16 +184,43 @@ func TestRouteGroup_SetDeadline(t *testing.T) {
 
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
-		c1 = createRouteGroup()
-		c2 = createRouteGroup()
+		rg1 := createRouteGroup()
+		rg2 := createRouteGroup()
+
+		c1, c2 = rg1, rg2
+
+		m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+		ctx, cancel := context.WithCancel(context.Background())
+
+		go pushPackets(t, ctx, m1, rg1)
+		go pushPackets(t, ctx, m2, rg2)
+
 		stop = func() {
+			cancel()
+			teardownEnv()
 			assert.NoError(t, c1.Close())
 			assert.NoError(t, c2.Close())
 		}
-		err = nil
 		return
 	}
 	nettest.TestConn(t, mp)
+}
+
+func pushPackets(t *testing.T, ctx context.Context, from *transport.Manager, to *RouteGroup) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			packet, err := from.ReadPacket()
+			assert.NoError(t, err)
+			select {
+			case <-ctx.Done():
+				return
+			case to.readCh <- packet.Payload():
+			}
+		}
+	}
 }
 
 func createRouteGroup() *RouteGroup {
@@ -173,7 +236,7 @@ func createRouteGroup() *RouteGroup {
 	return rg
 }
 
-func createTransports(t *testing.T, rg1, rg2 *RouteGroup) (m1, m2 *transport.Manager, closeFunc func()) {
+func createTransports(t *testing.T, rg1, rg2 *RouteGroup) (m1, m2 *transport.Manager, teardown func()) {
 	tpDisc := transport.NewDiscoveryMock()
 	keys := snettest.GenKeyPairs(2)
 
