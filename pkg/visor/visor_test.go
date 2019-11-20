@@ -79,16 +79,15 @@ func TestMain(m *testing.M) {
 func TestNodeStartClose(t *testing.T) {
 	r := new(mockRouter)
 	executer := &MockExecuter{}
-	conf := []AppConfig{
-		{App: "skychat", Version: "1.0", AutoStart: true, Port: 1},
-		{App: "foo", Version: "1.0", AutoStart: false},
-	}
+	apps := map[string]AppConfig{}
+	apps["skychat"] = AppConfig{App: "skychat", Version: "1.0", AutoStart: true, Port: 1}
+	apps["foo"] = AppConfig{App: "foo", Version: "1.0", AutoStart: false}
 
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	node := &Node{conf: &Config{}, router: r, exec: executer, appsConf: conf,
+	node := &Node{conf: &Config{}, router: r, exec: executer, appsConf: apps,
 		startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test")}
 
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock())
@@ -129,7 +128,8 @@ func TestNodeSpawnApp(t *testing.T) {
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
-	apps := []AppConfig{{App: "skychat", Version: "1.0", AutoStart: false, Port: 10, Args: []string{"foo"}}}
+	apps := make(map[string]AppConfig)
+	apps["skychat"] = AppConfig{App: "skychat", Version: "1.0", AutoStart: false, Port: 10, Args: []string{"foo"}}
 	node := &Node{router: r, exec: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"),
 		conf: &Config{}}
 	node.conf.Node.StaticPubKey = pk
