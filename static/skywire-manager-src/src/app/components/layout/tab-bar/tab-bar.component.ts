@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { LanguageService } from 'src/app/services/language.service';
 import { Subscription } from 'rxjs';
-import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { MatDialog } from '@angular/material/dialog';
 import { SelectTabComponent } from './select-tab/select-tab.component';
 import { Router } from '@angular/router';
 
@@ -61,11 +61,7 @@ export class TabBarComponent implements OnInit, OnDestroy {
   }
 
   openTabSelector() {
-    const config = new MatDialogConfig();
-    config.data = this.tabsData;
-    config.autoFocus = false;
-    config.width = '480px';
-    this.dialog.open(SelectTabComponent, config).afterClosed().subscribe((result: number) => {
+    SelectTabComponent.openDialog(this.dialog, this.tabsData).afterClosed().subscribe((result: number) => {
       if (result) {
         result -= 1;
         if (result !== this.selectedTabIndex) {
