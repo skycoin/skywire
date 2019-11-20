@@ -1,0 +1,19 @@
+<app-dialog [headline]="'tables.title' | translate">
+  <mat-dialog-content>
+    <div class="button-container" *ngFor="let column of data; let i = index">
+      <ng-container *ngFor="let reverse of [false, true]">
+        <button
+          mat-button
+          [disableRipple]="true"
+          class="grey-button-background"
+          (click)="closePopup(column, reverse)"
+          >
+          <div class="internal-container">
+            <span>{{ column | translate }}</span>
+            ({{ (!reverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }})
+          </div>
+        </button>
+      </ng-container>
+    </div>
+  </mat-dialog-content>
+</app-dialog>

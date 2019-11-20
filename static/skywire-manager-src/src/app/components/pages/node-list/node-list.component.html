@@ -91,6 +91,19 @@
         *ngIf="dataSource.length > 0"
         cellspacing="0" cellpadding="0"
       >
+        <tr class="selectable full-box" (click)="openSortingOrderModal()"><td>
+          <div class="list-item-container">
+            <div class="left-part">
+              <div class="title">{{ 'tables.sorting-title' | translate }}</div>
+              <div>{{ sortBy | translate }}
+                ({{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }})
+              </div>
+            </div>
+            <div class="right-part">
+              <mat-icon [inline]="true">{{ sortingArrow }}</mat-icon>
+            </div>
+          </div>
+        </td></tr>
         <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable full-box"><td>
           <div class="list-item-container">
             <div class="left-part">

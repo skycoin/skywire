@@ -1,0 +1,14 @@
+@import 'variables';
+
+.button-container {
+  margin: 0 (-$mat-dialog-padding);
+
+  button {
+    width: 100%;
+
+    .internal-container {
+      text-align: left;
+      padding: 5px 7px;
+    }
+  }
+}

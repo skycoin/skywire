@@ -63,10 +63,16 @@
 
   .right-part {
     width: 60px;
+    text-align: center;
 
     button {
       width: 60px;
       height: 60px;
+    }
+
+    mat-icon {
+      display: inline;
+      font-size: 20px;
     }
   }
 }

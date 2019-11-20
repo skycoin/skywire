@@ -11,10 +11,11 @@ import { delay, flatMap, tap } from 'rxjs/operators';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
+import { SelectColumnComponent, SelectedColumn } from '../../layout/select-column/select-column.component';
 
 enum SortableColumns {
-  Label,
-  Key,
+  Label = 'nodes.label',
+  Key = 'common.key',
 }
 
 @Component({
@@ -128,6 +129,28 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
 
     this.sortList();
+  }
+
+  openSortingOrderModal() {
+    const enumKeys = Object.keys(SortableColumns);
+    const columnsMap = new Map<string, SortableColumns>();
+    const columns = enumKeys.map(key => {
+      const val = SortableColumns[key as any];
+      columnsMap.set(val, SortableColumns[key]);
+
+      return val;
+    });
+
+    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
+      if (result) {
+        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
+          this.sortBy = columnsMap.get(result.label);
+          this.sortReverse = result.sortReverse;
+
+          this.sortList();
+        }
+      }
+    });
   }
 
   private refresh(delayMilliseconds: number) {

@@ -23,6 +23,13 @@
     "window-size-error": "The window is too narrow for the content"
   },
 
+  "tables": {
+    "title": "Order by",
+    "sorting-title": "Ordered by:",
+    "ascending-order": "ascending",
+    "descending-order": "descending"
+  },
+
   "inputs": {
     "hints": {
       "domain-port": "domain:port"

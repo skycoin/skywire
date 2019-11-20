@@ -104,6 +104,7 @@ import { TruncatedTextComponent } from './components/layout/truncated-text/trunc
 import { SelectTabComponent } from './components/layout/tab-bar/select-tab/select-tab.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
+import { SelectColumnComponent } from './components/layout/select-column/select-column.component';
 
 @NgModule({
   declarations: [
@@ -182,6 +183,7 @@ import { NodeInfoComponent } from './components/pages/node/node-info/node-info.c
     SelectTabComponent,
     NodeInfoContentComponent,
     NodeInfoComponent,
+    SelectColumnComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -207,6 +209,7 @@ import { NodeInfoComponent } from './components/pages/node/node-info/node-info.c
     InitialSetupComponent,
     SelectLanguageComponent,
     SelectTabComponent,
+    SelectColumnComponent,
   ],
   imports: [
     BrowserModule,

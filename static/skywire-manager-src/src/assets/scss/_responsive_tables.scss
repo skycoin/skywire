@@ -86,10 +86,10 @@ $responsive-table-colors: (
       &:last-of-type {
         margin-bottom: 0px;
       }
+    }
 
-      .title {
-        @extend .font-title;
-      }
+    .title {
+      @extend .font-title;
     }
   }
 }
