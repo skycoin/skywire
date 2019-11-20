@@ -111,6 +111,42 @@ func TestRouteGroup_Write(t *testing.T) {
 	require.Equal(t, msg1, recv.Payload())
 }
 
+func TestRouteGroup_ReadWrite(t *testing.T) {
+	msg1 := []byte("hello1")
+	msg2 := []byte("hello2")
+
+	rg1 := createRouteGroup()
+	rg2 := createRouteGroup()
+
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+	defer teardownEnv()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go pushPackets(t, ctx, m1, rg1)
+	go pushPackets(t, ctx, m2, rg2)
+
+	_, err := rg1.Write(msg1)
+	require.NoError(t, err)
+
+	_, err = rg2.Write(msg2)
+	require.NoError(t, err)
+
+	buf1 := make([]byte, len(msg2))
+	_, err = rg1.Read(buf1)
+	require.NoError(t, err)
+	require.Equal(t, msg2, buf1)
+
+	buf2 := make([]byte, len(msg1))
+	_, err = rg2.Read(buf2)
+	require.NoError(t, err)
+	require.Equal(t, msg1, buf2)
+
+	assert.NoError(t, rg1.Close())
+	assert.NoError(t, rg2.Close())
+	return
+}
+
 func TestRouteGroup_LocalAddr(t *testing.T) {
 	rg := createRouteGroup()
 	require.Equal(t, rg.desc.Src(), rg.LocalAddr())
@@ -156,25 +192,8 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		m1, m2, teardownEnv := createTransports(t, rg1, rg2)
 		ctx, cancel := context.WithCancel(context.Background())
 
-		pushPackets := func(from *transport.Manager, to *RouteGroup) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					packet, err := from.ReadPacket()
-					assert.NoError(t, err)
-					select {
-					case <-ctx.Done():
-						return
-					case to.readCh <- packet.Payload():
-					}
-				}
-			}
-		}
-
-		go pushPackets(m1, rg1)
-		go pushPackets(m2, rg2)
+		go pushPackets(t, ctx, m1, rg1)
+		go pushPackets(t, ctx, m2, rg2)
 
 		stop = func() {
 			cancel()
@@ -185,6 +204,23 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		return
 	}
 	nettest.TestConn(t, mp)
+}
+
+func pushPackets(t *testing.T, ctx context.Context, from *transport.Manager, to *RouteGroup) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			packet, err := from.ReadPacket()
+			assert.NoError(t, err)
+			select {
+			case <-ctx.Done():
+				return
+			case to.readCh <- packet.Payload():
+			}
+		}
+	}
 }
 
 func createRouteGroup() *RouteGroup {
