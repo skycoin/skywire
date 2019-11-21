@@ -36,7 +36,7 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, std
 
 	env := make([]string, 0, 3)
 	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
-	env = append(env, fmt.Sprintf(sockFileEnvFormat, c.SockFile))
+	env = append(env, fmt.Sprintf(sockFileEnvFormat, c.SockFilePath))
 	env = append(env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
 
 	cmd := exec.Command(binaryPath, args...) // nolint:gosec
@@ -48,7 +48,7 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, std
 	cmd.Stderr = stderr
 
 	rpcS, err := New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", key)),
-		c.SockFile, key)
+		c.SockFilePath, key)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (p *Proc) Run() error {
 	return nil
 }
 
-// Stop stops the applicacation. It stops the process and
+// Stop stops the application. It stops the process and
 // shuts down the RPC server.
 func (p *Proc) Stop() error {
 	p.closeRPCServer()

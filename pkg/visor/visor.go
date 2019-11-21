@@ -406,12 +406,12 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	}
 
 	appCfg := appcommon.Config{
-		Name:      config.App,
-		Version:   config.Version,
-		SockFile:  node.conf.AppServerSockFile,
-		VisorPK:   node.conf.Node.StaticPubKey.Hex(),
-		BinaryDir: node.appsPath,
-		WorkDir:   filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
+		Name:         config.App,
+		Version:      config.Version,
+		SockFilePath: filepath.Join(node.dir(), node.conf.AppServerSockFile),
+		VisorPK:      node.conf.Node.StaticPubKey.Hex(),
+		BinaryDir:    node.appsPath,
+		WorkDir:      filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {

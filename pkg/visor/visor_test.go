@@ -117,11 +117,11 @@ func TestNodeStartClose(t *testing.T) {
 
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
-		Name:     apps[0].App,
-		Version:  apps[0].Version,
-		SockFile: nodeCfg.AppServerSockFile,
-		VisorPK:  nodeCfg.Node.StaticPubKey.Hex(),
-		WorkDir:  filepath.Join("", apps[0].App, fmt.Sprintf("v%s", apps[0].Version)),
+		Name:         apps[0].App,
+		Version:      apps[0].Version,
+		SockFilePath: nodeCfg.AppServerSockFile,
+		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		WorkDir:      filepath.Join("", apps[0].App, fmt.Sprintf("v%s", apps[0].Version)),
 	}
 	appArgs1 := append([]string{filepath.Join(node.dir(), apps[0].App)}, apps[0].Args...)
 	appPID1 := appcommon.ProcID(10)
@@ -196,11 +196,11 @@ func TestNodeSpawnApp(t *testing.T) {
 
 	pm := &appserver.MockProcManager{}
 	appCfg := appcommon.Config{
-		Name:     app.App,
-		Version:  app.Version,
-		SockFile: nodeCfg.AppServerSockFile,
-		VisorPK:  nodeCfg.Node.StaticPubKey.Hex(),
-		WorkDir:  filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+		Name:         app.App,
+		Version:      app.Version,
+		SockFilePath: nodeCfg.AppServerSockFile,
+		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
 	}
 	appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
 	pm.On("Wait", app.App).Return(testhelpers.NoErr)
@@ -254,11 +254,11 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
-			Name:     app.App,
-			Version:  app.Version,
-			SockFile: c.AppServerSockFile,
-			VisorPK:  c.Node.StaticPubKey.Hex(),
-			WorkDir:  filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+			Name:         app.App,
+			Version:      app.Version,
+			SockFilePath: c.AppServerSockFile,
+			VisorPK:      c.Node.StaticPubKey.Hex(),
+			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
 		}
 		appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
 
@@ -290,11 +290,11 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
-			Name:     app.App,
-			Version:  app.Version,
-			SockFile: c.AppServerSockFile,
-			VisorPK:  c.Node.StaticPubKey.Hex(),
-			WorkDir:  filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+			Name:         app.App,
+			Version:      app.Version,
+			SockFilePath: c.AppServerSockFile,
+			VisorPK:      c.Node.StaticPubKey.Hex(),
+			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
 		}
 		appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
 
