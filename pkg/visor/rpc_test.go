@@ -147,11 +147,11 @@ func TestStartStopApp(t *testing.T) {
 
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
-		Name:     app,
-		Version:  apps[0].Version,
-		SockFile: nodeCfg.AppServerSockFile,
-		VisorPK:  nodeCfg.Node.StaticPubKey.Hex(),
-		WorkDir:  filepath.Join("", app, fmt.Sprintf("v%s", apps[0].Version)),
+		Name:         app,
+		Version:      apps[0].Version,
+		SockFilePath: nodeCfg.AppServerSockFile,
+		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		WorkDir:      filepath.Join("", app, fmt.Sprintf("v%s", apps[0].Version)),
 	}
 	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps[0].Args...)
 	appPID1 := appcommon.ProcID(10)
