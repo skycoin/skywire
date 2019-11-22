@@ -21,27 +21,37 @@ export class NodeService {
   getNodes(): Observable<Node[]> {
     return this.apiService.get('nodes', { api2: true }).pipe(map((nodes: Node[]) => {
       nodes = nodes || [];
-      const obtainedNodes = new Map<string, boolean>();
+      const obtainedNodes = new Map<string, Node>();
       nodes.forEach(node => {
         node.port = this.getPort(node.tcp_addr);
         node.label = this.storageService.getNodeLabel(node.local_pk);
 
-        obtainedNodes.set(node.local_pk, true);
+        obtainedNodes.set(node.local_pk, node);
       });
 
-      const offlineNodes: Node[] = [];
+      const missingSavedNodes: Node[] = [];
       this.storageService.getNodes().forEach(node => {
-        if (!obtainedNodes.has(node.publicKey)) {
+        if (!obtainedNodes.has(node.publicKey) && !node.deleted) {
           const newNode: Node = new Node();
           newNode.local_pk = node.publicKey;
           newNode.label = node.label;
           newNode.online = false;
 
-          offlineNodes.push(newNode);
+          missingSavedNodes.push(newNode);
+        }
+
+        if (obtainedNodes.has(node.publicKey) && !obtainedNodes.get(node.publicKey).online && node.deleted) {
+          obtainedNodes.delete(node.publicKey);
+        }
+
+        if (obtainedNodes.has(node.publicKey) && obtainedNodes.get(node.publicKey).online && node.deleted) {
+          this.storageService.changeNodeState(node.publicKey, false);
         }
       });
 
-      nodes = nodes.concat(offlineNodes);
+      nodes = [];
+      obtainedNodes.forEach(value => nodes.push(value));
+      nodes = nodes.concat(missingSavedNodes);
       nodes = nodes.sort((a, b) => a.local_pk.localeCompare(b.local_pk));
 
       return nodes;

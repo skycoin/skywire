@@ -236,7 +236,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   deleteNode(node: Node) {
-    this.storageService.removeNode(node.local_pk);
+    this.storageService.changeNodeState(node.local_pk, true);
     this.refresh(0);
   }
 

@@ -7,6 +7,7 @@ const KEY_NODES = 'nodesData';
 export class NodeInfo {
   publicKey: string;
   label: string;
+  deleted: boolean;
 }
 
 @Injectable({
@@ -65,6 +66,7 @@ export class StorageService {
         this.savedNodes.set(node.publicKey, {
           label: nodeLabel,
           publicKey: node.publicKey,
+          deleted: node.deleted,
         });
       }
 
@@ -74,9 +76,15 @@ export class StorageService {
     this.setNodes(nodes);
   }
 
-  removeNode(nodeKey: string) {
-    this.savedNodes.delete(nodeKey);
-    this.setNodes(this.getNodes().filter(n => n.publicKey !== nodeKey));
+  changeNodeState(nodeKey: string, deleted: boolean) {
+    this.savedNodes.get(nodeKey).deleted = true;
+    this.setNodes(this.getNodes().map(val => {
+      if (val.publicKey === nodeKey) {
+        val.deleted = deleted;
+      }
+
+      return val;
+    }));
   }
 
   getNodes(): NodeInfo[] {
@@ -92,6 +100,7 @@ export class StorageService {
     this.addNode({
       publicKey: nodeKey,
       label: newLabel,
+      deleted: false,
     });
 
     return newLabel;
