@@ -34,6 +34,7 @@ func TestClient_Close(t *testing.T) {
 func TestClient_AddEdgeRules(t *testing.T) {
 	srcPK, _ := cipher.GenerateKeyPair()
 	dstPK, _ := cipher.GenerateKeyPair()
+
 	var srcPort, dstPort routing.Port = 100, 110
 
 	desc := routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort)
@@ -74,7 +75,7 @@ func TestClient_AddIntermediaryRules(t *testing.T) {
 }
 
 func TestClient_ReserveIDs(t *testing.T) {
-	var n uint8 = 5
+	n := uint8(5)
 	ids := []routing.RouteID{1, 2, 3, 4, 5}
 
 	r := &router.MockRouter{}
@@ -97,6 +98,7 @@ func prepRPCServerAndClient(t *testing.T, r router.Router) (s *rpc.Server, cl *C
 	s = rpc.NewServer()
 	err = s.Register(gateway)
 	require.NoError(t, err)
+
 	go s.Accept(l)
 
 	conn, err := net.Dial("tcp", l.Addr().String())
