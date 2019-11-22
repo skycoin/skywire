@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"io"
 	"math/rand"
 	"net"
 	"strconv"
@@ -46,6 +47,7 @@ func TestRouteGroup_Read(t *testing.T) {
 	defer cancel()
 
 	errCh := make(chan error, 1)
+
 	go func() {
 		_, err := rg1.Read(buf1)
 		errCh <- err
@@ -115,139 +117,168 @@ func TestRouteGroup_Write(t *testing.T) {
 }
 
 func TestRouteGroup_ReadWrite(t *testing.T) {
-	for k := 0; k < 2; k++ {
-		msg1 := []byte("hello1_")
-		msg2 := []byte("hello2_")
+	const iterations = 3
 
-		rg1 := createRouteGroup()
-		rg2 := createRouteGroup()
+	for i := 0; i < iterations; i++ {
+		testReadWrite(t, iterations)
+	}
+}
 
-		m1, m2, _ := createTransports(t, rg1, rg2)
+func testReadWrite(t *testing.T, iterations int) {
+	rg1 := createRouteGroup()
+	rg2 := createRouteGroup()
+	m1, m2, _ := createTransports(t, rg1, rg2)
 
-		ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
-		go pushPackets(t, ctx, m1, rg1)
-		go pushPackets(t, ctx, m2, rg2)
+	go pushPackets(ctx, t, m1, rg1)
 
-		const iterations = 10
+	go pushPackets(ctx, t, m2, rg2)
 
-		t.Run("Group", func(t *testing.T) {
-			t.Run("MultipleWriteRead", func(t *testing.T) {
-				for i := 0; i < iterations; i++ {
-					for j := 0; j < iterations; j++ {
-						_, err := rg1.Write(append(msg1, []byte(strconv.Itoa(j))...))
-						require.NoError(t, err)
+	testRouteGroupReadWrite(t, iterations, rg1, rg2)
+	cancel()
 
-						_, err = rg2.Write(append(msg2, []byte(strconv.Itoa(j))...))
-						require.NoError(t, err)
-					}
+	assert.NoError(t, rg1.Close())
+	assert.NoError(t, rg2.Close())
 
-					for j := 0; j < iterations; j++ {
-						msg := append(msg2, []byte(strconv.Itoa(j))...)
-						buf1 := make([]byte, len(msg))
-						_, err := rg1.Read(buf1)
-						require.NoError(t, err)
-						require.Equal(t, msg, buf1)
-					}
+	// TODO: uncomment
+	// teardownEnv()
+}
 
-					for j := 0; j < iterations; j++ {
-						msg := append(msg1, []byte(strconv.Itoa(j))...)
-						buf2 := make([]byte, len(msg))
-						_, err := rg2.Read(buf2)
-						require.NoError(t, err)
-						require.Equal(t, msg, buf2)
-					}
-				}
-			})
+func testRouteGroupReadWrite(t *testing.T, iterations int, rg1, rg2 io.ReadWriter) {
+	msg1 := []byte("hello1_")
+	msg2 := []byte("hello2_")
 
-			t.Run("SingleReadWrite", func(t *testing.T) {
-				var err1, err2 error
-				go func() {
-					time.Sleep(1 * time.Second)
-					_, err1 = rg1.Write(msg1)
-					_, err2 = rg2.Write(msg2)
-				}()
-				require.NoError(t, err1)
-				require.NoError(t, err2)
-
-				buf1 := make([]byte, len(msg2))
-				_, err := rg1.Read(buf1)
-				require.NoError(t, err)
-				require.Equal(t, msg2, buf1)
-
-				buf2 := make([]byte, len(msg1))
-				_, err = rg2.Read(buf2)
-				require.NoError(t, err)
-				require.Equal(t, msg1, buf2)
-			})
-
-			t.Run("MultipleReadWrite", func(t *testing.T) {
-				var err1, err2 error
-				for i := 0; i < iterations; i++ {
-					var wg sync.WaitGroup
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
-
-						time.Sleep(100 * time.Millisecond)
-
-						for j := 0; j < iterations; j++ {
-							_, err := rg1.Write(append(msg1, []byte(strconv.Itoa(j))...))
-							require.NoError(t, err)
-
-							_, err = rg2.Write(append(msg2, []byte(strconv.Itoa(j))...))
-							require.NoError(t, err)
-						}
-					}()
-					require.NoError(t, err1)
-					require.NoError(t, err2)
-
-					for j := 0; j < iterations; j++ {
-						msg := append(msg2, []byte(strconv.Itoa(j))...)
-						buf1 := make([]byte, len(msg))
-						_, err := rg1.Read(buf1)
-						require.NoError(t, err)
-						require.Equal(t, msg, buf1)
-					}
-
-					for j := 0; j < iterations; j++ {
-						msg := append(msg1, []byte(strconv.Itoa(j))...)
-						buf2 := make([]byte, len(msg))
-						_, err := rg2.Read(buf2)
-						require.NoError(t, err)
-						require.Equal(t, msg, buf2)
-					}
-
-					wg.Wait()
-				}
-			})
-
-			t.Run("SingleWriteRead", func(t *testing.T) {
-				_, err := rg1.Write(msg1)
-				require.NoError(t, err)
-
-				_, err = rg2.Write(msg2)
-				require.NoError(t, err)
-
-				buf1 := make([]byte, len(msg2))
-				_, err = rg1.Read(buf1)
-				require.NoError(t, err)
-				require.Equal(t, msg2, buf1)
-
-				buf2 := make([]byte, len(msg1))
-				_, err = rg2.Read(buf2)
-				require.NoError(t, err)
-				require.Equal(t, msg1, buf2)
-			})
+	t.Run("Group", func(t *testing.T) {
+		t.Run("MultipleWriteRead", func(t *testing.T) {
+			testMultipleWR(t, iterations, rg1, rg2, msg1, msg2)
 		})
 
-		cancel()
+		t.Run("SingleReadWrite", func(t *testing.T) {
+			testSingleRW(t, rg1, rg2, msg1, msg2)
+		})
 
-		assert.NoError(t, rg1.Close())
-		assert.NoError(t, rg2.Close())
+		t.Run("MultipleReadWrite", func(t *testing.T) {
+			testMultipleRW(t, iterations, rg1, rg2, msg1, msg2)
+		})
 
-		// TODO: uncomment
-		// teardownEnv()
+		t.Run("SingleWriteRead", func(t *testing.T) {
+			testSingleWR(t, rg1, rg2, msg1, msg2)
+		})
+	})
+}
+
+func testSingleWR(t *testing.T, rg1, rg2 io.ReadWriter, msg1, msg2 []byte) {
+	_, err := rg1.Write(msg1)
+	require.NoError(t, err)
+
+	_, err = rg2.Write(msg2)
+	require.NoError(t, err)
+
+	buf1 := make([]byte, len(msg2))
+	_, err = rg1.Read(buf1)
+	require.NoError(t, err)
+	require.Equal(t, msg2, buf1)
+
+	buf2 := make([]byte, len(msg1))
+	_, err = rg2.Read(buf2)
+	require.NoError(t, err)
+	require.Equal(t, msg1, buf2)
+}
+
+func testMultipleRW(t *testing.T, iterations int, rg1, rg2 io.ReadWriter, msg1, msg2 []byte) {
+	var err1, err2 error
+
+	for i := 0; i < iterations; i++ {
+		var wg sync.WaitGroup
+
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			time.Sleep(100 * time.Millisecond)
+
+			for j := 0; j < iterations; j++ {
+				_, err := rg1.Write(append(msg1, []byte(strconv.Itoa(j))...))
+				require.NoError(t, err)
+
+				_, err = rg2.Write(append(msg2, []byte(strconv.Itoa(j))...))
+				require.NoError(t, err)
+			}
+		}()
+
+		require.NoError(t, err1)
+		require.NoError(t, err2)
+
+		for j := 0; j < iterations; j++ {
+			msg := append(msg2, []byte(strconv.Itoa(j))...)
+			buf1 := make([]byte, len(msg))
+			_, err := rg1.Read(buf1)
+			require.NoError(t, err)
+			require.Equal(t, msg, buf1)
+		}
+
+		for j := 0; j < iterations; j++ {
+			msg := append(msg1, []byte(strconv.Itoa(j))...)
+			buf2 := make([]byte, len(msg))
+			_, err := rg2.Read(buf2)
+			require.NoError(t, err)
+			require.Equal(t, msg, buf2)
+		}
+
+		wg.Wait()
+	}
+}
+
+func testSingleRW(t *testing.T, rg1, rg2 io.ReadWriter, msg1, msg2 []byte) {
+	var err1, err2 error
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		_, err1 = rg1.Write(msg1)
+		_, err2 = rg2.Write(msg2)
+	}()
+
+	require.NoError(t, err1)
+	require.NoError(t, err2)
+
+	buf1 := make([]byte, len(msg2))
+	_, err := rg1.Read(buf1)
+	require.NoError(t, err)
+	require.Equal(t, msg2, buf1)
+
+	buf2 := make([]byte, len(msg1))
+	_, err = rg2.Read(buf2)
+	require.NoError(t, err)
+	require.Equal(t, msg1, buf2)
+}
+
+func testMultipleWR(t *testing.T, iterations int, rg1, rg2 io.ReadWriter, msg1, msg2 []byte) {
+	for i := 0; i < iterations; i++ {
+		for j := 0; j < iterations; j++ {
+			_, err := rg1.Write(append(msg1, []byte(strconv.Itoa(j))...))
+			require.NoError(t, err)
+
+			_, err = rg2.Write(append(msg2, []byte(strconv.Itoa(j))...))
+			require.NoError(t, err)
+		}
+
+		for j := 0; j < iterations; j++ {
+			msg := append(msg2, []byte(strconv.Itoa(j))...)
+			buf1 := make([]byte, len(msg))
+			_, err := rg1.Read(buf1)
+			require.NoError(t, err)
+			require.Equal(t, msg, buf1)
+		}
+
+		for j := 0; j < iterations; j++ {
+			msg := append(msg1, []byte(strconv.Itoa(j))...)
+			buf2 := make([]byte, len(msg))
+			_, err := rg2.Read(buf2)
+			require.NoError(t, err)
+			require.Equal(t, msg, buf2)
+		}
 	}
 }
 
@@ -266,7 +297,7 @@ func TestRouteGroup_SetReadDeadline(t *testing.T) {
 	now := time.Now()
 
 	require.NoError(t, rg.SetReadDeadline(now))
-	require.Equal(t, now.UnixNano(), rg.readDeadline)
+	assert.Equal(t, now, rg.readDeadline.Load())
 }
 
 func TestRouteGroup_SetWriteDeadline(t *testing.T) {
@@ -274,16 +305,16 @@ func TestRouteGroup_SetWriteDeadline(t *testing.T) {
 	now := time.Now()
 
 	require.NoError(t, rg.SetWriteDeadline(now))
-	require.Equal(t, now.UnixNano(), rg.writeDeadline)
+	assert.Equal(t, now, rg.writeDeadline.Load())
 }
 
 func TestRouteGroup_SetDeadline(t *testing.T) {
 	rg := createRouteGroup()
 	now := time.Now()
 
-	assert.NoError(t, rg.SetDeadline(now))
-	assert.Equal(t, now.UnixNano(), rg.readDeadline)
-	assert.Equal(t, now.UnixNano(), rg.writeDeadline)
+	require.NoError(t, rg.SetDeadline(now))
+	assert.Equal(t, now, rg.readDeadline.Load())
+	assert.Equal(t, now, rg.writeDeadline.Load())
 }
 
 func TestRouteGroup_TestConn(t *testing.T) {
@@ -293,10 +324,11 @@ func TestRouteGroup_TestConn(t *testing.T) {
 	// c1, c2 = rg1, rg2
 
 	m1, m2, _ := createTransports(t, rg1, rg2)
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
-	go pushPackets(t, ctx, m1, rg1)
-	go pushPackets(t, ctx, m2, rg2)
+	go pushPackets(ctx, t, m1, rg1)
+
+	go pushPackets(ctx, t, m2, rg2)
 
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
 		c1, c2 = rg1, rg2
@@ -305,12 +337,16 @@ func TestRouteGroup_TestConn(t *testing.T) {
 			// cancel()
 			// teardownEnv()
 		}
+
 		return
 	}
+
 	nettest.TestConn(t, mp)
+
+	cancel()
 }
 
-func pushPackets(t *testing.T, ctx context.Context, from *transport.Manager, to *RouteGroup) {
+func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to *RouteGroup) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -337,6 +373,7 @@ func createRouteGroup() *RouteGroup {
 	desc := routing.NewRouteDescriptor(pk1, pk2, port1, port2)
 
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), rt, desc)
+
 	return rg
 }
 
@@ -355,8 +392,8 @@ func createTransports(t *testing.T, rg1, rg2 *RouteGroup) (m1, m2 *transport.Man
 
 	keepAlive := 1 * time.Hour
 	// TODO: remove rand
-	id1 := routing.RouteID(rand.Int())
-	id2 := routing.RouteID(rand.Int())
+	id1 := routing.RouteID(rand.Int()) // nolint: gosec
+	id2 := routing.RouteID(rand.Int()) // nolint: gosec
 	port1 := routing.Port(1)
 	port2 := routing.Port(2)
 	rule1 := routing.ForwardRule(keepAlive, id1, id2, tp2.Entry.ID, keys[0].PK, port1, port2)
