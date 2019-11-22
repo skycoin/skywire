@@ -30,9 +30,13 @@ var (
 	ErrNoRules = errors.New("no rules")
 	// ErrNoTransport is returned when transport is nil.
 	ErrBadTransport = errors.New("bad transport")
-	// ErrTimeout happens if Read/Write times out.
-	ErrTimeout = errors.New("timeout")
 )
+
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
 
 type RouteGroupConfig struct {
 	ReadChBufSize     int
@@ -136,7 +140,7 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 		defer r.mu.Unlock()
 		return ioutil.BufRead(&r.readBuf, data, p)
 	case <-timeout:
-		return 0, ErrTimeout
+		return 0, timeoutError{}
 	}
 }
 
@@ -169,7 +173,7 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 		}
 		return v.n, v.err
 	case <-timeout:
-		return 0, ErrTimeout
+		return 0, timeoutError{}
 	}
 }
 
@@ -234,7 +238,7 @@ func (r *RouteGroup) Close() error {
 
 	r.once.Do(func() {
 		close(r.done)
-		close(r.readCh)
+		// close(r.readCh) // TODO: fix panics and uncomment
 	})
 
 	return nil
