@@ -27,6 +27,7 @@ func NewRPCGateway(reqPK cipher.PubKey, sn *Node) *RPCGateway {
 
 func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *routing.EdgeRules) (err error) {
 	startTime := time.Now()
+
 	defer func() {
 		g.sn.metrics.Record(time.Since(startTime), err != nil)
 	}()
@@ -44,5 +45,6 @@ func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *rou
 
 	// Confirm routes with initiating visor.
 	*rules = initRules
+
 	return nil
 }

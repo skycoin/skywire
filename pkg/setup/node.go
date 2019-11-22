@@ -30,9 +30,11 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	ctx := context.Background()
 
 	logger := logging.NewMasterLogger()
+
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
 		logger.SetLevel(lvl)
 	}
+
 	log := logger.PackageLogger("setup_node")
 
 	// Prepare dmsg.
@@ -45,12 +47,14 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	if err := dmsgC.InitiateServerConnections(ctx, conf.Messaging.ServerCount); err != nil {
 		return nil, fmt.Errorf("failed to init dmsg: %s", err)
 	}
+
 	log.Info("connected to dmsg servers")
 
 	dmsgL, err := dmsgC.Listen(skyenv.DmsgSetupPort)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on dmsg port %d: %v", skyenv.DmsgSetupPort, dmsgL)
 	}
+
 	log.Info("started listening for dmsg connections")
 
 	node := &Node{
@@ -89,6 +93,7 @@ func (sn *Node) Serve() error {
 		if err := rpcS.Register(NewRPCGateway(conn.RemotePK(), sn)); err != nil {
 			return err
 		}
+
 		go rpcS.ServeConn(conn)
 	}
 }
@@ -122,10 +127,14 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	sn.logger.Infof("generated intermediary rules: %v", intermediaryRules)
 
 	errCh := make(chan error, len(intermediaryRules))
+
 	var wg sync.WaitGroup
+
 	for pk, rules := range intermediaryRules {
-		wg.Add(1)
 		pk, rules := pk, rules
+
+		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 			if _, err := routerclient.AddIntermediaryRules(ctx, sn.logger, sn.dmsgC, pk, rules); err != nil {
@@ -174,5 +183,6 @@ func (sn *Node) reserveRouteIDs(ctx context.Context, route routing.Bidirectional
 	}
 
 	sn.logger.Infof("Successfully reserved route IDs.")
+
 	return reservoir, err
 }
