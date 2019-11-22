@@ -26,9 +26,9 @@ const (
 var (
 	// ErrNoTransports is returned when RouteGroup has no transports.
 	ErrNoTransports = errors.New("no transports")
-	// ErrNoTransport is returned when RouteGroup has no rules.
+	// ErrNoRules is returned when RouteGroup has no rules.
 	ErrNoRules = errors.New("no rules")
-	// ErrNoTransport is returned when transport is nil.
+	// ErrBadTransport is returned when transport is nil.
 	ErrBadTransport = errors.New("bad transport")
 )
 
@@ -72,8 +72,8 @@ type RouteGroup struct {
 	rvs []routing.Rule // reverse rules (for reading)
 
 	lastSent      int64
-	readDeadline  int64
-	writeDeadline int64
+	readDeadline  atomic.Value
+	writeDeadline atomic.Value
 
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
@@ -107,19 +107,27 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 }
 
 // Read reads the next packet payload of a RouteGroup.
-// The Router, via transport.Manager, is responsible for reading incoming packets and pushing it to the appropriate RouteGroup via (*RouteGroup).readCh.
-// To help with implementing the read logic, within the dmsg repo, we have ioutil.BufRead, just in case the read buffer is short.
+// The Router, via transport.Manager, is responsible for reading incoming packets and pushing it
+// to the appropriate RouteGroup via (*RouteGroup).readCh.
+// To help with implementing the read logic, within the dmsg repo, we have ioutil.BufRead,
+// just in case the read buffer is short.
 func (r *RouteGroup) Read(p []byte) (n int, err error) {
-	var timeout <-chan time.Time
-	var timer *time.Timer
+	var (
+		timeout <-chan time.Time
+		timer   *time.Timer
+	)
 
-	if deadline := atomic.LoadInt64(&r.readDeadline); deadline != 0 {
-		delay := time.Until(time.Unix(0, deadline))
+	if deadline, ok := r.readDeadline.Load().(time.Time); ok && !deadline.IsZero() {
+		delay := time.Until(deadline)
+		if delay <= 0 {
+			return 0, timeoutError{}
+		}
 
 		r.mu.Lock()
 		if delay > time.Duration(0) && r.readBuf.Len() > 0 {
 			n, err := r.readBuf.Read(p)
 			r.mu.Unlock()
+
 			return n, err
 		}
 		r.mu.Unlock()
@@ -133,11 +141,14 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 		if timer != nil {
 			timer.Stop()
 		}
+
 		if !ok {
 			return 0, io.ErrClosedPipe
 		}
+
 		r.mu.Lock()
 		defer r.mu.Unlock()
+
 		return ioutil.BufRead(&r.readBuf, data, p)
 	case <-timeout:
 		return 0, timeoutError{}
@@ -147,10 +158,17 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 // Write writes payload to a RouteGroup
 // For the first version, only the first ForwardRule (fwd[0]) is used for writing.
 func (r *RouteGroup) Write(p []byte) (n int, err error) {
-	var timeout <-chan time.Time
-	var timer *time.Timer
-	if deadline := atomic.LoadInt64(&r.writeDeadline); deadline != 0 {
-		delay := time.Until(time.Unix(0, deadline))
+	var (
+		timeout <-chan time.Time
+		timer   *time.Timer
+	)
+
+	if deadline, ok := r.writeDeadline.Load().(time.Time); ok && !deadline.IsZero() {
+		delay := time.Until(deadline)
+		if delay <= 0 {
+			return 0, timeoutError{}
+		}
+
 		timer = time.NewTimer(delay)
 		timeout = timer.C
 	}
@@ -161,6 +179,7 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	ch := make(chan values, 1)
+
 	go func() {
 		n, err := r.write(p)
 		ch <- values{n, err}
@@ -171,6 +190,7 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 		if timer != nil {
 			timer.Stop()
 		}
+
 		return v.n, v.err
 	case <-timeout:
 		return 0, timeoutError{}
@@ -188,6 +208,7 @@ func (r *RouteGroup) write(p []byte) (n int, err error) {
 	if len(r.tps) == 0 {
 		return 0, ErrNoTransports
 	}
+
 	if len(r.fwd) == 0 {
 		return 0, ErrNoRules
 	}
@@ -231,9 +252,11 @@ func (r *RouteGroup) Close() error {
 
 	rules := r.rt.RulesWithDesc(r.desc)
 	routeIDs := make([]routing.RouteID, 0, len(rules))
+
 	for _, rule := range rules {
 		routeIDs = append(routeIDs, rule.KeyRouteID())
 	}
+
 	r.rt.DelRules(routeIDs)
 
 	r.once.Do(func() {
@@ -256,16 +279,17 @@ func (r *RouteGroup) SetDeadline(t time.Time) error {
 	if err := r.SetReadDeadline(t); err != nil {
 		return err
 	}
+
 	return r.SetWriteDeadline(t)
 }
 
 func (r *RouteGroup) SetReadDeadline(t time.Time) error {
-	atomic.StoreInt64(&r.readDeadline, t.UnixNano())
+	r.readDeadline.Store(t)
 	return nil
 }
 
 func (r *RouteGroup) SetWriteDeadline(t time.Time) error {
-	atomic.StoreInt64(&r.writeDeadline, t.UnixNano())
+	r.writeDeadline.Store(t)
 	return nil
 }
 
@@ -306,6 +330,7 @@ func (r *RouteGroup) sendKeepAlive() error {
 	if err := tp.WritePacket(context.Background(), packet); err != nil {
 		return err
 	}
+
 	return nil
 }
 
