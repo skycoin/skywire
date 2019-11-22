@@ -127,7 +127,7 @@ func TestRouteGroup_ReadWrite(t *testing.T) {
 func testReadWrite(t *testing.T, iterations int) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
-	m1, m2, _ := createTransports(t, rg1, rg2)
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -136,13 +136,13 @@ func testReadWrite(t *testing.T, iterations int) {
 	go pushPackets(ctx, t, m2, rg2)
 
 	testRouteGroupReadWrite(t, iterations, rg1, rg2)
+
 	cancel()
 
 	assert.NoError(t, rg1.Close())
 	assert.NoError(t, rg2.Close())
 
-	// TODO: uncomment
-	// teardownEnv()
+	teardownEnv()
 }
 
 func testRouteGroupReadWrite(t *testing.T, iterations int, rg1, rg2 io.ReadWriter) {
@@ -294,56 +294,91 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 
 func TestRouteGroup_SetReadDeadline(t *testing.T) {
 	rg := createRouteGroup()
-	now := time.Now()
+	timeout := 100 * time.Millisecond
+	now := time.Now().Add(timeout)
+
+	assert.Equal(t, false, rg.readTimedOut.IsSet())
+	assert.Nil(t, rg.readTimer)
 
 	require.NoError(t, rg.SetReadDeadline(now))
-	assert.Equal(t, now, rg.readDeadline.Load())
+
+	assert.Equal(t, false, rg.readTimedOut.IsSet())
+	assert.NotNil(t, rg.readTimer)
+
+	time.Sleep(timeout * 2)
+
+	assert.Equal(t, true, rg.readTimedOut.IsSet())
+	assert.NotNil(t, rg.readTimer)
 }
 
 func TestRouteGroup_SetWriteDeadline(t *testing.T) {
 	rg := createRouteGroup()
-	now := time.Now()
+	timeout := 100 * time.Millisecond
+	now := time.Now().Add(timeout)
+
+	assert.Equal(t, false, rg.writeTimedOut.IsSet())
+	assert.Nil(t, rg.writeTimer)
 
 	require.NoError(t, rg.SetWriteDeadline(now))
-	assert.Equal(t, now, rg.writeDeadline.Load())
+
+	assert.Equal(t, false, rg.writeTimedOut.IsSet())
+	assert.NotNil(t, rg.writeTimer)
+
+	time.Sleep(timeout * 2)
+
+	assert.Equal(t, true, rg.writeTimedOut.IsSet())
+	assert.NotNil(t, rg.writeTimer)
 }
 
 func TestRouteGroup_SetDeadline(t *testing.T) {
 	rg := createRouteGroup()
-	now := time.Now()
+	timeout := 100 * time.Millisecond
+	now := time.Now().Add(timeout)
+
+	assert.Equal(t, false, rg.readTimedOut.IsSet())
+	assert.Equal(t, false, rg.writeTimedOut.IsSet())
+	assert.Nil(t, rg.readTimer)
+	assert.Nil(t, rg.writeTimer)
 
 	require.NoError(t, rg.SetDeadline(now))
-	assert.Equal(t, now, rg.readDeadline.Load())
-	assert.Equal(t, now, rg.writeDeadline.Load())
+
+	assert.Equal(t, false, rg.readTimedOut.IsSet())
+	assert.Equal(t, false, rg.writeTimedOut.IsSet())
+	assert.NotNil(t, rg.readTimer)
+	assert.NotNil(t, rg.writeTimer)
+
+	time.Sleep(timeout * 2)
+
+	assert.Equal(t, true, rg.readTimedOut.IsSet())
+	assert.Equal(t, true, rg.writeTimedOut.IsSet())
+	assert.NotNil(t, rg.readTimer)
+	assert.NotNil(t, rg.writeTimer)
 }
 
+// TODO: fix hangs
 func TestRouteGroup_TestConn(t *testing.T) {
-	rg1 := createRouteGroup()
-	rg2 := createRouteGroup()
-
-	// c1, c2 = rg1, rg2
-
-	m1, m2, _ := createTransports(t, rg1, rg2)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go pushPackets(ctx, t, m1, rg1)
-
-	go pushPackets(ctx, t, m2, rg2)
-
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
+		rg1 := createRouteGroup()
+		rg2 := createRouteGroup()
+
 		c1, c2 = rg1, rg2
+
+		m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+		ctx, cancel := context.WithCancel(context.Background())
+
+		go pushPackets(ctx, t, m1, rg1)
+
+		go pushPackets(ctx, t, m2, rg2)
+
 		stop = func() {
-			// TODO: uncomment
-			// cancel()
-			// teardownEnv()
+			cancel()
+			teardownEnv()
 		}
 
 		return
 	}
 
 	nettest.TestConn(t, mp)
-
-	cancel()
 }
 
 func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to *RouteGroup) {
