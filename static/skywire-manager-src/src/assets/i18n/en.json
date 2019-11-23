@@ -112,10 +112,13 @@
     "state": "State",
     "label": "Label",
     "view-node": "View node",
-    "delete-node": "Delete node",
+    "delete-node": "Remove node",
     "error-load": "An error occurred while refreshing nodes",
     "empty": "There aren't any nodes connected to this manager.",
-    "logout-error": "Error logging out."
+    "logout-error": "Error logging out.",
+    "delete-node-confirmation": "Are you sure you want to remove the node from the list?",
+    "deleted": "Node removed",
+    "options": "Options"
   },
 
   "edit-label": {

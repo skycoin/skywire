@@ -122,13 +122,13 @@
             </div>
             <div class="right-part">
               <button
-                (click)="$event.stopPropagation(); showEditLabelDialog(node)"
+                (click)="$event.stopPropagation(); node.online ? showEditLabelDialog(node) : showOptionsDialog(node)"
                 mat-icon-button
-                [matTooltip]="'edit-label.title' | translate"
+                [matTooltip]="(node.online ? 'edit-label.title' : 'nodes.options') | translate"
                 [disableRipple]="true"
                 class="grey-button-background"
               >
-                <mat-icon>short_text</mat-icon>
+                <mat-icon>{{ node.online ? 'short_text' : 'add' }}</mat-icon>
               </button>
             </div>
           </div>

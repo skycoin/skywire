@@ -12,6 +12,8 @@ import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
 import { SelectColumnComponent, SelectedColumn } from '../../layout/select-column/select-column.component';
+import { SelectNodeOptionComponent, NodeListOptions } from './select-node-option/select-node-option.component';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 enum SortableColumns {
   Label = 'nodes.label',
@@ -227,6 +229,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
     );
   }
 
+  showOptionsDialog(node: Node) {
+    SelectNodeOptionComponent.openDialog(this.dialog).afterClosed().subscribe((option: NodeListOptions) => {
+      if (option === NodeListOptions.Delete) {
+        this.deleteNode(node);
+      } else if (option === NodeListOptions.Rename) {
+        this.showEditLabelDialog(node);
+      }
+    });
+  }
+
   showEditLabelDialog(node: Node) {
     EditLabelComponent.openDialog(this.dialog, node).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
@@ -236,8 +248,14 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   deleteNode(node: Node) {
-    this.storageService.changeNodeState(node.local_pk, true);
-    this.refresh(0);
+    const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'nodes.delete-node-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.close();
+      this.storageService.changeNodeState(node.local_pk, true);
+      this.refresh(0);
+      this.snackbarService.showDone('nodes.deleted');
+    });
   }
 
   open(node: Node) {

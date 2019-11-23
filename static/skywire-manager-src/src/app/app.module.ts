@@ -105,6 +105,7 @@ import { SelectTabComponent } from './components/layout/tab-bar/select-tab/selec
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectColumnComponent } from './components/layout/select-column/select-column.component';
+import { SelectNodeOptionComponent } from './components/pages/node-list/select-node-option/select-node-option.component';
 
 @NgModule({
   declarations: [
@@ -184,6 +185,7 @@ import { SelectColumnComponent } from './components/layout/select-column/select-
     NodeInfoContentComponent,
     NodeInfoComponent,
     SelectColumnComponent,
+    SelectNodeOptionComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -210,6 +212,7 @@ import { SelectColumnComponent } from './components/layout/select-column/select-
     SelectLanguageComponent,
     SelectTabComponent,
     SelectColumnComponent,
+    SelectNodeOptionComponent,
   ],
   imports: [
     BrowserModule,
