@@ -1,5 +1,6 @@
 import { MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { ConfirmationComponent, ConfirmationData } from '../components/layout/confirmation/confirmation.component';
+import { AppConfig } from '../app.config';
 
 export default class GeneralUtils {
   static createDeleteConfirmation(dialog: MatDialog, text: string): MatDialogRef<ConfirmationComponent, any> {
@@ -11,10 +12,11 @@ export default class GeneralUtils {
       disableDismiss: true,
     };
 
-    return dialog.open(ConfirmationComponent, <MatDialogConfig> {
-      width: '450px',
-      data: confirmationData,
-      autoFocus: false,
-    });
+    const config = new MatDialogConfig();
+    config.data = confirmationData;
+    config.autoFocus = false;
+    config.width = AppConfig.smallModalWidth;
+
+    return dialog.open(ConfirmationComponent, config);
   }
 }

@@ -1,7 +1,14 @@
 @import 'variables';
+@import "bootstrap_overrides";
 
 .main-container {
   text-align: right;
+
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    & {
+      text-align: center;
+    }
+  }
 
   .paginator {
     display: inline-block;
@@ -17,6 +24,9 @@
         text-align: center;
         color: $white;
         text-decoration: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
 
         &:hover {
           background: rgba(0, 0, 0, 0.12);

@@ -100,7 +100,7 @@
               </div>
             </div>
             <div class="right-part">
-              <mat-icon [inline]="true">{{ sortingArrow }}</mat-icon>
+              <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
             </div>
           </div>
         </td></tr>
@@ -120,11 +120,12 @@
                 {{ node.local_pk }}
               </div>
             </div>
+            <div class="margin-part"></div>
             <div class="right-part">
               <button
                 (click)="$event.stopPropagation(); node.online ? showEditLabelDialog(node) : showOptionsDialog(node)"
                 mat-icon-button
-                [matTooltip]="(node.online ? 'edit-label.title' : 'nodes.options') | translate"
+                [matTooltip]="(node.online ? 'edit-label.title' : 'common.options') | translate"
                 [disableRipple]="true"
                 class="grey-button-background"
               >

@@ -20,7 +20,7 @@
     "delete": "Delete",
     "none": "None",
     "loading-error": "There was an error getting the data. Retrying...",
-    "window-size-error": "The window is too narrow for the content"
+    "options": "Options"
   },
 
   "tables": {
@@ -117,8 +117,7 @@
     "empty": "There aren't any nodes connected to this manager.",
     "logout-error": "Error logging out.",
     "delete-node-confirmation": "Are you sure you want to remove the node from the list?",
-    "deleted": "Node removed",
-    "options": "Options"
+    "deleted": "Node removed"
   },
 
   "edit-label": {
@@ -266,7 +265,12 @@
       "app-name": "App name",
       "port": "Port",
       "status": "Status",
-      "auto-start": "Auto start"
+      "auto-start": "Auto start",
+      "empty": "Node doesn't have any routes.",
+      "disable-autostart": "Disable autostart",
+      "enable-autostart": "Enable autostart",
+      "autostart-disabled": "Autostart disable",
+      "autostart-enabled": "Autostart enabled"
     },
     "stop-app": "Stop",
     "start-app": "Start",
@@ -291,7 +295,7 @@
     "title": "Transports",
     "list-title": "Transport list",
     "id": "ID",
-    "remote": "Remote node",
+    "remote-node": "Remote",
     "type": "Type",
     "create": "Create transport",
     "delete-confirmation": "Are you sure you want to delete the transport?",
@@ -299,6 +303,7 @@
     "delete": "Delete transport",
     "deleted": "Delete operation completed",
     "error-deleting": "It was not possible to complete the delete operation",
+    "empty": "Node doesn't have any transports.",
     "details": {
       "title": "Details",
       "basic": {
@@ -337,6 +342,7 @@
     "delete": "Delete route",
     "deleted": "Delete operation completed",
     "error-deleting": "It was not possible to complete the delete operation",
+    "empty": "Node doesn't have any routes.",
     "details": {
       "title": "Details",
       "basic": {

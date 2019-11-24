@@ -1,7 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Application } from '../../../../../../app.datatypes';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
 import { AppsService } from '../../../../../../services/apps.service';
 import { LogComponent } from '../log/log.component';
 import { NodeComponent } from '../../../node.component';
@@ -11,12 +10,14 @@ import { AppConfig } from '../../../../../../app.config';
 import GeneralUtils from '../../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
+import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
+import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 
 enum SortableColumns {
-  Name,
-  Port,
-  Status,
-  AutoStart,
+  Name = 'apps.apps-list.app-name',
+  Port = 'apps.apps-list.port',
+  Status = 'apps.apps-list.status',
+  AutoStart = 'apps.apps-list.auto-start',
 }
 
 @Component({
@@ -34,8 +35,7 @@ export class NodeAppsListComponent implements OnDestroy {
     return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   }
 
-  displayedColumns: string[] = ['selection', 'name', 'port', 'status', 'autostart', 'actions'];
-  dataSource = new MatTableDataSource<Application>();
+  dataSource: Application[];
   selections = new Map<string, boolean>();
 
   showShortList_: boolean;
@@ -144,7 +144,7 @@ export class NodeAppsListComponent implements OnDestroy {
     });
 
     const confirmationDialog = GeneralUtils.createDeleteConfirmation(
-      this.dialog, autostart ? 'apps.disable-autostart-selected-confirmation' : 'apps.enable-autostart-selected-confirmation'
+      this.dialog, autostart ? 'apps.enable-autostart-selected-confirmation' : 'apps.disable-autostart-selected-confirmation'
     );
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
@@ -156,6 +156,33 @@ export class NodeAppsListComponent implements OnDestroy {
 
   onCloseAppClicked(appName: string): void {
     // this.appsService.closeApp(appName).subscribe();
+  }
+
+  showOptionsDialog(app: Application) {
+    const options: SelectableOption[] = [
+      {
+        icon: 'list',
+        label: 'apps.view-logs',
+      },
+      {
+        icon: app.status === 1 ? 'stop' : 'play_arrow',
+        label: 'apps.' + (app.status === 1 ? 'stop-app' : 'start-app'),
+      },
+      {
+        icon: app.autostart ? 'close' : 'done',
+        label: app.autostart ? 'apps.apps-list.disable-autostart' : 'apps.apps-list.enable-autostart',
+      }
+    ];
+
+    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+      if (selectedOption === 1) {
+        this.viewLogs(app);
+      } else if (selectedOption === 2) {
+        this.changeAppState(app);
+      } else if (selectedOption === 3) {
+        this.changeAppAutostart(app);
+      }
+    });
   }
 
   changeAppState(app: Application): void {
@@ -229,6 +256,28 @@ export class NodeAppsListComponent implements OnDestroy {
     this.recalculateElementsToShow();
   }
 
+  openSortingOrderModal() {
+    const enumKeys = Object.keys(SortableColumns);
+    const columnsMap = new Map<string, SortableColumns>();
+    const columns = enumKeys.map(key => {
+      const val = SortableColumns[key as any];
+      columnsMap.set(val, SortableColumns[key]);
+
+      return val;
+    });
+
+    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
+      if (result) {
+        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
+          this.sortBy = columnsMap.get(result.label);
+          this.sortReverse = result.sortReverse;
+
+          this.recalculateElementsToShow();
+        }
+      }
+    });
+  }
+
   private recalculateElementsToShow() {
     this.currentPage = this.currentPageInUrl;
 
@@ -287,7 +336,7 @@ export class NodeAppsListComponent implements OnDestroy {
       this.selections = new Map<string, boolean>();
     }
 
-    this.dataSource.data = this.appsToShow;
+    this.dataSource = this.appsToShow;
   }
 
   private startChangingAppState(appName: string, startApp: boolean): Observable<any> {

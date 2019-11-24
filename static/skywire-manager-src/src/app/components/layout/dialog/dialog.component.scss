@@ -17,7 +17,7 @@
     align-items: center;
     background-color: white;
 
-    @media (max-width: map-get($grid-breakpoints, md)) {
+    @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
       & {
         padding: 0px 2px 0px $mat-dialog-padding;
       }
@@ -39,7 +39,7 @@
       line-height: 20px;
       margin-left: 10px;
 
-      @media (max-width: map-get($grid-breakpoints, md)) {
+      @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
         & {
           width: 46px;
           height: 46px;

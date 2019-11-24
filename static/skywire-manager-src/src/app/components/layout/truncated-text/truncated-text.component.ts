@@ -9,7 +9,7 @@ export class TruncatedTextComponent {
   @Input() short = false;
   @Input() showTooltip = true;
   @Input() text: string;
-  @Input() shortTextLength = 6;
+  @Input() shortTextLength = 5;
 
   get shortText() {
     if (this.text.length > this.shortTextLength * 2) {

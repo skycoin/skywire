@@ -12,8 +12,8 @@ import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
 import { SelectColumnComponent, SelectedColumn } from '../../layout/select-column/select-column.component';
-import { SelectNodeOptionComponent, NodeListOptions } from './select-node-option/select-node-option.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
 
 enum SortableColumns {
   Label = 'nodes.label',
@@ -230,11 +230,22 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   showOptionsDialog(node: Node) {
-    SelectNodeOptionComponent.openDialog(this.dialog).afterClosed().subscribe((option: NodeListOptions) => {
-      if (option === NodeListOptions.Delete) {
-        this.deleteNode(node);
-      } else if (option === NodeListOptions.Rename) {
+    const options: SelectableOption[] = [
+      {
+        icon: 'short_text',
+        label: 'edit-label.title',
+      },
+      {
+        icon: 'close',
+        label: 'nodes.delete-node',
+      }
+    ];
+
+    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+      if (selectedOption === 1) {
         this.showEditLabelDialog(node);
+      } else if (selectedOption === 2) {
+        this.deleteNode(node);
       }
     });
   }

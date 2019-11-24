@@ -30,7 +30,7 @@
 }
 
 .responsive-table-white {
-  @media (max-width: map-get($grid-breakpoints, md)) {
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
     & {
       padding: 0;
     }
@@ -48,31 +48,6 @@
       &:last-child {
         margin-left: 15px;
       }
-    }
-  }
-}
-
-.list-item-container {
-  display: flex;
-  padding: 10px 15px;
-  padding-right: 0px;
-
-  .left-part {
-    flex-grow: 1;
-  }
-
-  .right-part {
-    width: 60px;
-    text-align: center;
-
-    button {
-      width: 60px;
-      height: 60px;
-    }
-
-    mat-icon {
-      display: inline;
-      font-size: 20px;
     }
   }
 }

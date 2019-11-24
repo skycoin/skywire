@@ -1,6 +1,5 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
 import { Route } from 'src/app/app.datatypes';
 import { RouteService } from '../../../../../services/route.service';
 import { NodeComponent } from '../../node.component';
@@ -11,10 +10,12 @@ import { AppConfig } from '../../../../../app.config';
 import GeneralUtils from '../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
+import { SelectOptionComponent, SelectableOption } from 'src/app/components/layout/select-option/select-option.component';
+import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 
 enum SortableColumns {
-  Key,
-  Rule,
+  Key = 'routes.key',
+  Rule = 'routes.rule',
 }
 
 @Component({
@@ -32,8 +33,7 @@ export class RouteListComponent implements OnDestroy {
     return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   }
 
-  displayedColumns: string[] = ['selection', 'key', 'rule', 'actions'];
-  dataSource = new MatTableDataSource<Route>();
+  dataSource: Route[];
   selections = new Map<number, boolean>();
 
   showShortList_: boolean;
@@ -124,6 +124,27 @@ export class RouteListComponent implements OnDestroy {
     });
   }
 
+  showOptionsDialog(route: Route) {
+    const options: SelectableOption[] = [
+      {
+        icon: 'visibility',
+        label: 'routes.details.title',
+      },
+      {
+        icon: 'close',
+        label: 'routes.delete',
+      }
+    ];
+
+    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+      if (selectedOption === 1) {
+        this.details(route.key.toString());
+      } else if (selectedOption === 2) {
+        this.delete(route.key);
+      }
+    });
+  }
+
   details(route: string) {
     RouteDetailsComponent.openDialog(this.dialog, route);
   }
@@ -153,6 +174,28 @@ export class RouteListComponent implements OnDestroy {
     }
 
     this.recalculateElementsToShow();
+  }
+
+  openSortingOrderModal() {
+    const enumKeys = Object.keys(SortableColumns);
+    const columnsMap = new Map<string, SortableColumns>();
+    const columns = enumKeys.map(key => {
+      const val = SortableColumns[key as any];
+      columnsMap.set(val, SortableColumns[key]);
+
+      return val;
+    });
+
+    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
+      if (result) {
+        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
+          this.sortBy = columnsMap.get(result.label);
+          this.sortReverse = result.sortReverse;
+
+          this.recalculateElementsToShow();
+        }
+      }
+    });
   }
 
   private recalculateElementsToShow() {
@@ -209,7 +252,7 @@ export class RouteListComponent implements OnDestroy {
       this.selections = new Map<number, boolean>();
     }
 
-    this.dataSource.data = this.routesToShow;
+    this.dataSource = this.routesToShow;
   }
 
   private startDeleting(routeKey: number): Observable<any> {

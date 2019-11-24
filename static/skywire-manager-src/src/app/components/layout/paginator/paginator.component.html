@@ -1,24 +1,40 @@
 <div class="main-container">
   <div class="paginator container-elevated-translucid mt-3">
     <div class="internal-container">
-      <a *ngIf="currentPage > 3" [routerLink]="linkParts.concat(['1'])">
-        <mat-icon [inline]="true">chevron_left</mat-icon>
-        {{ 'paginator.first' | translate }}
+      <a *ngIf="currentPage > 3" [routerLink]="linkParts.concat(['1'])" class="d-none d-md-flex">
+        <div>
+          <mat-icon [inline]="true">chevron_left</mat-icon>
+          {{ 'paginator.first' | translate }}
+        </div>
       </a>
-      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])">
-        <mat-icon [inline]="true">chevron_left</mat-icon>
+      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat(['1'])" class="d-md-none">
+        <div>
+          <mat-icon [inline]="true">chevron_left</mat-icon><br/>
+          {{ 'paginator.first' | translate }}
+        </div>
       </a>
-      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat([(currentPage - 2).toString()])">{{ currentPage - 2 }}</a>
+      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])" class="d-none d-md-flex">
+        <div><mat-icon [inline]="true">chevron_left</mat-icon></div>
+      </a>
+      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat([(currentPage - 2).toString()])" class="d-none d-md-flex">{{ currentPage - 2 }}</a>
       <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])">{{ currentPage - 1 }}</a>
       <a class="selected">{{ currentPage }}</a>
       <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])">{{ currentPage + 1 }}</a>
-      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 2).toString()])">{{ currentPage + 2 }}</a>
-      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])">
-        <mat-icon [inline]="true">chevron_right</mat-icon>
+      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 2).toString()])" class="d-none d-md-flex">{{ currentPage + 2 }}</a>
+      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])" class="d-none d-md-flex">
+        <div><mat-icon [inline]="true">chevron_right</mat-icon></div>
       </a>
-      <a *ngIf="currentPage + 2 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])">
-        {{ 'paginator.last' | translate }}
-        <mat-icon [inline]="true">chevron_right</mat-icon>
+      <a *ngIf="currentPage + 2 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" class="d-none d-md-flex">
+        <div>
+          {{ 'paginator.last' | translate }}
+          <mat-icon [inline]="true">chevron_right</mat-icon>
+        </div>
+      </a>
+      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" class="d-md-none">
+        <div>
+          <mat-icon [inline]="true">chevron_right</mat-icon><br/>
+          {{ 'paginator.last' | translate }}
+        </div>
       </a>
     </div>
   </div>

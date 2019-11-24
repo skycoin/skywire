@@ -14,7 +14,7 @@
     padding: 0;
     color: unset;
 
-    @media (max-width: map-get($grid-breakpoints, md)) {
+    @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
       & {
         width: 90px;
         font-size: 10px;
@@ -27,7 +27,7 @@
       height: 64px;
       margin: 10px 0px;
 
-      @media (max-width: map-get($grid-breakpoints, md)) {
+      @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
         & {
           width: 48px;
           height: 48px;
@@ -43,7 +43,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
 
-      @media (max-width: map-get($grid-breakpoints, md)) {
+      @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
         & {
           padding: 4px 5px;
         }

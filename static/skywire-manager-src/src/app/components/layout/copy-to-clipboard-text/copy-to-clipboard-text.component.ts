@@ -9,7 +9,7 @@ import { SnackbarService } from '../../../services/snackbar.service';
 export class CopyToClipboardTextComponent {
   @Input() public short = false;
   @Input() text: string;
-  @Input() shortTextLength = 6;
+  @Input() shortTextLength = 5;
   // @ViewChild(MatMenuTrigger) trigger: MatMenuTrigger;
 
   constructor(

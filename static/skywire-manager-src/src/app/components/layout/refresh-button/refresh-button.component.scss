@@ -21,7 +21,7 @@
     opacity: 0.5;
     display: inline-block;
 
-    @media (max-width: map-get($grid-breakpoints, md)) {
+    @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
       & {
         font-size: 22px;
         margin-right: 0;

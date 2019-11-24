@@ -3,9 +3,9 @@
     <span *ngIf="showShortList_">{{ 'routes.title' | translate }}</span>
   </div>
   <mat-icon
-    class="ic-mini-plus table-create-record"
+    class="ic-mini-plus-responsive table-create-record"
     [matMenuTriggerFor]="selectionMenu"
-    *ngIf="dataSource.data && dataSource.data.length > 0"
+    *ngIf="dataSource && dataSource.length > 0"
   >more_horiz</mat-icon>
   <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
     <div mat-menu-item (click)="changeAllSelections(true)">
@@ -20,77 +20,122 @@
   </mat-menu>
 </div>
 
-<div class="container-elevated-translucid mt-3 overflow">
+<div class="container-elevated-translucid table-container mt-3 overflow" *ngIf="dataSource && dataSource.length > 0">
   <table
-    class="table-translucid fit"
-    mat-table
-    [dataSource]="dataSource"
-    *ngIf="dataSource.data && dataSource.data.length > 0"
+    class="responsive-table-translucid fit d-none d-md-table"   
+    cellspacing="0" cellpadding="0"
   >
-    <ng-container matColumnDef="selection">
-      <th mat-header-cell *matHeaderCellDef></th>
-      <td mat-cell *matCellDef="let conn;" class="selection-col">
-        <mat-checkbox
-          type="checkbox"
-          class="dark-check-box"
-          [checked]="selections.get(conn.key)"
-          (change)="changeSelection(conn)">
-        </mat-checkbox>
-      </td>
-    </ng-container>
-    <ng-container matColumnDef="key">
-      <th mat-header-cell *matHeaderCellDef class="bold sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
+    <tr>
+      <th></th>
+      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
         {{ 'routes.key' | translate }}
         <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
-      <td mat-cell *matCellDef="let conn;">
-        {{ conn.key }}
-      </td>
-    </ng-container>
-    <ng-container matColumnDef="rule">
-      <th mat-header-cell *matHeaderCellDef class="bold sortable-column"  (click)="changeSortingOrder(sortableColumns.Rule)">
+      <th class="sortable-column"  (click)="changeSortingOrder(sortableColumns.Rule)">
         {{ 'routes.rule' | translate }}
         <mat-icon *ngIf="sortBy === sortableColumns.Rule" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
-      <td mat-cell *matCellDef="let conn;">
-        <app-copy-to-clipboard-text [text]="conn.rule"></app-copy-to-clipboard-text>
+      <th class="actions"></th>
+    </tr>
+    <tr *ngFor="let route of dataSource">
+      <td class="selection-col">
+        <mat-checkbox
+          type="checkbox"
+          class="dark-check-box"
+          [checked]="selections.get(route.key)"
+          (change)="changeSelection(route)">
+        </mat-checkbox>
       </td>
-    </ng-container>
-    <ng-container matColumnDef="actions">
-      <th mat-header-cell *matHeaderCellDef class="bold"></th>
-      <td mat-cell *matCellDef="let conn;" class="text-right">
+      <td>
+        {{ route.key }}
+      </td>
+      <td>
+        <app-copy-to-clipboard-text [text]="route.rule"></app-copy-to-clipboard-text>
+      </td>
+      <td class="actions">
         <mat-icon
           class="table-delete-record ic-mini"
           [matTooltip]="'routes.details.title' | translate"
-          (click)="details(conn.key)">
+          (click)="details(route.key)">
           visibility
         </mat-icon>
         &nbsp;
         <mat-icon
           class="table-delete-record ic-mini"
           [matTooltip]="'routes.delete' | translate"
-          (click)="delete(conn.key)">
+          (click)="delete(route.key)">
           close
         </mat-icon>
       </td>
-    </ng-container>
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </tr>
+  </table>
+
+  <table
+    class="responsive-table-translucid fit d-md-none nowrap"
+    cellspacing="0" cellpadding="0"
+  >
+    <tr class="selectable full-box" (click)="openSortingOrderModal()"><td>
+      <div class="list-item-container">
+        <div class="left-part">
+          <div class="title">{{ 'tables.sorting-title' | translate }}</div>
+          <div>{{ sortBy | translate }}
+            ({{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }})
+          </div>
+        </div>
+        <div class="right-part">
+          <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+        </div>
+      </div>
+    </td></tr>
+    <tr *ngFor="let route of dataSource" class="full-box"><td>
+      <div class="list-item-container">
+        <div class="check-part">
+          <mat-checkbox
+            type="checkbox"
+            class="dark-check-box"
+            [checked]="selections.get(route.key)"
+            (change)="changeSelection(route)">
+          </mat-checkbox>
+        </div>
+        <div class="left-part">
+          <div class="list-row">
+            <span class="title">{{ 'routes.key' | translate }}</span>:
+            {{ route.key }}
+          </div>
+          <div class="list-row">
+            <span class="title">{{ 'routes.rule' | translate }}</span>:
+            {{ route.rule }}
+          </div>
+        </div>
+        <div class="margin-part"></div>
+        <div class="right-part">
+          <button
+            (click)="$event.stopPropagation(); showOptionsDialog(route)"
+            mat-icon-button
+            [matTooltip]="'common.options' | translate"
+            [disableRipple]="true"
+            class="grey-button-background"
+          >
+            <mat-icon>{{ 'add' }}</mat-icon>
+          </button>
+        </div>
+      </div>
+    </td></tr>
   </table>
 
   <app-view-all-link
     [numberOfElements]="allRoutes.length"
     [linkParts]="['/nodes', nodePK, 'routes']"
-    *ngIf="showShortList_ && numberOfPages > 1 && dataSource.data"
+    *ngIf="showShortList_ && numberOfPages > 1"
   ></app-view-all-link>
+</div>
 
-  <div *ngIf="!dataSource.data || dataSource.data.length === 0">
-    <span class="text">Node doesn't have any routes.</span>
-  </div>
+<div class="container-elevated-translucid mt-3 overflow" *ngIf="!dataSource || dataSource.length === 0">
+    <span class="text">{{ 'routes.empty' | translate }}</span>
 </div>
 
 <app-paginator
-  *ngIf="!showShortList_ && numberOfPages > 1 && dataSource.data"
+  *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"
   [numberOfPages]="numberOfPages"
   [linkParts]="['/nodes', nodePK, 'routes']">

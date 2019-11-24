@@ -80,11 +80,61 @@ $responsive-table-colors: (
       }
     }
 
-    .list-row {
-      margin-bottom: 5px;
+    .list-item-container {
+      display: flex;
+      padding: 10px 15px;
+      padding-right: 0px;
+    
+      .check-part {
+        width: 50px;
+        flex-shrink: 0;
+        margin-left: -20px;
 
-      &:last-of-type {
-        margin-bottom: 0px;
+        mat-checkbox {
+          >label {
+            width: 50px;
+            height: 50px;
+            padding-left: 20px;
+        
+            .mat-checkbox-inner-container {
+              margin: 0 !important;
+            }
+          }
+        }
+      }
+    
+      .left-part {
+        flex-grow: 1;
+
+        .list-row {
+          margin-bottom: 5px;
+    
+          &:last-of-type {
+            margin-bottom: 0px;
+          }
+        }
+      }
+
+      .margin-part {
+        width: 5px;
+        height: 5px;
+        flex-shrink: 0;
+      }
+    
+      .right-part {
+        width: 60px;
+        text-align: center;
+        flex-shrink: 0;
+    
+        button {
+          width: 60px;
+          height: 60px;
+        }
+    
+        mat-icon {
+          display: inline;
+          font-size: 20px;
+        }
       }
     }
 

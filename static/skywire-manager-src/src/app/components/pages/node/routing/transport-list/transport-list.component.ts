@@ -1,7 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { Transport } from '../../../../../app.datatypes';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
@@ -12,13 +11,15 @@ import { ConfirmationComponent } from '../../../../layout/confirmation/confirmat
 import GeneralUtils from '../../../../../utils/generalUtils';
 import { TransportDetailsComponent } from './transport-details/transport-details.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
+import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
+import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 
 enum SortableColumns {
-  Id,
-  RemotePk,
-  Type,
-  Uploaded,
-  Downloaded,
+  Id = 'transports.id',
+  RemotePk = 'transports.remote',
+  Type = 'transports.type',
+  Uploaded = 'common.upload',
+  Downloaded = 'common.download',
 }
 
 @Component({
@@ -36,8 +37,7 @@ export class TransportListComponent implements OnDestroy {
     return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   }
 
-  displayedColumns: string[] = ['selection', 'id', 'remote', 'type', 'upload_total', 'download_total', 'actions'];
-  dataSource = new MatTableDataSource<Transport>();
+  dataSource: Transport[];
   selections = new Map<string, boolean>();
 
   showShortList_: boolean;
@@ -132,6 +132,27 @@ export class TransportListComponent implements OnDestroy {
     CreateTransportComponent.openDialog(this.dialog);
   }
 
+  showOptionsDialog(transport: Transport) {
+    const options: SelectableOption[] = [
+      {
+        icon: 'visibility',
+        label: 'transports.details.title',
+      },
+      {
+        icon: 'close',
+        label: 'transports.delete',
+      }
+    ];
+
+    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+      if (selectedOption === 1) {
+        this.details(transport);
+      } else if (selectedOption === 2) {
+        this.delete(transport.id);
+      }
+    });
+  }
+
   details(transport: Transport) {
     TransportDetailsComponent.openDialog(this.dialog, transport);
   }
@@ -161,6 +182,28 @@ export class TransportListComponent implements OnDestroy {
     }
 
     this.recalculateElementsToShow();
+  }
+
+  openSortingOrderModal() {
+    const enumKeys = Object.keys(SortableColumns);
+    const columnsMap = new Map<string, SortableColumns>();
+    const columns = enumKeys.map(key => {
+      const val = SortableColumns[key as any];
+      columnsMap.set(val, SortableColumns[key]);
+
+      return val;
+    });
+
+    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
+      if (result) {
+        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
+          this.sortBy = columnsMap.get(result.label);
+          this.sortReverse = result.sortReverse;
+
+          this.recalculateElementsToShow();
+        }
+      }
+    });
   }
 
   private recalculateElementsToShow() {
@@ -223,7 +266,7 @@ export class TransportListComponent implements OnDestroy {
       this.selections = new Map<string, boolean>();
     }
 
-    this.dataSource.data = this.transportsToShow;
+    this.dataSource = this.transportsToShow;
   }
 
   private startDeleting(id: string): Observable<any> {

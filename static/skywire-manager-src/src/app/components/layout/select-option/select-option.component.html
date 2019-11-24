@@ -1,6 +1,6 @@
-<app-dialog [headline]="'nodes.options' | translate">
+<app-dialog [headline]="'common.options' | translate">
   <mat-dialog-content>
-    <div class="button-container" *ngFor="let option of options; let i = index">
+    <div class="button-container" *ngFor="let option of data; let i = index">
       <button
         mat-button
         [disableRipple]="true"
