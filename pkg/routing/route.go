@@ -65,13 +65,16 @@ func (p PathEdges) MarshalText() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	b2, err := p[1].MarshalText()
 	if err != nil {
 		return nil, err
 	}
+
 	res := bytes.NewBuffer(b1)
 	res.WriteString(":") // nolint
 	res.Write(b2)        // nolint
+
 	return res.Bytes(), nil
 }
 
@@ -81,9 +84,11 @@ func (p *PathEdges) UnmarshalText(b []byte) error {
 	if err != nil {
 		return err
 	}
+
 	err = p[1].UnmarshalText(b[67:])
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
