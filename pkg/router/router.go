@@ -326,6 +326,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	rg, ok := r.routeGroup(desc)
 
 	if !ok {
+		r.logger.Infof("Descriptor not found for rule with type %s", rule.Type())
 		return errors.New("route descriptor does not exist")
 	}
 
