@@ -238,8 +238,8 @@ func (r Rule) String() string {
 	switch t := r.Type(); t {
 	case RuleConsume:
 		rd := r.RouteDescriptor()
-		return fmt.Sprintf("APP(keyRtID:%d, resRtID:%d, %s)",
-			r.KeyRouteID(), r.NextRouteID(), rd.String())
+		return fmt.Sprintf("APP(keyRtID:%d, %s)",
+			r.KeyRouteID(), rd.String())
 	case RuleForward:
 		rd := r.RouteDescriptor()
 		return fmt.Sprintf("FWD(keyRtID:%d, nxtRtID:%d, nxtTpID:%s, %s)",
