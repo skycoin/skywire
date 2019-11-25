@@ -20,6 +20,7 @@
     "delete": "Delete",
     "none": "None",
     "loading-error": "There was an error getting the data. Retrying...",
+    "refreshed": "Data refreshed",
     "options": "Options"
   },
 

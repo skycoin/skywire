@@ -4,19 +4,21 @@
       <span class="section-title">{{ 'node.details.node-info.title' | translate }}</span>
       <span class="font-smaller info-line">
         <span class="title">{{ 'node.details.node-info.label' | translate }}</span>
-        {{ node.label }}
-        <mat-icon [inline]="true" (click)="showEditLabelDialog()" class="edit-label-icon">edit</mat-icon>
+        <span class="edit-label" (click)="showEditLabelDialog()">
+          {{ node.label }}
+          <mat-icon [inline]="true">edit</mat-icon>
+        </span>
       </span>
       <span class="font-smaller info-line">
-        <span class="title">{{ 'node.details.node-info.public-key' | translate }}</span>&nbsp;
+        <span class="title">{{ 'node.details.node-info.public-key' | translate }}&nbsp;</span>
         <app-copy-to-clipboard-text text="{{ node.local_pk }}"></app-copy-to-clipboard-text>
       </span>
       <span class="font-smaller info-line">
-        <span class="title">{{ 'node.details.node-info.ip' | translate }}</span>&nbsp;
+        <span class="title">{{ 'node.details.node-info.ip' | translate }}&nbsp;</span>
         <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
       </span>
       <span class="font-smaller info-line">
-        <span class="title">{{ 'node.details.node-info.port' | translate }}</span>&nbsp;
+        <span class="title">{{ 'node.details.node-info.port' | translate }}&nbsp;</span>
         <app-copy-to-clipboard-text text="{{ node.port }}"></app-copy-to-clipboard-text>
       </span>
       <span class="font-smaller info-line">

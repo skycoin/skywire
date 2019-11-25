@@ -154,7 +154,7 @@ export class NodeComponent implements OnInit, OnDestroy {
     }
   }
 
-  private refresh(delayMilliseconds: number) {
+  private refresh(delayMilliseconds: number, requestedManually = false) {
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
@@ -178,6 +178,10 @@ export class NodeComponent implements OnInit, OnDestroy {
           this.updating = false;
           this.errorsUpdating = false;
 
+          if (requestedManually) {
+            this.snackbarService.showDone('common.refreshed', null);
+          }
+
           this.refresh(this.storageService.getRefreshTime() * 1000);
         });
       }, (err: HttpErrorResponse) => {
@@ -200,9 +204,9 @@ export class NodeComponent implements OnInit, OnDestroy {
           this.errorsUpdating = true;
 
           if (!this.node) {
-            this.refresh(3000);
+            this.refresh(3000, requestedManually);
           } else {
-            this.refresh(this.storageService.getRefreshTime() * 1000);
+            this.refresh(this.storageService.getRefreshTime() * 1000, requestedManually);
           }
         });
       });

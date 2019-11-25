@@ -27,7 +27,7 @@
       [showLoading]="updating"
       [showAlert]="errorsUpdating"
       [refeshRate]="storageService.getRefreshTime()"
-      (refreshRequested)="refresh(0)"
+      (refreshRequested)="refresh(0, true)"
     ></app-tab-bar>
   </div>
   <div

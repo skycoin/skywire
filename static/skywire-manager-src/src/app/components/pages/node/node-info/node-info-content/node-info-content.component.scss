@@ -27,6 +27,7 @@
   mat-icon {
     position: relative;
     top: 2px;
+    user-select: none;
   }
 
   i {
@@ -38,6 +39,16 @@
   }
 }
 
-.edit-label-icon {
+.edit-label {
   cursor: pointer;
+
+  mat-icon {
+    opacity: 0.5;
+  }
+
+  &:hover {
+    mat-icon {
+      opacity: 0.8;
+    }
+  }
 }
