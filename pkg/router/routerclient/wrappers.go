@@ -12,11 +12,18 @@ import (
 )
 
 // AddEdgeRules is a wrapper for (*Client).AddEdgeRules.
-func AddEdgeRules(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, pk cipher.PubKey, rules routing.EdgeRules) (bool, error) {
+func AddEdgeRules(
+	ctx context.Context,
+	log *logging.Logger,
+	dmsgC *dmsg.Client,
+	pk cipher.PubKey,
+	rules routing.EdgeRules,
+) (bool, error) {
 	client, err := NewClient(ctx, dmsgC, pk)
 	if err != nil {
 		return false, fmt.Errorf("failed to dial remote: %v", err)
 	}
+
 	defer closeClient(log, client)
 
 	ok, err := client.AddEdgeRules(ctx, rules)
@@ -28,11 +35,18 @@ func AddEdgeRules(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, 
 }
 
 // AddIntermediaryRules is a wrapper for (*Client).AddIntermediaryRules.
-func AddIntermediaryRules(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, pk cipher.PubKey, rules []routing.Rule) (bool, error) {
+func AddIntermediaryRules(
+	ctx context.Context,
+	log *logging.Logger,
+	dmsgC *dmsg.Client,
+	pk cipher.PubKey,
+	rules []routing.Rule,
+) (bool, error) {
 	client, err := NewClient(ctx, dmsgC, pk)
 	if err != nil {
 		return false, fmt.Errorf("failed to dial remote: %v", err)
 	}
+
 	defer closeClient(log, client)
 
 	routeIDs, err := client.AddIntermediaryRules(ctx, rules)
@@ -44,11 +58,18 @@ func AddIntermediaryRules(ctx context.Context, log *logging.Logger, dmsgC *dmsg.
 }
 
 // ReserveIDs is a wrapper for (*Client).ReserveIDs.
-func ReserveIDs(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, pk cipher.PubKey, n uint8) ([]routing.RouteID, error) {
+func ReserveIDs(
+	ctx context.Context,
+	log *logging.Logger,
+	dmsgC *dmsg.Client,
+	pk cipher.PubKey,
+	n uint8,
+) ([]routing.RouteID, error) {
 	client, err := NewClient(ctx, dmsgC, pk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial remote: %v", err)
 	}
+
 	defer closeClient(log, client)
 
 	routeIDs, err := client.ReserveIDs(ctx, n)
