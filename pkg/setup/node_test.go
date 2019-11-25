@@ -4,7 +4,6 @@ package setup
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net/rpc"
@@ -21,13 +20,14 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -37,6 +37,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		logging.SetLevel(lvl)
 	} else {
 		logging.Disable()
@@ -69,6 +70,7 @@ func TestNode(t *testing.T) {
 	// CLOSURE: sets up dmsg clients.
 	prepClients := func(n int) ([]clientWithDMSGAddrAndListener, func()) {
 		clients := make([]clientWithDMSGAddrAndListener, n)
+
 		for i := 0; i < n; i++ {
 			var port uint16
 			// setup node
@@ -77,12 +79,17 @@ func TestNode(t *testing.T) {
 			} else {
 				port = skyenv.DmsgAwaitSetupPort
 			}
+
 			pk, sk := keys[i].PK, keys[i].SK
 			t.Logf("client[%d] PK: %s\n", i, pk)
-			c := dmsg.NewClient(pk, sk, nEnv.DmsgD, dmsg.SetLogger(logging.MustGetLogger(fmt.Sprintf("client_%d:%s:%d", i, pk, port))))
+
+			clientLogger := logging.MustGetLogger(fmt.Sprintf("client_%d:%s:%d", i, pk, port))
+			c := dmsg.NewClient(pk, sk, nEnv.DmsgD, dmsg.SetLogger(clientLogger))
 			require.NoError(t, c.InitiateServerConnections(ctx, 1))
+
 			listener, err := c.Listen(port)
 			require.NoError(t, err)
+
 			clients[i] = clientWithDMSGAddrAndListener{
 				Client: c,
 				Addr: dmsg.Addr{
@@ -120,6 +127,7 @@ func TestNode(t *testing.T) {
 				rpcServer := rpc.NewServer()
 				err = rpcServer.Register(router.NewRPCGateway(r))
 				require.NoError(t, err)
+
 				go rpcServer.Accept(listener)
 			}
 		}
@@ -139,11 +147,13 @@ func TestNode(t *testing.T) {
 			dmsgL:   listener,
 			metrics: metrics.NewDummy(),
 		}
+
 		go func() {
 			if err := sn.Serve(); err != nil {
 				sn.logger.WithError(err).Error("Failed to serve")
 			}
 		}()
+
 		return sn, func() {
 			require.NoError(t, sn.Close())
 		}
@@ -228,7 +238,9 @@ func TestNode(t *testing.T) {
 			Reverse: consumeRules[route.Desc.SrcPK()],
 		}
 
-		gotEdgeRules, err := setupclient.DialRouteGroup(ctx, logging.MustGetLogger("setupclient_test"), nEnv.Nets[1], []cipher.PubKey{clients[0].Addr.PK}, route)
+		testLogger := logging.MustGetLogger("setupclient_test")
+		pks := []cipher.PubKey{clients[0].Addr.PK}
+		gotEdgeRules, err := setupclient.DialRouteGroup(ctx, testLogger, nEnv.Nets[1], pks, route)
 		require.NoError(t, err)
 		require.Equal(t, wantEdgeRules, gotEdgeRules)
 
@@ -249,13 +261,4 @@ func TestNode(t *testing.T) {
 
 		require.Equal(t, respRouteRules, clients[4].AppliedEdgeRules)
 	})
-}
-
-func errWithTimeout(ch <-chan error) error {
-	select {
-	case err := <-ch:
-		return err
-	case <-time.After(5 * time.Second):
-		return errors.New("timeout")
-	}
 }

@@ -25,22 +25,28 @@ func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
 
 	if err := r.router.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		*ok = false
+
 		r.logger.WithError(err).Warnf("Request completed with error.")
+
 		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
 	}
 
 	*ok = true
+
 	return nil
 }
 
 func (r *RPCGateway) AddIntermediaryRules(rules []routing.Rule, ok *bool) error {
 	if err := r.router.SaveRoutingRules(rules...); err != nil {
 		*ok = false
+
 		r.logger.WithError(err).Warnf("Request completed with error.")
+
 		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
 	}
 
 	*ok = true
+
 	return nil
 }
 
@@ -52,5 +58,6 @@ func (r *RPCGateway) ReserveIDs(n uint8, routeIDs *[]routing.RouteID) error {
 	}
 
 	*routeIDs = ids
+
 	return nil
 }

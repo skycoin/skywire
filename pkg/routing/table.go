@@ -213,5 +213,6 @@ func (mt *memTable) ruleIsTimedOut(key RouteID, rule Rule) bool {
 	lastActivity, ok := mt.activity[key]
 	idling := time.Since(lastActivity)
 	keepAlive := rule.KeepAlive()
+
 	return !ok || idling > keepAlive
 }
