@@ -37,8 +37,6 @@ var (
 	ErrUnknownPacketType = errors.New("unknown packet type")
 )
 
-var log = logging.MustGetLogger("router")
-
 // Config configures Router.
 type Config struct {
 	Logger           *logging.Logger
@@ -53,7 +51,7 @@ type Config struct {
 // SetDefaults sets default values for certain empty values.
 func (c *Config) SetDefaults() {
 	if c.Logger == nil {
-		c.Logger = log
+		c.Logger = logging.MustGetLogger("router")
 	}
 }
 
@@ -87,7 +85,8 @@ type Router interface {
 	// - Return RouteGroup if successful.
 	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (*RouteGroup, error)
 
-	// AcceptRoutes should block until we receive an visorAddRules packet from SetupNode that contains ConsumeRule(s) or ForwardRule(s).
+	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
+	// that contains ConsumeRule(s) or ForwardRule(s).
 	// Then the following should happen:
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return the RoutingGroup.
@@ -104,9 +103,6 @@ type Router interface {
 // rules and manages loops for apps.
 type router struct {
 	mx           sync.Mutex
-	once         sync.Once
-	done         chan struct{}
-	wg           sync.WaitGroup
 	conf         *Config
 	logger       *logging.Logger
 	n            *snet.Network
@@ -118,6 +114,9 @@ type router struct {
 	rgs          map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
 	rpcSrv       *rpc.Server
 	accept       chan routing.EdgeRules
+	done         chan struct{}
+	wg           sync.WaitGroup
+	once         sync.Once
 }
 
 // New constructs a new Router.
@@ -142,6 +141,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		rt:           config.RoutingTable,
 		sl:           sl,
 		rfc:          config.RouteFinder,
+		rgs:          make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:       rpc.NewServer(),
 		accept:       make(chan routing.EdgeRules, acceptSize),
 		trustedNodes: trustedNodes,
@@ -162,7 +162,12 @@ func New(n *snet.Network, config *Config) (Router, error) {
 // - Setup routes via SetupNode (in one call).
 // - Save to routing.Table and internal RouteGroup map.
 // - Return RouteGroup if successful.
-func (r *router) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (*RouteGroup, error) {
+func (r *router) DialRoutes(
+	ctx context.Context,
+	rPK cipher.PubKey,
+	lPort, rPort routing.Port,
+	opts *DialOptions,
+) (*RouteGroup, error) {
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
@@ -190,10 +195,12 @@ func (r *router) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort
 	rg := r.saveRouteGroupRules(rules)
 
 	r.logger.Infof("Created new routes to %s on port %d", rPK, lPort)
+
 	return rg, nil
 }
 
-// AcceptsRoutes should block until we receive an AddRules packet from SetupNode that contains ConsumeRule(s) or ForwardRule(s).
+// AcceptsRoutes should block until we receive an AddRules packet from SetupNode
+// that contains ConsumeRule(s) or ForwardRule(s).
 // Then the following should happen:
 // - Save to routing.Table and internal RouteGroup map.
 // - Return the RoutingGroup.
@@ -211,6 +218,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
 	}
 
 	rg := r.saveRouteGroupRules(rules)
+
 	return rg, nil
 }
 
@@ -221,12 +229,14 @@ func (r *router) Serve(ctx context.Context) error {
 	go r.serveTransportManager(ctx)
 
 	r.wg.Add(1)
+
 	go func() {
 		defer r.wg.Done()
 		r.serveSetup()
 	}()
 
 	r.tm.Serve(ctx)
+
 	return nil
 }
 
@@ -243,6 +253,7 @@ func (r *router) serveTransportManager(ctx context.Context) {
 				r.logger.WithError(err).Warnf("Stopped serving Transport.")
 				return
 			}
+
 			r.logger.Warnf("Failed to handle transport frame: %v", err)
 		}
 	}
@@ -259,13 +270,10 @@ func (r *router) serveSetup() {
 			r.logger.Warnf("closing conn from untrusted setup node: %v", conn.Close())
 			continue
 		}
+
 		r.logger.Infof("handling setup request: setupPK(%s)", conn.RemotePK())
 
 		go r.rpcSrv.ServeConn(conn)
-
-		if err := conn.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close connection")
-		}
 	}
 }
 
@@ -303,6 +311,7 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 
 func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
+
 	if err != nil {
 		return err
 	}
@@ -313,9 +322,11 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 
 	desc := rule.RouteDescriptor()
 	rg, ok := r.routeGroup(desc)
+
 	if !ok {
 		return errors.New("route descriptor does not exist")
 	}
+
 	if rg == nil {
 		return errors.New("RouteGroup is nil")
 	}
@@ -391,6 +402,7 @@ func (r *router) Close() error {
 	if err := r.sl.Close(); err != nil {
 		r.logger.WithError(err).Warnf("closing route_manager returned error")
 	}
+
 	r.wg.Wait()
 
 	return r.tm.Close()
@@ -401,11 +413,14 @@ func (r *router) forwardPacket(ctx context.Context, payload []byte, rule routing
 	if tp == nil {
 		return errors.New("unknown transport")
 	}
+
 	packet := routing.MakeDataPacket(rule.KeyRouteID(), payload)
 	if err := tp.WritePacket(ctx, packet); err != nil {
 		return err
 	}
+
 	r.logger.Infof("Forwarded packet via Transport %s using rule %d", rule.NextTransportID(), rule.KeyRouteID())
+
 	return nil
 }
 
@@ -425,25 +440,27 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	}
 }
 
-func (r *router) fetchBestRoutes(source, destination cipher.PubKey, opts *DialOptions) (fwd routing.Path, rev routing.Path, err error) {
+func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev routing.Path, err error) {
 	// TODO(nkryuchkov): use opts
 	if opts == nil {
 		defaultOpts := DefaultDialOptions()
-		opts = &defaultOpts
+		opts = &defaultOpts // nolint: ineffassign
 	}
 
-	r.logger.Infof("Requesting new routes from %s to %s", source, destination)
+	r.logger.Infof("Requesting new routes from %s to %s", src, dst)
 
 	timer := time.NewTimer(time.Second * 10)
 	defer timer.Stop()
 
-	forward := [2]cipher.PubKey{source, destination}
-	backward := [2]cipher.PubKey{destination, source}
+	forward := [2]cipher.PubKey{src, dst}
+	backward := [2]cipher.PubKey{dst, src}
 
 fetchRoutesAgain:
 	ctx := context.Background()
+
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
 		&rfclient.RouteOptions{MinHops: minHops, MaxHops: maxHops})
+
 	if err != nil {
 		select {
 		case <-timer.C:
@@ -454,6 +471,7 @@ fetchRoutesAgain:
 	}
 
 	r.logger.Infof("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
+
 	return paths[forward][0], paths[backward][0], nil
 }
 
@@ -485,6 +503,7 @@ func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	defer r.mx.Unlock()
 
 	rg, ok := r.rgs[desc]
+
 	return rg, ok
 }
 

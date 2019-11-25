@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -29,10 +30,12 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		logging.SetLevel(lvl)
 	} else {
 		logging.SetLevel(logrus.TraceLevel)
 	}
+
 	os.Exit(m.Run())
 }
 
@@ -44,19 +47,25 @@ func TestRouter_Serve(t *testing.T) {
 	// create test env
 	nEnv := snettest.NewEnv(t, keys)
 	defer nEnv.Teardown()
+
 	rEnv := NewTestEnv(t, nEnv.Nets)
 	defer rEnv.Teardown()
 
 	// Create routers
 	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
 	require.NoError(t, err)
+
 	r0, ok := r0Ifc.(*router)
 	require.True(t, ok)
+
 	// go r0.Serve(context.TODO())
+
 	r1Ifc, err := New(nEnv.Nets[1], rEnv.GenRouterConfig(1))
 	require.NoError(t, err)
+
 	r1, ok := r1Ifc.(*router)
 	require.True(t, ok)
+
 	// go r1.Serve(context.TODO())
 
 	// Create dmsg transport between two `snet.Network` entities.
@@ -204,11 +213,13 @@ func TestRouter_Rules(t *testing.T) {
 	// create test env
 	nEnv := snettest.NewEnv(t, keys)
 	defer nEnv.Teardown()
+
 	rEnv := NewTestEnv(t, nEnv.Nets)
 	defer rEnv.Teardown()
 
 	rIfc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
 	require.NoError(t, err)
+
 	r, ok := rIfc.(*router)
 	require.True(t, ok)
 

@@ -35,6 +35,7 @@ func NewClient(ctx context.Context, log *logging.Logger, n *snet.Network, setupN
 	if err != nil {
 		return nil, err
 	}
+
 	client.conn = conn
 
 	client.rpc = rpc.NewClient(conn)
@@ -49,8 +50,10 @@ func (c *Client) dial(ctx context.Context) (*snet.Conn, error) {
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
 			continue
 		}
+
 		return conn, nil
 	}
+
 	return nil, errors.New("failed to dial to a setup node")
 }
 
@@ -75,6 +78,7 @@ func (c *Client) Close() error {
 func (c *Client) DialRouteGroup(ctx context.Context, req routing.BidirectionalRoute) (routing.EdgeRules, error) {
 	var resp routing.EdgeRules
 	err := c.call(ctx, rpcName+".DialRouteGroup", req, &resp)
+
 	return resp, err
 }
 
