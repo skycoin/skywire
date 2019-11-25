@@ -124,6 +124,15 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
+	r.mu.Lock()
+	if r.readBuf.Len() > 0 {
+		data, err := r.readBuf.Read(p)
+		r.mu.Unlock()
+
+		return data, err
+	}
+	r.mu.Unlock()
+
 	data, ok := <-r.readCh
 	if !ok {
 		return 0, io.ErrClosedPipe
@@ -205,7 +214,7 @@ func (r *RouteGroup) Close() error {
 
 	r.once.Do(func() {
 		close(r.done)
-		// close(r.readCh) // TODO: fix panics and uncomment
+		close(r.readCh)
 	})
 
 	return nil
