@@ -180,10 +180,12 @@ func (r *router) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort
 
 	rules, err := setupclient.DialRouteGroup(ctx, r.logger, r.n, r.conf.SetupNodes, req)
 	if err != nil {
+		r.logger.WithError(err).Error("Error dialing route group")
 		return nil, err
 	}
 
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		r.logger.WithError(err).Error("Error saving routing rules")
 		return nil, err
 	}
 
@@ -262,10 +264,6 @@ func (r *router) serveSetup() {
 		r.logger.Infof("handling setup request: setupPK(%s)", conn.RemotePK())
 
 		go r.rpcSrv.ServeConn(conn)
-
-		if err := conn.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close connection")
-		}
 	}
 }
 
@@ -472,7 +470,12 @@ func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
 }
 
 func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
-	return r.rt.ReserveKeys(n)
+	ids, err :=  r.rt.ReserveKeys(n)
+	if err != nil {
+		r.logger.WithError(err).Error("Error reserving IDs")
+	}
+
+	return ids, err
 }
 
 func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
