@@ -307,6 +307,10 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return err
 	}
 
+	if rule.Type() == routing.RuleIntermediaryForward {
+		return r.forwardPacket(ctx, packet.Payload(), rule)
+	}
+
 	desc := rule.RouteDescriptor()
 	rg, ok := r.routeGroup(desc)
 	if !ok {
@@ -318,7 +322,8 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
 
-	if t := rule.Type(); t == routing.RuleForward || t == routing.RuleIntermediaryForward {
+	// TODO: maybe move this up along the execution flow? `rg` doesn't seem to be necessary here
+	if t := rule.Type(); t == routing.RuleForward {
 		return r.forwardPacket(ctx, packet.Payload(), rule)
 	}
 
