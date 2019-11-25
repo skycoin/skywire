@@ -19,6 +19,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		logging.SetLevel(lvl)
 	} else {
 		logging.Disable()
@@ -61,6 +62,7 @@ func RoutingTableSuite(t *testing.T, tbl Table) {
 	for _, rule := range tbl.AllRules() {
 		ids = append(ids, rule.KeyRouteID())
 	}
+
 	require.ElementsMatch(t, []RouteID{id[0], id2[0]}, ids)
 
 	tbl.DelRules([]RouteID{id[0], id2[0]})
