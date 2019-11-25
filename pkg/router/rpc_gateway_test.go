@@ -13,6 +13,7 @@ import (
 func TestRPCGateway_AddEdgeRules(t *testing.T) {
 	srcPK, _ := cipher.GenerateKeyPair()
 	dstPK, _ := cipher.GenerateKeyPair()
+
 	var srcPort, dstPort routing.Port = 100, 110
 
 	desc := routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort)
