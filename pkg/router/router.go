@@ -141,6 +141,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		rt:           config.RoutingTable,
 		sl:           sl,
 		rfc:          config.RouteFinder,
+		rgs:          make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:       rpc.NewServer(),
 		accept:       make(chan routing.EdgeRules, acceptSize),
 		trustedNodes: trustedNodes,
@@ -491,7 +492,7 @@ func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
 }
 
 func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
-	ids, err :=  r.rt.ReserveKeys(n)
+	ids, err := r.rt.ReserveKeys(n)
 	if err != nil {
 		r.logger.WithError(err).Error("Error reserving IDs")
 	}
