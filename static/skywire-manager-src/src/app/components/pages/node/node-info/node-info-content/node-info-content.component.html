@@ -8,12 +8,16 @@
         <mat-icon [inline]="true" (click)="showEditLabelDialog()" class="edit-label-icon">edit</mat-icon>
       </span>
       <span class="font-smaller info-line">
-        <span class="title">{{ 'node.details.node-info.public-key' | translate }}</span>
-        {{ node.local_pk }}
+        <span class="title">{{ 'node.details.node-info.public-key' | translate }}</span>&nbsp;
+        <app-copy-to-clipboard-text text="{{ node.local_pk }}"></app-copy-to-clipboard-text>
       </span>
       <span class="font-smaller info-line">
-        <span class="title">{{ 'node.details.node-info.port' | translate }}</span>
-        {{ node.port }}
+        <span class="title">{{ 'node.details.node-info.ip' | translate }}</span>&nbsp;
+        <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
+      </span>
+      <span class="font-smaller info-line">
+        <span class="title">{{ 'node.details.node-info.port' | translate }}</span>&nbsp;
+        <app-copy-to-clipboard-text text="{{ node.port }}"></app-copy-to-clipboard-text>
       </span>
       <span class="font-smaller info-line">
         <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>
@@ -66,8 +70,11 @@
     </div>
     <hr>
   </div>
-  <app-charts
-    class="d-flex flex-column justify-content-end"
-    [transports]="node.transports"
-  ></app-charts>
+  <div class="section">
+    <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
+    <app-charts
+      class="d-flex flex-column justify-content-end"
+      [transports]="node.transports"
+    ></app-charts>
+  </div>
 </div>

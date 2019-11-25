@@ -4,7 +4,7 @@ import { SnackbarService } from '../../../services/snackbar.service';
 @Component({
   selector: 'app-copy-to-clipboard-text',
   templateUrl: './copy-to-clipboard-text.component.html',
-  styleUrls: ['./copy-to-clipboard-text.component.css']
+  styleUrls: ['./copy-to-clipboard-text.component.scss']
 })
 export class CopyToClipboardTextComponent {
   @Input() public short = false;

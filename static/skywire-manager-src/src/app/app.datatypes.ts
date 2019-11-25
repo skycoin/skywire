@@ -1,5 +1,6 @@
 export class Node {
   tcp_addr: string;
+  ip: string;
   port: string;
   local_pk: string;
   node_version: string;

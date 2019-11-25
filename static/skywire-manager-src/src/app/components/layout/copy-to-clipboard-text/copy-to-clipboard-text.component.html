@@ -8,9 +8,9 @@
     <app-truncated-text [short]="true" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text"></app-truncated-text>
   </ng-container>
   <ng-container *ngIf="!short">
-    <app-truncated-text [short]="false" [text]="text" class="d-none d-md-block"></app-truncated-text>
-    <app-truncated-text [short]="true" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text" class="d-md-none"></app-truncated-text>
+    <app-truncated-text [short]="false" [text]="text"></app-truncated-text>
   </ng-container>
+  &nbsp;<mat-icon [inline]="true">filter_none</mat-icon>
 </div>
 <!--<mat-menu [overlapTrigger]="false" #appMenu="matMenu">-->
   <!--<div-->

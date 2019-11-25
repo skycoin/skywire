@@ -9,6 +9,7 @@ $top-bar-height: 56px;
   width: 100%;
   position: fixed;
   z-index: 1;
+  top: 0px;
 
   .top-bar {
     height: $top-bar-height;
@@ -47,7 +48,7 @@ $top-bar-height: 56px;
 }
 
 .nav-container {
-  $nav-width: 285px;
+  $nav-width: 250px;
 
   width: $nav-width;
   flex-shrink: 0;

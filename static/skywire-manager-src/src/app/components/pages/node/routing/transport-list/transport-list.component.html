@@ -25,9 +25,21 @@
   </mat-menu>
 </div>
 
-<div class="container-elevated-translucid table-container mt-3 overflow" *ngIf="dataSource && dataSource.length > 0">
+<app-paginator
+  *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
+  [currentPage]="currentPage"
+  [numberOfPages]="numberOfPages"
+  [linkParts]="['/nodes', nodePK, 'transports']">
+</app-paginator>
+
+<div
+  class="container-elevated-translucid mt-3 overflow"
+  [ngClass]="{'table-container': showShortList_, 'full-list-table-container': !showShortList_}"
+  *ngIf="dataSource && dataSource.length > 0"
+>
   <table
-    class="responsive-table-translucid fit d-none d-md-table"   
+    class="responsive-table-translucid fit d-none d-md-table"
+    [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
     <tr>
@@ -45,11 +57,11 @@
         <mat-icon *ngIf="sortBy === sortableColumns.Type" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Uploaded)">
-        {{ 'common.upload' | translate }}
+        {{ 'common.uploaded' | translate }}
         <mat-icon *ngIf="sortBy === sortableColumns.Uploaded" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Downloaded)">
-        {{ 'common.download' | translate }}
+        {{ 'common.downloaded' | translate }}
         <mat-icon *ngIf="sortBy === sortableColumns.Downloaded" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
       <th class="actions"></th>
@@ -97,6 +109,7 @@
 
   <table
     class="responsive-table-translucid fit d-md-none nowrap"
+    [ngClass]="{'d-lg-table d-xl-none': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
     <tr class="selectable full-box" (click)="openSortingOrderModal()"><td>
@@ -125,22 +138,22 @@
         <div class="left-part">
           <div class="list-row">
             <span class="title">{{ 'transports.id' | translate }}</span>:
-            {{ transport.id }}
+            <app-copy-to-clipboard-text text="{{ transport.id }}"></app-copy-to-clipboard-text>
           </div>
           <div class="list-row">
             <span class="title">{{ 'transports.remote-node' | translate }}</span>:
-            {{ transport.remote_pk }}
+            <app-copy-to-clipboard-text text="{{ transport.remote_pk }}"></app-copy-to-clipboard-text>
           </div>
           <div class="list-row">
             <span class="title">{{ 'transports.type' | translate }}</span>:
             {{ transport.type }}
           </div>
           <div class="list-row">
-            <span class="title">{{ 'common.upload' | translate }}</span>:
+            <span class="title">{{ 'common.uploaded' | translate }}</span>:
             {{ transport.log.sent | autoScale }}
           </div>
           <div class="list-row">
-            <span class="title">{{ 'common.download' | translate }}</span>:
+            <span class="title">{{ 'common.downloaded' | translate }}</span>:
             {{ transport.log.recv | autoScale }}
           </div>
         </div>

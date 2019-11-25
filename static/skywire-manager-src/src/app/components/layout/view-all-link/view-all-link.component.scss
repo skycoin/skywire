@@ -8,7 +8,7 @@
   text-align: right;
   font-size: 14px;
 
-  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) , (min-width: map-get($grid-breakpoints, lg)) and (max-width: (map-get($grid-breakpoints, xl) - 1)) {
     & {
       margin: 0;
       padding: 16px;

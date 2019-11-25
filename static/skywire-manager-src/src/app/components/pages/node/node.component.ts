@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { NodeService } from '../../../services/node.service';
-import { Node } from '../../../app.datatypes';
+import { Node, Application, Route, Transport } from '../../../app.datatypes';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs/internal/Subscription';
 import { of, Observable, ReplaySubject, timer } from 'rxjs';
@@ -29,6 +29,7 @@ export class NodeComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
   selectedTabIndex = -1;
   showingInfo = false;
+  showingFullList = false;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -96,7 +97,7 @@ export class NodeComponent implements OnInit, OnDestroy {
         {
           icon: 'info',
           label: 'actions.menu.info',
-          notInXl: true,
+          onlyIfLessThanLg: true,
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'info'] : null,
         },
         {
@@ -112,6 +113,7 @@ export class NodeComponent implements OnInit, OnDestroy {
       ];
 
       this.selectedTabIndex = 1;
+      this.showingFullList = false;
       this.showingInfo = false;
       if (this.lastUrl.includes('/info')) {
         this.selectedTabIndex = 0;
@@ -124,6 +126,9 @@ export class NodeComponent implements OnInit, OnDestroy {
       this.lastUrl && (this.lastUrl.includes('/transports') ||
       this.lastUrl.includes('/routes') ||
       this.lastUrl.includes('/apps-list'))) {
+
+      this.showingFullList = true;
+      this.showingInfo = false;
 
       let prefix = 'transports';
       if (this.lastUrl.includes('/routes')) {

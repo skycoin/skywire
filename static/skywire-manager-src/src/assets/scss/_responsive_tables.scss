@@ -108,6 +108,7 @@ $responsive-table-colors: (
 
         .list-row {
           margin-bottom: 5px;
+          word-break: break-word;
     
           &:last-of-type {
             margin-bottom: 0px;

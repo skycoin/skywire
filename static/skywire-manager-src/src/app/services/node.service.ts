@@ -23,7 +23,8 @@ export class NodeService {
       nodes = nodes || [];
       const obtainedNodes = new Map<string, Node>();
       nodes.forEach(node => {
-        node.port = this.getPort(node.tcp_addr);
+        node.ip = this.getAddressPart(node.tcp_addr, 0);
+        node.port = this.getAddressPart(node.tcp_addr, 1);
         node.label = this.storageService.getNodeLabel(node.local_pk);
 
         obtainedNodes.set(node.local_pk, node);
@@ -63,7 +64,8 @@ export class NodeService {
 
     return this.apiService.get(`nodes/${nodeKey}`, { api2: true }).pipe(
       flatMap((node: Node) => {
-        node.port = this.getPort(node.tcp_addr);
+        node.ip = this.getAddressPart(node.tcp_addr, 0);
+        node.port = this.getAddressPart(node.tcp_addr, 1);
         node.label = this.storageService.getNodeLabel(node.local_pk);
         currentNode = node;
 
@@ -108,12 +110,12 @@ export class NodeService {
     );
   }
 
-  private getPort(tcpAddr: string): string {
+  private getAddressPart(tcpAddr: string, part: number): string {
     const addressParts = tcpAddr.split(':');
     let port = tcpAddr;
 
     if (addressParts && addressParts.length === 2) {
-      port = addressParts[1];
+      port = addressParts[part];
     }
 
     return port;

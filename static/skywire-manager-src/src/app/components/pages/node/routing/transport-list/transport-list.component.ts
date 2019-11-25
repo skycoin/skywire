@@ -18,8 +18,8 @@ enum SortableColumns {
   Id = 'transports.id',
   RemotePk = 'transports.remote',
   Type = 'transports.type',
-  Uploaded = 'common.upload',
-  Downloaded = 'common.download',
+  Uploaded = 'common.uploaded',
+  Downloaded = 'common.downloaded',
 }
 
 @Component({

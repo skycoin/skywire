@@ -32,7 +32,7 @@
   </div>
   <div
     class="col-12"
-    [ngClass]="{'col-xl-8': !showingInfo}"
+    [ngClass]="{'col-lg-8': !showingInfo && !showingFullList}"
   >
     <div class="d-flex flex-column h-100">
       <router-outlet></router-outlet>
@@ -40,8 +40,8 @@
   </div>
   <div
     class="d-none"
-    [ngClass]="{'col-4 d-xl-block': !showingInfo}"
+    [ngClass]="{'col-4 d-lg-block': !showingInfo && !showingFullList}"
   >
-    <app-node-info-content *ngIf="!showingInfo" [nodeInfo]="node"></app-node-info-content>
+    <app-node-info-content *ngIf="!showingInfo && !showingFullList" [nodeInfo]="node"></app-node-info-content>
   </div>
 </div>

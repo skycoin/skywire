@@ -4,12 +4,6 @@
 .main-container {
   text-align: right;
 
-  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
-    & {
-      text-align: center;
-    }
-  }
-
   .paginator {
     display: inline-block;
 
@@ -17,8 +11,19 @@
       display: flex;
       margin: -20px;
 
-      a {
+      .elements-padding {
         padding: 10px;
+      }
+
+      .responsive-height {
+        @extend .elements-padding;
+        width: 0px;
+        padding-left: 0;
+        padding-right: 0;
+      }
+
+      a {
+        @extend .elements-padding;
         border-right: rgba(0, 0, 0, 0.12) solid 1px;
         min-width: 40px;
         text-align: center;
@@ -44,6 +49,10 @@
         mat-icon {
           position: relative;
           top: 2px;
+        }
+
+        .label {
+          font-size: 12px;
         }
       }
 

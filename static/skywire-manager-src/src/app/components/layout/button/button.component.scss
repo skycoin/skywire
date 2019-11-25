@@ -3,6 +3,9 @@
 button {
   color: $white;
   border-radius: $mat-dialog-radius;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 
   mat-spinner ::ng-deep circle {
     stroke: $white;

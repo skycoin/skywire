@@ -1,41 +1,48 @@
 <div class="main-container">
   <div class="paginator container-elevated-translucid mt-3">
-    <div class="internal-container">
-      <a *ngIf="currentPage > 3" [routerLink]="linkParts.concat(['1'])" class="d-none d-md-flex">
+    <div class="internal-container d-none d-md-flex">
+      <a *ngIf="currentPage > 3" [routerLink]="linkParts.concat(['1'])">
         <div>
           <mat-icon [inline]="true">chevron_left</mat-icon>
           {{ 'paginator.first' | translate }}
         </div>
       </a>
-      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat(['1'])" class="d-md-none">
-        <div>
-          <mat-icon [inline]="true">chevron_left</mat-icon><br/>
-          {{ 'paginator.first' | translate }}
-        </div>
-      </a>
-      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])" class="d-none d-md-flex">
+      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])">
         <div><mat-icon [inline]="true">chevron_left</mat-icon></div>
       </a>
-      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat([(currentPage - 2).toString()])" class="d-none d-md-flex">{{ currentPage - 2 }}</a>
+      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat([(currentPage - 2).toString()])">{{ currentPage - 2 }}</a>
       <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])">{{ currentPage - 1 }}</a>
       <a class="selected">{{ currentPage }}</a>
       <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])">{{ currentPage + 1 }}</a>
-      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 2).toString()])" class="d-none d-md-flex">{{ currentPage + 2 }}</a>
-      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])" class="d-none d-md-flex">
+      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 2).toString()])">{{ currentPage + 2 }}</a>
+      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])">
         <div><mat-icon [inline]="true">chevron_right</mat-icon></div>
       </a>
-      <a *ngIf="currentPage + 2 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" class="d-none d-md-flex">
+      <a *ngIf="currentPage + 2 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])">
         <div>
           {{ 'paginator.last' | translate }}
           <mat-icon [inline]="true">chevron_right</mat-icon>
         </div>
       </a>
-      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" class="d-md-none">
-        <div>
-          <mat-icon [inline]="true">chevron_right</mat-icon><br/>
-          {{ 'paginator.last' | translate }}
-        </div>
-      </a>
     </div>
+    <!-- The version for small screens is separated to avoid overcomplicating the code for the :hover effect -->
+    <div class="internal-container d-md-none">
+        <div class="responsive-height">&nbsp;<br/>&nbsp;</div>
+        <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat(['1'])">
+          <div>
+            <mat-icon [inline]="true">chevron_left</mat-icon><br/>
+            <span class="label">{{ 'paginator.first' | translate }}</span>
+          </div>
+        </a>
+        <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])">{{ currentPage - 1 }}</a>
+        <a class="selected">{{ currentPage }}</a>
+        <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])">{{ currentPage + 1 }}</a>
+        <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])">
+          <div>
+            <mat-icon [inline]="true">chevron_right</mat-icon><br/>
+            <span class="label">{{ 'paginator.last' | translate }}</span>
+          </div>
+        </a>
+      </div>
   </div>
 </div>
