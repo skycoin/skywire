@@ -41,7 +41,9 @@ func (rd *RouteDescriptor) Dst() Addr {
 // SrcPK returns source public key from RouteDescriptor.
 func (rd *RouteDescriptor) SrcPK() cipher.PubKey {
 	var pk cipher.PubKey
+
 	copy(pk[:], rd[0:pkSize])
+
 	return pk
 }
 
@@ -53,7 +55,9 @@ func (rd *RouteDescriptor) setSrcPK(pk cipher.PubKey) {
 // DstPK returns destination public key from RouteDescriptor.
 func (rd *RouteDescriptor) DstPK() cipher.PubKey {
 	var pk cipher.PubKey
+
 	copy(pk[:], rd[pkSize:pkSize*2])
+
 	return pk
 }
 

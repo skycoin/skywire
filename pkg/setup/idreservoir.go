@@ -24,16 +24,20 @@ type idReservoir struct {
 
 func newIDReservoir(paths ...routing.Path) (*idReservoir, int) {
 	rec := make(map[cipher.PubKey]uint8)
+
 	var total int
 
 	for _, path := range paths {
 		if len(path) == 0 {
 			continue
 		}
+
 		rec[path[0].From]++
+
 		for _, hop := range path {
 			rec[hop.To]++
 		}
+
 		total += len(path) + 1
 	}
 
@@ -43,10 +47,20 @@ func newIDReservoir(paths ...routing.Path) (*idReservoir, int) {
 	}, total
 }
 
-type reserveFunc func(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, pk cipher.PubKey, n uint8) ([]routing.RouteID, error)
+type reserveFunc func(
+	ctx context.Context,
+	log *logging.Logger,
+	dmsgC *dmsg.Client,
+	pk cipher.PubKey,
+	n uint8,
+) ([]routing.RouteID, error)
 
-func (idr *idReservoir) ReserveIDs(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, reserve reserveFunc) error {
-
+func (idr *idReservoir) ReserveIDs(
+	ctx context.Context,
+	log *logging.Logger,
+	dmsgC *dmsg.Client,
+	reserve reserveFunc,
+) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -54,8 +68,7 @@ func (idr *idReservoir) ReserveIDs(ctx context.Context, log *logging.Logger, dms
 	defer close(errCh)
 
 	for pk, n := range idr.rec {
-		pk, n := pk, n
-		go func() {
+		go func(pk cipher.PubKey, n uint8) {
 			ids, err := reserve(ctx, log, dmsgC, pk, n)
 			if err != nil {
 				errCh <- fmt.Errorf("reserve routeID from %s failed: %v", pk, err)
@@ -65,7 +78,7 @@ func (idr *idReservoir) ReserveIDs(ctx context.Context, log *logging.Logger, dms
 			idr.ids[pk] = ids
 			idr.mx.Unlock()
 			errCh <- nil
-		}()
+		}(pk, n)
 	}
 
 	return finalError(len(idr.rec), errCh)
@@ -81,13 +94,16 @@ func (idr *idReservoir) PopID(pk cipher.PubKey) (routing.RouteID, bool) {
 	}
 
 	idr.ids[pk] = ids[1:]
+
 	return ids[0], true
 }
 
 func (idr *idReservoir) String() string {
 	idr.mx.Lock()
 	defer idr.mx.Unlock()
+
 	b, _ := json.MarshalIndent(idr.ids, "", "\t") //nolint:errcheck
+
 	return string(b)
 }
 
@@ -96,17 +112,21 @@ type RulesMap map[cipher.PubKey][]routing.Rule
 
 func (rm RulesMap) String() string {
 	out := make(map[cipher.PubKey][]string, len(rm))
+
 	for pk, rules := range rm {
 		str := make([]string, len(rules))
 		for i, rule := range rules {
 			str[i] = rule.String()
 		}
+
 		out[pk] = str
 	}
+
 	jb, err := json.MarshalIndent(out, "", "\t")
 	if err != nil {
 		panic(err)
 	}
+
 	return string(jb)
 }
 
@@ -115,12 +135,16 @@ func (rm RulesMap) String() string {
 // The outputs are as follows:
 // - a map that relates a slice of routing rules to a given visor's public key.
 // - an error (if any).
-func (idr *idReservoir) GenerateRules(forward, reverse routing.Route) (forwardRules, consumeRules map[cipher.PubKey]routing.Rule, intermediaryRules RulesMap, err error) {
+func (idr *idReservoir) GenerateRules(fwd, rev routing.Route) (
+	forwardRules, consumeRules map[cipher.PubKey]routing.Rule,
+	intermediaryRules RulesMap,
+	err error,
+) {
 	forwardRules = make(map[cipher.PubKey]routing.Rule)
 	consumeRules = make(map[cipher.PubKey]routing.Rule)
 	intermediaryRules = make(RulesMap)
 
-	for _, route := range []routing.Route{forward, reverse} {
+	for _, route := range []routing.Route{fwd, rev} {
 		// 'firstRID' is the first visor's key routeID
 		firstRID, ok := idr.PopID(route.Path[0].From)
 		if !ok {
@@ -133,6 +157,7 @@ func (idr *idReservoir) GenerateRules(forward, reverse routing.Route) (forwardRu
 		dstPort := desc.DstPort()
 
 		var rID = firstRID
+
 		for i, hop := range route.Path {
 			nxtRID, ok := idr.PopID(hop.To)
 			if !ok {
@@ -159,10 +184,12 @@ func (idr *idReservoir) GenerateRules(forward, reverse routing.Route) (forwardRu
 
 func finalError(n int, errCh <-chan error) error {
 	var finalErr error
+
 	for i := 0; i < n; i++ {
 		if err := <-errCh; err != nil {
 			finalErr = err
 		}
 	}
+
 	return finalErr
 }
