@@ -273,10 +273,6 @@ func (r *router) serveSetup() {
 		r.logger.Infof("handling setup request: setupPK(%s)", conn.RemotePK())
 
 		go r.rpcSrv.ServeConn(conn)
-
-		if err := conn.Close(); err != nil {
-			r.logger.WithError(err).Warn("Failed to close connection")
-		}
 	}
 }
 
