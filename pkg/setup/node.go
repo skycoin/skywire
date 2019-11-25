@@ -114,6 +114,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	forwardRules, consumeRules, intermediaryRules, err := idr.GenerateRules(forwardRoute, reverseRoute)
 
 	if err != nil {
+		sn.logger.WithError(err).Error("ERROR GENERATING RULES")
 		return routing.EdgeRules{}, err
 	}
 
