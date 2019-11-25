@@ -386,11 +386,15 @@ func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to 
 		select {
 		case <-ctx.Done():
 			return
+		case <-to.done:
+			return
 		default:
 			packet, err := from.ReadPacket()
 			assert.NoError(t, err)
 			select {
 			case <-ctx.Done():
+				return
+			case <-to.done:
 				return
 			case to.readCh <- packet.Payload():
 			}
