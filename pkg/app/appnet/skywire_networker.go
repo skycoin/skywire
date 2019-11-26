@@ -92,10 +92,14 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 // serve accepts and serves routes.
 func (r *SkywireNetworker) serve(ctx context.Context) error {
 	for {
+		r.log.Infoln("Trying to accept routing group...")
 		rg, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
+			r.log.Infof("Error accepting routing group: %v", err)
 			return err
 		}
+
+		r.log.Infoln("Accepted routing group")
 
 		go r.serveRG(rg)
 	}
@@ -103,7 +107,8 @@ func (r *SkywireNetworker) serve(ctx context.Context) error {
 
 // serveRG passes accepted router group to the corresponding listener.
 func (r *SkywireNetworker) serveRG(rg *router.RouteGroup) {
-	localAddr, ok := rg.LocalAddr().(routing.Addr)
+	// TODO: local? remote? decide on this
+	localAddr, ok := rg.RemoteAddr().(routing.Addr)
 	if !ok {
 		r.closeRG(rg)
 		r.log.Error("wrong type of addr in accepted conn")

@@ -104,22 +104,29 @@ type AcceptResp struct {
 
 // Accept accepts connection from the listener specified by `lisID`.
 func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
+	r.log.Infoln("Inside RPC Accept on server side")
 	lis, err := r.getListener(*lisID)
 	if err != nil {
+		r.log.Infoln("Error getting listener on RPC Accept server side")
 		return err
 	}
 
+	r.log.Infoln("Reserving next ID on RPC Accept server side")
 	connID, free, err := r.cm.ReserveNextID()
 	if err != nil {
+		r.log.Infoln("Error reserving next ID on RPC Accept server side")
 		return err
 	}
 
+	r.log.Infoln("Accepting conn on RPC Accept server side")
 	conn, err := lis.Accept()
 	if err != nil {
+		r.log.Infoln("Error accepting conn on RPC Accept server side")
 		free()
 		return err
 	}
 
+	r.log.Infoln("Wrapping conn on RPC Accept server side")
 	wrappedConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		free()
