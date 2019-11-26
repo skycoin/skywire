@@ -80,6 +80,7 @@ func listenLoop() {
 	}
 
 	for {
+		log.Println("Accepting skychat conn...")
 		conn, err := l.Accept()
 		if err != nil {
 			log.Println("Failed to accept conn:", err)
@@ -90,6 +91,7 @@ func listenLoop() {
 		connsMu.Lock()
 		chatConns[raddr.PubKey] = conn
 		connsMu.Unlock()
+		log.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
 		go handleConn(conn)
 	}
