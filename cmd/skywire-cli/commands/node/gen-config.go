@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
 	"time"
 
@@ -78,6 +79,22 @@ func localConfig() *visor.Config {
 	return c
 }
 
+func getLocalIPAddress() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String() + ":7777", nil
+			}
+		}
+	}
+	return "", nil
+}
+
 func defaultConfig() *visor.Config {
 	conf := &visor.Config{}
 	conf.Version = "1.0"
@@ -85,6 +102,11 @@ func defaultConfig() *visor.Config {
 	pk, sk := cipher.GenerateKeyPair()
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
+
+	if localAddress, err := getLocalIPAddress(); err != nil {
+		log.WithError(err).Warnf("Failed to unmarshal default setup node public key %s", skyenv.DefaultSetupPK)
+		conf.STCP.LocalAddr = localAddress
+	}
 
 	if testenv {
 		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
