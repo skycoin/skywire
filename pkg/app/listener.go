@@ -24,10 +24,12 @@ type Listener struct {
 }
 
 func (l *Listener) Accept() (net.Conn, error) {
+	l.log.Infoln("Calling app RPC Accept")
 	connID, remote, err := l.rpc.Accept(l.id)
 	if err != nil {
 		return nil, err
 	}
+	l.log.Infoln("Accepted conn from app RPC")
 
 	conn := &Conn{
 		id:     connID,

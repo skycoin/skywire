@@ -55,6 +55,7 @@ func main() {
 		log.Fatal("Setup failure: ", err)
 	}
 	defer a.Close()
+	log.Println("Successfully created skychat app")
 
 	chatApp = a
 
@@ -86,6 +87,7 @@ func listenLoop() {
 			log.Println("Failed to accept conn:", err)
 			return
 		}
+		log.Println("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
