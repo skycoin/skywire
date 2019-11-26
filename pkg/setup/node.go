@@ -6,6 +6,8 @@ import (
 	"net/rpc"
 	"sync"
 
+	"github.com/SkycoinProject/dmsg/cipher"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -162,7 +164,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 		Reverse: consumeRules[route.Desc.SrcPK()],
 	}
 	respRouteRules := routing.EdgeRules{
-		Desc:    forwardRoute.Desc,
+		Desc:    routing.NewRouteDescriptor(cipher.PubKey{}, forwardRoute.Desc.DstPK(), forwardRoute.Desc.SrcPort(), forwardRoute.Desc.DstPort()),
 		Forward: forwardRules[route.Desc.DstPK()],
 		Reverse: consumeRules[route.Desc.DstPK()],
 	}
