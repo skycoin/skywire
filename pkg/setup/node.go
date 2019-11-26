@@ -99,6 +99,8 @@ func (sn *Node) Serve() error {
 }
 
 func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.BidirectionalRoute) (routing.EdgeRules, error) {
+	sn.logger.Infof("Setup route from %s to %s", route.Desc.SrcPK(), route.Desc.DstPK())
+
 	idr, err := sn.reserveRouteIDs(ctx, route)
 	if err != nil {
 		return routing.EdgeRules{}, err
@@ -134,6 +136,8 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	for pk, rules := range intermediaryRules {
 		pk, rules := pk, rules
 
+		sn.logger.WithField("remote", pk).Info("Adding rules to intermediary node")
+
 		wg.Add(1)
 
 		go func() {
@@ -153,12 +157,12 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	}
 
 	initRouteRules := routing.EdgeRules{
-		Desc:    forwardRoute.Desc,
+		Desc:    reverseRoute.Desc,
 		Forward: forwardRules[route.Desc.SrcPK()],
 		Reverse: consumeRules[route.Desc.SrcPK()],
 	}
 	respRouteRules := routing.EdgeRules{
-		Desc:    reverseRoute.Desc,
+		Desc:    forwardRoute.Desc,
 		Forward: forwardRules[route.Desc.DstPK()],
 		Reverse: consumeRules[route.Desc.DstPK()],
 	}
