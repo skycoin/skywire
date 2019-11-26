@@ -117,6 +117,7 @@ func (mt *memTable) SaveRule(rule Rule) error {
 	defer mt.Unlock()
 
 	mt.rules[key] = rule
+	fmt.Printf("ROUTING TABLE CONTENTS: %v\n", mt.rules)
 	mt.activity[key] = now
 
 	return nil

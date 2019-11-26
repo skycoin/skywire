@@ -280,11 +280,13 @@ func (r *router) serveSetup() {
 }
 
 func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
+	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
 	rg, ok := r.rgs[rules.Desc]
 	if !ok || rg == nil {
+		r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
 		rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
 		r.rgs[rules.Desc] = rg
 	}
@@ -319,14 +321,17 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	if rule.Type() == routing.RuleIntermediaryForward {
+		r.logger.Infoln("Handling intermediary packet")
 		return r.forwardPacket(ctx, packet.Payload(), rule)
 	}
 
 	desc := rule.RouteDescriptor()
 	rg, ok := r.routeGroup(desc)
 
+	r.logger.Infof("Handling packet with descriptor %s", &desc)
+
 	if !ok {
-		r.logger.Infof("Descriptor not found for rule with type %s", rule.Type())
+		r.logger.Infof("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
 		return errors.New("route descriptor does not exist")
 	}
 
@@ -488,6 +493,7 @@ func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
 func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
 	for _, rule := range rules {
 		if err := r.rt.SaveRule(rule); err != nil {
+			r.logger.WithError(err).Error("Error saving rule to routing table")
 			return fmt.Errorf("routing table: %s", err)
 		}
 

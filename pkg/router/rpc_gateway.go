@@ -19,10 +19,15 @@ func NewRPCGateway(router Router) *RPCGateway {
 }
 
 func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
-	if err := r.router.IntroduceRules(rules); err != nil {
-		return err
-	}
+	/*if err := r.router.IntroduceRules(rules); err != nil {
+		*ok = false
 
+		r.logger.WithError(err).Warnf("Request completed with error.")
+
+		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
+	}*/
+
+	r.logger.Infof("Adding Edge rules: forward: %s, reverse: %s", rules.Forward, rules.Reverse)
 	if err := r.router.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		*ok = false
 
@@ -30,6 +35,20 @@ func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
 
 		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
 	}
+
+	router, assertOk := r.router.(*router)
+	if !assertOk {
+		panic("Wrong router type")
+	}
+	router.saveRouteGroupRules(rules)
+
+	/*if err := r.router.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		*ok = false
+
+		r.logger.WithError(err).Warnf("Request completed with error.")
+
+		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
+	}*/
 
 	*ok = true
 
