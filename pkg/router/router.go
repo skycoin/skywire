@@ -340,6 +340,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
+	r.logger.Infof("Packet contents: %s", packet.Payload())
 
 	// TODO: maybe move this up along the execution flow? `rg` doesn't seem to be necessary here
 	if t := rule.Type(); t == routing.RuleForward {
@@ -347,6 +348,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	if rg.isClosed() {
+		r.logger.Infoln("RG IS CLOSED")
 		return io.ErrClosedPipe
 	}
 
@@ -355,8 +357,10 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 
 	select {
 	case <-rg.done:
+		r.logger.Infof("RG IS DONE")
 		return io.ErrClosedPipe
 	case rg.readCh <- packet.Payload():
+		r.logger.Infof("PUT PAYLOAD INTO RG READ CHAN")
 		return nil
 	}
 }

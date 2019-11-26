@@ -117,6 +117,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 // just in case the read buffer is short.
 func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	if r.readTimedOut.IsSet() {
+		r.logger.Infoln("TIMEOUT ERROR?")
 		return 0, timeoutError{}
 	}
 
@@ -126,20 +127,26 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 
 	r.mu.Lock()
 	if r.readBuf.Len() > 0 {
+		r.logger.Infoln("BLOCKING BEFORE BUF READ")
 		data, err := r.readBuf.Read(p)
+		r.logger.Infoln("GOT SOME FROM BUF READ")
 		r.mu.Unlock()
 
 		return data, err
 	}
 	r.mu.Unlock()
 
+	r.logger.Infoln("BLOCKING BEFORE READ CHAN")
 	data, ok := <-r.readCh
 	if !ok {
+		r.logger.Infof("COULDN'T READ DATA")
 		return 0, io.ErrClosedPipe
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	r.logger.Infof("READ DATA FROM CHAN: %s", data)
 
 	return ioutil.BufRead(&r.readBuf, data, p)
 }
