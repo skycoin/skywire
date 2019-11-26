@@ -73,6 +73,8 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 			return nil, err
 		}
 
+		log.Errorf("Error getting entry: %v", message.Message)
+
 		return nil, errFromString(message.Message)
 	}
 
