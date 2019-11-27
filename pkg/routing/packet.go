@@ -127,5 +127,5 @@ func (p Packet) RouteID() RouteID {
 
 // Payload returns payload from a Packet.
 func (p Packet) Payload() []byte {
-	return p[PacketPayloadOffset:]
+	return p[PacketPayloadOffset:] // TODO: consider checking if real payload size differs
 }

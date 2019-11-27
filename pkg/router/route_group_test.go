@@ -41,37 +41,13 @@ func TestRouteGroup_Read(t *testing.T) {
 	buf2 := make([]byte, len(msg2))
 
 	rg1 := createRouteGroup()
-	require.NotNil(t, rg1)
-
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
-	defer cancel()
-
-	errCh := make(chan error, 1)
-
-	go func() {
-		_, err := rg1.Read(buf1)
-		errCh <- err
-	}()
-
-	var err error
-	select {
-	case <-ctx.Done():
-		err = ctx.Err()
-	case err = <-errCh:
-	}
-	require.Equal(t, context.DeadlineExceeded, err)
-	require.NoError(t, rg1.Close())
-
-	rg1 = createRouteGroup()
 	rg2 := createRouteGroup()
 
 	_, _, teardown := createTransports(t, rg1, rg2)
 	defer teardown()
 
-	go func() {
-		rg1.readCh <- msg1
-		rg2.readCh <- msg2
-	}()
+	rg1.readCh <- msg1
+	rg2.readCh <- msg2
 
 	n, err := rg1.Read(buf1)
 	require.NoError(t, err)
@@ -391,12 +367,22 @@ func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to 
 		default:
 			packet, err := from.ReadPacket()
 			assert.NoError(t, err)
+
+			if packet.Type() != routing.DataPacket {
+				continue
+			}
+
+			payload := packet.Payload()
+			if len(payload) != int(packet.Size()) {
+				panic("malformed packet")
+			}
+
 			select {
 			case <-ctx.Done():
 				return
 			case <-to.done:
 				return
-			case to.readCh <- packet.Payload():
+			case to.readCh <- payload:
 			}
 		}
 	}
@@ -411,7 +397,8 @@ func createRouteGroup() *RouteGroup {
 	port2 := routing.Port(2)
 	desc := routing.NewRouteDescriptor(pk1, pk2, port1, port2)
 
-	rg := NewRouteGroup(DefaultRouteGroupConfig(), rt, desc)
+	cfg := DefaultRouteGroupConfig()
+	rg := NewRouteGroup(cfg, rt, desc)
 
 	return rg
 }
@@ -438,10 +425,15 @@ func createTransports(t *testing.T, rg1, rg2 *RouteGroup) (m1, m2 *transport.Man
 	rule1 := routing.ForwardRule(keepAlive, id1, id2, tp2.Entry.ID, keys[0].PK, port1, port2)
 	rule2 := routing.ForwardRule(keepAlive, id2, id1, tp1.Entry.ID, keys[1].PK, port2, port1)
 
+	rg1.mu.Lock()
 	rg1.tps = append(rg1.tps, tp1)
 	rg1.fwd = append(rg1.fwd, rule1)
+	rg1.mu.Unlock()
+
+	rg2.mu.Lock()
 	rg2.tps = append(rg2.tps, tp2)
 	rg2.fwd = append(rg2.fwd, rule2)
+	rg2.mu.Unlock()
 
 	return m1, m2, func() {
 		nEnv.Teardown()
