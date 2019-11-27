@@ -191,7 +191,10 @@ func defaultSkyproxyClientConfig() visor.AppConfig {
 }
 
 func getLocalIPAddress() string {
-	addrs, _ := net.InterfaceAddrs()
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		log.WithError(err)
+	}
 
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
