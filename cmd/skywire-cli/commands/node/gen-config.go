@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
 	"time"
 
@@ -85,6 +86,8 @@ func defaultConfig() *visor.Config {
 	pk, sk := cipher.GenerateKeyPair()
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
+
+	conf.STCP.LocalAddr = getLocalIPAddress()
 
 	if testenv {
 		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
@@ -185,4 +188,17 @@ func defaultSkyproxyClientConfig() visor.AppConfig {
 		AutoStart: false,
 		Port:      routing.Port(skyenv.SkyproxyClientPort),
 	}
+}
+
+func getLocalIPAddress() string {
+	addrs, _ := net.InterfaceAddrs()
+
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String() + ":7777"
+			}
+		}
+	}
+	return ""
 }
