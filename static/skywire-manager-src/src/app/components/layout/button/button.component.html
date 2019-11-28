@@ -1,8 +1,8 @@
 <ng-template #contentTpl>
-  <mat-spinner *ngIf="state === buttonStates.LOADING" [diameter]="loadingSize" color="white"></mat-spinner>
-  <mat-icon *ngIf="state === buttonStates.SUCCESS">done</mat-icon>
-  <mat-icon *ngIf="state === buttonStates.ERROR">error_outline</mat-icon>
-  <mat-icon *ngIf="state === buttonStates.NORMAL && icon">{{ icon }}</mat-icon>
+  <mat-spinner *ngIf="state === buttonStates.Loading" [diameter]="loadingSize"></mat-spinner>
+  <mat-icon *ngIf="state === buttonStates.Success">done</mat-icon>
+  <mat-icon *ngIf="state === buttonStates.Error">error_outline</mat-icon>
+  <mat-icon *ngIf="state === buttonStates.Normal && icon">{{ icon }}</mat-icon>
   <ng-content></ng-content>
   <i *ngIf="notification" class="dot-red sm"></i>
 </ng-template>
@@ -12,24 +12,19 @@
   mat-button
   [disableRipple]="true"
   (click)="click()"
-  [matTooltip]="tooltip"
   [disabled]="disabled"
-  [ngClass]="dark ? 'dark' : ''"
   [color]="color"
   class="grey-button-background"
   #button1
 >
   <ng-container [ngTemplateOutlet]="contentTpl"></ng-container>
 </button>
-
 <button
   *ngIf="type === 'mat-raised-button'"
   mat-raised-button
   [disableRipple]="true"
   (click)="click()"
-  [matTooltip]="tooltip"
   [disabled]="disabled"
-  [ngClass]="dark ? 'dark' : ''"
   [color]="color"
   #button2
 >

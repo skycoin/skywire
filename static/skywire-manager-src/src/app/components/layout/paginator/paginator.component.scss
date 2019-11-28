@@ -1,69 +1,50 @@
 @import 'variables';
 @import "bootstrap_overrides";
+@import "~bootstrap/scss/functions";
 
 .main-container {
   text-align: right;
 
-  .paginator {
-    display: inline-block;
+  $elements-padding: 10px;
 
-    .internal-container {
-      display: flex;
-      margin: -20px;
+  .responsive-height {
+    padding: $elements-padding 0;
+    width: 0px;
+  }
 
-      .elements-padding {
-        padding: 10px;
-      }
+  a {
+    padding: $elements-padding;
+    border-right: $separator solid 1px;
+    border-left: $separator solid 1px;
+    min-width: 40px;
+    text-align: center;
+    color: $white;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-      .responsive-height {
-        @extend .elements-padding;
-        width: 0px;
-        padding-left: 0;
-        padding-right: 0;
-      }
+    &:hover {
+      background: theme-color(translucid-hover);
+    }
 
-      a {
-        @extend .elements-padding;
-        border-right: rgba(0, 0, 0, 0.12) solid 1px;
-        min-width: 40px;
-        text-align: center;
-        color: $white;
-        text-decoration: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    mat-icon {
+      position: relative;
+      top: 2px;
+    }
 
-        &:hover {
-          background: rgba(0, 0, 0, 0.12);
-        }
+    .label {
+      font-size: $font-size-mini;
+    }
+  }
 
-        &:first-of-type {
-          border-radius: 10px 0px 0px 10px;
-        }
+  .selected {
+    color: $black;
+    background: theme-color(translucid-hover);
+    font-weight: bold;
 
-        &:last-of-type {
-          border-right: none;
-          border-radius: 0px 10px 10px 0px;
-        }
-
-        mat-icon {
-          position: relative;
-          top: 2px;
-        }
-
-        .label {
-          font-size: 12px;
-        }
-      }
-
-      .selected {
-        color: rgba(0, 0, 0, 0.75);
-        background: rgba(0, 0, 0, 0.25);
-
-        &:hover {
-          background: rgba(0, 0, 0, 0.25) !important;
-        }
-      }
+    &:hover {
+      background: theme-color(translucid-hover) !important;
     }
   }
 }

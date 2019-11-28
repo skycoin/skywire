@@ -4,12 +4,16 @@
 @import "backgrounds";
 @import "~bootstrap/scss/functions";
 
-.mat-menu-panel, mat-dialog-container.mat-dialog-container
-{
+.mat-menu-panel {
   border-radius: $mat-dialog-radius !important;
+}
+
+mat-dialog-container.mat-dialog-container {
+  border-radius: $mat-dialog-radius !important;
+  padding: $mat-dialog-padding !important;
 
   .mat-dialog-actions {
-    padding-bottom: 24px;
+    padding-bottom: $mat-dialog-padding;
   }
 }
 

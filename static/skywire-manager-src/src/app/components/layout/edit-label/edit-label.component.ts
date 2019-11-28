@@ -1,11 +1,16 @@
 import { Component, Inject, ViewChild, ElementRef, AfterViewInit, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { FormGroup, FormBuilder } from '@angular/forms';
+
 import { StorageService } from '../../../services/storage.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { Node } from '../../../app.datatypes';
 import { AppConfig } from 'src/app/app.config';
 
+/**
+ * Modal window for changing the label of a node. It changes the label and shows a confirmation
+ * msg by itself.
+ */
 @Component({
   selector: 'app-edit-label',
   templateUrl: './edit-label.component.html',
@@ -16,6 +21,9 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
 
   form: FormGroup;
 
+  /**
+   * Opens the modal window. Please use this function instead of opening the window "by hand".
+   */
   public static openDialog(dialog: MatDialog, data: Node): MatDialogRef<EditLabelComponent, any> {
     const config = new MatDialogConfig();
     config.data = data;
@@ -47,6 +55,8 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
     const label = this.form.get('label').value.trim();
     this.storageService.setNodeLabel(this.data.local_pk, label);
 
+    // This comprobation is used because sending an empty label to
+    // storageService.setNodeLabel makes it to add a default label.
     if (!label) {
       this.snackbarService.showWarning('edit-label.default-label-warning');
     } else {

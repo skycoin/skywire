@@ -1,32 +1,40 @@
-import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ViewChild, OnDestroy } from '@angular/core';
 import { MatButton } from '@angular/material/button';
 
-enum BUTTON_STATE {
-  NORMAL, SUCCESS, ERROR, LOADING
+enum ButtonStates {
+  Normal, Success, Error, Loading
 }
 
+/**
+ * Common button used in the app.
+ */
 @Component({
   selector: 'app-button',
   templateUrl: './button.component.html',
   styleUrls: ['./button.component.scss']
 })
-export class ButtonComponent {
+export class ButtonComponent implements OnDestroy {
   @ViewChild('button1', { static: false }) button1: MatButton;
   @ViewChild('button2', { static: false }) button2: MatButton;
 
+  // Should be be 'mat-button' or 'mat-raised-button'.
   @Input() type = 'mat-button';
   @Input() disabled = false;
-  @Input() icon = null;
-  @Input() dark = false;
+  @Input() icon: string;
+  // Must be one of the colors defined on the default theme.
   @Input() color = '';
   @Input() loadingSize = 24;
+  // Click event.
   @Output() action = new EventEmitter();
-  tooltip = '';
   notification = false;
-  state = BUTTON_STATE.NORMAL;
-  buttonStates = BUTTON_STATE;
+  state = ButtonStates.Normal;
+  buttonStates = ButtonStates;
 
-  private readonly timeout = 3000;
+  private readonly successDuration = 3000;
+
+  ngOnDestroy() {
+    this.action.complete();
+  }
 
   click() {
     if (!this.disabled) {
@@ -36,8 +44,7 @@ export class ButtonComponent {
   }
 
   reset() {
-    this.state = BUTTON_STATE.NORMAL;
-    this.tooltip = '';
+    this.state = ButtonStates.Normal;
     this.disabled = false;
     this.notification = false;
   }
@@ -51,28 +58,28 @@ export class ButtonComponent {
     }
   }
 
-  enable() {
+  showEnabled() {
     this.disabled = false;
   }
 
-  disable() {
+  showDisabled() {
     this.disabled = true;
   }
 
-  loading() {
-    this.state = BUTTON_STATE.LOADING;
+  showLoading() {
+    this.state = ButtonStates.Loading;
     this.disabled = true;
   }
 
-  success() {
-    this.state = BUTTON_STATE.SUCCESS;
+  showSuccess() {
+    this.state = ButtonStates.Success;
+    this.disabled = false;
 
-    setTimeout(() => this.state = BUTTON_STATE.NORMAL, this.timeout);
+    setTimeout(() => this.state = ButtonStates.Normal, this.successDuration);
   }
 
-  error(error: string) {
-    this.state = BUTTON_STATE.ERROR;
-    this.tooltip = error;
+  showError() {
+    this.state = ButtonStates.Error;
     this.disabled = false;
   }
 

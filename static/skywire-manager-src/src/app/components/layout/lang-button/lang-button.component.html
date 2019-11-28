@@ -3,6 +3,7 @@
   class="lang-button grey-button-background"
   [disableRipple]="true"
   (click)="openLanguageWindow()"
-  [matTooltip]="'language.title' | translate">
+  [matTooltip]="'language.title' | translate"
+>
   <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag">
 </button>

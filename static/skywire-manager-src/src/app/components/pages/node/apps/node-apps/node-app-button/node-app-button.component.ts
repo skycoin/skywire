@@ -140,7 +140,7 @@ export class NodeAppButtonComponent implements OnChanges {
     this.button.reset();
 
     if (loading) {
-      this.button.loading();
+      this.button.showLoading();
     }
   }
 }

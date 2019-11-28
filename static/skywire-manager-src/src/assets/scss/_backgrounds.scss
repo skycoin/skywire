@@ -17,15 +17,20 @@ $elevated-containers-colors: (
   translucid-dark: map_get($theme-colors, translucid-dark)
 );
 
-@each $color-name, $color-value in $elevated-containers-colors
-{
-  .container-elevated-#{$color-name}
-  {
+$containers-padding: 20px;
+
+@each $color-name, $color-value in $elevated-containers-colors {
+  .container-elevated-#{$color-name} {
     //@include mat-elevation(8);
     border-radius: $mat-dialog-radius;
-    padding: 20px;
+    padding: $containers-padding;
     background-color: $color-value !important;
+    overflow: hidden;
   }
+}
+
+.no-padding-container {
+  padding: 0;
 }
 
 //

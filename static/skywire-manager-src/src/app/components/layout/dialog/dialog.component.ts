@@ -1,6 +1,8 @@
 import { Component, Input } from '@angular/core';
-import { MatDialogRef } from '@angular/material/dialog';
 
+/**
+ * Base component for all the modal windows. Its main function is to show the title bar.
+ */
 @Component({
   selector: 'app-dialog',
   templateUrl: './dialog.component.html',
@@ -8,5 +10,13 @@ import { MatDialogRef } from '@angular/material/dialog';
 })
 export class DialogComponent {
   @Input() headline: string;
+  /**
+   * Hides the close button.
+   */
   @Input() disableDismiss: boolean;
+  /**
+   * If true, this control adds the contents of the modal window inside a scrollable container.
+   * If false, the contents must include its own scrollable container.
+   */
+  @Input() includeScrollableArea = true;
 }

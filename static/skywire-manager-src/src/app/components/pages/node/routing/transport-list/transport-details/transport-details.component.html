@@ -1,31 +1,29 @@
 <app-dialog [headline]="'transports.details.title' | translate">
-  <mat-dialog-content>
-    <div>
-      <div class="title no-top-margin">
-        {{ 'transports.details.basic.title' | translate }}
-      </div>
-      <div class="item">
-        <span class="item-title">{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}
-      </div>
-      <div class="item">
-        <span class="item-title">{{ 'transports.details.basic.local-pk' | translate }}</span> {{ data.local_pk }}
-      </div>
-      <div class="item">
-        <span class="item-title">{{ 'transports.details.basic.remote-pk' | translate }}</span> {{ data.remote_pk }}
-      </div>
-      <div class="item">
-        <span class="item-title">{{ 'transports.details.basic.type' | translate }}</span> {{ data.type }}
-      </div>
-
-      <div class="title">
-        {{ 'transports.details.data.title' | translate }}
-      </div>
-      <div class="item">
-        <span class="item-title">{{ 'transports.details.data.uploaded' | translate }}</span> {{ data.log.sent | autoScale }}
-      </div>
-      <div class="item">
-        <span class="item-title">{{ 'transports.details.data.downloaded' | translate }}</span> {{ data.log.recv | autoScale }}
-      </div>
+  <div>
+    <div class="title no-top-margin">
+      {{ 'transports.details.basic.title' | translate }}
     </div>
-  </mat-dialog-content>
+    <div class="item">
+      <span class="item-title">{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}
+    </div>
+    <div class="item">
+      <span class="item-title">{{ 'transports.details.basic.local-pk' | translate }}</span> {{ data.local_pk }}
+    </div>
+    <div class="item">
+      <span class="item-title">{{ 'transports.details.basic.remote-pk' | translate }}</span> {{ data.remote_pk }}
+    </div>
+    <div class="item">
+      <span class="item-title">{{ 'transports.details.basic.type' | translate }}</span> {{ data.type }}
+    </div>
+
+    <div class="title">
+      {{ 'transports.details.data.title' | translate }}
+    </div>
+    <div class="item">
+      <span class="item-title">{{ 'transports.details.data.uploaded' | translate }}</span> {{ data.log.sent | autoScale }}
+    </div>
+    <div class="item">
+      <span class="item-title">{{ 'transports.details.data.downloaded' | translate }}</span> {{ data.log.recv | autoScale }}
+    </div>
+  </div>
 </app-dialog>

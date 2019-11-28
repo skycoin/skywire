@@ -11,6 +11,7 @@
     color: $white;
 
     span {
+      // In combination with the previous opacity value, this makes the text even more transparent.
       opacity: 0.7;
     }
   }
@@ -36,6 +37,6 @@
   }
 
   span {
-    font-size: 10px;
+    font-size: $font-size-mini-plus;
   }
 }

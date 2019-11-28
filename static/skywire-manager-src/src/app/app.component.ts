@@ -14,8 +14,6 @@ import { LanguageService } from './services/language.service';
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent {
-  showFooter = false;
-
   constructor(
     private translate: TranslateService,
     private storage: StorageService,
@@ -36,8 +34,6 @@ export class AppComponent {
     dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
 
     router.events.subscribe(e => {
-      this.showFooter = !location.isCurrentPathEqualTo('/login');
-
       if (e instanceof NavigationEnd) {
         window.scrollTo(0, 0);
       }

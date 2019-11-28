@@ -29,7 +29,6 @@ import { MatTableModule } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import {FooterComponent} from './components/layout/footer/footer.component';
 import { TransportListComponent } from './components/pages/node/routing/transport-list/transport-list.component';
 import { NodeAppsListComponent } from './components/pages/node/apps/node-apps/node-apps-list/node-apps-list.component';
 import { NodeAppsComponent } from './components/pages/node/apps/node-apps/node-apps.component';
@@ -118,7 +117,6 @@ import { SelectOptionComponent } from './components/layout/select-option/select-
     ActionsComponent,
     TerminalComponent,
     ConfigurationComponent,
-    FooterComponent,
     LogComponent,
     AppSshsComponent,
     SshsStartupComponent,

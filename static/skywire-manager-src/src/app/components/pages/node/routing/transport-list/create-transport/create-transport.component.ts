@@ -64,7 +64,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.button.loading();
+    this.button.showLoading();
 
     this.transportService.create(
       NodeComponent.getCurrentNodeKey(),
@@ -83,7 +83,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   }
 
   private onError(error: string) {
-    this.button.error('');
+    this.button.showError();
     this.snackbarService.showError('transports.dialog.error');
   }
 

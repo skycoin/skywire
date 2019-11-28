@@ -58,14 +58,14 @@ export class PasswordComponent implements OnInit, AfterViewInit {
           },
         );
       } else {
-        this.button.loading();
+        this.button.showLoading();
 
         this.authService.initialConfig(this.form.get('newPassword').value).subscribe(
           () => {
             this.dialog.closeAll();
             this.snackbarService.showDone('settings.password.initial-config.done');
           }, err => {
-            this.button.error('');
+            this.button.showError();
             if (err.message) {
               this.snackbarService.showError(err.message);
             } else {

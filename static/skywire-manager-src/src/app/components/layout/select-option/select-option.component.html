@@ -1,17 +1,15 @@
 <app-dialog [headline]="'common.options' | translate">
-  <mat-dialog-content>
-    <div class="button-container" *ngFor="let option of data; let i = index">
-      <button
-        mat-button
-        [disableRipple]="true"
-        class="grey-button-background"
-        (click)="closePopup(i + 1)"
-        >
-        <div class="internal-container">
-          <mat-icon [inline]="true">{{ option.icon }}</mat-icon>
-          <span>{{ option.label | translate }}</span>
-        </div>
-      </button>
-    </div>
-  </mat-dialog-content>
+  <div class="button-container" *ngFor="let option of data; let i = index">
+    <button
+      mat-button
+      [disableRipple]="true"
+      class="grey-button-background"
+      (click)="closePopup(i + 1)"
+      >
+      <div class="internal-container">
+        <mat-icon [inline]="true">{{ option.icon }}</mat-icon>
+        <span>{{ option.label | translate }}</span>
+      </div>
+    </button>
+  </div>
 </app-dialog>

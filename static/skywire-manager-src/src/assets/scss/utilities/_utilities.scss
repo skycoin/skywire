@@ -1,9 +1,15 @@
 @import "theme";
 @import "flexbox";
 
-.cursor-pointer
-{
+.cursor-pointer {
   cursor: pointer;
+}
+
+.reactivate-mouse {
+  touch-action: initial !important;
+  user-select: initial !important;
+  -webkit-user-drag: auto !important;
+  -webkit-tap-highlight-color: initial !important;
 }
 
 .clearfix::after {

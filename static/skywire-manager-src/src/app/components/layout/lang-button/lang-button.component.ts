@@ -1,9 +1,13 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { LanguageService, LanguageData } from '../../../services/language.service';
 import { Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+
+import { LanguageService, LanguageData } from '../../../services/language.service';
 import { SelectLanguageComponent } from '../select-language/select-language.component';
 
+/**
+ * Button for opening the language selection modal window. It normally is in the tab bar.
+ */
 @Component({
   selector: 'app-lang-button',
   templateUrl: './lang-button.component.html',

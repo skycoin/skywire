@@ -1,22 +1,13 @@
 @import 'variables';
+@import 'text';
 
 button {
   color: $white;
   border-radius: $mat-dialog-radius;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @extend .single-line;
 
   mat-spinner ::ng-deep circle {
     stroke: $white;
-  }
-
-  &.dark {
-    color: $black;
-
-    mat-spinner ::ng-deep circle {
-      stroke: $black;
-    }
   }
 
   .dot-red {

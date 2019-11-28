@@ -1,6 +1,9 @@
-import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit, IterableDiffer } from '@angular/core';
 import { Chart } from 'chart.js';
 
+/**
+ * Line chart used for showing how much data has been uploaded/downloaded.
+ */
 @Component({
   selector: 'app-line-chart',
   templateUrl: './line-chart.component.html',
@@ -11,15 +14,18 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
   @Input() data: number[];
   chart: any;
 
-  private differ: any;
+  private differ: IterableDiffer<unknown>;
 
   constructor(
     differs: IterableDiffers,
   ) {
+    // Create the object used for checking if the "data" var has been updated.
     this.differ = differs.find([]).create(null);
   }
 
   ngAfterViewInit() {
+    // The chart shows the values of the "data" var and most of the visual
+    // elements are removed.
     this.chart = new Chart(this.chartElement.nativeElement, {
       type: 'line',
       data: {
@@ -53,6 +59,7 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
   ngDoCheck() {
     const changes = this.differ.diff(this.data);
 
+    // Update the chart only when the values of the "data" var change.
     if (changes && this.chart) {
       this.chart.update();
     }

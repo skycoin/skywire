@@ -1,26 +1,9 @@
-<div class="cursor-pointer wrapper"
-     [clipboard]="text"
-     (copyEvent)="onCopyToClipboardClicked()"
-     [matTooltip]="(!short ? 'copy.tooltip' : 'copy.tooltip-with-text') | translate:{ text: text }"
-     [matTooltipClass]="{ 'tooltip-word-break': true }"
+<div class="wrapper"
+  [clipboard]="text"
+  (copyEvent)="onCopyToClipboardClicked()"
+  [matTooltip]="(!short ? 'copy.tooltip' : 'copy.tooltip-with-text') | translate:{ text: text }"
+  [matTooltipClass]="{ 'tooltip-word-break': true }"
 >
-  <ng-container *ngIf="short">
-    <app-truncated-text [short]="true" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text"></app-truncated-text>
-  </ng-container>
-  <ng-container *ngIf="!short">
-    <app-truncated-text [short]="false" [text]="text"></app-truncated-text>
-  </ng-container>
+  <app-truncated-text [short]="short" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="text"></app-truncated-text>
   &nbsp;<mat-icon [inline]="true">filter_none</mat-icon>
 </div>
-<!--<mat-menu [overlapTrigger]="false" #appMenu="matMenu">-->
-  <!--<div-->
-    <!--mat-menu-item-->
-    <!--[clipboard]="text"-->
-    <!--[matTooltip]="'copy.tooltip' | translate"-->
-    <!--(copyEvent)="onCopyToClipboardClicked()">-->
-    <!--{{ text }}-->
-    <!--<button style="margin-left: 15px;" color="accent" mat-icon-button>-->
-      <!--<mat-icon aria-label="content_copy">content_copy</mat-icon>-->
-    <!--</button>-->
-  <!--</div>-->
-<!--</mat-menu>-->

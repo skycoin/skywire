@@ -1,21 +1,54 @@
 import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, AfterViewInit } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+
 import { ButtonComponent } from '../button/button.component';
 
+/**
+ * Data that must be pased to ConfirmationComponent.
+ */
 export interface ConfirmationData {
+  /**
+   * Confirmation text to show.
+   */
   text: string;
+  /**
+   * Title of the modal window.
+   */
   headerText: string;
+  /**
+   * Text for the confirmation button.
+   */
   confirmButtonText: string;
+  /**
+   * Text for the cancel button. the button is not shown if no text is provided.
+   */
   cancelButtonText?: string;
+  /**
+   * If true, in the Asking state the window can only be closed by pressing the cancel
+   * button, if present.
+   */
   disableDismiss?: boolean;
 }
 
+/**
+ * States of the modal window:
+ * - Asking: for asking confirmation from the user.
+ * - Processing: the buttons are disabled, the user can not close the window and a loading
+ * indicator is shown.
+ * - Done: the window shows a msg (could be for informing success or an error) and a close button
+ * is shown.
+ */
 enum ConfirmationStates {
   Asking,
   Processing,
   Done,
 }
 
+/**
+ * Modal window used to request confirmation from the user. It has 3 posible states, which can be changed
+ * via code (the component does not change the state by itself). The initial state is Asking. When the
+ * user confirms an event is sent, the window does not close itself.
+ */
 @Component({
   selector: 'app-confirmation',
   templateUrl: './confirmation.component.html',
@@ -29,9 +62,11 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
   state = ConfirmationStates.Asking;
   confirmationStates = ConfirmationStates;
 
+  // Texts for the Done state.
   doneTitle: string;
   doneText: string;
 
+  // Event for when the user confirms.
   @Output() operationAccepted = new EventEmitter();
 
   constructor(
@@ -64,13 +99,19 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
 
   showProcessing() {
     this.state = ConfirmationStates.Processing;
-    this.confirmButton.loading();
+    this.disableDismiss = true;
+    this.confirmButton.showLoading();
 
     if (this.cancelButton) {
-      this.cancelButton.disable();
+      this.cancelButton.showDisabled();
     }
   }
 
+  /**
+   * Use only after the operation is done or receiving an error.
+   * @param newTitle New title for the modal window.
+   * @param newText New main text for the modal window.
+   */
   showDone(newTitle: string, newText: string) {
     this.doneTitle = newTitle;
     this.doneText = newText;
