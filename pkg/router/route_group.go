@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/ioutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -82,8 +81,10 @@ type RouteGroup struct {
 	done    chan struct{}
 	once    sync.Once
 
-	readTimer     *time.Timer
-	writeTimer    *time.Timer
+	readTimer  *time.Timer
+	writeTimer *time.Timer
+	// TODO: try to implement timed out flags with open/closed chan struct{}
+	//  in order to be able to check timeout in select statement
 	readTimedOut  atomicbool.Bool // set true when read deadline has been reached
 	writeTimedOut atomicbool.Bool // set true when write deadline has been reached
 }
@@ -94,7 +95,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	rg := &RouteGroup{
-		logger:  logging.MustGetLogger(fmt.Sprintf("RouteGroup %v", desc)),
+		logger:  logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
 		desc:    desc,
 		rt:      rt,
 		tps:     make([]*transport.ManagedTransport, 0),
@@ -115,7 +116,12 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 // to the appropriate RouteGroup via (*RouteGroup).readCh.
 // To help with implementing the read logic, within the dmsg repo, we have ioutil.BufRead,
 // just in case the read buffer is short.
+// TODO: too long, simplify
 func (r *RouteGroup) Read(p []byte) (n int, err error) {
+	if r.isClosed() {
+		return 0, io.ErrClosedPipe
+	}
+
 	if r.readTimedOut.IsSet() {
 		r.logger.Infoln("TIMEOUT ERROR?")
 		return 0, timeoutError{}
@@ -125,41 +131,66 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	r.mu.Lock()
-	if r.readBuf.Len() > 0 {
-		r.logger.Infoln("BLOCKING BEFORE BUF READ")
-		data, err := r.readBuf.Read(p)
-		r.logger.Infoln("GOT SOME FROM BUF READ")
-		r.mu.Unlock()
+	// TODO: use readBuf
+	// r.mu.Lock()
+	// if r.readBuf.Len() > 0 {
+	// 	data, err := r.readBuf.Read(p)
+	// 	r.mu.Unlock()
+	//
+	// 	return data, err
+	// }
+	// r.mu.Unlock()
 
-		return data, err
-	}
-	r.mu.Unlock()
+	timeout := make(chan struct{})
 
-	r.logger.Infoln("BLOCKING BEFORE READ CHAN")
-	data, ok := <-r.readCh
-	if !ok {
-		r.logger.Infof("COULDN'T READ DATA")
-		return 0, io.ErrClosedPipe
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+	loop:
+		for {
+			select {
+			case <-ticker.C:
+				if r.readTimedOut.IsSet() {
+					close(timeout)
+					break loop
+				}
+			case <-ctx.Done():
+				break loop
+			}
+		}
+		ticker.Stop()
+	}()
+
+	var data []byte
+	select {
+	case data = <-r.readCh:
+	case <-timeout:
+		return 0, timeoutError{}
+	case <-time.After(5 * time.Second):
+		return 0, io.EOF
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.logger.Infof("READ DATA FROM CHAN: %s", data)
+	// return ioutil.BufRead(&r.readBuf, data, p)
 
-	return ioutil.BufRead(&r.readBuf, data, p)
+	n = copy(p, data)
+
+	return n, nil
 }
 
 // Write writes payload to a RouteGroup
 // For the first version, only the first ForwardRule (fwd[0]) is used for writing.
 func (r *RouteGroup) Write(p []byte) (n int, err error) {
-	if r.writeTimedOut.IsSet() {
-		return 0, timeoutError{}
-	}
-
 	if r.isClosed() {
 		return 0, io.ErrClosedPipe
+	}
+
+	if r.writeTimedOut.IsSet() {
+		return 0, timeoutError{}
 	}
 
 	r.mu.Lock()
@@ -194,7 +225,6 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 // - Send Close packet for all ForwardRules.
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
 // - Close all go channels.
-// TODO: fix hang after read
 func (r *RouteGroup) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -221,7 +251,7 @@ func (r *RouteGroup) Close() error {
 
 	r.once.Do(func() {
 		close(r.done)
-		close(r.readCh)
+		// close(r.readCh) // TODO: uncomment
 	})
 
 	return nil
