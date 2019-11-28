@@ -30,7 +30,8 @@ func main() {
 	log = app.NewLogger(appName)
 	ssh.Log = log.PackageLogger("therealssh")
 
-	var authFile = flag.String("auth", "~/.therealssh/authorized_keys", "Auth file location. Should contain one PubKey per line.")
+	// TODO: change back to the tilda-like home path
+	var authFile = flag.String("auth", "/Users/darkrengarius/.therealssh/authorized_keys", "Auth file location. Should contain one PubKey per line.")
 	var debug = flag.Bool("debug", false, "enable debug messages")
 
 	flag.Parse()
@@ -51,6 +52,7 @@ func main() {
 
 	path, err := homedir.Expand(*authFile)
 	if err != nil {
+		log.Errorf("Error expanding auth file path %s: %v\n", *authFile, err)
 		log.Fatal("Failed to resolve auth file path: ", err)
 	}
 
