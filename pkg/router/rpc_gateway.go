@@ -1,8 +1,6 @@
 package router
 
 import (
-	"time"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -28,31 +26,6 @@ func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
 
 		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
 	}
-
-	time.Sleep(1 * time.Second)
-
-	/*r.logger.Infof("Adding Edge rules: forward: %s, reverse: %s", rules.Forward, rules.Reverse)
-	if err := r.router.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		*ok = false
-
-		r.logger.WithError(err).Warnf("Request completed with error.")
-
-		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
-	}
-
-	router, assertOk := r.router.(*router)
-	if !assertOk {
-		panic("Wrong router type")
-	}
-	router.saveRouteGroupRules(rules)*/
-
-	/*if err := r.router.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		*ok = false
-
-		r.logger.WithError(err).Warnf("Request completed with error.")
-
-		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
-	}*/
 
 	*ok = true
 
