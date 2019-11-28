@@ -144,6 +144,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		rgs:          make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:       rpc.NewServer(),
 		accept:       make(chan routing.EdgeRules, acceptSize),
+		done:         make(chan struct{}),
 		trustedNodes: trustedNodes,
 	}
 
