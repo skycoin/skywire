@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -256,6 +257,126 @@ func testMultipleWR(t *testing.T, iterations int, rg1, rg2 io.ReadWriter, msg1, 
 			require.Equal(t, msg, buf2)
 		}
 	}
+}
+
+func TestArbitrarySizeOneMessage(t *testing.T) {
+	// Test fails if message size is above 4059
+	const (
+		value1 = 4058
+		value2 = 4059
+	)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+
+	t.Run("Value1", func(t *testing.T) {
+		defer wg.Done()
+		testArbitrarySizeOneMessage(t, value1)
+	})
+
+	wg.Wait()
+
+	t.Run("Value2", func(t *testing.T) {
+		testArbitrarySizeOneMessage(t, value2)
+	})
+}
+
+func TestArbitrarySizeMultipleMessagesByChunks(t *testing.T) {
+	// Test fails if message size is above 64810
+	const (
+		value1 = 64810 // 2^16 - 726
+		value2 = 64811 // 2^16 - 725
+	)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+
+	t.Run("Value1", func(t *testing.T) {
+		defer wg.Done()
+		testArbitrarySizeMultipleMessagesByChunks(t, value1)
+	})
+
+	wg.Wait()
+
+	t.Run("Value2", func(t *testing.T) {
+		testArbitrarySizeMultipleMessagesByChunks(t, value2)
+	})
+}
+
+func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
+	rg1 := createRouteGroup()
+	rg2 := createRouteGroup()
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer func() {
+		cancel()
+		teardownEnv()
+	}()
+
+	go pushPackets(ctx, t, m1, rg1)
+
+	go pushPackets(ctx, t, m2, rg2)
+
+	chunkSize := 1024
+
+	msg := []byte(strings.Repeat("A", size))
+
+	for offset := 0; offset < size; offset += chunkSize {
+		_, err := rg1.Write(msg[offset : offset+chunkSize])
+		require.NoError(t, err)
+	}
+
+	for offset := 0; offset < size; offset += chunkSize {
+		buf := make([]byte, chunkSize)
+		n, err := rg2.Read(buf)
+		require.NoError(t, err)
+		require.Equal(t, chunkSize, n)
+		require.Equal(t, msg[offset:offset+chunkSize], buf)
+	}
+
+	buf := make([]byte, chunkSize)
+	n, err := rg2.Read(buf)
+	assert.Equal(t, io.EOF, err)
+	assert.Equal(t, 0, n)
+	assert.Equal(t, make([]byte, chunkSize), buf)
+}
+
+func testArbitrarySizeOneMessage(t *testing.T, size int) {
+	rg1 := createRouteGroup()
+	rg2 := createRouteGroup()
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer func() {
+		cancel()
+		teardownEnv()
+	}()
+
+	go pushPackets(ctx, t, m1, rg1)
+
+	go pushPackets(ctx, t, m2, rg2)
+
+	msg := []byte(strings.Repeat("A", size))
+
+	_, err := rg1.Write(msg)
+	require.NoError(t, err)
+
+	buf := make([]byte, size)
+	n, err := rg2.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, size, n)
+	require.Equal(t, msg, buf)
+
+	buf = make([]byte, size)
+	n, err = rg2.Read(buf)
+	require.Equal(t, io.EOF, err)
+	require.Equal(t, 0, n)
+	require.Equal(t, make([]byte, size), buf)
 }
 
 func TestRouteGroup_LocalAddr(t *testing.T) {
