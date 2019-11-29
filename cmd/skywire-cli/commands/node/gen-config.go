@@ -28,9 +28,6 @@ var (
 	testenv       bool
 )
 
-// ErrNoLocalIPFound occurs when there is no non-loopback local IP address.
-var ErrNoLocalIPFound = errors.New("could not find local IP address")
-
 func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
@@ -212,5 +209,5 @@ func getLocalIPAddress() (string, error) {
 			}
 		}
 	}
-	return "", ErrNoLocalIPFound
+	return "", errors.New("could not find local IP address")
 }
