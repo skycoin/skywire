@@ -11,16 +11,18 @@ import (
 
 func TestConsumeRule(t *testing.T) {
 	keepAlive := 2 * time.Minute
-	pk, _ := cipher.GenerateKeyPair()
+	localPK, _ := cipher.GenerateKeyPair()
+	remotePK, _ := cipher.GenerateKeyPair()
 
-	rule := ConsumeRule(keepAlive, 1, pk, 2, 3)
+	rule := ConsumeRule(keepAlive, 1, localPK, remotePK, 2, 3)
 
 	assert.Equal(t, keepAlive, rule.KeepAlive())
 	assert.Equal(t, RuleConsume, rule.Type())
 	assert.Equal(t, RouteID(1), rule.KeyRouteID())
 
 	rd := rule.RouteDescriptor()
-	assert.Equal(t, pk, rd.DstPK())
+	assert.Equal(t, localPK, rd.SrcPK())
+	assert.Equal(t, remotePK, rd.DstPK())
 	assert.Equal(t, Port(3), rd.DstPort())
 	assert.Equal(t, Port(2), rd.SrcPort())
 
