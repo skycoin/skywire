@@ -1,6 +1,7 @@
 package node
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -26,6 +27,9 @@ var (
 	configLocType = pathutil.WorkingDirLoc
 	testenv       bool
 )
+
+// ErrNoLocalIPFound occurs when there is no non-loopback local IP address.
+var ErrNoLocalIPFound = errors.New("could not find local IP address")
 
 func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
@@ -87,7 +91,12 @@ func defaultConfig() *visor.Config {
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
 
-	conf.STCP.LocalAddr = getLocalIPAddress()
+	lIPaddr, err := getLocalIPAddress()
+	if err != nil {
+		log.Warn(err)
+	}
+
+	conf.STCP.LocalAddr = lIPaddr
 
 	if testenv {
 		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
@@ -190,18 +199,18 @@ func defaultSkyproxyClientConfig() visor.AppConfig {
 	}
 }
 
-func getLocalIPAddress() string {
+func getLocalIPAddress() (string, error) {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		log.WithError(err)
+		return "", err
 	}
 
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String() + ":7777"
+				return ipnet.IP.String() + ":7777", nil
 			}
 		}
 	}
-	return ""
+	return "", ErrNoLocalIPFound
 }
