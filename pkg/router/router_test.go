@@ -272,20 +272,21 @@ func TestRouter_Rules(t *testing.T) {
 	t.Run("RemoveRouteDescriptor", func(t *testing.T) {
 		clearRules()
 
-		pk, _ := cipher.GenerateKeyPair()
+		localPK, _ := cipher.GenerateKeyPair()
+		remotePK, _ := cipher.GenerateKeyPair()
 
 		id, err := r.rt.ReserveKeys(1)
 		require.NoError(t, err)
 
-		rule := routing.ConsumeRule(10*time.Minute, id[0], pk, 2, 3)
+		rule := routing.ConsumeRule(10*time.Minute, id[0], localPK, remotePK, 2, 3)
 		err = r.rt.SaveRule(rule)
 		require.NoError(t, err)
 
-		desc := routing.NewRouteDescriptor(cipher.PubKey{}, pk, 3, 2)
+		desc := routing.NewRouteDescriptor(localPK, remotePK, 3, 2)
 		r.RemoveRouteDescriptor(desc)
 		assert.Equal(t, 1, rt.Count())
 
-		desc = routing.NewRouteDescriptor(cipher.PubKey{}, pk, 2, 3)
+		desc = routing.NewRouteDescriptor(localPK, remotePK, 2, 3)
 		r.RemoveRouteDescriptor(desc)
 		assert.Equal(t, 0, rt.Count())
 	})

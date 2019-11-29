@@ -299,7 +299,7 @@ func (rs *RuleSummary) ToRule() (Rule, error) {
 		f := rs.ConsumeFields
 		d := f.RouteDescriptor
 
-		return ConsumeRule(rs.KeepAlive, rs.KeyRouteID, d.DstPK, d.SrcPort, d.DstPort), nil
+		return ConsumeRule(rs.KeepAlive, rs.KeyRouteID, d.SrcPK, d.DstPK, d.SrcPort, d.DstPort), nil
 	case rs.Type == RuleForward:
 		if rs.ConsumeFields != nil || rs.ForwardFields == nil || rs.IntermediaryForwardFields != nil {
 			return nil, errors.New("invalid routing rule summary")
@@ -375,7 +375,6 @@ func ConsumeRule(keepAlive time.Duration, key RouteID, localPK, remotePK cipher.
 
 	rule.setSrcPK(localPK)
 	rule.setDstPK(remotePK)
-	rule.setSrcPK(cipher.PubKey{})
 	rule.setDstPort(remotePort)
 	rule.setSrcPort(localPort)
 
