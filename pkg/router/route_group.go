@@ -258,11 +258,11 @@ func (r *RouteGroup) Close() error {
 }
 
 func (r *RouteGroup) LocalAddr() net.Addr {
-	return r.desc.Src()
+	return r.desc.Dst()
 }
 
 func (r *RouteGroup) RemoteAddr() net.Addr {
-	return r.desc.Dst()
+	return r.desc.Src()
 }
 
 // https://golang.org/src/internal/poll/fd_plan9.go#L103
