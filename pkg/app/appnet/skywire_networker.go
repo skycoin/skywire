@@ -107,8 +107,7 @@ func (r *SkywireNetworker) serve(ctx context.Context) error {
 
 // serveRG passes accepted router group to the corresponding listener.
 func (r *SkywireNetworker) serveRG(rg *router.RouteGroup) {
-	// TODO: local? remote? decide on this
-	localAddr, ok := rg.RemoteAddr().(routing.Addr)
+	localAddr, ok := rg.LocalAddr().(routing.Addr)
 	if !ok {
 		r.closeRG(rg)
 		r.log.Error("wrong type of addr in accepted conn")
