@@ -152,6 +152,7 @@ func (idr *idReservoir) GenerateRules(fwd, rev routing.Route) (
 		}
 
 		desc := route.Desc
+		srcPK := desc.SrcPK()
 		dstPK := desc.DstPK()
 		srcPort := desc.SrcPort()
 		dstPort := desc.DstPort()
@@ -175,8 +176,8 @@ func (idr *idReservoir) GenerateRules(fwd, rev routing.Route) (
 			rID = nxtRID
 		}
 
-		fmt.Printf("GENERATING CONSUME RULE WITH SRC %s")
-		rule := routing.ConsumeRule(route.KeepAlive, rID, dstPK, srcPort, dstPort)
+		fmt.Printf("GENERATING CONSUME RULE WITH SRC %s\n", srcPK)
+		rule := routing.ConsumeRule(route.KeepAlive, rID, srcPK, dstPK, srcPort, dstPort)
 		consumeRules[dstPK] = rule
 	}
 
