@@ -1,10 +1,14 @@
 import { Component, Input } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+
 import { Node } from '../../../../../app.datatypes';
 import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-label.component';
 import { NodeComponent } from '../../node.component';
-import TimeUtils from 'src/app/utils/timeUtils';
+import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
 
+/**
+ * Shows the basic info of a node.
+ */
 @Component({
   selector: 'app-node-info-content',
   templateUrl: './node-info-content.component.html',
@@ -13,11 +17,11 @@ import TimeUtils from 'src/app/utils/timeUtils';
 export class NodeInfoContentComponent {
   @Input() set nodeInfo(val: Node) {
     this.node = val;
-    this.onlineTimeTextElements = TimeUtils.getElapsedTimeElements(val.seconds_online);
+    this.timeOnline = TimeUtils.getElapsedTime(val.seconds_online);
   }
 
   node: Node;
-  onlineTimeTextElements = ['seconds', ''];
+  timeOnline: ElapsedTime;
 
   constructor(
     private dialog: MatDialog,

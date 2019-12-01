@@ -4,10 +4,10 @@
       mat-button
       color="accent"
       [disableRipple]="true"
-      class="button grey-button-background"
+      class="grey-button-background"
       *ngFor="let language of languages"
       (click)="closePopup(language)"
-      >
+    >
       <img [src]="'assets/img/lang/' + language.iconName">
       <div class="label">{{ language.name }}</div>
     </button>

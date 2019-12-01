@@ -1,14 +1,33 @@
 import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
-import { AppsService } from '../../../../../../services/apps.service';
-import { LogMessage, Application } from '../../../../../../app.datatypes';
 import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
-import { NodeComponent } from '../../../node.component';
 import { delay, flatMap } from 'rxjs/operators';
+
+import { AppsService } from '../../../../../../services/apps.service';
+import { Application } from '../../../../../../app.datatypes';
+import { NodeComponent } from '../../../node.component';
 import { LogFilterComponent, LogsFilter } from './log-filter/log-filter.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
 
+/**
+ * Represents a log entry.
+ */
+interface LogMessage {
+  /**
+   * String with the date of the entry.
+   */
+  time: string;
+  /**
+   * The log msg itself.
+   */
+  msg: string;
+}
+
+/**
+ * Modal window for showing the logs of an app. It allow to filter the initial date
+ * of the log messages that are shown.
+ */
 @Component({
   selector: 'app-log',
   templateUrl: './log.component.html',
@@ -24,9 +43,16 @@ export class LogComponent implements OnInit, OnDestroy {
     days: 7
   };
 
+  /**
+   * Allows to show an error msg in the snack bar only the first time there is an error
+   * getting the data, and not all the automatic attemps.
+   */
   private shouldShowError = true;
   private subscription: Subscription;
 
+  /**
+   * Opens the modal window. Please use this function instead of opening the window "by hand".
+   */
   public static openDialog(dialog: MatDialog, data: Application): MatDialogRef<LogComponent, any> {
     const config = new MatDialogConfig();
     config.data = data;
@@ -48,13 +74,14 @@ export class LogComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.snackbarService.closeCurrentIfTemporalError();
+    this.snackbarService.closeCurrentIfTemporaryError();
     this.removeSubscription();
   }
 
   filter() {
     LogFilterComponent.openDialog(this.dialog, this.currentFilter).afterClosed().subscribe(result => {
       if (result) {
+        // Change the filter and reload the data.
         this.currentFilter = result;
         this.logMessages = [];
 
@@ -68,7 +95,9 @@ export class LogComponent implements OnInit, OnDestroy {
 
     this.loading = true;
     this.subscription = of(1).pipe(
+      // Wait the delay.
       delay(delayMilliseconds),
+      // Load the data. The node pk is obtained from the currently openned node page.
       flatMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name, this.currentFilter.days))
     ).subscribe(
       (log) => this.onLogsReceived(log),
@@ -83,9 +112,12 @@ export class LogComponent implements OnInit, OnDestroy {
   }
 
   private onLogsReceived(logs: string[] = []) {
+    // Reset the indicators related to the loading operation.
     this.loading = false;
-    this.snackbarService.closeCurrentIfTemporalError();
+    this.shouldShowError = true;
+    this.snackbarService.closeCurrentIfTemporaryError();
 
+    // Separate the date from the actual log msg and add the entry to the array that will populate the UI.
     logs.forEach(log => {
       const dateStart = log.startsWith('[') ? 0 : -1;
       const dateEnd = dateStart !== -1 ? log.indexOf(']') : -1;
@@ -103,17 +135,20 @@ export class LogComponent implements OnInit, OnDestroy {
       }
     });
 
+    // Scroll to the bottom. Use a timer to wait for the UI to be updated.
     setTimeout(() => {
       (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
     });
   }
 
   private onLogsError() {
+    // Show an error msg if it has not be done before during the current attempt to obtain the data.
     if (this.shouldShowError) {
       this.snackbarService.showError('common.loading-error', null, true);
       this.shouldShowError = false;
     }
 
+    // Retry after a small delay.
     this.loadData(3000);
   }
 }

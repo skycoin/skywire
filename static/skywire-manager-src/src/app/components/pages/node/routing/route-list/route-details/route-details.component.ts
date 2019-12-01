@@ -1,17 +1,21 @@
 import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription, of } from 'rxjs';
+import { delay, flatMap } from 'rxjs/operators';
+
 import { RouteService } from '../../../../../../services/route.service';
 import { NodeComponent } from '../../../node.component';
-import { delay, flatMap } from 'rxjs/operators';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
+
+// Objects representing the structure of the response returned by the hypervisor.
 
 class RouteRule {
   key:  string;
   rule: string;
   rule_summary?: RuleSumary;
 }
+
 class RuleSumary {
   keep_alive: number;
   rule_type: number;
@@ -32,6 +36,9 @@ class ForwardRuleSumary {
   next_tid: string;
 }
 
+/**
+ * Modal window for showing the details of a route.
+ */
 @Component({
   selector: 'app-route-details',
   templateUrl: './route-details.component.html',
@@ -43,11 +50,17 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
   private shouldShowError = true;
   private dataSubscription: Subscription;
 
+  /**
+   * Map with the types of route rules that the hypervisor can return and are known by this app.
+   */
   private ruleTypes = new Map<number, string>([
     [0, 'App'],
     [1, 'Forward']
   ]);
 
+  /**
+   * Opens the modal window. Please use this function instead of opening the window "by hand".
+   */
   public static openDialog(dialog: MatDialog, data: string): MatDialogRef<RouteDetailsComponent, any> {
     const config = new MatDialogConfig();
     config.data = data;
@@ -69,7 +82,7 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.snackbarService.closeCurrentIfTemporalError();
+    this.snackbarService.closeCurrentIfTemporaryError();
     this.dataSubscription.unsubscribe();
   }
 
@@ -91,19 +104,23 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
     }
 
     this.dataSubscription = of(1).pipe(
+      // Wait the delay.
       delay(delayMilliseconds),
+      // Load the data. The node pk is obtained from the currently openned node page.
       flatMap(() => this.routeService.get(NodeComponent.getCurrentNodeKey(), this.data))
     ).subscribe(
       (rule: RouteRule) => {
-        this.snackbarService.closeCurrentIfTemporalError();
+        this.snackbarService.closeCurrentIfTemporaryError();
         this.routeRule = rule;
       },
       () => {
+        // Show an error msg if it has not be done before during the current attempt to obtain the data.
         if (this.shouldShowError) {
           this.snackbarService.showError('common.loading-error', null, true);
           this.shouldShowError = false;
         }
 
+        // Retry after a small delay.
         this.loadData(3000);
       },
     );

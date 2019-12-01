@@ -1,11 +1,11 @@
 import { Component, OnInit } from '@angular/core';
-import {
-  FormBuilder,
-  FormGroup,
-  Validators
-} from '@angular/forms';
+import { FormBuilder, FormGroup } from '@angular/forms';
+
 import { StorageService } from '../../../../services/storage.service';
 
+/**
+ * Allows to change the frequency of the automatic data refresing.
+ */
 @Component({
   selector: 'app-refresh-rate',
   templateUrl: './refresh-rate.component.html',
@@ -14,6 +14,7 @@ import { StorageService } from '../../../../services/storage.service';
 export class RefreshRateComponent implements OnInit {
   form: FormGroup;
 
+  // Options in seconds.
   readonly timesList = ['3', '5', '10', '15', '30', '60', '90', '150', '300'];
 
   constructor(
@@ -23,7 +24,7 @@ export class RefreshRateComponent implements OnInit {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'refreshRate': [this.storageService.getRefreshTime().toString(), Validators.required],
+      'refreshRate': [this.storageService.getRefreshTime().toString()],
     });
 
     this.form.get('refreshRate').valueChanges.subscribe(refreshRate => {

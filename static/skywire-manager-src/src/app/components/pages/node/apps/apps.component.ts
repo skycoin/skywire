@@ -1,12 +1,16 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Application, Node } from '../../../../app.datatypes';
-import { NodeComponent } from '../node.component';
 import { Subscription } from 'rxjs';
 
+import { Application, Node } from '../../../../app.datatypes';
+import { NodeComponent } from '../node.component';
+
+/**
+ * Page that shows the apps summary. It is a subpage of the Node page.
+ */
 @Component({
   selector: 'app-apps',
   templateUrl: './apps.component.html',
-  styleUrls: ['./apps.component.css']
+  styleUrls: ['./apps.component.scss']
 })
 export class AppsComponent implements OnInit, OnDestroy {
   apps: Application[];
@@ -15,6 +19,7 @@ export class AppsComponent implements OnInit, OnDestroy {
   private dataSubscription: Subscription;
 
   ngOnInit() {
+    // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.local_pk;
       this.apps = node.apps;

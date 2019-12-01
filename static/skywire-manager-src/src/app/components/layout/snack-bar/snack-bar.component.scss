@@ -1,3 +1,6 @@
+@import "variables";
+@import "utilities/utilities";
+
 .main-container {
   width: 100%;
   display: flex;
@@ -24,12 +27,15 @@
 .text-container {
   flex-grow: 1;
   margin-right: 10px;
-  font-size: 15px;
+  font-size: $font-size-base;
   margin-top: 2px;
 }
 
-.close-container {
-  mat-icon {
-    cursor: pointer;
+.close-button {
+  @extend .cursor-pointer;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
   }
 }

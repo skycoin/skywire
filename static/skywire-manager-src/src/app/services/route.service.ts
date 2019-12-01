@@ -1,9 +1,12 @@
 import { Injectable } from '@angular/core';
-import { ApiService } from './api.service';
 import { Observable } from 'rxjs';
-import { Route } from '../app.datatypes';
-import { map } from 'rxjs/operators';
 
+import { ApiService } from './api.service';
+import { Route } from '../app.datatypes';
+
+/**
+ * Allows to work with the routes of a node.
+ */
 @Injectable({
   providedIn: 'root'
 })
@@ -12,21 +15,21 @@ export class RouteService {
     private apiService: ApiService,
   ) { }
 
+  /**
+   * Get a list with the routes of a node.
+   */
   getRoutes(nodeKey: string): Observable<Route[]> {
-    return this.apiService.get(`nodes/${nodeKey}/routes`, { api2: true }).pipe(map((response: Route[]) => {
-      if (response) {
-        response = response.sort((a, b) => a.key - b.key);
-      }
-
-      return response;
-    }));
+    return this.apiService.get(`nodes/${nodeKey}/routes`);
   }
 
-  get(key: string, routeId: string) {
-    return this.apiService.get(`nodes/${key}/routes/${routeId}`, {api2: true});
+  /**
+   * Gets the details of a specific route.
+   */
+  get(nodeKey: string, routeId: string) {
+    return this.apiService.get(`nodes/${nodeKey}/routes/${routeId}`);
   }
 
-  delete(key: string, routeId: string) {
-    return this.apiService.delete(`nodes/${key}/routes/${routeId}`, {api2: true});
+  delete(nodeKey: string, routeId: string) {
+    return this.apiService.delete(`nodes/${nodeKey}/routes/${routeId}`);
   }
 }

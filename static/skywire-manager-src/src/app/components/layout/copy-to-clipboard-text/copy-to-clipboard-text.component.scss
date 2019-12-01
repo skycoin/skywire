@@ -3,19 +3,11 @@
 
 .wrapper {
   display: inline;
-  @extend .cursor-pointer;
   /* Needed because the tooltip blocks the ability to select the text. */
   @extend .reactivate-mouse;
 
   mat-icon {
-    opacity: 0.5;
     font-size: $font-size-mini-plus;
     user-select: none;
-  }
-
-  &:hover {
-    mat-icon {
-      opacity: 0.8;
-    }
   }
 }

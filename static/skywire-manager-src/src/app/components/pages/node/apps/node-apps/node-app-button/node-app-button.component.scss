@@ -1,5 +1,4 @@
 @import "variables";
-@import "../../../../../../../assets/scss/utilities/theme";
 @import "backgrounds";
 @import "../../../../../../../../node_modules/bootstrap/scss/functions";
 
@@ -62,7 +61,7 @@
 
 .btn-more
 {
-  font-size: theme-font-size(lg);
+  font-size: $font-size-lg;
   position: absolute;
   right: -30px;
   top: -12px;

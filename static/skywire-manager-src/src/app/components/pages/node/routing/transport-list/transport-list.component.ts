@@ -1,12 +1,13 @@
 import { Component, Input, OnDestroy } from '@angular/core';
-import { Transport } from '../../../../../app.datatypes';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { Observable, Subscription } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
+
+import { Transport } from '../../../../../app.datatypes';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
-import { Observable, Subscription } from 'rxjs';
 import { AppConfig } from '../../../../../app.config';
-import { ActivatedRoute } from '@angular/router';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
 import GeneralUtils from '../../../../../utils/generalUtils';
 import { TransportDetailsComponent } from './transport-details/transport-details.component';
@@ -14,6 +15,9 @@ import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 
+/**
+ * List of the columns that can be used to sort the data.
+ */
 enum SortableColumns {
   Id = 'transports.id',
   RemotePk = 'transports.remote',
@@ -22,6 +26,10 @@ enum SortableColumns {
   Downloaded = 'common.downloaded',
 }
 
+/**
+ * Shows the list of transports of a node. I can be used to show a short preview, with just some
+ * elements and a link for showing the rest: or the full list, with pagination controls.
+ */
 @Component({
   selector: 'app-transport-list',
   templateUrl: './transport-list.component.html',
@@ -31,6 +39,7 @@ export class TransportListComponent implements OnDestroy {
   @Input() nodePK: string;
   sortableColumns = SortableColumns;
 
+  // Vars for keeping track of the column used for sorting the data.
   sortBy = SortableColumns.Id;
   sortReverse = false;
   get sortingArrow(): string {
@@ -38,8 +47,16 @@ export class TransportListComponent implements OnDestroy {
   }
 
   dataSource: Transport[];
+  /**
+   * Keeps track of the state of the check boxes of the elements.
+   */
   selections = new Map<string, boolean>();
 
+  /**
+   * If true, the control can only show few elements and, if there are more elements, a link for
+   * accessing the full list. If false, the full list is shown, with pagination
+   * controls, if needed.
+   */
   showShortList_: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
@@ -50,6 +67,7 @@ export class TransportListComponent implements OnDestroy {
   transportsToShow: Transport[];
   numberOfPages = 1;
   currentPage = 1;
+  // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
   @Input() set transports(val: Transport[]) {
     this.allTransports = val;
@@ -67,8 +85,8 @@ export class TransportListComponent implements OnDestroy {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
-        if (selectedPage === NaN || selectedPage < 0) {
-          selectedPage = 0;
+        if (isNaN(selectedPage) || selectedPage < 1) {
+          selectedPage = 1;
         }
 
         this.currentPageInUrl = selectedPage;
@@ -82,6 +100,9 @@ export class TransportListComponent implements OnDestroy {
     this.navigationsSubscription.unsubscribe();
   }
 
+  /**
+   * Changes the selection state of an entry (modifies the state of its checkbox).
+   */
   changeSelection(transport: Transport) {
     if (this.selections.get(transport.id)) {
       this.selections.set(transport.id, false);
@@ -90,6 +111,9 @@ export class TransportListComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Check if at lest one entry has been selected via its checkbox.
+   */
   hasSelectedElements(): boolean {
     if (!this.selections) {
       return false;
@@ -105,14 +129,21 @@ export class TransportListComponent implements OnDestroy {
     return found;
   }
 
+  /**
+   * Selects or deselects all items.
+   */
   changeAllSelections(setSelected: boolean) {
     this.selections.forEach((val, key) => {
       this.selections.set(key, setSelected);
     });
   }
 
+  /**
+   * Deletes the selected elements.
+   */
   deleteSelected() {
-    const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'transports.delete-selected-confirmation');
+    // Ask for confirmation.
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'transports.delete-selected-confirmation');
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
@@ -128,10 +159,16 @@ export class TransportListComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Shows the transport creation modal window.
+   */
   create() {
     CreateTransportComponent.openDialog(this.dialog);
   }
 
+  /**
+   * Opens the modal window used on small screens with the options of an element.
+   */
   showOptionsDialog(transport: Transport) {
     const options: SelectableOption[] = [
       {
@@ -153,18 +190,25 @@ export class TransportListComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Shows a modal window with the details of a transport.
+   */
   details(transport: Transport) {
     TransportDetailsComponent.openDialog(this.dialog, transport);
   }
 
+  /**
+   * Deletes a specific element.
+   */
   delete(id: string) {
-    const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'transports.delete-confirmation');
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'transports.delete-confirmation');
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
       this.startDeleting(id).subscribe(() => {
         confirmationDialog.close();
+        // Make the parent page reload the data.
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.deleted');
       }, () => {
@@ -173,6 +217,9 @@ export class TransportListComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Changes the column and/or order used for sorting the data.
+   */
   changeSortingOrder(column: SortableColumns) {
     if (this.sortBy !== column) {
       this.sortBy = column;
@@ -184,7 +231,11 @@ export class TransportListComponent implements OnDestroy {
     this.recalculateElementsToShow();
   }
 
+  /**
+   * Opens the modal window used on small screens for selecting how to sort the data.
+   */
   openSortingOrderModal() {
+    // Get the list of sortable columns.
     const enumKeys = Object.keys(SortableColumns);
     const columnsMap = new Map<string, SortableColumns>();
     const columns = enumKeys.map(key => {
@@ -206,10 +257,16 @@ export class TransportListComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Sorts the data and recalculates which elements should be shown on the UI.
+   */
   private recalculateElementsToShow() {
+    // Needed to prevent racing conditions.
     this.currentPage = this.currentPageInUrl;
 
+    // Needed to prevent racing conditions.
     if (this.allTransports) {
+      // Sort all the data.
       this.allTransports.sort((a, b) => {
         const defaultOrder = a.id.localeCompare(b.id);
 
@@ -231,36 +288,40 @@ export class TransportListComponent implements OnDestroy {
         return response !== 0 ? response : defaultOrder;
       });
 
+      // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-
       this.numberOfPages = Math.ceil(this.allTransports.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
 
+      // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
       this.transportsToShow = this.allTransports.slice(start, end);
 
+      // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<string, boolean>();
       this.transportsToShow.forEach(transport => {
         currentElementsMap.set(transport.id, true);
 
+        // Add to the selections map the elements that are going to be shown.
         if (!this.selections.has(transport.id)) {
           this.selections.set(transport.id, false);
         }
       });
 
+      // Remove from the selections map the elements that are not going to be shown.
       const keysToRemove: string[] = [];
       this.selections.forEach((value, key) => {
         if (!currentElementsMap.has(key)) {
           keysToRemove.push(key);
         }
       });
-
       keysToRemove.forEach(key => {
         this.selections.delete(key);
       });
+
     } else {
       this.transportsToShow = null;
       this.selections = new Map<string, boolean>();
@@ -269,15 +330,25 @@ export class TransportListComponent implements OnDestroy {
     this.dataSource = this.transportsToShow;
   }
 
+  /**
+   * Prepares the operation for deteling an element, but does not start it. To start the operation,
+   * subscribe to the response.
+   */
   private startDeleting(id: string): Observable<any> {
     return this.transportService.delete(NodeComponent.getCurrentNodeKey(), id);
   }
 
+  /**
+   * Recursively deletes a list of elements.
+   * @param ids List with the IDs of the elements to delete.
+   * @param confirmationDialog Dialog used for requesting confirmation from the user.
+   */
   deleteRecursively(ids: string[], confirmationDialog: MatDialogRef<ConfirmationComponent, any>) {
     this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
         confirmationDialog.close();
+        // Make the parent page reload the data.
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.deleted');
       } else {

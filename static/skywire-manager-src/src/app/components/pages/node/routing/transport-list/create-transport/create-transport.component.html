@@ -7,7 +7,8 @@
         maxlength="66"
         [placeholder]="'transports.dialog.remote-key' | translate"
         #firstInput
-        matInput>
+        matInput
+      >
       <mat-error>
         <ng-container *ngIf="!this.form.get('remoteKey').hasError('pattern');else hexError">
           {{ 'transports.dialog.errors.remote-key-length-error' | translate }}
@@ -21,7 +22,8 @@
     <mat-form-field>
       <mat-select
         formControlName="type"
-        [placeholder]="'transports.dialog.transport-type' | translate">
+        [placeholder]="'transports.dialog.transport-type' | translate"
+      >
         <mat-option *ngFor="let type of types" [value]="type">{{ type }}</mat-option>
       </mat-select>
       <mat-error>
@@ -35,7 +37,8 @@
       type="mat-raised-button"
       [disabled]="!form.valid"
       color="primary"
-      class="float-right">
+      class="float-right"
+    >
       {{ 'transports.create' | translate }}
     </app-button>
   </form>

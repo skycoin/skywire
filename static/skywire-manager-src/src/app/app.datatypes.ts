@@ -66,11 +66,6 @@ export interface ClientConnection {
   count: number;
 }
 
-export interface LogMessage {
-  time: string;
-  msg: string;
-}
-
 export interface AutoStartConfig {
   sshs: boolean;
   sshc: boolean;

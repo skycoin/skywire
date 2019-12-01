@@ -1,54 +1,9 @@
 @import "variables";
-@import "utilities/theme";
-@import "bootstrap_overrides";
-@import "~bootstrap/scss/functions";
-
-:host::ng-deep
-{
-  app-toolbar {
-    padding: 20px 0;
-  }
-
-  .mat-form-field
-  {
-    width: 50px;
-    transition: width .4s cubic-bezier(.25,.8,.25,1);
-
-    &.mat-form-field-invalid
-    {
-      width: 180px;
-    }
-  }
-
-  .mat-form-field-underline
-  {
-    background-color: theme-color(translucid-white);
-  }
-
-  .mat-form-field-ripple
-  {
-    background-color: theme-color(translucid-white);
-  }
-
-  .mat-input-element {
-    caret-color: theme-color(translucid-white);
-  }
-
-  .menu-button {
-    color: theme-color(white);
-    margin-right: 15px;
-    cursor: pointer;
-  }
-
-  .mw-0 {
-    min-width: 0;
-  }
-}
 
 .not-found-label {
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: $font-size-base;
 
   mat-icon {
     position: relative;

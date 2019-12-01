@@ -1,11 +1,11 @@
+@import 'utilities/utilities';
+
 .nowrap {
   white-space: nowrap;
 }
 
 .wrapper {
   display: inline;
-  touch-action: initial !important;
-  user-select: initial !important;
-  -webkit-user-drag: auto !important;
-  -webkit-tap-highlight-color: initial !important;
+  /* Needed because the tooltip blocks the ability to select the text. */
+  @extend .reactivate-mouse;
 }

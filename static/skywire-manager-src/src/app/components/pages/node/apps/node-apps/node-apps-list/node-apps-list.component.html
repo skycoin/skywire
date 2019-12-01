@@ -1,9 +1,9 @@
-<div class="title-container mt-4.5 d-flex justify-content-between">
-  <div class="title font-mini uppercase ml-3.5">
+<!-- Header. -->
+<div class="generic-title-container mt-4.5 d-flex">
+  <div class="title uppercase ml-3.5">
     <span *ngIf="showShortList_">{{ 'apps.apps-list.title' | translate }}</span>
   </div>
   <mat-icon
-    class="ic-mini-plus-responsive table-create-record"
     [matMenuTriggerFor]="selectionMenu"
     *ngIf="dataSource && dataSource.length > 0"
   >more_horiz</mat-icon>
@@ -29,6 +29,7 @@
   </mat-menu>
 </div>
 
+<!-- Upper paginator. -->
 <app-paginator
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"
@@ -37,15 +38,17 @@
 </app-paginator>
 
 <div
-  class="container-elevated-translucid mt-3 overflow"
+  class="container-elevated-translucid mt-3"
   [ngClass]="{'table-container': showShortList_, 'full-list-table-container': !showShortList_}"
   *ngIf="dataSource && dataSource.length > 0"
 >
+  <!-- Table for large screens. -->
   <table
-    class="responsive-table-translucid fit d-none d-md-table"
+    class="responsive-table-translucid d-none d-md-table"
     [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
+    <!-- Column names. -->
     <tr>
       <th></th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Name)">
@@ -66,11 +69,10 @@
       </th>
       <th class="actions"></th>
     </tr>
+    <!-- Values. -->
     <tr *ngFor="let app of dataSource">
       <td class="selection-col">
         <mat-checkbox
-          type="checkbox"
-          class="dark-check-box"
           [checked]="selections.get(app.name)"
           (change)="changeSelection(app)">
         </mat-checkbox>
@@ -89,7 +91,7 @@
       </td>
       <td>
         <mat-icon
-          class="ic-mini table-delete-record"
+          class="table-neutral-option"
           (click)="changeAppAutostart(app)"
           [matTooltip]="(app.autostart ? 'apps.apps-list.disable-autostart' : 'apps.apps-list.enable-autostart') | translate"
         >
@@ -98,13 +100,13 @@
       </td>
       <td class="actions">
         <mat-icon
-          class="table-delete-record"
+          class="table-neutral-option"
           (click)="viewLogs(app)"
           [matTooltip]="'apps.view-logs' | translate"
           >list</mat-icon>
         &nbsp;
         <mat-icon
-          class="table-delete-record"
+          class="table-neutral-option"
           (click)="changeAppState(app)"
           [matTooltip]="('apps.' + (app.status === 1 ? 'stop-app' : 'start-app')) | translate"
           >{{ app.status === 1 ? 'stop' : 'play_arrow' }}</mat-icon>
@@ -112,12 +114,14 @@
     </tr>
   </table>
 
+  <!-- List for small screens. -->
   <table
-    class="responsive-table-translucid fit d-md-none nowrap"
+    class="responsive-table-translucid d-md-none"
     [ngClass]="{'d-lg-table d-xl-none': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
-    <tr class="selectable full-box" (click)="openSortingOrderModal()"><td>
+    <!-- Sorting button. -->
+    <tr class="selectable" (click)="openSortingOrderModal()"><td>
       <div class="list-item-container">
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
@@ -130,12 +134,11 @@
         </div>
       </div>
     </td></tr>
-    <tr *ngFor="let app of dataSource" class="full-box"><td>
+    <!-- Values. -->
+    <tr *ngFor="let app of dataSource"><td>
       <div class="list-item-container">
         <div class="check-part">
           <mat-checkbox
-            type="checkbox"
-            class="dark-check-box"
             [checked]="selections.get(app.name)"
             (change)="changeSelection(app)">
           </mat-checkbox>
@@ -178,6 +181,7 @@
     </td></tr>
   </table>
 
+  <!-- Lower paginator. -->
   <app-view-all-link
     [numberOfElements]="allApps.length"
     [linkParts]="['/nodes', nodePK, 'apps-list']"
@@ -185,10 +189,12 @@
   ></app-view-all-link>
 </div>
 
-<div class="container-elevated-translucid mt-3 overflow" *ngIf="!dataSource || dataSource.length === 0">
-  <span class="text">{{ 'apps.apps-list.empty' | translate }}</span>
+<!-- Msg shown if the list is empty. -->
+<div class="container-elevated-translucid mt-3" *ngIf="!dataSource || dataSource.length === 0">
+  <span class="font-sm">{{ 'apps.apps-list.empty' | translate }}</span>
 </div>
 
+<!-- Link for accessing the full list. -->
 <app-paginator
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"

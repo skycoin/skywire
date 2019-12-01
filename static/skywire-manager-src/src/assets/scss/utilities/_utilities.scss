@@ -1,5 +1,4 @@
-@import "theme";
-@import "flexbox";
+// General utilities for the app.
 
 .cursor-pointer {
   cursor: pointer;
@@ -10,6 +9,10 @@
   user-select: initial !important;
   -webkit-user-drag: auto !important;
   -webkit-tap-highlight-color: initial !important;
+}
+
+.mouse-disabled {
+  pointer-events: none;
 }
 
 .clearfix::after {
@@ -28,4 +31,18 @@
 
 .mr-3\.5 {
   margin-right: 1.25rem !important;
+}
+
+.highlight-internal-icon {
+  @extend .cursor-pointer;
+
+  mat-icon {
+    opacity: 0.5;
+  }
+
+  &:hover {
+    mat-icon {
+      opacity: 0.8;
+    }
+  }
 }

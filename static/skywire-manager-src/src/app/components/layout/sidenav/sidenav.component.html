@@ -1,52 +1,59 @@
-<div class="fixed-container d-lg-none">
-  <div class="top-bar">
-    <div class="logo-container">
-      <img src="/assets/img/logo-sup.png" />
-    </div>
-    <div class="button-container">
-      <button
-        mat-icon-button
-        [matMenuTriggerFor]="menu"
-      >
-        <mat-icon>menu</mat-icon>
-      </button>
-      <mat-menu #menu="matMenu" [overlapTrigger]="false">
-        <ng-container *ngIf="sidenavService.upperContents">
-          <ng-container *ngFor="let content of sidenavService.upperContents">
-            <div mat-menu-item (click)="requestAction(content.actionName)" [disabled]="content.disabled">
-              <mat-icon [ngClass]="{'transparent': content.disabled}">{{ content.icon }}</mat-icon> {{ content.name | translate }}
-            </div>
-          </ng-container>
+<!-- Top bar shown on small screens. -->
+<div class="top-bar d-lg-none">
+  <div class="logo-container">
+    <img src="/assets/img/logo-sup.png" />
+  </div>
+  <div class="button-container">
+    <button
+      mat-icon-button
+      [matMenuTriggerFor]="menu"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+
+    <!-- Top bar menu. -->
+    <mat-menu #menu="matMenu" [overlapTrigger]="false">
+      <!-- Upper area. -->
+      <ng-container *ngIf="sidenavService.upperContents">
+        <ng-container *ngFor="let content of sidenavService.upperContents">
+          <div mat-menu-item (click)="requestAction(content.actionName)" [disabled]="content.disabled">
+            <mat-icon [ngClass]="{'transparent': content.disabled}">{{ content.icon }}</mat-icon> {{ content.name | translate }}
+          </div>
         </ng-container>
-        <div *ngIf="sidenavService.upperContents && sidenavService.lowerContents" class="menu-separator"></div>
-        <ng-container *ngIf="sidenavService.lowerContents">
-          <ng-container *ngFor="let content of sidenavService.lowerContents">
-            <div mat-menu-item (click)="requestAction(content.actionName)" [disabled]="content.disabled">
-              <mat-icon>{{ content.icon }}</mat-icon> {{ content.name | translate }}
-            </div>
-          </ng-container>
+      </ng-container>
+      <div *ngIf="sidenavService.upperContents && sidenavService.lowerContents" class="menu-separator"></div>
+      <!-- Lower area. -->
+      <ng-container *ngIf="sidenavService.lowerContents">
+        <ng-container *ngFor="let content of sidenavService.lowerContents">
+          <div mat-menu-item (click)="requestAction(content.actionName)" [disabled]="content.disabled">
+            <mat-icon [ngClass]="{'transparent': content.disabled}">{{ content.icon }}</mat-icon> {{ content.name | translate }}
+          </div>
         </ng-container>
-        <div *ngIf="!hideLanguageButton && (sidenavService.upperContents || sidenavService.lowerContents)" class="menu-separator"></div>
-        <div *ngIf="!hideLanguageButton" mat-menu-item (click)="openLanguageWindow()">
-          <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag"> {{ (language ? language.name : '') | translate }}
-        </div>
-      </mat-menu>
-    </div>
+      </ng-container>
+      <div *ngIf="!hideLanguageButton && (sidenavService.upperContents || sidenavService.lowerContents)" class="menu-separator"></div>
+      <!-- Language area. -->
+      <div *ngIf="!hideLanguageButton" mat-menu-item (click)="openLanguageWindow()">
+        <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag"> {{ (language ? language.name : '') | translate }}
+      </div>
+    </mat-menu>
   </div>
 </div>
 
+<!-- Margin to prevent the top bar from covering the content. -->
 <div class="top-bar-margin d-lg-none"></div>
-<div class="full-height flex">
+
+<div class="h-100 d-flex">
   
-  <div class="nav-container d-none d-lg-block">
-    <div class="nav-internal-container">
-      <div class="top-bar-margin d-lg-none"></div>
+  <!-- Left options bar shown on big screens. -->
+  <div class="left-bar-container d-none d-lg-block">
+    <div class="left-bar-internal-container">
       <nav>
         <div class="header">
           <app-skycoin-logo></app-skycoin-logo>
         </div>
 
         <div class="menu-container">
+          <!-- Upper area. -->
           <div class="upper-actions">
             <div class="button-group">
               <ng-container *ngIf="sidenavService.upperContents">
@@ -61,6 +68,7 @@
             </div>
           </div>
           
+          <!-- Lower area. -->
           <div>
             <ng-container *ngIf="sidenavService.lowerContents">
               <ng-container *ngFor="let content of sidenavService.lowerContents">
@@ -78,6 +86,7 @@
     </div>
   </div>
 
+  <!-- Content. -->
   <div class="content container-fluid">
     <router-outlet></router-outlet>
   </div>

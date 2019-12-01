@@ -1,22 +1,25 @@
 import { Component, AfterViewInit, OnDestroy } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { ConfigurationComponent } from './configuration/configuration.component';
 import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
+
+import { ConfigurationComponent } from './configuration/configuration.component';
 import { UpdateNodeComponent } from './update-node/update-node.component';
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
 import { SnackbarService } from '../../../../services/snackbar.service';
 import { NodeComponent } from '../node.component';
-import { Subscription } from 'rxjs';
 import { SidenavService } from 'src/app/services/sidenav.service';
 
+/**
+ * Hs the code for making the options of the left bar of the nodes page to appear. It does not
+ * have its own UI, it just works with SidenavService to make the options appear and work.
+ */
 @Component({
   selector: 'app-actions',
   templateUrl: './actions.component.html',
   styleUrls: ['./actions.component.scss']
 })
 export class ActionsComponent implements AfterViewInit, OnDestroy {
-  // @ViewChild('updateButton', { static: false }) updateButton: ButtonComponent;
-
   private menuSubscription: Subscription;
 
   constructor(
@@ -27,16 +30,9 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   ) { }
 
   ngAfterViewInit() {
-    // if (environment.production) {
-    //   this.updateButton.loading();
-    //
-    //   this.nodeService.checkUpdate().subscribe(hasUpdate => {
-    //     this.updateButton.reset();
-    //     this.updateButton.notify(hasUpdate);
-    //   });
-    // }
-
     setTimeout(() => {
+      // Make the options appear and listen to the event, to react if the user selects
+      // any of the options.
       this.menuSubscription = this.sidenavService.setContents([
         {
           name: 'actions.menu.terminal',
@@ -46,7 +42,8 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
         {
           name: 'actions.menu.config',
           actionName: 'config',
-          icon: 'settings'
+          icon: 'settings',
+          disabled: true
         },
         {
           name: 'actions.menu.update',
@@ -65,6 +62,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           actionName: 'back',
           icon: 'chevron_left'
         }]).subscribe(actionName => {
+          // Call the adequate function if the user clicks any of the options.
           if (actionName === 'terminal') {
             this.terminal();
           } else if (actionName === 'config') {

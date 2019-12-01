@@ -1,15 +1,21 @@
 import {
   Component,
   OnInit,
-  HostBinding,
   OnDestroy
 } from '@angular/core';
-import { SidenavService } from '../../../services/sidenav.service';
 import { LanguageService, LanguageData } from 'src/app/services/language.service';
 import { Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
+
+import { SidenavService } from '../../../services/sidenav.service';
 import { SelectLanguageComponent } from '../select-language/select-language.component';
 
+/**
+ * Base component for the pages that show an options bar at the left. It shows the options bar
+ * at the left on big screens and a top bar (with an extra button for changing the language) on
+ * small screens. It acts as a container for the content of the page. It works interacting
+ * with SidenavService.
+ */
 @Component({
   selector: 'app-sidenav',
   templateUrl: './sidenav.component.html',
@@ -17,11 +23,10 @@ import { SelectLanguageComponent } from '../select-language/select-language.comp
 })
 export class SidenavComponent implements OnInit, OnDestroy {
   language: LanguageData;
+  // The language button is only shown if there is more than one language.
   hideLanguageButton = true;
 
   private langSubscriptionsGroup: Subscription[] = [];
-
-  @HostBinding('class') get class() { return 'full-height flex-column'; }
 
   constructor(
     public sidenavService: SidenavService,

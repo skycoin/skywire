@@ -5,7 +5,7 @@
     </mat-icon>
   </div>
   <form [formGroup]="form">
-    <mat-form-field class="solo-input">
+    <mat-form-field>
       <mat-select formControlName="refreshRate" [placeholder]="'settings.refresh-rate' | translate">
         <mat-option *ngFor="let time of timesList" value="{{time}}">
           {{ time }} {{ 'settings.seconds' | translate }}

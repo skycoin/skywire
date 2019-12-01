@@ -1,11 +1,15 @@
 import { Component, OnInit, Input, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+
 import { AuthService } from '../../../../services/auth.service';
 import { SnackbarService } from '../../../../services/snackbar.service';
-import { MatDialog } from '@angular/material/dialog';
 import { ButtonComponent } from '../../../layout/button/button.component';
 
+/**
+ * Allows both to set the password for the first time and to change the existing password.
+ */
 @Component({
   selector: 'app-password',
   templateUrl: './password.component.html',
@@ -15,6 +19,10 @@ export class PasswordComponent implements OnInit, AfterViewInit {
   @ViewChild('button', { static: false }) button: ButtonComponent;
   @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
 
+  /**
+   * If true, the control is used for setting the password for the first time. If false,
+   * it is used to change the current password.
+   */
   @Input() forInitialConfig = false;
 
   form: FormGroup;
@@ -31,8 +39,6 @@ export class PasswordComponent implements OnInit, AfterViewInit {
       'oldPassword': new FormControl('', !this.forInitialConfig ? Validators.required : null),
       'newPassword': new FormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
       'newPasswordConfirmation': new FormControl('', [this.validatePasswords.bind(this)]),
-    }, {
-      validators: [this.validatePasswords.bind(this)],
     });
   }
 

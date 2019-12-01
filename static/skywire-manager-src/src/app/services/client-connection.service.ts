@@ -3,6 +3,11 @@ import { ApiService } from './api.service';
 import { Observable } from 'rxjs';
 import { ClientConnection } from '../app.datatypes';
 
+// This file appears to be only needed by an unnused component: HistoryComponent.
+// May not work anymore due to the change from testnet to mainnet, but if it does it
+// may currently have problems due to the fact that the apiService.post function now
+// adds "/api" as part of the request made to the backend.
+
 @Injectable({
   providedIn: 'root'
 })

@@ -23,19 +23,19 @@
       color: $white;
 
       &.text {
-        font-size: 13px;
+        font-size: $font-size-smaller;
         text-transform: uppercase;
         font-weight: $font-weight-bold;
       }
 
       &.rate {
         .value {
-          font-size: 20px;
+          font-size: $font-size-lg;
           font-weight: $font-weight-bold;
         }
 
         .unit {
-          font-size: 13px;
+          font-size: $font-size-smaller;
           padding-left: 5px;
         }
       }

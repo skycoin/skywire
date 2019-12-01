@@ -1,10 +1,9 @@
 import {FormControl, ValidationErrors} from '@angular/forms';
-import StringUtils from '../utils/stringUtils';
 
 function isValidPublicKey(value: string, required: boolean) {
   if (value !== null && value !== undefined) {
     if (required || value.length > 0) {
-      const isEmpty = StringUtils.removeWhitespaces(value).length === 0,
+      const isEmpty = (value as string).trim().length === 0,
             isValid = (value as string).length === 66;
 
       if (isEmpty) {

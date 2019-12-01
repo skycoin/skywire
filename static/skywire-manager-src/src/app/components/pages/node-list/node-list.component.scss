@@ -1,6 +1,5 @@
 @import "variables";
 @import "text";
-@import "utilities/theme";
 @import "~bootstrap/scss/functions";
 @import "bootstrap_overrides";
 
@@ -14,7 +13,7 @@
 
   .nodes-empty {
     color: theme-color(light-gray);
-    @extend .font-size-sm;
+    font-size: $font-size-sm;
 
     i {
       display: inline-block;

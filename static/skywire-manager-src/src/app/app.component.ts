@@ -1,13 +1,15 @@
 import { Component } from '@angular/core';
-import { TranslateService } from '@ngx-translate/core';
-import {StorageService} from './services/storage.service';
-import {getLangs} from './utils/languageUtils';
 import { Router, NavigationEnd } from '@angular/router';
 import { Location } from '@angular/common';
-import { SnackbarService } from './services/snackbar.service';
 import { MatDialog } from '@angular/material/dialog';
+
+import { StorageService } from './services/storage.service';
+import { SnackbarService } from './services/snackbar.service';
 import { LanguageService } from './services/language.service';
 
+/**
+ * Root app component.
+ */
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
@@ -15,30 +17,30 @@ import { LanguageService } from './services/language.service';
 })
 export class AppComponent {
   constructor(
-    private translate: TranslateService,
-    private storage: StorageService,
-    private location: Location,
-    private router: Router,
+    // Imported to call its constructor right after opening the app.
+    storage: StorageService,
+    location: Location,
+    router: Router,
     snackbarService: SnackbarService,
     dialog: MatDialog,
     languageService: LanguageService,
   ) {
-    translate.addLangs(getLangs());
-    translate.use(storage.getDefaultLanguage());
-    translate.onDefaultLangChange.subscribe(({lang}) => storage.setDefaultLanguage(lang));
-
+    // When navigating, close the snackbar and all modal windows.
     location.subscribe(() => {
       snackbarService.closeCurrent();
       dialog.closeAll();
     });
+    // Close the snackbar when opening a modal window.
     dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
 
+    // Scroll to the top after navigating.
     router.events.subscribe(e => {
       if (e instanceof NavigationEnd) {
         window.scrollTo(0, 0);
       }
     });
 
+    // Initialize the language configuration.
     languageService.loadLanguageSettings();
   }
 }

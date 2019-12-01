@@ -1,10 +1,14 @@
 import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot } from '@angular/router';
-import { Observable, of } from 'rxjs';
-import { AUTH_STATE, AuthService } from './auth.service';
+import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 
+import { AuthService, AuthStates } from './auth.service';
+
+/**
+ * Makes sure of only allowing the user to access the system when having permission.
+ */
 @Injectable({
   providedIn: 'root'
 })
@@ -16,35 +20,22 @@ export class AuthGuardService implements CanActivate {
   ) { }
 
   canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
-    return this.authService.checkLogin(true).pipe(map((authState: AUTH_STATE) => {
+    return this.authService.checkLogin().pipe(map((authState: AuthStates) => {
       // If the user is trying to access "Login" page while he is already logged in or the
       // auth is disabled, redirect him to "Nodes" page
-      if (route.routeConfig.path === 'login' && (authState === AUTH_STATE.LOGIN_OK || authState === AUTH_STATE.AUTH_DISABLED)) {
+      if (route.routeConfig.path === 'login' && (authState === AuthStates.Logged || authState === AuthStates.AuthDisabled)) {
         this.router.navigate(['nodes']);
 
         return false;
       }
 
-      // If the user is trying to access protected part of the application while not logged in,
+      // If the user is trying to access a protected part of the application while not logged in,
       // redirect him to "Login" page
-      if (route.routeConfig.path !== 'login' && authState === AUTH_STATE.LOGIN_FAIL) {
+      if (route.routeConfig.path !== 'login' && (authState !== AuthStates.Logged && authState !== AuthStates.AuthDisabled)) {
         this.router.navigate(['login']);
         this.matDialog.closeAll();
 
         return false;
-      }
-
-      // If the server wants the user to change his password
-      // allow him to go to "Change password" page
-      // and deny him to go anywhere else
-      if (authState === AUTH_STATE.CHANGE_PASSWORD) {
-        if (route.routeConfig.path === 'settings/password') {
-          return true;
-        } else {
-          this.router.navigate(['settings/password']);
-
-          return false;
-        }
       }
 
       return true;

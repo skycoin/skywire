@@ -1,13 +1,14 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
-import { NodeService } from '../../../services/node.service';
-import { Node } from '../../../app.datatypes';
 import { Subscription, of, timer } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
+import { delay, flatMap, tap } from 'rxjs/operators';
+
+import { NodeService } from '../../../services/node.service';
+import { Node } from '../../../app.datatypes';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService } from '../../../services/storage.service';
-import { delay, flatMap, tap } from 'rxjs/operators';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
@@ -15,17 +16,24 @@ import { SelectColumnComponent, SelectedColumn } from '../../layout/select-colum
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
 
+/**
+ * List of the columns that can be used to sort the data.
+ */
 enum SortableColumns {
   Label = 'nodes.label',
   Key = 'common.key',
 }
 
+/**
+ * Page for showing the node list.
+ */
 @Component({
   selector: 'app-node-list',
   templateUrl: './node-list.component.html',
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
+  // Vars for keeping track of the column used for sorting the data.
   sortableColumns = SortableColumns;
   sortBy = SortableColumns.Key;
   sortReverse = false;
@@ -41,6 +49,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   private updateTimeSubscription: Subscription;
   private menuSubscription: Subscription;
 
+  // Vars for keeping track of the data updating.
   secondsSinceLastUpdate = 0;
   private lastUpdate = Date.now();
   updating = false;
@@ -56,6 +65,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private sidenavService: SidenavService,
   ) {
+    // Data for populating the tab bar.
     this.tabsData = [
       {
         icon: 'view_headline',
@@ -71,8 +81,10 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    // Load the data.
     this.refresh(0);
 
+    // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
       this.updateTimeSubscription =
         timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
@@ -80,6 +92,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         }));
     });
 
+    // Populate the left options bar.
     setTimeout(() => {
       this.menuSubscription = this.sidenavService.setContents([
         {
@@ -87,6 +100,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
           actionName: 'logout',
           icon: 'power_settings_new'
         }], null).subscribe(actionName => {
+          // React to the events of the left options bar.
           if (actionName === 'logout') {
             this.logout();
           }
@@ -104,15 +118,25 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
   }
 
-  nodeStatusClass(node: Node, forTooltip: boolean): string {
+  /**
+   * Returns the scss class to be used to show the current status of the node.
+   * @param forDot If true, returns a class for creating a colored dot. If false,
+   * returns a class for a colored text.
+   */
+  nodeStatusClass(node: Node, forDot: boolean): string {
     switch (node.online) {
       case true:
-        return forTooltip ? 'dot-green' : 'green-text';
+        return forDot ? 'dot-green' : 'green-text';
       default:
-        return forTooltip ? 'dot-red' : 'red-text';
+        return forDot ? 'dot-red' : 'red-text';
     }
   }
 
+  /**
+   * Returns the text to be used to indicate the current status of the node.
+   * @param forTooltip If true, returns a text for a tooltip. If false, returns a
+   * text for the node list shown on small screens.
+   */
   nodeStatusText(node: Node, forTooltip: boolean): string {
     switch (node.online) {
       case true:
@@ -122,6 +146,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Changes the column and/or order used for sorting the data.
+   */
   changeSortingOrder(column: SortableColumns) {
     if (this.sortBy !== column) {
       this.sortBy = column;
@@ -133,7 +160,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.sortList();
   }
 
+  /**
+   * Opens the modal window used on small screens for selecting how to sort the data.
+   */
   openSortingOrderModal() {
+    // Get the list of sortable columns.
     const enumKeys = Object.keys(SortableColumns);
     const columnsMap = new Map<string, SortableColumns>();
     const columns = enumKeys.map(key => {
@@ -155,16 +186,26 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Loads the data from the backend.
+   * @param delayMilliseconds Delay before loading the data.
+   * @param requestedManually True if the data is being loaded because of a direct request from the user.
+   */
   private refresh(delayMilliseconds: number, requestedManually = false) {
+    // Cancel any pending operation. Important because a previous operation could be waiting for
+    // the delay to finish.
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
 
     this.ngZone.runOutsideAngular(() => {
       this.dataSubscription = of(1).pipe(
+        // Wait the requested delay.
         delay(delayMilliseconds),
+        // Additional steps for making sure the UI shows the animation (important in case of quick errors).
         tap(() => this.ngZone.run(() => this.updating = true)),
         delay(120),
+        // Load the data. The node pk is obtained from the currently openned node page.
         flatMap(() => this.nodeService.getNodes())
       ).subscribe(
         (nodes: Node[]) => {
@@ -172,7 +213,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
             this.dataSource = nodes;
             this.sortList();
             this.loading = false;
-            this.snackbarService.closeCurrentIfTemporalError();
+            // Close any previous temporary loading error msg.
+            this.snackbarService.closeCurrentIfTemporaryError();
 
             this.lastUpdate = Date.now();
             this.secondsSinceLastUpdate = 0;
@@ -180,13 +222,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
             this.errorsUpdating = false;
 
             if (requestedManually) {
+              // Show a confirmation msg.
               this.snackbarService.showDone('common.refreshed', null);
             }
 
+            // Automatically refresh the data after some time.
             this.refresh(this.storageService.getRefreshTime() * 1000);
           });
         }, error => {
           this.ngZone.run(() => {
+            // Show an error msg if it has not be done before during the current attempt to obtain the data.
             if (!this.errorsUpdating) {
               if (this.loading) {
                 this.snackbarService.showError('common.loading-error', null, true);
@@ -195,9 +240,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
               }
             }
 
+            // Stop the loading indicator and show a warning icon.
             this.updating = false;
             this.errorsUpdating = true;
 
+            // Retry after some time. Do it faster if the component is still showing the
+            // initial loading indicator (no data has been obtained since the component was created).
             if (this.loading) {
               this.refresh(3000, requestedManually);
             } else {
@@ -209,6 +257,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Sorts the data.
+   */
   private sortList() {
     this.dataSource = this.dataSource.sort((a, b) => {
       const defaultOrder = a.local_pk.localeCompare(b.local_pk);
@@ -233,6 +284,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     );
   }
 
+  /**
+   * Opens the modal window used on small screens with the options of an element.
+   */
   showOptionsDialog(node: Node) {
     const options: SelectableOption[] = [
       {
@@ -254,6 +308,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Opens the modal window for changing the label of a node.
+   */
   showEditLabelDialog(node: Node) {
     EditLabelComponent.openDialog(this.dialog, node).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
@@ -262,8 +319,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Removes an offline node from the list, until seeing it online again.
+   */
   deleteNode(node: Node) {
-    const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'nodes.delete-node-confirmation');
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'nodes.delete-node-confirmation');
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
@@ -273,6 +333,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Opens the page with the details of the node.
+   */
   open(node: Node) {
     if (node.online) {
       this.router.navigate(['nodes', node.local_pk]);

@@ -2,36 +2,35 @@ export enum TimeRepresentations {
   Seconds, Minutes, Hours, Days, Weeks
 }
 
+/**
+ * Elemets for showing in the UI an amount of elapsed time.
+ */
 export class ElapsedTime {
+  /**
+   * Explanation of the value in elapsedTime.
+   */
   timeRepresentation: TimeRepresentations;
+  /**
+   * Amount of time to show in the UI.
+   */
   elapsedTime: string;
+  /**
+   * Total time in minutes.
+   */
   totalMinutes: string;
+  /**
+   * Var from the translation file to be use to show the elapsed time in the UI.
+   */
   translationVarName: string;
 }
 
+/**
+ * Helper functions for making calculations with time.
+ */
 export default class TimeUtils {
-  static getElapsedTimeElements(elapsedSeconds: number): string[] {
-    if (elapsedSeconds < 60) {
-      return ['seconds', '', ''];
-    } else if (elapsedSeconds >= 60 && elapsedSeconds < 120) {
-      return ['minute', '', ''];
-    } else if (elapsedSeconds >= 120 && elapsedSeconds < 3600) {
-      return ['minutes', Math.floor(elapsedSeconds / 60).toString(), ''];
-    } else if (elapsedSeconds >= 3600 && elapsedSeconds < 7200) {
-      return ['hour', '', Math.floor(elapsedSeconds / 60).toString()];
-    } else if (elapsedSeconds >= 7200 && elapsedSeconds < 86400) {
-      return ['hours', Math.floor(elapsedSeconds / 3600).toString(), Math.floor(elapsedSeconds / 60).toString()];
-    } else if (elapsedSeconds >= 86400 && elapsedSeconds < 172800) {
-      return ['day', '', Math.floor(elapsedSeconds / 60).toString()];
-    } else if (elapsedSeconds >= 172800 && elapsedSeconds < 604800) {
-      return ['days', Math.floor(elapsedSeconds / 86400).toString(), Math.floor(elapsedSeconds / 60).toString()];
-    } else if (elapsedSeconds >= 604800 && elapsedSeconds < 1209600) {
-      return ['week', '', Math.floor(elapsedSeconds / 60).toString()];
-    } else {
-      return ['weeks', Math.floor(elapsedSeconds / 604800).toString(), Math.floor(elapsedSeconds / 60).toString()];
-    }
-  }
-
+  /**
+   * Calculates the best way to display in the UI an amount of elapsed time.
+   */
   static getElapsedTime(elapsedSeconds: number): ElapsedTime {
     const response = new ElapsedTime();
     response.timeRepresentation = TimeRepresentations.Seconds;

@@ -1,14 +1,13 @@
-<div class="title-container mt-4.5 d-flex justify-content-between">
-  <div class="title font-mini uppercase ml-3.5">
+<!-- Header. -->
+<div class="generic-title-container mt-4.5 d-flex">
+  <div class="title uppercase ml-3.5">
     <span *ngIf="showShortList_">{{ 'transports.title' | translate }}</span>
   </div>
   <mat-icon
     (click)="create()"
     [matTooltip]="'transports.create' | translate"
-    class="ic-mini-plus-responsive table-create-record"
   >add</mat-icon>
   <mat-icon
-    class="ic-mini-plus-responsive table-create-record"
     [matMenuTriggerFor]="selectionMenu"
     *ngIf="dataSource && dataSource.length > 0"
   >more_horiz</mat-icon>
@@ -25,6 +24,7 @@
   </mat-menu>
 </div>
 
+<!-- Upper paginator. -->
 <app-paginator
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"
@@ -37,11 +37,13 @@
   [ngClass]="{'table-container': showShortList_, 'full-list-table-container': !showShortList_}"
   *ngIf="dataSource && dataSource.length > 0"
 >
+  <!-- Table for large screens. -->
   <table
-    class="responsive-table-translucid fit d-none d-md-table"
+    class="responsive-table-translucid d-none d-md-table"
     [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
+    <!-- Column names. -->
     <tr>
       <th></th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Id)">
@@ -66,11 +68,10 @@
       </th>
       <th class="actions"></th>
     </tr>
+    <!-- Values. -->
     <tr *ngFor="let transport of dataSource">
       <td class="selection-col">
         <mat-checkbox
-          type="checkbox"
-          class="dark-check-box"
           [checked]="selections.get(transport.id)"
           (change)="changeSelection(transport)">
         </mat-checkbox>
@@ -92,14 +93,14 @@
       </td>
       <td class="actions">
         <mat-icon
-          class="table-delete-record ic-mini"
+          class="table-dark-option"
           [matTooltip]="'transports.details.title' | translate"
           (click)="details(transport)">
           visibility
         </mat-icon>
         &nbsp;
         <mat-icon
-          class="table-delete-record ic-mini"
+          class="table-dark-option"
           [matTooltip]="'transports.delete' | translate"
           (click)="delete(transport.id)"
         >close</mat-icon>
@@ -107,12 +108,14 @@
     </tr>
   </table>
 
+  <!-- List for small screens. -->
   <table
-    class="responsive-table-translucid fit d-md-none nowrap"
+    class="responsive-table-translucid d-md-none"
     [ngClass]="{'d-lg-table d-xl-none': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
-    <tr class="selectable full-box" (click)="openSortingOrderModal()"><td>
+    <!-- Sorting button. -->
+    <tr class="selectable" (click)="openSortingOrderModal()"><td>
       <div class="list-item-container">
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
@@ -125,12 +128,11 @@
         </div>
       </div>
     </td></tr>
-    <tr *ngFor="let transport of dataSource" class="full-box"><td>
+    <!-- Values. -->
+    <tr *ngFor="let transport of dataSource"><td>
       <div class="list-item-container">
         <div class="check-part">
           <mat-checkbox
-            type="checkbox"
-            class="dark-check-box"
             [checked]="selections.get(transport.id)"
             (change)="changeSelection(transport)">
           </mat-checkbox>
@@ -173,6 +175,7 @@
     </td></tr>
   </table>
 
+  <!-- Lower paginator. -->
   <app-view-all-link
     [numberOfElements]="allTransports.length"
     [linkParts]="['/nodes', nodePK, 'transports']"
@@ -180,10 +183,12 @@
   ></app-view-all-link>
 </div>
 
-<div class="container-elevated-translucid mt-3 overflow" *ngIf="!dataSource || dataSource.length === 0">
-  <span class="text">{{ 'transports.empty' | translate }}</span>
+<!-- Msg shown if the list is empty. -->
+<div class="container-elevated-translucid mt-3" *ngIf="!dataSource || dataSource.length === 0">
+  <span class="font-sm">{{ 'transports.empty' | translate }}</span>
 </div>
 
+<!-- Link for accessing the full list. -->
 <app-paginator
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"

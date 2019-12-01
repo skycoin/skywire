@@ -8,7 +8,6 @@ import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
 import { ReactiveFormsModule } from '@angular/forms';
-import { RelativeTimePipe } from './pipes/relative-time.pipe';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -34,7 +33,6 @@ import { NodeAppsListComponent } from './components/pages/node/apps/node-apps/no
 import { NodeAppsComponent } from './components/pages/node/apps/node-apps/node-apps.component';
 import { CopyToClipboardTextComponent } from './components/layout/copy-to-clipboard-text/copy-to-clipboard-text.component';
 import { ActionsComponent } from './components/pages/node/actions/actions.component';
-import { TerminalComponent } from './components/pages/node/actions/terminal/terminal.component';
 import { ConfigurationComponent } from './components/pages/node/actions/configuration/configuration.component';
 import { LogComponent } from './components/pages/node/apps/node-apps/log/log.component';
 import { AppSshsComponent } from './components/pages/node/apps/node-apps/app-sshs/app-sshs.component';
@@ -51,7 +49,7 @@ import { SettingsComponent } from './components/pages/settings/settings.componen
 import { PasswordComponent } from './components/pages/settings/password/password.component';
 import { NodeAppButtonComponent } from './components/pages/node/apps/node-apps/node-app-button/node-app-button.component';
 import { ClipboardService } from './services/clipboard.service';
-import { ClipboardDirective } from './directives';
+import { ClipboardDirective } from './directives/clipboard.directive';
 import { StartupConfigComponent } from './components/pages/node/apps/node-apps/startup-config/startup-config.component';
 import { KeyInputComponent } from './components/layout/key-input/key-input.component';
 import { AppTranslationModule } from './app-translation.module';
@@ -59,18 +57,14 @@ import { ButtonComponent } from './components/layout/button/button.component';
 import { EditLabelComponent } from './components/layout/edit-label/edit-label.component';
 import { DialogComponent } from './components/layout/dialog/dialog.component';
 import {EditableKeyComponent} from './components/layout/editable-key/editable-key.component';
-import {ValidationInputComponent} from './components/layout/validation-input/validation-input.component';
 import {ComponentHostDirective} from './directives/component-host.directive';
 import {HostComponent} from './components/layout/host/host.component';
 import {DatatableComponent} from './components/layout/datatable/datatable.component';
 import {SearchNodesComponent} from './components/pages/node/apps/node-apps/app-socksc/socksc-connect/search-nodes/search-nodes.component';
 import { LineChartComponent } from './components/layout/line-chart/line-chart.component';
 import { ChartsComponent } from './components/pages/node/charts/charts.component';
-import {ToolbarComponent} from './components/layout/toolbar/toolbar.component';
 import {UpdateNodeComponent} from './components/pages/node/actions/update-node/update-node.component';
-import {StatusComponent} from './components/pages/node/status/status.component';
 import {SkycoinLogoComponent} from './components/layout/skycoin-logo/skycoin-logo.component';
-import {ErrorsnackbarService} from './services/errorsnackbar.service';
 import { HistoryComponent } from './components/pages/node/apps/node-apps/history/history.component';
 import { RouteListComponent } from './components/pages/node/routing/route-list/route-list.component';
 import { LoopListComponent } from './components/pages/node/routing/loop-list/loop-list.component';
@@ -112,10 +106,8 @@ import { SelectOptionComponent } from './components/layout/select-option/select-
     LoginComponent,
     NodeListComponent,
     NodeComponent,
-    RelativeTimePipe,
     AutoScalePipe,
     ActionsComponent,
-    TerminalComponent,
     ConfigurationComponent,
     LogComponent,
     AppSshsComponent,
@@ -142,15 +134,12 @@ import { SelectOptionComponent } from './components/layout/select-option/select-
     EditLabelComponent,
     DialogComponent,
     EditableKeyComponent,
-    ValidationInputComponent,
     HostComponent,
     DatatableComponent,
     SearchNodesComponent,
-    ToolbarComponent,
     UpdateNodeComponent,
     LineChartComponent,
     ChartsComponent,
-    StatusComponent,
     SkycoinLogoComponent,
     HistoryComponent,
     RouteListComponent,
@@ -187,7 +176,6 @@ import { SelectOptionComponent } from './components/layout/select-option/select-
   ],
   entryComponents: [
     ConfigurationComponent,
-    TerminalComponent,
     LogComponent,
     SshsStartupComponent,
     SshsWhitelistComponent,
@@ -244,7 +232,6 @@ import { SelectOptionComponent } from './components/layout/select-option/select-
   ],
   providers: [
     ClipboardService,
-    ErrorsnackbarService,
     {provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: {duration: 3000, verticalPosition: 'top'}},
     {provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: {width: '600px', hasBackdrop: true}},
     {provide: ErrorStateMatcher, useClass: ShowOnDirtyErrorStateMatcher},

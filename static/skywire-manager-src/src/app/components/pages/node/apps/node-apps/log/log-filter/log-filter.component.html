@@ -3,7 +3,8 @@
     <mat-form-field>
       <mat-select
         formControlName="filter"
-        [placeholder]="'apps.log.filter.filter' | translate">
+        [placeholder]="'apps.log.filter.filter' | translate"
+      >
         <mat-option *ngFor="let filter of filters" [value]="filter.days">{{ filter.text | translate }}</mat-option>
       </mat-select>
     </mat-form-field>

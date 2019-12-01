@@ -1,14 +1,18 @@
-import {Injectable} from '@angular/core';
-import {ApiService} from './api.service';
+import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
 
-export enum AUTH_STATE {
-  AUTH_DISABLED, LOGIN_OK, LOGIN_FAIL, CHANGE_PASSWORD
+import { ApiService } from './api.service';
+
+export enum AuthStates {
+  AuthDisabled, Logged, NotLogged
 }
 
+/**
+ * Allows to work with the user authentication. It uses the "admin" user account.
+ */
 @Injectable({
   providedIn: 'root'
 })
@@ -18,8 +22,11 @@ export class AuthService {
     private translateService: TranslateService,
   ) { }
 
-  login(password: string) {
-    return this.apiService.post('login', { username: 'admin', password: password }, { api2: true, type: 'json', ignoreAuth: true })
+  /**
+   * Logs in the user.
+   */
+  login(password: string): Observable<any> {
+    return this.apiService.post('login', { username: 'admin', password: password }, { type: 'json', ignoreAuth: true })
       .pipe(
         tap(status => {
           if (status !== true) {
@@ -29,28 +36,32 @@ export class AuthService {
       );
   }
 
-  checkLogin(deactivateAuthRedirects = false): Observable<AUTH_STATE> {
-    return this.apiService.get('user', { responseType: 'text', api2: true, ignoreAuth: deactivateAuthRedirects })
+  /**
+   * Checks if the user is logged in.
+   */
+  checkLogin(): Observable<AuthStates> {
+    return this.apiService.get('user', { responseType: 'text', ignoreAuth: true })
       .pipe(
-        map(() => AUTH_STATE.LOGIN_OK),
+        map(() => AuthStates.Logged),
         catchError(err => {
+          // The auth options are disabled in the backend.
           if ((err as HttpErrorResponse).status === 504) {
-            return of(AUTH_STATE.AUTH_DISABLED);
+            return of(AuthStates.AuthDisabled);
           }
 
+          // The user is not logged.
           if ((err as HttpErrorResponse).status === 401 || err.error.includes('Unauthorized')) {
-            return of(AUTH_STATE.LOGIN_FAIL);
-          }
-
-          if (err.error.includes('change password')) {
-            return of(AUTH_STATE.CHANGE_PASSWORD);
+            return of(AuthStates.NotLogged);
           }
         })
       );
   }
 
-  logout() {
-    return this.apiService.post('logout', {}, { api2: true, type: 'json' })
+  /**
+   * Logs out the user.
+   */
+  logout(): Observable<any> {
+    return this.apiService.post('logout', {}, { type: 'json' })
       .pipe(
         tap(status => {
           if (status !== true) {
@@ -60,14 +71,13 @@ export class AuthService {
       );
   }
 
-  authToken(): Observable<string> {
-    return this.apiService.post('checkLogin', {}, {responseType: 'text'});
-  }
-
-  changePassword(oldPass: string, newPass: string): Observable<boolean> {
+  /**
+   * Changes the password.
+   */
+  changePassword(oldPass: string, newPass: string): Observable<any> {
     return this.apiService.post('change-password',
-      {old_password: oldPass, new_password: newPass},
-      { responseType: 'text', type: 'json', api2: true, ignoreAuth: true })
+      { old_password: oldPass, new_password: newPass },
+      { responseType: 'text', type: 'json', ignoreAuth: true })
       .pipe(map(result => {
         if (typeof result === 'string' && result.trim() === 'true') {
           return true;
@@ -87,10 +97,13 @@ export class AuthService {
       }));
   }
 
-  initialConfig(pass: string): Observable<boolean> {
+  /**
+   * Set the initial password for accessing the system. It only works if threre is not password yet.
+   */
+  initialConfig(pass: string): Observable<any> {
     return this.apiService.post('create-account',
-      {username: 'admin', password: pass},
-      { responseType: 'text', type: 'json', api2: true, ignoreAuth: true })
+      { username: 'admin', password: pass },
+      { responseType: 'text', type: 'json', ignoreAuth: true })
       .pipe(map(result => {
         if (typeof result === 'string' && result.trim() === 'true') {
           return true;

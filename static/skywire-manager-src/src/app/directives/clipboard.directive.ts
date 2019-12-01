@@ -1,14 +1,24 @@
 import { Directive, Output, Input, HostListener } from '@angular/core';
 import { EventEmitter } from '@angular/core';
+
 import {ClipboardService} from '../services/clipboard.service';
 
+/**
+ * Makes a component copy a specific text to the clipboard when clicked.
+ */
 @Directive({
   /* tslint:disable:directive-selector */
   selector: '[clipboard]',
 })
 export class ClipboardDirective {
+  /**
+   * Event sent when the text is copied.
+   */
   @Output() copyEvent: EventEmitter<string>;
-  @Output() errorEvent: EventEmitter<Error>;
+  /**
+   * Event sent when it was not possible to copy the text.
+   */
+  @Output() errorEvent: EventEmitter<void>;
   /* tslint:disable:no-input-rename */
   @Input('clipboard') value: string;
 
@@ -19,17 +29,11 @@ export class ClipboardDirective {
   }
 
   @HostListener('click') copyToClipboard(): void {
-    this.clipboardService
-      .copy(this.value)
-      .then(
-        (value: string): void => {
-          this.copyEvent.emit(value);
-        },
-      )
-      .catch(
-        (error: Error): void => {
-          this.errorEvent.emit(error);
-        },
-      );
+    // Use ClipboardService to copy the text.
+    if (this.clipboardService.copy(this.value)) {
+      this.copyEvent.emit(this.value);
+    } else {
+      this.errorEvent.emit();
+    }
   }
 }

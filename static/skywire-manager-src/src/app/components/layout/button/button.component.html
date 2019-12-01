@@ -14,7 +14,7 @@
   (click)="click()"
   [disabled]="disabled"
   [color]="color"
-  class="grey-button-background"
+  [ngClass]="{'grey-button-background': !disabled}"
   #button1
 >
   <ng-container [ngTemplateOutlet]="contentTpl"></ng-container>

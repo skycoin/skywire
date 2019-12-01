@@ -2,13 +2,28 @@ import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
+
 import { AppConfig } from 'src/app/app.config';
 
+/**
+ * Result returned when a value is selected with LogFilterComponent.
+ */
 export interface LogsFilter {
+  /**
+   * Text of the selected option, for using with the "translate" pipe.
+   */
   text: string;
+  /**
+   * Number of days from now of the selected option. It is -1 for the
+   * "show all" option.
+   */
   days: number;
 }
 
+/**
+ * Modal window for selecting the initial date of the log messages. The date is
+ * indicated in days from now. It returns -1 for the "show all" option.
+ */
 @Component({
   selector: 'app-log-filter',
   templateUrl: './log-filter.component.html',
@@ -20,6 +35,9 @@ export class LogFilterComponent implements OnInit, OnDestroy {
 
   private formSubscription: Subscription;
 
+  /**
+   * Opens the modal window. Please use this function instead of opening the window "by hand".
+   */
   public static openDialog(dialog: MatDialog, data: LogsFilter): MatDialogRef<LogFilterComponent, any> {
     const config = new MatDialogConfig();
     config.data = data;

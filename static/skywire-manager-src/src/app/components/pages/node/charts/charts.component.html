@@ -3,8 +3,9 @@
   <div class="info">
     <span class="text">{{ 'common.uploaded' | translate }}</span>
     <span class="rate">
-      <span class="value">{{ (sendingTotal / 128).toFixed(2) }}</span>
-      <span class="unit">Kb</span></span>
+      <span class="value">{{ sendingTotal | autoScale:{ showValue: true } }}</span>
+      <span class="unit">{{ sendingTotal | autoScale:{ showUnit: true } }}</span>
+    </span>
   </div>
 </div>
 
@@ -13,7 +14,8 @@
   <div class="info">
     <span class="text">{{ 'common.downloaded' | translate }}</span>
     <span class="rate">
-      <span class="value">{{ (receivingTotal / 128).toFixed(2) }}</span>
-      <span class="unit">Kb</span></span>
+      <span class="value">{{ receivingTotal | autoScale:{ showValue: true } }}</span>
+      <span class="unit">{{ receivingTotal | autoScale:{ showUnit: true } }}</span>
+    </span>
   </div>
 </div>

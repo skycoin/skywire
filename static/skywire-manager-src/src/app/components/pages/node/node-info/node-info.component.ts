@@ -3,6 +3,9 @@ import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { Subscription } from 'rxjs';
 
+/**
+ * Page for showing the basic info of a node.
+ */
 @Component({
   selector: 'app-node-info',
   templateUrl: './node-info.component.html',
@@ -14,6 +17,7 @@ export class NodeInfoComponent implements OnInit, OnDestroy {
   private dataSubscription: Subscription;
 
   ngOnInit() {
+    // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
     });

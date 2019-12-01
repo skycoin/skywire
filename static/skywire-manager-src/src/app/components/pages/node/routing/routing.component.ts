@@ -1,12 +1,16 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Node, Transport, Route } from '../../../../app.datatypes';
-import { NodeComponent } from '../node.component';
 import { Subscription } from 'rxjs';
 
+import { Node, Transport, Route } from '../../../../app.datatypes';
+import { NodeComponent } from '../node.component';
+
+/**
+ * Page that shows the routing summary. It is a subpage of the Node page.
+ */
 @Component({
   selector: 'app-routing',
   templateUrl: './routing.component.html',
-  styleUrls: ['./routing.component.css']
+  styleUrls: ['./routing.component.scss']
 })
 export class RoutingComponent implements OnInit, OnDestroy {
   transports: Transport[];
@@ -16,6 +20,7 @@ export class RoutingComponent implements OnInit, OnDestroy {
   private dataSubscription: Subscription;
 
   ngOnInit() {
+    // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.local_pk;
       this.transports = node.transports;

@@ -7,22 +7,18 @@
 
 @import "assets/scss/fonts";
 @import "assets/scss/text";
-@import "assets/scss/images";
 @import "assets/scss/icons";
-@import "assets/scss/buttons";
 @import "assets/scss/menu";
-@import "assets/scss/chips";
 @import "assets/scss/tables";
 @import "assets/scss/responsive_tables";
 @import "assets/scss/forms";
 @import "assets/scss/backgrounds";
 @import "assets/scss/dialogs";
-@import "assets/scss/snackbar";
 @import '~@angular/material/theming';
 
 /***************************
 * Bootsrap 4
-****+***********************/
+****************************/
 
 // Skywire boostrap overrides
 @import "assets/scss/bootstrap_overrides";
@@ -46,114 +42,19 @@
 
 /***************************
 * Skywire
-****+***********************/
+****************************/
 
-html, body
-{
+html, body {
   height: 100%;
   min-height: 100%;
   font-family: $skywire-font-family;
   margin:0;
   color: theme-color(white) !important;
   font-size: $font-size-base;
-  font-weight: $font-weight-base;
-  line-height: $line-height-base;
 }
 
 button:focus {
   outline: 0;
-}
-
-//
-// Divider
-//
-hr
-{
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  border: 0;
-  border-top: 1px solid theme-color(translucid-white);
-  width: 100%;
-}
-
-//
-// Terminal
-//
-
-@import "~xterm/dist/xterm.css";
-
-#terminal-dialog {
-  padding: 0;
-}
-
-.mat-icon.ic-mini-plus {
-  width: 18px !important;
-  height: 18px !important;
-  line-height: 18px !important;
-  font-size: 18px !important;
-}
-
-.mat-icon.ic-mini-plus-responsive {
-  width: 18px !important;
-  height: 18px !important;
-  line-height: 18px !important;
-  font-size: 18px !important;
-
-  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
-    & {
-      width: 24px !important;
-      height: 24px !important;
-      line-height: 24px !important;
-      font-size: 24px !important;
-    }
-  }
-}
-
-.dark-check-box {
-  >label {
-    margin-bottom: 0;
-  }
-
-  .mat-checkbox-background, .mat-checkbox-frame {
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    position: absolute;
-    box-sizing: border-box;
-    pointer-events: none;
-    width: 18px;
-    height: 18px;
-    background: rgba(30, 34, 39, 0.10) !important;
-    border-radius: 6px;
-    border-width: 2px;
-    border-color: rgba(0, 0, 0, 0.15);
-  }
-
-  .mat-ripple-element {
-    background-color: rgba(255, 255, 255, 0.10) !important;
-  }
-}
-
-.flex {
-  display: flex;
-}
-
-.flex-column {
-  display: flex;
-  flex-direction: column;
-}
-
-.full-height {
-  height: 100%;
-}
-
-.full-width {
-  width: 100%;
-}
-
-.hidden {
-  display: none !important;
 }
 
 .tooltip-word-break {
@@ -167,3 +68,9 @@ hr
 .grey-button-background:hover {
   background-color: rgba(0,0,0,0.05) !important;
 }
+
+.flex-1
+{
+  flex: 1;
+}
+

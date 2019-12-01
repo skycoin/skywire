@@ -1,7 +1,7 @@
 @import "variables";
 
 .mat-dialog-content {
-  font-size: 14px;
+  font-size: $font-size-sm;
 }
 
 .app-log-message {
@@ -14,11 +14,10 @@
 }
 
 .filter-link {
-  font-size: 13px;
+  font-size: $font-size-sm;
   text-align: center;
-  margin: 0;
   padding: 10px 0;
   color: $blue;
-  border-bottom: #e6e6e6 solid 1px;
+  border-bottom: $separator solid 1px;
   cursor: pointer;
 }

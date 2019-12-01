@@ -1,4 +1,5 @@
-<div *ngIf="loading" class="flex-column full-height full-width">
+<!-- Content when loading. -->
+<div *ngIf="loading" class="flex-column h-100 w-100">
   <div>
     <app-tab-bar
       [titleParts]="['start.title']"
@@ -7,8 +8,10 @@
       [showUpdateButton]="false"
     ></app-tab-bar>
   </div>
-  <app-loading-indicator class="full-height"></app-loading-indicator>
+  <app-loading-indicator class="h-100"></app-loading-indicator>
 </div>
+
+<!-- Content when loaded. -->
 <div *ngIf="!loading" class="row">
   <div class="col-12">
     <app-tab-bar
@@ -24,12 +27,13 @@
   </div>
   <div class="col-12">
     <div class="node-list-container mt-4.5">
+      <!-- Table for large screens. -->
       <table
         class="responsive-table-white container-elevated-white d-none d-md-table"
         *ngIf="dataSource.length > 0"
         cellspacing="0" cellpadding="0"
       >
-
+        <!-- Column names. -->
         <tr>
           <th></th>
           <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
@@ -43,6 +47,7 @@
           <th class="actions"></th>
         </tr>
 
+        <!-- Values. -->
         <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable">
           <td>
             <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
@@ -56,7 +61,8 @@
           <td (click)="$event.stopPropagation()" class="actions">
             <button
               (click)="showEditLabelDialog(node)"
-              mat-icon-button [matTooltip]="'edit-label.title' | translate"
+              mat-icon-button
+              [matTooltip]="'edit-label.title' | translate"
               [disableRipple]="true"
               class="grey-button-background"
             >
@@ -86,12 +92,14 @@
         </tr>
       </table>
 
+      <!-- List for small screens. -->
       <table
         class="responsive-table-white container-elevated-white d-md-none nowrap"
         *ngIf="dataSource.length > 0"
         cellspacing="0" cellpadding="0"
       >
-        <tr class="selectable full-box" (click)="openSortingOrderModal()"><td>
+        <!-- Sorting button. -->
+        <tr class="selectable" (click)="openSortingOrderModal()"><td>
           <div class="list-item-container">
             <div class="left-part">
               <div class="title">{{ 'tables.sorting-title' | translate }}</div>
@@ -104,7 +112,8 @@
             </div>
           </div>
         </td></tr>
-        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable full-box"><td>
+        <!-- Values. -->
+        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable"><td>
           <div class="list-item-container">
             <div class="left-part">
               <div class="list-row">
@@ -136,6 +145,7 @@
         </td></tr>
       </table>
 
+      <!-- Msg shown if the list is empty. -->
       <div class="nodes-empty container-elevated-white" *ngIf="dataSource.length === 0">
         <i class="material-icons">warning</i>
         <span>{{ 'nodes.empty' | translate }}</span>

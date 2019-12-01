@@ -1,19 +1,23 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/core';
-import { TransportService } from '../../../../../../services/transport.service';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { ButtonComponent } from '../../../../../layout/button/button.component';
-import { NodeComponent } from '../../../node.component';
 import { Subscription, of } from 'rxjs';
 import { delay, flatMap } from 'rxjs/operators';
+
+import { TransportService } from '../../../../../../services/transport.service';
+import { ButtonComponent } from '../../../../../layout/button/button.component';
+import { NodeComponent } from '../../../node.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
 
+/**
+ * Modal window used for creating trnasports. It creates the transport and shows a
+ * confirmation msg by itself.
+ */
 @Component({
   selector: 'app-create-transport',
   templateUrl: './create-transport.component.html',
-  styleUrls: ['./create-transport.component.css']
+  styleUrls: ['./create-transport.component.scss']
 })
 export class CreateTransportComponent implements OnInit, OnDestroy {
   @ViewChild('button', { static: false }) button: ButtonComponent;
@@ -21,9 +25,13 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   types: string[];
   form: FormGroup;
 
+  private working = false;
   private shouldShowError = true;
   private dataSubscription: Subscription;
 
+  /**
+   * Opens the modal window. Please use this function instead of opening the window "by hand".
+   */
   public static openDialog(dialog: MatDialog): MatDialogRef<CreateTransportComponent, any> {
     const config = new MatDialogConfig();
     config.autoFocus = false;
@@ -35,7 +43,6 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   constructor(
     private transportService: TransportService,
     private formBuilder: FormBuilder,
-    private snackbar: MatSnackBar,
     private dialogRef: MatDialogRef<CreateTransportComponent>,
     private snackbarService: SnackbarService,
   ) { }
@@ -51,22 +58,28 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       'type': ['', Validators.required],
     });
 
+    // Load the list of available types.
     this.loadData(0);
   }
 
   ngOnDestroy() {
-    this.snackbarService.closeCurrentIfTemporalError();
+    this.snackbarService.closeCurrentIfTemporaryError();
     this.dataSubscription.unsubscribe();
   }
 
+  /**
+   * Creates the transport.
+   */
   create() {
-    if (! this.form.valid) {
+    if (!this.form.valid || this.working) {
       return;
     }
 
+    this.working = true;
     this.button.showLoading();
 
     this.transportService.create(
+      // The node pk is obtained from the currently openned node page.
       NodeComponent.getCurrentNodeKey(),
       this.form.get('remoteKey').value,
       this.form.get('type').value,
@@ -83,30 +96,38 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   }
 
   private onError(error: string) {
+    this.working = false;
     this.button.showError();
     this.snackbarService.showError('transports.dialog.error');
   }
 
+  /**
+   * Loads the list of available types.
+   */
   private loadData(delayMilliseconds: number) {
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
 
     this.dataSubscription = of(1).pipe(
+      // Wait the delay.
       delay(delayMilliseconds),
+      // Load the data. The node pk is obtained from the currently openned node page.
       flatMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey()))
     ).subscribe(
       types => {
-        this.snackbarService.closeCurrentIfTemporalError();
+        this.snackbarService.closeCurrentIfTemporaryError();
         setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
         this.types = types;
       },
       () => {
+        // Show an error msg if it has not be done before during the current attempt to obtain the data.
         if (this.shouldShowError) {
           this.snackbarService.showError('common.loading-error', null, true);
           this.shouldShowError = false;
         }
 
+        // Retry after a small delay.
         this.loadData(3000);
       },
     );

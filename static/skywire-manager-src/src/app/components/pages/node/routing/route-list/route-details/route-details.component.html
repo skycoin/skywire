@@ -1,14 +1,14 @@
-<app-dialog [headline]="'routes.details.title' | translate">
+<app-dialog class="info-dialog" [headline]="'routes.details.title' | translate">
   <app-loading-indicator [showWhite]="false" *ngIf="!routeRule"></app-loading-indicator>
   <div *ngIf="routeRule">
-    <div class="title no-top-margin">
+    <div class="title mt-0">
       {{ 'routes.details.basic.title' | translate }}
     </div>
     <div class="item">
-      <span class="item-title">{{ 'routes.details.basic.key' | translate }}</span> {{ routeRule.key }}
+      <span>{{ 'routes.details.basic.key' | translate }}</span> {{ routeRule.key }}
     </div>
     <div class="item">
-      <span class="item-title">{{ 'routes.details.basic.rule' | translate }}</span> {{ routeRule.rule }}
+      <span>{{ 'routes.details.basic.rule' | translate }}</span> {{ routeRule.rule }}
     </div>
 
     <div *ngIf="routeRule.rule_summary">
@@ -16,13 +16,13 @@
         {{ 'routes.details.summary.title' | translate }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.summary.keep-alive' | translate }}</span> {{ routeRule.rule_summary.keep_alive }}
+        <span>{{ 'routes.details.summary.keep-alive' | translate }}</span> {{ routeRule.rule_summary.keep_alive }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.summary.type' | translate }}</span> {{ getRuleTypeName(routeRule.rule_summary.rule_type) }}
+        <span>{{ 'routes.details.summary.type' | translate }}</span> {{ getRuleTypeName(routeRule.rule_summary.rule_type) }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.summary.request-route-id' | translate }}</span> {{ routeRule.rule_summary.request_route_id }}
+        <span>{{ 'routes.details.summary.request-route-id' | translate }}</span> {{ routeRule.rule_summary.request_route_id }}
       </div>
     </div>
 
@@ -31,16 +31,16 @@
         {{ 'routes.details.app.title' | translate }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.app.route-id' | translate }}</span> {{ routeRule.rule_summary.app_fields.resp_rid }}
+        <span>{{ 'routes.details.app.route-id' | translate }}</span> {{ routeRule.rule_summary.app_fields.resp_rid }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.app.remote-pk' | translate }}</span> {{ routeRule.rule_summary.app_fields.remote_pk }}
+        <span>{{ 'routes.details.app.remote-pk' | translate }}</span> {{ routeRule.rule_summary.app_fields.remote_pk }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.app.remote-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.remote_port }}
+        <span>{{ 'routes.details.app.remote-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.remote_port }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.app.local-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.local_port }}
+        <span>{{ 'routes.details.app.local-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.local_port }}
       </div>
     </div>
 
@@ -49,10 +49,10 @@
         {{ 'routes.details.forward.title' | translate }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.forward.route-id' | translate }}</span> {{ routeRule.rule_summary.forward_fields.next_rid }}
+        <span>{{ 'routes.details.forward.route-id' | translate }}</span> {{ routeRule.rule_summary.forward_fields.next_rid }}
       </div>
       <div class="item">
-        <span class="item-title">{{ 'routes.details.forward.transport-id' | translate }}</span> {{ routeRule.rule_summary.forward_fields.next_tid }}
+        <span>{{ 'routes.details.forward.transport-id' | translate }}</span> {{ routeRule.rule_summary.forward_fields.next_tid }}
       </div>
     </div>
   </div>

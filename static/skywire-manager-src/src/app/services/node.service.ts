@@ -1,12 +1,16 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { Node, Transport, Route, Application, HealthInfo } from '../app.datatypes';
-import { ApiService } from './api.service';
 import { flatMap, map } from 'rxjs/operators';
-import { StorageService, NodeInfo } from './storage.service';
+import { StorageService } from './storage.service';
+
+import { Node, Transport, Route, HealthInfo } from '../app.datatypes';
+import { ApiService } from './api.service';
 import { TransportService } from './transport.service';
 import { RouteService } from './route.service';
 
+/**
+ * Allows to work with the nodes.
+ */
 @Injectable({
   providedIn: 'root'
 })
@@ -18,9 +22,14 @@ export class NodeService {
     private routeService: RouteService,
   ) {}
 
+  /**
+   * Get the list of the nodes connected to the hypervisor.
+   */
   getNodes(): Observable<Node[]> {
-    return this.apiService.get('nodes', { api2: true }).pipe(map((nodes: Node[]) => {
+    return this.apiService.get('nodes').pipe(map((nodes: Node[]) => {
       nodes = nodes || [];
+
+      // Process the node data and create a helper map.
       const obtainedNodes = new Map<string, Node>();
       nodes.forEach(node => {
         node.ip = this.getAddressPart(node.tcp_addr, 0);
@@ -32,6 +41,7 @@ export class NodeService {
 
       const missingSavedNodes: Node[] = [];
       this.storageService.getNodes().forEach(node => {
+        // If the backend did not return a saved node, add it to the response as an offline node.
         if (!obtainedNodes.has(node.publicKey) && !node.deleted) {
           const newNode: Node = new Node();
           newNode.local_pk = node.publicKey;
@@ -41,10 +51,14 @@ export class NodeService {
           missingSavedNodes.push(newNode);
         }
 
+        // If the backend returned a node, informed that it is online and the saved data indicates that
+        // the user deleted it from the node list in the past, remove it from the response.
         if (obtainedNodes.has(node.publicKey) && !obtainedNodes.get(node.publicKey).online && node.deleted) {
           obtainedNodes.delete(node.publicKey);
         }
 
+        // If the user deleted an ofline node from the node list but now the backend says that it is online,
+        // it will be shown in the node list again, so the "deleted" flag is removed in this code segment.
         if (obtainedNodes.has(node.publicKey) && obtainedNodes.get(node.publicKey).online && node.deleted) {
           this.storageService.changeNodeState(node.publicKey, false);
         }
@@ -53,63 +67,59 @@ export class NodeService {
       nodes = [];
       obtainedNodes.forEach(value => nodes.push(value));
       nodes = nodes.concat(missingSavedNodes);
-      nodes = nodes.sort((a, b) => a.local_pk.localeCompare(b.local_pk));
 
       return nodes;
     }));
   }
 
+  /**
+   * Gets the details of a specific node.
+   */
   getNode(nodeKey: string): Observable<Node> {
     let currentNode: Node;
 
-    return this.apiService.get(`nodes/${nodeKey}`, { api2: true }).pipe(
+    // Get the basic node data.
+    return this.apiService.get(`nodes/${nodeKey}`).pipe(
       flatMap((node: Node) => {
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
         node.label = this.storageService.getNodeLabel(node.local_pk);
         currentNode = node;
 
-        return this.apiService.get(`nodes/${nodeKey}/health`, { api2: true });
+        // Get the health info.
+        return this.apiService.get(`nodes/${nodeKey}/health`);
       }),
       flatMap((health: HealthInfo) => {
         currentNode.health = health;
 
-        return this.apiService.get(`nodes/${nodeKey}/uptime`, { api2: true });
+        // Get the node uptime.
+        return this.apiService.get(`nodes/${nodeKey}/uptime`);
       }),
       flatMap((secondsOnline: string) => {
         currentNode.seconds_online = Math.floor(Number.parseFloat(secondsOnline));
 
+        // Get the complete transports info.
         return this.transportService.getTransports(nodeKey);
       }),
       flatMap((transports: Transport[]) => {
         currentNode.transports = transports;
 
+        // Get the complete routes info.
         return this.routeService.getRoutes(nodeKey);
       }),
       map((routes: Route[]) => {
         currentNode.routes = routes;
-
-        if (currentNode.apps) {
-          const startedApps: Application[] = [];
-          const stoppedApps: Application[] = [];
-          currentNode.apps.forEach(app => {
-            if (app.status === 1) {
-              startedApps.push(app);
-            } else {
-              stoppedApps.push(app);
-            }
-          });
-
-          startedApps.sort((a, b) => a.name.localeCompare(b.name));
-          stoppedApps.sort((a, b) => a.name.localeCompare(b.name));
-          currentNode.apps = startedApps.concat(stoppedApps);
-        }
 
         return currentNode;
       })
     );
   }
 
+  /**
+   * Gets a part of the node address: the ip or the port.
+   * @param tcpAddr Complete address.
+   * @param part 0 for the ip or 1 for the port.
+   */
   private getAddressPart(tcpAddr: string, part: number): string {
     const addressParts = tcpAddr.split(':');
     let port = tcpAddr;

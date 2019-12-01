@@ -1,11 +1,15 @@
-import {Component, OnInit} from '@angular/core';
-import {AuthService} from '../../../services/auth.service';
-import {FormControl, FormGroup, Validators} from '@angular/forms';
-import {Router} from '@angular/router';
-import { SnackbarService } from '../../../services/snackbar.service';
+import { Component, OnInit } from '@angular/core';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
+
+import { AuthService } from '../../../services/auth.service';
+import { SnackbarService } from '../../../services/snackbar.service';
 import { InitialSetupComponent } from './initial-setup/initial-setup.component';
 
+/**
+ * Login page.
+ */
 @Component({
   selector: 'app-login',
   templateUrl: './login.component.html',
@@ -28,15 +32,6 @@ export class LoginComponent implements OnInit {
     });
   }
 
-  onLoginSuccess() {
-    this.router.navigate(['nodes']);
-  }
-
-  onLoginError() {
-    this.loading = false;
-    this.snackbarService.showError('login.incorrect-password');
-  }
-
   login() {
     if (!this.form.valid) {
       return;
@@ -50,9 +45,15 @@ export class LoginComponent implements OnInit {
   }
 
   configure() {
-    const config = new MatDialogConfig();
-    config.autoFocus = false;
-    config.width = '480px';
-    this.dialog.open(InitialSetupComponent, config);
+    InitialSetupComponent.openDialog(this.dialog);
+  }
+
+  private onLoginSuccess() {
+    this.router.navigate(['nodes']);
+  }
+
+  private onLoginError() {
+    this.loading = false;
+    this.snackbarService.showError('login.incorrect-password');
   }
 }

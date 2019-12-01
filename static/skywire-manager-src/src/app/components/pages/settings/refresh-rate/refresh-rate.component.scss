@@ -1,8 +1,10 @@
 @import "variables";
 
-mat-form-field ::ng-deep {
-  width: 50%;
+mat-form-field {
+  margin-right: 32px;
+}
 
+mat-form-field ::ng-deep {
   .mat-form-field-wrapper {
     padding-bottom: 0 !important;
   }

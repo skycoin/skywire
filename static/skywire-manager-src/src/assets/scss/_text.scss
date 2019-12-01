@@ -1,68 +1,29 @@
-span
-{
+span {
   overflow-wrap: break-word;
 }
 
-//
-// Color
-//
-@each $color-name, $color-value in $theme-colors
-{
-  .sky-color-#{$color-name}
-  {
-    color: $color-value !important;
-  }
+.font-base {
+  font-size: $font-size-base !important;
 }
 
-//
-// Size
-//
-@each $size-name, $size-value in $theme-font-sizes
-{
-  .font-size-#{$size-name}
-  {
-    font-size: $size-value !important;
-  }
-}
-
-.font-weight-light
-{
+.font-sm {
+  font-size: $font-size-sm !important;
   font-weight: $font-weight-light !important;
 }
 
-.font-base
-{
-  @extend .font-size-base;
-}
-
-.font-base-light
-{
-  @extend .font-base;
-  @extend .font-weight-light;
-}
-
-.font-sm
-{
-  @extend .font-size-sm;
-  @extend .font-weight-light;
-}
-
-.font-title
-{
-  @extend .font-size-sm;
+.font-title {
+  font-size: $font-size-sm !important;
   font-weight: bold;
 }
 
-.font-smaller
-{
-  @extend .font-size-smaller;
-  @extend .font-weight-light;
+.font-smaller {
+  font-size: $font-size-smaller !important;
+  font-weight: $font-weight-light !important;
 }
 
-.font-mini
-{
-  @extend .font-size-mini;
-  @extend .font-weight-light;
+.font-mini {
+  font-size: $font-size-mini !important;
+  font-weight: $font-weight-light !important;
 }
 
 .uppercase {
@@ -73,4 +34,12 @@ span
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.green-text {
+  color: $green;
+}
+
+.red-text {
+  color: $red;
 }

@@ -8,17 +8,17 @@ $black: #202226;
 $blue-light: #00C3FF;
 $blue: #0072FF;
 $blue-dark: #154B6C;
-
-$blue-chart: #0B6DB0;
 $blue-panel: rgba(32, 34, 38, .44);
 
 $red: #DA3439;
 $green: #2ECC54;
 $light-gray: #777;
+$lighter-gray: #999;
 
 $nav-bg: rgba(255, 255, 255, 0.1);
 
 $separator: rgba(0, 0, 0, 0.12);
+$white-separator: rgba(255, 255, 255, 0.44);
 
 $theme-colors: (
   green:              $green,
@@ -48,14 +48,6 @@ $font-size-smaller:           ($font-size-base * .8);
 $font-size-mini:              ($font-size-base * .70);
 $font-size-mini-plus:         ($font-size-base * .60);
 
-$theme-font-sizes: (
-  mini: $font-size-mini,
-  smaller: $font-size-smaller,
-  sm: $font-size-sm,
-  base: $font-size-base,
-  lg: $font-size-lg
-);
-
 $font-weight-light:           lighter;
 $font-weight-normal:          400;
 $font-weight-bold:            700;
@@ -71,6 +63,11 @@ $skywire-font-family: 'Skycoin';
 //
 $mat-dialog-padding: 24px;
 $mat-dialog-radius: 10px;
+
+//
+// Container
+//
+$containers-padding: 20px;
 
 //
 // Sizes

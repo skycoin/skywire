@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { TranslateService, LangChangeEvent } from '@ngx-translate/core';
-import { AppConfig } from '../app.config';
 import { ReplaySubject } from 'rxjs';
+
+import { AppConfig } from '../app.config';
 import { environment } from '../../environments/environment';
 
 export class LanguageData {
@@ -14,6 +15,9 @@ export class LanguageData {
   }
 }
 
+/**
+ * Manages the language displayed in the UI.
+ */
 @Injectable({
   providedIn: 'root'
 })
@@ -23,18 +27,22 @@ export class LanguageService {
 
   private readonly storageKey = 'lang';
   private languagesInternal: LanguageData[] = [];
-  private settingLoaded = false;
+  private settingsLoaded = false;
 
   constructor(
     private translate: TranslateService,
   ) { }
 
+  /**
+   * Initializes the language management. Must be called at the start of the app.
+   */
   loadLanguageSettings() {
-    if (this.settingLoaded) {
+    if (this.settingsLoaded) {
       return;
     }
-    this.settingLoaded = true;
+    this.settingsLoaded = true;
 
+    // Get the available languages from the configuration file.
     let langs: string[] = [];
     AppConfig.languages.forEach(lang => {
       const LangObj = new LanguageData(lang);
@@ -42,32 +50,45 @@ export class LanguageService {
       langs.push(LangObj.code);
     });
 
+    // Exclude Spanish from the production builds, as it have not been implemented.
     if (environment.production) {
       this.languagesInternal = this.languagesInternal.filter(lang => lang.code !== 'es');
       langs = langs.filter(lang => lang !== 'es');
     }
 
+    // Inform what the currently available languages are.
     this.languages.next(this.languagesInternal);
 
+    // Config Ngx-Translate.
     this.translate.addLangs(langs);
     this.translate.setDefaultLang(AppConfig.defaultLanguage);
 
+    // Detect when the selected language is changed.
     this.translate.onLangChange
       .subscribe((event: LangChangeEvent) => this.onLanguageChanged(event));
 
+    // Load the lastest language selected by the user.
     this.loadCurrentLanguage();
   }
 
+  /**
+   * Changes the current language of the UI.
+   */
   changeLanguage(langCode: string) {
     this.translate.use(langCode);
   }
 
   private onLanguageChanged(event: LangChangeEvent) {
+    // Inform the changes to the subscribers.
     this.currentLanguage.next(this.languagesInternal.find(val => val.code === event.lang));
 
+    // Save the new selection.
     localStorage.setItem(this.storageKey, event.lang);
   }
 
+  /**
+   * Makes the UI to use the lastest language selected by the user.
+   */
   private loadCurrentLanguage() {
     const currentLang = localStorage.getItem(this.storageKey);
 

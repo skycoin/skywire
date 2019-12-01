@@ -1,9 +1,9 @@
-<div class="title-container mt-4.5 d-flex justify-content-between">
-  <div class="title font-mini uppercase ml-3.5">
+<!-- Header. -->
+<div class="generic-title-container mt-4.5 d-flex">
+  <div class="title uppercase ml-3.5">
     <span *ngIf="showShortList_">{{ 'routes.title' | translate }}</span>
   </div>
   <mat-icon
-    class="ic-mini-plus-responsive table-create-record"
     [matMenuTriggerFor]="selectionMenu"
     *ngIf="dataSource && dataSource.length > 0"
   >more_horiz</mat-icon>
@@ -20,6 +20,7 @@
   </mat-menu>
 </div>
 
+<!-- Upper paginator. -->
 <app-paginator
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"
@@ -28,15 +29,17 @@
 </app-paginator>
 
 <div
-  class="container-elevated-translucid mt-3 overflow"
+  class="container-elevated-translucid mt-3"
   [ngClass]="{'table-container': showShortList_, 'full-list-table-container': !showShortList_}"
   *ngIf="dataSource && dataSource.length > 0"
 >
+  <!-- Table for large screens. -->
   <table
-    class="responsive-table-translucid fit d-none d-md-table"
+    class="responsive-table-translucid d-none d-md-table"
     [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
+    <!-- Column names. -->
     <tr>
       <th></th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
@@ -49,11 +52,10 @@
       </th>
       <th class="actions"></th>
     </tr>
+    <!-- Values. -->
     <tr *ngFor="let route of dataSource">
       <td class="selection-col">
         <mat-checkbox
-          type="checkbox"
-          class="dark-check-box"
           [checked]="selections.get(route.key)"
           (change)="changeSelection(route)">
         </mat-checkbox>
@@ -66,14 +68,14 @@
       </td>
       <td class="actions">
         <mat-icon
-          class="table-delete-record ic-mini"
+          class="table-dark-option"
           [matTooltip]="'routes.details.title' | translate"
           (click)="details(route.key)">
           visibility
         </mat-icon>
         &nbsp;
         <mat-icon
-          class="table-delete-record ic-mini"
+          class="table-dark-option"
           [matTooltip]="'routes.delete' | translate"
           (click)="delete(route.key)">
           close
@@ -82,12 +84,14 @@
     </tr>
   </table>
 
+  <!-- List for small screens. -->
   <table
-    class="responsive-table-translucid fit d-md-none nowrap"
+    class="responsive-table-translucid d-md-none"
     [ngClass]="{'d-lg-table d-xl-none': showShortList_}"
     cellspacing="0" cellpadding="0"
   >
-    <tr class="selectable full-box" (click)="openSortingOrderModal()"><td>
+    <!-- Sorting button. -->
+    <tr class="selectable" (click)="openSortingOrderModal()"><td>
       <div class="list-item-container">
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
@@ -100,12 +104,11 @@
         </div>
       </div>
     </td></tr>
-    <tr *ngFor="let route of dataSource" class="full-box"><td>
+    <!-- Values. -->
+    <tr *ngFor="let route of dataSource"><td>
       <div class="list-item-container">
         <div class="check-part">
           <mat-checkbox
-            type="checkbox"
-            class="dark-check-box"
             [checked]="selections.get(route.key)"
             (change)="changeSelection(route)">
           </mat-checkbox>
@@ -136,6 +139,7 @@
     </td></tr>
   </table>
 
+  <!-- Lower paginator. -->
   <app-view-all-link
     [numberOfElements]="allRoutes.length"
     [linkParts]="['/nodes', nodePK, 'routes']"
@@ -143,10 +147,12 @@
   ></app-view-all-link>
 </div>
 
-<div class="container-elevated-translucid mt-3 overflow" *ngIf="!dataSource || dataSource.length === 0">
-    <span class="text">{{ 'routes.empty' | translate }}</span>
+<!-- Msg shown if the list is empty. -->
+<div class="container-elevated-translucid mt-3" *ngIf="!dataSource || dataSource.length === 0">
+    <span class="font-sm">{{ 'routes.empty' | translate }}</span>
 </div>
 
+<!-- Link for accessing the full list. -->
 <app-paginator
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"

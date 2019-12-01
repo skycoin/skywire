@@ -1,11 +1,15 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Router } from '@angular/router';
+import { Subscription } from 'rxjs';
+
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { AuthService } from '../../../services/auth.service';
-import { Router } from '@angular/router';
 import { SnackbarService } from '../../../services/snackbar.service';
-import { Subscription } from 'rxjs';
 import { SidenavService } from 'src/app/services/sidenav.service';
 
+/**
+ * Page with the general settings of the app.
+ */
 @Component({
   selector: 'app-settings',
   templateUrl: './settings.component.html',
@@ -22,6 +26,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private sidenavService: SidenavService,
   ) {
+    // Data for populating the tab bar.
     this.tabsData = [
       {
         icon: 'view_headline',
@@ -38,12 +43,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     setTimeout(() => {
+      // Populate the left options bar.
       this.menuSubscription = this.sidenavService.setContents([
         {
           name: 'nodes.logout',
           actionName: 'logout',
           icon: 'power_settings_new'
         }], null).subscribe(actionName => {
+          // React to the events of the left options bar.
           if (actionName === 'logout') {
             this.logout();
           }

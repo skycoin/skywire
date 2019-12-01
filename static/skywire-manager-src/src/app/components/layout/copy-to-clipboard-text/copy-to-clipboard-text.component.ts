@@ -13,6 +13,9 @@ import { SnackbarService } from '../../../services/snackbar.service';
   styleUrls: ['./copy-to-clipboard-text.component.scss']
 })
 export class CopyToClipboardTextComponent {
+  /**
+   * Indicates if the text must be truncated if it is too long.
+   */
   @Input() public short = false;
   @Input() text: string;
   /**

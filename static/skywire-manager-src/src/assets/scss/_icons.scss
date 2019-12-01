@@ -1,24 +1,4 @@
-$icon-sizes: (
-  mini: 16px,
-  small: 20px,
-  big: 30px
-);
-
-@each $size-name, $size-value in $icon-sizes
-{
-  .mat-icon.ic-#{$size-name}
-  {
-    width: $size-value !important;
-    height: $size-value !important;
-    line-height: $size-value !important;
-    font-size: $size-value !important;
-  }
-}
-
-//
 // Solid circles
-//
-
 $dot-icons: (
   green: theme-color(green),
   red: theme-color(red),

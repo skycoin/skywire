@@ -1,5 +1,8 @@
+<!-- Show the options on the left bar. -->
 <app-actions></app-actions>
-<div *ngIf="!node" class="flex-column full-height full-width">
+
+<!-- Content when loading. -->
+<div *ngIf="!node" class="flex-column h-100 w-100">
   <div>
     <app-tab-bar
       [titleParts]="titleParts"
@@ -9,7 +12,8 @@
     ></app-tab-bar>
   </div>
   <app-loading-indicator *ngIf="!notFound"></app-loading-indicator>
-  <div *ngIf="notFound" class="full-width full-height flex not-found-label">
+  <!-- Msg shown if the node is not found. -->
+  <div *ngIf="notFound" class="w-100 h-100 d-flex not-found-label">
     <div>
       <mat-icon [inline]="true">error</mat-icon>
       {{ 'node.not-found' | translate }}
@@ -17,6 +21,7 @@
   </div>
 </div>
 
+<!-- Content when loaded. -->
 <div class="row" *ngIf="node">
   <div class="col-12">
     <app-tab-bar
@@ -35,9 +40,11 @@
     [ngClass]="{'col-lg-8': !showingInfo && !showingFullList}"
   >
     <div class="d-flex flex-column h-100">
+      <!-- Content of the subpage. -->
       <router-outlet></router-outlet>
     </div>
   </div>
+  <!-- Right bar. -->
   <div
     class="d-none"
     [ngClass]="{'col-4 d-lg-block': !showingInfo && !showingFullList}"

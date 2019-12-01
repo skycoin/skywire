@@ -1,11 +1,12 @@
 import { Component, Input, OnDestroy } from '@angular/core';
-import { Application } from '../../../../../../app.datatypes';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { Observable, Subscription } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
+
+import { Application } from '../../../../../../app.datatypes';
 import { AppsService } from '../../../../../../services/apps.service';
 import { LogComponent } from '../log/log.component';
 import { NodeComponent } from '../../../node.component';
-import { Observable, Subscription } from 'rxjs';
-import { ActivatedRoute } from '@angular/router';
 import { AppConfig } from '../../../../../../app.config';
 import GeneralUtils from '../../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../../layout/confirmation/confirmation.component';
@@ -13,6 +14,9 @@ import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 
+/**
+ * List of the columns that can be used to sort the data.
+ */
 enum SortableColumns {
   Name = 'apps.apps-list.app-name',
   Port = 'apps.apps-list.port',
@@ -20,6 +24,10 @@ enum SortableColumns {
   AutoStart = 'apps.apps-list.auto-start',
 }
 
+/**
+ * Shows the list of applications of a node. I can be used to show a short preview, with just some
+ * elements and a link for showing the rest: or the full list, with pagination controls.
+ */
 @Component({
   selector: 'app-node-app-list',
   templateUrl: './node-apps-list.component.html',
@@ -29,6 +37,7 @@ export class NodeAppsListComponent implements OnDestroy {
   @Input() nodePK: string;
   sortableColumns = SortableColumns;
 
+  // Vars for keeping track of the column used for sorting the data.
   sortBy = SortableColumns.Name;
   sortReverse = false;
   get sortingArrow(): string {
@@ -36,8 +45,16 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   dataSource: Application[];
+  /**
+   * Keeps track of the state of the check boxes of the elements.
+   */
   selections = new Map<string, boolean>();
 
+  /**
+   * If true, the control can only show few elements and, if there are more elements, a link for
+   * accessing the full list. If false, the full list is shown, with pagination
+   * controls, if needed.
+   */
   showShortList_: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
@@ -49,6 +66,7 @@ export class NodeAppsListComponent implements OnDestroy {
   appsMap: Map<string, Application>;
   numberOfPages = 1;
   currentPage = 1;
+  // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
   @Input() set apps(val: Application[]) {
     this.allApps = val;
@@ -66,8 +84,8 @@ export class NodeAppsListComponent implements OnDestroy {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
-        if (selectedPage === NaN || selectedPage < 0) {
-          selectedPage = 0;
+        if (isNaN(selectedPage) || selectedPage < 1) {
+          selectedPage = 1;
         }
 
         this.currentPageInUrl = selectedPage;
@@ -81,6 +99,9 @@ export class NodeAppsListComponent implements OnDestroy {
     this.navigationsSubscription.unsubscribe();
   }
 
+  /**
+   * Changes the selection state of an entry (modifies the state of its checkbox).
+   */
   changeSelection(app: Application) {
     if (this.selections.get(app.name)) {
       this.selections.set(app.name, false);
@@ -89,6 +110,9 @@ export class NodeAppsListComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Check if at lest one entry has been selected via its checkbox.
+   */
   hasSelectedElements(): boolean {
     if (!this.selections) {
       return false;
@@ -104,14 +128,21 @@ export class NodeAppsListComponent implements OnDestroy {
     return found;
   }
 
+  /**
+   * Selects or deselects all items.
+   */
   changeAllSelections(setSelected: boolean) {
     this.selections.forEach((val, key) => {
       this.selections.set(key, setSelected);
     });
   }
 
+  /**
+   * Starts or stops the selected apps.
+   */
   changeStateOfSelected(startApps: boolean) {
     const elementsToChange: string[] = [];
+    // Ignore all elements shich already have the desired settings applied.
     this.selections.forEach((val, key) => {
       if (val) {
         if ((startApps && this.appsMap.get(key).status !== 1) || (!startApps && this.appsMap.get(key).status === 1)) {
@@ -123,7 +154,8 @@ export class NodeAppsListComponent implements OnDestroy {
     if (startApps) {
       this.changeAppsValRecursively(elementsToChange, false, startApps);
     } else {
-      const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'apps.stop-selected-confirmation');
+      // Ask for confirmation if the apps are going to be stopped.
+      const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'apps.stop-selected-confirmation');
 
       confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
         confirmationDialog.componentInstance.showProcessing();
@@ -133,8 +165,12 @@ export class NodeAppsListComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Changes the autostart setting of the selected apps.
+   */
   changeAutostartOfSelected(autostart: boolean) {
     const elementsToChange: string[] = [];
+    // Ignore all elements shich already have the desired settings applied.
     this.selections.forEach((val, key) => {
       if (val) {
         if ((autostart && !this.appsMap.get(key).autostart) || (!autostart && this.appsMap.get(key).autostart)) {
@@ -143,7 +179,8 @@ export class NodeAppsListComponent implements OnDestroy {
       }
     });
 
-    const confirmationDialog = GeneralUtils.createDeleteConfirmation(
+    // Ask for confirmation.
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(
       this.dialog, autostart ? 'apps.enable-autostart-selected-confirmation' : 'apps.disable-autostart-selected-confirmation'
     );
 
@@ -154,10 +191,9 @@ export class NodeAppsListComponent implements OnDestroy {
     });
   }
 
-  onCloseAppClicked(appName: string): void {
-    // this.appsService.closeApp(appName).subscribe();
-  }
-
+  /**
+   * Opens the modal window used on small screens with the options of an element.
+   */
   showOptionsDialog(app: Application) {
     const options: SelectableOption[] = [
       {
@@ -185,13 +221,17 @@ export class NodeAppsListComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Starts or stops a specific app.
+   */
   changeAppState(app: Application): void {
     if (app.status !== 1) {
       this.changeSingleAppVal(
         this.startChangingAppState(app.name, app.status !== 1)
       );
     } else {
-      const confirmationDialog = GeneralUtils.createDeleteConfirmation(this.dialog, 'apps.stop-confirmation');
+      // Ask for confirmation if the app is going to be stopped.
+      const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'apps.stop-confirmation');
 
       confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
         confirmationDialog.componentInstance.showProcessing();
@@ -204,8 +244,11 @@ export class NodeAppsListComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Changes the autostart setting of a specific app.
+   */
   changeAppAutostart(app: Application): void {
-    const confirmationDialog = GeneralUtils.createDeleteConfirmation(
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(
       this.dialog, app.autostart ? 'apps.disable-autostart-confirmation' : 'apps.enable-autostart-confirmation'
     );
 
@@ -219,19 +262,30 @@ export class NodeAppsListComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Helper function used for starting a process for changing a value on an app and reacting to the result.
+   * Used to avoid repeating common code.
+   * @param observable Observable which will start the operation after subscription.
+   * @param confirmationDialog Dialog used for requesting confirmation from the user.
+   */
   private changeSingleAppVal(
     observable: Observable<any>,
     confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
 
+    // Start the operation.
     observable.subscribe(
       () => {
         if (confirmationDialog) {
           confirmationDialog.close();
         }
+
+        // Make the parent page reload the data.
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.snackbarService.showDone('apps.operation-completed');
       }, () => {
+        // Make the parent page reload the data.
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
+
         if (confirmationDialog) {
           confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
         } else {
@@ -241,10 +295,16 @@ export class NodeAppsListComponent implements OnDestroy {
     );
   }
 
+  /**
+   * Shows a modal window with the logs of an app.
+   */
   viewLogs(app: Application): void {
     LogComponent.openDialog(this.dialog, app);
   }
 
+  /**
+   * Changes the column and/or order used for sorting the data.
+   */
   changeSortingOrder(column: SortableColumns) {
     if (this.sortBy !== column) {
       this.sortBy = column;
@@ -256,7 +316,11 @@ export class NodeAppsListComponent implements OnDestroy {
     this.recalculateElementsToShow();
   }
 
+  /**
+   * Opens the modal window used on small screens for selecting how to sort the data.
+   */
   openSortingOrderModal() {
+    // Get the list of sortable columns.
     const enumKeys = Object.keys(SortableColumns);
     const columnsMap = new Map<string, SortableColumns>();
     const columns = enumKeys.map(key => {
@@ -278,10 +342,16 @@ export class NodeAppsListComponent implements OnDestroy {
     });
   }
 
+  /**
+   * Sorts the data and recalculates which elements should be shown on the UI.
+   */
   private recalculateElementsToShow() {
+    // Needed to prevent racing conditions.
     this.currentPage = this.currentPageInUrl;
 
+    // Needed to prevent racing conditions.
     if (this.allApps) {
+      // Sort all the data.
       this.allApps.sort((a, b) => {
         const defaultOrder = a.name.localeCompare(b.name);
 
@@ -301,33 +371,36 @@ export class NodeAppsListComponent implements OnDestroy {
         return response !== 0 ? response : defaultOrder;
       });
 
+      // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-
       this.numberOfPages = Math.ceil(this.allApps.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
 
+      // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
       this.appsToShow = this.allApps.slice(start, end);
 
+      // Create a map with the elements to show, as a helper.
       this.appsMap = new Map<string, Application>();
       this.appsToShow.forEach(app => {
         this.appsMap.set(app.name, app);
 
+        // Add to the selections map the elements that are going to be shown.
         if (!this.selections.has(app.name)) {
           this.selections.set(app.name, false);
         }
       });
 
+      // Remove from the selections map the elements that are not going to be shown.
       const keysToRemove: string[] = [];
       this.selections.forEach((value, key) => {
         if (!this.appsMap.has(key)) {
           keysToRemove.push(key);
         }
       });
-
       keysToRemove.forEach(key => {
         this.selections.delete(key);
       });
@@ -339,20 +412,38 @@ export class NodeAppsListComponent implements OnDestroy {
     this.dataSource = this.appsToShow;
   }
 
+  /**
+   * Prepares the operation for starting or stopping an app, but does not start it. To start the operation,
+   * subscribe to the response.
+   */
   private startChangingAppState(appName: string, startApp: boolean): Observable<any> {
     return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp);
   }
 
+  /**
+   * Prepares the operation for changing the autostart setting of an app, but does not start it. To
+   * start the operation, subscribe to the response.
+   */
   private startChangingAppAutostart(appName: string, autostart: boolean): Observable<any> {
     return this.appsService.changeAppAutostart(NodeComponent.getCurrentNodeKey(), appName, autostart);
   }
 
+  /**
+   * Recursively changes a setting in a list of apps.
+   * @param names List with the names of the apps to modify.
+   * @param changingAutostart True if going to change the autostart setting, false if going to change
+   * the running state of the apps.
+   * @param newVal If "changingAutostart" is true, the new state of the autostart setting; otherwise,
+   * true for starting the apps or false for stopping them.
+   * @param confirmationDialog Dialog used for requesting confirmation from the user.
+   */
   private changeAppsValRecursively(
     names: string[],
     changingAutostart: boolean,
     newVal: boolean,
     confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
 
+    // The list may be empty because apps which already have the settings are ignored.
     if (!names || names.length === 0) {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
       this.snackbarService.showDone('apps.operation-completed');
@@ -377,6 +468,7 @@ export class NodeAppsListComponent implements OnDestroy {
         if (confirmationDialog) {
           confirmationDialog.close();
         }
+        // Make the parent page reload the data.
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.snackbarService.showDone('apps.operation-completed');
       } else {
