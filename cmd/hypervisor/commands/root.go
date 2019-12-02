@@ -62,7 +62,18 @@ var rootCmd = &cobra.Command{
 
 		log.Infof("serving RPC on '%s'", rpcAddr)
 		go func() {
-			l, err := net.Listen("tcp", rpcAddr)
+			_, rpcPort, err := config.Interfaces.SplitRPCAddr()
+			if err != nil {
+				log.Fatalln("Failed to parse rpc port from rpc address:", err)
+			}
+
+			dmsgC := dmsg.NewClient(config.PK, config.SK, disc.NewHTTP(config.DmsgDiscovery))
+
+			ctx := context.Background()
+			if err = dmsgC.InitiateServerConnections(ctx, 1); err != nil {
+				log.Fatalln("failed to initiate dmsg server connections:", err)
+			}
+			l, err := dmsgC.Listen(rpcPort)
 			if err != nil {
 				log.Fatalln("Failed to bind tcp port:", err)
 			}

@@ -184,7 +184,7 @@ func ensureDir(path string) (string, error) {
 // HypervisorConfig represents hypervisor configuration.
 type HypervisorConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
-	Addr   string        `json:"address"`
+	Port   uint16        `json:"port"`
 }
 
 // DmsgConfig represents dmsg configuration.

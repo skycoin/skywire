@@ -96,7 +96,7 @@ type Node struct {
 	pidMu sync.Mutex
 
 	rpcListener net.Listener
-	rpcDialers  []*noise.RPCClientDialer
+	rpcDialers   []*RPCClientDialer
 
 	procManager *appserver.ProcManager
 }
@@ -204,14 +204,9 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 		}
 		node.rpcListener = l
 	}
-	node.rpcDialers = make([]*noise.RPCClientDialer, len(config.Hypervisors))
+	node.rpcDialers = make([]*RPCClientDialer, len(config.Hypervisors))
 	for i, entry := range config.Hypervisors {
-		node.rpcDialers[i] = noise.NewRPCClientDialer(entry.Addr, noise.HandshakeXK, noise.Config{
-			LocalPK:   pk,
-			LocalSK:   sk,
-			RemotePK:  entry.PubKey,
-			Initiator: true,
-		})
+		node.rpcDialers[i] = NewRPCClientDialer(node.n, entry.PubKey, entry.Port)
 	}
 
 	return node, err
@@ -258,9 +253,9 @@ func (node *Node) Start() error {
 		go rpcSvr.Accept(node.rpcListener)
 	}
 	for _, dialer := range node.rpcDialers {
-		go func(dialer *noise.RPCClientDialer) {
+		go func(dialer *RPCClientDialer) {
 			if err := dialer.Run(rpcSvr, time.Second); err != nil {
-				node.logger.Errorf("Dialer exited with error: %v", err)
+				node.logger.Errorf("Hypervisor Dmsg Dial exited with error: %v", err)
 			}
 		}(dialer)
 	}
@@ -342,13 +337,6 @@ func (node *Node) Close() (err error) {
 			node.logger.WithError(err).Error("failed to stop RPC interface")
 		} else {
 			node.logger.Info("RPC interface stopped successfully")
-		}
-	}
-	for i, dialer := range node.rpcDialers {
-		if err = dialer.Close(); err != nil {
-			node.logger.WithError(err).Errorf("(%d) failed to stop RPC dialer", i)
-		} else {
-			node.logger.Infof("(%d) RPC dialer closed successfully", i)
 		}
 	}
 
