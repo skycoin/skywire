@@ -22,7 +22,7 @@ type Client struct {
 func NewClient(conn net.Conn) (*Client, error) {
 	session, err := yamux.Client(conn, nil)
 	if err != nil {
-		return nil, fmt.Errorf("yamux: %s", err)
+		return nil, fmt.Errorf("error creating client: yamux: %s", err)
 	}
 
 	return &Client{session: session}, nil
@@ -48,7 +48,7 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		stream, err = c.session.Open()
 		if err != nil {
-			return fmt.Errorf("yamux: %s", err)
+			return fmt.Errorf("error on `ListenAndServe`: yamux: %s", err)
 		}
 
 		go func() {
