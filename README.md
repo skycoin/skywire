@@ -9,9 +9,11 @@
     - [Configure](#configure)
       - [`stcp` setup](#stcp-setup)
       - [`dmsgpty` setup](#dmsgpty-setup)
+      - [`hypervisor` setup](#hypervisor-setup)
     - [Run `skywire-visor`](#run-skywire-visor)
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `dmsgpty`](#run-dmsgpty)
+    - [Run `hypervisor`](#run-hypervisor)
     - [Apps](#apps)
     - [Transports](#transports)
   - [App programming API](#app-programming-api)
@@ -136,6 +138,17 @@ Here is an example configuration for enabling the `dmsgpty` server within `skywi
 
 For `dmsgpty` usage, refer to [#run-dmsgpty](#run-dmsgpty).
 
+#### `hypervisor` setup
+
+Every node can be controlled by one or more hypervisors. The hypervisor allows to control and configure multiple visors. In order to allow a hypervisor to access a visor, the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
+
+```json
+  "hypervisors":[{
+		"public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775",
+	       	"address":"127.0.0.1:7080"
+	}],
+```
+
 ### Run `skywire-visor`
 
 `skywire-visor` hosts apps, proxies app's requests to remote nodes and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the node, communication between node and app is performed via unix pipes provided on app startup.
@@ -177,6 +190,20 @@ To open a non-interactive shell and run a command:
 
 ```bash
 $ dmsgpty --addr='0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08' --cmd='echo' --arg='hello world'
+```
+
+### Run `hypervisor`
+
+In order to run the hypervisor, generate a hypervisor config file with 
+
+```bash
+$ hypervisor gen-config
+```
+
+Then you can start a hypervisor with:
+
+```bash
+$ hypervisor 
 ```
 
 ### Apps
