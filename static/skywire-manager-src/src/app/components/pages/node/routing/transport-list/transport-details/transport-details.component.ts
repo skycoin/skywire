@@ -17,9 +17,9 @@ export class TransportDetailsComponent {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, data: Transport): MatDialogRef<TransportDetailsComponent, any> {
+  public static openDialog(dialog: MatDialog, transport: Transport): MatDialogRef<TransportDetailsComponent, any> {
     const config = new MatDialogConfig();
-    config.data = data;
+    config.data = transport;
     config.autoFocus = false;
     config.width = AppConfig.largeModalWidth;
 

@@ -54,8 +54,8 @@ export class SnackbarComponent {
   config: SnackbarConfig;
 
   constructor(
-    @Inject(MAT_SNACK_BAR_DATA) public data: SnackbarConfig,
-    public snackbarRef: MatSnackBarRef<SnackbarComponent>,
+    @Inject(MAT_SNACK_BAR_DATA) data: SnackbarConfig,
+    private snackbarRef: MatSnackBarRef<SnackbarComponent>,
   ) {
     this.config = data;
   }

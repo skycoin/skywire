@@ -160,6 +160,7 @@
     "change-password": "Change password",
     "refresh-rate": "Refresh rate",
     "refresh-rate-help": "Time the system waits to update the data automatically.",
+    "refresh-rate-confirmation": "Refresh rate changed",
     "seconds": "seconds"
   },
 

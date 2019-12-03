@@ -10,7 +10,6 @@
 <button
   *ngIf="type === 'mat-button'"
   mat-button
-  [disableRipple]="true"
   (click)="click()"
   [disabled]="disabled"
   [color]="color"
@@ -22,7 +21,6 @@
 <button
   *ngIf="type === 'mat-raised-button'"
   mat-raised-button
-  [disableRipple]="true"
   (click)="click()"
   [disabled]="disabled"
   [color]="color"

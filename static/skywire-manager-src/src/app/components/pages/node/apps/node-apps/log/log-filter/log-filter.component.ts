@@ -38,9 +38,9 @@ export class LogFilterComponent implements OnInit, OnDestroy {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, data: LogsFilter): MatDialogRef<LogFilterComponent, any> {
+  public static openDialog(dialog: MatDialog, currentFilter: LogsFilter): MatDialogRef<LogFilterComponent, any> {
     const config = new MatDialogConfig();
-    config.data = data;
+    config.data = currentFilter;
     config.autoFocus = false;
     config.width = AppConfig.smallModalWidth;
 

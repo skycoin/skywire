@@ -25,17 +25,15 @@ export class AppComponent {
     dialog: MatDialog,
     languageService: LanguageService,
   ) {
-    // When navigating, close the snackbar and all modal windows.
-    location.subscribe(() => {
-      snackbarService.closeCurrent();
-      dialog.closeAll();
-    });
     // Close the snackbar when opening a modal window.
     dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
 
     // Scroll to the top after navigating.
+    // When navigating, scroll to the top and close the snackbar and all modal windows.
     router.events.subscribe(e => {
       if (e instanceof NavigationEnd) {
+        snackbarService.closeCurrent();
+        dialog.closeAll();
         window.scrollTo(0, 0);
       }
     });

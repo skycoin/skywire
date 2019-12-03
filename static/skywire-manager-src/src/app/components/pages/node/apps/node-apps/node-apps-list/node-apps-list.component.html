@@ -154,13 +154,13 @@
           </div>
           <div class="list-row">
             <span class="title">{{ 'apps.apps-list.status' | translate }}</span>:
-            <span [class]="app.status === 1 ? 'green-text' : 'red-text'">
+            <span [class]="(app.status === 1 ? 'green-text' : 'red-text') + ' title'">
               {{ (app.status === 1 ? 'apps.status-running' : 'apps.status-stopped') | translate }}
             </span>
           </div>
           <div class="list-row">
             <span class="title">{{ 'apps.apps-list.auto-start' | translate }}</span>:
-            <span [class]="app.autostart ? 'green-text' : 'red-text'">
+            <span [class]="(app.autostart ? 'green-text' : 'red-text') + ' title'">
               {{ (app.autostart ? 'apps.apps-list.autostart-enabled' : 'apps.apps-list.autostart-disabled') | translate }}
             </span>
           </div>
@@ -171,7 +171,6 @@
             (click)="$event.stopPropagation(); showOptionsDialog(app)"
             mat-icon-button
             [matTooltip]="'common.options' | translate"
-            [disableRipple]="true"
             class="grey-button-background"
           >
             <mat-icon>{{ 'add' }}</mat-icon>

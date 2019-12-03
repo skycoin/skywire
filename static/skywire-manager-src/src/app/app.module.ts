@@ -12,7 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
-import { ErrorStateMatcher, ShowOnDirtyErrorStateMatcher } from '@angular/material/core';
+import { ErrorStateMatcher, ShowOnDirtyErrorStateMatcher, RippleGlobalOptions, MAT_RIPPLE_GLOBAL_OPTIONS } from '@angular/material/core';
 import { MAT_DIALOG_DEFAULT_OPTIONS, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -99,6 +99,10 @@ import { NodeInfoContentComponent } from './components/pages/node/node-info/node
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectColumnComponent } from './components/layout/select-column/select-column.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
+
+const globalRippleConfig: RippleGlobalOptions = {
+  disabled: true,
+};
 
 @NgModule({
   declarations: [
@@ -236,6 +240,7 @@ import { SelectOptionComponent } from './components/layout/select-option/select-
     {provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: {width: '600px', hasBackdrop: true}},
     {provide: ErrorStateMatcher, useClass: ShowOnDirtyErrorStateMatcher},
     {provide: RouteReuseStrategy, useClass: AppReuseStrategy},
+    {provide: MAT_RIPPLE_GLOBAL_OPTIONS, useValue: globalRippleConfig},
   ],
   bootstrap: [AppComponent]
 })

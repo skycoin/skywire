@@ -32,11 +32,10 @@ export interface SelectedColumn {
 export class SelectColumnComponent {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
-   * @param data Names of the columns.
    */
-  public static openDialog(dialog: MatDialog, data: string[]): MatDialogRef<SelectColumnComponent, any> {
+  public static openDialog(dialog: MatDialog, columnNames: string[]): MatDialogRef<SelectColumnComponent, any> {
     const config = new MatDialogConfig();
-    config.data = data;
+    config.data = columnNames;
     config.autoFocus = false;
     config.width = AppConfig.smallModalWidth;
 
@@ -45,7 +44,7 @@ export class SelectColumnComponent {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: string[],
-    public dialogRef: MatDialogRef<SelectColumnComponent>,
+    private dialogRef: MatDialogRef<SelectColumnComponent>,
   ) { }
 
   closePopup(label: string, reverse: boolean) {

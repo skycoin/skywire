@@ -31,9 +31,9 @@ export class SelectOptionComponent {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, data: SelectableOption[]): MatDialogRef<SelectOptionComponent, any> {
+  public static openDialog(dialog: MatDialog, optionsToShow: SelectableOption[]): MatDialogRef<SelectOptionComponent, any> {
     const config = new MatDialogConfig();
-    config.data = data;
+    config.data = optionsToShow;
     config.autoFocus = false;
     config.width = AppConfig.smallModalWidth;
 
@@ -42,7 +42,7 @@ export class SelectOptionComponent {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: SelectableOption[],
-    public dialogRef: MatDialogRef<SelectOptionComponent>,
+    private dialogRef: MatDialogRef<SelectOptionComponent>,
   ) { }
 
   closePopup(selectedOption: number) {

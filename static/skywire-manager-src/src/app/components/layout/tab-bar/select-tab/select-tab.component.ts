@@ -18,9 +18,9 @@ export class SelectTabComponent {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, data: TabButtonData[]): MatDialogRef<SelectTabComponent, any> {
+  public static openDialog(dialog: MatDialog, tabs: TabButtonData[]): MatDialogRef<SelectTabComponent, any> {
     const config = new MatDialogConfig();
-    config.data = data;
+    config.data = tabs;
     config.autoFocus = false;
     config.width = AppConfig.smallModalWidth;
 
@@ -29,7 +29,7 @@ export class SelectTabComponent {
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: TabButtonData[],
-    public dialogRef: MatDialogRef<SelectTabComponent>,
+    private dialogRef: MatDialogRef<SelectTabComponent>,
   ) { }
 
   closePopup(index: number) {

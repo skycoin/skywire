@@ -1,4 +1,4 @@
-import { Directive, Output, Input, HostListener } from '@angular/core';
+import { Directive, Output, Input, HostListener, OnDestroy } from '@angular/core';
 import { EventEmitter } from '@angular/core';
 
 import {ClipboardService} from '../services/clipboard.service';
@@ -10,7 +10,7 @@ import {ClipboardService} from '../services/clipboard.service';
   /* tslint:disable:directive-selector */
   selector: '[clipboard]',
 })
-export class ClipboardDirective {
+export class ClipboardDirective implements OnDestroy {
   /**
    * Event sent when the text is copied.
    */
@@ -26,6 +26,11 @@ export class ClipboardDirective {
     this.copyEvent = new EventEmitter();
     this.errorEvent = new EventEmitter();
     this.value = '';
+  }
+
+  ngOnDestroy() {
+    this.copyEvent.complete();
+    this.errorEvent.complete();
   }
 
   @HostListener('click') copyToClipboard(): void {

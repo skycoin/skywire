@@ -71,6 +71,7 @@ export class RouteListComponent implements OnDestroy {
   }
 
   private navigationsSubscription: Subscription;
+  private operationSubscriptionsGroup: Subscription[] = [];
 
   constructor(
     private routeService: RouteService,
@@ -94,6 +95,7 @@ export class RouteListComponent implements OnDestroy {
 
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
+    this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
   }
 
   /**
@@ -195,14 +197,15 @@ export class RouteListComponent implements OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.startDeleting(routeKey).subscribe(() => {
+      // Start the operation and save it for posible cancellation.
+      this.operationSubscriptionsGroup.push(this.startDeleting(routeKey).subscribe(() => {
         confirmationDialog.close();
         // Make the parent page reload the data.
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('routes.deleted');
       }, () => {
         confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'routes.error-deleting');
-      });
+      }));
     });
   }
 
@@ -326,7 +329,7 @@ export class RouteListComponent implements OnDestroy {
    * @param confirmationDialog Dialog used for requesting confirmation from the user.
    */
   deleteRecursively(ids: number[], confirmationDialog: MatDialogRef<ConfirmationComponent, any>) {
-    this.startDeleting(ids[ids.length - 1]).subscribe(() => {
+    this.operationSubscriptionsGroup.push(this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
         confirmationDialog.close();
@@ -339,6 +342,6 @@ export class RouteListComponent implements OnDestroy {
     }, () => {
       NodeComponent.refreshCurrentDisplayedData();
       confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'routes.error-deleting');
-    });
+    }));
   }
 }

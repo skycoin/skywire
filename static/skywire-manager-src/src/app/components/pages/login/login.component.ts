@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
-import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { MatDialog } from '@angular/material/dialog';
+import { Subscription } from 'rxjs';
 
 import { AuthService } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
@@ -15,9 +16,11 @@ import { InitialSetupComponent } from './initial-setup/initial-setup.component';
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss']
 })
-export class LoginComponent implements OnInit {
+export class LoginComponent implements OnInit, OnDestroy {
   form: FormGroup;
   loading = false;
+
+  private subscription: Subscription;
 
   constructor(
     private authService: AuthService,
@@ -32,13 +35,19 @@ export class LoginComponent implements OnInit {
     });
   }
 
+  ngOnDestroy() {
+    if (this.subscription) {
+      this.subscription.unsubscribe();
+    }
+  }
+
   login() {
-    if (!this.form.valid) {
+    if (!this.form.valid || this.loading) {
       return;
     }
 
     this.loading = true;
-    this.authService.login(this.form.get('password').value).subscribe(
+    this.subscription = this.authService.login(this.form.get('password').value).subscribe(
       () => this.onLoginSuccess(),
       () => this.onLoginError()
     );

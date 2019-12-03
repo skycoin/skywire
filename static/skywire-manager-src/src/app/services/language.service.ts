@@ -90,7 +90,8 @@ export class LanguageService {
    * Makes the UI to use the lastest language selected by the user.
    */
   private loadCurrentLanguage() {
-    const currentLang = localStorage.getItem(this.storageKey);
+    let currentLang = localStorage.getItem(this.storageKey);
+    currentLang = currentLang ? currentLang : AppConfig.defaultLanguage;
 
     setTimeout(() => { this.translate.use(currentLang); }, 16);
   }

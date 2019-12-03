@@ -74,6 +74,7 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   private navigationsSubscription: Subscription;
+  private operationSubscriptionsGroup: Subscription[] = [];
 
   constructor(
     private appsService: AppsService,
@@ -97,6 +98,7 @@ export class NodeAppsListComponent implements OnDestroy {
 
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
+    this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
   }
 
   /**
@@ -272,8 +274,8 @@ export class NodeAppsListComponent implements OnDestroy {
     observable: Observable<any>,
     confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
 
-    // Start the operation.
-    observable.subscribe(
+    // Start the operation and save it for posible cancellation.
+    this.operationSubscriptionsGroup.push(observable.subscribe(
       () => {
         if (confirmationDialog) {
           confirmationDialog.close();
@@ -292,7 +294,7 @@ export class NodeAppsListComponent implements OnDestroy {
           this.snackbarService.showError('apps.error');
         }
       }
-    );
+    ));
   }
 
   /**
@@ -462,7 +464,7 @@ export class NodeAppsListComponent implements OnDestroy {
       observable = this.startChangingAppState(names[names.length - 1], newVal);
     }
 
-    observable.subscribe(() => {
+    this.operationSubscriptionsGroup.push(observable.subscribe(() => {
       names.pop();
       if (names.length === 0) {
         if (confirmationDialog) {
@@ -481,6 +483,6 @@ export class NodeAppsListComponent implements OnDestroy {
       } else {
         this.snackbarService.showError('apps.error');
       }
-    });
+    }));
   }
 }

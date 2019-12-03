@@ -24,9 +24,9 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, data: Node): MatDialogRef<EditLabelComponent, any> {
+  public static openDialog(dialog: MatDialog, node: Node): MatDialogRef<EditLabelComponent, any> {
     const config = new MatDialogConfig();
-    config.data = data;
+    config.data = node;
     config.autoFocus = false;
     config.width = AppConfig.smallModalWidth;
 
@@ -34,7 +34,7 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
   }
 
   constructor(
-    public dialogRef: MatDialogRef<EditLabelComponent>,
+    private dialogRef: MatDialogRef<EditLabelComponent>,
     @Inject(MAT_DIALOG_DATA) private data: Node,
     private formBuilder: FormBuilder,
     private storageService: StorageService,

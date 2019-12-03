@@ -17,7 +17,6 @@
         mat-button
         class="tab-button white-theme"
         [disabled]="i === selectedTabIndex"
-        [disableRipple]="true"
         [routerLink]="tabData.linkParts"
         replaceUrl
         [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
@@ -27,11 +26,10 @@
       </a>
     </div>
     <!-- Select tab button. Only shown on small screens when there is only one tab. -->
-    <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}">
+    <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}" *ngIf="tabsData && tabsData[selectedTabIndex]">
       <button
         mat-button
         class="tab-button full-opacity white-theme"
-        [disableRipple]="true"
         [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
         (click)="openTabSelector()"
       >

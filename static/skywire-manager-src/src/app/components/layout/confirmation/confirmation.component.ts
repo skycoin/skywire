@@ -70,7 +70,7 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
   @Output() operationAccepted = new EventEmitter();
 
   constructor(
-    public dialogRef: MatDialogRef<ConfirmationComponent>,
+    private dialogRef: MatDialogRef<ConfirmationComponent>,
     @Inject(MAT_DIALOG_DATA) public data: ConfirmationData,
   ) {
     this.disableDismiss = !!data.disableDismiss;

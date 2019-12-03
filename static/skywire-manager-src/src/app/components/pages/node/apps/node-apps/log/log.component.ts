@@ -53,9 +53,9 @@ export class LogComponent implements OnInit, OnDestroy {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, data: Application): MatDialogRef<LogComponent, any> {
+  public static openDialog(dialog: MatDialog, app: Application): MatDialogRef<LogComponent, any> {
     const config = new MatDialogConfig();
-    config.data = data;
+    config.data = app;
     config.autoFocus = false;
     config.width = AppConfig.largeModalWidth;
 

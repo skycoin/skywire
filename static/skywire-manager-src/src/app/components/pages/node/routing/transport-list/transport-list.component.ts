@@ -75,6 +75,7 @@ export class TransportListComponent implements OnDestroy {
   }
 
   private navigationsSubscription: Subscription;
+  private operationSubscriptionsGroup: Subscription[] = [];
 
   constructor(
     private dialog: MatDialog,
@@ -98,6 +99,7 @@ export class TransportListComponent implements OnDestroy {
 
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
+    this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
   }
 
   /**
@@ -206,14 +208,15 @@ export class TransportListComponent implements OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.startDeleting(id).subscribe(() => {
+      // Start the operation and save it for posible cancellation.
+      this.operationSubscriptionsGroup.push(this.startDeleting(id).subscribe(() => {
         confirmationDialog.close();
         // Make the parent page reload the data.
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.deleted');
       }, () => {
         confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'transports.error-deleting');
-      });
+      }));
     });
   }
 
@@ -344,7 +347,7 @@ export class TransportListComponent implements OnDestroy {
    * @param confirmationDialog Dialog used for requesting confirmation from the user.
    */
   deleteRecursively(ids: string[], confirmationDialog: MatDialogRef<ConfirmationComponent, any>) {
-    this.startDeleting(ids[ids.length - 1]).subscribe(() => {
+    this.operationSubscriptionsGroup.push(this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
         confirmationDialog.close();
@@ -357,6 +360,6 @@ export class TransportListComponent implements OnDestroy {
     }, () => {
       NodeComponent.refreshCurrentDisplayedData();
       confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'transports.error-deleting');
-    });
+    }));
   }
 }

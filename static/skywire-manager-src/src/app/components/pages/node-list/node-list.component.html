@@ -63,7 +63,6 @@
               (click)="showEditLabelDialog(node)"
               mat-icon-button
               [matTooltip]="'edit-label.title' | translate"
-              [disableRipple]="true"
               class="grey-button-background"
             >
               <mat-icon>short_text</mat-icon>
@@ -73,7 +72,6 @@
               (click)="open(node)"
               mat-icon-button
               [matTooltip]="'nodes.view-node' | translate"
-              [disableRipple]="true"
               class="grey-button-background"
             >
               <mat-icon>chevron_right</mat-icon>
@@ -83,7 +81,6 @@
               (click)="deleteNode(node)"
               mat-icon-button
               [matTooltip]="'nodes.delete-node' | translate"
-              [disableRipple]="true"
               class="grey-button-background"
             >
               <mat-icon>close</mat-icon>
@@ -135,7 +132,6 @@
                 (click)="$event.stopPropagation(); node.online ? showEditLabelDialog(node) : showOptionsDialog(node)"
                 mat-icon-button
                 [matTooltip]="(node.online ? 'edit-label.title' : 'common.options') | translate"
-                [disableRipple]="true"
                 class="grey-button-background"
               >
                 <mat-icon>{{ node.online ? 'short_text' : 'add' }}</mat-icon>

@@ -1,7 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Subscription } from 'rxjs';
+
 import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
-import { Subscription } from 'rxjs';
 
 /**
  * Page for showing the basic info of a node.

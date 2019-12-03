@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -14,6 +14,7 @@ export class ApiService {
   constructor(
     private http: HttpClient,
     private router: Router,
+    private ngZone: NgZone,
   ) { }
 
   /**
@@ -114,11 +115,11 @@ export class ApiService {
     // user is redirected to the login page.
     if (!options.ignoreAuth) {
       if (error.status === 401) {
-        this.router.navigate(['login']);
+        this.ngZone.run(() => this.router.navigate(['login']));
       }
 
       if (error.error && typeof error.error === 'string' && error.error.includes('change password')) {
-        this.router.navigate(['login']);
+        this.ngZone.run(() => this.router.navigate(['login']));
       }
     }
 

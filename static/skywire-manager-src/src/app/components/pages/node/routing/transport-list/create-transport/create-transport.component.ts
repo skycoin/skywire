@@ -25,9 +25,9 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   types: string[];
   form: FormGroup;
 
-  private working = false;
   private shouldShowError = true;
   private dataSubscription: Subscription;
+  private operationSubscription: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -65,20 +65,22 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.snackbarService.closeCurrentIfTemporaryError();
     this.dataSubscription.unsubscribe();
+    if (this.operationSubscription) {
+      this.operationSubscription.unsubscribe();
+    }
   }
 
   /**
    * Creates the transport.
    */
   create() {
-    if (!this.form.valid || this.working) {
+    if (!this.form.valid || this.button.disabled) {
       return;
     }
 
-    this.working = true;
     this.button.showLoading();
 
-    this.transportService.create(
+    this.operationSubscription = this.transportService.create(
       // The node pk is obtained from the currently openned node page.
       NodeComponent.getCurrentNodeKey(),
       this.form.get('remoteKey').value,
@@ -96,7 +98,6 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   }
 
   private onError(error: string) {
-    this.working = false;
     this.button.showError();
     this.snackbarService.showError('transports.dialog.error');
   }

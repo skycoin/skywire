@@ -6,7 +6,7 @@ import { delay, flatMap, tap } from 'rxjs/operators';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { NodeService } from '../../../services/node.service';
-import { Node, Application, Route, Transport } from '../../../app.datatypes';
+import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';

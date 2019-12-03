@@ -1,3 +1,6 @@
+// Most classes are based on the responses returned by the API, but
+// sometimes with some extra fields which are calculated internally in the app.
+
 export class Node {
   tcp_addr: string;
   ip: string;

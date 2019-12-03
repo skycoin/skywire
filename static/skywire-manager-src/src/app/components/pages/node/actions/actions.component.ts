@@ -11,7 +11,7 @@ import { NodeComponent } from '../node.component';
 import { SidenavService } from 'src/app/services/sidenav.service';
 
 /**
- * Hs the code for making the options of the left bar of the nodes page to appear. It does not
+ * Component for making the options of the left bar of the nodes page to appear. It does not
  * have its own UI, it just works with SidenavService to make the options appear and work.
  */
 @Component({

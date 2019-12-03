@@ -1,7 +1,6 @@
 <button
   mat-button
   class="time-button white-theme"
-  [disableRipple]="true"
   [disabled]="showLoading"
   [ngClass]="{'grey-button-background' : !showLoading}"
   [matTooltip]="showAlert ? ('refresh-button.error-tooltip' | translate:{time: refeshRate}) : ''"
