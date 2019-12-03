@@ -168,7 +168,7 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	case data = <-r.readCh:
 	case <-timeout:
 		return 0, timeoutError{}
-	case <-time.After(5 * time.Second):
+	case <-time.After(50 * time.Second):
 		return 0, io.EOF
 	}
 
