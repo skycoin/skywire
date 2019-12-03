@@ -51,5 +51,7 @@ func main() {
 		log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
 	}
 
+	log.Infoln("Starting serving proxy server")
+
 	log.Fatal(srv.Serve(l))
 }
