@@ -3,6 +3,7 @@ package hypervisor
 import (
 	"encoding/hex"
 	"encoding/json"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"net/http"
 	"net/url"
 	"os"
@@ -46,11 +47,18 @@ type Config struct {
 	DmsgDiscovery string          `json:"dmsg_discovery"` // DmsgDiscovery address for dmsg usage
 }
 
-func makeConfig() Config {
+func makeConfig(testenv bool) Config {
 	var c Config
 	pk, sk := cipher.GenerateKeyPair()
 	c.PK = pk
 	c.SK = sk
+
+	if testenv{
+		c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
+	} else {
+		c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
+	}
+
 	c.EnableAuth = true
 	c.Cookies.HashKey = cipher.RandByte(64)
 	c.Cookies.BlockKey = cipher.RandByte(32)
@@ -59,26 +67,26 @@ func makeConfig() Config {
 }
 
 // GenerateWorkDirConfig generates a config with default values and uses db from current working directory.
-func GenerateWorkDirConfig() Config {
+func GenerateWorkDirConfig(testenv bool) Config {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("failed to generate WD config: %s", dir)
 	}
-	c := makeConfig()
+	c := makeConfig(testenv)
 	c.DBPath = filepath.Join(dir, "users.db")
 	return c
 }
 
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
-func GenerateHomeConfig() Config {
-	c := makeConfig()
+func GenerateHomeConfig(testenv bool) Config {
+	c := makeConfig(testenv)
 	c.DBPath = filepath.Join(pathutil.HomeDir(), ".skycoin/hypervisor/users.db")
 	return c
 }
 
 // GenerateLocalConfig generates a config with default values and uses db from shared folder.
-func GenerateLocalConfig() Config {
-	c := makeConfig()
+func GenerateLocalConfig(testenv bool) Config {
+	c := makeConfig(testenv)
 	c.DBPath = "/usr/local/SkycoinProject/hypervisor/users.db"
 	return c
 }

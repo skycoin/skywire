@@ -14,6 +14,7 @@ var (
 	output        string
 	replace       bool
 	configLocType = pathutil.WorkingDirLoc
+	testenv		bool
 )
 
 func init() {
@@ -21,6 +22,7 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
+	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -40,11 +42,11 @@ var genConfigCmd = &cobra.Command{
 		var conf hypervisor.Config
 		switch configLocType {
 		case pathutil.WorkingDirLoc:
-			conf = hypervisor.GenerateWorkDirConfig()
+			conf = hypervisor.GenerateWorkDirConfig(testenv)
 		case pathutil.HomeLoc:
-			conf = hypervisor.GenerateHomeConfig()
+			conf = hypervisor.GenerateHomeConfig(testenv)
 		case pathutil.LocalLoc:
-			conf = hypervisor.GenerateLocalConfig()
+			conf = hypervisor.GenerateLocalConfig(testenv)
 		default:
 			log.Fatalln("invalid config type:", configLocType)
 		}

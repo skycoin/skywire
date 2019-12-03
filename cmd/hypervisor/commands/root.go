@@ -1,8 +1,9 @@
 package commands
 
 import (
+	"context"
 	"fmt"
-	"net"
+	"github.com/SkycoinProject/dmsg/disc"
 	"net/http"
 	"os"
 
@@ -11,6 +12,8 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+
+	"github.com/SkycoinProject/dmsg"
 )
 
 const configEnv = "SW_HYPERVISOR_CONFIG"
