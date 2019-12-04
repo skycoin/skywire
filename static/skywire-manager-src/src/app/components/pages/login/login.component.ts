@@ -7,6 +7,7 @@ import { Subscription } from 'rxjs';
 import { AuthService } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { InitialSetupComponent } from './initial-setup/initial-setup.component';
+import { HttpErrorResponse } from '@angular/common/http';
 
 /**
  * Login page.
@@ -49,7 +50,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.subscription = this.authService.login(this.form.get('password').value).subscribe(
       () => this.onLoginSuccess(),
-      () => this.onLoginError()
+      err => this.onLoginError(err)
     );
   }
 
@@ -61,8 +62,12 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.router.navigate(['nodes'], { replaceUrl: true });
   }
 
-  private onLoginError() {
+  private onLoginError(err: HttpErrorResponse) {
     this.loading = false;
-    this.snackbarService.showError('login.incorrect-password');
+    if (err && err.status === 401) {
+      this.snackbarService.showError('login.incorrect-password');
+    } else {
+      this.snackbarService.showError('common.operation-error');
+    }
   }
 }

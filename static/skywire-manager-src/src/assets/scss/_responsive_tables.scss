@@ -30,13 +30,15 @@ $responsive-table-colors: (
     }
 
     th {
-      @extend .font-title;
+      font-size: $font-size-sm !important;
+      font-weight: bold;
       @include text-truncate;
       height: 48px;
     }
 
     td {
-      @extend .font-smaller;
+      font-size: $font-size-smaller !important;
+      font-weight: $font-weight-light !important;
     }
 
     tr {
@@ -179,7 +181,8 @@ $responsive-table-colors: (
     }
 
     .title {
-      @extend .font-title;
+      font-size: $font-size-sm !important;
+      font-weight: bold;
     }
   }
 }

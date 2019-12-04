@@ -42,9 +42,17 @@
     color: $black;
     background: theme-color(translucid-hover);
     font-weight: bold;
+    padding: $elements-padding ($elements-padding * 2);
+    cursor: pointer;
 
     &:hover {
-      background: theme-color(translucid-hover) !important;
+      background: adjust-color(theme-color(translucid-hover), $alpha: 0.2);
     }
+  }
+
+  .total-pages {
+    font-size: $font-size-mini-plus;
+    margin-top: -3px;
+    margin-right: 4px;
   }
 }

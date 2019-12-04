@@ -21,6 +21,10 @@ export interface BasicTerminalData {
    * Public key of the node.
    */
   pk: string;
+  /**
+   * Node label.
+   */
+  label: string;
 }
 
 /**

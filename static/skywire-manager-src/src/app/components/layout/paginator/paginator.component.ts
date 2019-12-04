@@ -1,4 +1,8 @@
 import { Component, Input } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
+
+import { SelectPageComponent } from './select-page/select-page.component';
 
 /**
  * Generic paginator for the long lists of the app.
@@ -20,4 +24,17 @@ export class PaginatorComponent {
    * the <a> tag will open the URL corresponding to the array ['page1', 'page 2', '5'].
    */
   @Input() linkParts = [''];
+
+  constructor(
+    private dialog: MatDialog,
+    private router: Router,
+  ) { }
+
+  openSelectionDialog() {
+    SelectPageComponent.openDialog(this.dialog, this.numberOfPages).afterClosed().subscribe((selectedPage: number) => {
+      if (selectedPage) {
+        this.router.navigate(this.linkParts.concat([selectedPage.toString()]));
+      }
+    });
+  }
 }

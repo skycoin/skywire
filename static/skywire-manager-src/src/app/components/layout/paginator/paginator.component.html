@@ -24,7 +24,7 @@
       <!-- Link for going -1 pages. -->
       <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])">{{ currentPage - 1 }}</a>
       <!-- Current page. -->
-      <a class="selected">{{ currentPage }}</a>
+      <a (click)="openSelectionDialog()" class="selected">{{ currentPage }}</a>
       <!-- Link for going +1 pages. -->
       <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])">{{ currentPage + 1 }}</a>
       <!-- Link for going +2 pages, only on large window sizes. -->
@@ -46,4 +46,8 @@
       </a>
     </div>
   </div>
+
+  <!-- Total number of pages. -->
+  <div class="d-none d-md-block total-pages" *ngIf="numberOfPages > 3">{{ 'paginator.total' | translate:{number: numberOfPages} }}</div>
+  <div class="d-block d-md-none total-pages" *ngIf="numberOfPages > 2">{{ 'paginator.total' | translate:{number: numberOfPages} }}</div>
 </div>

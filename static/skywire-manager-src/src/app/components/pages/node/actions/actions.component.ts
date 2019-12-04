@@ -9,6 +9,7 @@ import { BasicTerminalComponent } from './basic-terminal/basic-terminal.componen
 import { SnackbarService } from '../../../../services/snackbar.service';
 import { NodeComponent } from '../node.component';
 import { SidenavService } from 'src/app/services/sidenav.service';
+import { Node } from '../../../../app.datatypes';
 
 /**
  * Component for making the options of the left bar of the nodes page to appear. It does not
@@ -20,7 +21,10 @@ import { SidenavService } from 'src/app/services/sidenav.service';
   styleUrls: ['./actions.component.scss']
 })
 export class ActionsComponent implements AfterViewInit, OnDestroy {
+  private currentMNode: Node;
+
   private menuSubscription: Subscription;
+  private nodeSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
@@ -30,6 +34,10 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   ) { }
 
   ngAfterViewInit() {
+    this.nodeSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
+      this.currentMNode = node;
+    });
+
     setTimeout(() => {
       // Make the options appear and listen to the event, to react if the user selects
       // any of the options.
@@ -39,6 +47,8 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           actionName: 'terminal',
           icon: 'laptop'
         },
+        // Options not implemented yet.
+        /*
         {
           name: 'actions.menu.config',
           actionName: 'config',
@@ -56,7 +66,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           actionName: 'reboot',
           icon: 'rotate_right',
           disabled: true
-        }], [
+        }*/], [
         {
           name: 'nodes.title',
           actionName: 'back',
@@ -80,6 +90,9 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.nodeSubscription) {
+      this.nodeSubscription.unsubscribe();
+    }
     if (this.menuSubscription) {
       this.menuSubscription.unsubscribe();
     }
@@ -109,7 +122,8 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
 
   terminal() {
     BasicTerminalComponent.openDialog(this.dialog, {
-      pk: NodeComponent.getCurrentNodeKey(),
+      pk: this.currentMNode.local_pk,
+      label: this.currentMNode.label,
     });
   }
 

@@ -99,6 +99,7 @@ import { NodeInfoContentComponent } from './components/pages/node/node-info/node
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectColumnComponent } from './components/layout/select-column/select-column.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
+import { SelectPageComponent } from './components/layout/paginator/select-page/select-page.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -177,6 +178,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     NodeInfoComponent,
     SelectColumnComponent,
     SelectOptionComponent,
+    SelectPageComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -203,6 +205,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SelectTabComponent,
     SelectColumnComponent,
     SelectOptionComponent,
+    SelectPageComponent,
   ],
   imports: [
     BrowserModule,

@@ -72,7 +72,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
               if (err.message) {
                 this.snackbarService.showError(err.message);
               } else {
-                this.snackbarService.showError('settings.password.error-changing');
+                this.snackbarService.showError('common.operation-error');
               }
             },
           );
@@ -83,10 +83,11 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
             this.snackbarService.showDone('settings.password.initial-config.done');
           }, err => {
             this.button.showError();
+            // The errors are marked as temporary to close the snackbar when closing the modal window.
             if (err.message) {
               this.snackbarService.showError(err.message, null, true);
             } else {
-              this.snackbarService.showError('settings.password.initial-config.error', null, true);
+              this.snackbarService.showError('common.operation-error', null, true);
             }
           },
         );

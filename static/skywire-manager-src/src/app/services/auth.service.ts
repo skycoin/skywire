@@ -86,14 +86,16 @@ export class AuthService {
             throw new Error(this.translateService.instant('settings.password.errors.default-password'));
           }
 
-          throw new Error(this.translateService.instant('settings.password.errors.bad-old-password'));
+          throw new Error(this.translateService.instant('common.operation-error'));
         }
       }), catchError(err => {
-        if ((err as HttpErrorResponse).status === 400) {
+        if (err && (err as HttpErrorResponse).status === 400) {
           throw new Error(this.translateService.instant('settings.password.errors.invalid-password-format'));
+        } else if (err && (err as HttpErrorResponse).status === 401) {
+          throw new Error(this.translateService.instant('settings.password.errors.bad-old-password'));
         }
 
-        throw new Error(this.translateService.instant('settings.password.errors.bad-old-password'));
+        throw new Error(this.translateService.instant('common.operation-error'));
       }));
   }
 
@@ -111,11 +113,13 @@ export class AuthService {
           throw new Error(result);
         }
       }), catchError(err => {
-        if ((err as HttpErrorResponse).status === 400) {
+        if (err && (err as HttpErrorResponse).status === 400) {
           throw new Error(this.translateService.instant('settings.password.errors.invalid-password-format'));
+        } else if (err && (err as HttpErrorResponse).status === 403) {
+          throw new Error(this.translateService.instant('settings.password.initial-config.error'));
         }
 
-        throw new Error(this.translateService.instant('settings.password.initial-config.error'));
+        throw new Error(this.translateService.instant('common.operation-error'));
       }));
   }
 }

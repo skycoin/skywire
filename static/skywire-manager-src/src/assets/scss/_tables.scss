@@ -86,7 +86,8 @@ $tables-colors: (
     td
     {
       padding-right: 16px;
-      @extend .font-smaller;
+      font-size: $font-size-smaller !important;
+      font-weight: $font-weight-light !important;
     }
 
     &.sm td

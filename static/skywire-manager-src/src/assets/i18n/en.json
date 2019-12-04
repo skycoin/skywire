@@ -20,6 +20,7 @@
     "delete": "Delete",
     "none": "None",
     "loading-error": "There was an error getting the data. Retrying...",
+    "operation-error": "There was an error trying to complete the operation.",
     "refreshed": "Data refreshed",
     "options": "Options"
   },
@@ -411,7 +412,9 @@
 
   "paginator": {
     "first": "First",
-    "last": "Last"
+    "last": "Last",
+    "total": "Total: {{ number }} pages",
+    "select-page-title": "select page"
   },
 
   "confirmation" : {
