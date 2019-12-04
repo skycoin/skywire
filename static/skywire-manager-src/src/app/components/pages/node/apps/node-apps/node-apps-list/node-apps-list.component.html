@@ -90,26 +90,32 @@
         ></i>
       </td>
       <td>
-        <mat-icon
-          class="table-neutral-option"
+        <button
           (click)="changeAppAutostart(app)"
+          mat-icon-button
           [matTooltip]="(app.autostart ? 'apps.apps-list.disable-autostart' : 'apps.apps-list.enable-autostart') | translate"
+          class="big-action-button hard-grey-button-background"
         >
-          {{ app.autostart ? 'done' : 'close' }}
-        </mat-icon>
+          <mat-icon [inline]="true">{{ app.autostart ? 'done' : 'close' }}</mat-icon>
+        </button>
       </td>
       <td class="actions">
-        <mat-icon
-          class="table-neutral-option"
+        <button
           (click)="viewLogs(app)"
+          mat-icon-button
           [matTooltip]="'apps.view-logs' | translate"
-          >list</mat-icon>
-        &nbsp;
-        <mat-icon
-          class="table-neutral-option"
+          class="big-action-button hard-grey-button-background"
+        >
+          <mat-icon [inline]="true">list</mat-icon>
+        </button>
+        <button
           (click)="changeAppState(app)"
+          mat-icon-button
           [matTooltip]="('apps.' + (app.status === 1 ? 'stop-app' : 'start-app')) | translate"
-          >{{ app.status === 1 ? 'stop' : 'play_arrow' }}</mat-icon>
+          class="big-action-button hard-grey-button-background"
+        >
+          <mat-icon [inline]="true">{{ app.status === 1 ? 'stop' : 'play_arrow' }}</mat-icon>
+        </button>
       </td>
     </tr>
   </table>

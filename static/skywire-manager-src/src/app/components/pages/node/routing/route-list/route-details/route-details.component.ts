@@ -82,7 +82,6 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.snackbarService.closeCurrentIfTemporaryError();
     this.dataSubscription.unsubscribe();
   }
 

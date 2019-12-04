@@ -20,8 +20,7 @@ export class AppsService {
    */
   changeAppState(nodeKey: string, appName: string, startApp: boolean) {
     return this.apiService.put(`nodes/${nodeKey}/apps/${encodeURIComponent(appName)}`,
-      { status: startApp ? 1 : 0 },
-      { type: 'json' }
+      { status: startApp ? 1 : 0 }
     );
   }
 
@@ -30,8 +29,7 @@ export class AppsService {
    */
   changeAppAutostart(nodeKey: string, appName: string, autostart: boolean) {
     return this.apiService.put(`nodes/${nodeKey}/apps/${encodeURIComponent(appName)}`,
-      { autostart: autostart },
-      { type: 'json' }
+      { autostart: autostart }
     );
   }
 

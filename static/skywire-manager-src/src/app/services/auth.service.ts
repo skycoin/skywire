@@ -4,7 +4,7 @@ import { catchError, map, tap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
 
-import { ApiService } from './api.service';
+import { ApiService, ResponseTypes, RequestOptions } from './api.service';
 
 export enum AuthStates {
   AuthDisabled, Logged, NotLogged
@@ -26,7 +26,7 @@ export class AuthService {
    * Logs in the user.
    */
   login(password: string): Observable<any> {
-    return this.apiService.post('login', { username: 'admin', password: password }, { type: 'json', ignoreAuth: true })
+    return this.apiService.post('login', { username: 'admin', password: password }, new RequestOptions({ ignoreAuth: true }))
       .pipe(
         tap(status => {
           if (status !== true) {
@@ -40,7 +40,7 @@ export class AuthService {
    * Checks if the user is logged in.
    */
   checkLogin(): Observable<AuthStates> {
-    return this.apiService.get('user', { responseType: 'text', ignoreAuth: true })
+    return this.apiService.get('user', new RequestOptions({ responseType: ResponseTypes.Text, ignoreAuth: true }))
       .pipe(
         map(() => AuthStates.Logged),
         catchError(err => {
@@ -61,7 +61,7 @@ export class AuthService {
    * Logs out the user.
    */
   logout(): Observable<any> {
-    return this.apiService.post('logout', {}, { type: 'json' })
+    return this.apiService.post('logout', {})
       .pipe(
         tap(status => {
           if (status !== true) {
@@ -77,7 +77,7 @@ export class AuthService {
   changePassword(oldPass: string, newPass: string): Observable<any> {
     return this.apiService.post('change-password',
       { old_password: oldPass, new_password: newPass },
-      { responseType: 'text', type: 'json', ignoreAuth: true })
+      new RequestOptions({ responseType: ResponseTypes.Text, ignoreAuth: true }))
       .pipe(map(result => {
         if (typeof result === 'string' && result.trim() === 'true') {
           return true;
@@ -103,7 +103,7 @@ export class AuthService {
   initialConfig(pass: string): Observable<any> {
     return this.apiService.post('create-account',
       { username: 'admin', password: pass },
-      { responseType: 'text', type: 'json', ignoreAuth: true })
+      new RequestOptions({ responseType: ResponseTypes.Text, ignoreAuth: true }))
       .pipe(map(result => {
         if (typeof result === 'string' && result.trim() === 'true') {
           return true;

@@ -32,7 +32,7 @@ export class AuthGuardService implements CanActivate, CanActivateChild {
       // If the user is trying to access "Login" page while he is already logged in or the
       // auth is disabled, redirect him to "Nodes" page
       if (route.routeConfig.path === 'login' && (authState === AuthStates.Logged || authState === AuthStates.AuthDisabled)) {
-        this.router.navigate(['nodes']);
+        this.router.navigate(['nodes'], { replaceUrl: true });
 
         return false;
       }
@@ -40,7 +40,7 @@ export class AuthGuardService implements CanActivate, CanActivateChild {
       // If the user is trying to access a protected part of the application while not logged in,
       // redirect him to "Login" page
       if (route.routeConfig.path !== 'login' && (authState !== AuthStates.Logged && authState !== AuthStates.AuthDisabled)) {
-        this.router.navigate(['login']);
+        this.router.navigate(['login'], { replaceUrl: true });
         this.matDialog.closeAll();
 
         return false;

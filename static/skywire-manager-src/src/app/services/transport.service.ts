@@ -27,8 +27,6 @@ export class TransportService {
       remote_pk: remoteKey,
       transport_type: type,
       public: true,
-    }, {
-      type: 'json',
     });
   }
 

@@ -36,12 +36,17 @@ enum SortableColumns {
   styleUrls: ['./transport-list.component.scss']
 })
 export class TransportListComponent implements OnDestroy {
+  private static sortByInternal = SortableColumns.Id;
+  private static sortReverseInternal = false;
+
   @Input() nodePK: string;
-  sortableColumns = SortableColumns;
 
   // Vars for keeping track of the column used for sorting the data.
-  sortBy = SortableColumns.Id;
-  sortReverse = false;
+  sortableColumns = SortableColumns;
+  get sortBy(): SortableColumns { return TransportListComponent.sortByInternal; }
+  set sortBy(val: SortableColumns) { TransportListComponent.sortByInternal = val; }
+  get sortReverse(): boolean { return TransportListComponent.sortReverseInternal; }
+  set sortReverse(val: boolean) { TransportListComponent.sortReverseInternal = val; }
   get sortingArrow(): string {
     return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   }

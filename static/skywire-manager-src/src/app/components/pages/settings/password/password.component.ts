@@ -41,7 +41,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
     this.form = new FormGroup({
       'oldPassword': new FormControl('', !this.forInitialConfig ? Validators.required : null),
       'newPassword': new FormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
-      'newPasswordConfirmation': new FormControl('', [this.validatePasswords.bind(this)]),
+      'newPasswordConfirmation': new FormControl('', [Validators.required, this.validatePasswords.bind(this)]),
     });
   }
 
@@ -68,6 +68,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
               this.router.navigate(['nodes']);
               this.snackbarService.showDone('settings.password.password-changed');
             }, (err) => {
+              this.button.showError();
               if (err.message) {
                 this.snackbarService.showError(err.message);
               } else {
@@ -83,9 +84,9 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
           }, err => {
             this.button.showError();
             if (err.message) {
-              this.snackbarService.showError(err.message);
+              this.snackbarService.showError(err.message, null, true);
             } else {
-              this.snackbarService.showError('settings.password.initial-config.error');
+              this.snackbarService.showError('settings.password.initial-config.error', null, true);
             }
           },
         );

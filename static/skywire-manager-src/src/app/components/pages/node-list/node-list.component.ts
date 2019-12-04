@@ -33,10 +33,15 @@ enum SortableColumns {
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
+  private static sortByInternal = SortableColumns.Key;
+  private static sortReverseInternal = false;
+
   // Vars for keeping track of the column used for sorting the data.
   sortableColumns = SortableColumns;
-  sortBy = SortableColumns.Key;
-  sortReverse = false;
+  get sortBy(): SortableColumns { return NodeListComponent.sortByInternal; }
+  set sortBy(val: SortableColumns) { NodeListComponent.sortByInternal = val; }
+  get sortReverse(): boolean { return NodeListComponent.sortReverseInternal; }
+  set sortReverse(val: boolean) { NodeListComponent.sortReverseInternal = val; }
   get sortingArrow(): string {
     return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   }

@@ -74,7 +74,6 @@ export class LogComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.snackbarService.closeCurrentIfTemporaryError();
     this.removeSubscription();
   }
 

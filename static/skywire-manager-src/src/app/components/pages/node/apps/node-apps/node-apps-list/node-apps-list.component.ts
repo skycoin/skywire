@@ -34,12 +34,17 @@ enum SortableColumns {
   styleUrls: ['./node-apps-list.component.scss']
 })
 export class NodeAppsListComponent implements OnDestroy {
+  private static sortByInternal = SortableColumns.Name;
+  private static sortReverseInternal = false;
+
   @Input() nodePK: string;
-  sortableColumns = SortableColumns;
 
   // Vars for keeping track of the column used for sorting the data.
-  sortBy = SortableColumns.Name;
-  sortReverse = false;
+  sortableColumns = SortableColumns;
+  get sortBy(): SortableColumns { return NodeAppsListComponent.sortByInternal; }
+  set sortBy(val: SortableColumns) { NodeAppsListComponent.sortByInternal = val; }
+  get sortReverse(): boolean { return NodeAppsListComponent.sortReverseInternal; }
+  set sortReverse(val: boolean) { NodeAppsListComponent.sortReverseInternal = val; }
   get sortingArrow(): string {
     return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   }

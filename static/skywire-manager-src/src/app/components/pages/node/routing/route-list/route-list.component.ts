@@ -32,12 +32,17 @@ enum SortableColumns {
   styleUrls: ['./route-list.component.scss']
 })
 export class RouteListComponent implements OnDestroy {
+  private static sortByInternal = SortableColumns.Key;
+  private static sortReverseInternal = false;
+
   @Input() nodePK: string;
-  sortableColumns = SortableColumns;
 
   // Vars for keeping track of the column used for sorting the data.
-  sortBy = SortableColumns.Key;
-  sortReverse = false;
+  sortableColumns = SortableColumns;
+  get sortBy(): SortableColumns { return RouteListComponent.sortByInternal; }
+  set sortBy(val: SortableColumns) { RouteListComponent.sortByInternal = val; }
+  get sortReverse(): boolean { return RouteListComponent.sortReverseInternal; }
+  set sortReverse(val: boolean) { RouteListComponent.sortReverseInternal = val; }
   get sortingArrow(): string {
     return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
   }

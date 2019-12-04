@@ -38,6 +38,10 @@ export class AppComponent {
       }
     });
 
+    // After closing the modal windows, close the snackbar, but only if it is showing a temporary error,
+    // as modal windows can open the snackbar for showing messages that should stay open.
+    dialog.afterAllClosed.subscribe(() => snackbarService.closeCurrentIfTemporaryError());
+
     // Initialize the language configuration.
     languageService.loadLanguageSettings();
   }

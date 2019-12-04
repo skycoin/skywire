@@ -92,18 +92,22 @@
         {{ transport.log.recv | autoScale }}
       </td>
       <td class="actions">
-        <mat-icon
-          class="table-dark-option"
+        <button
+          (click)="details(transport)"
+          mat-icon-button
           [matTooltip]="'transports.details.title' | translate"
-          (click)="details(transport)">
-          visibility
-        </mat-icon>
-        &nbsp;
-        <mat-icon
-          class="table-dark-option"
-          [matTooltip]="'transports.delete' | translate"
+          class="action-button hard-grey-button-background"
+        >
+          <mat-icon [inline]="true">visibility</mat-icon>
+        </button>
+        <button
           (click)="delete(transport.id)"
-        >close</mat-icon>
+          mat-icon-button
+          [matTooltip]="'transports.delete' | translate"
+          class="action-button hard-grey-button-background"
+        >
+          <mat-icon [inline]="true">close</mat-icon>
+        </button>
       </td>
     </tr>
   </table>

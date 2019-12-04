@@ -67,19 +67,22 @@
         <app-copy-to-clipboard-text [text]="route.rule"></app-copy-to-clipboard-text>
       </td>
       <td class="actions">
-        <mat-icon
-          class="table-dark-option"
+        <button
+          (click)="details(route.key)"
+          mat-icon-button
           [matTooltip]="'routes.details.title' | translate"
-          (click)="details(route.key)">
-          visibility
-        </mat-icon>
-        &nbsp;
-        <mat-icon
-          class="table-dark-option"
+          class="action-button hard-grey-button-background"
+        >
+          <mat-icon [inline]="true">visibility</mat-icon>
+        </button>
+        <button
+          (click)="delete(route.key)"
+          mat-icon-button
           [matTooltip]="'routes.delete' | translate"
-          (click)="delete(route.key)">
-          close
-        </mat-icon>
+          class="action-button hard-grey-button-background"
+        >
+          <mat-icon [inline]="true">close</mat-icon>
+        </button>
       </td>
     </tr>
   </table>

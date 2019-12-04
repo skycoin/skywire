@@ -62,24 +62,22 @@ $responsive-table-colors: (
       width: 30px;
     }
 
-    // Icon used as button.
-    .table-dark-option {
-      width: 16px;
-      height: 16px;
+    .action-button {
+      width: 28px;
+      height: 28px;
       line-height: 16px;
       font-size: 16px;
-      color: #bbb;
-      cursor: pointer;
+      margin-right: 5px;
+
+      &:last-child {
+        margin-right: 0;
+      }
     }
 
-    // Icon used as button.
-    .table-neutral-option {
-      width: 18px;
-      height: 18px;
+    .big-action-button {
+      @extend .action-button;
       line-height: 18px;
       font-size: 18px;
-      color: inherit !important;
-      cursor: pointer;
     }
 
     .selectable {
@@ -206,6 +204,7 @@ $responsive-table-colors: (
     color: $blue-dark;
     border-radius: 1000px;
     cursor: pointer;
+    opacity: 0.9;
 
     @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
       & {
@@ -214,6 +213,10 @@ $responsive-table-colors: (
         line-height: 24px !important;
         font-size: 24px !important;
       }
+    }
+
+    &:hover {
+      opacity: 1;
     }
   }
 }

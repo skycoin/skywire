@@ -124,7 +124,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
       this.currentInputText = '';
 
       // Send the command and wait for the response of the hypervisor.
-      this.subscription = this.apiService.post(`exec/${this.data.pk}`, { command: input }, { type: 'json' })
+      this.subscription = this.apiService.post(`exec/${this.data.pk}`, { command: input })
       .subscribe(response => {
         // Print the response.
         if (response.output) {

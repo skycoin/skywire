@@ -63,7 +63,6 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.snackbarService.closeCurrentIfTemporaryError();
     this.dataSubscription.unsubscribe();
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
