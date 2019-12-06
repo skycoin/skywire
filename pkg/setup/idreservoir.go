@@ -166,7 +166,7 @@ func (idr *idReservoir) GenerateRules(fwd, rev routing.Route) (
 			}
 
 			if i == 0 {
-				rule := routing.ForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID, dstPK, srcPort, dstPort)
+				rule := routing.ForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID, srcPK, dstPK, srcPort, dstPort)
 				forwardRules[hop.From] = rule
 			} else {
 				rule := routing.IntermediaryForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID)
