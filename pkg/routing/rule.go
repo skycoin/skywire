@@ -308,7 +308,7 @@ func (rs *RuleSummary) ToRule() (Rule, error) {
 		f := rs.ForwardFields
 		d := f.RouteDescriptor
 
-		return ForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID, d.DstPK, d.SrcPort, d.DstPort), nil
+		return ForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID, d.SrcPK, d.DstPK, d.SrcPort, d.DstPort), nil
 	case rs.Type == RuleIntermediaryForward:
 		if rs.ConsumeFields != nil || rs.ForwardFields != nil || rs.IntermediaryForwardFields == nil {
 			return nil, errors.New("invalid routing rule summary")
@@ -386,7 +386,7 @@ func ForwardRule(
 	keepAlive time.Duration,
 	key, nextRt RouteID,
 	nextTp uuid.UUID,
-	rPK cipher.PubKey,
+	lPK, rPK cipher.PubKey,
 	lPort, rPort Port,
 ) Rule {
 	rule := Rule(make([]byte, RuleHeaderSize+routeDescriptorSize+4+pkSize))
@@ -397,10 +397,10 @@ func ForwardRule(
 	rule.setNextRouteID(nextRt)
 	rule.setNextTransportID(nextTp)
 
-	rule.setDstPK(rPK)
-	rule.setSrcPK(cipher.PubKey{})
-	rule.setDstPort(rPort)
+	rule.setSrcPK(lPK)
 	rule.setSrcPort(lPort)
+	rule.setDstPK(rPK)
+	rule.setDstPort(rPort)
 
 	return rule
 }
