@@ -42,10 +42,10 @@ func TestNewManager(t *testing.T) {
 	tpDisc := transport.NewDiscoveryMock()
 
 	keys := snettest.GenKeyPairs(2)
-	nEnv := snettest.NewEnv(t, keys)
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
-	m0, m1, tp0, tp1, err := transport.CreateTransportPair(tpDisc, keys, nEnv)
+	m0, m1, tp0, tp1, err := transport.CreateTransportPair(tpDisc, keys, nEnv, "dmsg")
 	defer func() { require.NoError(t, m0.Close()) }()
 	defer func() { require.NoError(t, m1.Close()) }()
 
