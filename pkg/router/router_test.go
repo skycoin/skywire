@@ -45,7 +45,7 @@ func TestRouter_Serve(t *testing.T) {
 	keys := snettest.GenKeyPairs(2)
 
 	// create test env
-	nEnv := snettest.NewEnv(t, keys)
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
 	rEnv := NewTestEnv(t, nEnv.Nets)
@@ -92,7 +92,7 @@ func TestRouter_Serve(t *testing.T) {
 		fwdRtID, err := r0.ReserveKeys(1)
 		require.NoError(t, err)
 
-		fwdRule := routing.ForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(5), tp1.Entry.ID, keys[1].PK, 0, 0)
+		fwdRule := routing.ForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(5), tp1.Entry.ID, keys[0].PK, keys[1].PK, 0, 0)
 		err = r0.rt.SaveRule(fwdRule)
 		require.NoError(t, err)
 
@@ -202,7 +202,7 @@ func TestRouter_Serve(t *testing.T) {
 func TestRouter_Rules(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 
-	env := snettest.NewEnv(t, []snettest.KeyPair{{PK: pk, SK: sk}})
+	env := snettest.NewEnv(t, []snettest.KeyPair{{PK: pk, SK: sk}}, []string{dmsg.Type})
 	defer env.Teardown()
 
 	rt := routing.NewTable(routing.Config{GCInterval: 100 * time.Millisecond})
@@ -211,7 +211,7 @@ func TestRouter_Rules(t *testing.T) {
 	keys := snettest.GenKeyPairs(2)
 
 	// create test env
-	nEnv := snettest.NewEnv(t, keys)
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
 	rEnv := NewTestEnv(t, nEnv.Nets)

@@ -320,13 +320,8 @@ func CreateTransportPair(
 	tpDisc DiscoveryClient,
 	keys []snettest.KeyPair,
 	nEnv *snettest.Env,
-) (
-	m0 *Manager,
-	m1 *Manager,
-	tp0 *ManagedTransport,
-	tp1 *ManagedTransport,
-	err error,
-) {
+	network string,
+) (m0 *Manager, m1 *Manager, tp0 *ManagedTransport, tp1 *ManagedTransport, err error) {
 	// Prepare tp manager 0.
 	pk0, sk0 := keys[0].PK, keys[0].SK
 	ls0 := InMemoryTransportLogStore()
@@ -358,12 +353,12 @@ func CreateTransportPair(
 	go m1.Serve(context.TODO())
 
 	// Create data transport between manager 1 & manager 2.
-	tp1, err = m1.SaveTransport(context.TODO(), pk0, "dmsg")
+	tp1, err = m1.SaveTransport(context.TODO(), pk0, network)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	tp0 = m0.Transport(MakeTransportID(pk0, pk1, "dmsg"))
+	tp0 = m0.Transport(MakeTransportID(pk0, pk1, network))
 
 	return m0, m1, tp0, tp1, nil
 }

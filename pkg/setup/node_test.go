@@ -52,7 +52,7 @@ func TestNode(t *testing.T) {
 	keys := snettest.GenKeyPairs(5)
 
 	// create test env
-	nEnv := snettest.NewEnv(t, keys)
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
 	type clientWithDMSGAddrAndListener struct {
