@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,7 @@ func TestRouteGroup_Read(t *testing.T) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
 
-	_, _, teardown := createTransports(t, rg1, rg2)
+	_, _, teardown := createTransports(t, rg1, rg2, dmsg.Type)
 	defer teardown()
 
 	rg1.readCh <- msg1
@@ -75,7 +76,7 @@ func TestRouteGroup_Write(t *testing.T) {
 	rg1 = createRouteGroup()
 	rg2 := createRouteGroup()
 
-	m1, m2, teardown := createTransports(t, rg1, rg2)
+	m1, m2, teardown := createTransports(t, rg1, rg2, dmsg.Type)
 	defer teardown()
 
 	_, err = rg1.Write(msg1)
@@ -104,7 +105,7 @@ func TestRouteGroup_ReadWrite(t *testing.T) {
 func testReadWrite(t *testing.T, iterations int) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
-	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -262,8 +263,8 @@ func testMultipleWR(t *testing.T, iterations int, rg1, rg2 io.ReadWriter, msg1, 
 func TestArbitrarySizeOneMessage(t *testing.T) {
 	// Test fails if message size is above 4059
 	const (
-		value1 = 4058
-		value2 = 4059
+		value1 = 4058 // dmsg/noise.maxFrameSize - 38
+		value2 = 4059 // dmsg/noise.maxFrameSize - 37
 	)
 
 	var wg sync.WaitGroup
@@ -308,7 +309,7 @@ func TestArbitrarySizeMultipleMessagesByChunks(t *testing.T) {
 func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
-	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -348,7 +349,7 @@ func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
 func testArbitrarySizeOneMessage(t *testing.T, size int) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
-	m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -397,7 +398,7 @@ func TestRouteGroup_TestConn(t *testing.T) {
 
 		c1, c2 = rg1, rg2
 
-		m1, m2, teardownEnv := createTransports(t, rg1, rg2)
+		m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		go pushPackets(ctx, t, m1, rg1)
@@ -461,13 +462,13 @@ func createRouteGroup() *RouteGroup {
 	return rg
 }
 
-func createTransports(t *testing.T, rg1, rg2 *RouteGroup) (m1, m2 *transport.Manager, teardown func()) {
+func createTransports(t *testing.T, rg1, rg2 *RouteGroup, network string) (m1, m2 *transport.Manager, teardown func()) {
 	tpDisc := transport.NewDiscoveryMock()
 	keys := snettest.GenKeyPairs(2)
 
-	nEnv := snettest.NewEnv(t, keys)
+	nEnv := snettest.NewEnv(t, keys, []string{network})
 
-	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, keys, nEnv)
+	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, keys, nEnv, network)
 	require.NoError(t, err)
 	require.NotNil(t, tp1)
 	require.NotNil(t, tp2)
@@ -480,8 +481,8 @@ func createTransports(t *testing.T, rg1, rg2 *RouteGroup) (m1, m2 *transport.Man
 	id2 := routing.RouteID(rand.Int()) // nolint: gosec
 	port1 := routing.Port(1)
 	port2 := routing.Port(2)
-	rule1 := routing.ForwardRule(keepAlive, id1, id2, tp2.Entry.ID, keys[0].PK, port1, port2)
-	rule2 := routing.ForwardRule(keepAlive, id2, id1, tp1.Entry.ID, keys[1].PK, port2, port1)
+	rule1 := routing.ForwardRule(keepAlive, id1, id2, tp2.Entry.ID, keys[0].PK, keys[1].PK, port1, port2)
+	rule2 := routing.ForwardRule(keepAlive, id2, id1, tp1.Entry.ID, keys[1].PK, keys[0].PK, port2, port1)
 
 	rg1.mu.Lock()
 	rg1.tps = append(rg1.tps, tp1)
