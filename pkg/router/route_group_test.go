@@ -389,69 +389,6 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 	require.Equal(t, rg.desc.Dst(), rg.RemoteAddr())
 }
 
-func TestRouteGroup_SetReadDeadline(t *testing.T) {
-	rg := createRouteGroup()
-	timeout := 100 * time.Millisecond
-	now := time.Now().Add(timeout)
-
-	assert.Equal(t, false, rg.readTimedOut.IsSet())
-	assert.Nil(t, rg.readTimer)
-
-	require.NoError(t, rg.SetReadDeadline(now))
-
-	assert.Equal(t, false, rg.readTimedOut.IsSet())
-	assert.NotNil(t, rg.readTimer)
-
-	time.Sleep(timeout * 2)
-
-	assert.Equal(t, true, rg.readTimedOut.IsSet())
-	assert.NotNil(t, rg.readTimer)
-}
-
-func TestRouteGroup_SetWriteDeadline(t *testing.T) {
-	rg := createRouteGroup()
-	timeout := 100 * time.Millisecond
-	now := time.Now().Add(timeout)
-
-	assert.Equal(t, false, rg.writeTimedOut.IsSet())
-	assert.Nil(t, rg.writeTimer)
-
-	require.NoError(t, rg.SetWriteDeadline(now))
-
-	assert.Equal(t, false, rg.writeTimedOut.IsSet())
-	assert.NotNil(t, rg.writeTimer)
-
-	time.Sleep(timeout * 2)
-
-	assert.Equal(t, true, rg.writeTimedOut.IsSet())
-	assert.NotNil(t, rg.writeTimer)
-}
-
-func TestRouteGroup_SetDeadline(t *testing.T) {
-	rg := createRouteGroup()
-	timeout := 100 * time.Millisecond
-	now := time.Now().Add(timeout)
-
-	assert.Equal(t, false, rg.readTimedOut.IsSet())
-	assert.Equal(t, false, rg.writeTimedOut.IsSet())
-	assert.Nil(t, rg.readTimer)
-	assert.Nil(t, rg.writeTimer)
-
-	require.NoError(t, rg.SetDeadline(now))
-
-	assert.Equal(t, false, rg.readTimedOut.IsSet())
-	assert.Equal(t, false, rg.writeTimedOut.IsSet())
-	assert.NotNil(t, rg.readTimer)
-	assert.NotNil(t, rg.writeTimer)
-
-	time.Sleep(timeout * 2)
-
-	assert.Equal(t, true, rg.readTimedOut.IsSet())
-	assert.Equal(t, true, rg.writeTimedOut.IsSet())
-	assert.NotNil(t, rg.readTimer)
-	assert.NotNil(t, rg.writeTimer)
-}
-
 // TODO: fix hangs
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {

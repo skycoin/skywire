@@ -15,7 +15,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/atomicbool"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/deadline"
 )
 
 const (
@@ -81,12 +81,8 @@ type RouteGroup struct {
 	done    chan struct{}
 	once    sync.Once
 
-	readTimer  *time.Timer
-	writeTimer *time.Timer
-	// TODO: try to implement timed out flags with open/closed chan struct{}
-	//  in order to be able to check timeout in select statement
-	readTimedOut  atomicbool.Bool // set true when read deadline has been reached
-	writeTimedOut atomicbool.Bool // set true when write deadline has been reached
+	readDeadline  deadline.PipeDeadline
+	writeDeadline deadline.PipeDeadline
 }
 
 func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
@@ -95,15 +91,17 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	rg := &RouteGroup{
-		logger:  logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
-		desc:    desc,
-		rt:      rt,
-		tps:     make([]*transport.ManagedTransport, 0),
-		fwd:     make([]routing.Rule, 0),
-		rvs:     make([]routing.Rule, 0),
-		readCh:  make(chan []byte, cfg.ReadChBufSize),
-		readBuf: bytes.Buffer{},
-		done:    make(chan struct{}),
+		logger:        logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		desc:          desc,
+		rt:            rt,
+		tps:           make([]*transport.ManagedTransport, 0),
+		fwd:           make([]routing.Rule, 0),
+		rvs:           make([]routing.Rule, 0),
+		readCh:        make(chan []byte, cfg.ReadChBufSize),
+		readBuf:       bytes.Buffer{},
+		done:          make(chan struct{}),
+		readDeadline:  deadline.MakePipeDeadline(),
+		writeDeadline: deadline.MakePipeDeadline(),
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
@@ -116,13 +114,12 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 // to the appropriate RouteGroup via (*RouteGroup).readCh.
 // To help with implementing the read logic, within the dmsg repo, we have ioutil.BufRead,
 // just in case the read buffer is short.
-// TODO: too long, simplify
 func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	if r.isClosed() {
 		return 0, io.ErrClosedPipe
 	}
 
-	if r.readTimedOut.IsSet() {
+	if r.readDeadline.Closed() {
 		r.logger.Infoln("TIMEOUT ERROR?")
 		return 0, timeoutError{}
 	}
@@ -141,32 +138,10 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	// }
 	// r.mu.Unlock()
 
-	timeout := make(chan struct{})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
-	loop:
-		for {
-			select {
-			case <-ticker.C:
-				if r.readTimedOut.IsSet() {
-					close(timeout)
-					break loop
-				}
-			case <-ctx.Done():
-				break loop
-			}
-		}
-		ticker.Stop()
-	}()
-
 	var data []byte
 	select {
 	case data = <-r.readCh:
-	case <-timeout:
+	case <-r.readDeadline.Wait():
 		return 0, timeoutError{}
 	case <-time.After(5 * time.Second):
 		return 0, io.EOF
@@ -189,7 +164,7 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 
-	if r.writeTimedOut.IsSet() {
+	if r.writeDeadline.Closed() {
 		return 0, timeoutError{}
 	}
 
@@ -276,58 +251,12 @@ func (r *RouteGroup) SetDeadline(t time.Time) error {
 }
 
 func (r *RouteGroup) SetReadDeadline(t time.Time) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.readTimedOut.SetFalse()
-
-	d := time.Until(t)
-	if t.IsZero() || d < 0 {
-		if r.readTimer != nil {
-			r.readTimer.Stop()
-		}
-
-		r.readTimer = nil
-	} else {
-		// Interrupt I/O operation once timer has expired
-		r.readTimer = time.AfterFunc(d, func() {
-			r.readTimedOut.SetTrue()
-		})
-	}
-
-	if !t.IsZero() && d < 0 {
-		// Interrupt current I/O operation
-		r.readTimedOut.SetTrue()
-	}
-
+	r.readDeadline.Set(t)
 	return nil
 }
 
 func (r *RouteGroup) SetWriteDeadline(t time.Time) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.writeTimedOut.SetFalse()
-
-	d := time.Until(t)
-	if t.IsZero() || d < 0 {
-		if r.writeTimer != nil {
-			r.writeTimer.Stop()
-		}
-
-		r.writeTimer = nil
-	} else {
-		// Interrupt I/O operation once timer has expired
-		r.writeTimer = time.AfterFunc(d, func() {
-			r.writeTimedOut.SetTrue()
-		})
-	}
-
-	if !t.IsZero() && d < 0 {
-		// Interrupt current I/O operation
-		r.writeTimedOut.SetTrue()
-	}
-
+	r.writeDeadline.Set(t)
 	return nil
 }
 
