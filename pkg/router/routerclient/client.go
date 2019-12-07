@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/rpc"
 
-	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -20,10 +19,10 @@ type Client struct {
 }
 
 // NewClient creates a new Client.
-func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Client, error) {
+func NewClient(ctx context.Context, dialer snet.Dialer, pk cipher.PubKey) (*Client, error) {
 	fmt.Printf("Dialing to %s\n", pk) // TODO: remove debug logging
 
-	s, err := dmsgC.Dial(ctx, pk, snet.AwaitSetupPort)
+	s, err := dialer.Dial(ctx, pk, snet.AwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}

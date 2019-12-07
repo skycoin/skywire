@@ -14,6 +14,8 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
+const Type = "stcp"
+
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
 type Conn struct {
 	net.Conn
@@ -137,7 +139,7 @@ type Client struct {
 // NewClient creates a net Client.
 func NewClient(log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, t PKTable) *Client {
 	if log == nil {
-		log = logging.MustGetLogger("stcp")
+		log = logging.MustGetLogger(Type)
 	}
 	return &Client{
 		log:  log,
@@ -277,4 +279,9 @@ func (c *Client) isClosed() bool {
 	default:
 		return false
 	}
+}
+
+// Type returns the stream type.
+func (c *Client) Type() string {
+	return Type
 }
