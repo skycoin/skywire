@@ -43,7 +43,7 @@ export class LanguageService {
     this.settingsLoaded = true;
 
     // Get the available languages from the configuration file.
-    let langs: string[] = [];
+    const langs: string[] = [];
     AppConfig.languages.forEach(lang => {
       const LangObj = new LanguageData(lang);
       this.languagesInternal.push(LangObj);
