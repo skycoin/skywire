@@ -21,7 +21,7 @@ import { SelectOptionComponent, SelectableOption } from '../../layout/select-opt
  */
 enum SortableColumns {
   Label = 'nodes.label',
-  Key = 'common.key',
+  Key = 'nodes.key',
 }
 
 /**
@@ -101,7 +101,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     setTimeout(() => {
       this.menuSubscription = this.sidenavService.setContents([
         {
-          name: 'nodes.logout',
+          name: 'common.logout',
           actionName: 'logout',
           icon: 'power_settings_new'
         }], null).subscribe(actionName => {
@@ -285,7 +285,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   logout() {
     this.authService.logout().subscribe(
       () => this.router.navigate(['login']),
-      () => this.snackbarService.showError('nodes.logout-error')
+      () => this.snackbarService.showError('common.logout-error')
     );
   }
 

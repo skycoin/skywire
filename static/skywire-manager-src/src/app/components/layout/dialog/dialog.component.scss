@@ -1,6 +1,7 @@
 @import 'variables';
 @import "bootstrap_overrides";
 @import 'utilities/utilities';
+@import 'text';
 
 .header {
   margin-top: -$mat-dialog-padding;
@@ -14,6 +15,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+
+  span {
+    @extend .single-line;
+  }
 
   @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
     & {

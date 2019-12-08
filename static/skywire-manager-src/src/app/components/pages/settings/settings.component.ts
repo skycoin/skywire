@@ -46,7 +46,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       // Populate the left options bar.
       this.menuSubscription = this.sidenavService.setContents([
         {
-          name: 'nodes.logout',
+          name: 'common.logout',
           actionName: 'logout',
           icon: 'power_settings_new'
         }], null).subscribe(actionName => {
@@ -68,7 +68,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   logout() {
     this.authService.logout().subscribe(
       () => this.router.navigate(['login']),
-      () => this.snackbarService.showError('nodes.logout-error')
+      () => this.snackbarService.showError('common.logout-error')
     );
   }
 }

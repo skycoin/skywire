@@ -124,7 +124,7 @@
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
           <div>{{ sortBy | translate }}
-            ({{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }})
+            {{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
           </div>
         </div>
         <div class="right-part">
@@ -142,11 +142,11 @@
           </mat-checkbox>
         </div>
         <div class="left-part">
-          <div class="list-row">
+          <div class="list-row long-content">
             <span class="title">{{ 'transports.id' | translate }}</span>:
             <app-copy-to-clipboard-text text="{{ transport.id }}"></app-copy-to-clipboard-text>
           </div>
-          <div class="list-row">
+          <div class="list-row long-content">
             <span class="title">{{ 'transports.remote-node' | translate }}</span>:
             <app-copy-to-clipboard-text text="{{ transport.remote_pk }}"></app-copy-to-clipboard-text>
           </div>

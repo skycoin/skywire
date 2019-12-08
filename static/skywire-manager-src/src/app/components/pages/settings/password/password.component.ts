@@ -29,6 +29,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
   form: FormGroup;
 
   private subscription: Subscription;
+  private formSubscription: Subscription;
 
   constructor(
     private authService: AuthService,
@@ -43,6 +44,9 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
       'newPassword': new FormControl('', Validators.compose([Validators.required, Validators.minLength(6), Validators.maxLength(64)])),
       'newPasswordConfirmation': new FormControl('', [Validators.required, this.validatePasswords.bind(this)]),
     });
+
+    this.formSubscription = this.form.controls['newPassword'].valueChanges
+      .subscribe(() => this.form.controls['newPasswordConfirmation'].updateValueAndValidity());
   }
 
   ngAfterViewInit() {
@@ -55,6 +59,8 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.subscription) {
       this.subscription.unsubscribe();
     }
+
+    this.formSubscription.unsubscribe();
   }
 
   changePassword() {

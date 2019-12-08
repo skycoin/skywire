@@ -137,19 +137,19 @@ export class NodeComponent implements OnInit, OnDestroy {
       this.tabsData = [
         {
           icon: 'info',
-          label: 'actions.menu.info',
+          label: 'node.tabs.info',
           // Hide the tab on large screens, as the info is shown on the right bar.
           onlyIfLessThanLg: true,
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'info'] : null,
         },
         {
           icon: 'shuffle',
-          label: 'actions.menu.routing',
+          label: 'node.tabs.routing',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'routing'] : null,
         },
         {
           icon: 'apps',
-          label: 'actions.menu.apps',
+          label: 'node.tabs.apps',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
         }
       ];

@@ -50,12 +50,6 @@ export class LanguageService {
       langs.push(LangObj.code);
     });
 
-    // Exclude Spanish from the production builds, as it have not been implemented.
-    if (environment.production) {
-      this.languagesInternal = this.languagesInternal.filter(lang => lang.code !== 'es');
-      langs = langs.filter(lang => lang !== 'es');
-    }
-
     // Inform what the currently available languages are.
     this.languages.next(this.languagesInternal);
 

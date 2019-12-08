@@ -1,4 +1,4 @@
-import { Component, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, AfterViewInit, OnDestroy, Input } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -21,7 +21,17 @@ import { Node } from '../../../../app.datatypes';
   styleUrls: ['./actions.component.scss']
 })
 export class ActionsComponent implements AfterViewInit, OnDestroy {
-  private currentMNode: Node;
+  /**
+   * Allows to know if the currently displayed subpage is one dedicated to show a full list
+   * of elements (true) or if it is one dedicated only to show a sumary (false).
+   */
+  @Input() set showingFullList(val: boolean) {
+    this.showingFullListInternal = val;
+    this.updateMenu();
+  }
+  private showingFullListInternal: boolean;
+
+  private currentNode: Node;
 
   private menuSubscription: Subscription;
   private nodeSubscription: Subscription;
@@ -35,9 +45,13 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     this.nodeSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
-      this.currentMNode = node;
+      this.currentNode = node;
     });
 
+    this.updateMenu();
+  }
+
+  updateMenu() {
     setTimeout(() => {
       // Make the options appear and listen to the event, to react if the user selects
       // any of the options.
@@ -68,7 +82,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           disabled: true
         }*/], [
         {
-          name: 'nodes.title',
+          name: !this.showingFullListInternal ? 'nodes.title' : 'node.title',
           actionName: 'back',
           icon: 'chevron_left'
         }]).subscribe(actionName => {
@@ -122,12 +136,16 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
 
   terminal() {
     BasicTerminalComponent.openDialog(this.dialog, {
-      pk: this.currentMNode.local_pk,
-      label: this.currentMNode.label,
+      pk: this.currentNode.local_pk,
+      label: this.currentNode.label,
     });
   }
 
   back() {
-    this.router.navigate(['nodes']);
+    if (!this.showingFullListInternal) {
+      this.router.navigate(['nodes']);
+    } else {
+      this.router.navigate(['nodes', this.currentNode.local_pk]);
+    }
   }
 }

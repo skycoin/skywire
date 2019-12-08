@@ -64,7 +64,6 @@ import {SearchNodesComponent} from './components/pages/node/apps/node-apps/app-s
 import { LineChartComponent } from './components/layout/line-chart/line-chart.component';
 import { ChartsComponent } from './components/pages/node/charts/charts.component';
 import {UpdateNodeComponent} from './components/pages/node/actions/update-node/update-node.component';
-import {SkycoinLogoComponent} from './components/layout/skycoin-logo/skycoin-logo.component';
 import { HistoryComponent } from './components/pages/node/apps/node-apps/history/history.component';
 import { RouteListComponent } from './components/pages/node/routing/route-list/route-list.component';
 import { LoopListComponent } from './components/pages/node/routing/loop-list/loop-list.component';
@@ -145,7 +144,6 @@ const globalRippleConfig: RippleGlobalOptions = {
     UpdateNodeComponent,
     LineChartComponent,
     ChartsComponent,
-    SkycoinLogoComponent,
     HistoryComponent,
     RouteListComponent,
     LoopListComponent,

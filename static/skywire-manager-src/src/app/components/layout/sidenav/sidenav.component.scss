@@ -26,16 +26,18 @@ $left-bar-width: 250px;
 
   .logo-container {
     flex-grow: 1;
-    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 
     img {
-      height: ($top-bar-height / 7) * 5;
-      margin-top: $top-bar-height / 7;
+      height: $top-bar-height / 2;
     }
   }
 
   .button-container {
     flex-shrink: 0;
+    width: $top-bar-height;
 
     button {
       width: $top-bar-height;
@@ -83,6 +85,10 @@ $left-bar-width: 250px;
         align-items: center;
         height: $header-height + 5px;
         border-bottom: 1px solid $white-separator;
+
+        img {
+          width: 170px;
+        }
       }
 
       .menu-container {

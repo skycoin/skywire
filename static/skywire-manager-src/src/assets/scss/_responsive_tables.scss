@@ -154,6 +154,10 @@ $responsive-table-colors: (
             margin-bottom: 0px;
           }
         }
+
+        .long-content {
+          word-break: break-all;
+        }
       }
 
       .margin-part {

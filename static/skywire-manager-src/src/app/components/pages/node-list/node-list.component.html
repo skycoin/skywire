@@ -41,7 +41,7 @@
             <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
           <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
-            {{ 'common.key' | translate }}
+            {{ 'nodes.key' | translate }}
             <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
           <th class="actions"></th>
@@ -101,7 +101,7 @@
             <div class="left-part">
               <div class="title">{{ 'tables.sorting-title' | translate }}</div>
               <div>{{ sortBy | translate }}
-                ({{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }})
+                {{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
               </div>
             </div>
             <div class="right-part">
@@ -121,8 +121,8 @@
                 <span class="title">{{ 'nodes.label' | translate }}</span>:
                 {{ node.label }}
               </div>
-              <div class="list-row">
-                <span class="title">{{ 'common.key' | translate }}</span>:
+              <div class="list-row long-content">
+                <span class="title">{{ 'nodes.key' | translate }}</span>:
                 {{ node.local_pk }}
               </div>
             </div>
