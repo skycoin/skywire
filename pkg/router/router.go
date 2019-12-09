@@ -272,6 +272,7 @@ func (r *router) serveSetup() {
 		conn, err := r.sl.AcceptConn()
 		if err != nil {
 			r.logger.WithError(err).Warnf("setup client stopped serving")
+			return
 		}
 
 		if !r.SetupIsTrusted(conn.RemotePK()) {
