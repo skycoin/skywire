@@ -3,8 +3,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -12,7 +10,6 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,7 +20,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
-func TestMain(m *testing.M) {
+/*func TestMain(m *testing.M) {
 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
 	if ok {
 		lvl, err := logging.LevelFromString(loggingLevel)
@@ -37,7 +34,7 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
-}
+}*/
 
 // Ensure that received packets are handled properly in `(*Router).Serve()`.
 func TestRouter_Serve(t *testing.T) {
@@ -82,19 +79,27 @@ func TestRouter_Serve(t *testing.T) {
 		}
 	}
 
+	clearRouteGroups := func(routers ...*router) {
+		for _, r := range routers {
+			r.rgs = make(map[routing.RouteDescriptor]*RouteGroup)
+		}
+	}
+
 	// TEST: Ensure handleTransportPacket does as expected.
 	// After setting a rule in r0, r0 should forward a packet to r1 (as specified in the given rule)
 	// when r0.handleTransportPacket() is called.
 	t.Run("handlePacket_fwdRule", func(t *testing.T) {
 		defer clearRules(r0, r1)
+		defer clearRouteGroups(r0, r1)
 
 		// Add a FWD rule for r0.
 		fwdRtID, err := r0.ReserveKeys(1)
 		require.NoError(t, err)
 
-		fwdRule := routing.ForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(5), tp1.Entry.ID, keys[0].PK, keys[1].PK, 0, 0)
+		fwdRule := routing.ForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(1), tp1.Entry.ID, keys[0].PK, keys[1].PK, 0, 0)
 		err = r0.rt.SaveRule(fwdRule)
 		require.NoError(t, err)
+		r0.saveRouteGroupRules(routing.EdgeRules{Desc: fwdRule.RouteDescriptor(), Forward: fwdRule, Reverse: nil})
 
 		// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
 		packet := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
@@ -105,11 +110,12 @@ func TestRouter_Serve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, fwdRtID, packet.RouteID())
+		assert.Equal(t, fwdRtID[0], packet.RouteID())
 	})
 
 	t.Run("handlePacket_intFwdRule", func(t *testing.T) {
 		defer clearRules(r0, r1)
+		defer clearRouteGroups(r0, r1)
 
 		// Add a FWD rule for r0.
 		fwdRtID, err := r0.ReserveKeys(1)
@@ -129,6 +135,15 @@ func TestRouter_Serve(t *testing.T) {
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
 		assert.Equal(t, fwdRtID[0], packet.RouteID())
+	})
+
+	t.Run("handlePacket_cnsmRule", func(t *testing.T) {
+		defer clearRules(r0, r1)
+
+		/*cnsmRtID, err := r1.ReserveKeys(1)
+		require.NoError(t, err)
+
+		cnsmRule := routing.ConsumeRule(1*time.Hour, cnsmRtID[0], routing.RouteID(5))*/
 	})
 
 	// TODO(evanlinjin): I'm having so much trouble with this I officially give up.
