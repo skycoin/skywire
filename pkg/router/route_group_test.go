@@ -382,12 +382,12 @@ func testArbitrarySizeOneMessage(t *testing.T, size int) {
 
 func TestRouteGroup_LocalAddr(t *testing.T) {
 	rg := createRouteGroup()
-	require.Equal(t, rg.desc.Src(), rg.LocalAddr())
+	require.Equal(t, rg.desc.Dst(), rg.LocalAddr())
 }
 
 func TestRouteGroup_RemoteAddr(t *testing.T) {
 	rg := createRouteGroup()
-	require.Equal(t, rg.desc.Dst(), rg.RemoteAddr())
+	require.Equal(t, rg.desc.Src(), rg.RemoteAddr())
 }
 
 // TODO: fix hangs
