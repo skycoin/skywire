@@ -139,11 +139,31 @@ func TestRouter_Serve(t *testing.T) {
 
 	t.Run("handlePacket_cnsmRule", func(t *testing.T) {
 		defer clearRules(r0, r1)
+		defer clearRouteGroups(r0, r1)
 
-		/*cnsmRtID, err := r1.ReserveKeys(1)
+		cnsmRtID, err := r1.ReserveKeys(1)
 		require.NoError(t, err)
 
-		cnsmRule := routing.ConsumeRule(1*time.Hour, cnsmRtID[0], routing.RouteID(5))*/
+		fwdRtID, err := r0.ReserveKeys(1)
+		require.NoError(t, err)
+
+		fwdRule := routing.IntermediaryForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(5), tp1.Entry.ID)
+		err = r0.rt.SaveRule(fwdRule)
+		require.NoError(t, err)
+
+		cnsmRule := routing.ConsumeRule(1*time.Hour, cnsmRtID[0], keys[0].PK, keys[1].PK, 0, 0)
+		//err = r1.rt.SaveRule(cnsmRule)
+		//require.NoError(t, err)
+		r1.saveRouteGroupRules(routing.EdgeRules{Desc: cnsmRule.RouteDescriptor(), Forward: cnsmRule, Reverse: nil})
+
+		packet := routing.MakeDataPacket(cnsmRtID[0], []byte("test"))
+		require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
+
+		recvPacket, err := r1.tm.ReadPacket()
+		assert.NoError(t, err)
+		assert.Equal(t, packet.Size(), recvPacket.Size())
+		assert.Equal(t, packet.Payload(), recvPacket.Payload())
+		assert.Equal(t, cnsmRtID[0], packet.RouteID())
 	})
 
 	// TODO(evanlinjin): I'm having so much trouble with this I officially give up.
