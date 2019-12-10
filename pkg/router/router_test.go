@@ -128,7 +128,7 @@ func TestRouter_Serve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, fwdRtID, packet.RouteID())
+		assert.Equal(t, fwdRtID[0], packet.RouteID())
 	})
 
 	// TODO(evanlinjin): I'm having so much trouble with this I officially give up.
