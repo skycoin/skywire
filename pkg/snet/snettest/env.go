@@ -2,6 +2,7 @@ package snettest
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -53,7 +54,10 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	dmsgD := disc.NewMock()
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
 
-	table := stcp.NewTable(map[cipher.PubKey]string{})
+	table := stcp.NewTable(map[cipher.PubKey]string{
+		keys[0].PK: "127.0.0.1:7033",
+		keys[1].PK: "127.0.0.1:7034",
+	})
 
 	var hasDmsg, hasStcp bool
 
@@ -80,19 +84,19 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			stcpClient = stcp.NewClient(logging.MustGetLogger("stcp"), pairs.PK, pairs.SK, table)
 		}
 
+		port := 7033
 		n := snet.NewRaw(
 			snet.Config{
-				PubKey:      pairs.PK,
-				SecKey:      pairs.SK,
-				TpNetworks:  networks,
-				DmsgMinSrvs: 1,
+				PubKey:        pairs.PK,
+				SecKey:        pairs.SK,
+				TpNetworks:    networks,
+				DmsgMinSrvs:   1,
+				STCPLocalAddr: "127.0.0.1:" + strconv.Itoa(port+i),
 			},
 			dmsgClient,
 			stcpClient,
 		)
-		if hasDmsg {
-			require.NoError(t, n.Init(context.TODO()))
-		}
+		require.NoError(t, n.Init(context.TODO()))
 		ns[i] = n
 	}
 
