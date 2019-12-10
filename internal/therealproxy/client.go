@@ -22,7 +22,7 @@ type Client struct {
 func NewClient(conn net.Conn) (*Client, error) {
 	session, err := yamux.Client(conn, nil)
 	if err != nil {
-		return nil, fmt.Errorf("yamux: %s", err)
+		return nil, fmt.Errorf("error creating client: yamux: %s", err)
 	}
 
 	return &Client{session: session}, nil
@@ -39,17 +39,23 @@ func (c *Client) ListenAndServe(addr string) error {
 		return fmt.Errorf("listen: %s", err)
 	}
 
+	Log.Println("Listening therealproxy client")
+
 	c.listener = l
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			Log.Printf("Error accepting: %v\n", err)
 			return fmt.Errorf("accept: %s", err)
 		}
 
+		Log.Println("Accepted therealproxy client")
 		stream, err = c.session.Open()
 		if err != nil {
-			return fmt.Errorf("yamux: %s", err)
+			return fmt.Errorf("error on `ListenAndServe`: yamux: %s", err)
 		}
+
+		Log.Println("Opened session therealproxy client")
 
 		go func() {
 			errCh := make(chan error, 2)
@@ -81,6 +87,7 @@ func (c *Client) ListenAndServe(addr string) error {
 
 // Close implement io.Closer.
 func (c *Client) Close() error {
+	Log.Infoln("Closing proxy client")
 	if c == nil {
 		return nil
 	}
