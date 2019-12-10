@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
@@ -45,7 +45,7 @@ func TestRouteGroup_Read(t *testing.T) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
 
-	_, _, teardown := createTransports(t, rg1, rg2, dmsg.Type)
+	_, _, teardown := createTransports(t, rg1, rg2, stcp.Type)
 	defer teardown()
 
 	rg1.readCh <- msg1
@@ -76,7 +76,7 @@ func TestRouteGroup_Write(t *testing.T) {
 	rg1 = createRouteGroup()
 	rg2 := createRouteGroup()
 
-	m1, m2, teardown := createTransports(t, rg1, rg2, dmsg.Type)
+	m1, m2, teardown := createTransports(t, rg1, rg2, stcp.Type)
 	defer teardown()
 
 	_, err = rg1.Write(msg1)
@@ -105,7 +105,7 @@ func TestRouteGroup_ReadWrite(t *testing.T) {
 func testReadWrite(t *testing.T, iterations int) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
-	m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2, stcp.Type)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -309,7 +309,7 @@ func TestArbitrarySizeMultipleMessagesByChunks(t *testing.T) {
 func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
-	m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2, stcp.Type)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -349,7 +349,7 @@ func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
 func testArbitrarySizeOneMessage(t *testing.T, size int) {
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
-	m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
+	m1, m2, teardownEnv := createTransports(t, rg1, rg2, stcp.Type)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -398,7 +398,7 @@ func TestRouteGroup_TestConn(t *testing.T) {
 
 		c1, c2 = rg1, rg2
 
-		m1, m2, teardownEnv := createTransports(t, rg1, rg2, dmsg.Type)
+		m1, m2, teardownEnv := createTransports(t, rg1, rg2, stcp.Type)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		go pushPackets(ctx, t, m1, rg1)
