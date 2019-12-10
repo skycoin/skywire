@@ -79,7 +79,9 @@ func main() {
 		log.Fatal("Failed to create a new client: ", err)
 	}
 
-	log.Printf("Serving  %v\n", addr)
+	log.Printf("Serving proxy client %v\n", *addr)
 
-	log.Fatal(client.ListenAndServe(*addr))
+	if err := client.ListenAndServe(*addr); err != nil {
+		log.Fatalf("Error serving proxy client: %v\n", err)
+	}
 }
