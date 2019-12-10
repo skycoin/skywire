@@ -3,6 +3,7 @@ package routerclient
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -10,6 +11,22 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
+
+// TODO: remove this
+// dmsgClientWrapper is a temporary workaround to make dmsg client implement `snet.Dialer`.
+// The only reason to use this is because client's `Dial` returns `*dmsg.Stream` instead of `net.Conn`,
+// so this stuff should be removed as soon as the func's signature changes
+type dmsgClientWrapper struct {
+	*dmsg.Client
+}
+
+func wrapDmsgC(dmsgC *dmsg.Client) *dmsgClientWrapper {
+	return &dmsgClientWrapper{Client: dmsgC}
+}
+
+func (w *dmsgClientWrapper) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
+	return w.Client.Dial(ctx, remote, port)
+}
 
 // AddEdgeRules is a wrapper for (*Client).AddEdgeRules.
 func AddEdgeRules(
@@ -19,7 +36,7 @@ func AddEdgeRules(
 	pk cipher.PubKey,
 	rules routing.EdgeRules,
 ) (bool, error) {
-	client, err := NewClient(ctx, dmsgC, pk)
+	client, err := NewClient(ctx, wrapDmsgC(dmsgC), pk)
 	if err != nil {
 		return false, fmt.Errorf("failed to dial remote: %v", err)
 	}
@@ -42,7 +59,7 @@ func AddIntermediaryRules(
 	pk cipher.PubKey,
 	rules []routing.Rule,
 ) (bool, error) {
-	client, err := NewClient(ctx, dmsgC, pk)
+	client, err := NewClient(ctx, wrapDmsgC(dmsgC), pk)
 	if err != nil {
 		return false, fmt.Errorf("failed to dial remote: %v", err)
 	}
@@ -65,7 +82,7 @@ func ReserveIDs(
 	pk cipher.PubKey,
 	n uint8,
 ) ([]routing.RouteID, error) {
-	client, err := NewClient(ctx, dmsgC, pk)
+	client, err := NewClient(ctx, wrapDmsgC(dmsgC), pk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial remote: %v", err)
 	}
