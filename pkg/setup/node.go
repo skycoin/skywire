@@ -6,8 +6,6 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -164,16 +162,21 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 		Reverse: consumeRules[route.Desc.SrcPK()],
 	}
 	respRouteRules := routing.EdgeRules{
-		Desc:    routing.NewRouteDescriptor(cipher.PubKey{}, forwardRoute.Desc.DstPK(), forwardRoute.Desc.SrcPort(), forwardRoute.Desc.DstPort()),
+		Desc:    forwardRoute.Desc,
 		Forward: forwardRules[route.Desc.DstPK()],
 		Reverse: consumeRules[route.Desc.DstPK()],
 	}
+
+	sn.logger.Infof("initRouteRules: Desc(%s), %s", &initRouteRules.Desc, initRouteRules)
+	sn.logger.Infof("respRouteRules: Desc(%s), %s", &respRouteRules.Desc, respRouteRules)
 
 	// Confirm routes with responding visor.
 	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
 	if err != nil || !ok {
 		return routing.EdgeRules{}, fmt.Errorf("failed to confirm loop with destination visor: %v", err)
 	}
+
+	sn.logger.Infof("Returning route rules to initiating node: %v", initRouteRules)
 
 	return initRouteRules, nil
 }
