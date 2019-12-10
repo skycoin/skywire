@@ -84,15 +84,19 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
 
 // Init initiates server connections.
 func (n *Network) Init(ctx context.Context) error {
-	if err := n.dmsgC.InitiateServerConnections(ctx, n.conf.DmsgMinSrvs); err != nil {
-		return fmt.Errorf("failed to initiate 'dmsg': %v", err)
-	}
-	if n.conf.STCPLocalAddr != "" {
-		if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
-			return fmt.Errorf("failed to initiate 'stcp': %v", err)
+	if n.dmsgC != nil {
+		if err := n.dmsgC.InitiateServerConnections(ctx, n.conf.DmsgMinSrvs); err != nil {
+			return fmt.Errorf("failed to initiate 'dmsg': %v", err)
 		}
-	} else {
-		fmt.Println("No config found for stcp")
+	}
+	if n.stcpC != nil {
+		if n.conf.STCPLocalAddr != "" {
+			if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
+				return fmt.Errorf("failed to initiate 'stcp': %v", err)
+			}
+		} else {
+			fmt.Println("No config found for stcp")
+		}
 	}
 	return nil
 }
