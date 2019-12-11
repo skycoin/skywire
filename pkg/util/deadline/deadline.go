@@ -8,9 +8,10 @@ import (
 
 // PipeDeadline is an abstraction for handling timeouts.
 type PipeDeadline struct {
-	mu     sync.Mutex // Guards timer and cancel
-	timer  *time.Timer
-	cancel chan struct{} // Must be non-nil
+	mu       sync.Mutex // Guards timer and cancel
+	timer    *time.Timer
+	cancelMu sync.RWMutex
+	cancel   chan struct{} // Must be non-nil
 }
 
 func MakePipeDeadline() PipeDeadline {
@@ -44,7 +45,9 @@ func (d *PipeDeadline) Set(t time.Time) {
 	// Time in the future, setup a timer to cancel in the future.
 	if dur := time.Until(t); dur > 0 {
 		if closed {
+			d.cancelMu.Lock()
 			d.cancel = make(chan struct{})
+			d.cancelMu.Unlock()
 		}
 		d.timer = time.AfterFunc(dur, func() {
 			close(d.cancel)
@@ -66,6 +69,9 @@ func (d *PipeDeadline) Wait() chan struct{} {
 }
 
 func (d *PipeDeadline) Closed() bool {
+	d.cancelMu.RLock()
+	defer d.cancelMu.RUnlock()
+
 	select {
 	case <-d.cancel:
 		return true
