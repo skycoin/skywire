@@ -233,7 +233,7 @@ func TestNode(t *testing.T) {
 		forwardRoute, reverseRoute := generateForwardAndReverseRoutes(route)
 
 		wantEdgeRules := routing.EdgeRules{
-			Desc:    forwardRoute.Desc,
+			Desc:    reverseRoute.Desc,
 			Forward: forwardRules[route.Desc.SrcPK()],
 			Reverse: consumeRules[route.Desc.SrcPK()],
 		}
@@ -254,7 +254,7 @@ func TestNode(t *testing.T) {
 		}
 
 		respRouteRules := routing.EdgeRules{
-			Desc:    reverseRoute.Desc,
+			Desc:    forwardRoute.Desc,
 			Forward: forwardRules[route.Desc.DstPK()],
 			Reverse: consumeRules[route.Desc.DstPK()],
 		}
