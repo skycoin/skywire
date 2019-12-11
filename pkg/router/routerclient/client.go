@@ -50,7 +50,6 @@ func (c *Client) Close() error {
 }
 
 // AddEdgeRules adds forward and consume rules to router (forward and reverse).
-// TODO(nkryuchkov): make sure that deadline functions are used, then get rid of context here and below
 func (c *Client) AddEdgeRules(ctx context.Context, rules routing.EdgeRules) (bool, error) {
 	var ok bool
 	err := c.call(ctx, rpcName+".AddEdgeRules", rules, &ok)
