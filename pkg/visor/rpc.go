@@ -345,7 +345,7 @@ func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) error {
 }
 
 // SaveRoutingRule saves a routing rule.
-func (r *RPC) SaveRoutingRule(in *routing.Rule, out *struct{}) error {
+func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) error {
 	return r.node.rt.SaveRule(*in)
 }
 

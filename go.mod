@@ -22,7 +22,7 @@ require (
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.3
 	golang.org/x/crypto v0.0.0-20191106202628-ed6320f186d4
-	golang.org/x/net v0.0.0-20191105084925-a882066a44e0
+	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
 )
 
 replace github.com/SkycoinProject/dmsg => ../dmsg
