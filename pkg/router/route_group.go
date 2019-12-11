@@ -196,7 +196,6 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 		case errCh <- tp.WritePacket(context.Background(), packet):
 		}
 		close(errCh)
-		return
 	}()
 
 	timeout := time.NewTimer(5 * time.Second)
@@ -218,22 +217,6 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 
 		return len(p), nil
 	}
-}
-
-func (r *RouteGroup) writePacketAsync(tp *transport.ManagedTransport, packet routing.Packet) error {
-	var err error
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		err = tp.WritePacket(context.Background(), packet)
-	}()
-
-	wg.Wait()
-
-	return err
 }
 
 // Close closes a RouteGroup:

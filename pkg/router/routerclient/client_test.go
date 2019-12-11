@@ -89,6 +89,7 @@ func TestClient_ReserveIDs(t *testing.T) {
 	require.Equal(t, ids, gotIDs)
 }
 
+// nolint:unparam
 func prepRPCServerAndClient(t *testing.T, r router.Router) (s *rpc.Server, cl *Client, cleanup func()) {
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)

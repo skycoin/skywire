@@ -2,13 +2,13 @@ package appnet
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
 	"sync/atomic"
 
 	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/pkg/errors"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"

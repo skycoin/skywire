@@ -462,6 +462,7 @@ func createRouteGroup() *RouteGroup {
 	return rg
 }
 
+// nolint:unparam
 func createTransports(t *testing.T, rg1, rg2 *RouteGroup, network string) (m1, m2 *transport.Manager, teardown func()) {
 	tpDisc := transport.NewDiscoveryMock()
 	keys := snettest.GenKeyPairs(2)

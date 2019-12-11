@@ -1,12 +1,11 @@
 package appserver
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"sync"
-
-	"github.com/pkg/errors"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
