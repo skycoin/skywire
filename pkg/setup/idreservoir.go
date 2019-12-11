@@ -107,7 +107,7 @@ func (idr *idReservoir) String() string {
 	return string(b)
 }
 
-// RulesMap associates a rule to a visor's public key.
+// RuleMap associates a rule to a visor's public key.
 type RuleMap map[cipher.PubKey]routing.Rule
 
 // RulesMap associates a slice of rules to a visor's public key.
