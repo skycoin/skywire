@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/pkg/errors"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 )
@@ -22,12 +21,12 @@ type Server struct {
 	stopCh   chan struct{}
 }
 
-// NewServer constructs server.
+// New constructs server.
 func New(log *logging.Logger, sockFile string, appKey appcommon.Key) (*Server, error) {
 	rpcS := rpc.NewServer()
 	gateway := NewRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_server_%s", appKey)))
 	if err := rpcS.RegisterName(string(appKey), gateway); err != nil {
-		return nil, errors.Wrap(err, "error registering RPC server for app")
+		return nil, fmt.Errorf("error registering RPC server for app: %v", err)
 	}
 
 	return &Server{
