@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/ioutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -128,15 +129,14 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	// TODO: use readBuf
-	// r.mu.Lock()
-	// if r.readBuf.Len() > 0 {
-	// 	data, err := r.readBuf.Read(p)
-	// 	r.mu.Unlock()
-	//
-	// 	return data, err
-	// }
-	// r.mu.Unlock()
+	r.mu.Lock()
+	if r.readBuf.Len() > 0 {
+		data, err := r.readBuf.Read(p)
+		r.mu.Unlock()
+
+		return data, err
+	}
+	r.mu.Unlock()
 
 	timeout := time.NewTimer(5 * time.Second)
 	defer timeout.Stop()
@@ -153,11 +153,7 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// return ioutil.BufRead(&r.readBuf, data, p)
-
-	n = copy(p, data)
-
-	return n, nil
+	return ioutil.BufRead(&r.readBuf, data, p)
 }
 
 // Write writes payload to a RouteGroup
