@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/rpc"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -89,8 +90,10 @@ func (sn *Node) Serve() error {
 
 		sn.logger.WithField("requester", conn.RemotePK()).Infof("Received request.")
 
+		const timeout = 30 * time.Second
+
 		rpcS := rpc.NewServer()
-		if err := rpcS.Register(NewRPCGateway(conn.RemotePK(), sn)); err != nil {
+		if err := rpcS.Register(NewRPCGateway(conn.RemotePK(), sn, timeout)); err != nil {
 			return err
 		}
 

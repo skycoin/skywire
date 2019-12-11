@@ -100,7 +100,7 @@ func MakeClosePacket(id RouteID, code CloseCode) Packet {
 }
 
 // MakeKeepAlivePacket constructs a new KeepAlivePacket.
-func MakeKeepAlivePacket(id RouteID) Packet { // TODO(nkryuchkov): use it
+func MakeKeepAlivePacket(id RouteID) Packet {
 	packet := make([]byte, PacketHeaderSize)
 
 	packet[PacketTypeOffset] = byte(KeepAlivePacket)
