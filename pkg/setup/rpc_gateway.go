@@ -12,16 +12,18 @@ import (
 )
 
 type RPCGateway struct {
-	logger *logging.Logger
-	reqPK  cipher.PubKey
-	sn     *Node
+	logger  *logging.Logger
+	reqPK   cipher.PubKey
+	sn      *Node
+	timeout time.Duration
 }
 
-func NewRPCGateway(reqPK cipher.PubKey, sn *Node) *RPCGateway {
+func NewRPCGateway(reqPK cipher.PubKey, sn *Node, timeout time.Duration) *RPCGateway {
 	return &RPCGateway{
-		logger: logging.MustGetLogger(fmt.Sprintf("setup-gateway (%s)", reqPK)),
-		reqPK:  reqPK,
-		sn:     sn,
+		logger:  logging.MustGetLogger(fmt.Sprintf("setup-gateway (%s)", reqPK)),
+		reqPK:   reqPK,
+		sn:      sn,
+		timeout: timeout,
 	}
 }
 
@@ -34,8 +36,7 @@ func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *rou
 
 	g.logger.Infof("Received RPC DialRouteGroup request")
 
-	// TODO(nkryuchkov): Is there a better way to do timeout?
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), g.timeout)
 	defer cancel()
 
 	initRules, err := g.sn.handleDialRouteGroup(ctx, route)

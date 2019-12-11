@@ -43,8 +43,7 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn
 		return nil, err
 	}
 
-	dialOpts := router.DefaultDialOptions()
-	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, &dialOpts)
+	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
 		return nil, err
 	}

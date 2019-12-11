@@ -107,6 +107,9 @@ func (idr *idReservoir) String() string {
 	return string(b)
 }
 
+// RulesMap associates a rule to a visor's public key.
+type RuleMap map[cipher.PubKey]routing.Rule
+
 // RulesMap associates a slice of rules to a visor's public key.
 type RulesMap map[cipher.PubKey][]routing.Rule
 
@@ -130,18 +133,17 @@ func (rm RulesMap) String() string {
 	return string(jb)
 }
 
-// TODO(nkryuchkov): fix comment, refactor
-// GenerateRules generates rules for a given route.
+// GenerateRules generates rules for given forward and reverse routes.
 // The outputs are as follows:
-// - a map that relates a slice of routing rules to a given visor's public key.
+// - maps that relate slices of forward, consume and intermediary routing rules to a given visor's public key.
 // - an error (if any).
 func (idr *idReservoir) GenerateRules(fwd, rev routing.Route) (
-	forwardRules, consumeRules map[cipher.PubKey]routing.Rule,
+	forwardRules, consumeRules RuleMap,
 	intermediaryRules RulesMap,
 	err error,
 ) {
-	forwardRules = make(map[cipher.PubKey]routing.Rule)
-	consumeRules = make(map[cipher.PubKey]routing.Rule)
+	forwardRules = make(RuleMap)
+	consumeRules = make(RuleMap)
 	intermediaryRules = make(RulesMap)
 
 	for _, route := range []routing.Route{fwd, rev} {
