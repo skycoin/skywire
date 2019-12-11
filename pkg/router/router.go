@@ -371,14 +371,31 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 }
 
-func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) error {
-	// TODO(nkryuchkov): implement
+func (r *router) handleClosePacket(_ context.Context, packet routing.Packet) error {
+	routeID := packet.RouteID()
+
+	r.logger.Infof("Received keepalive packet for route ID %v", routeID)
+
+	rules := []routing.RouteID{routeID}
+	r.rt.DelRules(rules)
+
 	return nil
 }
 
-func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
-	// TODO(nkryuchkov): implement
-	return nil
+func (r *router) handleKeepAlivePacket(_ context.Context, packet routing.Packet) error {
+	routeID := packet.RouteID()
+
+	r.logger.Infof("Received keepalive packet for route ID %v", routeID)
+
+	rule, err := r.GetRule(routeID)
+
+	if err != nil {
+		return err
+	}
+
+	r.logger.Infof("Route ID %v found, updating activity", routeID)
+
+	return r.SaveRoutingRules(rule)
 }
 
 // GetRule gets routing rule.
