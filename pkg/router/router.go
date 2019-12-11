@@ -63,9 +63,8 @@ type DialOptions struct {
 	MaxConsumeRts int
 }
 
-// TODO(nkryuchkov): return pointer, make struct val unexported
-func DefaultDialOptions() DialOptions {
-	return DialOptions{
+func DefaultDialOptions() *DialOptions {
+	return &DialOptions{
 		MinForwardRts: 1,
 		MaxForwardRts: 1,
 		MinConsumeRts: 1,
@@ -462,8 +461,7 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev routing.Path, err error) {
 	// TODO(nkryuchkov): use opts
 	if opts == nil {
-		defaultOpts := DefaultDialOptions()
-		opts = &defaultOpts // nolint: ineffassign
+		opts = DefaultDialOptions()
 	}
 
 	r.logger.Infof("Requesting new routes from %s to %s", src, dst)
