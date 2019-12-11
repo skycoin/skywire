@@ -113,8 +113,6 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 // Read reads the next packet payload of a RouteGroup.
 // The Router, via transport.Manager, is responsible for reading incoming packets and pushing it
 // to the appropriate RouteGroup via (*RouteGroup).readCh.
-// To help with implementing the read logic, within the dmsg repo, we have ioutil.BufRead,
-// just in case the read buffer is short.
 func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	if r.isClosed() {
 		return 0, io.ErrClosedPipe
@@ -129,6 +127,7 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
+	// In case the read buffer is short.
 	r.mu.Lock()
 	if r.readBuf.Len() > 0 {
 		data, err := r.readBuf.Read(p)
