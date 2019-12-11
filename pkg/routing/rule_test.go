@@ -35,7 +35,7 @@ func TestForwardRule(t *testing.T) {
 	keepAlive := 2 * time.Minute
 	pk, _ := cipher.GenerateKeyPair()
 
-	rule := ForwardRule(keepAlive, 1, 2, trID, pk, 3, 4)
+	rule := ForwardRule(keepAlive, 1, 2, trID, cipher.PubKey{}, pk, 3, 4)
 
 	assert.Equal(t, keepAlive, rule.KeepAlive())
 	assert.Equal(t, RuleForward, rule.Type())
