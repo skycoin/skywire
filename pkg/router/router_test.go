@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -234,10 +235,15 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		}
 	}
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	// TEST: Ensure handleTransportPacket does as expected.
 	// After setting a rule in r0, r0 should forward a packet to r1 (as specified in the given rule)
 	// when r0.handleTransportPacket() is called.
 	t.Run("handlePacket_fwdRule", func(t *testing.T) {
+		defer wg.Done()
+
 		defer clearRules(r0, r1)
 		defer clearRouteGroups(r0, r1)
 
@@ -262,7 +268,10 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		assert.Equal(t, routing.RouteID(1), recvPacket.RouteID())
 	})
 
+	wg.Add(1)
 	t.Run("handlePacket_intFwdRule", func(t *testing.T) {
+		defer wg.Done()
+
 		defer clearRules(r0, r1)
 		defer clearRouteGroups(r0, r1)
 
@@ -286,7 +295,10 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		assert.Equal(t, routing.RouteID(5), recvPacket.RouteID())
 	})
 
+	wg.Add(1)
 	t.Run("handlePacket_cnsmRule", func(t *testing.T) {
+		defer wg.Done()
+
 		defer clearRules(r0, r1)
 		defer clearRouteGroups(r0, r1)
 
@@ -338,7 +350,10 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		require.Equal(t, consumeMsg, data)
 	})
 
+	wg.Add(1)
 	t.Run("handlePacket_close", func(t *testing.T) {
+		defer wg.Done()
+
 		defer clearRules(r0, r1)
 		defer clearRouteGroups(r0, r1)
 
@@ -356,7 +371,10 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		require.Len(t, r0.rt.AllRules(), 0)
 	})
 
+	wg.Add(1)
 	t.Run("handlePacket_keepalive", func(t *testing.T) {
+		defer wg.Done()
+
 		defer clearRules(r0, r1)
 		defer clearRouteGroups(r0, r1)
 
@@ -382,6 +400,8 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		require.Len(t, r0.rt.AllRules(), 0)
 	})
+
+	wg.Wait()
 }
 
 func TestRouter_Rules(t *testing.T) {
