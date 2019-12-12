@@ -449,7 +449,7 @@ func (r *router) forwardPacket(ctx context.Context, payload []byte, rule routing
 		return errors.New("unknown transport")
 	}
 
-	packet := routing.MakeDataPacket(rule.KeyRouteID(), payload)
+	packet := routing.MakeDataPacket(rule.NextRouteID(), payload)
 	if err := tp.WritePacket(ctx, packet); err != nil {
 		return err
 	}
