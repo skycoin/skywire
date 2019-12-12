@@ -51,7 +51,11 @@ func TestRouteGroup_Read(t *testing.T) {
 	rg1.readCh <- msg1
 	rg2.readCh <- msg2
 
-	n, err := rg1.Read(buf1)
+	n, err := rg1.Read([]byte{})
+	require.Equal(t, 0, n)
+	require.NoError(t, err)
+
+	n, err = rg1.Read(buf1)
 	require.NoError(t, err)
 	require.Equal(t, msg1, buf1)
 	require.Equal(t, len(msg1), n)
@@ -60,6 +64,9 @@ func TestRouteGroup_Read(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, msg2, buf2)
 	require.Equal(t, len(msg2), n)
+
+	require.NoError(t, rg1.Close())
+	require.NoError(t, rg2.Close())
 }
 
 func TestRouteGroup_Write(t *testing.T) {
@@ -79,6 +86,14 @@ func TestRouteGroup_Write(t *testing.T) {
 	m1, m2, teardown := createTransports(t, rg1, rg2, stcp.Type)
 	defer teardown()
 
+	n, err := rg1.Write([]byte{})
+	require.Equal(t, 0, n)
+	require.NoError(t, err)
+
+	n, err = rg2.Write([]byte{})
+	require.Equal(t, 0, n)
+	require.NoError(t, err)
+
 	_, err = rg1.Write(msg1)
 	require.NoError(t, err)
 
@@ -92,6 +107,9 @@ func TestRouteGroup_Write(t *testing.T) {
 	recv, err = m2.ReadPacket()
 	require.NoError(t, err)
 	require.Equal(t, msg1, recv.Payload())
+
+	require.NoError(t, rg1.Close())
+	require.NoError(t, rg2.Close())
 }
 
 func TestRouteGroup_ReadWrite(t *testing.T) {
@@ -121,6 +139,9 @@ func testReadWrite(t *testing.T, iterations int) {
 	assert.NoError(t, rg2.Close())
 
 	teardownEnv()
+
+	require.NoError(t, rg1.Close())
+	require.NoError(t, rg2.Close())
 }
 
 func testRouteGroupReadWrite(t *testing.T, iterations int, rg1, rg2 io.ReadWriter) {
@@ -378,19 +399,25 @@ func testArbitrarySizeOneMessage(t *testing.T, size int) {
 	require.Equal(t, io.EOF, err)
 	require.Equal(t, 0, n)
 	require.Equal(t, make([]byte, size), buf)
+
+	require.NoError(t, rg1.Close())
+	require.NoError(t, rg2.Close())
 }
 
 func TestRouteGroup_LocalAddr(t *testing.T) {
 	rg := createRouteGroup()
 	require.Equal(t, rg.desc.Dst(), rg.LocalAddr())
+
+	require.NoError(t, rg.Close())
 }
 
 func TestRouteGroup_RemoteAddr(t *testing.T) {
 	rg := createRouteGroup()
 	require.Equal(t, rg.desc.Src(), rg.RemoteAddr())
+
+	require.NoError(t, rg.Close())
 }
 
-// TODO: fix hangs
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
 		rg1 := createRouteGroup()
@@ -408,6 +435,8 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		stop = func() {
 			cancel()
 			teardownEnv()
+			require.NoError(t, rg1.Close())
+			require.NoError(t, rg2.Close())
 		}
 
 		return
