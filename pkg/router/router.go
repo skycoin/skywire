@@ -330,7 +330,8 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return err
 	}
 
-	if rule.Type() == routing.RuleIntermediaryForward {
+	switch rule.Type() {
+	case routing.RuleForward, routing.RuleIntermediaryForward:
 		r.logger.Infoln("Handling intermediary packet")
 		return r.forwardPacket(ctx, packet.Payload(), rule)
 	}
@@ -351,11 +352,6 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
 	r.logger.Infof("Packet contents: %s", packet.Payload())
-
-	// TODO: maybe move this up along the execution flow? `rg` doesn't seem to be necessary here
-	if t := rule.Type(); t == routing.RuleForward {
-		return r.forwardPacket(ctx, packet.Payload(), rule)
-	}
 
 	if rg.isClosed() {
 		r.logger.Infoln("RG IS CLOSED")
