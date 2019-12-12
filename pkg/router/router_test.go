@@ -290,7 +290,7 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 			Reverse: cnsmRule,
 		})
 
-		packet := routing.MakeDataPacket(intFwdRtID[0], []byte("test"))
+		packet := routing.MakeDataPacket(intFwdRtID[0], []byte("test intermediary forward"))
 		require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 		recvPacket, err := r1.tm.ReadPacket()
@@ -298,6 +298,17 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
 		assert.Equal(t, dstRtIDs[1], recvPacket.RouteID())
+
+		consumeMsg := []byte("test_consume")
+		packet = routing.MakeDataPacket(dstRtIDs[1], consumeMsg)
+		require.NoError(t, r1.handleTransportPacket(context.TODO(), packet))
+
+		rg, ok := r1.routeGroup(fwdRtDesc.Invert())
+		require.True(t, ok)
+		require.NotNil(t, rg)
+
+		data := <-rg.readCh
+		require.Equal(t, consumeMsg, data)
 	})
 
 	t.Run("handlePacket_close", func(t *testing.T) {
