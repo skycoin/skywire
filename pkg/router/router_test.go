@@ -267,6 +267,7 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
 		assert.Equal(t, routing.RouteID(1), recvPacket.RouteID())
 	})
+	wg.Wait()
 
 	wg.Add(1)
 	t.Run("handlePacket_intFwdRule", func(t *testing.T) {
@@ -294,6 +295,7 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
 		assert.Equal(t, routing.RouteID(5), recvPacket.RouteID())
 	})
+	wg.Wait()
 
 	wg.Add(1)
 	t.Run("handlePacket_cnsmRule", func(t *testing.T) {
@@ -349,6 +351,7 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		data := <-rg.readCh
 		require.Equal(t, consumeMsg, data)
 	})
+	wg.Wait()
 
 	wg.Add(1)
 	t.Run("handlePacket_close", func(t *testing.T) {
@@ -370,6 +373,7 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 
 		require.Len(t, r0.rt.AllRules(), 0)
 	})
+	wg.Wait()
 
 	wg.Add(1)
 	t.Run("handlePacket_keepalive", func(t *testing.T) {
@@ -400,7 +404,6 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		require.Len(t, r0.rt.AllRules(), 0)
 	})
-
 	wg.Wait()
 }
 
