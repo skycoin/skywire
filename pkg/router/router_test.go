@@ -114,7 +114,7 @@ func TestRouter_Serve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, fwdRtID[0], packet.RouteID())
+		assert.Equal(t, routing.RouteID(1), recvPacket.RouteID())
 	})
 
 	t.Run("handlePacket_intFwdRule", func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestRouter_Serve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, fwdRtID[0], packet.RouteID())
+		assert.Equal(t, routing.RouteID(5), recvPacket.RouteID())
 	})
 
 	t.Run("handlePacket_cnsmRule", func(t *testing.T) {
@@ -158,8 +158,10 @@ func TestRouter_Serve(t *testing.T) {
 
 		fwdRule := routing.ForwardRule(1*time.Hour, dstRtIDs[0], routing.RouteID(7), tp1.Entry.ID, keys[0].PK, keys[1].PK, 0, 0)
 		cnsmRule := routing.ConsumeRule(1*time.Hour, dstRtIDs[1], keys[1].PK, keys[0].PK, 0, 0)
-		//err = r1.rt.SaveRule(cnsmRule)
-		//require.NoError(t, err)
+		err = r1.rt.SaveRule(fwdRule)
+		require.NoError(t, err)
+		err = r1.rt.SaveRule(cnsmRule)
+		require.NoError(t, err)
 		fwdRtDesc := fwdRule.RouteDescriptor()
 		r1.saveRouteGroupRules(routing.EdgeRules{
 			Desc:    fwdRtDesc.Invert(),
@@ -174,7 +176,7 @@ func TestRouter_Serve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, dstRtIDs[1], packet.RouteID())
+		assert.Equal(t, dstRtIDs[1], recvPacket.RouteID())
 	})
 
 	// TODO(evanlinjin): I'm having so much trouble with this I officially give up.
