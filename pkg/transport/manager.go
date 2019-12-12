@@ -73,6 +73,10 @@ func (tm *Manager) serve(ctx context.Context) {
 	var listeners []*snet.Listener
 
 	for _, netType := range tm.n.TransportNetworks() {
+		if tm.isClosing() {
+			return
+		}
+
 		lis, err := tm.n.Listen(netType, skyenv.DmsgTransportPort)
 		if err != nil {
 			tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",

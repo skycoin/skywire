@@ -31,6 +31,8 @@ var (
 	ErrNoRules = errors.New("no rules")
 	// ErrBadTransport is returned when transport is nil.
 	ErrBadTransport = errors.New("bad transport")
+	// ErrRuleTransportMismatch is returned when number of forward rules does not equal to number of transports.
+	ErrRuleTransportMismatch = errors.New("rule/transport mismatch")
 )
 
 type timeoutError struct{}
@@ -59,6 +61,7 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 type RouteGroup struct {
 	mu sync.Mutex
 
+	cfg    *RouteGroupConfig
 	logger *logging.Logger
 	desc   routing.RouteDescriptor // describes the route group
 	rt     routing.Table
@@ -97,6 +100,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	rg := &RouteGroup{
+		cfg:           cfg,
 		logger:        logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
 		desc:          desc,
 		rt:            rt,
@@ -236,7 +240,7 @@ func (r *RouteGroup) Close() error {
 	defer r.mu.Unlock()
 
 	if len(r.fwd) != len(r.tps) {
-		return errors.New("len(r.fwd) != len(r.tps)")
+		return ErrRuleTransportMismatch
 	}
 
 	for i := 0; i < len(r.tps); i++ {

@@ -25,6 +25,7 @@ import (
 func TestNewRouteGroup(t *testing.T) {
 	rg := createRouteGroup()
 	require.NotNil(t, rg)
+	require.Equal(t, DefaultRouteGroupConfig(), rg.cfg)
 }
 
 func TestRouteGroup_Close(t *testing.T) {
@@ -34,13 +35,22 @@ func TestRouteGroup_Close(t *testing.T) {
 	require.False(t, rg.isClosed())
 	require.NoError(t, rg.Close())
 	require.True(t, rg.isClosed())
+
+	rg = createRouteGroup()
+	require.NotNil(t, rg)
+
+	rg.tps = append(rg.tps, &transport.ManagedTransport{})
+	require.Equal(t, ErrRuleTransportMismatch, rg.Close())
 }
 
 func TestRouteGroup_Read(t *testing.T) {
 	msg1 := []byte("hello1")
 	msg2 := []byte("hello2")
+	msg3 := []byte("hello3")
 	buf1 := make([]byte, len(msg1))
 	buf2 := make([]byte, len(msg2))
+	buf3 := make([]byte, len(msg2)/2)
+	buf4 := make([]byte, len(msg2)/2)
 
 	rg1 := createRouteGroup()
 	rg2 := createRouteGroup()
@@ -50,6 +60,7 @@ func TestRouteGroup_Read(t *testing.T) {
 
 	rg1.readCh <- msg1
 	rg2.readCh <- msg2
+	rg2.readCh <- msg3
 
 	n, err := rg1.Read([]byte{})
 	require.Equal(t, 0, n)
@@ -64,6 +75,17 @@ func TestRouteGroup_Read(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, msg2, buf2)
 	require.Equal(t, len(msg2), n)
+
+	// Test short reads.
+	n, err = rg2.Read(buf3)
+	require.NoError(t, err)
+	require.Equal(t, msg3[0:len(msg3)/2], buf3)
+	require.Equal(t, len(msg3)/2, n)
+
+	n, err = rg2.Read(buf4)
+	require.NoError(t, err)
+	require.Equal(t, msg3[len(msg3)/2:], buf4)
+	require.Equal(t, len(msg3)/2, n)
 
 	require.NoError(t, rg1.Close())
 	require.NoError(t, rg2.Close())
@@ -107,6 +129,24 @@ func TestRouteGroup_Write(t *testing.T) {
 	recv, err = m2.ReadPacket()
 	require.NoError(t, err)
 	require.Equal(t, msg1, recv.Payload())
+
+	tpBackup := rg1.tps[0]
+	rg1.tps[0] = nil
+	_, err = rg1.Write(msg1)
+	require.Equal(t, ErrBadTransport, err)
+	rg1.tps[0] = tpBackup
+
+	tpsBackup := rg1.tps
+	rg1.tps = nil
+	_, err = rg1.Write(msg1)
+	require.Equal(t, ErrNoTransports, err)
+	rg1.tps = tpsBackup
+
+	fwdBackup := rg1.fwd
+	rg1.fwd = nil
+	_, err = rg1.Write(msg1)
+	require.Equal(t, ErrNoRules, err)
+	rg1.fwd = fwdBackup
 
 	require.NoError(t, rg1.Close())
 	require.NoError(t, rg2.Close())
@@ -502,8 +542,7 @@ func createRouteGroup() *RouteGroup {
 	port2 := routing.Port(2)
 	desc := routing.NewRouteDescriptor(pk1, pk2, port1, port2)
 
-	cfg := DefaultRouteGroupConfig()
-	rg := NewRouteGroup(cfg, rt, desc)
+	rg := NewRouteGroup(nil, rt, desc)
 
 	return rg
 }
