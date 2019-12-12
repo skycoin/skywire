@@ -82,6 +82,10 @@ func (tm *Manager) serve(ctx context.Context) {
 		tm.Logger.Infof("listening on network: %s", netType)
 		listeners = append(listeners, lis)
 
+		if tm.isClosing() {
+			return
+		}
+
 		tm.wg.Add(1)
 		go func() {
 			defer tm.wg.Done()
@@ -298,6 +302,7 @@ func (tm *Manager) close() {
 	}
 
 	tm.wg.Wait()
+
 	close(tm.readCh)
 }
 
