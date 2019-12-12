@@ -38,6 +38,7 @@ func TestListener_Accept(t *testing.T) {
 		rpc.On("Accept", acceptConnID).Return(acceptConnID, acceptRemote, acceptErr)
 
 		lis := &Listener{
+			log:  l,
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
@@ -143,6 +144,7 @@ func TestListener_Accept(t *testing.T) {
 		rpc.On("Accept", lisID).Return(acceptConnID, acceptRemote, acceptErr)
 
 		lis := &Listener{
+			log:  l,
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
