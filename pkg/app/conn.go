@@ -1,11 +1,10 @@
 package app
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 )
@@ -21,6 +20,7 @@ type Conn struct {
 	freeConnMx sync.RWMutex
 }
 
+// Read reads from connection.
 func (c *Conn) Read(b []byte) (int, error) {
 	n, err := c.rpc.Read(c.id, b)
 	if err != nil {
@@ -30,10 +30,12 @@ func (c *Conn) Read(b []byte) (int, error) {
 	return n, err
 }
 
+// Write writes to connection.
 func (c *Conn) Write(b []byte) (int, error) {
 	return c.rpc.Write(c.id, b)
 }
 
+// Close closes connection.
 func (c *Conn) Close() error {
 	c.freeConnMx.RLock()
 	defer c.freeConnMx.RUnlock()
@@ -48,22 +50,30 @@ func (c *Conn) Close() error {
 	return nil
 }
 
+// LocalAddr returns local address of connection.
 func (c *Conn) LocalAddr() net.Addr {
 	return c.local
 }
 
+// RemoteAddr returns remote address of connection.
 func (c *Conn) RemoteAddr() net.Addr {
 	return c.remote
 }
 
+// SetDeadline sets read and write deadlines for connection.
+// TODO: implement
 func (c *Conn) SetDeadline(t time.Time) error {
 	return errMethodNotImplemented
 }
 
+// SetReadDeadline sets read deadline for connection.
+// TODO: implement
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	return errMethodNotImplemented
 }
 
+// SetWriteDeadline sets write deadline for connection.
+// TODO: implement
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return errMethodNotImplemented
 }

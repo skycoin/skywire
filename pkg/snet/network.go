@@ -144,18 +144,10 @@ func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
 // STcp returns the underlying stcp.Client.
 func (n *Network) STcp() *stcp.Client { return n.stcpC }
 
+// Dialer is an entity that can be dialed and asked for its type.
 type Dialer interface {
 	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
 	Type() string
-}
-
-// Dial dials a node by its public key and returns a connection.
-func DialDialer(ctx context.Context, dialer Dialer, pk cipher.PubKey, port uint16) (*Conn, error) {
-	conn, err := dialer.Dial(ctx, pk, port)
-	if err != nil {
-		return nil, err
-	}
-	return makeConn(conn, dialer.Type()), nil
 }
 
 // Dial dials a node by its public key and returns a connection.

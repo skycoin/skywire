@@ -22,7 +22,7 @@ func TestAssertListener(t *testing.T) {
 
 		l, err := AssertListener(ifc)
 		require.Error(t, err)
-		require.True(t, "wrong type of value stored for listener" == err.Error())
+		require.EqualError(t, err, "wrong type of value stored for listener")
 		require.Nil(t, l)
 	})
 }
@@ -41,7 +41,7 @@ func TestAssertConn(t *testing.T) {
 
 		conn, err := AssertConn(ifc)
 		require.Error(t, err)
-		require.True(t, "wrong type of value stored for conn" == err.Error())
+		require.EqualError(t, err, "wrong type of value stored for conn")
 		require.Nil(t, conn)
 	})
 }
