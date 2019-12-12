@@ -46,6 +46,7 @@ type Config struct {
 	TransportManager *transport.Manager
 	RoutingTable     routing.Table
 	RouteFinder      rfclient.Client
+	RouteGroupDialer setupclient.RouteGroupDialer
 	SetupNodes       []cipher.PubKey
 }
 
@@ -53,6 +54,9 @@ type Config struct {
 func (c *Config) SetDefaults() {
 	if c.Logger == nil {
 		c.Logger = logging.MustGetLogger("router")
+	}
+	if c.RouteGroupDialer == nil {
+		c.RouteGroupDialer = setupclient.NewSetupNodeDialer()
 	}
 }
 
@@ -189,7 +193,7 @@ func (r *router) DialRoutes(
 		Reverse:   reversePath,
 	}
 
-	rules, err := setupclient.DialRouteGroup(ctx, r.logger, r.n, r.conf.SetupNodes, req)
+	rules, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.n, r.conf.SetupNodes, req)
 	if err != nil {
 		r.logger.WithError(err).Error("Error dialing route group")
 		return nil, err
