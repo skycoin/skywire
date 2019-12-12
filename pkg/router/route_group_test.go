@@ -465,12 +465,16 @@ func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to 
 				panic("malformed packet")
 			}
 
+			to.readChMu.Lock()
 			select {
 			case <-ctx.Done():
+				to.readChMu.Unlock()
 				return
 			case <-to.done:
+				to.readChMu.Unlock()
 				return
 			case to.readCh <- payload:
+				to.readChMu.Unlock()
 			}
 		}
 	}
