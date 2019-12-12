@@ -23,6 +23,7 @@ type Listener struct {
 	freeLisMx sync.RWMutex
 }
 
+// Accept accepts a connection from listener.
 func (l *Listener) Accept() (net.Conn, error) {
 	l.log.Infoln("Calling app RPC Accept")
 	connID, remote, err := l.rpc.Accept(l.id)
@@ -60,6 +61,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 	return conn, nil
 }
 
+// Close closes listener.
 func (l *Listener) Close() error {
 	l.freeLisMx.RLock()
 	defer l.freeLisMx.RUnlock()
@@ -92,6 +94,7 @@ func (l *Listener) Close() error {
 	return nil
 }
 
+// Addr returns address listener listens on.
 func (l *Listener) Addr() net.Addr {
 	return l.addr
 }

@@ -15,6 +15,7 @@ type PipeDeadline struct {
 	cancel   chan struct{} // Must be non-nil
 }
 
+// MakePipeDeadline creates a new PipeDeadline
 func MakePipeDeadline() PipeDeadline {
 	return PipeDeadline{cancel: make(chan struct{})}
 }
@@ -69,6 +70,7 @@ func (d *PipeDeadline) Wait() chan struct{} {
 	return d.cancel
 }
 
+// Closed checks if deadline happened.
 func (d *PipeDeadline) Closed() bool {
 	d.cancelMu.RLock()
 	defer d.cancelMu.RUnlock()

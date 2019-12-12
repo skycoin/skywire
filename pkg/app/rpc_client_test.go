@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/rpc"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"

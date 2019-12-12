@@ -14,6 +14,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
+// Type is stcp type.
 const Type = "stcp"
 
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.

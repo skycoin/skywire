@@ -11,6 +11,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
+// RPCGateway is a RPC interface for setup node.
 type RPCGateway struct {
 	logger  *logging.Logger
 	reqPK   cipher.PubKey
@@ -18,6 +19,7 @@ type RPCGateway struct {
 	timeout time.Duration
 }
 
+// NewRPCGateway returns a new RPCGateway.
 func NewRPCGateway(reqPK cipher.PubKey, sn *Node, timeout time.Duration) *RPCGateway {
 	return &RPCGateway{
 		logger:  logging.MustGetLogger(fmt.Sprintf("setup-gateway (%s)", reqPK)),
@@ -27,6 +29,7 @@ func NewRPCGateway(reqPK cipher.PubKey, sn *Node, timeout time.Duration) *RPCGat
 	}
 }
 
+// DialRouteGroup dials RouteGroups for route and rules.
 func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *routing.EdgeRules) (err error) {
 	startTime := time.Now()
 

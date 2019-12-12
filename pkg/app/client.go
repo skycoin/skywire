@@ -1,13 +1,14 @@
 package app
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"net/rpc"
 	"os"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/pkg/errors"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -77,7 +78,7 @@ type Client struct {
 func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
 	rpcCl, err := rpc.Dial("unix", config.SockFile)
 	if err != nil {
-		return nil, errors.Wrap(err, "error connecting to the app server")
+		return nil, fmt.Errorf("error connecting to the app server: %v", err)
 	}
 
 	return &Client{

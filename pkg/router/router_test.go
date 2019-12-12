@@ -66,6 +66,7 @@ func Test_router_AcceptRoutes(t *testing.T) {
 	desc := routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort)
 
 	dstRtIDs, err := r0.ReserveKeys(2)
+	require.NoError(t, err)
 
 	fwdRule := routing.ForwardRule(1*time.Hour, dstRtIDs[0], routing.RouteID(3), uuid.UUID{}, keys[0].PK, keys[1].PK, 4, 5)
 	cnsmRule := routing.ConsumeRule(1*time.Hour, dstRtIDs[1], keys[1].PK, keys[0].PK, 5, 4)
