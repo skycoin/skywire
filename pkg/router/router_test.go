@@ -40,6 +40,54 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func Test_router_AcceptRoutes(t *testing.T) {
+	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
+	keys := snettest.GenKeyPairs(2)
+
+	// create test env
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
+
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
+
+	// Create routers
+	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
+	require.NoError(t, err)
+
+	r0, ok := r0Ifc.(*router)
+	require.True(t, ok)
+
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+
+	var srcPort, dstPort routing.Port = 1, 2
+
+	desc := routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort)
+
+	dstRtIDs, err := r0.ReserveKeys(2)
+
+	fwdRule := routing.ForwardRule(1*time.Hour, dstRtIDs[0], routing.RouteID(3), uuid.UUID{}, keys[0].PK, keys[1].PK, 4, 5)
+	cnsmRule := routing.ConsumeRule(1*time.Hour, dstRtIDs[1], keys[1].PK, keys[0].PK, 5, 4)
+
+	rules := routing.EdgeRules{
+		Desc:    desc,
+		Forward: fwdRule,
+		Reverse: cnsmRule,
+	}
+
+	r0.accept <- rules
+
+	rg, err := r0.AcceptRoutes(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, rg)
+	require.Equal(t, desc, rg.desc)
+	require.Equal(t, []routing.Rule{fwdRule}, rg.fwd)
+	require.Equal(t, []routing.Rule{cnsmRule}, rg.rvs)
+	require.Len(t, rg.tps, 1)
+	require.Equal(t, []routing.Rule{fwdRule, cnsmRule}, rg.rt.AllRules())
+}
+
 // Ensure that received packets are handled properly in `(*Router).Serve()`.
 func TestRouter_Serve(t *testing.T) {
 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
