@@ -19,6 +19,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
@@ -38,6 +39,63 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+func Test_router_DialRoutes(t *testing.T) {
+	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
+	keys := snettest.GenKeyPairs(3)
+
+	// create test env
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
+
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
+
+	// Create routers
+	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
+	require.NoError(t, err)
+
+	r0, ok := r0Ifc.(*router)
+	require.True(t, ok)
+
+	r1Ifc, err := New(nEnv.Nets[1], rEnv.GenRouterConfig(1))
+	require.NoError(t, err)
+
+	r1, ok := r1Ifc.(*router)
+	require.True(t, ok)
+
+	r0.conf.RouteGroupDialer = setupclient.NewMockDialer()
+	r1.conf.RouteGroupDialer = setupclient.NewMockDialer()
+
+	// prepare loop creation (client_1 will use this to request loop creation with setup node).
+	desc := routing.NewRouteDescriptor(r0.conf.PubKey, r1.conf.PubKey, 1, 1)
+
+	forwardHops := []routing.Hop{
+		{From: r0.conf.PubKey, To: r1.conf.PubKey, TpID: uuid.New()},
+	}
+
+	reverseHops := []routing.Hop{
+		{From: r1.conf.PubKey, To: r0.conf.PubKey, TpID: uuid.New()},
+	}
+
+	route := routing.BidirectionalRoute{
+		Desc:      desc,
+		KeepAlive: 1 * time.Hour,
+		Forward:   forwardHops,
+		Reverse:   reverseHops,
+	}
+
+	ctx := context.Background()
+	testLogger := logging.MustGetLogger("setupclient_test")
+	pks := []cipher.PubKey{r1.conf.PubKey}
+
+	_, err = r0.conf.RouteGroupDialer.Dial(ctx, testLogger, nEnv.Nets[2], pks, route)
+	require.NoError(t, err)
+	rg, err := r0.DialRoutes(context.Background(), r0.conf.PubKey, 0, 0, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, rg)
 }
 
 func Test_router_Introduce_AcceptRoutes(t *testing.T) {
