@@ -45,14 +45,19 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 
 		var ok bool
 		err := gateway.AddEdgeRules(rules, &ok)
-		require.Equal(t, testhelpers.Err, err)
+
+		wantErr := routing.Failure{
+			Code: routing.FailureAddRules,
+			Msg:  testhelpers.Err.Error(),
+		}
+
+		require.Equal(t, wantErr, err)
 		require.False(t, ok)
 	})
 
 	t.Run("fail saving rules", func(t *testing.T) {
 		r := &MockRouter{}
-		r.On("IntroduceRules", rules).Return(testhelpers.NoErr)
-		r.On("SaveRoutingRules", rules.Forward, rules.Reverse).Return(testhelpers.Err)
+		r.On("IntroduceRules", rules).Return(testhelpers.Err)
 
 		gateway := NewRPCGateway(r)
 
