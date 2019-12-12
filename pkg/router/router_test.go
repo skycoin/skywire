@@ -88,9 +88,11 @@ func Test_router_AcceptRoutes(t *testing.T) {
 	require.Len(t, rg.tps, 1)
 
 	allRules := rg.rt.AllRules()
-	assert.Len(t, allRules, 2)
-	assert.Contains(t, allRules, fwdRule)
-	assert.Contains(t, allRules, cnsmRule)
+	require.Len(t, allRules, 2)
+	require.Contains(t, allRules, fwdRule)
+	require.Contains(t, allRules, cnsmRule)
+
+	require.NoError(t, r0.Close())
 }
 
 // Ensure that received packets are handled properly in `(*Router).Serve()`.
@@ -121,6 +123,11 @@ func TestRouter_Serve(t *testing.T) {
 	require.True(t, ok)
 
 	// go r1.Serve(context.TODO())
+
+	defer func() {
+		require.NoError(t, r0.Close())
+		require.NoError(t, r1.Close())
+	}()
 
 	// Create dmsg transport between two `snet.Network` entities.
 	tp1, err := rEnv.TpMngrs[1].SaveTransport(context.TODO(), keys[0].PK, dmsg.Type)
@@ -323,6 +330,10 @@ func TestRouter_Rules(t *testing.T) {
 
 	r, ok := rIfc.(*router)
 	require.True(t, ok)
+
+	defer func() {
+		require.NoError(t, r.Close())
+	}()
 
 	r.rt = rt
 
