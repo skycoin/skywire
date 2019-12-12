@@ -87,6 +87,7 @@ func TestListener_Accept(t *testing.T) {
 		rpc.On("CloseConn", acceptConnID).Return(closeErr)
 
 		lis := &Listener{
+			log:  l,
 			id:   lisID,
 			rpc:  rpc,
 			addr: local,
