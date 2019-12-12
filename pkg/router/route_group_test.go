@@ -465,18 +465,30 @@ func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to 
 				panic("malformed packet")
 			}
 
-			to.readChMu.Lock()
-			select {
-			case <-ctx.Done():
-				to.readChMu.Unlock()
+			if safeSend(to, ctx, payload) {
 				return
-			case <-to.done:
-				to.readChMu.Unlock()
-				return
-			case to.readCh <- payload:
-				to.readChMu.Unlock()
 			}
 		}
+	}
+}
+
+func safeSend(to *RouteGroup, ctx context.Context, payload []byte) (interrupt bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			interrupt = r != "send on closed channel" // TODO: come up with idea how to handle this case
+		}
+	}()
+
+	to.readChMu.Lock()
+	defer to.readChMu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return true
+	case <-to.done:
+		return true
+	case to.readCh <- payload:
+		return false
 	}
 }
 
