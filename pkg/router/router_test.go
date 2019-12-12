@@ -40,7 +40,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func Test_router_AcceptRoutes(t *testing.T) {
+func Test_router_Introduce_AcceptRoutes(t *testing.T) {
 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
 	keys := snettest.GenKeyPairs(2)
 
@@ -77,7 +77,7 @@ func Test_router_AcceptRoutes(t *testing.T) {
 		Reverse: cnsmRule,
 	}
 
-	r0.accept <- rules
+	require.NoError(t, r0.IntroduceRules(rules))
 
 	rg, err := r0.AcceptRoutes(context.Background())
 	require.NoError(t, err)
@@ -95,8 +95,8 @@ func Test_router_AcceptRoutes(t *testing.T) {
 	require.NoError(t, r0.Close())
 }
 
-// Ensure that received packets are handled properly in `(*Router).Serve()`.
-func TestRouter_Serve(t *testing.T) {
+// Ensure that received packets are handled properly in `(*Router).handleTransportPacket()`.
+func TestRouter_handleTransportPacket(t *testing.T) {
 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
 	keys := snettest.GenKeyPairs(2)
 
@@ -489,6 +489,25 @@ func TestRouter_Rules(t *testing.T) {
 	// 	assert.Equal(t, routing.Port(3), inLoop.Remote.Port)
 	// 	assert.Equal(t, pk, inLoop.Remote.PubKey)
 	// })
+}
+
+func TestRouter_SetupIsTrusted(t *testing.T) {
+	keys := snettest.GenKeyPairs(2)
+
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
+
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
+
+	routerConfig := rEnv.GenRouterConfig(0)
+	routerConfig.SetupNodes = append(routerConfig.SetupNodes, keys[0].PK)
+
+	r0, err := New(nEnv.Nets[0], routerConfig)
+	require.NoError(t, err)
+
+	assert.True(t, r0.SetupIsTrusted(keys[0].PK))
+	assert.False(t, r0.SetupIsTrusted(keys[1].PK))
 }
 
 type TestEnv struct {
