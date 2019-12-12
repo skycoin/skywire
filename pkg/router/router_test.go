@@ -3,8 +3,12 @@ package router
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -20,7 +24,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
-/*func TestMain(m *testing.M) {
+func TestMain(m *testing.M) {
 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
 	if ok {
 		lvl, err := logging.LevelFromString(loggingLevel)
@@ -34,7 +38,7 @@ import (
 	}
 
 	os.Exit(m.Run())
-}*/
+}
 
 // Ensure that received packets are handled properly in `(*Router).Serve()`.
 func TestRouter_Serve(t *testing.T) {
@@ -110,7 +114,7 @@ func TestRouter_Serve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, fwdRtID[0], packet.RouteID())
+		assert.Equal(t, routing.RouteID(1), recvPacket.RouteID())
 	})
 
 	t.Run("handlePacket_intFwdRule", func(t *testing.T) {
@@ -134,36 +138,45 @@ func TestRouter_Serve(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, fwdRtID[0], packet.RouteID())
+		assert.Equal(t, routing.RouteID(5), recvPacket.RouteID())
 	})
 
 	t.Run("handlePacket_cnsmRule", func(t *testing.T) {
 		defer clearRules(r0, r1)
 		defer clearRouteGroups(r0, r1)
 
-		cnsmRtID, err := r1.ReserveKeys(1)
+		// one for consume rule and one for reverse forward rule
+		dstRtIDs, err := r1.ReserveKeys(2)
 		require.NoError(t, err)
 
-		fwdRtID, err := r0.ReserveKeys(1)
+		intFwdRtID, err := r0.ReserveKeys(1)
 		require.NoError(t, err)
 
-		fwdRule := routing.IntermediaryForwardRule(1*time.Hour, fwdRtID[0], routing.RouteID(5), tp1.Entry.ID)
-		err = r0.rt.SaveRule(fwdRule)
+		intFwdRule := routing.IntermediaryForwardRule(1*time.Hour, intFwdRtID[0], dstRtIDs[1], tp1.Entry.ID)
+		err = r0.rt.SaveRule(intFwdRule)
 		require.NoError(t, err)
 
-		cnsmRule := routing.ConsumeRule(1*time.Hour, cnsmRtID[0], keys[0].PK, keys[1].PK, 0, 0)
-		//err = r1.rt.SaveRule(cnsmRule)
-		//require.NoError(t, err)
-		r1.saveRouteGroupRules(routing.EdgeRules{Desc: cnsmRule.RouteDescriptor(), Forward: cnsmRule, Reverse: nil})
+		fwdRule := routing.ForwardRule(1*time.Hour, dstRtIDs[0], routing.RouteID(7), tp1.Entry.ID, keys[0].PK, keys[1].PK, 0, 0)
+		cnsmRule := routing.ConsumeRule(1*time.Hour, dstRtIDs[1], keys[1].PK, keys[0].PK, 0, 0)
+		err = r1.rt.SaveRule(fwdRule)
+		require.NoError(t, err)
+		err = r1.rt.SaveRule(cnsmRule)
+		require.NoError(t, err)
+		fwdRtDesc := fwdRule.RouteDescriptor()
+		r1.saveRouteGroupRules(routing.EdgeRules{
+			Desc:    fwdRtDesc.Invert(),
+			Forward: fwdRule,
+			Reverse: cnsmRule,
+		})
 
-		packet := routing.MakeDataPacket(cnsmRtID[0], []byte("test"))
+		packet := routing.MakeDataPacket(intFwdRtID[0], []byte("test"))
 		require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 		recvPacket, err := r1.tm.ReadPacket()
 		assert.NoError(t, err)
 		assert.Equal(t, packet.Size(), recvPacket.Size())
 		assert.Equal(t, packet.Payload(), recvPacket.Payload())
-		assert.Equal(t, cnsmRtID[0], packet.RouteID())
+		assert.Equal(t, dstRtIDs[1], recvPacket.RouteID())
 	})
 
 	// TODO(evanlinjin): I'm having so much trouble with this I officially give up.
