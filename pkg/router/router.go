@@ -56,6 +56,7 @@ func (c *Config) SetDefaults() {
 	}
 }
 
+// DialOptions describes dial options.
 type DialOptions struct {
 	MinForwardRts int
 	MaxForwardRts int
@@ -63,6 +64,8 @@ type DialOptions struct {
 	MaxConsumeRts int
 }
 
+// DefaultDialOptions returns default dial options.
+// Used by default if nil is passed as options.
 func DefaultDialOptions() *DialOptions {
 	return &DialOptions{
 		MinForwardRts: 1,
@@ -72,6 +75,8 @@ func DefaultDialOptions() *DialOptions {
 	}
 }
 
+// Router is responsible for creating and keeping track of routes.
+// Internally, it uses the routing table, route finder client and setup client.
 type Router interface {
 	io.Closer
 
@@ -478,7 +483,7 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev routing.Path, err error) {
 	// TODO(nkryuchkov): use opts
 	if opts == nil {
-		opts = DefaultDialOptions()
+		opts = DefaultDialOptions() // nolint
 	}
 
 	r.logger.Infof("Requesting new routes from %s to %s", src, dst)

@@ -56,6 +56,7 @@ func TestConvertAddr(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			addr, err := ConvertAddr(tc.addr)
 			require.Equal(t, err, tc.want.err)

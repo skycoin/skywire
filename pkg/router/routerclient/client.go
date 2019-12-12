@@ -2,7 +2,6 @@ package routerclient
 
 import (
 	"context"
-	"fmt"
 	"net/rpc"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -20,14 +19,10 @@ type Client struct {
 
 // NewClient creates a new Client.
 func NewClient(ctx context.Context, dialer snet.Dialer, pk cipher.PubKey) (*Client, error) {
-	fmt.Printf("Dialing to %s\n", pk) // TODO: remove debug logging
-
 	s, err := dialer.Dial(ctx, pk, snet.AwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Printf("Dialed to %s\n", pk) // TODO: remove debug logging
 
 	client := &Client{
 		rpc: rpc.NewClient(s),

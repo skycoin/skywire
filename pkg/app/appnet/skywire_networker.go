@@ -36,7 +36,7 @@ func (r *SkywireNetworker) Dial(addr Addr) (net.Conn, error) {
 	return r.DialContext(context.Background(), addr)
 }
 
-// Dial dials remote `addr` via `skynet` with context.
+// DialContext dials remote `addr` via `skynet` with context.
 func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn, error) {
 	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
 	if err != nil {
@@ -59,7 +59,7 @@ func (r *SkywireNetworker) Listen(addr Addr) (net.Listener, error) {
 	return r.ListenContext(context.Background(), addr)
 }
 
-// Listen starts listening on local `addr` in the skynet with context.
+// ListenContext starts listening on local `addr` in the skynet with context.
 func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Listener, error) {
 	lis := &skywireListener{
 		addr: addr,

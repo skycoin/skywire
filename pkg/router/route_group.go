@@ -39,11 +39,14 @@ func (timeoutError) Error() string   { return "timeout" }
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
 
+// RouteGroupConfig configures RouteGroup.
 type RouteGroupConfig struct {
 	ReadChBufSize     int
 	KeepAliveInterval time.Duration
 }
 
+// DefaultRouteGroupConfig returns default RouteGroup config.
+// Used by default if config is nil.
 func DefaultRouteGroupConfig() *RouteGroupConfig {
 	return &RouteGroupConfig{
 		KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
@@ -86,6 +89,7 @@ type RouteGroup struct {
 	writeDeadline deadline.PipeDeadline
 }
 
+// NewRouteGroup creates a new RouteGroup.
 func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
 	if cfg == nil {
 		cfg = DefaultRouteGroupConfig()
@@ -187,6 +191,7 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 	packet := routing.MakeDataPacket(rule.KeyRouteID(), p)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	errCh := make(chan error)
 
@@ -203,10 +208,8 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 
 	select {
 	case <-r.writeDeadline.Wait():
-		cancel()
 		return 0, timeoutError{}
 	case <-timeout.C:
-		cancel()
 		return 0, io.EOF
 	case err := <-errCh:
 		if err != nil {
@@ -255,16 +258,17 @@ func (r *RouteGroup) Close() error {
 	return nil
 }
 
+// LocalAddr returns destination address of underlying RouteDescriptor.
 func (r *RouteGroup) LocalAddr() net.Addr {
 	return r.desc.Dst()
 }
 
+// RemoteAddr returns source address of underlying RouteDescriptor.
 func (r *RouteGroup) RemoteAddr() net.Addr {
 	return r.desc.Src()
 }
 
-// https://golang.org/src/internal/poll/fd_plan9.go#L103
-// https://golang.org/src/internal/poll/fd_poll_runtime.go#L126
+// SetDeadline sets both read and write deadlines.
 func (r *RouteGroup) SetDeadline(t time.Time) error {
 	if err := r.SetReadDeadline(t); err != nil {
 		return err
@@ -273,11 +277,13 @@ func (r *RouteGroup) SetDeadline(t time.Time) error {
 	return r.SetWriteDeadline(t)
 }
 
+// SetReadDeadline sets read deadline.
 func (r *RouteGroup) SetReadDeadline(t time.Time) error {
 	r.readDeadline.Set(t)
 	return nil
 }
 
+// SetWriteDeadline sets write deadline.
 func (r *RouteGroup) SetWriteDeadline(t time.Time) error {
 	r.writeDeadline.Set(t)
 	return nil
