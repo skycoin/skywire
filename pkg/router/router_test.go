@@ -218,10 +218,13 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 
 		fwdRule := routing.ForwardRule(1*time.Hour, dstRtIDs[0], routing.RouteID(7), tp1.Entry.ID, keys[0].PK, keys[1].PK, 0, 0)
 		cnsmRule := routing.ConsumeRule(1*time.Hour, dstRtIDs[1], keys[1].PK, keys[0].PK, 0, 0)
+
 		err = r1.rt.SaveRule(fwdRule)
 		require.NoError(t, err)
+
 		err = r1.rt.SaveRule(cnsmRule)
 		require.NoError(t, err)
+
 		fwdRtDesc := fwdRule.RouteDescriptor()
 		r1.saveRouteGroupRules(routing.EdgeRules{
 			Desc:    fwdRtDesc.Invert(),
