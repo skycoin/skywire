@@ -80,10 +80,11 @@ type RouteGroup struct {
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
 	//      and push to the appropriate '(RouteGroup).readCh'.
-	readCh  chan []byte  // push reads from Router
-	readBuf bytes.Buffer // for read overflow
-	done    chan struct{}
-	once    sync.Once
+	readCh   chan []byte // push reads from Router
+	readChMu sync.Mutex
+	readBuf  bytes.Buffer // for read overflow
+	done     chan struct{}
+	once     sync.Once
 
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
@@ -256,7 +257,9 @@ func (r *RouteGroup) Close() error {
 
 	r.once.Do(func() {
 		close(r.done)
-		// close(r.readCh) // TODO(nkryuchkov): uncomment
+		r.readChMu.Lock()
+		close(r.readCh)
+		r.readChMu.Unlock()
 	})
 
 	return nil
