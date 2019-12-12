@@ -86,7 +86,11 @@ func Test_router_AcceptRoutes(t *testing.T) {
 	require.Equal(t, []routing.Rule{fwdRule}, rg.fwd)
 	require.Equal(t, []routing.Rule{cnsmRule}, rg.rvs)
 	require.Len(t, rg.tps, 1)
-	require.Equal(t, []routing.Rule{fwdRule, cnsmRule}, rg.rt.AllRules())
+
+	allRules := rg.rt.AllRules()
+	assert.Len(t, allRules, 2)
+	assert.Contains(t, allRules, fwdRule)
+	assert.Contains(t, allRules, cnsmRule)
 }
 
 // Ensure that received packets are handled properly in `(*Router).Serve()`.
