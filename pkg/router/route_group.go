@@ -137,7 +137,7 @@ func (r *RouteGroup) Read(p []byte) (n int, err error) {
 	}
 	r.mu.Unlock()
 
-	timeout := time.NewTimer(5 * time.Second)
+	timeout := time.NewTimer(500 * time.Second)
 	defer timeout.Stop()
 
 	var data []byte
