@@ -240,7 +240,7 @@ func TestNode(t *testing.T) {
 
 		testLogger := logging.MustGetLogger("setupclient_test")
 		pks := []cipher.PubKey{clients[0].Addr.PK}
-		gotEdgeRules, err := setupclient.DialRouteGroup(ctx, testLogger, nEnv.Nets[1], pks, route)
+		gotEdgeRules, err := setupclient.NewSetupNodeDialer().Dial(ctx, testLogger, nEnv.Nets[1], pks, route)
 		require.NoError(t, err)
 		require.Equal(t, wantEdgeRules, gotEdgeRules)
 
