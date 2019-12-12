@@ -14,6 +14,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
+// ErrNoKey is returned when key is not found.
 var ErrNoKey = errors.New("id reservoir has no key")
 
 type idReservoir struct {

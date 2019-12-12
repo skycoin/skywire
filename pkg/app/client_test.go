@@ -1,16 +1,15 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"testing"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"

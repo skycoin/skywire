@@ -167,10 +167,8 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 		go mTp.Serve(tm.readCh, tm.done)
 		tm.tps[tpID] = mTp
 
-	} else {
-		if err := mTp.Accept(ctx, conn); err != nil {
-			return err
-		}
+	} else if err := mTp.Accept(ctx, conn); err != nil {
+		return err
 	}
 
 	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
@@ -316,6 +314,7 @@ func (tm *Manager) tpIDFromPK(pk cipher.PubKey, tpType string) uuid.UUID {
 	return MakeTransportID(tm.Conf.PubKey, pk, tpType)
 }
 
+// CreateTransportPair create a new transport pair for tests.
 func CreateTransportPair(
 	tpDisc DiscoveryClient,
 	keys []snettest.KeyPair,
