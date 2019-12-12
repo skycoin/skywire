@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"testing"
@@ -151,6 +152,32 @@ func Test_router_Introduce_AcceptRoutes(t *testing.T) {
 	require.Contains(t, allRules, cnsmRule)
 
 	require.NoError(t, r0.Close())
+	require.Equal(t, io.ErrClosedPipe, r0.IntroduceRules(rules))
+}
+
+func TestRouter_Serve(t *testing.T) {
+	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
+	keys := snettest.GenKeyPairs(2)
+
+	// create test env
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
+
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
+
+	// Create routers
+	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
+	require.NoError(t, err)
+
+	r0, ok := r0Ifc.(*router)
+	require.True(t, ok)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NoError(t, r0.tm.Close())
+	require.NoError(t, r0.Serve(ctx))
 }
 
 // Ensure that received packets are handled properly in `(*Router).handleTransportPacket()`.
