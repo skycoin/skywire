@@ -219,7 +219,6 @@ func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case rules, ok = <-r.accept:
-		break
 	}
 	if !ok {
 		return nil, &net.OpError{Op: "accept", Net: "skynet", Source: nil, Err: errors.New("use of closed network connection")}

@@ -170,6 +170,10 @@ func (r *RouteGroup) Write(p []byte) (n int, err error) {
 		return 0, timeoutError{}
 	}
 
+	if len(p) == 0 {
+		return 0, nil
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -252,7 +256,7 @@ func (r *RouteGroup) Close() error {
 
 	r.once.Do(func() {
 		close(r.done)
-		// close(r.readCh) // TODO: uncomment
+		// close(r.readCh) // TODO(nkryuchkov): uncomment
 	})
 
 	return nil
