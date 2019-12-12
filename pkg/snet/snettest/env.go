@@ -54,10 +54,14 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	dmsgD := disc.NewMock()
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
 
-	table := stcp.NewTable(map[cipher.PubKey]string{
-		keys[0].PK: "127.0.0.1:7033",
-		keys[1].PK: "127.0.0.1:7034",
-	})
+	const baseSTCPPort = 7033
+
+	tableEntries := make(map[cipher.PubKey]string)
+	for i, pair := range keys {
+		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
+	}
+
+	table := stcp.NewTable(tableEntries)
 
 	var hasDmsg, hasStcp bool
 
