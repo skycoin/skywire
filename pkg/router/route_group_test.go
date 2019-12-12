@@ -465,17 +465,18 @@ func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to 
 				panic("malformed packet")
 			}
 
-			if safeSend(to, ctx, payload) {
+			if safeSend(ctx, to, payload) {
 				return
 			}
 		}
 	}
 }
 
-func safeSend(to *RouteGroup, ctx context.Context, payload []byte) (interrupt bool) {
+func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (interrupt bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			interrupt = r != "send on closed channel" // TODO: come up with idea how to handle this case
+			// TODO: come up with idea how to get rid of panic
+			interrupt = r != "send on closed channel"
 		}
 	}()
 
