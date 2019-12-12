@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20191106075825-cabc26522b11 => ../dmsg
+# github.com/SkycoinProject/dmsg v0.0.0-20191106075825-cabc26522b11
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
@@ -40,9 +40,9 @@ github.com/gorilla/securecookie
 github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/mattn/go-colorable v0.1.4
+# github.com/mattn/go-colorable v0.1.2
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.8
 github.com/mattn/go-isatty
@@ -52,8 +52,6 @@ github.com/matttproud/golang_protobuf_extensions/pbutil
 github.com/mgutz/ansi
 # github.com/mitchellh/go-homedir v1.1.0
 github.com/mitchellh/go-homedir
-# github.com/pkg/errors v0.8.1
-github.com/pkg/errors
 # github.com/pkg/profile v1.3.0
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
@@ -103,7 +101,7 @@ golang.org/x/crypto/internal/chacha20
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20191105084925-a882066a44e0
+# golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
 golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/nettest
