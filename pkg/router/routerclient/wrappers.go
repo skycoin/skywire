@@ -12,7 +12,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-// TODO(nkryuchkov): remove this
+// TODO: remove this
 // dmsgClientWrapper is a temporary workaround to make dmsg client implement `snet.Dialer`.
 // The only reason to use this is because client's `Dial` returns `*dmsg.Stream` instead of `net.Conn`,
 // so this stuff should be removed as soon as the func's signature changes
