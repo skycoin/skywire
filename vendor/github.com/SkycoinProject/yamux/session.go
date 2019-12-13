@@ -209,6 +209,9 @@ func (s *Session) Accept() (net.Conn, error) {
 // AcceptStream is used to block until the next available stream
 // is ready to be accepted.
 func (s *Session) AcceptStream() (*Stream, error) {
+	if isClosedChan(s.shutdownCh) {
+		return nil, s.shutdownErr
+	}
 	select {
 	case stream := <-s.acceptCh:
 		if err := stream.sendWindowUpdate(); err != nil {

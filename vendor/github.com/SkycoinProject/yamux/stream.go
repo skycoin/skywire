@@ -47,28 +47,28 @@ type Stream struct {
 	recvNotifyCh chan struct{}
 	sendNotifyCh chan struct{}
 
-	readDeadline  atomic.Value // time.Time
-	writeDeadline atomic.Value // time.Time
+	readDeadline  pipeDeadline
+	writeDeadline pipeDeadline
 }
 
 // newStream is used to construct a new stream within
 // a given session for an ID
 func newStream(session *Session, id uint32, state streamState) *Stream {
 	s := &Stream{
-		id:           id,
-		session:      session,
-		state:        state,
-		controlHdr:   header(make([]byte, headerSize)),
-		controlErr:   make(chan error, 1),
-		sendHdr:      header(make([]byte, headerSize)),
-		sendErr:      make(chan error, 1),
-		recvWindow:   initialStreamWindow,
-		sendWindow:   initialStreamWindow,
-		recvNotifyCh: make(chan struct{}, 1),
-		sendNotifyCh: make(chan struct{}, 1),
+		id:            id,
+		session:       session,
+		state:         state,
+		controlHdr:    header(make([]byte, headerSize)),
+		controlErr:    make(chan error, 1),
+		sendHdr:       header(make([]byte, headerSize)),
+		sendErr:       make(chan error, 1),
+		recvWindow:    initialStreamWindow,
+		sendWindow:    initialStreamWindow,
+		recvNotifyCh:  make(chan struct{}, 1),
+		sendNotifyCh:  make(chan struct{}, 1),
+		readDeadline:  makePipeDeadline(),
+		writeDeadline: makePipeDeadline(),
 	}
-	s.readDeadline.Store(time.Time{})
-	s.writeDeadline.Store(time.Time{})
 	return s
 }
 
@@ -85,64 +85,61 @@ func (s *Stream) StreamID() uint32 {
 // Read is used to read from the stream
 func (s *Stream) Read(b []byte) (n int, err error) {
 	defer asyncNotify(s.recvNotifyCh)
-START:
-	s.stateLock.Lock()
-	switch s.state {
-	case streamLocalClose:
-		fallthrough
-	case streamRemoteClose:
-		fallthrough
-	case streamClosed:
+
+	if isClosedChan(s.readDeadline.wait()) {
+		return 0, ErrTimeout
+	}
+
+	for {
+		s.stateLock.Lock()
+		switch s.state {
+		case streamLocalClose:
+			fallthrough
+		case streamRemoteClose:
+			fallthrough
+		case streamClosed:
+			s.recvLock.Lock()
+			if s.recvBuf == nil || s.recvBuf.Len() == 0 {
+				s.recvLock.Unlock()
+				s.stateLock.Unlock()
+				return 0, io.EOF
+			}
+			s.recvLock.Unlock()
+		case streamReset:
+			s.stateLock.Unlock()
+			return 0, ErrConnectionReset
+		}
+		s.stateLock.Unlock()
+
+		// If there is no data available, block
 		s.recvLock.Lock()
 		if s.recvBuf == nil || s.recvBuf.Len() == 0 {
 			s.recvLock.Unlock()
-			s.stateLock.Unlock()
-			return 0, io.EOF
+		} else {
+			// Read any bytes
+			n, _ = s.recvBuf.Read(b)
+			s.recvLock.Unlock()
+
+			// Send a window update potentially
+			err = s.sendWindowUpdate()
+			return n, err
 		}
-		s.recvLock.Unlock()
-	case streamReset:
-		s.stateLock.Unlock()
-		return 0, ErrConnectionReset
-	}
-	s.stateLock.Unlock()
 
-	// If there is no data available, block
-	s.recvLock.Lock()
-	if s.recvBuf == nil || s.recvBuf.Len() == 0 {
-		s.recvLock.Unlock()
-		goto WAIT
-	}
-
-	// Read any bytes
-	n, _ = s.recvBuf.Read(b)
-	s.recvLock.Unlock()
-
-	// Send a window update potentially
-	err = s.sendWindowUpdate()
-	return n, err
-
-WAIT:
-	var timeout <-chan time.Time
-	var timer *time.Timer
-	readDeadline := s.readDeadline.Load().(time.Time)
-	if !readDeadline.IsZero() {
-		delay := readDeadline.Sub(time.Now())
-		timer = time.NewTimer(delay)
-		timeout = timer.C
-	}
-	select {
-	case <-s.recvNotifyCh:
-		if timer != nil {
-			timer.Stop()
+		select {
+		case <-s.recvNotifyCh:
+			continue
+		case <-s.readDeadline.wait():
+			return 0, ErrTimeout
 		}
-		goto START
-	case <-timeout:
-		return 0, ErrTimeout
 	}
 }
 
 // Write is used to write to the stream
 func (s *Stream) Write(b []byte) (n int, err error) {
+	if isClosedChan(s.writeDeadline.wait()) {
+		return 0, ErrTimeout
+	}
+
 	s.sendLock.Lock()
 	defer s.sendLock.Unlock()
 	total := 0
@@ -162,59 +159,55 @@ func (s *Stream) write(b []byte) (n int, err error) {
 	var flags uint16
 	var max uint32
 	var body io.Reader
-START:
-	s.stateLock.Lock()
-	switch s.state {
-	case streamLocalClose:
-		fallthrough
-	case streamClosed:
-		s.stateLock.Unlock()
-		return 0, ErrStreamClosed
-	case streamReset:
-		s.stateLock.Unlock()
-		return 0, ErrConnectionReset
-	}
-	s.stateLock.Unlock()
 
-	// If there is no data available, block
-	window := atomic.LoadUint32(&s.sendWindow)
-	if window == 0 {
-		goto WAIT
-	}
-
-	// Determine the flags if any
-	flags = s.sendFlags()
-
-	// Send up to our send window
-	max = min(window, uint32(len(b)))
-	body = bytes.NewReader(b[:max])
-
-	// Send the header
-	s.sendHdr.encode(typeData, flags, s.id, max)
-	if err = s.session.waitForSendErr(s.sendHdr, body, s.sendErr); err != nil {
-		return 0, err
-	}
-
-	// Reduce our send window
-	atomic.AddUint32(&s.sendWindow, ^uint32(max-1))
-
-	// Unlock
-	return int(max), err
-
-WAIT:
-	var timeout <-chan time.Time
-	writeDeadline := s.writeDeadline.Load().(time.Time)
-	if !writeDeadline.IsZero() {
-		delay := writeDeadline.Sub(time.Now())
-		timeout = time.After(delay)
-	}
-	select {
-	case <-s.sendNotifyCh:
-		goto START
-	case <-timeout:
+	if isClosedChan(s.writeDeadline.wait()) {
 		return 0, ErrTimeout
 	}
-	return 0, nil
+
+	for {
+		s.stateLock.Lock()
+		switch s.state {
+		case streamLocalClose:
+			fallthrough
+		case streamClosed:
+			s.stateLock.Unlock()
+			return 0, ErrStreamClosed
+		case streamReset:
+			s.stateLock.Unlock()
+			return 0, ErrConnectionReset
+		}
+		s.stateLock.Unlock()
+
+		// If there is no data available, block
+		window := atomic.LoadUint32(&s.sendWindow)
+		if window != 0 {
+			// Determine the flags if any
+			flags = s.sendFlags()
+
+			// Send up to our send window
+			max = min(window, uint32(len(b)))
+			body = bytes.NewReader(b[:max])
+
+			// Send the header
+			s.sendHdr.encode(typeData, flags, s.id, max)
+			if err = s.session.waitForSendErr(s.sendHdr, body, s.sendErr); err != nil {
+				return 0, err
+			}
+
+			// Reduce our send window
+			atomic.AddUint32(&s.sendWindow, ^uint32(max-1))
+
+			// Unlock
+			return int(max), err
+		}
+
+		select {
+		case <-s.sendNotifyCh:
+			continue
+		case <-s.writeDeadline.wait():
+			return 0, ErrTimeout
+		}
+	}
 }
 
 // sendFlags determines any flags that are appropriate
@@ -448,13 +441,13 @@ func (s *Stream) SetDeadline(t time.Time) error {
 
 // SetReadDeadline sets the deadline for future Read calls.
 func (s *Stream) SetReadDeadline(t time.Time) error {
-	s.readDeadline.Store(t)
+	s.readDeadline.set(t)
 	return nil
 }
 
 // SetWriteDeadline sets the deadline for future Write calls
 func (s *Stream) SetWriteDeadline(t time.Time) error {
-	s.writeDeadline.Store(t)
+	s.writeDeadline.set(t)
 	return nil
 }
 
