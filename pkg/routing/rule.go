@@ -366,17 +366,17 @@ func (r Rule) Summary() *RuleSummary {
 }
 
 // ConsumeRule constructs a new Consume rule.
-func ConsumeRule(keepAlive time.Duration, key RouteID, localPK, remotePK cipher.PubKey, localPort, remotePort Port) Rule {
+func ConsumeRule(keepAlive time.Duration, key RouteID, lPK, rPK cipher.PubKey, lPort, rPort Port) Rule {
 	rule := Rule(make([]byte, RuleHeaderSize+routeDescriptorSize))
 
 	rule.setKeepAlive(keepAlive)
 	rule.setType(RuleConsume)
 	rule.SetKeyRouteID(key)
 
-	rule.setSrcPK(localPK)
-	rule.setDstPK(remotePK)
-	rule.setDstPort(remotePort)
-	rule.setSrcPort(localPort)
+	rule.setSrcPK(lPK)
+	rule.setDstPK(rPK)
+	rule.setDstPort(rPort)
+	rule.setSrcPort(lPort)
 
 	return rule
 }
