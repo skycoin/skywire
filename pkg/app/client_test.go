@@ -305,8 +305,10 @@ func TestClient_Close(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
 	visorPK, _ := cipher.GenerateKeyPair()
 
-	var closeNoErr error
-	closeErr := errors.New("close error")
+	var (
+		closeNoErr error
+		closeErr   = errors.New("close error")
+	)
 
 	rpc := &MockRPCClient{}
 
@@ -321,11 +323,13 @@ func TestClient_Close(t *testing.T) {
 	lis1 := &Listener{id: lisID1, rpc: rpc, cm: idmanager.New()}
 	freeLis1, err := lm.Add(lisID1, lis1)
 	require.NoError(t, err)
+
 	lis1.freeLis = freeLis1
 
 	lis2 := &Listener{id: lisID2, rpc: rpc, cm: idmanager.New()}
 	freeLis2, err := lm.Add(lisID2, lis2)
 	require.NoError(t, err)
+
 	lis2.freeLis = freeLis2
 
 	connID1 := uint16(1)
@@ -339,11 +343,13 @@ func TestClient_Close(t *testing.T) {
 	conn1 := &Conn{id: connID1, rpc: rpc}
 	freeConn1, err := cm.Add(connID1, conn1)
 	require.NoError(t, err)
+
 	conn1.freeConn = freeConn1
 
 	conn2 := &Conn{id: connID2, rpc: rpc}
 	freeConn2, err := cm.Add(connID2, conn2)
 	require.NoError(t, err)
+
 	conn2.freeConn = freeConn2
 
 	cl := prepClient(l, visorPK, rpc)

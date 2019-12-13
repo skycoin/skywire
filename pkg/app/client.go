@@ -109,6 +109,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	}
 
 	conn.freeConnMx.Lock()
+
 	free, err := c.cm.Add(connID, conn)
 
 	if err != nil {
@@ -120,7 +121,9 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 
 		return nil, err
 	}
+
 	conn.freeConn = free
+
 	conn.freeConnMx.Unlock()
 
 	return conn, nil
@@ -148,16 +151,20 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 	}
 
 	listener.freeLisMx.Lock()
+
 	freeLis, err := c.lm.Add(lisID, listener)
 	if err != nil {
 		listener.freeLisMx.Unlock()
+
 		if err := listener.Close(); err != nil {
 			c.log.WithError(err).Error("error closing listener")
 		}
 
 		return nil, err
 	}
+
 	listener.freeLis = freeLis
+
 	listener.freeLisMx.Unlock()
 
 	return listener, nil
@@ -167,6 +174,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 // listeners and connections.
 func (c *Client) Close() {
 	var listeners []net.Listener
+
 	c.lm.DoRange(func(_ uint16, v interface{}) bool {
 		lis, err := idmanager.AssertListener(v)
 		if err != nil {
@@ -179,6 +187,7 @@ func (c *Client) Close() {
 	})
 
 	var conns []net.Conn
+
 	c.cm.DoRange(func(_ uint16, v interface{}) bool {
 		conn, err := idmanager.AssertConn(v)
 		if err != nil {
