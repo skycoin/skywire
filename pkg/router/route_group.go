@@ -185,35 +185,20 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
-	if len(rg.tps) == 0 {
-		return 0, ErrNoTransports
+	tp, err := rg.tp()
+	if err != nil {
+		return 0, err
 	}
 
-	if len(rg.fwd) == 0 {
-		return 0, ErrNoRules
-	}
-
-	tp := rg.tps[0]
-	rule := rg.fwd[0]
-
-	if tp == nil {
-		return 0, ErrBadTransport
+	rule, err := rg.rule()
+	if err != nil {
+		return 0, err
 	}
 
 	packet := routing.MakeDataPacket(rule.KeyRouteID(), p)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	errCh, cancel := rg.writePacketAsync(tp, packet)
 	defer cancel()
-
-	errCh := make(chan error)
-
-	go func() {
-		select {
-		case <-ctx.Done():
-		case errCh <- tp.WritePacket(context.Background(), packet):
-		}
-		close(errCh)
-	}()
 
 	timeout := time.NewTimer(rg.cfg.IOTimeout)
 	defer timeout.Stop()
@@ -232,6 +217,46 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 
 		return len(p), nil
 	}
+}
+
+func (rg *RouteGroup) writePacketAsync(tp *transport.ManagedTransport, packet routing.Packet) (chan error, func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+		case errCh <- tp.WritePacket(context.Background(), packet):
+		}
+		close(errCh)
+	}()
+
+	return errCh, cancel
+}
+
+func (rg *RouteGroup) rule() (routing.Rule, error) {
+	if len(rg.fwd) == 0 {
+		return nil, ErrNoRules
+	}
+
+	rule := rg.fwd[0]
+
+	return rule, nil
+}
+
+func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
+	if len(rg.tps) == 0 {
+		return nil, ErrNoTransports
+	}
+
+	tp := rg.tps[0]
+
+	if tp == nil {
+		return nil, ErrBadTransport
+	}
+
+	return tp, nil
 }
 
 // Close closes a RouteGroup:

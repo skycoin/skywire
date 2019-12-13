@@ -55,6 +55,7 @@ func (c *Config) SetDefaults() {
 	if c.Logger == nil {
 		c.Logger = logging.MustGetLogger("router")
 	}
+
 	if c.RouteGroupDialer == nil {
 		c.RouteGroupDialer = setupclient.NewSetupNodeDialer()
 	}
@@ -217,15 +218,26 @@ func (r *router) DialRoutes(
 // - Save to routing.Table and internal RouteGroup map.
 // - Return the RoutingGroup.
 func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
-	var rules routing.EdgeRules
-	var ok bool
+	var (
+		rules routing.EdgeRules
+		ok    bool
+	)
+
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case rules, ok = <-r.accept:
 	}
+
 	if !ok {
-		return nil, &net.OpError{Op: "accept", Net: "skynet", Source: nil, Err: errors.New("use of closed network connection")}
+		err := &net.OpError{
+			Op:     "accept",
+			Net:    "skynet",
+			Source: nil,
+			Err:    errors.New("use of closed network connection"),
+		}
+
+		return nil, err
 	}
 
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
