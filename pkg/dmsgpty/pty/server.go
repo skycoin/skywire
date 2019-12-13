@@ -82,11 +82,13 @@ func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 			if err := st.Close(); err != nil {
 				log.WithError(err).Warn("close transport error")
 			}
+
 			continue
 		}
 
 		log.Info("request accepted")
 		wg.Add(1)
+
 		go func(st *dmsg.Stream) {
 			done := make(chan struct{})
 			defer func() {
@@ -126,6 +128,7 @@ func (s *Server) handleConn(log logrus.FieldLogger, _ cipher.PubKey, conn net.Co
 
 	// Prepare and serve gateway to connection.
 	ptyG := NewDirectGateway()
+
 	defer func() { _ = ptyG.Stop(nil, nil) }() //nolint:errcheck
 
 	rpcS := rpc.NewServer()

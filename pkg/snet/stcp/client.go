@@ -29,9 +29,11 @@ func newConn(conn net.Conn, deadline time.Time, hs Handshake, freePort func()) (
 	lAddr, rAddr, err := hs(conn, deadline)
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
+
 		if freePort != nil {
 			freePort()
 		}
+
 		return nil, err
 	}
 	return &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: freePort}, nil
