@@ -37,6 +37,7 @@ type Manager struct {
 
 	readCh    chan routing.Packet
 	mx        sync.RWMutex
+	wgMu      sync.Mutex
 	wg        sync.WaitGroup
 	serveOnce sync.Once // ensure we only serve once.
 	closeOnce sync.Once // ensure we only close once.
@@ -90,7 +91,10 @@ func (tm *Manager) serve(ctx context.Context) {
 			return
 		}
 
+		tm.wgMu.Lock()
 		tm.wg.Add(1)
+		tm.wgMu.Unlock()
+
 		go func() {
 			defer tm.wg.Done()
 			for {
@@ -305,7 +309,9 @@ func (tm *Manager) close() {
 		tm.Logger.Warnf("failed to update transport statuses: %v", err)
 	}
 
+	tm.wgMu.Lock()
 	tm.wg.Wait()
+	tm.wgMu.Unlock()
 
 	close(tm.readCh)
 }

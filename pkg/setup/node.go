@@ -109,16 +109,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 		return routing.EdgeRules{}, err
 	}
 
-	forwardRoute := routing.Route{
-		Desc:      route.Desc,
-		Path:      route.Forward,
-		KeepAlive: route.KeepAlive,
-	}
-	reverseRoute := routing.Route{
-		Desc:      route.Desc.Invert(),
-		Path:      route.Reverse,
-		KeepAlive: route.KeepAlive,
-	}
+	forwardRoute, reverseRoute := route.ForwardAndReverse()
 
 	// Determine the rules to send to visors using loop descriptor and reserved route IDs.
 	forwardRules, consumeRules, intermediaryRules, err := idr.GenerateRules(forwardRoute, reverseRoute)
@@ -132,6 +123,37 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	sn.logger.Infof("generated consume rules: %v", consumeRules)
 	sn.logger.Infof("generated intermediary rules: %v", intermediaryRules)
 
+	if err := sn.addIntermediaryRules(ctx, intermediaryRules); err != nil {
+		return routing.EdgeRules{}, err
+	}
+
+	initRouteRules := routing.EdgeRules{
+		Desc:    reverseRoute.Desc,
+		Forward: forwardRules[route.Desc.SrcPK()],
+		Reverse: consumeRules[route.Desc.SrcPK()],
+	}
+
+	respRouteRules := routing.EdgeRules{
+		Desc:    forwardRoute.Desc,
+		Forward: forwardRules[route.Desc.DstPK()],
+		Reverse: consumeRules[route.Desc.DstPK()],
+	}
+
+	sn.logger.Infof("initRouteRules: Desc(%s), %s", &initRouteRules.Desc, initRouteRules)
+	sn.logger.Infof("respRouteRules: Desc(%s), %s", &respRouteRules.Desc, respRouteRules)
+
+	// Confirm routes with responding visor.
+	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
+	if err != nil || !ok {
+		return routing.EdgeRules{}, fmt.Errorf("failed to confirm loop with destination visor: %v", err)
+	}
+
+	sn.logger.Infof("Returning route rules to initiating node: %v", initRouteRules)
+
+	return initRouteRules, nil
+}
+
+func (sn *Node) addIntermediaryRules(ctx context.Context, intermediaryRules RulesMap) error {
 	errCh := make(chan error, len(intermediaryRules))
 
 	var wg sync.WaitGroup
@@ -155,33 +177,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	wg.Wait()
 	close(errCh)
 
-	if err := finalError(len(intermediaryRules), errCh); err != nil {
-		return routing.EdgeRules{}, err
-	}
-
-	initRouteRules := routing.EdgeRules{
-		Desc:    reverseRoute.Desc,
-		Forward: forwardRules[route.Desc.SrcPK()],
-		Reverse: consumeRules[route.Desc.SrcPK()],
-	}
-	respRouteRules := routing.EdgeRules{
-		Desc:    forwardRoute.Desc,
-		Forward: forwardRules[route.Desc.DstPK()],
-		Reverse: consumeRules[route.Desc.DstPK()],
-	}
-
-	sn.logger.Infof("initRouteRules: Desc(%s), %s", &initRouteRules.Desc, initRouteRules)
-	sn.logger.Infof("respRouteRules: Desc(%s), %s", &respRouteRules.Desc, respRouteRules)
-
-	// Confirm routes with responding visor.
-	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
-	if err != nil || !ok {
-		return routing.EdgeRules{}, fmt.Errorf("failed to confirm loop with destination visor: %v", err)
-	}
-
-	sn.logger.Infof("Returning route rules to initiating node: %v", initRouteRules)
-
-	return initRouteRules, nil
+	return finalError(len(intermediaryRules), errCh)
 }
 
 func (sn *Node) reserveRouteIDs(ctx context.Context, route routing.BidirectionalRoute) (*idReservoir, error) {

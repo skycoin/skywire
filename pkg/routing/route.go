@@ -35,6 +35,22 @@ type BidirectionalRoute struct {
 	Reverse   Path
 }
 
+func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse Route) {
+	forwardRoute := Route{
+		Desc:      br.Desc,
+		Path:      br.Forward,
+		KeepAlive: br.KeepAlive,
+	}
+
+	reverseRoute := Route{
+		Desc:      br.Desc.Invert(),
+		Path:      br.Reverse,
+		KeepAlive: br.KeepAlive,
+	}
+
+	return forwardRoute, reverseRoute
+}
+
 // EdgeRules represents edge forward and reverse rules. Edge rules are forward and consume rules.
 type EdgeRules struct {
 	Desc    RouteDescriptor
