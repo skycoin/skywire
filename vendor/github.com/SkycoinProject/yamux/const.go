@@ -5,6 +5,14 @@ import (
 	"fmt"
 )
 
+type timeoutError struct {
+	error string
+}
+
+func (e timeoutError) Error() string   { return e.error }
+func (e timeoutError) Timeout() bool   { return true }
+func (e timeoutError) Temporary() bool { return true }
+
 var (
 	// ErrInvalidVersion means we received a frame with an
 	// invalid version
@@ -30,7 +38,7 @@ var (
 	ErrRecvWindowExceeded = fmt.Errorf("recv window exceeded")
 
 	// ErrTimeout is used when we reach an IO deadline
-	ErrTimeout = fmt.Errorf("i/o deadline reached")
+	ErrTimeout = timeoutError{error: "i/o deadline reached"}
 
 	// ErrStreamClosed is returned when using a closed stream
 	ErrStreamClosed = fmt.Errorf("stream closed")
