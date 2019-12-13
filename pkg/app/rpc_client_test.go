@@ -48,7 +48,6 @@ func TestRPCClient_Dial(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, connID, uint16(1))
 		require.Equal(t, localPort, routing.Port(dmsgLocal.Port))
-
 	})
 
 	t.Run("dial error", func(t *testing.T) {

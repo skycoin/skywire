@@ -76,6 +76,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	// Prepare `snets`.
 	ns := make([]*snet.Network, len(keys))
+
 	for i, pairs := range keys {
 		var dmsgClient *dmsg.Client
 		var stcpClient *stcp.Client

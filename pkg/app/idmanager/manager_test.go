@@ -359,6 +359,7 @@ func TestManager_DoRange(t *testing.T) {
 
 	// run full range
 	gotVals := make([]int, 0, valsCount)
+
 	m.DoRange(func(_ uint16, v interface{}) bool {
 		val, ok := v.(int)
 		require.True(t, ok)
@@ -373,6 +374,7 @@ func TestManager_DoRange(t *testing.T) {
 	// run part range
 	var gotVal int
 	gotValsCount := 0
+
 	m.DoRange(func(_ uint16, v interface{}) bool {
 		if gotValsCount == 1 {
 			return false
@@ -389,11 +391,13 @@ func TestManager_DoRange(t *testing.T) {
 	})
 
 	found := false
+
 	for _, v := range vals {
 		if v == gotVal {
 			found = true
 		}
 	}
+
 	require.True(t, found)
 }
 
