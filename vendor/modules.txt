@@ -8,6 +8,8 @@ github.com/SkycoinProject/dmsg/noise
 # github.com/SkycoinProject/skycoin v0.26.0
 github.com/SkycoinProject/skycoin/src/cipher
 github.com/SkycoinProject/skycoin/src/util/logging
+# github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
+github.com/SkycoinProject/yamux
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 github.com/alecthomas/template
 github.com/alecthomas/template/parse
@@ -36,8 +38,6 @@ github.com/google/uuid
 github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
 github.com/gorilla/securecookie
-# github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
-github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2

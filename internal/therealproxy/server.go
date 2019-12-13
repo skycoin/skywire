@@ -5,8 +5,8 @@ import (
 	"net"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/yamux"
 	"github.com/armon/go-socks5"
-	"github.com/hashicorp/yamux"
 )
 
 // Server implements multiplexing proxy server using yamux.
