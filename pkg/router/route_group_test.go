@@ -93,7 +93,6 @@ func TestRouteGroup_Read(t *testing.T) {
 
 func TestRouteGroup_Write(t *testing.T) {
 	msg1 := []byte("hello1")
-	msg2 := []byte("hello2")
 
 	rg1 := createRouteGroup()
 	require.NotNil(t, rg1)
@@ -107,6 +106,16 @@ func TestRouteGroup_Write(t *testing.T) {
 
 	m1, m2, teardown := createTransports(t, rg1, rg2, stcp.Type)
 	defer teardown()
+
+	testWrite(t, rg1, rg2, m1, m2)
+
+	require.NoError(t, rg1.Close())
+	require.NoError(t, rg2.Close())
+}
+
+func testWrite(t *testing.T, rg1, rg2 *RouteGroup, m1, m2 *transport.Manager) {
+	msg1 := []byte("hello1")
+	msg2 := []byte("hello2")
 
 	n, err := rg1.Write([]byte{})
 	require.Equal(t, 0, n)
@@ -134,22 +143,22 @@ func TestRouteGroup_Write(t *testing.T) {
 	rg1.tps[0] = nil
 	_, err = rg1.Write(msg1)
 	require.Equal(t, ErrBadTransport, err)
+
 	rg1.tps[0] = tpBackup
 
 	tpsBackup := rg1.tps
 	rg1.tps = nil
 	_, err = rg1.Write(msg1)
 	require.Equal(t, ErrNoTransports, err)
+
 	rg1.tps = tpsBackup
 
 	fwdBackup := rg1.fwd
 	rg1.fwd = nil
 	_, err = rg1.Write(msg1)
 	require.Equal(t, ErrNoRules, err)
-	rg1.fwd = fwdBackup
 
-	require.NoError(t, rg1.Close())
-	require.NoError(t, rg2.Close())
+	rg1.fwd = fwdBackup
 }
 
 func TestRouteGroup_ReadWrite(t *testing.T) {
