@@ -452,6 +452,7 @@ func prepNetworkerWithListener(t *testing.T, lis *appcommon.MockListener, local 
 	var noErr error
 
 	appnet.ClearNetworkers()
+
 	n := &appnet.MockNetworker{}
 	n.On("ListenContext", mock.Anything, local).Return(lis, noErr)
 

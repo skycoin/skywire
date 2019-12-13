@@ -26,6 +26,7 @@ type Listener struct {
 // Accept accepts a connection from listener.
 func (l *Listener) Accept() (net.Conn, error) {
 	l.log.Infoln("Calling app RPC Accept")
+
 	connID, remote, err := l.rpc.Accept(l.id)
 	if err != nil {
 		return nil, err
@@ -47,6 +48,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 	// the conn without `freeConn` while the next few lines are running,
 	// the panic may raise without this lock
 	conn.freeConnMx.Lock()
+
 	free, err := l.cm.Add(connID, conn)
 	if err != nil {
 		conn.freeConnMx.Unlock()
@@ -68,6 +70,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 func (l *Listener) Close() error {
 	l.freeLisMx.RLock()
 	defer l.freeLisMx.RUnlock()
+
 	if l.freeLis != nil {
 		if freed := l.freeLis(); !freed {
 			return errors.New("listener is already closed")
