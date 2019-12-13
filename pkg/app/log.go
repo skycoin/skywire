@@ -19,6 +19,7 @@ func NewLogger(appName string) *logging.MasterLogger {
 
 	l := newAppLogger()
 	l.SetOutput(io.MultiWriter(l.Out, db))
+
 	os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 
 	return l
@@ -45,5 +46,6 @@ func newPersistentLogger(path, appName string) (*logging.MasterLogger, LogStore,
 func newAppLogger() *logging.MasterLogger {
 	l := logging.NewMasterLogger()
 	l.Logger.Formatter.(*logging.TextFormatter).TimestampFormat = time.RFC3339Nano
+
 	return l
 }

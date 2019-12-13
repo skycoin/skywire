@@ -143,6 +143,7 @@ func (c *CLI) RequestPty() error {
 func (c *CLI) ptyResizeLoop(ctx context.Context, ptyC *pty.Client) error {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
+
 	for {
 		select {
 		case <-ctx.Done():
