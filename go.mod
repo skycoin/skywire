@@ -5,13 +5,14 @@ go 1.13
 require (
 	github.com/SkycoinProject/dmsg v0.0.0-20191106075825-cabc26522b11
 	github.com/SkycoinProject/skycoin v0.26.0
+	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.9
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/securecookie v1.1.1
-	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
+	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.8.1
 	github.com/pkg/profile v1.3.0
