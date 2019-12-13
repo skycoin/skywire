@@ -30,6 +30,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	l.log.Infoln("Accepted conn from app RPC")
 
 	conn := &Conn{
@@ -49,12 +50,14 @@ func (l *Listener) Accept() (net.Conn, error) {
 	free, err := l.cm.Add(connID, conn)
 	if err != nil {
 		conn.freeConnMx.Unlock()
+
 		if err := conn.Close(); err != nil {
 			l.log.WithError(err).Error("error closing listener")
 		}
 
 		return nil, err
 	}
+
 	conn.freeConn = free
 	conn.freeConnMx.Unlock()
 
@@ -71,6 +74,7 @@ func (l *Listener) Close() error {
 		}
 
 		var conns []net.Conn
+
 		l.cm.DoRange(func(_ uint16, v interface{}) bool {
 			conn, err := idmanager.AssertConn(v)
 			if err != nil {

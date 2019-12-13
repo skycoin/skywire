@@ -34,6 +34,7 @@ func prepareConns(t *testing.T) (*Conn, *Conn, func()) {
 	var b *Conn
 	var respErr error
 	done := make(chan struct{})
+
 	go func() {
 		b, respErr = newConn(bConn, time.Now().Add(HandshakeTimeout), rhs, nil)
 		close(done)

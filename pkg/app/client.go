@@ -110,8 +110,10 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 
 	conn.freeConnMx.Lock()
 	free, err := c.cm.Add(connID, conn)
+
 	if err != nil {
 		conn.freeConnMx.Unlock()
+
 		if err := conn.Close(); err != nil {
 			c.log.WithError(err).Error("error closing conn")
 		}

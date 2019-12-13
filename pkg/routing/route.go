@@ -35,6 +35,7 @@ type BidirectionalRoute struct {
 	Reverse   Path
 }
 
+// ForwardAndReverse generate forward and reverse routes for bidirectional route.
 func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse Route) {
 	forwardRoute := Route{
 		Desc:      br.Desc,

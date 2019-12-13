@@ -83,6 +83,7 @@ func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk ciphe
 
 func (td *mockDiscoveryClient) UpdateStatuses(ctx context.Context, statuses ...*Status) ([]*EntryWithStatus, error) {
 	res := make([]*EntryWithStatus, 0)
+
 	for _, status := range statuses {
 		entry, err := td.GetTransportByID(ctx, status.ID)
 		if err != nil {
