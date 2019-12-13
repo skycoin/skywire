@@ -39,6 +39,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 func (c *Conn) Close() error {
 	c.freeConnMx.RLock()
 	defer c.freeConnMx.RUnlock()
+
 	if c.freeConn != nil {
 		if freed := c.freeConn(); !freed {
 			return errors.New("conn is already closed")
