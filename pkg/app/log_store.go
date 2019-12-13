@@ -58,6 +58,7 @@ func newBoltDB(path, appName string) (_ LogStore, err error) {
 
 		return nil
 	})
+
 	if err != nil && !strings.Contains(err.Error(), bbolt.ErrBucketExists.Error()) {
 		return nil, err
 	}
@@ -125,6 +126,7 @@ func (l *boltDBappLogs) LogsSince(t time.Time) (logs []string, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		cErr := db.Close()
 		err = cErr
