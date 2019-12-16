@@ -24,6 +24,7 @@ func TestType_IsValid(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			valid := tc.t.IsValid()
 			require.Equal(t, tc.want, valid)
