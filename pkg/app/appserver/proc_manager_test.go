@@ -36,9 +36,12 @@ func TestProcManager_Range(t *testing.T) {
 	}
 
 	var gotAppNames []string
+
 	next := func(name string, app *Proc) bool {
 		gotAppNames = append(gotAppNames, name)
+
 		require.Nil(t, app)
+
 		return true
 	}
 
@@ -64,6 +67,7 @@ func TestProcManager_Pop(t *testing.T) {
 	app, err = m.pop(appName)
 	require.NoError(t, err)
 	require.Nil(t, app)
+
 	_, ok = m.procs[appName]
 	require.False(t, ok)
 }

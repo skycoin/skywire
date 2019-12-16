@@ -59,6 +59,7 @@ func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
 		}
 
 		free()
+
 		return err
 	}
 
@@ -89,6 +90,7 @@ func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) error {
 		}
 
 		free()
+
 		return err
 	}
 
@@ -106,6 +108,7 @@ type AcceptResp struct {
 // Accept accepts connection from the listener specified by `lisID`.
 func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 	r.log.Infoln("Inside RPC Accept on server side")
+
 	lis, err := r.getListener(*lisID)
 	if err != nil {
 		r.log.Infoln("Error getting listener on RPC Accept server side")
@@ -113,6 +116,7 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 	}
 
 	r.log.Infoln("Reserving next ID on RPC Accept server side")
+
 	connID, free, err := r.cm.ReserveNextID()
 	if err != nil {
 		r.log.Infoln("Error reserving next ID on RPC Accept server side")
@@ -120,14 +124,17 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 	}
 
 	r.log.Infoln("Accepting conn on RPC Accept server side")
+
 	conn, err := lis.Accept()
 	if err != nil {
 		r.log.Infoln("Error accepting conn on RPC Accept server side")
 		free()
+
 		return err
 	}
 
 	r.log.Infoln("Wrapping conn on RPC Accept server side")
+
 	wrappedConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		free()
@@ -140,6 +147,7 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 		}
 
 		free()
+
 		return err
 	}
 
@@ -192,6 +200,7 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 	}
 
 	buf := make([]byte, req.BufLen)
+
 	resp.N, err = conn.Read(buf)
 	if err != nil {
 		return err
