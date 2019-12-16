@@ -367,7 +367,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
-	r.logger.Infof("Packet contents: %s", packet.Payload())
+	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
 
 	if rg.isClosed() {
 		r.logger.Infoln("RG IS CLOSED")
