@@ -50,6 +50,7 @@ func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 	m.lstID = nxtID
 
 	m.mx.Unlock()
+
 	return &nxtID, m.constructFreeFunc(nxtID), nil
 }
 
@@ -57,6 +58,7 @@ func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 // returns it.
 func (m *Manager) Pop(id uint16) (interface{}, error) {
 	m.mx.Lock()
+
 	v, ok := m.values[id]
 	if !ok {
 		m.mx.Unlock()
@@ -71,6 +73,7 @@ func (m *Manager) Pop(id uint16) (interface{}, error) {
 	delete(m.values, id)
 
 	m.mx.Unlock()
+
 	return v, nil
 }
 
@@ -86,6 +89,7 @@ func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 	m.values[id] = v
 
 	m.mx.Unlock()
+
 	return m.constructFreeFunc(id), nil
 }
 
@@ -98,6 +102,7 @@ func (m *Manager) Set(id uint16, v interface{}) error {
 		m.mx.Unlock()
 		return errors.New("id is not reserved")
 	}
+
 	if l != nil {
 		m.mx.Unlock()
 		return ErrValueAlreadyExists
@@ -106,6 +111,7 @@ func (m *Manager) Set(id uint16, v interface{}) error {
 	m.values[id] = v
 
 	m.mx.Unlock()
+
 	return nil
 }
 
@@ -114,9 +120,11 @@ func (m *Manager) Get(id uint16) (interface{}, bool) {
 	m.mx.RLock()
 	lis, ok := m.values[id]
 	m.mx.RUnlock()
+
 	if lis == nil {
 		return nil, false
 	}
+
 	return lis, ok
 }
 
@@ -136,14 +144,18 @@ func (m *Manager) DoRange(next func(id uint16, v interface{}) bool) {
 // a slot with the specified `id`.
 func (m *Manager) constructFreeFunc(id uint16) func() bool {
 	var once sync.Once
+
 	return func() bool {
 		var freed bool
+
 		once.Do(func() {
 			freed = true
+
 			m.mx.Lock()
 			delete(m.values, id)
 			m.mx.Unlock()
 		})
+
 		return freed
 	}
 }
