@@ -7,24 +7,18 @@ import (
 	"net/rpc"
 	"testing"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/mock"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
-
-	"github.com/stretchr/testify/require"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 )
 
 func TestConn_Read(t *testing.T) {
