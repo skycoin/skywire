@@ -38,12 +38,15 @@ func AddNetworker(t Type, n Networker) error {
 // ResolveNetworker resolves Networker by `network`.
 func ResolveNetworker(t Type) (Networker, error) {
 	networkersMx.RLock()
+
 	n, ok := networkers[t]
 	if !ok {
 		networkersMx.RUnlock()
 		return nil, ErrNoSuchNetworker
 	}
+
 	networkersMx.RUnlock()
+
 	return n, nil
 }
 
