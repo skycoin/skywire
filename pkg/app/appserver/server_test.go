@@ -35,6 +35,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 	}
 
 	errCh := make(chan error)
+
 	go func() {
 		err := s.ListenAndServe()
 		if err != nil {
@@ -55,7 +56,9 @@ func TestServer_ListenAndServe(t *testing.T) {
 	conn.On("Close").Return(noErr)
 
 	appnet.ClearNetworkers()
+
 	n := &appnet.MockNetworker{}
+
 	n.On("DialContext", mock.Anything, remote).Return(conn, noErr)
 
 	err = appnet.AddNetworker(appnet.TypeDMSG, n)

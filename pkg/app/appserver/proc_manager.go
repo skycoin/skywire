@@ -65,11 +65,14 @@ func (m *procManager) Run(log *logging.Logger, c appcommon.Config, args []string
 	m.mx.Lock()
 	if _, ok := m.procs[c.Name]; ok {
 		m.mx.Unlock()
+
 		if err := p.Stop(); err != nil {
 			m.log.WithError(err).Error("error stopping app")
 		}
+
 		return 0, ErrAppAlreadyStarted
 	}
+
 	m.procs[c.Name] = p
 	m.mx.Unlock()
 
@@ -82,6 +85,7 @@ func (m *procManager) Exists(name string) bool {
 	defer m.mx.RUnlock()
 
 	_, ok := m.procs[name]
+
 	return ok
 }
 
