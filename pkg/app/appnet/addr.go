@@ -34,6 +34,7 @@ func (a Addr) String() string {
 	if a.Port == 0 {
 		return fmt.Sprintf("%s:~", a.PubKey)
 	}
+
 	return fmt.Sprintf("%s:%d", a.PubKey, a.Port)
 }
 

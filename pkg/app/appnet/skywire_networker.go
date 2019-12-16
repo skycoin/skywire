@@ -3,6 +3,7 @@ package appnet
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -79,7 +80,7 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
 		go func() {
-			if err := r.serve(ctx); err != nil {
+			if err := r.serveLoop(ctx); err != nil {
 				r.log.WithError(err).Error("error serving")
 			}
 		}()
@@ -88,10 +89,11 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 	return lis, nil
 }
 
-// serve accepts and serves routes.
-func (r *SkywireNetworker) serve(ctx context.Context) error {
+// serveLoop accepts and serves routes.
+func (r *SkywireNetworker) serveLoop(ctx context.Context) error {
 	for {
 		r.log.Infoln("Trying to accept routing group...")
+
 		rg, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
 			r.log.Infof("Error accepting routing group: %v", err)
@@ -100,39 +102,42 @@ func (r *SkywireNetworker) serve(ctx context.Context) error {
 
 		r.log.Infoln("Accepted routing group")
 
-		go r.serveRG(rg)
+		go r.serve(rg)
 	}
 }
 
 // serveRG passes accepted router group to the corresponding listener.
-func (r *SkywireNetworker) serveRG(rg *router.RouteGroup) {
-	localAddr, ok := rg.LocalAddr().(routing.Addr)
+func (r *SkywireNetworker) serve(conn net.Conn) {
+	localAddr, ok := conn.LocalAddr().(routing.Addr)
 	if !ok {
-		r.closeRG(rg)
+		r.close(conn)
 		r.log.Error("wrong type of addr in accepted conn")
+
 		return
 	}
 
 	lisIfc, ok := r.porter.PortValue(uint16(localAddr.Port))
 	if !ok {
-		r.closeRG(rg)
+		r.close(conn)
 		r.log.Errorf("no listener on port %d", localAddr.Port)
+
 		return
 	}
 
 	lis, ok := lisIfc.(*skywireListener)
 	if !ok {
-		r.closeRG(rg)
+		r.close(conn)
 		r.log.Errorf("wrong type of listener on port %d", localAddr.Port)
+
 		return
 	}
 
-	lis.putConn(rg)
+	lis.putConn(conn)
 }
 
 // closeRG closes router group and logs error if any.
-func (r *SkywireNetworker) closeRG(rg *router.RouteGroup) {
-	if err := rg.Close(); err != nil {
+func (r *SkywireNetworker) close(closer io.Closer) {
+	if err := closer.Close(); err != nil {
 		r.log.Error(err)
 	}
 }
@@ -191,6 +196,7 @@ type skywireConn struct {
 // Close closes connection.
 func (c *skywireConn) Close() error {
 	var err error
+
 	c.once.Do(func() {
 		defer func() {
 			c.freePortMx.RLock()
