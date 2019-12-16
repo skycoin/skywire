@@ -39,7 +39,7 @@ func (c *Client) ListenAndServe(addr string) error {
 		return fmt.Errorf("listen: %s", err)
 	}
 
-	Log.Println("Listening therealproxy client")
+	Log.Printf("Listening therealproxy client on %s", addr)
 
 	c.listener = l
 	for {
