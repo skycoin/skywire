@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/rpc"
+	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -21,24 +22,27 @@ type RPCClient interface {
 	Read(connID uint16, b []byte) (int, error)
 	CloseConn(id uint16) error
 	CloseListener(id uint16) error
+	SetDeadline(id uint16, t time.Time) error
+	SetReadDeadline(id uint16, t time.Time) error
+	SetWriteDeadline(id uint16, t time.Time) error
 }
 
 // rpcClient implements `RPCClient`.
-type rpcCLient struct {
+type rpcClient struct {
 	rpc    *rpc.Client
 	appKey appcommon.Key
 }
 
 // NewRPCClient constructs new `rpcClient`.
 func NewRPCClient(rpc *rpc.Client, appKey appcommon.Key) RPCClient {
-	return &rpcCLient{
+	return &rpcClient{
 		rpc:    rpc,
 		appKey: appKey,
 	}
 }
 
 // Dial sends `Dial` command to the server.
-func (c *rpcCLient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
+func (c *rpcClient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
 	var resp appserver.DialResp
 	if err := c.rpc.Call(c.formatMethod("Dial"), &remote, &resp); err != nil {
 		return 0, 0, err
@@ -48,7 +52,7 @@ func (c *rpcCLient) Dial(remote appnet.Addr) (connID uint16, localPort routing.P
 }
 
 // Listen sends `Listen` command to the server.
-func (c *rpcCLient) Listen(local appnet.Addr) (uint16, error) {
+func (c *rpcClient) Listen(local appnet.Addr) (uint16, error) {
 	var lisID uint16
 	if err := c.rpc.Call(c.formatMethod("Listen"), &local, &lisID); err != nil {
 		return 0, err
@@ -58,7 +62,7 @@ func (c *rpcCLient) Listen(local appnet.Addr) (uint16, error) {
 }
 
 // Accept sends `Accept` command to the server.
-func (c *rpcCLient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error) {
+func (c *rpcClient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error) {
 	var acceptResp appserver.AcceptResp
 	if err := c.rpc.Call(c.formatMethod("Accept"), &lisID, &acceptResp); err != nil {
 		return 0, appnet.Addr{}, err
@@ -68,7 +72,7 @@ func (c *rpcCLient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err
 }
 
 // Write sends `Write` command to the server.
-func (c *rpcCLient) Write(connID uint16, b []byte) (int, error) {
+func (c *rpcClient) Write(connID uint16, b []byte) (int, error) {
 	req := appserver.WriteReq{
 		ConnID: connID,
 		B:      b,
@@ -83,7 +87,7 @@ func (c *rpcCLient) Write(connID uint16, b []byte) (int, error) {
 }
 
 // Read sends `Read` command to the server.
-func (c *rpcCLient) Read(connID uint16, b []byte) (int, error) {
+func (c *rpcClient) Read(connID uint16, b []byte) (int, error) {
 	req := appserver.ReadReq{
 		ConnID: connID,
 		BufLen: len(b),
@@ -100,17 +104,47 @@ func (c *rpcCLient) Read(connID uint16, b []byte) (int, error) {
 }
 
 // CloseConn sends `CloseConn` command to the server.
-func (c *rpcCLient) CloseConn(id uint16) error {
+func (c *rpcClient) CloseConn(id uint16) error {
 	return c.rpc.Call(c.formatMethod("CloseConn"), &id, nil)
 }
 
 // CloseListener sends `CloseListener` command to the server.
-func (c *rpcCLient) CloseListener(id uint16) error {
+func (c *rpcClient) CloseListener(id uint16) error {
 	return c.rpc.Call(c.formatMethod("CloseListener"), &id, nil)
 }
 
+// SetDeadline sends `SetDeadline` command to the server.
+func (c *rpcClient) SetDeadline(id uint16, t time.Time) error {
+	req := appserver.DeadlineReq{
+		ConnID:   id,
+		Deadline: t,
+	}
+
+	return c.rpc.Call(c.formatMethod("SetDeadline"), &req, nil)
+}
+
+// SetReadDeadline sends `SetReadDeadline` command to the server.
+func (c *rpcClient) SetReadDeadline(id uint16, t time.Time) error {
+	req := appserver.DeadlineReq{
+		ConnID:   id,
+		Deadline: t,
+	}
+
+	return c.rpc.Call(c.formatMethod("SetReadDeadline"), &req, nil)
+}
+
+// SetWriteDeadline sends `SetWriteDeadline` command to the server.
+func (c *rpcClient) SetWriteDeadline(id uint16, t time.Time) error {
+	req := appserver.DeadlineReq{
+		ConnID:   id,
+		Deadline: t,
+	}
+
+	return c.rpc.Call(c.formatMethod("SetWriteDeadline"), &req, nil)
+}
+
 // formatMethod formats complete RPC method signature.
-func (c *rpcCLient) formatMethod(method string) string {
+func (c *rpcClient) formatMethod(method string) string {
 	const methodFmt = "%s.%s"
 	return fmt.Sprintf(methodFmt, c.appKey, method)
 }
