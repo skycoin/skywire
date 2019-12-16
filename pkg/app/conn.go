@@ -62,19 +62,16 @@ func (c *Conn) RemoteAddr() net.Addr {
 }
 
 // SetDeadline sets read and write deadlines for connection.
-// TODO: implement
 func (c *Conn) SetDeadline(t time.Time) error {
-	return errMethodNotImplemented
+	return c.rpc.SetDeadline(c.id, t)
 }
 
 // SetReadDeadline sets read deadline for connection.
-// TODO: implement
 func (c *Conn) SetReadDeadline(t time.Time) error {
-	return errMethodNotImplemented
+	return c.rpc.SetReadDeadline(c.id, t)
 }
 
 // SetWriteDeadline sets write deadline for connection.
-// TODO: implement
 func (c *Conn) SetWriteDeadline(t time.Time) error {
-	return errMethodNotImplemented
+	return c.rpc.SetWriteDeadline(c.id, t)
 }

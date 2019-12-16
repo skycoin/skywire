@@ -3,6 +3,7 @@ package appserver
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -220,6 +221,41 @@ func (r *RPCGateway) CloseListener(lisID *uint16, _ *struct{}) error {
 	}
 
 	return lis.Close()
+}
+
+type DeadlineReq struct {
+	ConnID   uint16
+	Deadline time.Time
+}
+
+// SetDeadline sets deadline for connection specified by `connID`.
+func (r *RPCGateway) SetDeadline(req *DeadlineReq, _ *struct{}) error {
+	conn, err := r.getConn(req.ConnID)
+	if err != nil {
+		return err
+	}
+
+	return conn.SetDeadline(req.Deadline)
+}
+
+// SetReadDeadline sets read deadline for connection specified by `connID`.
+func (r *RPCGateway) SetReadDeadline(req *DeadlineReq, _ *struct{}) error {
+	conn, err := r.getConn(req.ConnID)
+	if err != nil {
+		return err
+	}
+
+	return conn.SetReadDeadline(req.Deadline)
+}
+
+// SetWriteDeadline sets read deadline for connection specified by `connID`.
+func (r *RPCGateway) SetWriteDeadline(req *DeadlineReq, _ *struct{}) error {
+	conn, err := r.getConn(req.ConnID)
+	if err != nil {
+		return err
+	}
+
+	return conn.SetWriteDeadline(req.Deadline)
 }
 
 // popListener gets listener from the manager by `lisID` and removes it.
