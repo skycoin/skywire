@@ -3,9 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/rpc"
 	"testing"
+	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -445,6 +449,213 @@ func TestRPCClient_CloseListener(t *testing.T) {
 		err = cl.CloseListener(lisID)
 		require.Error(t, err)
 		require.Equal(t, err.Error(), closeErr.Error())
+	})
+}
+
+func TestRPCClient_SetDeadline(t *testing.T) {
+	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
+
+	deadline := time.Now().Add(1 * time.Hour)
+
+	t.Run("ok", func(t *testing.T) {
+		gateway := prepGateway()
+
+		conn := &appcommon.MockConn{}
+		conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
+			if !deadline.Equal(d) {
+				return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+			}
+
+			return testhelpers.NoErr
+		})
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
+
+		prepNetworkerWithConn(t, conn, remote)
+
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
+		require.NoError(t, err)
+
+		s := prepRPCServer(t, gateway)
+		rpcL, lisCleanup := prepListener(t)
+		defer lisCleanup()
+		go s.Accept(rpcL)
+
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+		err = cl.SetDeadline(dialResp.ConnID, deadline)
+		require.NoError(t, err)
+	})
+
+	t.Run("set deadline error", func(t *testing.T) {
+		gateway := prepGateway()
+
+		conn := &appcommon.MockConn{}
+		conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
+			if !deadline.Equal(d) {
+				return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+			}
+
+			return testhelpers.Err
+		})
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
+
+		prepNetworkerWithConn(t, conn, remote)
+
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
+		require.NoError(t, err)
+
+		s := prepRPCServer(t, gateway)
+		rpcL, lisCleanup := prepListener(t)
+		defer lisCleanup()
+		go s.Accept(rpcL)
+
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+		err = cl.SetDeadline(dialResp.ConnID, deadline)
+		require.Error(t, err)
+		require.Equal(t, testhelpers.Err.Error(), err.Error())
+	})
+}
+
+func TestRPCClient_SetReadDeadline(t *testing.T) {
+	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
+
+	deadline := time.Now().Add(1 * time.Hour)
+
+	t.Run("ok", func(t *testing.T) {
+		gateway := prepGateway()
+
+		conn := &appcommon.MockConn{}
+		conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
+			if !deadline.Equal(d) {
+				return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+			}
+
+			return testhelpers.NoErr
+		})
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
+
+		prepNetworkerWithConn(t, conn, remote)
+
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
+		require.NoError(t, err)
+
+		s := prepRPCServer(t, gateway)
+		rpcL, lisCleanup := prepListener(t)
+		defer lisCleanup()
+		go s.Accept(rpcL)
+
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+		err = cl.SetReadDeadline(dialResp.ConnID, deadline)
+		require.NoError(t, err)
+	})
+
+	t.Run("set deadline error", func(t *testing.T) {
+		gateway := prepGateway()
+
+		conn := &appcommon.MockConn{}
+		conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
+			if !deadline.Equal(d) {
+				return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+			}
+
+			return testhelpers.Err
+		})
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
+
+		prepNetworkerWithConn(t, conn, remote)
+
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
+		require.NoError(t, err)
+
+		s := prepRPCServer(t, gateway)
+		rpcL, lisCleanup := prepListener(t)
+		defer lisCleanup()
+		go s.Accept(rpcL)
+
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+		err = cl.SetReadDeadline(dialResp.ConnID, deadline)
+		require.Error(t, err)
+		require.Equal(t, testhelpers.Err.Error(), err.Error())
+	})
+}
+
+func TestRPCClient_SetWriteDeadline(t *testing.T) {
+	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
+
+	deadline := time.Now().Add(1 * time.Hour)
+
+	t.Run("ok", func(t *testing.T) {
+		gateway := prepGateway()
+
+		conn := &appcommon.MockConn{}
+		conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
+			if !deadline.Equal(d) {
+				return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+			}
+
+			return testhelpers.NoErr
+		})
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
+
+		prepNetworkerWithConn(t, conn, remote)
+
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
+		require.NoError(t, err)
+
+		s := prepRPCServer(t, gateway)
+		rpcL, lisCleanup := prepListener(t)
+		defer lisCleanup()
+		go s.Accept(rpcL)
+
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+		err = cl.SetWriteDeadline(dialResp.ConnID, deadline)
+		require.NoError(t, err)
+	})
+
+	t.Run("set deadline error", func(t *testing.T) {
+		gateway := prepGateway()
+
+		conn := &appcommon.MockConn{}
+		conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
+			if !deadline.Equal(d) {
+				return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+			}
+
+			return testhelpers.Err
+		})
+		conn.On("LocalAddr").Return(dmsgLocal)
+		conn.On("RemoteAddr").Return(dmsgRemote)
+
+		prepNetworkerWithConn(t, conn, remote)
+
+		var dialResp appserver.DialResp
+		err := gateway.Dial(&remote, &dialResp)
+		require.NoError(t, err)
+
+		s := prepRPCServer(t, gateway)
+		rpcL, lisCleanup := prepListener(t)
+		defer lisCleanup()
+		go s.Accept(rpcL)
+
+		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+		err = cl.SetWriteDeadline(dialResp.ConnID, deadline)
+		require.Error(t, err)
+		require.Equal(t, testhelpers.Err.Error(), err.Error())
 	})
 }
 
