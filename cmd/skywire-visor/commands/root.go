@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -46,6 +47,7 @@ type runCfg struct {
 	masterLogger *logging.MasterLogger
 	conf         visor.Config
 	node         *visor.Node
+	restartCtx   *restart.Context
 }
 
 var cfg *runCfg
@@ -73,6 +75,13 @@ func init() {
 	rootCmd.Flags().BoolVarP(&cfg.cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 	rootCmd.Flags().StringVarP(&cfg.profileMode, "profile", "p", "none", "enable profiling with pprof. Mode:  none or one of: [cpu, mem, mutex, block, trace, http]")
 	rootCmd.Flags().StringVarP(&cfg.port, "port", "", "6060", "port for http-mode of pprof")
+
+	restartCtx, err := restart.CaptureContext()
+	if err != nil {
+		log.Printf("Failed to capture context: %v", err)
+	} else {
+		cfg.restartCtx = restartCtx
+	}
 }
 
 // Execute executes root CLI command.
@@ -148,7 +157,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 }
 
 func (cfg *runCfg) runNode() *runCfg {
-	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger)
+	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx)
 	if err != nil {
 		cfg.logger.Fatal("Failed to initialize node: ", err)
 	}
