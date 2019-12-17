@@ -7,6 +7,11 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+
+	"github.com/stretchr/testify/mock"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -546,6 +551,276 @@ func testRPCGatewayReadError(t *testing.T, l *logging.Logger, readBuf []byte) {
 	var resp ReadResp
 	err := rpc.Read(&req, &resp)
 	require.Equal(t, err, readErr)
+}
+
+func TestRPCGateway_SetWriteDeadline(t *testing.T) {
+	l := logging.MustGetLogger("rpc_gateway")
+
+	deadline := time.Now().Add(1 * time.Hour)
+
+	t.Run("ok", func(t *testing.T) {
+		testRPCGatewaySetWriteDeadlineOK(t, l, deadline)
+	})
+
+	t.Run("no such conn", func(t *testing.T) {
+		testRPCGatewaySetWriteDeadlineNoSuchConn(t, l, deadline)
+	})
+
+	t.Run("conn is not set", func(t *testing.T) {
+		testRPCGatewaySetWriteDeadlineConnNotSet(t, l, deadline)
+	})
+
+	t.Run("set read deadline error", func(t *testing.T) {
+		testRPCGatewaySetWriteDeadlineError(t, l, deadline)
+	})
+}
+
+func testRPCGatewaySetWriteDeadlineOK(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	conn := &appcommon.MockConn{}
+	conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
+		require.Equal(t, deadline, d)
+
+		return nil
+	})
+
+	connID := addConn(t, rpc, conn)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetWriteDeadline(&req, nil)
+	require.NoError(t, err)
+}
+
+func testRPCGatewaySetWriteDeadlineNoSuchConn(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	connID := uint16(1)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetWriteDeadline(&req, nil)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "no conn"))
+}
+
+func testRPCGatewaySetWriteDeadlineConnNotSet(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	connID := addConn(t, rpc, nil)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetWriteDeadline(&req, nil)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "no conn"))
+}
+
+func testRPCGatewaySetWriteDeadlineError(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	conn := &appcommon.MockConn{}
+	conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
+		require.Equal(t, deadline, d)
+
+		return testhelpers.Err
+	})
+
+	connID := addConn(t, rpc, conn)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetWriteDeadline(&req, nil)
+	require.Equal(t, testhelpers.Err, err)
+}
+
+func TestRPCGateway_SetReadDeadline(t *testing.T) {
+	l := logging.MustGetLogger("rpc_gateway")
+
+	deadline := time.Now().Add(1 * time.Hour)
+
+	t.Run("ok", func(t *testing.T) {
+		testRPCGatewaySetReadDeadlineOK(t, l, deadline)
+	})
+
+	t.Run("no such conn", func(t *testing.T) {
+		testRPCGatewaySetReadDeadlineNoSuchConn(t, l, deadline)
+	})
+
+	t.Run("conn is not set", func(t *testing.T) {
+		testRPCGatewaySetReadDeadlineConnNotSet(t, l, deadline)
+	})
+
+	t.Run("set read deadline error", func(t *testing.T) {
+		testRPCGatewaySetReadDeadlineError(t, l, deadline)
+	})
+}
+
+func testRPCGatewaySetReadDeadlineOK(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	conn := &appcommon.MockConn{}
+	conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
+		require.Equal(t, deadline, d)
+
+		return nil
+	})
+
+	connID := addConn(t, rpc, conn)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetReadDeadline(&req, nil)
+	require.NoError(t, err)
+}
+
+func testRPCGatewaySetReadDeadlineNoSuchConn(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	connID := uint16(1)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetReadDeadline(&req, nil)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "no conn"))
+}
+
+func testRPCGatewaySetReadDeadlineConnNotSet(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	connID := addConn(t, rpc, nil)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetReadDeadline(&req, nil)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "no conn"))
+}
+
+func testRPCGatewaySetReadDeadlineError(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	conn := &appcommon.MockConn{}
+	conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
+		require.Equal(t, deadline, d)
+
+		return testhelpers.Err
+	})
+
+	connID := addConn(t, rpc, conn)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetReadDeadline(&req, nil)
+	require.Equal(t, testhelpers.Err, err)
+}
+
+func TestRPCGateway_SetDeadline(t *testing.T) {
+	l := logging.MustGetLogger("rpc_gateway")
+
+	deadline := time.Now().Add(1 * time.Hour)
+
+	t.Run("ok", func(t *testing.T) {
+		testRPCGatewaySetDeadlineOK(t, l, deadline)
+	})
+
+	t.Run("no such conn", func(t *testing.T) {
+		testRPCGatewaySetDeadlineNoSuchConn(t, l, deadline)
+	})
+
+	t.Run("conn is not set", func(t *testing.T) {
+		testRPCGatewaySetDeadlineConnNotSet(t, l, deadline)
+	})
+
+	t.Run("set deadline error", func(t *testing.T) {
+		testRPCGatewaySetDeadlineError(t, l, deadline)
+	})
+}
+
+func testRPCGatewaySetDeadlineOK(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	conn := &appcommon.MockConn{}
+	conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
+		require.Equal(t, deadline, d)
+
+		return nil
+	})
+
+	connID := addConn(t, rpc, conn)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetDeadline(&req, nil)
+	require.NoError(t, err)
+}
+
+func testRPCGatewaySetDeadlineNoSuchConn(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	connID := uint16(1)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetDeadline(&req, nil)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "no conn"))
+}
+
+func testRPCGatewaySetDeadlineConnNotSet(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	connID := addConn(t, rpc, nil)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetDeadline(&req, nil)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "no conn"))
+}
+
+func testRPCGatewaySetDeadlineError(t *testing.T, l *logging.Logger, deadline time.Time) {
+	rpc := NewRPCGateway(l)
+
+	conn := &appcommon.MockConn{}
+	conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
+		require.Equal(t, deadline, d)
+
+		return testhelpers.Err
+	})
+
+	connID := addConn(t, rpc, conn)
+
+	req := DeadlineReq{
+		ConnID:   connID,
+		Deadline: deadline,
+	}
+	err := rpc.SetDeadline(&req, nil)
+	require.Equal(t, testhelpers.Err, err)
 }
 
 func TestRPCGateway_CloseConn(t *testing.T) {
