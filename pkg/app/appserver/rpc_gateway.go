@@ -165,18 +165,34 @@ type WriteReq struct {
 	B      []byte
 }
 
+// WriteResp contains response parameters for `Write`.
+type WriteResp struct {
+	N              int
+	Err            string
+	IsNetErr       bool
+	IsTimeoutErr   bool
+	IsTemporaryErr bool
+}
+
 // Write writes to the connection.
-func (r *RPCGateway) Write(req *WriteReq, n *int) error {
+func (r *RPCGateway) Write(req *WriteReq, resp *WriteResp) error {
 	conn, err := r.getConn(req.ConnID)
 	if err != nil {
 		return err
 	}
 
-	*n, err = conn.Write(req.B)
+	resp.N, err = conn.Write(req.B)
 	if err != nil {
-		return err
+		resp.Err = err.Error()
+
+		if netErr, ok := err.(net.Error); ok {
+			resp.IsNetErr = true
+			resp.IsTemporaryErr = netErr.Temporary()
+			resp.IsTimeoutErr = netErr.Timeout()
+		}
 	}
 
+	// avoid error in RPC pipeline, error is included in response body
 	return nil
 }
 
@@ -188,8 +204,12 @@ type ReadReq struct {
 
 // ReadResp contains response parameters for `Read`.
 type ReadResp struct {
-	B []byte
-	N int
+	B              []byte
+	N              int
+	Err            string
+	IsNetErr       bool
+	IsTimeoutErr   bool
+	IsTemporaryErr bool
 }
 
 // Read reads data from connection specified by `connID`.
@@ -202,13 +222,22 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 	buf := make([]byte, req.BufLen)
 
 	resp.N, err = conn.Read(buf)
-	if err != nil {
-		return err
+	if resp.N != 0 {
+		resp.B = make([]byte, resp.N)
+		copy(resp.B, buf[:resp.N])
 	}
 
-	resp.B = make([]byte, resp.N)
-	copy(resp.B, buf[:resp.N])
+	if err != nil {
+		resp.Err = err.Error()
 
+		if netErr, ok := err.(net.Error); ok {
+			resp.IsNetErr = true
+			resp.IsTemporaryErr = netErr.Temporary()
+			resp.IsTimeoutErr = netErr.Timeout()
+		}
+	}
+
+	// avoid error in RPC pipeline, error is included in response body
 	return nil
 }
 
