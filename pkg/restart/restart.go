@@ -16,7 +16,7 @@ var (
 	ErrMalformedArgs = errors.New("malformed args")
 )
 
-const defaultCheckDelay = 5 * time.Second
+const DefaultCheckDelay = 5 * time.Second
 
 // Context describes data required for restarting visor.
 type Context struct {
@@ -24,6 +24,7 @@ type Context struct {
 	checkDelay       time.Duration
 	workingDirectory string
 	args             []string
+	needsExit        bool // disable in (c *Context) Restart() tests
 }
 
 // CaptureContext captures data required for restarting visor.
@@ -38,9 +39,10 @@ func CaptureContext() (*Context, error) {
 	args := os.Args
 
 	context := &Context{
-		checkDelay:       defaultCheckDelay,
+		checkDelay:       DefaultCheckDelay,
 		workingDirectory: wd,
 		args:             args,
+		needsExit:        true,
 	}
 
 	return context, nil
@@ -48,12 +50,16 @@ func CaptureContext() (*Context, error) {
 
 // RegisterLogger registers a logger instead of standard one.
 func (c *Context) RegisterLogger(logger *logging.Logger) {
-	c.log = logger
+	if c != nil {
+		c.log = logger
+	}
 }
 
 // SetCheckDelay sets a check delay instead of standard one.
 func (c *Context) SetCheckDelay(delay time.Duration) {
-	c.checkDelay = delay
+	if c != nil {
+		c.checkDelay = delay
+	}
 }
 
 // Restart restarts executable using Context.
@@ -79,9 +85,11 @@ func (c *Context) Restart() error {
 		return err
 	case <-ticker.C:
 		c.infoLogger()("New instance started successfully, exiting")
-		os.Exit(0)
+		if c.needsExit {
+			os.Exit(0)
+		}
 
-		// unreachable
+		// unreachable unless run in tests
 		return nil
 	}
 }
@@ -90,6 +98,8 @@ func (c *Context) start(path string) chan error {
 	errCh := make(chan error, 1)
 
 	go func(path string) {
+		defer close(errCh)
+
 		normalizedPath, err := exec.LookPath(path)
 		if err != nil {
 			errCh <- err

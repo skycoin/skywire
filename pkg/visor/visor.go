@@ -101,11 +101,19 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *res
 	node := &Node{
 		conf:        config,
 		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager")),
-		restartCtx:  restartCtx,
 	}
 
 	node.Logger = masterLogger
 	node.logger = node.Logger.PackageLogger("skywire")
+
+	restartCheckDelay, err := time.ParseDuration(config.RestartCheckDelay)
+	if err == nil {
+		restartCtx.SetCheckDelay(restartCheckDelay)
+	}
+
+	restartCtx.RegisterLogger(node.logger)
+
+	node.restartCtx = restartCtx
 
 	pk := config.Node.StaticPubKey
 	sk := config.Node.StaticSecKey
