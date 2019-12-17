@@ -23,16 +23,23 @@ type Conn struct {
 // Read reads from connection.
 func (c *Conn) Read(b []byte) (int, error) {
 	n, err := c.rpc.Read(c.id, b)
-	if err != nil {
-		return 0, err
-	}
+	/*if err != nil && err != io.EOF {
+		fmt.Printf("READ ERROR: %v\n", err)
+		return n, &net.OpError{Op: "read", Net: c.local.Network(), Source: c.local, Addr: c.remote, Err: err}
+	}*/
 
 	return n, err
 }
 
 // Write writes to connection.
 func (c *Conn) Write(b []byte) (int, error) {
-	return c.rpc.Write(c.id, b)
+	n, err := c.rpc.Write(c.id, b)
+	if err != nil {
+		//return n, &net.OpError{Op: "write", Net: c.local.Network(), Source: c.local, Addr: c.remote, Err: err}
+		return n, err
+	}
+
+	return n, nil
 }
 
 // Close closes connection.
