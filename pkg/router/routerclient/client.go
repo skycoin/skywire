@@ -15,7 +15,7 @@ const rpcName = "RPCGateway"
 
 // Client is an RPC client for router.
 type Client struct {
-	tr  *dmsg.Transport
+	tr  *dmsg.Stream
 	rpc *rpc.Client
 }
 
