@@ -73,6 +73,8 @@ type Config struct {
 	Interfaces InterfaceConfig `json:"interfaces"`
 
 	AppServerSockFile string `json:"app_server_sock_file"`
+
+	RestartCheckDelay string `json:"restart_check_delay"`
 }
 
 // MessagingConfig returns config for dmsg client.
