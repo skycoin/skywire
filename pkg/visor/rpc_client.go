@@ -9,13 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
@@ -49,6 +48,8 @@ type RPCClient interface {
 	RemoveRoutingRule(key routing.RouteID) error
 
 	Loops() ([]LoopInfo, error)
+
+	Restart() error
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -219,6 +220,11 @@ func (rc *rpcClient) Loops() ([]LoopInfo, error) {
 	var loops []LoopInfo
 	err := rc.Call("Loops", &struct{}{}, &loops)
 	return loops, err
+}
+
+// Restart calls Restart.
+func (rc *rpcClient) Restart() error {
+	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
 // MockRPCClient mocks RPCClient.
@@ -527,4 +533,9 @@ func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
 	}
 
 	return loops, nil
+}
+
+// Restart implements RPCClient.
+func (mc *mockRPCClient) Restart() error {
+	return nil
 }
