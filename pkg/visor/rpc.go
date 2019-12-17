@@ -29,6 +29,9 @@ var (
 
 	// ErrNotFound is returned when a requested resource is not found.
 	ErrNotFound = errors.New("not found")
+
+	// ErrMalformedRestartContext is returned when restart context is malformed.
+	ErrMalformedRestartContext = errors.New("restart context is malformed")
 )
 
 // RPC defines RPC methods for Node.
@@ -389,4 +392,17 @@ func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
 
 	*out = loops
 	return nil
+}
+
+/*
+	<<< VISOR MANAGEMENT >>>
+*/
+
+// Restart restarts visor.
+func (r *RPC) Restart(_ *struct{}, _ *struct{}) error {
+	if r.node.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+
+	return r.node.restartCtx.Restart()
 }
