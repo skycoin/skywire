@@ -22,9 +22,9 @@ type RPCClient interface {
 	Read(connID uint16, b []byte) (int, error)
 	CloseConn(id uint16) error
 	CloseListener(id uint16) error
-	SetDeadline(id uint16, t time.Time) error
-	SetReadDeadline(id uint16, t time.Time) error
-	SetWriteDeadline(id uint16, t time.Time) error
+	SetDeadline(connID uint16, d time.Time) error
+	SetReadDeadline(connID uint16, d time.Time) error
+	SetWriteDeadline(connID uint16, d time.Time) error
 }
 
 // rpcClient implements `RPCClient`.

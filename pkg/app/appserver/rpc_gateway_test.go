@@ -3,6 +3,7 @@ package appserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"strings"
@@ -580,7 +581,9 @@ func testRPCGatewaySetWriteDeadlineOK(t *testing.T, l *logging.Logger, deadline 
 
 	conn := &appcommon.MockConn{}
 	conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
-		require.Equal(t, deadline, d)
+		if !deadline.Equal(d) {
+			return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+		}
 
 		return nil
 	})
@@ -628,7 +631,9 @@ func testRPCGatewaySetWriteDeadlineError(t *testing.T, l *logging.Logger, deadli
 
 	conn := &appcommon.MockConn{}
 	conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
-		require.Equal(t, deadline, d)
+		if !deadline.Equal(d) {
+			return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+		}
 
 		return testhelpers.Err
 	})
@@ -670,7 +675,9 @@ func testRPCGatewaySetReadDeadlineOK(t *testing.T, l *logging.Logger, deadline t
 
 	conn := &appcommon.MockConn{}
 	conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
-		require.Equal(t, deadline, d)
+		if !deadline.Equal(d) {
+			return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+		}
 
 		return nil
 	})
@@ -718,7 +725,9 @@ func testRPCGatewaySetReadDeadlineError(t *testing.T, l *logging.Logger, deadlin
 
 	conn := &appcommon.MockConn{}
 	conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
-		require.Equal(t, deadline, d)
+		if !deadline.Equal(d) {
+			return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+		}
 
 		return testhelpers.Err
 	})
@@ -760,7 +769,9 @@ func testRPCGatewaySetDeadlineOK(t *testing.T, l *logging.Logger, deadline time.
 
 	conn := &appcommon.MockConn{}
 	conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
-		require.Equal(t, deadline, d)
+		if !deadline.Equal(d) {
+			return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+		}
 
 		return nil
 	})
@@ -808,7 +819,9 @@ func testRPCGatewaySetDeadlineError(t *testing.T, l *logging.Logger, deadline ti
 
 	conn := &appcommon.MockConn{}
 	conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
-		require.Equal(t, deadline, d)
+		if !deadline.Equal(d) {
+			return fmt.Errorf("expected deadline %v, got %v", deadline, d)
+		}
 
 		return testhelpers.Err
 	})
