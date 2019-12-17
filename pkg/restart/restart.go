@@ -85,6 +85,7 @@ func (c *Context) Restart() error {
 		return err
 	case <-ticker.C:
 		c.infoLogger()("New instance started successfully, exiting")
+
 		if c.needsExit {
 			os.Exit(0)
 		}
