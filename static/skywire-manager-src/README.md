@@ -6,7 +6,7 @@ Note: The software is still under heavy development and the current version is i
 
 ## Prerequisites
 
-The Skywire Manager requires Node 8.11.0 or higher, together with NPM 6.0.0 or higher.
+The Skywire Manager requires Node 10.9.0 or higher, together with NPM 6.0.0 or higher.
 
 ## Initial configuration
 
