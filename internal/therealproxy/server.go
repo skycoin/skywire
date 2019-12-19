@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/yamux"
+
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/armon/go-socks5"
 )
 
