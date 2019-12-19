@@ -31,7 +31,6 @@ func NewClient(conn net.Conn) (*Client, error) {
 // ListenAndServe start tcp listener on addr and proxies incoming
 // connection to a remote proxy server.
 func (c *Client) ListenAndServe(addr string) error {
-	var stream net.Conn
 	var err error
 
 	l, err := net.Listen("tcp", addr)
@@ -50,7 +49,7 @@ func (c *Client) ListenAndServe(addr string) error {
 		}
 
 		Log.Println("Accepted therealproxy client")
-		stream, err = c.session.Open()
+		stream, err := c.session.Open()
 		if err != nil {
 			return fmt.Errorf("error on `ListenAndServe`: yamux: %s", err)
 		}
@@ -59,6 +58,7 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		go func() {
 			errCh := make(chan error, 2)
+
 			go func() {
 				_, err := io.Copy(stream, conn)
 				errCh <- err
@@ -69,18 +69,30 @@ func (c *Client) ListenAndServe(addr string) error {
 				errCh <- err
 			}()
 
+			var connClosed, streamClosed bool
 			for err := range errCh {
-				if err := conn.Close(); err != nil {
-					Log.WithError(err).Warn("Failed to close connection")
+				if !connClosed {
+					if err := conn.Close(); err != nil {
+						Log.WithError(err).Warn("Failed to close connection")
+					}
+
+					connClosed = true
 				}
-				if err := stream.Close(); err != nil {
-					Log.WithError(err).Warn("Failed to close stream")
+
+				if !streamClosed {
+					if err := stream.Close(); err != nil {
+						Log.WithError(err).Warn("Failed to close stream")
+					}
+
+					streamClosed = true
 				}
 
 				if err != nil {
 					Log.Error("Copy error:", err)
 				}
 			}
+
+			close(errCh)
 		}()
 	}
 }
