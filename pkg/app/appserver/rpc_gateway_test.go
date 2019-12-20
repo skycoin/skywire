@@ -10,15 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-
-	"github.com/stretchr/testify/mock"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
@@ -391,10 +389,15 @@ func testRPCGatewayWriteOK(t *testing.T, l *logging.Logger, writeBuff []byte) {
 		B:      writeBuff,
 	}
 
-	var n int
-	err := rpc.Write(&req, &n)
+	wantResp := WriteResp{
+		N:   len(writeBuff),
+		Err: nil,
+	}
+
+	var resp WriteResp
+	err := rpc.Write(&req, &resp)
 	require.NoError(t, err)
-	require.Equal(t, n, len(writeBuff))
+	require.Equal(t, wantResp, resp)
 }
 
 func testRPCGatewayWriteNoSuchConn(t *testing.T, l *logging.Logger, writeBuff []byte) {
@@ -407,8 +410,8 @@ func testRPCGatewayWriteNoSuchConn(t *testing.T, l *logging.Logger, writeBuff []
 		B:      writeBuff,
 	}
 
-	var n int
-	err := rpc.Write(&req, &n)
+	var resp WriteResp
+	err := rpc.Write(&req, &resp)
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "no conn"))
 }
@@ -423,8 +426,8 @@ func testRPCGatewayWriteConnNotSet(t *testing.T, l *logging.Logger, writeBuff []
 		B:      writeBuff,
 	}
 
-	var n int
-	err := rpc.Write(&req, &n)
+	var resp WriteResp
+	err := rpc.Write(&req, &resp)
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "no conn"))
 }
@@ -435,7 +438,7 @@ func testRPCGatewayWriteError(t *testing.T, l *logging.Logger, writeBuff []byte)
 	writeErr := errors.New("write error")
 
 	conn := &appcommon.MockConn{}
-	conn.On("Write", writeBuff).Return(len(writeBuff), writeErr)
+	conn.On("Write", writeBuff).Return(len(writeBuff)/2, writeErr)
 
 	connID := addConn(t, rpc, conn)
 
@@ -444,10 +447,20 @@ func testRPCGatewayWriteError(t *testing.T, l *logging.Logger, writeBuff []byte)
 		B:      writeBuff,
 	}
 
-	var n int
-	err := rpc.Write(&req, &n)
-	require.Error(t, err)
-	require.Equal(t, err, writeErr)
+	wantResp := WriteResp{
+		N: len(writeBuff) / 2,
+		Err: &RPCIOErr{
+			Text:           writeErr.Error(),
+			IsNetErr:       false,
+			IsTimeoutErr:   false,
+			IsTemporaryErr: false,
+		},
+	}
+
+	var resp WriteResp
+	err := rpc.Write(&req, &resp)
+	require.NoError(t, err)
+	require.Equal(t, wantResp, resp)
 }
 
 func TestRPCGateway_Read(t *testing.T) {
@@ -478,10 +491,8 @@ func testRPCGatewayReadOK(t *testing.T, l *logging.Logger, readBuf []byte) {
 
 	readN := 10
 
-	var readErr error
-
 	conn := &appcommon.MockConn{}
-	conn.On("Read", readBuf).Return(readN, readErr)
+	conn.On("Read", readBuf).Return(readN, testhelpers.NoErr)
 
 	connID := addConn(t, rpc, conn)
 
@@ -536,7 +547,7 @@ func testRPCGatewayReadConnNotSet(t *testing.T, l *logging.Logger, readBufLen in
 func testRPCGatewayReadError(t *testing.T, l *logging.Logger, readBuf []byte) {
 	rpc := NewRPCGateway(l)
 
-	readN := 0
+	readN := 3
 	readErr := errors.New("read error")
 
 	conn := &appcommon.MockConn{}
@@ -549,9 +560,21 @@ func testRPCGatewayReadError(t *testing.T, l *logging.Logger, readBuf []byte) {
 		BufLen: len(readBuf),
 	}
 
+	wantResp := ReadResp{
+		B: make([]byte, readN),
+		N: readN,
+		Err: &RPCIOErr{
+			Text:           readErr.Error(),
+			IsNetErr:       false,
+			IsTimeoutErr:   false,
+			IsTemporaryErr: false,
+		},
+	}
+
 	var resp ReadResp
 	err := rpc.Read(&req, &resp)
-	require.Equal(t, err, readErr)
+	require.NoError(t, err)
+	require.Equal(t, wantResp, resp)
 }
 
 func TestRPCGateway_SetWriteDeadline(t *testing.T) {

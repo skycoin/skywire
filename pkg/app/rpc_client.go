@@ -1,10 +1,7 @@
 package app
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"net"
 	"net/rpc"
 	"time"
 
@@ -28,32 +25,6 @@ type RPCClient interface {
 	SetDeadline(connID uint16, d time.Time) error
 	SetReadDeadline(connID uint16, d time.Time) error
 	SetWriteDeadline(connID uint16, d time.Time) error
-}
-
-type netErr struct {
-	err       error
-	timeout   bool
-	temporary bool
-}
-
-func (e *netErr) Error() string {
-	return e.err.Error()
-}
-
-func (e *netErr) Timeout() bool {
-	return e.timeout
-}
-
-func (e *netErr) Temporary() bool {
-	return e.temporary
-}
-
-func wrapNetErr(err error, timeout, temporary bool) net.Error {
-	return &netErr{
-		err:       err,
-		timeout:   timeout,
-		temporary: temporary,
-	}
 }
 
 // rpcClient implements `RPCClient`.
@@ -112,25 +83,7 @@ func (c *rpcClient) Write(connID uint16, b []byte) (int, error) {
 		return 0, err
 	}
 
-	var err error
-	if resp.Err != "" {
-		if resp.IsNetErr {
-			err = wrapNetErr(errors.New(resp.Err), resp.IsTimeoutErr, resp.IsTemporaryErr)
-		} else {
-			switch resp.Err {
-			case io.EOF.Error():
-				err = io.EOF
-			case io.ErrClosedPipe.Error():
-				err = io.ErrClosedPipe
-			case io.ErrUnexpectedEOF.Error():
-				err = io.ErrUnexpectedEOF
-			default:
-				err = errors.New(resp.Err)
-			}
-		}
-	}
-
-	return resp.N, err
+	return resp.N, resp.Err.ToError()
 }
 
 // Read sends `Read` command to the server.
@@ -149,25 +102,7 @@ func (c *rpcClient) Read(connID uint16, b []byte) (int, error) {
 		copy(b[:resp.N], resp.B[:resp.N])
 	}
 
-	var err error
-	if resp.Err != "" {
-		if resp.IsNetErr {
-			err = wrapNetErr(errors.New(resp.Err), resp.IsTimeoutErr, resp.IsTemporaryErr)
-		} else {
-			switch resp.Err {
-			case io.EOF.Error():
-				err = io.EOF
-			case io.ErrClosedPipe.Error():
-				err = io.ErrClosedPipe
-			case io.ErrUnexpectedEOF.Error():
-				err = io.ErrUnexpectedEOF
-			default:
-				err = errors.New(resp.Err)
-			}
-		}
-	}
-
-	return resp.N, err
+	return resp.N, resp.Err.ToError()
 }
 
 // CloseConn sends `CloseConn` command to the server.
