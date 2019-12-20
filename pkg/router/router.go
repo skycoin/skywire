@@ -408,7 +408,7 @@ func (r *router) handleKeepAlivePacket(_ context.Context, packet routing.Packet)
 		return err
 	}
 
-	// TODO: propagate keep-alive packet down the chain
+	// TODO: propagate keep-alive packet down the line
 
 	r.logger.Infof("Route ID %v found, updated activity", routeID)
 
