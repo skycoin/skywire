@@ -124,10 +124,10 @@ func (mt *memTable) SaveRule(rule Rule) error {
 }
 
 func (mt *memTable) Rule(key RouteID) (Rule, error) {
-	mt.RLock()
-	rule, ok := mt.rules[key]
-	mt.RUnlock()
+	mt.Lock()
+	defer mt.Unlock()
 
+	rule, ok := mt.rules[key]
 	if !ok {
 		return nil, fmt.Errorf("rule of id %v not found", key)
 	}
@@ -135,6 +135,8 @@ func (mt *memTable) Rule(key RouteID) (Rule, error) {
 	if mt.ruleIsTimedOut(key, rule) {
 		return nil, ErrRuleTimedOut
 	}
+
+	mt.activity[key] = time.Now()
 
 	return rule, nil
 }
