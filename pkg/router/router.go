@@ -403,15 +403,16 @@ func (r *router) handleKeepAlivePacket(_ context.Context, packet routing.Packet)
 
 	r.logger.Infof("Received keepalive packet for route ID %v", routeID)
 
-	rule, err := r.GetRule(routeID)
-
+	_, err := r.GetRule(routeID)
 	if err != nil {
 		return err
 	}
 
-	r.logger.Infof("Route ID %v found, updating activity", routeID)
+	// TODO: propagate keep-alive packet down the chain
 
-	return r.SaveRoutingRules(rule)
+	r.logger.Infof("Route ID %v found, updated activity", routeID)
+
+	return nil
 }
 
 // GetRule gets routing rule.
