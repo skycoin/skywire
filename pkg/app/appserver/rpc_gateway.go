@@ -1,7 +1,9 @@
 package appserver
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -11,6 +13,46 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
+
+// RPCIOErr is used to return an error coming from network stack.
+//
+// Since client is implemented as an RPC client, we need to correctly
+// pass all kinds of network errors from gateway back to the client.
+// `net.Error` is an interface, so we can't pass it directly, we have to
+// disassemble error on the server side and reassemble it back on the
+// client side.
+type RPCIOErr struct {
+	Text           string
+	IsNetErr       bool
+	IsTimeoutErr   bool
+	IsTemporaryErr bool
+}
+
+// ToError converts `*RPCIOErr` to `error`.
+func (e *RPCIOErr) ToError() error {
+	if e == nil {
+		return nil
+	}
+
+	if !e.IsNetErr {
+		switch e.Text {
+		case io.EOF.Error():
+			return io.EOF
+		case io.ErrClosedPipe.Error():
+			return io.ErrClosedPipe
+		case io.ErrUnexpectedEOF.Error():
+			return io.ErrUnexpectedEOF
+		default:
+			return errors.New(e.Text)
+		}
+	}
+
+	return &netErr{
+		err:       errors.New(e.Text),
+		timeout:   e.IsTimeoutErr,
+		temporary: e.IsTemporaryErr,
+	}
+}
 
 // RPCGateway is a RPC interface for the app server.
 type RPCGateway struct {
@@ -167,11 +209,8 @@ type WriteReq struct {
 
 // WriteResp contains response parameters for `Write`.
 type WriteResp struct {
-	N              int
-	Err            string
-	IsNetErr       bool
-	IsTimeoutErr   bool
-	IsTemporaryErr bool
+	N   int
+	Err *RPCIOErr
 }
 
 // Write writes to the connection.
@@ -182,15 +221,7 @@ func (r *RPCGateway) Write(req *WriteReq, resp *WriteResp) error {
 	}
 
 	resp.N, err = conn.Write(req.B)
-	if err != nil {
-		resp.Err = err.Error()
-
-		if netErr, ok := err.(net.Error); ok {
-			resp.IsNetErr = true
-			resp.IsTemporaryErr = netErr.Temporary()
-			resp.IsTimeoutErr = netErr.Timeout()
-		}
-	}
+	resp.Err = ioErrToRPCIOErr(err)
 
 	// avoid error in RPC pipeline, error is included in response body
 	return nil
@@ -204,12 +235,9 @@ type ReadReq struct {
 
 // ReadResp contains response parameters for `Read`.
 type ReadResp struct {
-	B              []byte
-	N              int
-	Err            string
-	IsNetErr       bool
-	IsTimeoutErr   bool
-	IsTemporaryErr bool
+	B   []byte
+	N   int
+	Err *RPCIOErr
 }
 
 // Read reads data from connection specified by `connID`.
@@ -227,15 +255,7 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 		copy(resp.B, buf[:resp.N])
 	}
 
-	if err != nil {
-		resp.Err = err.Error()
-
-		if netErr, ok := err.(net.Error); ok {
-			resp.IsNetErr = true
-			resp.IsTemporaryErr = netErr.Temporary()
-			resp.IsTimeoutErr = netErr.Timeout()
-		}
-	}
+	resp.Err = ioErrToRPCIOErr(err)
 
 	// avoid error in RPC pipeline, error is included in response body
 	return nil
@@ -336,4 +356,22 @@ func (r *RPCGateway) getConn(connID uint16) (net.Conn, error) {
 	}
 
 	return idmanager.AssertConn(connIfc)
+}
+
+func ioErrToRPCIOErr(err error) *RPCIOErr {
+	if err == nil {
+		return nil
+	}
+
+	rpcIOErr := &RPCIOErr{
+		Text: err.Error(),
+	}
+
+	if netErr, ok := err.(net.Error); ok {
+		rpcIOErr.IsNetErr = true
+		rpcIOErr.IsTimeoutErr = netErr.Timeout()
+		rpcIOErr.IsTemporaryErr = netErr.Temporary()
+	}
+
+	return rpcIOErr
 }

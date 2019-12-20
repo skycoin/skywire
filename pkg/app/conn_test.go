@@ -8,17 +8,17 @@ import (
 	"testing"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-	"github.com/stretchr/testify/mock"
-	"golang.org/x/net/nettest"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/stretchr/testify/require"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 )
 
 func TestConn_Read(t *testing.T) {
@@ -54,11 +54,7 @@ func TestConn_Read(t *testing.T) {
 			}
 
 			n, err := conn.Read(tc.readBuff)
-			if tc.readErr != nil {
-				require.Equal(t, &net.OpError{Op: "read", Net: conn.local.Network(), Source: conn.local, Addr: conn.remote, Err: tc.readErr}, err)
-			} else {
-				require.NoError(t, err)
-			}
+			require.Equal(t, tc.readErr, err)
 			require.Equal(t, tc.readN, n)
 		})
 	}
@@ -97,11 +93,7 @@ func TestConn_Write(t *testing.T) {
 			}
 
 			n, err := conn.Write(tc.writeBuff)
-			if tc.writeErr != nil {
-				require.Equal(t, &net.OpError{Op: "write", Net: conn.local.Network(), Source: conn.local, Addr: conn.remote, Err: tc.writeErr}, err)
-			} else {
-				require.NoError(t, err)
-			}
+			require.Equal(t, tc.writeErr, err)
 			require.Equal(t, tc.writeN, n)
 		})
 	}
