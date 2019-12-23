@@ -70,7 +70,7 @@ func init() {
 }
 
 var addRuleCmd = &cobra.Command{
-	Use:   "add-rule (app <route-id> <remote-pk> <remote-port> <local-port> | fwd <next-route-id> <next-transport-id>)",
+	Use:   "add-rule (app <route-id> <local-pk> <local-port> <remote-pk> <remote-port> | fwd <next-route-id> <next-transport-id>)",
 	Short: "Adds a new routing rule",
 	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) > 0 {
@@ -95,11 +95,12 @@ var addRuleCmd = &cobra.Command{
 		case "app":
 			var (
 				routeID    = routing.RouteID(parseUint("route-id", args[1], 32))
-				remotePK   = internal.ParsePK("remote-pk", args[2])
-				remotePort = routing.Port(parseUint("remote-port", args[3], 16))
-				localPort  = routing.Port(parseUint("local-port", args[4], 16))
+				localPK    = internal.ParsePK("local-pk", args[2])
+				localPort  = routing.Port(parseUint("local-port", args[3], 16))
+				remotePK   = internal.ParsePK("remote-pk", args[4])
+				remotePort = routing.Port(parseUint("remote-port", args[5], 16))
 			)
-			rule = routing.ConsumeRule(keepAlive, routeID, remotePK, localPort, remotePort)
+			rule = routing.ConsumeRule(keepAlive, routeID, localPK, remotePK, localPort, remotePort)
 		case "fwd":
 			var (
 				nextRouteID = routing.RouteID(parseUint("next-route-id", args[1], 32))

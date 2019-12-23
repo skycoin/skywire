@@ -10,7 +10,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
@@ -93,7 +93,7 @@ type AppLogsRequest struct {
 
 // LogsSince returns all logs from an specific app since the timestamp
 func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) error {
-	ls, err := app2.NewLogStore(filepath.Join(r.node.dir(), in.AppName), in.AppName, "bbolt")
+	ls, err := app.NewLogStore(filepath.Join(r.node.dir(), in.AppName), in.AppName, "bbolt")
 	if err != nil {
 		return err
 	}
@@ -345,7 +345,7 @@ func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) error {
 }
 
 // SaveRoutingRule saves a routing rule.
-func (r *RPC) SaveRoutingRule(in *routing.Rule, out *struct{}) error {
+func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) error {
 	return r.node.rt.SaveRule(*in)
 }
 

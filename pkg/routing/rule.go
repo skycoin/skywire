@@ -18,8 +18,6 @@ const (
 	pkSize              = len(cipher.PubKey{})
 	uuidSize            = len(uuid.UUID{})
 	routeDescriptorSize = pkSize*2 + 2*2
-
-	invalidRule = "invalid rule"
 )
 
 // RuleType defines type of a routing rule
@@ -117,79 +115,77 @@ func (r Rule) RouteDescriptor() RouteDescriptor {
 		r.assertLen(RuleHeaderSize + routeDescriptorSize)
 
 		var desc RouteDescriptor
-		copy(desc[:], r[RuleHeaderSize:])
-		return desc
 
+		copy(desc[:], r[RuleHeaderSize:])
+
+		return desc
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
 // NextRouteID returns NextRouteID from the rule.
 func (r Rule) NextRouteID() RouteID {
 	offset := RuleHeaderSize
+
 	switch t := r.Type(); t {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-
 	case RuleIntermediaryForward:
 		r.assertLen(offset + 4)
 		return RouteID(binary.BigEndian.Uint32(r[offset : offset+4]))
-
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
 // setNextRouteID sets setNextRouteID of a rule.
 func (r Rule) setNextRouteID(id RouteID) {
 	offset := RuleHeaderSize
+
 	switch t := r.Type(); t {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-
 	case RuleIntermediaryForward:
 		r.assertLen(offset + 4)
 		binary.BigEndian.PutUint32(r[offset:offset+4], uint32(id))
-
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
 // NextTransportID returns next transport ID for a forward rule.
 func (r Rule) NextTransportID() uuid.UUID {
 	offset := RuleHeaderSize + 4
+
 	switch t := r.Type(); t {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-
 	case RuleIntermediaryForward:
 		r.assertLen(offset + 4)
-		return uuid.Must(uuid.FromBytes(r[offset : offset+uuidSize]))
 
+		return uuid.Must(uuid.FromBytes(r[offset : offset+uuidSize]))
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
 // setNextTransportID sets setNextTransportID of a rule.
 func (r Rule) setNextTransportID(id uuid.UUID) {
 	offset := RuleHeaderSize + 4
+
 	switch t := r.Type(); t {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-
 	case RuleIntermediaryForward:
 		r.assertLen(offset + 4)
 		copy(r[offset:offset+uuidSize], id[:])
-
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
@@ -199,9 +195,8 @@ func (r Rule) setSrcPK(pk cipher.PubKey) {
 	case RuleConsume, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize)
 		copy(r[RuleHeaderSize:RuleHeaderSize+pkSize], pk[:])
-
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
@@ -211,9 +206,8 @@ func (r Rule) setDstPK(pk cipher.PubKey) {
 	case RuleConsume, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize*2)
 		copy(r[RuleHeaderSize+pkSize:RuleHeaderSize+pkSize*2], pk[:])
-
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
@@ -223,9 +217,8 @@ func (r Rule) setSrcPort(port Port) {
 	case RuleConsume, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize*2 + 2)
 		binary.BigEndian.PutUint16(r[RuleHeaderSize+pkSize*2:RuleHeaderSize+pkSize*2+2], uint16(port))
-
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
@@ -235,94 +228,9 @@ func (r Rule) setDstPort(port Port) {
 	case RuleConsume, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize*2 + 2*2)
 		binary.BigEndian.PutUint16(r[RuleHeaderSize+pkSize*2+2:RuleHeaderSize+pkSize*2+2*2], uint16(port))
-
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
-}
-
-// RouteDescriptor describes a route (from the perspective of the source and destination edges).
-type RouteDescriptor [routeDescriptorSize]byte
-
-// NewRouteDescriptor returns a new RouteDescriptor.
-func NewRouteDescriptor(srcPK, dstPK cipher.PubKey, srcPort, dstPort Port) RouteDescriptor {
-	var desc RouteDescriptor
-
-	desc.setSrcPK(srcPK)
-	desc.setDstPK(dstPK)
-	desc.setSrcPort(srcPort)
-	desc.setDstPort(dstPort)
-
-	return desc
-}
-
-// Src returns source Addr from RouteDescriptor.
-func (rd RouteDescriptor) Src() Addr {
-	return Addr{
-		PubKey: rd.SrcPK(),
-		Port:   rd.SrcPort(),
-	}
-}
-
-// Dst returns destination Addr from RouteDescriptor.
-func (rd RouteDescriptor) Dst() Addr {
-	return Addr{
-		PubKey: rd.DstPK(),
-		Port:   rd.DstPort(),
-	}
-}
-
-// SrcPK returns source public key from RouteDescriptor.
-func (rd RouteDescriptor) SrcPK() cipher.PubKey {
-	var pk cipher.PubKey
-	copy(pk[:], rd[0:pkSize])
-	return pk
-}
-
-// setSrcPK sets source public key of a rule.
-func (rd RouteDescriptor) setSrcPK(pk cipher.PubKey) {
-	copy(rd[:pkSize], pk[:])
-}
-
-// DstPK returns destination public key from RouteDescriptor.
-func (rd RouteDescriptor) DstPK() cipher.PubKey {
-	var pk cipher.PubKey
-	copy(pk[:], rd[pkSize:pkSize*2])
-	return pk
-}
-
-// setDstPK sets destination public key of a rule.
-func (rd RouteDescriptor) setDstPK(pk cipher.PubKey) {
-	copy(rd[pkSize:pkSize*2], pk[:])
-}
-
-// SrcPort returns source port from RouteDescriptor.
-func (rd RouteDescriptor) SrcPort() Port {
-	return Port(binary.BigEndian.Uint16(rd[pkSize*2 : pkSize*2+2]))
-}
-
-// setSrcPort sets source port of a rule.
-func (rd RouteDescriptor) setSrcPort(port Port) {
-	binary.BigEndian.PutUint16(rd[pkSize*2:pkSize*2+2], uint16(port))
-}
-
-// DstPort returns destination port from RouteDescriptor.
-func (rd RouteDescriptor) DstPort() Port {
-	return Port(binary.BigEndian.Uint16(rd[pkSize*2+2 : pkSize*2+2*2]))
-}
-
-// setDstPort sets destination port of a rule.
-func (rd RouteDescriptor) setDstPort(port Port) {
-	binary.BigEndian.PutUint16(rd[pkSize*2+2:pkSize*2+2*2], uint16(port))
-}
-
-// Invert inverts source and destination.
-func (rd RouteDescriptor) Invert() RouteDescriptor {
-	return NewRouteDescriptor(rd.DstPK(), rd.SrcPK(), rd.DstPort(), rd.SrcPort())
-}
-
-func (rd RouteDescriptor) String() string {
-	return fmt.Sprintf("rPK:%s, lPK:%s, rPort:%d, lPort:%d", rd.DstPK(), rd.SrcPK(), rd.DstPort(), rd.SrcPK())
 }
 
 // String returns rule's string representation.
@@ -330,8 +238,8 @@ func (r Rule) String() string {
 	switch t := r.Type(); t {
 	case RuleConsume:
 		rd := r.RouteDescriptor()
-		return fmt.Sprintf("APP(keyRtID:%d, resRtID:%d, %s)",
-			r.KeyRouteID(), r.NextRouteID(), rd.String())
+		return fmt.Sprintf("APP(keyRtID:%d, %s)",
+			r.KeyRouteID(), rd.String())
 	case RuleForward:
 		rd := r.RouteDescriptor()
 		return fmt.Sprintf("FWD(keyRtID:%d, nxtRtID:%d, nxtTpID:%s, %s)",
@@ -340,7 +248,7 @@ func (r Rule) String() string {
 		return fmt.Sprintf("IFWD(keyRtID:%d, nxtRtID:%d, nxtTpID:%s)",
 			r.KeyRouteID(), r.NextRouteID(), r.NextTransportID())
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
 }
 
@@ -383,20 +291,32 @@ type RuleSummary struct {
 // ToRule converts RoutingRuleSummary to RoutingRule.
 func (rs *RuleSummary) ToRule() (Rule, error) {
 	switch {
-	case rs.Type == RuleConsume && rs.ConsumeFields != nil && rs.ForwardFields == nil && rs.IntermediaryForwardFields == nil:
+	case rs.Type == RuleConsume:
+		if rs.ConsumeFields == nil || rs.ForwardFields != nil || rs.IntermediaryForwardFields != nil {
+			return nil, errors.New("invalid routing rule summary")
+		}
+
 		f := rs.ConsumeFields
 		d := f.RouteDescriptor
-		return ConsumeRule(rs.KeepAlive, rs.KeyRouteID, d.DstPK, d.SrcPort, d.DstPort), nil
 
-	case rs.Type == RuleForward && rs.ConsumeFields == nil && rs.ForwardFields != nil && rs.IntermediaryForwardFields == nil:
+		return ConsumeRule(rs.KeepAlive, rs.KeyRouteID, d.SrcPK, d.DstPK, d.SrcPort, d.DstPort), nil
+	case rs.Type == RuleForward:
+		if rs.ConsumeFields != nil || rs.ForwardFields == nil || rs.IntermediaryForwardFields != nil {
+			return nil, errors.New("invalid routing rule summary")
+		}
+
 		f := rs.ForwardFields
 		d := f.RouteDescriptor
-		return ForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID, d.DstPK, d.SrcPort, d.DstPort), nil
 
-	case rs.Type == RuleIntermediaryForward && rs.ConsumeFields == nil && rs.ForwardFields == nil && rs.IntermediaryForwardFields != nil:
+		return ForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID, d.SrcPK, d.DstPK, d.SrcPort, d.DstPort), nil
+	case rs.Type == RuleIntermediaryForward:
+		if rs.ConsumeFields != nil || rs.ForwardFields != nil || rs.IntermediaryForwardFields == nil {
+			return nil, errors.New("invalid routing rule summary")
+		}
+
 		f := rs.IntermediaryForwardFields
-		return IntermediaryForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID), nil
 
+		return IntermediaryForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID), nil
 	default:
 		return nil, errors.New("invalid routing rule summary")
 	}
@@ -409,69 +329,78 @@ func (r Rule) Summary() *RuleSummary {
 		Type:       r.Type(),
 		KeyRouteID: r.KeyRouteID(),
 	}
+
+	rd := r.RouteDescriptor()
+
 	switch t := summary.Type; t {
 	case RuleConsume:
 		summary.ConsumeFields = &RuleConsumeFields{
 			RouteDescriptor: RouteDescriptorFields{
-				DstPK:   r.RouteDescriptor().DstPK(),
-				SrcPK:   r.RouteDescriptor().SrcPK(),
-				DstPort: r.RouteDescriptor().DstPort(),
-				SrcPort: r.RouteDescriptor().SrcPort(),
+				DstPK:   rd.DstPK(),
+				SrcPK:   rd.SrcPK(),
+				DstPort: rd.DstPort(),
+				SrcPort: rd.SrcPort(),
 			},
 		}
 	case RuleForward:
 		summary.ForwardFields = &RuleForwardFields{
 			RouteDescriptor: RouteDescriptorFields{
-				DstPK:   r.RouteDescriptor().DstPK(),
-				SrcPK:   r.RouteDescriptor().SrcPK(),
-				DstPort: r.RouteDescriptor().DstPort(),
-				SrcPort: r.RouteDescriptor().SrcPort(),
+				DstPK:   rd.DstPK(),
+				SrcPK:   rd.SrcPK(),
+				DstPort: rd.DstPort(),
+				SrcPort: rd.SrcPort(),
 			},
 			NextRID: r.NextRouteID(),
 			NextTID: r.NextTransportID(),
 		}
-
 	case RuleIntermediaryForward:
 		summary.IntermediaryForwardFields = &RuleIntermediaryForwardFields{
 			NextRID: r.NextRouteID(),
 			NextTID: r.NextTransportID(),
 		}
 	default:
-		panic(fmt.Sprintf("%v: %v", invalidRule, t.String()))
+		panic(fmt.Sprintf("invalid rule: %v", t.String()))
 	}
+
 	return &summary
 }
 
 // ConsumeRule constructs a new Consume rule.
-func ConsumeRule(keepAlive time.Duration, key RouteID, remotePK cipher.PubKey, localPort, remotePort Port) Rule {
+func ConsumeRule(keepAlive time.Duration, key RouteID, lPK, rPK cipher.PubKey, lPort, rPort Port) Rule {
 	rule := Rule(make([]byte, RuleHeaderSize+routeDescriptorSize))
 
 	rule.setKeepAlive(keepAlive)
 	rule.setType(RuleConsume)
 	rule.SetKeyRouteID(key)
 
-	rule.setDstPK(remotePK)
-	rule.setSrcPK(cipher.PubKey{})
-	rule.setDstPort(remotePort)
-	rule.setSrcPort(localPort)
+	rule.setSrcPK(lPK)
+	rule.setDstPK(rPK)
+	rule.setDstPort(rPort)
+	rule.setSrcPort(lPort)
 
 	return rule
 }
 
 // ForwardRule constructs a new Forward rule.
-func ForwardRule(keepAlive time.Duration, key, nextRoute RouteID, nextTransport uuid.UUID, remotePK cipher.PubKey, localPort, remotePort Port) Rule {
+func ForwardRule(
+	keepAlive time.Duration,
+	key, nextRt RouteID,
+	nextTp uuid.UUID,
+	lPK, rPK cipher.PubKey,
+	lPort, rPort Port,
+) Rule {
 	rule := Rule(make([]byte, RuleHeaderSize+routeDescriptorSize+4+pkSize))
 
 	rule.setKeepAlive(keepAlive)
 	rule.setType(RuleForward)
 	rule.SetKeyRouteID(key)
-	rule.setNextRouteID(nextRoute)
-	rule.setNextTransportID(nextTransport)
+	rule.setNextRouteID(nextRt)
+	rule.setNextTransportID(nextTp)
 
-	rule.setDstPK(remotePK)
-	rule.setSrcPK(cipher.PubKey{})
-	rule.setDstPort(remotePort)
-	rule.setSrcPort(localPort)
+	rule.setSrcPK(lPK)
+	rule.setSrcPort(lPort)
+	rule.setDstPK(rPK)
+	rule.setDstPort(rPort)
 
 	return rule
 }
