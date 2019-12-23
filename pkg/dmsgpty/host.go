@@ -163,6 +163,7 @@ func (h *Host) ServeRemoteRequests(ctx context.Context) {
 // ServeCLIRequests serves local requests from CLI.
 func (h *Host) ServeCLIRequests(ctx context.Context) {
 	wg := new(sync.WaitGroup)
+
 	defer func() {
 		wg.Wait()
 		h.cleanup()
@@ -285,6 +286,7 @@ func (h *Host) handlePtyReq(ctx context.Context, log logrus.FieldLogger, req *Pt
 	if err != nil {
 		return nil, err
 	}
+
 	go func() {
 		<-ctx.Done()
 		log.WithError(dmsgConn.Close()).
