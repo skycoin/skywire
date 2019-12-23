@@ -189,7 +189,9 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 
 	packet := routing.MakeDataPacket(rule.KeyRouteID(), p)
 
-	errCh, cancel := rg.writePacketAsync(tp, packet)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := rg.writePacketAsync(ctx, tp, packet)
 	defer cancel()
 
 	select {
@@ -206,20 +208,14 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 }
 
-func (rg *RouteGroup) writePacketAsync(tp *transport.ManagedTransport, packet routing.Packet) (chan error, func()) {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet) chan error {
 	errCh := make(chan error)
-
 	go func() {
-		select {
-		case <-ctx.Done():
-		case errCh <- tp.WritePacket(context.Background(), packet):
-		}
+		errCh <- tp.WritePacket(ctx, packet)
 		close(errCh)
 	}()
 
-	return errCh, cancel
+	return errCh
 }
 
 func (rg *RouteGroup) rule() (routing.Rule, error) {
