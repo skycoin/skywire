@@ -281,6 +281,7 @@ func (r *RPCGateway) CloseListener(lisID *uint16, _ *struct{}) error {
 	return lis.Close()
 }
 
+// DeadlineReq contains arguments for deadline methods.
 type DeadlineReq struct {
 	ConnID   uint16
 	Deadline time.Time
