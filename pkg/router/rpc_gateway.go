@@ -4,54 +4,61 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
 )
 
+// RPCGateway is a RPC interface for router.
 type RPCGateway struct {
 	logger *logging.Logger
-	router *router
+	router Router
 }
 
-func NewRPCGateway(router *router) *RPCGateway {
+// NewRPCGateway creates a new RPCGateway.
+func NewRPCGateway(router Router) *RPCGateway {
 	return &RPCGateway{
 		logger: logging.MustGetLogger("router-gateway"),
 		router: router,
 	}
 }
 
+// AddEdgeRules adds edge rules.
 func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
 	if err := r.router.IntroduceRules(rules); err != nil {
-		return err
-	}
-
-	if err := r.router.saveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		*ok = false
+
 		r.logger.WithError(err).Warnf("Request completed with error.")
-		return setup.Failure{Code: setup.FailureAddRules, Msg: err.Error()}
+
+		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
 	}
 
 	*ok = true
+
 	return nil
 }
 
+// AddIntermediaryRules adds intermediary rules.
 func (r *RPCGateway) AddIntermediaryRules(rules []routing.Rule, ok *bool) error {
-	if err := r.router.saveRoutingRules(rules...); err != nil {
+	if err := r.router.SaveRoutingRules(rules...); err != nil {
 		*ok = false
+
 		r.logger.WithError(err).Warnf("Request completed with error.")
-		return setup.Failure{Code: setup.FailureAddRules, Msg: err.Error()}
+
+		return routing.Failure{Code: routing.FailureAddRules, Msg: err.Error()}
 	}
 
 	*ok = true
+
 	return nil
 }
 
+// ReserveIDs reserves route IDs.
 func (r *RPCGateway) ReserveIDs(n uint8, routeIDs *[]routing.RouteID) error {
-	ids, err := r.router.rt.ReserveKeys(int(n))
+	ids, err := r.router.ReserveKeys(int(n))
 	if err != nil {
 		r.logger.WithError(err).Warnf("Request completed with error.")
-		return setup.Failure{Code: setup.FailureReserveRtIDs, Msg: err.Error()}
+		return routing.Failure{Code: routing.FailureReserveRtIDs, Msg: err.Error()}
 	}
 
 	*routeIDs = ids
+
 	return nil
 }

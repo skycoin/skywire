@@ -20,7 +20,7 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
@@ -357,7 +357,7 @@ func (m *Node) appLogsSince() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: app2.TimestampFromLog(logs[len(logs)-1]),
+			LastLogTimestamp: app.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
 	})
@@ -467,7 +467,7 @@ func (m *Node) getRoutes() http.HandlerFunc {
 		}
 		resp := make([]routingRuleResp, len(rules))
 		for i, rule := range rules {
-			resp[i] = makeRoutingRuleResp(rule.Key, rule.Value, qSummary)
+			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
 	})
