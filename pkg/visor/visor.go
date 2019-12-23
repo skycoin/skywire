@@ -22,9 +22,9 @@ import (
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appserver"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
@@ -56,7 +56,7 @@ const Version = "0.0.1"
 
 const supportedProtocolVersion = "0.0.1"
 
-var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "SSH", 3: "socksproxy"}
+var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "SSH", 3: "skysocks"}
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
@@ -91,7 +91,7 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	procManager *appserver.ProcManager
+	procManager appserver.ProcManager
 }
 
 // NewNode constructs new Node.
@@ -354,20 +354,7 @@ func (node *Node) Close() (err error) {
 		}
 	}
 
-	var procs []string
-	node.procManager.Range(func(name string, _ *appserver.Proc) bool {
-		procs = append(procs, name)
-		return true
-	})
-
-	for _, name := range procs {
-		if err := node.procManager.Stop(name); err != nil {
-			node.logger.WithError(err).Errorf("(%s) failed to stop app", name)
-			break
-		}
-
-		node.logger.Infof("(%s) app stopped successfully", name)
-	}
+	node.procManager.StopAll()
 
 	if err = node.router.Close(); err != nil {
 		node.logger.WithError(err).Error("failed to stop router")
@@ -430,12 +417,12 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	}
 
 	appCfg := appcommon.Config{
-		Name:      config.App,
-		Version:   config.Version,
-		SockFile:  node.conf.AppServerSockFile,
-		VisorPK:   node.conf.Node.StaticPubKey.Hex(),
-		BinaryDir: node.appsPath,
-		WorkDir:   filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
+		Name:         config.App,
+		Version:      config.Version,
+		SockFilePath: node.conf.AppServerSockFile,
+		VisorPK:      node.conf.Node.StaticPubKey.Hex(),
+		BinaryDir:    node.appsPath,
+		WorkDir:      filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {
@@ -485,6 +472,10 @@ func (node *Node) persistPID(name string, pid appcommon.ProcID) {
 // StopApp stops running App.
 func (node *Node) StopApp(appName string) error {
 	node.logger.Infof("Stopping app %s and closing ports", appName)
+
+	if !node.procManager.Exists(appName) {
+		return ErrUnknownApp
+	}
 
 	if err := node.procManager.Stop(appName); err != nil {
 		node.logger.Warn("Failed to stop app: ", err)

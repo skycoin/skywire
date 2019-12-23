@@ -117,16 +117,17 @@ func (mt *memTable) SaveRule(rule Rule) error {
 	defer mt.Unlock()
 
 	mt.rules[key] = rule
+	fmt.Printf("ROUTING TABLE CONTENTS: %v\n", mt.rules)
 	mt.activity[key] = now
 
 	return nil
 }
 
 func (mt *memTable) Rule(key RouteID) (Rule, error) {
-	mt.RLock()
-	rule, ok := mt.rules[key]
-	mt.RUnlock()
+	mt.Lock()
+	defer mt.Unlock()
 
+	rule, ok := mt.rules[key]
 	if !ok {
 		return nil, fmt.Errorf("rule of id %v not found", key)
 	}
@@ -134,6 +135,8 @@ func (mt *memTable) Rule(key RouteID) (Rule, error) {
 	if mt.ruleIsTimedOut(key, rule) {
 		return nil, ErrRuleTimedOut
 	}
+
+	mt.activity[key] = time.Now()
 
 	return rule, nil
 }
@@ -213,5 +216,6 @@ func (mt *memTable) ruleIsTimedOut(key RouteID, rule Rule) bool {
 	lastActivity, ok := mt.activity[key]
 	idling := time.Since(lastActivity)
 	keepAlive := rule.KeepAlive()
+
 	return !ok || idling > keepAlive
 }
