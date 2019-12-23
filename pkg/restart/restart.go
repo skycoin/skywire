@@ -16,6 +16,7 @@ var (
 	ErrMalformedArgs = errors.New("malformed args")
 )
 
+// DefaultCheckDelay is a default delay for checking if a new instance is started successfully.
 const DefaultCheckDelay = 5 * time.Second
 
 // Context describes data required for restarting visor.
@@ -113,7 +114,7 @@ func (c *Context) start(path string) chan error {
 		}
 
 		args := c.args[1:]
-		cmd := exec.Command(normalizedPath, args...)
+		cmd := exec.Command(normalizedPath, args...) // nolint:gosec
 
 		if err := cmd.Start(); err != nil {
 			errCh <- err
