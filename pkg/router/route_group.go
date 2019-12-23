@@ -21,7 +21,6 @@ import (
 
 const (
 	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
-	defaultRouteGroupIOTimeout         = 3 * time.Second
 	defaultReadChBufSize               = 1024
 )
 
@@ -46,7 +45,6 @@ func (timeoutError) Temporary() bool { return true }
 type RouteGroupConfig struct {
 	ReadChBufSize     int
 	KeepAliveInterval time.Duration
-	IOTimeout         time.Duration
 }
 
 // DefaultRouteGroupConfig returns default RouteGroup config.
@@ -54,7 +52,6 @@ type RouteGroupConfig struct {
 func DefaultRouteGroupConfig() *RouteGroupConfig {
 	return &RouteGroupConfig{
 		KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
-		IOTimeout:         defaultRouteGroupIOTimeout,
 		ReadChBufSize:     defaultReadChBufSize,
 	}
 }
@@ -149,15 +146,10 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 	}
 	rg.mu.Unlock()
 
-	timeout := time.NewTimer(rg.cfg.IOTimeout)
-	defer timeout.Stop()
-
 	var data []byte
 	select {
 	case <-rg.readDeadline.Wait():
 		return 0, timeoutError{}
-	case <-timeout.C:
-		return 0, io.EOF
 	case data = <-rg.readCh:
 	}
 
@@ -200,14 +192,9 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	errCh, cancel := rg.writePacketAsync(tp, packet)
 	defer cancel()
 
-	timeout := time.NewTimer(rg.cfg.IOTimeout)
-	defer timeout.Stop()
-
 	select {
 	case <-rg.writeDeadline.Wait():
 		return 0, timeoutError{}
-	case <-timeout.C:
-		return 0, io.EOF
 	case err := <-errCh:
 		if err != nil {
 			return 0, err
