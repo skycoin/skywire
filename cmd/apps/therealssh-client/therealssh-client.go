@@ -13,7 +13,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	ssh "github.com/SkycoinProject/skywire-mainnet/pkg/therealssh"
 )
 
@@ -24,7 +24,7 @@ const (
 var log *logging.MasterLogger
 
 func main() {
-	log = app2.NewLogger(appName)
+	log = app.NewLogger(appName)
 	ssh.Log = log.PackageLogger("therealssh")
 
 	// TODO(evanlinjin): Change "rpc" to "addr".
@@ -32,12 +32,12 @@ func main() {
 	var debug = flag.Bool("debug", false, "enable debug messages")
 	flag.Parse()
 
-	config, err := app2.ClientConfigFromEnv()
+	config, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
-	sshApp, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
+	sshApp, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
