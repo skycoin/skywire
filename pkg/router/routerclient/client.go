@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/rpc"
 
-	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -15,21 +14,20 @@ const rpcName = "RPCGateway"
 
 // Client is an RPC client for router.
 type Client struct {
-	tr  *dmsg.Transport
 	rpc *rpc.Client
 }
 
 // NewClient creates a new Client.
-func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Client, error) {
-	tr, err := dmsgC.Dial(ctx, pk, snet.AwaitSetupPort)
+func NewClient(ctx context.Context, dialer snet.Dialer, pk cipher.PubKey) (*Client, error) {
+	s, err := dialer.Dial(ctx, pk, snet.AwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}
 
 	client := &Client{
-		tr:  tr,
-		rpc: rpc.NewClient(tr.Conn),
+		rpc: rpc.NewClient(s),
 	}
+
 	return client, nil
 }
 
@@ -37,10 +35,6 @@ func NewClient(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey) (*Clie
 func (c *Client) Close() error {
 	if c == nil {
 		return nil
-	}
-
-	if err := c.tr.Close(); err != nil {
-		return err
 	}
 
 	if err := c.rpc.Close(); err != nil {
@@ -51,7 +45,6 @@ func (c *Client) Close() error {
 }
 
 // AddEdgeRules adds forward and consume rules to router (forward and reverse).
-// TODO(nkryuchkov): make sure that deadline functions are used, then get rid of context here and below
 func (c *Client) AddEdgeRules(ctx context.Context, rules routing.EdgeRules) (bool, error) {
 	var ok bool
 	err := c.call(ctx, rpcName+".AddEdgeRules", rules, &ok)

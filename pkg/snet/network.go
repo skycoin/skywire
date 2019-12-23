@@ -17,10 +17,18 @@ import (
 	"github.com/SkycoinProject/dmsg/disc"
 )
 
+// Default ports.
+// TODO(evanlinjin): Define these properly. These are currently random.
+const (
+	SetupPort      = uint16(36)  // Listening port of a setup node.
+	AwaitSetupPort = uint16(136) // Listening port of a visor node for setup operations.
+	TransportPort  = uint16(45)  // Listening port of a visor node for incoming transports.
+)
+
 // Network types.
 const (
-	DmsgType = "dmsg"
-	STcpType = "stcp"
+	DmsgType = dmsg.Type
+	STcpType = stcp.Type
 )
 
 var (
@@ -76,15 +84,19 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
 
 // Init initiates server connections.
 func (n *Network) Init(ctx context.Context) error {
-	if err := n.dmsgC.InitiateServerConnections(ctx, n.conf.DmsgMinSrvs); err != nil {
-		return fmt.Errorf("failed to initiate 'dmsg': %v", err)
-	}
-	if n.conf.STCPLocalAddr != "" {
-		if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
-			return fmt.Errorf("failed to initiate 'stcp': %v", err)
+	if n.dmsgC != nil {
+		if err := n.dmsgC.InitiateServerConnections(ctx, n.conf.DmsgMinSrvs); err != nil {
+			return fmt.Errorf("failed to initiate 'dmsg': %v", err)
 		}
-	} else {
-		fmt.Println("No config found for stcp")
+	}
+	if n.stcpC != nil {
+		if n.conf.STCPLocalAddr != "" {
+			if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
+				return fmt.Errorf("failed to initiate 'stcp': %v", err)
+			}
+		} else {
+			fmt.Println("No config found for stcp")
+		}
 	}
 	return nil
 }
@@ -131,6 +143,12 @@ func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
 
 // STcp returns the underlying stcp.Client.
 func (n *Network) STcp() *stcp.Client { return n.stcpC }
+
+// Dialer is an entity that can be dialed and asked for its type.
+type Dialer interface {
+	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
+	Type() string
+}
 
 // Dial dials a node by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {

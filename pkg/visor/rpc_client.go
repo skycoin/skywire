@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -227,7 +228,7 @@ type mockRPCClient struct {
 	s         *Summary
 	tpTypes   []string
 	rt        routing.Table
-	appls     app2.LogStore
+	appls     app.LogStore
 	sync.RWMutex
 }
 
@@ -252,39 +253,53 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 		}
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
+
 	rt := routing.NewTable(routing.DefaultConfig())
 	ruleKeepAlive := router.DefaultRouteKeepAlive
+
 	for i := 0; i < r.Intn(maxRules+1); i++ {
 		remotePK, _ := cipher.GenerateKeyPair()
 		var lpRaw, rpRaw [2]byte
+
 		if _, err := r.Read(lpRaw[:]); err != nil {
 			return cipher.PubKey{}, nil, err
 		}
+
 		if _, err := r.Read(rpRaw[:]); err != nil {
 			return cipher.PubKey{}, nil, err
 		}
+
 		lp := routing.Port(binary.BigEndian.Uint16(lpRaw[:]))
 		rp := routing.Port(binary.BigEndian.Uint16(rpRaw[:]))
+
 		fwdRID, err := rt.ReserveKeys(1)
 		if err != nil {
 			panic(err)
 		}
-		fwdRule := routing.IntermediaryForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New())
+
+		keys := snettest.GenKeyPairs(2)
+
+		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
 		if err := rt.SaveRule(fwdRule); err != nil {
 			panic(err)
 		}
+
 		appRID, err := rt.ReserveKeys(1)
 		if err != nil {
 			panic(err)
 		}
-		consumeRule := routing.ConsumeRule(ruleKeepAlive, appRID[0], remotePK, lp, rp)
+
+		consumeRule := routing.ConsumeRule(ruleKeepAlive, appRID[0], localPK, remotePK, lp, rp)
 		if err := rt.SaveRule(consumeRule); err != nil {
 			panic(err)
 		}
+
 		log.Infof("rt[%2da]: %v %v", i, fwdRID, fwdRule.Summary().ForwardFields)
 		log.Infof("rt[%2db]: %v %v", i, appRID[0], consumeRule.Summary().ConsumeFields)
 	}
+
 	log.Printf("rtCount: %d", rt.Count())
+
 	client := &mockRPCClient{
 		s: &Summary{
 			PubKey:          localPK,
@@ -301,6 +316,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 		rt:        rt,
 		startedAt: time.Now(),
 	}
+
 	return localPK, client, nil
 }
 

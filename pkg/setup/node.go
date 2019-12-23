@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/rpc"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -30,9 +31,11 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	ctx := context.Background()
 
 	logger := logging.NewMasterLogger()
+
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
 		logger.SetLevel(lvl)
 	}
+
 	log := logger.PackageLogger("setup_node")
 
 	// Prepare dmsg.
@@ -45,12 +48,14 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	if err := dmsgC.InitiateServerConnections(ctx, conf.Messaging.ServerCount); err != nil {
 		return nil, fmt.Errorf("failed to init dmsg: %s", err)
 	}
+
 	log.Info("connected to dmsg servers")
 
 	dmsgL, err := dmsgC.Listen(skyenv.DmsgSetupPort)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on dmsg port %d: %v", skyenv.DmsgSetupPort, dmsgL)
 	}
+
 	log.Info("started listening for dmsg connections")
 
 	node := &Node{
@@ -78,42 +83,39 @@ func (sn *Node) Serve() error {
 	sn.logger.Info("Serving setup node")
 
 	for {
-		conn, err := sn.dmsgL.AcceptTransport()
+		conn, err := sn.dmsgL.AcceptStream()
 		if err != nil {
 			return err
 		}
 
 		sn.logger.WithField("requester", conn.RemotePK()).Infof("Received request.")
 
+		const timeout = 30 * time.Second
+
 		rpcS := rpc.NewServer()
-		if err := rpcS.Register(NewRPCGateway(conn.RemotePK(), sn)); err != nil {
+		if err := rpcS.Register(NewRPCGateway(conn.RemotePK(), sn, timeout)); err != nil {
 			return err
 		}
+
 		go rpcS.ServeConn(conn)
 	}
 }
 
 func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.BidirectionalRoute) (routing.EdgeRules, error) {
+	sn.logger.Infof("Setup route from %s to %s", route.Desc.SrcPK(), route.Desc.DstPK())
+
 	idr, err := sn.reserveRouteIDs(ctx, route)
 	if err != nil {
 		return routing.EdgeRules{}, err
 	}
 
-	forwardRoute := routing.Route{
-		Desc:      route.Desc,
-		Path:      route.Forward,
-		KeepAlive: route.KeepAlive,
-	}
-	reverseRoute := routing.Route{
-		Desc:      route.Desc.Invert(),
-		Path:      route.Reverse,
-		KeepAlive: route.KeepAlive,
-	}
+	forwardRoute, reverseRoute := route.ForwardAndReverse()
 
 	// Determine the rules to send to visors using loop descriptor and reserved route IDs.
 	forwardRules, consumeRules, intermediaryRules, err := idr.GenerateRules(forwardRoute, reverseRoute)
 
 	if err != nil {
+		sn.logger.WithError(err).Error("ERROR GENERATING RULES")
 		return routing.EdgeRules{}, err
 	}
 
@@ -121,11 +123,48 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	sn.logger.Infof("generated consume rules: %v", consumeRules)
 	sn.logger.Infof("generated intermediary rules: %v", intermediaryRules)
 
+	if err := sn.addIntermediaryRules(ctx, intermediaryRules); err != nil {
+		return routing.EdgeRules{}, err
+	}
+
+	initRouteRules := routing.EdgeRules{
+		Desc:    reverseRoute.Desc,
+		Forward: forwardRules[route.Desc.SrcPK()],
+		Reverse: consumeRules[route.Desc.SrcPK()],
+	}
+
+	respRouteRules := routing.EdgeRules{
+		Desc:    forwardRoute.Desc,
+		Forward: forwardRules[route.Desc.DstPK()],
+		Reverse: consumeRules[route.Desc.DstPK()],
+	}
+
+	sn.logger.Infof("initRouteRules: Desc(%s), %s", &initRouteRules.Desc, initRouteRules)
+	sn.logger.Infof("respRouteRules: Desc(%s), %s", &respRouteRules.Desc, respRouteRules)
+
+	// Confirm routes with responding visor.
+	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
+	if err != nil || !ok {
+		return routing.EdgeRules{}, fmt.Errorf("failed to confirm loop with destination visor: %v", err)
+	}
+
+	sn.logger.Infof("Returning route rules to initiating node: %v", initRouteRules)
+
+	return initRouteRules, nil
+}
+
+func (sn *Node) addIntermediaryRules(ctx context.Context, intermediaryRules RulesMap) error {
 	errCh := make(chan error, len(intermediaryRules))
+
 	var wg sync.WaitGroup
+
 	for pk, rules := range intermediaryRules {
-		wg.Add(1)
 		pk, rules := pk, rules
+
+		sn.logger.WithField("remote", pk).Info("Adding rules to intermediary node")
+
+		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 			if _, err := routerclient.AddIntermediaryRules(ctx, sn.logger, sn.dmsgC, pk, rules); err != nil {
@@ -138,28 +177,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	wg.Wait()
 	close(errCh)
 
-	if err := finalError(len(intermediaryRules), errCh); err != nil {
-		return routing.EdgeRules{}, err
-	}
-
-	initRouteRules := routing.EdgeRules{
-		Desc:    forwardRoute.Desc,
-		Forward: forwardRules[route.Desc.SrcPK()],
-		Reverse: consumeRules[route.Desc.SrcPK()],
-	}
-	respRouteRules := routing.EdgeRules{
-		Desc:    reverseRoute.Desc,
-		Forward: forwardRules[route.Desc.DstPK()],
-		Reverse: consumeRules[route.Desc.DstPK()],
-	}
-
-	// Confirm routes with responding visor.
-	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
-	if err != nil || !ok {
-		return routing.EdgeRules{}, fmt.Errorf("failed to confirm loop with destination visor: %v", err)
-	}
-
-	return initRouteRules, nil
+	return finalError(len(intermediaryRules), errCh)
 }
 
 func (sn *Node) reserveRouteIDs(ctx context.Context, route routing.BidirectionalRoute) (*idReservoir, error) {
@@ -174,5 +192,6 @@ func (sn *Node) reserveRouteIDs(ctx context.Context, route routing.Bidirectional
 	}
 
 	sn.logger.Infof("Successfully reserved route IDs.")
+
 	return reservoir, err
 }

@@ -16,7 +16,7 @@ func TestSettlementHS(t *testing.T) {
 	tpDisc := transport.NewDiscoveryMock()
 
 	keys := snettest.GenKeyPairs(2)
-	nEnv := snettest.NewEnv(t, keys)
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
 	// TEST: Perform a handshake between two snet.Network instances.

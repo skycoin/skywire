@@ -10,8 +10,8 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
@@ -20,12 +20,12 @@ const (
 )
 
 func main() {
-	clientConfig, err := app2.ClientConfigFromEnv()
+	clientConfig, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
-	app, err := app2.NewClient(logging.MustGetLogger("helloworld"), clientConfig)
+	app, err := app.NewClient(logging.MustGetLogger("helloworld"), clientConfig)
 	if err != nil {
 		log.Fatalf("Error creating app client: %v\n", err)
 	}
