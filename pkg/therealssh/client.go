@@ -14,7 +14,7 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 

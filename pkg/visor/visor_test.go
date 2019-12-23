@@ -1,26 +1,34 @@
 package visor
 
 import (
-	"errors"
+	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
-	"os/exec"
-	"sync"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/stretchr/testify/require"
+
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
 var masterLogger *logging.MasterLogger
@@ -74,20 +82,56 @@ func TestMain(m *testing.M) {
 //	assert.NotNil(t, node.startedApps)
 //}
 
+// TODO (Darkren): fix tests
 func TestNodeStartClose(t *testing.T) {
-	r := new(mockRouter)
-	executer := &MockExecuter{}
-	conf := []AppConfig{
-		{App: "skychat", Version: "1.0", AutoStart: true, Port: 1},
-		{App: "foo", Version: "1.0", AutoStart: false},
+	r := &router.MockRouter{}
+	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
+	r.On("Close").Return(testhelpers.NoErr)
+
+	apps := []AppConfig{
+		{
+			App:       "skychat",
+			Version:   "1.0",
+			AutoStart: true,
+			Port:      1,
+		},
+		{
+			App:       "foo",
+			Version:   "1.0",
+			AutoStart: false,
+		},
 	}
 
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	node := &Node{conf: &Config{}, router: r, exec: executer, appsConf: conf,
-		startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test")}
+	nodeCfg := Config{}
+
+	node := &Node{
+		conf:     &nodeCfg,
+		router:   r,
+		appsConf: apps,
+		logger:   logging.MustGetLogger("test"),
+	}
+
+	pm := &appserver.MockProcManager{}
+	appCfg1 := appcommon.Config{
+		Name:         apps[0].App,
+		Version:      apps[0].Version,
+		SockFilePath: nodeCfg.AppServerSockFile,
+		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		WorkDir:      filepath.Join("", apps[0].App, fmt.Sprintf("v%s", apps[0].Version)),
+	}
+	appArgs1 := append([]string{filepath.Join(node.dir(), apps[0].App)}, apps[0].Args...)
+	appPID1 := appcommon.ProcID(10)
+	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+		Return(appPID1, testhelpers.NoErr)
+	pm.On("Wait", apps[0].App).Return(testhelpers.NoErr)
+
+	pm.On("StopAll").Return()
+
+	node.procManager = pm
 
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock())
 	netConf := snet.Config{
@@ -99,7 +143,10 @@ func TestNodeStartClose(t *testing.T) {
 	}
 
 	network := snet.NewRaw(netConf, dmsgC, nil)
-	tmConf := &transport.ManagerConfig{PubKey: cipher.PubKey{}, DiscoveryClient: transport.NewDiscoveryMock()}
+	tmConf := &transport.ManagerConfig{
+		PubKey:          cipher.PubKey{},
+		DiscoveryClient: transport.NewDiscoveryMock(),
+	}
 
 	tm, err := transport.NewManager(network, tmConf)
 	node.tm = tm
@@ -110,209 +157,162 @@ func TestNodeStartClose(t *testing.T) {
 		errCh <- node.Start()
 	}()
 
+	require.NoError(t, <-errCh)
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, node.Close())
-	require.True(t, r.didClose)
-	require.NoError(t, <-errCh)
-
-	require.Len(t, executer.cmds, 1)
-	assert.Equal(t, "skychat.v1.0", executer.cmds[0].Path)
-	assert.Equal(t, "skychat/v1.0", executer.cmds[0].Dir)
 }
 
 func TestNodeSpawnApp(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	r := new(mockRouter)
-	executer := &MockExecuter{}
+	r := &router.MockRouter{}
+	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
+	r.On("Close").Return(testhelpers.NoErr)
+
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
-	apps := []AppConfig{{App: "skychat", Version: "1.0", AutoStart: false, Port: 10, Args: []string{"foo"}}}
-	node := &Node{router: r, exec: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"),
-		conf: &Config{}}
-	node.conf.Node.StaticPubKey = pk
+
+	app := AppConfig{
+		App:       "skychat",
+		Version:   "1.0",
+		AutoStart: false,
+		Port:      10,
+		Args:      []string{"foo"},
+	}
+
+	nodeCfg := Config{}
+	nodeCfg.Node.StaticPubKey = pk
+
+	node := &Node{
+		router:   r,
+		appsConf: []AppConfig{app},
+		logger:   logging.MustGetLogger("test"),
+		conf:     &nodeCfg,
+	}
 	pathutil.EnsureDir(node.dir())
 	defer func() {
 		require.NoError(t, os.RemoveAll(node.dir()))
 	}()
 
-	require.NoError(t, node.StartApp("skychat"))
+	pm := &appserver.MockProcManager{}
+	appCfg := appcommon.Config{
+		Name:         app.App,
+		Version:      app.Version,
+		SockFilePath: nodeCfg.AppServerSockFile,
+		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+	}
+	appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
+	pm.On("Wait", app.App).Return(testhelpers.NoErr)
+
+	appPID := appcommon.ProcID(10)
+	pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+		Return(appPID, testhelpers.NoErr)
+	pm.On("Exists", app.App).Return(true)
+	pm.On("Stop", app.App).Return(testhelpers.NoErr)
+
+	node.procManager = pm
+
+	require.NoError(t, node.StartApp(app.App))
 	time.Sleep(100 * time.Millisecond)
 
-	require.NotNil(t, node.startedApps["skychat"])
+	require.True(t, node.procManager.Exists(app.App))
 
-	executer.Lock()
-	require.Len(t, executer.cmds, 1)
-	assert.Equal(t, "skychat.v1.0", executer.cmds[0].Path)
-	assert.Equal(t, "skychat/v1.0", executer.cmds[0].Dir)
-	assert.Equal(t, "skychat.v1.0", executer.cmds[0].Args[0])
-	assert.Equal(t, "foo", executer.cmds[0].Args[2])
-	executer.Unlock()
-
-	ports := r.Ports()
-	require.Len(t, ports, 1)
-	assert.Equal(t, routing.Port(10), ports[0])
-
-	require.NoError(t, node.StopApp("skychat"))
+	require.NoError(t, node.StopApp(app.App))
 }
 
 func TestNodeSpawnAppValidations(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	conn, _ := net.Pipe()
-	r := new(mockRouter)
-	executer := &MockExecuter{err: errors.New("foo")}
+	r := &router.MockRouter{}
+	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
+	r.On("Close").Return(testhelpers.NoErr)
+
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
+
 	c := &Config{}
 	c.Node.StaticPubKey = pk
-	node := &Node{router: r, exec: executer,
-		startedApps: map[string]*appBind{"skychat": {conn, 10}},
-		logger:      logging.MustGetLogger("test"),
-		conf:        c,
+
+	node := &Node{
+		router: r,
+		logger: logging.MustGetLogger("test"),
+		conf:   c,
 	}
-	defer os.Remove(node.dir()) // nolint
+	pathutil.EnsureDir(node.dir())
+	defer func() {
+		require.NoError(t, os.RemoveAll(node.dir()))
+	}()
 
-	cases := []struct {
-		conf *AppConfig
-		err  string
-	}{
-		{&AppConfig{App: "skychat", Version: "1.0", Port: 2}, "can't bind to reserved port 2"},
-		{&AppConfig{App: "skychat", Version: "1.0", Port: 10}, "app skychat is already started"},
-		{&AppConfig{App: "foo", Version: "1.0", Port: 11}, "failed to run app executable: foo"},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.err, func(t *testing.T) {
-			errCh := make(chan error)
-			go func() {
-				errCh <- node.SpawnApp(tc.conf, nil)
-			}()
-
-			time.Sleep(100 * time.Millisecond)
-			require.NoError(t, node.Close())
-			err := <-errCh
-			require.Error(t, err)
-			assert.Equal(t, tc.err, err.Error())
-		})
-	}
-}
-
-type MockExecuter struct {
-	sync.Mutex
-	err    error
-	cmds   []*exec.Cmd
-	stopCh chan struct{}
-}
-
-func (exc *MockExecuter) Start(cmd *exec.Cmd) (int, error) {
-	exc.Lock()
-	defer exc.Unlock()
-	if exc.stopCh != nil {
-		return -1, errors.New("already executing")
-	}
-
-	exc.stopCh = make(chan struct{})
-
-	if exc.err != nil {
-		return -1, exc.err
-	}
-
-	if exc.cmds == nil {
-		exc.cmds = make([]*exec.Cmd, 0)
-	}
-
-	exc.cmds = append(exc.cmds, cmd)
-
-	return 10, nil
-}
-
-func (exc *MockExecuter) Stop(pid int) error {
-	exc.Lock()
-	if exc.stopCh != nil {
-		select {
-		case <-exc.stopCh:
-		default:
-			close(exc.stopCh)
+	t.Run("fail - can't bind to reserved port", func(t *testing.T) {
+		app := AppConfig{
+			App:     "skychat",
+			Version: "1.0",
+			Port:    2,
 		}
-	}
-	exc.Unlock()
-	return nil
+		wantErr := "can't bind to reserved port 2"
+
+		pm := &appserver.MockProcManager{}
+		appCfg := appcommon.Config{
+			Name:         app.App,
+			Version:      app.Version,
+			SockFilePath: c.AppServerSockFile,
+			VisorPK:      c.Node.StaticPubKey.Hex(),
+			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+		}
+		appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
+
+		appPID := appcommon.ProcID(10)
+		pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+			Return(appPID, testhelpers.NoErr)
+		pm.On("Exists", app.App).Return(false)
+
+		node.procManager = pm
+
+		errCh := make(chan error)
+		go func() {
+			errCh <- node.SpawnApp(&app, nil)
+		}()
+
+		time.Sleep(100 * time.Millisecond)
+		err := <-errCh
+		require.Error(t, err)
+		assert.Equal(t, wantErr, err.Error())
+	})
+
+	t.Run("fail - app already started", func(t *testing.T) {
+		app := AppConfig{
+			App:     "skychat",
+			Version: "1.0",
+			Port:    10,
+		}
+		wantErr := fmt.Sprintf("error running app skychat: %s", appserver.ErrAppAlreadyStarted)
+
+		pm := &appserver.MockProcManager{}
+		appCfg := appcommon.Config{
+			Name:         app.App,
+			Version:      app.Version,
+			SockFilePath: c.AppServerSockFile,
+			VisorPK:      c.Node.StaticPubKey.Hex(),
+			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+		}
+		appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
+
+		appPID := appcommon.ProcID(10)
+		pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+			Return(appPID, appserver.ErrAppAlreadyStarted)
+		pm.On("Exists", app.App).Return(true)
+
+		node.procManager = pm
+
+		errCh := make(chan error)
+		go func() {
+			errCh <- node.SpawnApp(&app, nil)
+		}()
+
+		time.Sleep(100 * time.Millisecond)
+		err := <-errCh
+		require.Error(t, err)
+		assert.Equal(t, wantErr, err.Error())
+	})
 }
-
-func (exc *MockExecuter) Wait(cmd *exec.Cmd) error {
-	<-exc.stopCh
-	return nil
-}
-
-/*type mockRouter struct {
-	sync.Mutex
-
-	ports []routing.Port
-
-	didStart bool
-	didClose bool
-
-	errChan chan error
-}
-
-func (r *mockRouter) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *router.DialOptions) (*router.RouteGroup, error) {
-	panic("implement me")
-}
-
-func (r *mockRouter) AcceptRoutes(ctx context.Context) (*router.RouteGroup, error) {
-	panic("implement me")
-}
-
-func (r *mockRouter) Ports() []routing.Port {
-	r.Lock()
-	p := r.ports
-	r.Unlock()
-	return p
-}
-
-func (r *mockRouter) Serve(context.Context) error {
-	r.didStart = true
-	return nil
-}
-
-func (r *mockRouter) ServeApp(conn net.Conn, port routing.Port, appConf *app.Config) error {
-	r.Lock()
-	if r.ports == nil {
-		r.ports = []routing.Port{}
-	}
-
-	r.ports = append(r.ports, port)
-	r.Unlock()
-
-	if r.errChan == nil {
-		r.Lock()
-		r.errChan = make(chan error)
-		r.Unlock()
-	}
-
-	return <-r.errChan
-}
-
-func (r *mockRouter) Close() error {
-	if r == nil {
-		return nil
-	}
-	r.didClose = true
-	r.Lock()
-	if r.errChan != nil {
-		close(r.errChan)
-	}
-	r.Unlock()
-	return nil
-}
-
-func (r *mockRouter) IsSetupTransport(*transport.ManagedTransport) bool {
-	return false
-}
-
-func (r *mockRouter) SetupIsTrusted(cipher.PubKey) bool {
-	return true
-}
-*/
