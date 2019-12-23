@@ -24,4 +24,4 @@ require (
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
 )
 
-// replace github.com/SkycoinProject/dmsg => ../dmsg
+replace github.com/SkycoinProject/dmsg => ../dmsg
