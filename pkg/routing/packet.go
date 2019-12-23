@@ -100,7 +100,7 @@ func MakeClosePacket(id RouteID, code CloseCode) Packet {
 }
 
 // MakeKeepAlivePacket constructs a new KeepAlivePacket.
-func MakeKeepAlivePacket(id RouteID) Packet { // TODO(nkryuchkov): use it
+func MakeKeepAlivePacket(id RouteID) Packet {
 	packet := make([]byte, PacketHeaderSize)
 
 	packet[PacketTypeOffset] = byte(KeepAlivePacket)
@@ -127,5 +127,5 @@ func (p Packet) RouteID() RouteID {
 
 // Payload returns payload from a Packet.
 func (p Packet) Payload() []byte {
-	return p[PacketPayloadOffset:]
+	return p[PacketPayloadOffset:] // TODO: consider checking if real payload size differs
 }

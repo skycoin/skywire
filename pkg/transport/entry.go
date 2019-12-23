@@ -139,7 +139,6 @@ func (se *SignedEntry) Signature(pk cipher.PubKey) (cipher.Sig, bool) {
 func NewSignedEntry(entry *Entry, pk cipher.PubKey, secKey cipher.SecKey) (*SignedEntry, bool) {
 	se := &SignedEntry{Entry: entry}
 	return se, se.Sign(pk, secKey)
-
 }
 
 // Status represents the current state of a Transport from a Transport's single edge.

@@ -18,8 +18,8 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
@@ -33,7 +33,7 @@ var addr = flag.String("addr", ":8000", "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
-	chatApp   *app2.Client
+	chatApp   *app.Client
 	clientCh  chan string
 	chatConns map[cipher.PubKey]net.Conn
 	connsMu   sync.Mutex
@@ -41,20 +41,21 @@ var (
 )
 
 func main() {
-	log = app2.NewLogger(appName)
+	log = app.NewLogger(appName)
 	flag.Parse()
 
-	clientConfig, err := app2.ClientConfigFromEnv()
+	clientConfig, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.Fatalf("Error getting client config: %v\n", err)
 	}
 
 	// TODO: pass `log`?
-	a, err := app2.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), clientConfig)
+	a, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), clientConfig)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
 	defer a.Close()
+	log.Println("Successfully created skychat app")
 
 	chatApp = a
 
@@ -75,21 +76,24 @@ func main() {
 func listenLoop() {
 	l, err := chatApp.Listen(netType, port)
 	if err != nil {
-		log.Printf("Error listening network %v on port %d: %v\n", netType, port)
+		log.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
 		return
 	}
 
 	for {
+		log.Println("Accepting skychat conn...")
 		conn, err := l.Accept()
 		if err != nil {
 			log.Println("Failed to accept conn:", err)
 			return
 		}
+		log.Println("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
 		chatConns[raddr.PubKey] = conn
 		connsMu.Unlock()
+		log.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
 		go handleConn(conn)
 	}
