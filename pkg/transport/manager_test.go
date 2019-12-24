@@ -5,18 +5,21 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,8 +49,14 @@ func TestNewManager(t *testing.T) {
 	defer nEnv.Teardown()
 
 	m0, m1, tp0, tp1, err := transport.CreateTransportPair(tpDisc, keys, nEnv, "dmsg")
-	defer func() { require.NoError(t, m0.Close()) }()
-	defer func() { require.NoError(t, m1.Close()) }()
+	defer func() {
+		require.NoError(t, m0.Close())
+		fmt.Println("TP MANAGER 0 CLOSED")
+	}()
+	defer func() {
+		require.NoError(t, m1.Close())
+		fmt.Println("TP MANAGER 1 CLOSED")
+	}()
 
 	require.NoError(t, err)
 	require.NotNil(t, tp0)
@@ -56,8 +65,11 @@ func TestNewManager(t *testing.T) {
 	totalSent2 := 0
 	totalSent1 := 0
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	// Check read/writes are of expected.
 	t.Run("check_read_write", func(t *testing.T) {
+		defer wg.Done()
 
 		for i := 0; i < 10; i++ {
 			totalSent2 += i
@@ -87,9 +99,12 @@ func TestNewManager(t *testing.T) {
 			require.Equal(t, payload, recv.Payload())
 		}
 	})
+	wg.Wait()
 
+	wg.Add(1)
 	// Ensure tp log entries are of expected.
 	t.Run("check_tp_logs", func(t *testing.T) {
+		defer wg.Done()
 
 		// 1.5x log write interval just to be safe.
 		time.Sleep(time.Second * 9 / 2)
@@ -104,9 +119,12 @@ func TestNewManager(t *testing.T) {
 		assert.Equal(t, uint64(totalSent2), entry2.SentBytes)
 		assert.Equal(t, uint64(totalSent1), entry2.RecvBytes)
 	})
+	wg.Wait()
 
+	wg.Add(1)
 	// Ensure deleting a transport works as expected.
 	t.Run("check_delete_tp", func(t *testing.T) {
+		defer wg.Done()
 
 		// Make transport ID.
 		tpID := transport.MakeTransportID(m0.Conf.PubKey, m1.Conf.PubKey, "dmsg")
@@ -122,6 +140,7 @@ func TestNewManager(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, entry.IsUp)
 	})
+	wg.Wait()
 }
 
 func TestSortEdges(t *testing.T) {
