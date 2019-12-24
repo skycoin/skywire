@@ -348,8 +348,8 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 
 	switch rule.Type() {
 	case routing.RuleForward, routing.RuleIntermediaryForward:
-		r.logger.Infoln("Handling intermediary packet")
-		return r.forwardPacket(ctx, packet.Payload(), rule)
+		r.logger.Infoln("Handling intermediary data packet")
+		return r.forwardPacket(ctx, packet, rule)
 	}
 
 	desc := rule.RouteDescriptor()
@@ -398,17 +398,22 @@ func (r *router) handleClosePacket(_ context.Context, packet routing.Packet) err
 	return nil
 }
 
-func (r *router) handleKeepAlivePacket(_ context.Context, packet routing.Packet) error {
+func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
 	routeID := packet.RouteID()
 
 	r.logger.Infof("Received keepalive packet for route ID %v", routeID)
 
-	_, err := r.GetRule(routeID)
+	rule, err := r.GetRule(routeID)
 	if err != nil {
 		return err
 	}
 
-	// TODO: propagate keep-alive packet down the line
+	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
+	// consume rules should be omitted, activity is already updated
+	if t := rule.Type(); t == routing.RuleIntermediaryForward {
+		r.logger.Infoln("Handling intermediary keep-alive packet")
+		return r.forwardPacket(ctx, packet, rule)
+	}
 
 	r.logger.Infof("Route ID %v found, updated activity", routeID)
 
@@ -460,14 +465,23 @@ func (r *router) Close() error {
 	return r.tm.Close()
 }
 
-func (r *router) forwardPacket(ctx context.Context, payload []byte, rule routing.Rule) error {
+func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule routing.Rule) error {
 	tp := r.tm.Transport(rule.NextTransportID())
 	if tp == nil {
 		return errors.New("unknown transport")
 	}
 
-	packet := routing.MakeDataPacket(rule.NextRouteID(), payload)
-	if err := tp.WritePacket(ctx, packet); err != nil {
+	var p routing.Packet
+	switch packet.Type() {
+	case routing.DataPacket:
+		p = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
+	case routing.KeepAlivePacket:
+		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
+	default:
+		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
+	}
+
+	if err := tp.WritePacket(ctx, p); err != nil {
 		return err
 	}
 
