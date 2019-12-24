@@ -66,6 +66,25 @@ func TestContext_Restart(t *testing.T) {
 
 		assert.Equal(t, ErrMalformedArgs, cc.Restart())
 	})
+
+	t.Run("already restarting", func(t *testing.T) {
+		cc.args = nil
+
+		cmd := "touch"
+		path := "/tmp/test_restart"
+		args := []string{cmd, path}
+		cc.args = args
+
+		ch := make(chan error, 1)
+		go func() {
+			ch <- cc.Restart()
+		}()
+
+		assert.NoError(t, cc.Restart())
+		assert.NoError(t, os.Remove(path))
+
+		assert.Equal(t, ErrAlreadyRestarting, <-ch)
+	})
 }
 
 func TestContext_SetCheckDelay(t *testing.T) {
