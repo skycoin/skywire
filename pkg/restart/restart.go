@@ -69,7 +69,7 @@ func (c *Context) SetCheckDelay(delay time.Duration) {
 
 // Restart restarts executable using Context.
 func (c *Context) Restart() error {
-	if atomic.CompareAndSwapInt32(&c.isRestarting, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&c.isRestarting, 0, 1) {
 		return ErrAlreadyRestarting
 	}
 
