@@ -98,9 +98,7 @@ func defaultConfig() *visor.Config {
 	//passcode := base64.StdEncoding.Strict().EncodeToString(cipher.RandByte(8))
 	conf.Apps = []visor.AppConfig{
 		defaultSkychatConfig(),
-		defaultSkysshConfig(),
 		defaultSkyproxyConfig(""),
-		defaultSkysshClientConfig(),
 		defaultSkyproxyClientConfig(),
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
@@ -164,15 +162,6 @@ func defaultSkychatConfig() visor.AppConfig {
 	}
 }
 
-func defaultSkysshConfig() visor.AppConfig {
-	return visor.AppConfig{
-		App:       skyenv.SkysshName,
-		Version:   skyenv.SkysshVersion,
-		AutoStart: true,
-		Port:      routing.Port(skyenv.SkysshPort),
-	}
-}
-
 func defaultSkyproxyConfig(passcode string) visor.AppConfig {
 	var args []string
 	if passcode != "" {
@@ -184,15 +173,6 @@ func defaultSkyproxyConfig(passcode string) visor.AppConfig {
 		AutoStart: true,
 		Port:      routing.Port(skyenv.SkyproxyPort),
 		Args:      args,
-	}
-}
-
-func defaultSkysshClientConfig() visor.AppConfig {
-	return visor.AppConfig{
-		App:       skyenv.SkysshClientName,
-		Version:   skyenv.SkysshVersion,
-		AutoStart: true,
-		Port:      routing.Port(skyenv.SkysshClientPort),
 	}
 }
 
