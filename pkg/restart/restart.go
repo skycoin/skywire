@@ -6,14 +6,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 )
 
 var (
 	// ErrMalformedArgs is returned when executable args are malformed.
 	ErrMalformedArgs = errors.New("malformed args")
+	// ErrAlreadyRestarting is returned on restarting attempt when restarting is in progress.
+	ErrAlreadyRestarting = errors.New("already restarting")
 )
 
 // DefaultCheckDelay is a default delay for checking if a new instance is started successfully.
@@ -21,11 +24,12 @@ const DefaultCheckDelay = 5 * time.Second
 
 // Context describes data required for restarting visor.
 type Context struct {
-	log              *logging.Logger
+	log              logrus.FieldLogger
 	checkDelay       time.Duration
 	workingDirectory string
 	args             []string
 	needsExit        bool // disable in (c *Context) Restart() tests
+	isRestarting     int32
 }
 
 // CaptureContext captures data required for restarting visor.
@@ -50,7 +54,7 @@ func CaptureContext() (*Context, error) {
 }
 
 // RegisterLogger registers a logger instead of standard one.
-func (c *Context) RegisterLogger(logger *logging.Logger) {
+func (c *Context) RegisterLogger(logger logrus.FieldLogger) {
 	if c != nil {
 		c.log = logger
 	}
@@ -64,8 +68,13 @@ func (c *Context) SetCheckDelay(delay time.Duration) {
 }
 
 // Restart restarts executable using Context.
-// Should not be called from a goroutine.
 func (c *Context) Restart() error {
+	if atomic.CompareAndSwapInt32(&c.isRestarting, 0, 1) {
+		return ErrAlreadyRestarting
+	}
+
+	defer atomic.StoreInt32(&c.isRestarting, 0)
+
 	if len(c.args) == 0 {
 		return ErrMalformedArgs
 	}
