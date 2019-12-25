@@ -242,42 +242,9 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 	return tp, nil
 }
 
-// Close closes a RouteGroup:
-// - Send Close packet for all ForwardRules.
-// - Delete all rules (ForwardRules and ConsumeRules) from routing table.
-// - Close all go channels.
+// Close closes a RouteGroup.
 func (rg *RouteGroup) Close() error {
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-
-	if len(rg.fwd) != len(rg.tps) {
-		return ErrRuleTransportMismatch
-	}
-
-	for i := 0; i < len(rg.tps); i++ {
-		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), routing.CloseRequested)
-		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
-			return err
-		}
-	}
-
-	rules := rg.rt.RulesWithDesc(rg.desc)
-	routeIDs := make([]routing.RouteID, 0, len(rules))
-
-	for _, rule := range rules {
-		routeIDs = append(routeIDs, rule.KeyRouteID())
-	}
-
-	rg.rt.DelRules(routeIDs)
-
-	rg.once.Do(func() {
-		close(rg.done)
-		rg.readChMu.Lock()
-		close(rg.readCh)
-		rg.readChMu.Unlock()
-	})
-
-	return nil
+	return rg.close(routing.CloseRequested)
 }
 
 // LocalAddr returns destination address of underlying RouteDescriptor.
@@ -348,6 +315,44 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	if err := tp.WritePacket(context.Background(), packet); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+// Close closes a RouteGroup with the specified close `code`:
+// - Send Close packet for all ForwardRules with the code `code`.
+// - Delete all rules (ForwardRules and ConsumeRules) from routing table.
+// - Close all go channels.
+func (rg *RouteGroup) close(code routing.CloseCode) error {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	if len(rg.fwd) != len(rg.tps) {
+		return ErrRuleTransportMismatch
+	}
+
+	for i := 0; i < len(rg.tps); i++ {
+		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
+		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
+			return err
+		}
+	}
+
+	rules := rg.rt.RulesWithDesc(rg.desc)
+	routeIDs := make([]routing.RouteID, 0, len(rules))
+
+	for _, rule := range rules {
+		routeIDs = append(routeIDs, rule.KeyRouteID())
+	}
+
+	rg.rt.DelRules(routeIDs)
+
+	rg.once.Do(func() {
+		close(rg.done)
+		rg.readChMu.Lock()
+		close(rg.readCh)
+		rg.readChMu.Unlock()
+	})
 
 	return nil
 }
