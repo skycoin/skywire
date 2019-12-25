@@ -31,9 +31,9 @@ config: ## Generate skywire.json
 
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
-	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor ./SSH-cli
+	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
 
-install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `SSH-cli`, `dmsgpty`
+install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `dmsgpty`
 	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/therealssh-cli ./cmd/dmsgpty
 
 rerun: stop
