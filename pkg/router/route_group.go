@@ -91,6 +91,9 @@ type RouteGroup struct {
 
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
+
+	// serves as bool to indicate if this route group initiated connection close
+	closeInitiated int32
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -324,6 +327,8 @@ func (rg *RouteGroup) sendKeepAlive() error {
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
 // - Close all go channels.
 func (rg *RouteGroup) close(code routing.CloseCode) error {
+	atomic.CompareAndSwapInt32(&rg.closeInitiated, 0, 1)
+
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
@@ -337,6 +342,10 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 			return err
 		}
 	}
+
+	// if this node initiated closing, we need to wait for close packets
+	// to come back, or to exit with a time out if anything goes wrong in
+	// the network
 
 	rules := rg.rt.RulesWithDesc(rg.desc)
 	routeIDs := make([]routing.RouteID, 0, len(rules))
