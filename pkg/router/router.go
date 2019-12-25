@@ -416,6 +416,8 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return errors.New("route descriptor does not exist")
 	}
 
+	defer r.removeRouteGroup(desc)
+
 	if rg == nil {
 		return errors.New("RouteGroup is nil")
 	}
@@ -622,6 +624,13 @@ func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	rg, ok := r.rgs[desc]
 
 	return rg, ok
+}
+
+func (r *router) removeRouteGroup(desc routing.RouteDescriptor) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+
+	delete(r.rgs, desc)
 }
 
 func (r *router) IntroduceRules(rules routing.EdgeRules) error {
