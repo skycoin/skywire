@@ -20,7 +20,7 @@ var (
 )
 
 // DefaultCheckDelay is a default delay for checking if a new instance is started successfully.
-const DefaultCheckDelay = 5 * time.Second
+const DefaultCheckDelay = 1 * time.Second
 
 // Context describes data required for restarting visor.
 type Context struct {
@@ -28,8 +28,8 @@ type Context struct {
 	checkDelay       time.Duration
 	workingDirectory string
 	args             []string
-	needsExit        bool // disable in (c *Context) Restart() tests
 	isRestarting     int32
+	appendDelay      bool // disabled in tests
 }
 
 // CaptureContext captures data required for restarting visor.
@@ -47,7 +47,7 @@ func CaptureContext() (*Context, error) {
 		checkDelay:       DefaultCheckDelay,
 		workingDirectory: wd,
 		args:             args,
-		needsExit:        true,
+		appendDelay:      true,
 	}
 
 	return context, nil
@@ -67,8 +67,8 @@ func (c *Context) SetCheckDelay(delay time.Duration) {
 	}
 }
 
-// Restart restarts executable using Context.
-func (c *Context) Restart() error {
+// Start starts a new executable using Context.
+func (c *Context) Start() error {
 	if !atomic.CompareAndSwapInt32(&c.isRestarting, 0, 1) {
 		return ErrAlreadyRestarting
 	}
@@ -79,12 +79,12 @@ func (c *Context) Restart() error {
 		return ErrMalformedArgs
 	}
 
-	executableRelPath := c.args[0]
-	executableAbsPath := filepath.Join(c.workingDirectory, executableRelPath)
+	execPath := c.args[0]
+	if !filepath.IsAbs(execPath) {
+		execPath = filepath.Join(c.workingDirectory, execPath)
+	}
 
-	c.infoLogger()("Starting new instance of executable (path: %q)", executableAbsPath)
-
-	errCh := c.start(executableAbsPath)
+	errCh := c.startExec(execPath)
 
 	ticker := time.NewTicker(c.checkDelay)
 	defer ticker.Stop()
@@ -95,17 +95,11 @@ func (c *Context) Restart() error {
 		return err
 	case <-ticker.C:
 		c.infoLogger()("New instance started successfully, exiting")
-
-		if c.needsExit {
-			os.Exit(0)
-		}
-
-		// unreachable unless run in tests
 		return nil
 	}
 }
 
-func (c *Context) start(path string) chan error {
+func (c *Context) startExec(path string) chan error {
 	errCh := make(chan error, 1)
 
 	go func(path string) {
@@ -122,8 +116,15 @@ func (c *Context) start(path string) chan error {
 			return
 		}
 
-		args := c.args[1:]
+		args := c.startArgs()
 		cmd := exec.Command(normalizedPath, args...) // nolint:gosec
+
+		cmd.Stdout = os.Stdout
+		cmd.Stdin = os.Stdin
+		cmd.Stderr = os.Stderr
+		cmd.Env = os.Environ()
+
+		c.infoLogger()("Starting new instance of executable (path: %q, args: %q)", path, args)
 
 		if err := cmd.Start(); err != nil {
 			errCh <- err
@@ -137,6 +138,30 @@ func (c *Context) start(path string) chan error {
 	}(path)
 
 	return errCh
+}
+
+const extraWaitingTime = 1 * time.Second
+
+func (c *Context) startArgs() []string {
+	args := c.args[1:]
+
+	const delayArgName = "--delay"
+
+	l := len(args)
+	for i := 0; i < l; i++ {
+		if args[i] == delayArgName && i < len(args)-1 {
+			args = append(args[:i], args[i+2:]...)
+			i--
+			l -= 2
+		}
+	}
+
+	if c.appendDelay {
+		delay := c.checkDelay + extraWaitingTime
+		args = append(args, delayArgName, delay.String())
+	}
+
+	return args
 }
 
 func (c *Context) infoLogger() func(string, ...interface{}) {
