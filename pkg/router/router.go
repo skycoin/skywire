@@ -368,12 +368,9 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
 	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
 
-	if rg.isClosed() {
-		return io.ErrClosedPipe
-	}
-
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
+	// TODO: test that it's not needed indeed
+	/*rg.mu.Lock()
+	defer rg.mu.Unlock()*/
 
 	select {
 	case <-rg.done:
@@ -425,11 +422,11 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	r.logger.Infof("Got new remote close packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
 	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
 
+	closeCode := routing.CloseCode(packet.Payload()[0])
+
 	if rg.isClosed() {
 		return io.ErrClosedPipe
 	}
-
-	closeCode := routing.CloseCode(packet.Payload()[0])
 
 	if err := rg.handleClosePacket(closeCode); err != nil {
 		return fmt.Errorf("error handling close packet with code %d by route group with descriptor %s: %w",
