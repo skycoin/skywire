@@ -78,12 +78,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&cfg.port, "port", "", "6060", "port for http-mode of pprof")
 	rootCmd.Flags().StringVarP(&cfg.startDelay, "delay", "", "0ns", "delay before visor start")
 
-	restartCtx, err := restart.CaptureContext()
-	if err != nil {
-		log.Printf("Failed to capture context: %v", err)
-	} else {
-		cfg.restartCtx = restartCtx
-	}
+	cfg.restartCtx = restart.CaptureContext()
 }
 
 // Execute executes root CLI command.
