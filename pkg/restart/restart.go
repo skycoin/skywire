@@ -36,7 +36,7 @@ type Context struct {
 // Data used by CaptureContext must not be modified before,
 // therefore calling CaptureContext immediately after starting executable is recommended.
 func CaptureContext() *Context {
-	cmd := exec.Command(os.Args[0], os.Args[1:]...)
+	cmd := exec.Command(os.Args[0], os.Args[1:]...) // nolint:gosec
 
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
