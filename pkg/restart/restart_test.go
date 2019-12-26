@@ -2,6 +2,7 @@ package restart
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -11,21 +12,19 @@ import (
 )
 
 func TestCaptureContext(t *testing.T) {
-	cc, err := CaptureContext()
-	require.NoError(t, err)
+	cc := CaptureContext()
 
-	wd, err := os.Getwd()
-	assert.NoError(t, err)
-
-	require.Equal(t, wd, cc.workingDirectory)
 	require.Equal(t, DefaultCheckDelay, cc.checkDelay)
-	require.Equal(t, os.Args, cc.args)
+	require.Equal(t, os.Args, cc.cmd.Args)
+	require.Equal(t, os.Stdout, cc.cmd.Stdout)
+	require.Equal(t, os.Stdin, cc.cmd.Stdin)
+	require.Equal(t, os.Stderr, cc.cmd.Stderr)
+	require.Equal(t, os.Environ(), cc.cmd.Env)
 	require.Nil(t, cc.log)
 }
 
 func TestContext_RegisterLogger(t *testing.T) {
-	cc, err := CaptureContext()
-	require.NoError(t, err)
+	cc := CaptureContext()
 	require.Nil(t, cc.log)
 
 	logger := logging.MustGetLogger("test")
@@ -34,17 +33,13 @@ func TestContext_RegisterLogger(t *testing.T) {
 }
 
 func TestContext_Start(t *testing.T) {
-	cc, err := CaptureContext()
-	require.NoError(t, err)
-	assert.NotZero(t, len(cc.args))
-
-	cc.workingDirectory = ""
+	cc := CaptureContext()
+	assert.NotZero(t, len(cc.cmd.Args))
 
 	t.Run("executable started", func(t *testing.T) {
 		cmd := "touch"
 		path := "/tmp/test_restart"
-		args := []string{cmd, path}
-		cc.args = args
+		cc.cmd = exec.Command(cmd, path)
 		cc.appendDelay = false
 
 		assert.NoError(t, cc.Start())
@@ -53,26 +48,16 @@ func TestContext_Start(t *testing.T) {
 
 	t.Run("bad args", func(t *testing.T) {
 		cmd := "bad_command"
-		args := []string{cmd}
-		cc.args = args
+		cc.cmd = exec.Command(cmd)
 
 		// TODO(nkryuchkov): Check if it works on Linux and Windows, if not then change the error text.
 		assert.EqualError(t, cc.Start(), `exec: "bad_command": executable file not found in $PATH`)
 	})
 
-	t.Run("empty args", func(t *testing.T) {
-		cc.args = nil
-
-		assert.Equal(t, ErrMalformedArgs, cc.Start())
-	})
-
 	t.Run("already restarting", func(t *testing.T) {
-		cc.args = nil
-
 		cmd := "touch"
 		path := "/tmp/test_restart"
-		args := []string{cmd, path}
-		cc.args = args
+		cc.cmd = exec.Command(cmd, path)
 		cc.appendDelay = false
 
 		ch := make(chan error, 1)
@@ -81,15 +66,14 @@ func TestContext_Start(t *testing.T) {
 		}()
 
 		assert.NoError(t, cc.Start())
-		assert.NoError(t, os.Remove(path))
+		assert.Equal(t, ErrAlreadyStarting, <-ch)
 
-		assert.Equal(t, ErrAlreadyRestarting, <-ch)
+		assert.NoError(t, os.Remove(path))
 	})
 }
 
 func TestContext_SetCheckDelay(t *testing.T) {
-	cc, err := CaptureContext()
-	require.NoError(t, err)
+	cc := CaptureContext()
 	require.Equal(t, DefaultCheckDelay, cc.checkDelay)
 
 	const oneSecond = 1 * time.Second
