@@ -152,11 +152,19 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 	}
 	rg.mu.Unlock()
 
-	var data []byte
+	var (
+		data []byte
+		ok   bool
+	)
 	select {
 	case <-rg.readDeadline.Wait():
 		return 0, timeoutError{}
-	case data = <-rg.readCh:
+	case data, ok = <-rg.readCh:
+	}
+
+	if !ok {
+		// route group got closed
+		return 0, io.EOF
 	}
 
 	rg.mu.Lock()
