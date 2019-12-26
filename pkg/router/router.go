@@ -429,19 +429,14 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return io.ErrClosedPipe
 	}
 
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
+	closeCode := routing.CloseCode(packet.Payload()[0])
 
-	select {
-	case <-rg.done:
-		return io.ErrClosedPipe
-	default:
-		if err := rg.Close(); err != nil {
-			return fmt.Errorf("error closing route group with descriptor %s: %w", &desc, err)
-		}
-
-		return nil
+	if err := rg.handleClosePacket(closeCode); err != nil {
+		return fmt.Errorf("error handling close packet with code %d by route group with descriptor %s: %w",
+			closeCode, &desc, err)
 	}
+
+	return nil
 }
 
 func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
