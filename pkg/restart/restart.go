@@ -26,10 +26,10 @@ const (
 // Context describes data required for restarting visor.
 type Context struct {
 	log         logrus.FieldLogger
-	isStarting  int32
-	checkDelay  time.Duration
-	appendDelay bool // disabled in tests
 	cmd         *exec.Cmd
+	checkDelay  time.Duration
+	isStarting  int32
+	appendDelay bool // disabled in tests
 }
 
 // CaptureContext captures data required for restarting visor.
@@ -114,12 +114,15 @@ func (c *Context) startExec() chan error {
 func (c *Context) adjustArgs() {
 	args := c.cmd.Args
 
+	i := 0
 	l := len(args)
-	for i := 0; i < l; i++ {
+
+	for i < l {
 		if args[i] == delayArgName && i < len(args)-1 {
 			args = append(args[:i], args[i+2:]...)
-			i--
 			l -= 2
+		} else {
+			i++
 		}
 	}
 
