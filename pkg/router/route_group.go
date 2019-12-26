@@ -258,6 +258,8 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 
 // Close closes a RouteGroup.
 func (rg *RouteGroup) Close() error {
+	atomic.StoreInt32(&rg.closeInitiated, 1)
+
 	return rg.close(routing.CloseRequested)
 }
 
