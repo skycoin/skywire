@@ -22,6 +22,7 @@ import (
 const (
 	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
 	defaultReadChBufSize               = 1024
+	closeRoutineTimeout                = 2 * time.Second
 )
 
 var (
@@ -92,8 +93,10 @@ type RouteGroup struct {
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
 
-	// serves as bool to indicate if this route group initiated connection close
+	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated int32
+	// used to wait for all the `Close` packets to run through the loop and come back
+	closeDone sync.WaitGroup
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -327,8 +330,6 @@ func (rg *RouteGroup) sendKeepAlive() error {
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
 // - Close all go channels.
 func (rg *RouteGroup) close(code routing.CloseCode) error {
-	atomic.CompareAndSwapInt32(&rg.closeInitiated, 0, 1)
-
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
@@ -336,16 +337,26 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		return ErrRuleTransportMismatch
 	}
 
-	for i := 0; i < len(rg.tps); i++ {
-		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
-		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
-			return err
-		}
+	closeInitiator := rg.isCloseInitiator()
+
+	if closeInitiator {
+		// will wait for close response from all the transports
+		rg.closeDone.Add(len(rg.tps))
 	}
 
-	// if this node initiated closing, we need to wait for close packets
-	// to come back, or to exit with a time out if anything goes wrong in
-	// the network
+	if err := rg.broadcastClosePackets(code); err != nil {
+		// TODO: decide if we should return this error, or close route group anyway
+		return err
+	}
+
+	if closeInitiator {
+		// if this node initiated closing, we need to wait for close packets
+		// to come back, or to exit with a time out if anything goes wrong in
+		// the network
+		if err := rg.waitForCloseLoop(closeRoutineTimeout); err != nil {
+			rg.logger.Errorf("Error during close loop: %v", err)
+		}
+	}
 
 	rules := rg.rt.RulesWithDesc(rg.desc)
 	routeIDs := make([]routing.RouteID, 0, len(rules))
@@ -364,6 +375,57 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	})
 
 	return nil
+}
+
+func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
+	rg.logger.Infof("Got close packet with code %d", code)
+
+	if rg.isCloseInitiator() {
+		// this route group initiated close loop and got response
+		rg.logger.Debugf("Handling response close packet with code %d", code)
+
+		rg.closeDone.Done()
+		return nil
+	}
+
+	// TODO: use `close` with some close code if we decide that it should be different from the current one
+	return rg.Close()
+}
+
+func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) error {
+	for i := 0; i < len(rg.tps); i++ {
+		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
+		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
+			// TODO: decide if we should return this error, or close route group anyway
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
+	closeCtx, closeCancel := context.WithTimeout(context.Background(), waitTimeout)
+	defer closeCancel()
+
+	closeDoneCh := make(chan struct{})
+	go func() {
+		// wait till all remotes respond to close procedure
+		rg.closeDone.Wait()
+		close(closeDoneCh)
+	}()
+
+	select {
+	case <-closeCtx.Done():
+		return fmt.Errorf("close loop timed out: %w", closeCtx.Err())
+	case <-closeDoneCh:
+	}
+
+	return nil
+}
+
+func (rg *RouteGroup) isCloseInitiator() bool {
+	return atomic.LoadInt32(&rg.closeInitiated) == 1
 }
 
 func (rg *RouteGroup) isClosed() bool {
