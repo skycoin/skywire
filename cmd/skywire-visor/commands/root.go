@@ -40,6 +40,7 @@ type runCfg struct {
 	cfgFromStdin bool
 	profileMode  string
 	port         string
+	startDelay   string
 	args         []string
 
 	profileStop  func()
@@ -75,6 +76,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&cfg.cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 	rootCmd.Flags().StringVarP(&cfg.profileMode, "profile", "p", "none", "enable profiling with pprof. Mode:  none or one of: [cpu, mem, mutex, block, trace, http]")
 	rootCmd.Flags().StringVarP(&cfg.port, "port", "", "6060", "port for http-mode of pprof")
+	rootCmd.Flags().StringVarP(&cfg.startDelay, "delay", "", "0ns", "delay before visor start")
 
 	restartCtx, err := restart.CaptureContext()
 	if err != nil {
@@ -157,6 +159,18 @@ func (cfg *runCfg) readConfig() *runCfg {
 }
 
 func (cfg *runCfg) runNode() *runCfg {
+	startDelay, err := time.ParseDuration(cfg.startDelay)
+	if err != nil {
+		cfg.logger.Warnf("Using no visor start delay due to parsing failure: %v", err)
+		startDelay = time.Duration(0)
+	}
+
+	if startDelay != 0 {
+		cfg.logger.Infof("Visor start delay is %v, waiting...", startDelay)
+	}
+
+	time.Sleep(startDelay)
+
 	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx)
 	if err != nil {
 		cfg.logger.Fatal("Failed to initialize node: ", err)
@@ -190,7 +204,9 @@ func (cfg *runCfg) runNode() *runCfg {
 	if cfg.conf.ShutdownTimeout == 0 {
 		cfg.conf.ShutdownTimeout = defaultShutdownTimeout
 	}
+
 	cfg.node = node
+
 	return cfg
 }
 
