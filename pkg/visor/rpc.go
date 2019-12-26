@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -398,11 +399,22 @@ func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
 	<<< VISOR MANAGEMENT >>>
 */
 
+const exitDelay = 100 * time.Millisecond
+
 // Restart restarts visor.
-func (r *RPC) Restart(_ *struct{}, _ *struct{}) error {
+func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
+	defer func() {
+		if err == nil {
+			go func() {
+				time.Sleep(exitDelay)
+				os.Exit(0)
+			}()
+		}
+	}()
+
 	if r.node.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
 
-	return r.node.restartCtx.Restart()
+	return r.node.restartCtx.Start()
 }

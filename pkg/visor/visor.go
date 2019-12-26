@@ -84,6 +84,7 @@ type Node struct {
 	appsConf  []AppConfig
 
 	startedAt  time.Time
+	startDelay time.Duration
 	restartCtx *restart.Context
 
 	pidMu sync.Mutex

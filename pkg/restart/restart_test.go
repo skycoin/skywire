@@ -21,7 +21,6 @@ func TestCaptureContext(t *testing.T) {
 	require.Equal(t, DefaultCheckDelay, cc.checkDelay)
 	require.Equal(t, os.Args, cc.args)
 	require.Nil(t, cc.log)
-	require.True(t, cc.needsExit)
 }
 
 func TestContext_RegisterLogger(t *testing.T) {
@@ -34,21 +33,21 @@ func TestContext_RegisterLogger(t *testing.T) {
 	require.Equal(t, logger, cc.log)
 }
 
-func TestContext_Restart(t *testing.T) {
+func TestContext_Start(t *testing.T) {
 	cc, err := CaptureContext()
 	require.NoError(t, err)
 	assert.NotZero(t, len(cc.args))
 
 	cc.workingDirectory = ""
-	cc.needsExit = false
 
 	t.Run("executable started", func(t *testing.T) {
 		cmd := "touch"
 		path := "/tmp/test_restart"
 		args := []string{cmd, path}
 		cc.args = args
+		cc.appendDelay = false
 
-		assert.NoError(t, cc.Restart())
+		assert.NoError(t, cc.Start())
 		assert.NoError(t, os.Remove(path))
 	})
 
@@ -58,13 +57,13 @@ func TestContext_Restart(t *testing.T) {
 		cc.args = args
 
 		// TODO(nkryuchkov): Check if it works on Linux and Windows, if not then change the error text.
-		assert.EqualError(t, cc.Restart(), `exec: "bad_command": executable file not found in $PATH`)
+		assert.EqualError(t, cc.Start(), `exec: "bad_command": executable file not found in $PATH`)
 	})
 
 	t.Run("empty args", func(t *testing.T) {
 		cc.args = nil
 
-		assert.Equal(t, ErrMalformedArgs, cc.Restart())
+		assert.Equal(t, ErrMalformedArgs, cc.Start())
 	})
 
 	t.Run("already restarting", func(t *testing.T) {
@@ -74,13 +73,14 @@ func TestContext_Restart(t *testing.T) {
 		path := "/tmp/test_restart"
 		args := []string{cmd, path}
 		cc.args = args
+		cc.appendDelay = false
 
 		ch := make(chan error, 1)
 		go func() {
-			ch <- cc.Restart()
+			ch <- cc.Start()
 		}()
 
-		assert.NoError(t, cc.Restart())
+		assert.NoError(t, cc.Start())
 		assert.NoError(t, os.Remove(path))
 
 		assert.Equal(t, ErrAlreadyRestarting, <-ch)
