@@ -39,7 +39,7 @@ func TestContext_Start(t *testing.T) {
 	t.Run("executable started", func(t *testing.T) {
 		cmd := "touch"
 		path := "/tmp/test_restart"
-		cc.cmd = exec.Command(cmd, path)
+		cc.cmd = exec.Command(cmd, path) // nolint:gosec
 		cc.appendDelay = false
 
 		assert.NoError(t, cc.Start())
@@ -48,7 +48,7 @@ func TestContext_Start(t *testing.T) {
 
 	t.Run("bad args", func(t *testing.T) {
 		cmd := "bad_command"
-		cc.cmd = exec.Command(cmd)
+		cc.cmd = exec.Command(cmd) // nolint:gosec
 
 		// TODO(nkryuchkov): Check if it works on Linux and Windows, if not then change the error text.
 		assert.EqualError(t, cc.Start(), `exec: "bad_command": executable file not found in $PATH`)
@@ -57,7 +57,7 @@ func TestContext_Start(t *testing.T) {
 	t.Run("already restarting", func(t *testing.T) {
 		cmd := "touch"
 		path := "/tmp/test_restart"
-		cc.cmd = exec.Command(cmd, path)
+		cc.cmd = exec.Command(cmd, path) // nolint:gosec
 		cc.appendDelay = false
 
 		ch := make(chan error, 1)
