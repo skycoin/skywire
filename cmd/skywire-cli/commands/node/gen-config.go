@@ -138,7 +138,7 @@ func defaultConfig() *visor.Config {
 
 	conf.Interfaces.RPCAddress = "localhost:3435"
 
-	conf.AppServerSockFile = "app_server.sock"
+	conf.AppServerSockFile = "/tmp/visor_" + pk.Hex() + ".sock"
 
 	return conf
 }
