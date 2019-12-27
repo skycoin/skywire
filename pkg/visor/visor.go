@@ -26,6 +26,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -82,7 +83,8 @@ type Node struct {
 	localPath string
 	appsConf  []AppConfig
 
-	startedAt time.Time
+	startedAt  time.Time
+	restartCtx *restart.Context
 
 	pidMu sync.Mutex
 
@@ -93,7 +95,7 @@ type Node struct {
 }
 
 // NewNode constructs new Node.
-func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) {
+func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *restart.Context) (*Node, error) {
 	ctx := context.Background()
 
 	node := &Node{
@@ -103,6 +105,15 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 	node.Logger = masterLogger
 	node.logger = node.Logger.PackageLogger("skywire")
+
+	restartCheckDelay, err := time.ParseDuration(config.RestartCheckDelay)
+	if err == nil {
+		restartCtx.SetCheckDelay(restartCheckDelay)
+	}
+
+	restartCtx.RegisterLogger(node.logger)
+
+	node.restartCtx = restartCtx
 
 	pk := config.Node.StaticPubKey
 	sk := config.Node.StaticSecKey
