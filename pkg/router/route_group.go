@@ -368,14 +368,12 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		}
 	}
 
-	rules := rg.rt.RulesWithDesc(rg.desc)
-	routeIDs := make([]routing.RouteID, 0, len(rules))
-
-	for _, rule := range rules {
-		routeIDs = append(routeIDs, rule.KeyRouteID())
+	rules := make([]routing.RouteID, 0, len(rg.fwd))
+	for _, r := range rg.fwd {
+		rules = append(rules, r.KeyRouteID())
 	}
 
-	rg.rt.DelRules(routeIDs)
+	rg.rt.DelRules(rules)
 
 	rg.once.Do(func() {
 		close(rg.done)

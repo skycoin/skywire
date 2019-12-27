@@ -390,16 +390,13 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return err
 	}
 
+	defer func() {
+		routeIDs := []routing.RouteID{routeID}
+		r.rt.DelRules(routeIDs)
+	}()
+
 	if t := rule.Type(); t == routing.RuleIntermediaryForward {
 		r.logger.Infoln("Handling intermediary close packet")
-
-		// defer this only on intermediary nodes. destination node will remove
-		// the needed rules in the route group `Close` routine
-		defer func() {
-			routeIDs := []routing.RouteID{routeID}
-			r.rt.DelRules(routeIDs)
-		}()
-
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
