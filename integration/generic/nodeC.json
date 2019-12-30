@@ -33,13 +33,6 @@
       ]
     },
     {
-      "app": "SSH-client",
-      "version": "1.0",
-      "auto_start": true,
-      "port": 12,
-      "args": []
-    },
-    {
       "app": "socksproxy-client",
       "version": "1.0",
       "auto_start": true,
