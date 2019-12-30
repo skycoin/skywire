@@ -18,17 +18,3 @@ go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m 
 go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/noise -run TestReadWriterConcurrentTCP >> ./logs/internal/TestReadWriterConcurrentTCP.log
 
 go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealproxy -run TestProxy >> ./logs/internal/TestProxy.log
-
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestListAuthorizer >> ./logs/internal/TestListAuthorizer.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestFileAuthorizer >> ./logs/internal/TestFileAuthorizer.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestChannelServe >> ./logs/internal/TestChannelServe.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestChannelSendWrite >> ./logs/internal/TestChannelSendWrite.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestChannelRead >> ./logs/internal/TestChannelRead.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestChannelRequest >> ./logs/internal/TestChannelRequest.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestChannelServeSocket >> ./logs/internal/TestChannelServeSocket.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestClientOpenChannel >> ./logs/internal/TestClientOpenChannel.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestClientHandleResponse >> ./logs/internal/TestClientHandleResponse.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestClientHandleData >> ./logs/internal/TestClientHandleData.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestServerOpenChannel >> ./logs/internal/TestServerOpenChannel.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestServerHandleRequest >> ./logs/internal/TestServerHandleRequest.log
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealssh  -run TestServerHandleData >> ./logs/internal/TestServerHandleData.log
