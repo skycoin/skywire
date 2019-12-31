@@ -74,7 +74,8 @@ type Config struct {
 	LogLevel        string   `json:"log_level"`
 	ShutdownTimeout Duration `json:"shutdown_timeout"` // time value, examples: 10s, 1m, etc
 
-	Interfaces InterfaceConfig `json:"interfaces"`
+	Interfaces    InterfaceConfig `json:"interfaces"`
+	PeeringDaemon bool            `json:"peering_daemon"`
 }
 
 // MessagingConfig returns config for dmsg client.
