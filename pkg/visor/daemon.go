@@ -1,13 +1,13 @@
 package visor
 
 import (
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"net"
 	"net/rpc"
 	"os"
 	"os/exec"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	cp "github.com/SkycoinProject/skycoin/src/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -51,7 +51,7 @@ func addTransport(logger *logging.Logger) {
 			publicKey := cp.MustPubKeyFromHex(packet.PublicKey)
 			logger.Infof("Establishing transport to remote visor: {%s: %s}", packet.PublicKey, packet.IP)
 
-			_, err = rpcClient.AddTransport(cipher.PubKey(publicKey), dmsg.Type, false, time.Second*30)
+			_, err = rpcClient.AddTransport(cipher.PubKey(publicKey), snet.STcpType, false, time.Second*30)
 			if err != nil {
 				logger.Fatal(err)
 			}
