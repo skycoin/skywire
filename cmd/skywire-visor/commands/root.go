@@ -180,6 +180,8 @@ func (cfg *runCfg) runNode() *runCfg {
 		}
 	}()
 
+	go node.StartApd()
+
 	if cfg.conf.ShutdownTimeout == 0 {
 		cfg.conf.ShutdownTimeout = defaultShutdownTimeout
 	}

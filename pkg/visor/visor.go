@@ -3,10 +3,12 @@ package visor
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/rpc"
 	"os"
@@ -32,6 +34,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-peering-daemon/src/apd"
+	"github.com/rjeczalik/notify"
 )
 
 var log = logging.MustGetLogger("node")
@@ -230,6 +234,63 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	}
 
 	return node, err
+}
+
+// StartApd starts the auto-peering-daemon as an external process
+func (node *Node) StartApd() {
+	bin := "/home/kifen/Go-workspace/src/github.com/SkycoinPro/skywire-mainnet/skywire-peering-daemon"
+	pubKey := node.conf.Node.StaticPubKey.Hex()
+
+	dir, err := ioutil.TempDir("", "named_pipes")
+	if err != nil {
+		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
+	}
+
+	defer os.RemoveAll(dir)
+
+	namedPipe := filepath.Join(dir, "stdout")
+	syscall.Mkfifo(namedPipe, 0600)
+
+	go func() {
+		cmd := exec.Command(bin, pubKey, namedPipe)
+		//public_key := fmt.Sprintf("public-key=%s", pubKey)
+		//named_pipe := fmt.Sprintf("named-pipe=%s", namedPipe)
+		//cmd.Env = []string{public_key, named_pipe}
+		cmd.Stdout = os.Stdout
+		if err := cmd.Start(); err != nil {
+			node.logger.Error(err)
+		}
+
+	}()
+
+	//node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
+	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
+	defer stdOut.Close()
+
+	c := make(chan notify.EventInfo, 5)
+	notify.Watch(namedPipe, c, notify.Write)
+
+	// Read packets from named pipe
+	for {
+		var (
+			packet apd.Packet
+			buff   bytes.Buffer
+		)
+		select {
+		case <-c:
+			_, err = io.Copy(&buff, stdOut)
+			if err != nil {
+				node.logger.Fatal(err)
+			}
+
+			packet, err = apd.Deserialize(buff.Bytes())
+			if err != nil {
+				node.logger.Error(err)
+			}
+
+			node.logger.Infof("Packets received from APD:\n\t%s:%s", packet.PublicKey, packet.IP)
+		}
+	}
 }
 
 // Start spawns auto-started Apps, starts router and RPC interfaces .
