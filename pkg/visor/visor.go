@@ -236,8 +236,8 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	return node, err
 }
 
-// StartApd starts the auto-peering-daemon as an external process
-func (node *Node) StartApd() {
+// RunDaemon starts the auto-peering-daemon as an external process
+func (node *Node) RunDaemon() {
 	bin := "/home/kifen/Go-workspace/src/github.com/SkycoinPro/skywire-mainnet/skywire-peering-daemon"
 	pubKey := node.conf.Node.StaticPubKey.Hex()
 
@@ -246,51 +246,50 @@ func (node *Node) StartApd() {
 		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
 	}
 
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	namedPipe := filepath.Join(dir, "stdout")
 	syscall.Mkfifo(namedPipe, 0600)
 
-	go func() {
-		cmd := exec.Command(bin, pubKey, namedPipe)
-		//public_key := fmt.Sprintf("public-key=%s", pubKey)
-		//named_pipe := fmt.Sprintf("named-pipe=%s", namedPipe)
-		//cmd.Env = []string{public_key, named_pipe}
-		cmd.Stdout = os.Stdout
-		if err := cmd.Start(); err != nil {
-			node.logger.Error(err)
-		}
+	if err := execute(bin, pubKey, namedPipe); err != nil {
+		node.logger.Fatal("Failed to start daemon as an external process: ", err)
+	}
 
-	}()
-
-	//node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
+	node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
 	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
-	defer stdOut.Close()
+	if err != nil {
+		node.logger.Fatal(err)
+	}
 
 	c := make(chan notify.EventInfo, 5)
 	notify.Watch(namedPipe, c, notify.Write)
 
-	// Read packets from named pipe
-	for {
-		var (
-			packet apd.Packet
-			buff   bytes.Buffer
-		)
-		select {
-		case <-c:
-			_, err = io.Copy(&buff, stdOut)
-			if err != nil {
-				node.logger.Fatal(err)
-			}
+	go func() {
+		// Read packets from named pipe
+		for {
+			var (
+				packet apd.Packet
+				buff   bytes.Buffer
+			)
+			select {
+			case <-c:
+				_, err = io.Copy(&buff, stdOut)
+				if err != nil {
+					node.logger.Fatal(err)
+				}
 
-			packet, err = apd.Deserialize(buff.Bytes())
-			if err != nil {
-				node.logger.Error(err)
-			}
+				packet, err = apd.Deserialize(buff.Bytes())
+				if err != nil {
+					node.logger.Error(err)
+				}
 
-			node.logger.Infof("Packets received from APD:\n\t%s:%s", packet.PublicKey, packet.IP)
+				node.logger.Infof("Packets received from APD:\n\t%s:%s", packet.PublicKey, packet.IP)
+				pipeCh <- packet
+			}
 		}
-	}
+	}()
+
+	go addTransport(node.logger)
 }
 
 // Start spawns auto-started Apps, starts router and RPC interfaces .

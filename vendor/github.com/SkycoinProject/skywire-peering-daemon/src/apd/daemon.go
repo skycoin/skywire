@@ -121,7 +121,7 @@ func (apd *APD) Run() {
 		for range timer.C {
 			data, _ := serialize(Packet{
 				PublicKey: "031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055",
-				IP:        "127.0.0.1: 3000",
+				IP:        "127.0.0.1:3000",
 			})
 			err := write(data, apd.NamedPipe)
 			if err != nil {
