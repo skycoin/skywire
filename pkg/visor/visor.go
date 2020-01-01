@@ -26,6 +26,7 @@ import (
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	cp "github.com/SkycoinProject/skycoin/src/cipher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
 	routeFinder "github.com/SkycoinProject/skywire-mainnet/pkg/route-finder/client"
@@ -114,6 +115,7 @@ type Node struct {
 	startedAt   time.Time
 
 	pidMu sync.Mutex
+	dMu   sync.Mutex
 
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
@@ -246,7 +248,7 @@ func (node *Node) RunDaemon() {
 		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
 	}
 
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	namedPipe := filepath.Join(dir, "stdout")
 	syscall.Mkfifo(namedPipe, 0600)
@@ -283,13 +285,24 @@ func (node *Node) RunDaemon() {
 					node.logger.Error(err)
 				}
 
+				node.dMu.Lock()
+
+				publicKey := cp.MustPubKeyFromHex(packet.PublicKey)
+				node.conf.STCP.PubKeyTable[cipher.PubKey(publicKey)] = packet.IP
 				node.logger.Infof("Packets received from APD:\n\t%s:%s", packet.PublicKey, packet.IP)
-				pipeCh <- packet
+				node.logger.Info(node.conf.STCP.PubKeyTable)
+
+				conn, err := addTransport(node.n, snet.STcpType, packet)
+				if err != nil {
+					node.logger.Fatalf("Couldn't establish transport to remote visor: %s", err)
+				}
+
+				node.logger.Infof("Transport established to remote visor: \n\t{%s: %s}", conn.RemotePK(), conn.RemoteAddr())
+
+				node.dMu.Unlock()
 			}
 		}
 	}()
-
-	go addTransport(node.logger)
 }
 
 // Start spawns auto-started Apps, starts router and RPC interfaces .

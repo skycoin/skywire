@@ -6,6 +6,8 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -14,7 +16,10 @@ import (
 	"github.com/SkycoinProject/skywire-peering-daemon/src/apd"
 )
 
-var pipeCh = make(chan apd.Packet, 10)
+var (
+	//pipeCh = make(chan apd.Packet, 10)
+	logger = logging.MustGetLogger("skywire-peering-daemon")
+)
 
 func client(rpcAddr string, dialTimeout, connDuration time.Duration) (RPCClient, error) {
 	conn, err := net.DialTimeout("tcp", rpcAddr, dialTimeout)
@@ -39,22 +44,19 @@ func execute(binPath, publicKey, namedPipe string) error {
 	return nil
 }
 
-func addTransport(logger *logging.Logger) {
-	for {
-		select {
-		case packet := <-pipeCh:
-			rpcClient, err := client(packet.IP, time.Second*5, time.Second*60)
-			if err != nil {
-				logger.Fatal(err)
-			}
-
-			publicKey := cp.MustPubKeyFromHex(packet.PublicKey)
-			logger.Infof("Establishing transport to remote visor: {%s: %s}", packet.PublicKey, packet.IP)
-
-			_, err = rpcClient.AddTransport(cipher.PubKey(publicKey), snet.STcpType, false, time.Second*30)
-			if err != nil {
-				logger.Fatal(err)
-			}
-		}
+func addTransport(network *snet.Network, networkType string, packet apd.Packet) (*snet.Conn, error) {
+	logger.Infof("Establishing transport to remote visor: {%s: %s}", packet.PublicKey, packet.IP)
+	publicKey := cp.MustPubKeyFromHex(packet.PublicKey)
+	token := strings.Split(packet.IP, ":")
+	port, err := strconv.ParseUint(token[1], 0, 64)
+	if err != nil {
+		return nil, err
 	}
+
+	conn, err := network.Dial(networkType, cipher.PubKey(publicKey), uint16(port))
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
 }
