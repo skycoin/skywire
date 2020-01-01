@@ -240,7 +240,12 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 // RunDaemon starts the auto-peering-daemon as an external process
 func (node *Node) RunDaemon() {
-	bin := "/home/kifen/Go-workspace/src/github.com/SkycoinPro/skywire-mainnet/skywire-peering-daemon"
+	bin, err := exec.LookPath("daemon")
+	if err != nil {
+		node.logger.Fatalf("Cannot find `skywire-peering-daemon` binary file: %s", err)
+	}
+
+	node.logger.Info(bin)
 	pubKey := node.conf.Node.StaticPubKey.Hex()
 
 	dir, err := ioutil.TempDir("", "named_pipes")
@@ -248,7 +253,7 @@ func (node *Node) RunDaemon() {
 		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
 	}
 
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	namedPipe := filepath.Join(dir, "stdout")
 	syscall.Mkfifo(namedPipe, 0600)
@@ -292,7 +297,7 @@ func (node *Node) RunDaemon() {
 				node.logger.Infof("Packets received from APD:\n\t%s:%s", packet.PublicKey, packet.IP)
 				node.logger.Info(node.conf.STCP.PubKeyTable)
 
-				conn, err := transport(node.n, snet.STcpType, packet)
+				conn, err := createTransport(node.n, snet.STcpType, packet)
 				if err != nil {
 					node.logger.Fatalf("Couldn't establish transport to remote visor: %s", err)
 				}

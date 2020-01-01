@@ -83,7 +83,7 @@ func serialize(packet Packet) ([]byte, error) {
 }
 
 func write(data []byte, filePath string) error {
-	logger(moduleName).Info("Sending packet over pipe")
+	logger(moduleName).Info("Opening named pipe for writing")
 	stdOut, err := os.OpenFile(filePath, os.O_RDWR, 0600)
 	if err != nil {
 		return err
