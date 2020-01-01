@@ -150,7 +150,7 @@ func defaultConfig() *visor.Config {
 	conf.ShutdownTimeout = visor.Duration(10 * time.Second)
 
 	conf.Interfaces.RPCAddress = "localhost:3435"
-	conf.PeeringDaemon = false
+	conf.AutoStartSpd = false
 
 	return conf
 }

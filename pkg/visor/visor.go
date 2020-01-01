@@ -115,7 +115,7 @@ type Node struct {
 	startedAt   time.Time
 
 	pidMu sync.Mutex
-	dMu   sync.Mutex
+	spdMu sync.Mutex
 
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
@@ -285,21 +285,21 @@ func (node *Node) RunDaemon() {
 					node.logger.Error(err)
 				}
 
-				node.dMu.Lock()
+				node.spdMu.Lock()
 
-				publicKey := cp.MustPubKeyFromHex(packet.PublicKey)
-				node.conf.STCP.PubKeyTable[cipher.PubKey(publicKey)] = packet.IP
+				rPK := cp.MustPubKeyFromHex(packet.PublicKey)
+				node.conf.STCP.PubKeyTable[cipher.PubKey(rPK)] = packet.IP
 				node.logger.Infof("Packets received from APD:\n\t%s:%s", packet.PublicKey, packet.IP)
 				node.logger.Info(node.conf.STCP.PubKeyTable)
 
-				conn, err := addTransport(node.n, snet.STcpType, packet)
+				conn, err := transport(node.n, snet.STcpType, packet)
 				if err != nil {
 					node.logger.Fatalf("Couldn't establish transport to remote visor: %s", err)
 				}
 
 				node.logger.Infof("Transport established to remote visor: \n\t{%s: %s}", conn.RemotePK(), conn.RemoteAddr())
 
-				node.dMu.Unlock()
+				node.spdMu.Unlock()
 			}
 		}
 	}()
