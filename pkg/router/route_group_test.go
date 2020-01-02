@@ -549,7 +549,7 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
-		rg1 := createRouteGroup()
+		/*rg1 := createRouteGroup()
 		rg2 := createRouteGroup()
 
 		c1, c2 = rg1, rg2
@@ -559,16 +559,137 @@ func TestRouteGroup_TestConn(t *testing.T) {
 
 		go pushPackets(ctx, t, m1, rg1)
 
-		go pushPackets(ctx, t, m2, rg2)
+		go pushPackets(ctx, t, m2, rg2)*/
+
+		keys := snettest.GenKeyPairs(2)
+
+		pk1 := keys[0].PK
+		pk2 := keys[1].PK
+
+		// create test env
+		nEnv := snettest.NewEnv(t, keys, []string{stcp.Type})
+
+		tpDisc := transport.NewDiscoveryMock()
+		tpKeys := snettest.GenKeyPairs(2)
+
+		m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, stcp.Type)
+		require.NoError(t, err)
+		require.NotNil(t, tp1)
+		require.NotNil(t, tp2)
+		require.NotNil(t, tp1.Entry)
+		require.NotNil(t, tp2.Entry)
+
+		rg0 := createRouteGroup()
+		rg1 := createRouteGroup()
+
+		r0RtIDs, err := rg0.rt.ReserveKeys(1)
+		require.NoError(t, err)
+
+		r1RtIDs, err := rg1.rt.ReserveKeys(1)
+		require.NoError(t, err)
+
+		r0FwdRule := routing.ForwardRule(ruleKeepAlive, r0RtIDs[0], r1RtIDs[0], tp1.Entry.ID, pk2, pk1, 0, 0)
+		err = rg0.rt.SaveRule(r0FwdRule)
+		require.NoError(t, err)
+
+		r1FwdRule := routing.ForwardRule(ruleKeepAlive, r1RtIDs[0], r0RtIDs[0], tp2.Entry.ID, pk1, pk2, 0, 0)
+		err = rg1.rt.SaveRule(r1FwdRule)
+		require.NoError(t, err)
+
+		r0FwdRtDesc := r0FwdRule.RouteDescriptor()
+		rg0.desc = r0FwdRtDesc.Invert()
+		rg0.tps = append(rg0.tps, tp1)
+		rg0.fwd = append(rg0.fwd, r0FwdRule)
+
+		r1FwdRtDesc := r1FwdRule.RouteDescriptor()
+		rg1.desc = r1FwdRtDesc.Invert()
+		rg1.tps = append(rg1.tps, tp2)
+		rg1.fwd = append(rg1.fwd, r1FwdRule)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		// push close packet from transport to route group
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				packet, err := m1.ReadPacket()
+				if err != nil {
+					panic(err)
+				}
+
+				payload := packet.Payload()
+				if len(payload) != int(packet.Size()) {
+					panic("malformed packet")
+				}
+
+				if packet.Type() == routing.ClosePacket {
+					if err := rg1.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
+						panic(err)
+					}
+
+					return
+				} else {
+					if packet.Type() == routing.DataPacket {
+						if safeSend(ctx, rg1, payload) {
+							return
+						}
+					} else {
+						panic("wrong packet type")
+					}
+				}
+			}
+		}()
+
+		// push close packet from transport to route group
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				packet, err := m2.ReadPacket()
+				if err != nil {
+					panic(err)
+				}
+
+				payload := packet.Payload()
+				if len(payload) != int(packet.Size()) {
+					panic("malformed packet")
+				}
+
+				if packet.Type() == routing.ClosePacket {
+					if err := rg0.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
+						panic(err)
+					}
+
+					return
+				} else {
+					if packet.Type() == routing.DataPacket {
+						if safeSend(ctx, rg0, payload) {
+							return
+						}
+					} else {
+						panic("wrong packet type")
+					}
+				}
+			}
+		}()
 
 		stop = func() {
+			require.NoError(t, rg0.Close())
+			nEnv.Teardown()
 			cancel()
-			teardownEnv()
-			require.NoError(t, rg1.Close())
+
 			//require.NoError(t, rg2.Close())
 		}
 
-		return
+		return rg0, rg1, stop, nil
 	}
 
 	nettest.TestConn(t, mp)
