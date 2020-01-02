@@ -180,6 +180,10 @@ func (cfg *runCfg) runNode() *runCfg {
 		}
 	}()
 
+	if cfg.conf.AutoStartSpd {
+		node.RunDaemon()
+	}
+
 	if cfg.conf.ShutdownTimeout == 0 {
 		cfg.conf.ShutdownTimeout = defaultShutdownTimeout
 	}

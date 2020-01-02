@@ -19,6 +19,9 @@ BUILD_OPTS?=
 check: lint test ## Run linters and tests
 
 build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS} 
+	cd ../skywire-peering-daemon && make build && make install
+	cp -rv ../skywire-peering-daemon/*-daemon ./
+
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
