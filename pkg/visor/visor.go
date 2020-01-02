@@ -56,7 +56,7 @@ const Version = "0.0.1"
 
 const supportedProtocolVersion = "0.0.1"
 
-var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "SSH", 3: "skysocks"}
+var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
