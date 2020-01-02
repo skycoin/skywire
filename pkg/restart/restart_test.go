@@ -38,7 +38,7 @@ func TestContext_Start(t *testing.T) {
 
 	t.Run("executable started", func(t *testing.T) {
 		cmd := "touch"
-		path := "/tmp/test_restart"
+		path := "/tmp/test_start"
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
 		cc.appendDelay = false
 
@@ -50,23 +50,32 @@ func TestContext_Start(t *testing.T) {
 		cmd := "bad_command"
 		cc.cmd = exec.Command(cmd) // nolint:gosec
 
-		// TODO(nkryuchkov): Check if it works on Linux and Windows, if not then change the error text.
-		assert.EqualError(t, cc.Start(), `exec: "bad_command": executable file not found in $PATH`)
+		// TODO(nkryuchkov): Add error text for Windows
+		possibleErrors := []string{
+			`exec: "bad_command": executable file not found in $PATH`,
+		}
+		err := cc.Start()
+		require.NotNil(t, err)
+		assert.Contains(t, possibleErrors, err.Error())
 	})
 
-	t.Run("already restarting", func(t *testing.T) {
+	t.Run("already starting", func(t *testing.T) {
 		cmd := "touch"
-		path := "/tmp/test_restart"
+		path := "/tmp/test_start"
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
 		cc.appendDelay = false
 
-		ch := make(chan error, 1)
+		errCh := make(chan error, 1)
 		go func() {
-			ch <- cc.Start()
+			errCh <- cc.Start()
 		}()
 
-		assert.NoError(t, cc.Start())
-		assert.Equal(t, ErrAlreadyStarting, <-ch)
+		err1 := cc.Start()
+		err2 := <-errCh
+		errors := []error{err1, err2}
+
+		assert.Contains(t, errors, ErrAlreadyStarting)
+		assert.Contains(t, errors, nil)
 
 		assert.NoError(t, os.Remove(path))
 	})
