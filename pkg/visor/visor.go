@@ -35,7 +35,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
-	apd "github.com/SkycoinProject/skywire-peering-daemon/src/daemon"
+	spd "github.com/SkycoinProject/skywire-peering-daemon/src/daemon"
 	"github.com/rjeczalik/notify"
 )
 
@@ -288,11 +288,11 @@ func (node *Node) Start() error {
 	return nil
 }
 
-// RunDaemon starts the auto-peering-daemon as an external process
+// RunDaemon starts a skywire-peering-daemon as an external process
 func (node *Node) RunDaemon() {
 	bin, err := exec.LookPath("daemon")
 	if err != nil {
-		node.logger.Fatalf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
+		node.logger.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
 	}
 
 	dir, err := ioutil.TempDir("", "named_pipes")
@@ -301,40 +301,44 @@ func (node *Node) RunDaemon() {
 	}
 
 	namedPipe := filepath.Join(dir, "stdout")
+	lAddr := node.conf.STCP.LocalAddr
 	pubKey := node.conf.Node.StaticPubKey.Hex()
 	err = syscall.Mkfifo(namedPipe, 0600)
 	if err != nil {
-		node.logger.Fatal(err)
+		node.logger.Errorf(err)
 	}
 
-	if err := execute(bin, pubKey, namedPipe); err != nil {
-		node.logger.Fatal("Failed to start daemon as an external process: ", err)
+	if err := execute(bin, pubKey, namedPipe, lAddr); err != nil {
+		node.logger.Errorf("Failed to start daemon as an external process: ", err)
 	}
 
 	node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
 	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
 	if err != nil {
-		node.logger.Fatal(err)
+		node.logger.Errorf(err)
 	}
 
 	c := make(chan notify.EventInfo, 5)
-	notify.Watch(namedPipe, c, notify.Write)
+	err = notify.Watch(namedPipe, c, notify.Write)
+	if err != nil {
+		node.logger.Errorf(err)
+	}
 
 	go func() {
 		// Read packets from named pipe
 		for {
 			var (
-				packet apd.Packet
+				packet spd.Packet
 				buff   bytes.Buffer
 			)
 
 			<-c
 			_, err = io.Copy(&buff, stdOut)
 			if err != nil {
-				node.logger.Fatal(err)
+				node.logger.Error(err)
 			}
 
-			packet, err = apd.Deserialize(buff.Bytes())
+			packet, err = spd.Deserialize(buff.Bytes())
 			if err != nil {
 				node.logger.Error(err)
 			}
@@ -347,7 +351,7 @@ func (node *Node) RunDaemon() {
 
 			conn, err := createTransport(node.n, snet.STcpType, packet)
 			if err != nil {
-				node.logger.Fatalf("Couldn't establish transport to remote visor: %s", err)
+				node.logger.Errorf("Couldn't establish transport to remote visor: %s", err)
 			}
 
 			node.logger.Infof("Transport established to remote visor: \n\t{%s: %s}", conn.RemotePK(), conn.RemoteAddr())

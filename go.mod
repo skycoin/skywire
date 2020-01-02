@@ -34,4 +34,4 @@ require (
 
 // Uncomment for tests with alternate branches of 'dmsg'
 //replace github.com/SkycoinProject/dmsg => ../dmsg
-replace github.com/SkycoinProject/skywire-peering-daemon => ../skywire-peering-daemon
+//replace github.com/SkycoinProject/skywire-peering-daemon => ../skywire-peering-daemon
