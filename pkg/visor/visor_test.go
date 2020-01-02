@@ -248,9 +248,9 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 		app := AppConfig{
 			App:     "skychat",
 			Version: "1.0",
-			Port:    2,
+			Port:    3,
 		}
-		wantErr := "can't bind to reserved port 2"
+		wantErr := "can't bind to reserved port 3"
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
