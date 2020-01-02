@@ -35,7 +35,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
-	"github.com/SkycoinProject/skywire-peering-daemon/src/apd"
+	apd "github.com/SkycoinProject/skywire-peering-daemon/src/daemon"
 	"github.com/rjeczalik/notify"
 )
 
@@ -242,7 +242,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 func (node *Node) RunDaemon() {
 	bin, err := exec.LookPath("daemon")
 	if err != nil {
-		node.logger.Fatalf("Cannot find `skywire-peering-daemon` binary file: %s", err)
+		node.logger.Fatalf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
 	}
 
 	node.logger.Info(bin)
@@ -253,7 +253,7 @@ func (node *Node) RunDaemon() {
 		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
 	}
 
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	namedPipe := filepath.Join(dir, "stdout")
 	syscall.Mkfifo(namedPipe, 0600)
@@ -294,8 +294,7 @@ func (node *Node) RunDaemon() {
 
 				rPK := cp.MustPubKeyFromHex(packet.PublicKey)
 				node.conf.STCP.PubKeyTable[cipher.PubKey(rPK)] = packet.IP
-				node.logger.Infof("Packets received from APD:\n\t%s:%s", packet.PublicKey, packet.IP)
-				node.logger.Info(node.conf.STCP.PubKeyTable)
+				node.logger.Infof("Packets received from skywire-peering-daemon:\n\t{%s:%s}", packet.PublicKey, packet.IP)
 
 				conn, err := createTransport(node.n, snet.STcpType, packet)
 				if err != nil {

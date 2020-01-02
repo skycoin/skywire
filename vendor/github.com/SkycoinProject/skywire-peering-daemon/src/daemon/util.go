@@ -43,23 +43,6 @@ func BroadCastPubKey(pubkey, broadCastIP string, port int) error {
 	return nil
 }
 
-func getLocalIP() string {
-	var localIP string
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		logger(moduleName).Errorf("Couldn't get device unicast addresses: %v", err)
-		return ""
-	}
-	for _, a := range addrs {
-		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				localIP = ipnet.IP.String()
-			}
-		}
-	}
-	return localIP
-}
-
 func Deserialize(data []byte) (Packet, error) {
 	var packet Packet
 	decoder := gob.NewDecoder(bytes.NewReader(data))
@@ -83,7 +66,7 @@ func serialize(packet Packet) ([]byte, error) {
 }
 
 func write(data []byte, filePath string) error {
-	logger(moduleName).Info("Opening named pipe for writing")
+	logger(moduleName).Info("Sending packet over pipe")
 	stdOut, err := os.OpenFile(filePath, os.O_RDWR, 0600)
 	if err != nil {
 		return err

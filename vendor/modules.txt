@@ -12,7 +12,7 @@ github.com/SkycoinProject/skycoin/src/cipher/secp256k1-go
 github.com/SkycoinProject/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/SkycoinProject/skycoin/src/util/logging
 # github.com/SkycoinProject/skywire-peering-daemon v0.0.0-20191213084248-fd74f00eca84 => ../skywire-peering-daemon
-github.com/SkycoinProject/skywire-peering-daemon/src/apd
+github.com/SkycoinProject/skywire-peering-daemon/src/daemon
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 github.com/alecthomas/template
 github.com/alecthomas/template/parse
@@ -79,14 +79,14 @@ github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
 # github.com/spf13/cobra v0.0.5
 github.com/spf13/cobra
-# github.com/spf13/pflag v1.0.5
+# github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
 # github.com/stretchr/testify v1.4.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20191219195013-becbf705a915
+# golang.org/x/crypto v0.0.0-20191227163750-53104e6ec876
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
@@ -100,7 +100,7 @@ golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20191228213918-04cbcbbfeed8
+# golang.org/x/sys v0.0.0-20191010194322-b09406accb47
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -108,5 +108,5 @@ golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc/eventlog
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 gopkg.in/alecthomas/kingpin.v2
-# gopkg.in/yaml.v2 v2.2.7
+# gopkg.in/yaml.v2 v2.2.2
 gopkg.in/yaml.v2

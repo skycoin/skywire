@@ -5,23 +5,19 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"fmt"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	cp "github.com/SkycoinProject/skycoin/src/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/SkycoinProject/skywire-peering-daemon/src/apd"
+	apd "github.com/SkycoinProject/skywire-peering-daemon/src/daemon"
 )
 
 var logger = logging.MustGetLogger("skywire-peering-daemon")
 
 func execute(binPath, publicKey, namedPipe string) error {
-	cmd := exec.Command(binPath)
-	pubKey := fmt.Sprintf("pubkey=%s", publicKey)
-	nm := fmt.Sprintf("namedpipe=%s", namedPipe)
-	cmd.Env = []string{pubKey, nm}
+	cmd := exec.Command(binPath, publicKey, namedPipe)
 	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
 		return err
