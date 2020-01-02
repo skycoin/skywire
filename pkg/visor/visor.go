@@ -302,7 +302,11 @@ func (node *Node) RunDaemon() {
 
 	namedPipe := filepath.Join(dir, "stdout")
 	pubKey := node.conf.Node.StaticPubKey.Hex()
-	syscall.Mkfifo(namedPipe, 0600)
+	err = syscall.Mkfifo(namedPipe, 0600)
+	if err != nil {
+		node.logger.Fatal(err)
+	}
+
 	if err := execute(bin, pubKey, namedPipe); err != nil {
 		node.logger.Fatal("Failed to start daemon as an external process: ", err)
 	}
@@ -323,33 +327,32 @@ func (node *Node) RunDaemon() {
 				packet apd.Packet
 				buff   bytes.Buffer
 			)
-			select {
-			case <-c:
-				_, err = io.Copy(&buff, stdOut)
-				if err != nil {
-					node.logger.Fatal(err)
-				}
 
-				packet, err = apd.Deserialize(buff.Bytes())
-				if err != nil {
-					node.logger.Error(err)
-				}
-
-				node.spdMu.Lock()
-
-				rPK := cp.MustPubKeyFromHex(packet.PublicKey)
-				node.conf.STCP.PubKeyTable[cipher.PubKey(rPK)] = packet.IP
-				node.logger.Infof("Packets received from skywire-peering-daemon:\n\t{%s: %s}", packet.PublicKey, packet.IP)
-
-				conn, err := createTransport(node.n, snet.STcpType, packet)
-				if err != nil {
-					node.logger.Fatalf("Couldn't establish transport to remote visor: %s", err)
-				}
-
-				node.logger.Infof("Transport established to remote visor: \n\t{%s: %s}", conn.RemotePK(), conn.RemoteAddr())
-
-				node.spdMu.Unlock()
+			<-c
+			_, err = io.Copy(&buff, stdOut)
+			if err != nil {
+				node.logger.Fatal(err)
 			}
+
+			packet, err = apd.Deserialize(buff.Bytes())
+			if err != nil {
+				node.logger.Error(err)
+			}
+
+			node.spdMu.Lock()
+
+			rPK := cp.MustPubKeyFromHex(packet.PublicKey)
+			node.conf.STCP.PubKeyTable[cipher.PubKey(rPK)] = packet.IP
+			node.logger.Infof("Packets received from skywire-peering-daemon:\n\t{%s: %s}", packet.PublicKey, packet.IP)
+
+			conn, err := createTransport(node.n, snet.STcpType, packet)
+			if err != nil {
+				node.logger.Fatalf("Couldn't establish transport to remote visor: %s", err)
+			}
+
+			node.logger.Infof("Transport established to remote visor: \n\t{%s: %s}", conn.RemotePK(), conn.RemoteAddr())
+
+			node.spdMu.Unlock()
 		}
 	}()
 }
