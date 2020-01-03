@@ -1,13 +1,12 @@
-package therealproxy
+package skysocks
 
 import (
 	"fmt"
 	"net"
 
-	"github.com/SkycoinProject/yamux"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/armon/go-socks5"
+	"github.com/hashicorp/yamux"
 )
 
 // Server implements multiplexing proxy server using yamux.
@@ -44,7 +43,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 		session, err := yamux.Server(conn, nil)
 		if err != nil {
-			return fmt.Errorf("error in `Serve`: yamux: %s", err)
+			return fmt.Errorf("yamux server failure: %s", err)
 		}
 
 		go func() {
