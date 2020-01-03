@@ -47,8 +47,8 @@ Create 2 node config files:
 Compile binaries and start 2 nodes:
 
 ```sh
-$ go build -o apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-$ go build -o apps/socksproxy-client.v1.0 ./cmd/apps/therealproxy-client
+$ go build -o apps/socksproxy.v1.0 ./cmd/apps/skysocks
+$ go build -o apps/socksproxy-client.v1.0 ./cmd/apps/skysocks-client
 $ ./skywire-visor skywire1.json
 $ ./skywire-visor skywire2.json
 ```
