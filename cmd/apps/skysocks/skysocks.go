@@ -9,7 +9,7 @@ import (
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/therealproxy"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -23,7 +23,7 @@ const (
 
 func main() {
 	log := app.NewLogger(appName)
-	therealproxy.Log = log.PackageLogger("therealproxy")
+	skysocks.Log = log.PackageLogger("skysocks")
 
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
 	flag.Parse()
@@ -41,7 +41,7 @@ func main() {
 		socksApp.Close()
 	}()
 
-	srv, err := therealproxy.NewServer(*passcode, log)
+	srv, err := skysocks.NewServer(*passcode, log)
 	if err != nil {
 		log.Fatal("Failed to create a new server: ", err)
 	}

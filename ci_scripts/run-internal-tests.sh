@@ -17,4 +17,4 @@ go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m 
 go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/noise -run TestReadWriterXKPattern >> ./logs/internal/TestReadWriterXKPattern.log
 go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/noise -run TestReadWriterConcurrentTCP >> ./logs/internal/TestReadWriterConcurrentTCP.log
 
-go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/therealproxy -run TestProxy >> ./logs/internal/TestProxy.log
+go clean -testcache &>/dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/internal/skysocks -run TestProxy >> ./logs/internal/TestProxy.log

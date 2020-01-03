@@ -185,7 +185,12 @@ After `skywire-visor` is up and running with default environment, default apps a
 
 - [Chat](/cmd/apps/skychat)
 - [Hello World](/cmd/apps/helloworld)
+<<<<<<< HEAD
 - [The Real Proxy](/cmd/apps/therealproxy) ([Client](/cmd/apps/therealproxy-client))
+=======
+- [The Real Proxy](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
+- [The Real SSH](/cmd/apps/therealssh) ([Client](/cmd/apps/therealssh-client))
+>>>>>>> rename therealproxy to skysocks
 
 ### Transports
 
@@ -408,7 +413,7 @@ $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/skywire-visor ./cmd/skywire
 # 3. compile apps
 $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/skychat.v1.0 ./cmd/apps/skychat
 $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/helloworld.v1.0 ./cmd/apps/helloworld
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/socksproxy.v1.0 ./cmd/apps/therealproxy
+$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/socksproxy.v1.0 ./cmd/apps/skysocks
 # 4. Create skywire-config.json for node
 $ skywire-cli node gen-config -o /tmp/SKYNODE/skywire-config.json
 # 2019/03/15 16:43:49 Done!
