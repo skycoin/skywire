@@ -32,7 +32,7 @@ func main() {
 	log := app.NewLogger(appName)
 	skysocks.Log = log.PackageLogger("skysocks")
 
-	var addr = flag.String("addr", skyenv.SkyproxyClientAddr, "Client address to listen on")
+	var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
