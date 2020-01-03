@@ -305,7 +305,7 @@ func (node *Node) RunDaemon() {
 	pubKey := node.conf.Node.StaticPubKey.Hex()
 	err = syscall.Mkfifo(namedPipe, 0600)
 	if err != nil {
-		node.logger.Errorf(err)
+		node.logger.Error(err)
 	}
 
 	if err := execute(bin, pubKey, namedPipe, lAddr); err != nil {
@@ -315,13 +315,13 @@ func (node *Node) RunDaemon() {
 	node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
 	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
 	if err != nil {
-		node.logger.Errorf(err)
+		node.logger.Error(err)
 	}
 
 	c := make(chan notify.EventInfo, 5)
 	err = notify.Watch(namedPipe, c, notify.Write)
 	if err != nil {
-		node.logger.Errorf(err)
+		node.logger.Error(err)
 	}
 
 	go func() {
