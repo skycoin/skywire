@@ -86,8 +86,8 @@ dep: ## Sorts dependencies
 host-apps: ## Build app 
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat	
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy.v1.0 ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/socksproxy-client.v1.0  ./cmd/apps/skysocks-client
 
 # Bin 
 bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
@@ -105,8 +105,8 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build -o ./hypervisor ./cmd/hypervisor
 	${OPTS} go build -o ./apps/skychat.v1.0 ./cmd/apps/skychat
 	${OPTS} go build -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	${OPTS} go build -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
+	${OPTS} go build -o ./apps/socksproxy.v1.0 ./cmd/apps/skysocks
+	${OPTS} go build -o ./apps/socksproxy-client.v1.0  ./cmd/apps/skysocks-client
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
@@ -122,8 +122,8 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
 	-${DOCKER_OPTS} go build -race -o ./node/apps/skychat.v1.0 ./cmd/apps/skychat
 	-${DOCKER_OPTS} go build -race -o ./node/apps/helloworld.v1.0 ./cmd/apps/helloworld
-	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client
+	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy.v1.0 ./cmd/apps/skysocks
+	-${DOCKER_OPTS} go build -race -o ./node/apps/socksproxy-client.v1.0  ./cmd/apps/skysocks-client
 
 docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`. `go build` with  ${DOCKER_OPTS}
 	${DOCKER_OPTS} go build -race -o ./node/skywire-visor ./cmd/skywire-visor
