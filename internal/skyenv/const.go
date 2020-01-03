@@ -41,13 +41,13 @@ const (
 	SkychatPort    = uint16(1)
 	SkychatAddr    = ":8000"
 
-	SkyproxyName    = "socksproxy"
-	SkyproxyVersion = "1.0"
-	SkyproxyPort    = uint16(3)
+	SkysocksName    = "socksproxy"
+	SkysocksVersion = "1.0"
+	SkysocksPort    = uint16(3)
 
-	SkyproxyClientName    = "socksproxy-client"
-	SkyproxyClientVersion = "1.0"
-	SkyproxyClientPort    = uint16(13)
-	SkyproxyClientAddr    = ":1080"
+	SkysocksClientName    = "socksproxy-client"
+	SkysocksClientVersion = "1.0"
+	SkysocksClientPort    = uint16(13)
+	SkysocksClientAddr    = ":1080"
 	// TODO(evanlinjin): skyproxy-client requires
 )
