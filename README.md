@@ -185,12 +185,7 @@ After `skywire-visor` is up and running with default environment, default apps a
 
 - [Chat](/cmd/apps/skychat)
 - [Hello World](/cmd/apps/helloworld)
-<<<<<<< HEAD
-- [The Real Proxy](/cmd/apps/therealproxy) ([Client](/cmd/apps/therealproxy-client))
-=======
-- [The Real Proxy](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
-- [The Real SSH](/cmd/apps/therealssh) ([Client](/cmd/apps/therealssh-client))
->>>>>>> rename therealproxy to skysocks
+- [Sky Socks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
 
 ### Transports
 
