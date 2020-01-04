@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	appName   = "socksproxy-client"
+	appName   = "skysocks-client"
 	netType   = appnet.TypeSkynet
 	socksPort = routing.Port(3)
 )
