@@ -1,6 +1,6 @@
 # Skywire SOCKS5 proxy app
 
-`socksproxy` app implements SOCKS5 functionality over skywire
+`skysocks` app implements SOCKS5 functionality over skywire
 net.
 Any conventional SOCKS5 client should be able to connect to the
 proxy client.
@@ -18,7 +18,7 @@ Create 2 node config files:
 {  
   "apps": [
     {
-      "app": "socksproxy",
+      "app": "skysocks",
       "version": "1.0",
       "auto_start": true,
       "port": 3,
@@ -34,7 +34,7 @@ Create 2 node config files:
 {
   "apps": [
     {
-      "app": "socksproxy-client",
+      "app": "skysocks-client",
       "version": "1.0",
       "auto_start": true,
       "port": 33,
@@ -47,8 +47,8 @@ Create 2 node config files:
 Compile binaries and start 2 nodes:
 
 ```sh
-$ go build -o apps/socksproxy.v1.0 ./cmd/apps/skysocks
-$ go build -o apps/socksproxy-client.v1.0 ./cmd/apps/skysocks-client
+$ go build -o apps/skysocks.v1.0 ./cmd/apps/skysocks
+$ go build -o apps/skysocks-client.v1.0 ./cmd/apps/skysocks-client
 $ ./skywire-visor skywire1.json
 $ ./skywire-visor skywire2.json
 ```
