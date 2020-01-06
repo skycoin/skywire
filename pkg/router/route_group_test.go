@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/nettest"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
@@ -122,7 +120,16 @@ func TestRouteGroup_Close(t *testing.T) {
 	err = rg0.Close()
 	require.NoError(t, err)
 	require.True(t, rg0.isClosed())
-	require.True(t, rg1.isClosed())
+	var rg1DoneClosed bool
+	select {
+	case <-rg1.done:
+		rg1DoneClosed = true
+		default:
+	}
+	require.True(t, rg1DoneClosed)
+	// rg1 should be done (not getting any new data, returning `io.EOF` on further reads)
+	// but not closed
+	require.False(t, rg1.isClosed())
 }
 
 func TestRouteGroup_Read(t *testing.T) {
@@ -629,6 +636,12 @@ func TestRouteGroup_TestConn(t *testing.T) {
 				}
 
 				if packet.Type() == routing.ClosePacket {
+					select {
+					case <-rg1.done:
+						panic(io.ErrClosedPipe)
+						default:
+					}
+
 					if err := rg1.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
 						panic(err)
 					}
@@ -666,10 +679,15 @@ func TestRouteGroup_TestConn(t *testing.T) {
 				}
 
 				if packet.Type() == routing.ClosePacket {
+					select {
+					case <-rg0.done:
+						panic(io.ErrClosedPipe)
+					default:
+					}
+
 					if err := rg0.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
 						panic(err)
 					}
-
 					return
 				} else {
 					if packet.Type() == routing.DataPacket {
@@ -684,26 +702,26 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		}()
 
 		stop = func() {
-			require.NoError(t, rg0.Close())
+			_ = rg0.Close()
+			_ = rg1.Close()
 			nEnv.Teardown()
 			cancel()
-
-			//require.NoError(t, rg2.Close())
 		}
 
 		return rg0, rg1, stop, nil
 	}
 
-	nettest.TestConn(t, mp)
-	/*c1, c2, stop, err := mp()
+	//nettest.TestConn(t, mp)
+	c1, c2, stop, err := mp()
 	require.NoError(t, err)
 	defer stop()
 
-	testBasicIO(t, c1, c2)*/
+	testBasicIO(t, c1, c2)
 }
 
 func testBasicIO(t *testing.T, c1, c2 net.Conn) {
 	want := make([]byte, 1<<20)
+	//want := make([]byte, 50)
 	rand.New(rand.NewSource(0)).Read(want)
 
 	dataCh := make(chan []byte)
@@ -724,13 +742,25 @@ func testBasicIO(t *testing.T, c1, c2 net.Conn) {
 		if err := chunkedCopy(wr, c2); err != nil {
 			t.Errorf("unexpected c2.Read error: %v", err)
 		}
-		/*if err := c2.Close(); err != nil {
+		if err := c2.Close(); err != nil {
 			t.Errorf("unexpected c2.Close error: %v", err)
-		}*/
+		}
 		dataCh <- wr.Bytes()
 	}()
 
 	if got := <-dataCh; !bytes.Equal(got, want) {
+		if len(got) != len(want) {
+			fmt.Printf("Data len differs, got: %d, want: %d\n", len(got), len(want))
+		} else {
+			for i := range got {
+				if got[i] != want[i] {
+					fmt.Printf("Data differs from %d\n", i)
+					fmt.Printf("Different data: got: %v, want: %v\n", got[i-10:i+10], want[i-10:i+10])
+					break
+				}
+			}
+		}
+
 		t.Error("transmitted data differs")
 	}
 }
