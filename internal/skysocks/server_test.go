@@ -1,4 +1,4 @@
-package therealproxy
+package skysocks
 
 import (
 	"fmt"

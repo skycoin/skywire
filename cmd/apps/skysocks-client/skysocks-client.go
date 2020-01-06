@@ -14,14 +14,14 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/internal/therealproxy"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 const (
-	appName   = "socksproxy-client"
+	appName   = "skysocks-client"
 	netType   = appnet.TypeSkynet
 	socksPort = routing.Port(3)
 )
@@ -30,9 +30,9 @@ var r = netutil.NewRetrier(time.Second, 0, 1)
 
 func main() {
 	log := app.NewLogger(appName)
-	therealproxy.Log = log.PackageLogger("therealproxy")
+	skysocks.Log = log.PackageLogger("skysocks")
 
-	var addr = flag.String("addr", skyenv.SkyproxyClientAddr, "Client address to listen on")
+	var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 
@@ -74,7 +74,7 @@ func main() {
 
 	log.Printf("Connected to %v\n", pk)
 
-	client, err := therealproxy.NewClient(conn)
+	client, err := skysocks.NewClient(conn)
 	if err != nil {
 		log.Fatal("Failed to create a new client: ", err)
 	}
