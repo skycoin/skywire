@@ -12,7 +12,6 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/securecookie v1.1.1
-	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.2.1
 	github.com/prometheus/common v0.7.0

@@ -81,7 +81,7 @@ type Node struct {
 
 	appsPath  string
 	localPath string
-	appsConf  []AppConfig
+	appsConf  map[string]AppConfig
 
 	startedAt  time.Time
 	restartCtx *restart.Context
@@ -487,11 +487,12 @@ func (node *Node) StopApp(appName string) error {
 
 // SetAutoStart sets an app to auto start or not.
 func (node *Node) SetAutoStart(appName string, autoStart bool) error {
-	for i, ac := range node.appsConf {
-		if ac.App == appName {
-			node.appsConf[i].AutoStart = autoStart
-			return nil
-		}
+	appConf, ok := node.appsConf[appName]
+	if !ok {
+		return ErrUnknownApp
 	}
-	return ErrUnknownApp
+
+	appConf.AutoStart = autoStart
+	node.appsConf[appName] = appConf
+	return nil
 }
