@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/hashicorp/yamux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -50,12 +49,8 @@ func TestProxy(t *testing.T) {
 	conn, err := net.Dial("tcp", l.Addr().String())
 	require.NoError(t, err)
 
-	session, err := yamux.Client(conn, nil)
+	client, err := NewClient(conn)
 	require.NoError(t, err)
-
-	client := &Client{
-		session: session,
-	}
 
 	errChan2 := make(chan error)
 	go func() {
