@@ -41,6 +41,7 @@ func TestTransportDiscovery(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: pk, NextNonce: 1}))
 	}))
+
 	defer srv.Close()
 
 	conf := Config{}
@@ -54,6 +55,7 @@ func TestTransportDiscovery(t *testing.T) {
 
 func TestTransportLogStore(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "foo")
+
 	defer func() {
 		require.NoError(t, os.RemoveAll(dir))
 	}()

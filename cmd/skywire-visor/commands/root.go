@@ -42,6 +42,7 @@ type runCfg struct {
 	port         string
 	startDelay   string
 	args         []string
+	configPath   *string
 
 	profileStop  func()
 	logger       *logging.Logger
@@ -90,6 +91,7 @@ func Execute() {
 
 func (cfg *runCfg) startProfiler() *runCfg {
 	var option func(*profile.Profile)
+
 	switch cfg.profileMode {
 	case "none":
 		cfg.profileStop = func() {}
@@ -98,7 +100,9 @@ func (cfg *runCfg) startProfiler() *runCfg {
 		go func() {
 			log.Println(http.ListenAndServe(fmt.Sprintf("localhost:%v", cfg.port), nil))
 		}()
+
 		cfg.profileStop = func() {}
+
 		return cfg
 	case "cpu":
 		option = profile.CPUProfile
@@ -111,7 +115,9 @@ func (cfg *runCfg) startProfiler() *runCfg {
 	case "trace":
 		option = profile.TraceProfile
 	}
+
 	cfg.profileStop = profile.Start(profile.ProfilePath("./logs/"+cfg.tag), option).Stop
+
 	return cfg
 }
 
@@ -128,18 +134,32 @@ func (cfg *runCfg) startLogger() *runCfg {
 			cfg.masterLogger.Out = ioutil.Discard
 		}
 	}
+
 	return cfg
 }
 
 func (cfg *runCfg) readConfig() *runCfg {
 	var rdr io.Reader
-	var err error
+
 	if !cfg.cfgFromStdin {
 		configPath := pathutil.FindConfigPath(cfg.args, 0, configEnv, pathutil.NodeDefaults())
-		rdr, err = os.Open(filepath.Clean(configPath))
+		configPath = filepath.Clean(configPath)
+
+		file, err := os.Open(configPath)
 		if err != nil {
 			cfg.logger.Fatalf("Failed to open config: %s", err)
 		}
+
+		defer func() {
+			if err := file.Close(); err != nil {
+				cfg.logger.Warnf("Failed to close config file: %v", err)
+			}
+		}()
+
+		cfg.logger.Info("Reading config from %v", configPath)
+
+		rdr = file
+		cfg.configPath = &configPath
 	} else {
 		cfg.logger.Info("Reading config from STDIN")
 		rdr = bufio.NewReader(os.Stdin)
@@ -149,7 +169,9 @@ func (cfg *runCfg) readConfig() *runCfg {
 	if err := json.NewDecoder(rdr).Decode(&cfg.conf); err != nil {
 		cfg.logger.Fatalf("Failed to decode %s: %s", rdr, err)
 	}
+
 	fmt.Println("TCP Factory conf:", cfg.conf.STCP)
+
 	return cfg
 }
 
@@ -157,6 +179,7 @@ func (cfg *runCfg) runNode() *runCfg {
 	startDelay, err := time.ParseDuration(cfg.startDelay)
 	if err != nil {
 		cfg.logger.Warnf("Using no visor start delay due to parsing failure: %v", err)
+
 		startDelay = time.Duration(0)
 	}
 
@@ -166,7 +189,7 @@ func (cfg *runCfg) runNode() *runCfg {
 
 	time.Sleep(startDelay)
 
-	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx)
+	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx, cfg.configPath)
 	if err != nil {
 		cfg.logger.Fatal("Failed to initialize node: ", err)
 	}
@@ -207,11 +230,13 @@ func (cfg *runCfg) runNode() *runCfg {
 
 func (cfg *runCfg) stopNode() *runCfg {
 	defer cfg.profileStop()
+
 	if err := cfg.node.Close(); err != nil {
 		if !strings.Contains(err.Error(), "closed") {
 			cfg.logger.Fatal("Failed to close node: ", err)
 		}
 	}
+
 	return cfg
 }
 
@@ -219,6 +244,7 @@ func (cfg *runCfg) waitOsSignals() *runCfg {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT}...)
 	<-ch
+
 	go func() {
 		select {
 		case <-time.After(time.Duration(cfg.conf.ShutdownTimeout)):
@@ -227,5 +253,6 @@ func (cfg *runCfg) waitOsSignals() *runCfg {
 			cfg.logger.Fatalf("Received signal %s: terminating", s)
 		}
 	}()
+
 	return cfg
 }
