@@ -68,7 +68,8 @@ func TestUptime(t *testing.T) {
 
 // TODO (Darkren): fix tests
 func TestListApps(t *testing.T) {
-	apps := []AppConfig{
+	apps := make(map[string]AppConfig)
+	appCfg := []AppConfig{
 		{
 			App:       "foo",
 			AutoStart: false,
@@ -81,9 +82,13 @@ func TestListApps(t *testing.T) {
 		},
 	}
 
+	for _, app := range appCfg {
+		apps[app.App] = app
+	}
+
 	pm := &appserver.MockProcManager{}
-	pm.On("Exists", apps[0].App).Return(false)
-	pm.On("Exists", apps[1].App).Return(true)
+	pm.On("Exists", apps["foo"].App).Return(false)
+	pm.On("Exists", apps["bar"].App).Return(true)
 
 	n := Node{
 		appsConf:    apps,
@@ -119,7 +124,7 @@ func TestStartStopApp(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	apps := []AppConfig{
+	appCfg := []AppConfig{
 		{
 			App:       "foo",
 			Version:   "1.0",
@@ -127,9 +132,12 @@ func TestStartStopApp(t *testing.T) {
 			Port:      10,
 		},
 	}
+	apps := map[string]AppConfig{
+		"foo": appCfg[0],
+	}
 
 	unknownApp := "bar"
-	app := apps[0].App
+	app := apps["foo"].App
 
 	nodeCfg := Config{}
 	nodeCfg.Node.StaticPubKey = pk
@@ -148,12 +156,12 @@ func TestStartStopApp(t *testing.T) {
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:         app,
-		Version:      apps[0].Version,
+		Version:      apps["foo"].Version,
 		SockFilePath: nodeCfg.AppServerSockFile,
 		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", app, fmt.Sprintf("v%s", apps[0].Version)),
+		WorkDir:      filepath.Join("", app, fmt.Sprintf("v%s", apps["foo"].Version)),
 	}
-	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps[0].Args...)
+	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps["foo"].Args...)
 	appPID1 := appcommon.ProcID(10)
 	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
