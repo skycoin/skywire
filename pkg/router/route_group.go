@@ -129,9 +129,9 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 // The Router, via transport.Manager, is responsible for reading incoming packets and pushing it
 // to the appropriate RouteGroup via (*RouteGroup).readCh.
 func (rg *RouteGroup) Read(p []byte) (n int, err error) {
-	if rg.isClosed() {
+	/*if rg.isClosed() {
 		return 0, io.ErrClosedPipe
-	}
+	}*/
 
 	if rg.readDeadline.Closed() {
 		rg.logger.Infoln("TIMEOUT ERROR?")
@@ -145,10 +145,10 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 	// In case the read buffer is short.
 	rg.mu.Lock()
 	if rg.readBuf.Len() > 0 {
-		data, err := rg.readBuf.Read(p)
+		n, err := rg.readBuf.Read(p)
 		rg.mu.Unlock()
 
-		return data, err
+		return n, err
 	}
 	rg.mu.Unlock()
 
