@@ -1,4 +1,4 @@
-package therealproxy
+package skysocks
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 	"github.com/SkycoinProject/yamux"
 )
 
-// Log is therealproxy package level logger, it can be replaced with a different one from outside the package
-var Log = logging.MustGetLogger("therealproxy")
+// Log is skysocks package level logger, it can be replaced with a different one from outside the package
+var Log = logging.MustGetLogger("skysocks")
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
@@ -38,7 +38,7 @@ func (c *Client) ListenAndServe(addr string) error {
 		return fmt.Errorf("listen: %s", err)
 	}
 
-	Log.Printf("Listening therealproxy client on %s", addr)
+	Log.Printf("Listening skysocks client on %s", addr)
 
 	c.listener = l
 	for {
@@ -48,13 +48,13 @@ func (c *Client) ListenAndServe(addr string) error {
 			return fmt.Errorf("accept: %s", err)
 		}
 
-		Log.Println("Accepted therealproxy client")
+		Log.Println("Accepted skysocks client")
 		stream, err := c.session.Open()
 		if err != nil {
 			return fmt.Errorf("error on `ListenAndServe`: yamux: %s", err)
 		}
 
-		Log.Println("Opened session therealproxy client")
+		Log.Println("Opened session skysocks client")
 
 		go func() {
 			errCh := make(chan error, 2)
