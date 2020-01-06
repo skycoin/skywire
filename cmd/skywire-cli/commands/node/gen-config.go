@@ -94,12 +94,12 @@ func defaultConfig() *visor.Config {
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf
 
-	// TODO(evanlinjin): We have disabled skyproxy passcode by default for now - We should make a cli arg for this.
+	// TODO(evanlinjin): We have disabled skysocks passcode by default for now - We should make a cli arg for this.
 	//passcode := base64.StdEncoding.Strict().EncodeToString(cipher.RandByte(8))
 	conf.Apps = []visor.AppConfig{
 		defaultSkychatConfig(),
-		defaultSkyproxyConfig(""),
-		defaultSkyproxyClientConfig(),
+		defaultSkysocksConfig(""),
+		defaultSkysocksClientConfig(),
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
 
@@ -162,25 +162,25 @@ func defaultSkychatConfig() visor.AppConfig {
 	}
 }
 
-func defaultSkyproxyConfig(passcode string) visor.AppConfig {
+func defaultSkysocksConfig(passcode string) visor.AppConfig {
 	var args []string
 	if passcode != "" {
 		args = []string{"-passcode", passcode}
 	}
 	return visor.AppConfig{
-		App:       skyenv.SkyproxyName,
-		Version:   skyenv.SkyproxyVersion,
+		App:       skyenv.SkysocksName,
+		Version:   skyenv.SkysocksVersion,
 		AutoStart: true,
-		Port:      routing.Port(skyenv.SkyproxyPort),
+		Port:      routing.Port(skyenv.SkysocksPort),
 		Args:      args,
 	}
 }
 
-func defaultSkyproxyClientConfig() visor.AppConfig {
+func defaultSkysocksClientConfig() visor.AppConfig {
 	return visor.AppConfig{
-		App:       skyenv.SkyproxyClientName,
-		Version:   skyenv.SkyproxyClientVersion,
+		App:       skyenv.SkysocksClientName,
+		Version:   skyenv.SkysocksClientVersion,
 		AutoStart: false,
-		Port:      routing.Port(skyenv.SkyproxyClientPort),
+		Port:      routing.Port(skyenv.SkysocksClientPort),
 	}
 }
