@@ -531,6 +531,7 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 // Loops implements RPCClient.
 func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
 	var loops []LoopInfo
+
 	rules := mc.rt.AllRules()
 	for _, rule := range rules {
 		if rule.Type() != routing.RuleConsume {
