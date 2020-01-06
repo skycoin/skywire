@@ -279,6 +279,7 @@ type AddTransportIn struct {
 // AddTransport creates a transport for the node.
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
 	ctx := context.Background()
+
 	if in.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Second*20)
@@ -289,6 +290,7 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
 	if err != nil {
 		return err
 	}
+
 	*out = *newTransportSummary(r.node.tm, tp, false, r.node.router.SetupIsTrusted(tp.Remote()))
 	return nil
 }
@@ -309,10 +311,12 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 	if err != nil {
 		return err
 	}
+
 	entries, err := tpD.GetTransportsByEdge(context.Background(), *pk)
 	if err != nil {
 		return err
 	}
+
 	*out = entries
 	return nil
 }
@@ -323,10 +327,12 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatu
 	if err != nil {
 		return err
 	}
+
 	entry, err := tpD.GetTransportByID(context.Background(), *id)
 	if err != nil {
 		return err
 	}
+
 	*out = *entry
 	return nil
 }
@@ -385,6 +391,7 @@ func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
 		if err != nil {
 			return err
 		}
+
 		loops = append(loops, LoopInfo{
 			ConsumeRule: rule,
 			FwdRule:     rule,
