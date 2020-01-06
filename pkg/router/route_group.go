@@ -95,6 +95,7 @@ type RouteGroup struct {
 
 	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated int32
+	closed chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
 }
@@ -116,6 +117,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		readCh:        make(chan []byte, cfg.ReadChBufSize),
 		readBuf:       bytes.Buffer{},
 		done:          make(chan struct{}),
+		closed: make(chan struct{}),
 		readDeadline:  deadline.MakePipeDeadline(),
 		writeDeadline: deadline.MakePipeDeadline(),
 	}
@@ -157,12 +159,18 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 		ok   bool
 	)
 	select {
+	case <-rg.done:
+		if rg.isClosed() {
+			return 0, io.ErrClosedPipe
+		}
+
+		return 0, io.EOF
 	case <-rg.readDeadline.Wait():
 		return 0, timeoutError{}
 	case data, ok = <-rg.readCh:
 	}
 
-	if !ok {
+	if !ok || len(data) == 0 {
 		// route group got closed
 		return 0, io.EOF
 	}
@@ -258,6 +266,20 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 
 // Close closes a RouteGroup.
 func (rg *RouteGroup) Close() error {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	if rg.isClosed() {
+		return io.ErrClosedPipe
+	}
+
+	select {
+	case <-rg.done:
+		close(rg.closed)
+		return nil
+	default:
+	}
+
 	atomic.StoreInt32(&rg.closeInitiated, 1)
 
 	return rg.close(routing.CloseRequested)
@@ -340,8 +362,9 @@ func (rg *RouteGroup) sendKeepAlive() error {
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
 // - Close all go channels.
 func (rg *RouteGroup) close(code routing.CloseCode) error {
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
+	if rg.isClosed() {
+		return nil
+	}
 
 	if len(rg.fwd) != len(rg.tps) {
 		return ErrRuleTransportMismatch
@@ -376,6 +399,10 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	rg.rt.DelRules(rules)
 
 	rg.once.Do(func() {
+		if closeInitiator {
+			close(rg.closed)
+		}
+
 		close(rg.done)
 		rg.readChMu.Lock()
 		close(rg.readCh)
@@ -438,9 +465,10 @@ func (rg *RouteGroup) isCloseInitiator() bool {
 
 func (rg *RouteGroup) isClosed() bool {
 	select {
-	case <-rg.done:
+	case <-rg.closed:
 		return true
 	default:
-		return false
 	}
+
+	return false
 }
