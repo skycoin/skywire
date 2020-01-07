@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/nettest"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
@@ -124,7 +126,7 @@ func TestRouteGroup_Close(t *testing.T) {
 	select {
 	case <-rg1.done:
 		rg1DoneClosed = true
-		default:
+	default:
 	}
 	require.True(t, rg1DoneClosed)
 	// rg1 should be done (not getting any new data, returning `io.EOF` on further reads)
@@ -639,7 +641,7 @@ func TestRouteGroup_TestConn(t *testing.T) {
 					select {
 					case <-rg1.done:
 						panic(io.ErrClosedPipe)
-						default:
+					default:
 					}
 
 					if err := rg1.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
@@ -711,12 +713,12 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		return rg0, rg1, stop, nil
 	}
 
-	//nettest.TestConn(t, mp)
-	c1, c2, stop, err := mp()
+	nettest.TestConn(t, mp)
+	/*c1, c2, stop, err := mp()
 	require.NoError(t, err)
 	defer stop()
 
-	testBasicIO(t, c1, c2)
+	testBasicIO(t, c1, c2)*/
 }
 
 func testBasicIO(t *testing.T, c1, c2 net.Conn) {
