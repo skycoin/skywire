@@ -33,6 +33,7 @@ type RPCClient interface {
 	StopApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetSocksPassword(password string) error
+	SetSocksClientPK(pk cipher.PubKey) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -124,9 +125,14 @@ func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 	}, &struct{}{})
 }
 
-// SetAutoStart calls SetAutoStart.
+// SetSocksPassword calls SetSocksPassword.
 func (rc *rpcClient) SetSocksPassword(password string) error {
 	return rc.Call("SetSocksPassword", &password, &struct{}{})
+}
+
+// SetSocksClientPK calls SetSocksClientPK.
+func (rc *rpcClient) SetSocksClientPK(pk cipher.PubKey) error {
+	return rc.Call("SetSocksClientPK", &pk, &struct{}{})
 }
 
 // LogsSince calls LogsSince
@@ -416,7 +422,7 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	})
 }
 
-// SetAutoStart implements RPCClient.
+// SetSocksPassword implements RPCClient.
 func (mc *mockRPCClient) SetSocksPassword(password string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
@@ -436,6 +442,36 @@ func (mc *mockRPCClient) SetSocksPassword(password string) error {
 
 				if !changed {
 					mc.s.Apps[i].Args = append(mc.s.Apps[i].Args, passcodeArgName, password)
+				}
+
+				break
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetSocksClientPK implements RPCClient.
+func (mc *mockRPCClient) SetSocksClientPK(pk cipher.PubKey) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks-client"
+		const pkArgName = "-srv"
+
+		changed := false
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				for j := range mc.s.Apps[i].Args {
+					if mc.s.Apps[i].Args[j] == pkArgName && j+1 < len(mc.s.Apps[i].Args) {
+						mc.s.Apps[i].Args[j+1] = pk.String()
+						changed = true
+						break
+					}
+				}
+
+				if !changed {
+					mc.s.Apps[i].Args = append(mc.s.Apps[i].Args, pkArgName, pk.String())
 				}
 
 				break
