@@ -52,7 +52,7 @@ type Config struct {
 	Routing struct {
 		SetupNodes         []cipher.PubKey `json:"setup_nodes"`
 		RouteFinder        string          `json:"route_finder"`
-		RouteFinderTimeout Duration        `json:"route_finder_timeout"`
+		RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	} `json:"routing"`
 
 	Uptime struct {
@@ -68,13 +68,13 @@ type Config struct {
 	LocalPath string `json:"local_path"`
 
 	LogLevel        string   `json:"log_level"`
-	ShutdownTimeout Duration `json:"shutdown_timeout"` // time value, examples: 10s, 1m, etc
+	ShutdownTimeout Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 
 	Interfaces InterfaceConfig `json:"interfaces"`
 
 	AppServerSockFile string `json:"app_server_sock_file"`
 
-	RestartCheckDelay string `json:"restart_check_delay"`
+	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
 }
 
 // MessagingConfig returns config for dmsg client.
