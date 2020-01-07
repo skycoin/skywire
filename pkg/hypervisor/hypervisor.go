@@ -296,10 +296,12 @@ func (m *Node) putApp() http.HandlerFunc {
 			Autostart *bool `json:"autostart,omitempty"`
 			Status    *int  `json:"status,omitempty"`
 		}
+
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
+
 		if reqBody.Autostart != nil {
 			if *reqBody.Autostart != ctx.App.AutoStart {
 				if err := ctx.RPC.SetAutoStart(ctx.App.Name, *reqBody.Autostart); err != nil {

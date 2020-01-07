@@ -213,6 +213,11 @@ func (r *RPC) SetSocksPassword(in *string, _ *struct{}) error {
 	return r.node.SetSocksPassword(*in)
 }
 
+// SetSocksClientPK sets PK for skysocks-client.
+func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) error {
+	return r.node.SetSocksClientPK(*in)
+}
+
 /*
 	<<< TRANSPORT MANAGEMENT >>>
 */
