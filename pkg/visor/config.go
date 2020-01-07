@@ -99,6 +99,7 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	if c.DmsgPty == nil {
 		return nil, errors.New("'dmsg_pty' config field not defined")
 	}
+
 	return dmsgpty.NewHostFromDmsgClient(
 		nil,
 		dmsgC,
@@ -107,7 +108,8 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 		c.DmsgPty.AuthFile,
 		c.DmsgPty.Port,
 		c.DmsgPty.CLINet,
-		c.DmsgPty.CLIAddr)
+		c.DmsgPty.CLIAddr,
+	)
 }
 
 // TransportDiscovery returns transport discovery client.
