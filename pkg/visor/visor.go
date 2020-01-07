@@ -512,11 +512,11 @@ func (node *Node) StopApp(appName string) error {
 // RestartApp restarts running App.
 func (node *Node) RestartApp(name string) error {
 	if err := node.StopApp(name); err != nil {
-		return err
+		return fmt.Errorf("stop app %v: %w", name, err)
 	}
 
 	if err := node.StartApp(name); err != nil {
-		return err
+		return fmt.Errorf("start app %v: %w", name, err)
 	}
 
 	return nil
@@ -652,7 +652,7 @@ func (node *Node) readConfig() (*Config, error) {
 
 	configPath := *node.confPath
 
-	bytes, err := ioutil.ReadFile(configPath) // nolint:gosec
+	bytes, err := ioutil.ReadFile(filepath.Clean(configPath))
 	if err != nil {
 		return nil, err
 	}
