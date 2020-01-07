@@ -208,6 +208,11 @@ func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) error {
 	return r.node.SetAutoStart(in.AppName, in.AutoStart)
 }
 
+// SetSocksPassword sets password for skysocks.
+func (r *RPC) SetSocksPassword(in *string, _ *struct{}) error {
+	return r.node.SetSocksPassword(*in)
+}
+
 /*
 	<<< TRANSPORT MANAGEMENT >>>
 */

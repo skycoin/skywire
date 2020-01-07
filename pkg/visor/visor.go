@@ -70,6 +70,7 @@ type AppState struct {
 	AutoStart bool         `json:"autostart"`
 	Port      routing.Port `json:"port"`
 	Status    AppStatus    `json:"status"`
+	Args      []string     `json:"args"`
 }
 
 // Node provides messaging runtime for Apps by setting up all
@@ -397,7 +398,7 @@ func (node *Node) Apps() []*AppState {
 	res := make([]*AppState, 0)
 
 	for _, app := range node.appsConf {
-		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
+		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped, nil}
 
 		if node.procManager.Exists(app.App) {
 			state.Status = AppStatusRunning
@@ -518,10 +519,31 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 	appConf.AutoStart = autoStart
 	node.appsConf[appName] = appConf
 
-	return node.updateAutoStartConfig(appName, autoStart)
+	return node.updateConfigAppAutoStart(appName, autoStart)
 }
 
-func (node *Node) updateAutoStartConfig(appName string, autoStart bool) error {
+// SetSocksPassword sets skysocks password.
+func (node *Node) SetSocksPassword(password string) error {
+	if err := node.updateConfigSocksPassword(password); err != nil {
+		return err
+	}
+
+	const socksName = "skysocks"
+
+	node.logger.Infof("Updated %v password, restarting it", socksName)
+
+	if err := node.StopApp(socksName); err != nil {
+		return err
+	}
+
+	if err := node.StartApp(socksName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (node *Node) updateConfigAppAutoStart(appName string, autoStart bool) error {
 	if node.confPath == nil {
 		return nil
 	}
@@ -531,14 +553,15 @@ func (node *Node) updateAutoStartConfig(appName string, autoStart bool) error {
 		return err
 	}
 
-	changed := false
-
 	node.logger.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
+
+	changed := false
 
 	for i := range config.Apps {
 		if config.Apps[i].App == appName {
 			config.Apps[i].AutoStart = autoStart
 			changed = true
+			break
 		}
 	}
 
@@ -549,6 +572,48 @@ func (node *Node) updateAutoStartConfig(appName string, autoStart bool) error {
 	return node.writeConfig(config)
 }
 
+func (node *Node) updateConfigSocksPassword(password string) error {
+	if node.confPath == nil {
+		return nil
+	}
+
+	config, err := node.readConfig()
+	if err != nil {
+		return err
+	}
+
+	node.logger.Infof("Saving socks password = %q", password)
+
+	node.updateSocksPassword(config, password)
+
+	return node.writeConfig(config)
+}
+
+func (node *Node) updateSocksPassword(config *Config, password string) {
+	const socksName = "skysocks"
+	const passcodeArgName = "-passcode"
+
+	changed := false
+
+	for i := range config.Apps {
+		if config.Apps[i].App == socksName {
+			for j := range config.Apps[i].Args {
+				if config.Apps[i].Args[j] == passcodeArgName && j+1 < len(config.Apps[i].Args) {
+					config.Apps[i].Args[j+1] = password
+					changed = true
+					break
+				}
+			}
+
+			if !changed {
+				config.Apps[i].Args = append(config.Apps[i].Args, passcodeArgName, password)
+			}
+
+			break
+		}
+	}
+}
+
 func (node *Node) readConfig() (*Config, error) {
 	if node.confPath == nil {
 		return nil, ErrNoConfigPath
@@ -556,7 +621,7 @@ func (node *Node) readConfig() (*Config, error) {
 
 	configPath := *node.confPath
 
-	bytes, err := ioutil.ReadFile(configPath)
+	bytes, err := ioutil.ReadFile(configPath) // nolint:gosec
 	if err != nil {
 		return nil, err
 	}
