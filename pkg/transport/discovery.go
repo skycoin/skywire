@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"time"
+	"fmt"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ type DiscoveryClient interface {
 	RegisterTransports(ctx context.Context, entries ...*SignedEntry) error
 	GetTransportByID(ctx context.Context, id uuid.UUID) (*EntryWithStatus, error)
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*EntryWithStatus, error)
+	DeleteTransport(ctx context.Context, id uuid.UUID) error
 	UpdateStatuses(ctx context.Context, statuses ...*Status) ([]*EntryWithStatus, error)
 }
 
@@ -79,6 +81,21 @@ func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk ciphe
 	}
 
 	return res, nil
+}
+
+// NOTE that mock implementation doesn't checks whether the transport to be deleted is valid or not, this is, that
+// it can be deleted by the visor who called DeleteTransport
+func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
+	td.Lock()
+	defer td.Unlock()
+
+	_, ok := td.entries[id]
+	if !ok {
+		return fmt.Errorf("transport with id: %s not found in transport discovery", id)
+	}
+
+	delete(td.entries, id)
+	return nil
 }
 
 func (td *mockDiscoveryClient) UpdateStatuses(ctx context.Context, statuses ...*Status) ([]*EntryWithStatus, error) {
