@@ -145,7 +145,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 		configPath := pathutil.FindConfigPath(cfg.args, 0, configEnv, pathutil.NodeDefaults())
 		configPath = filepath.Clean(configPath)
 
-		file, err := os.Open(configPath)
+		file, err := os.Open(configPath) // nolint:gosec
 		if err != nil {
 			cfg.logger.Fatalf("Failed to open config: %s", err)
 		}

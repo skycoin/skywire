@@ -32,6 +32,7 @@ type RPCClient interface {
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
+	SetSocksPassword(password string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -121,6 +122,11 @@ func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 		AppName:   appName,
 		AutoStart: autostart,
 	}, &struct{}{})
+}
+
+// SetAutoStart calls SetAutoStart.
+func (rc *rpcClient) SetSocksPassword(password string) error {
+	return rc.Call("SetSocksPassword", &password, &struct{}{})
 }
 
 // LogsSince calls LogsSince
@@ -407,6 +413,36 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 			}
 		}
 		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
+}
+
+// SetAutoStart implements RPCClient.
+func (mc *mockRPCClient) SetSocksPassword(password string) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks"
+		const passcodeArgName = "-passcode"
+
+		changed := false
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				for j := range mc.s.Apps[i].Args {
+					if mc.s.Apps[i].Args[j] == passcodeArgName && j+1 < len(mc.s.Apps[i].Args) {
+						mc.s.Apps[i].Args[j+1] = password
+						changed = true
+						break
+					}
+				}
+
+				if !changed {
+					mc.s.Apps[i].Args = append(mc.s.Apps[i].Args, passcodeArgName, password)
+				}
+
+				break
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
 	})
 }
 
