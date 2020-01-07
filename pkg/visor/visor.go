@@ -578,7 +578,7 @@ func (node *Node) writeConfig(config *Config) error {
 
 	node.logger.Infof("Updating visor config to %+v", config)
 
-	bytes, err := json.Marshal(config)
+	bytes, err := json.MarshalIndent(config, "", "\t")
 	if err != nil {
 		return err
 	}
