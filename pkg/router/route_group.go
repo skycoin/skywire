@@ -22,7 +22,7 @@ import (
 const (
 	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
 	defaultReadChBufSize               = 1024
-	closeRoutineTimeout                = 2 * time.Second
+	closeRoutineTimeout                = 5 * time.Second
 )
 
 var (
@@ -95,7 +95,7 @@ type RouteGroup struct {
 
 	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated int32
-	closed chan struct{}
+	closed         chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
 }
@@ -117,7 +117,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		readCh:        make(chan []byte, cfg.ReadChBufSize),
 		readBuf:       bytes.Buffer{},
 		done:          make(chan struct{}),
-		closed: make(chan struct{}),
+		closed:        make(chan struct{}),
 		readDeadline:  deadline.MakePipeDeadline(),
 		writeDeadline: deadline.MakePipeDeadline(),
 	}
@@ -428,6 +428,7 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) error {
+	time.Sleep(2 * time.Second)
 	for i := 0; i < len(rg.tps); i++ {
 		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
 		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
