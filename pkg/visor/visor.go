@@ -533,9 +533,11 @@ func (node *Node) updateAutoStartConfig(appName string, autoStart bool) error {
 
 	changed := false
 
-	for _, app := range config.Apps {
-		if app.App == appName {
-			app.AutoStart = autoStart
+	node.logger.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
+
+	for i := range config.Apps {
+		if config.Apps[i].App == appName {
+			config.Apps[i].AutoStart = autoStart
 			changed = true
 		}
 	}
@@ -573,6 +575,8 @@ func (node *Node) writeConfig(config *Config) error {
 	}
 
 	configPath := *node.confPath
+
+	node.logger.Infof("Updating visor config to %+v", config)
 
 	bytes, err := json.Marshal(config)
 	if err != nil {
