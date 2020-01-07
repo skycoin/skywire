@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -509,6 +510,18 @@ func (node *Node) StopApp(appName string) error {
 	return nil
 }
 
+func (node *Node) RestartApp(name string) error {
+	if err := node.StopApp(name); err != nil {
+		return err
+	}
+
+	if err := node.StartApp(name); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // SetAutoStart sets an app to auto start or not.
 func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 	appConf, ok := node.appsConf[appName]
@@ -520,27 +533,6 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 	node.appsConf[appName] = appConf
 
 	return node.updateConfigAppAutoStart(appName, autoStart)
-}
-
-// SetSocksPassword sets skysocks password.
-func (node *Node) SetSocksPassword(password string) error {
-	if err := node.updateConfigSocksPassword(password); err != nil {
-		return err
-	}
-
-	const socksName = "skysocks"
-
-	node.logger.Infof("Updated %v password, restarting it", socksName)
-
-	if err := node.StopApp(socksName); err != nil {
-		return err
-	}
-
-	if err := node.StartApp(socksName); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (node *Node) updateConfigAppAutoStart(appName string, autoStart bool) error {
@@ -572,7 +564,73 @@ func (node *Node) updateConfigAppAutoStart(appName string, autoStart bool) error
 	return node.writeConfig(config)
 }
 
-func (node *Node) updateConfigSocksPassword(password string) error {
+// SetSocksPassword sets skysocks password.
+func (node *Node) SetSocksPassword(password string) error {
+	node.logger.Infof("Changing skysocks password to %q", password)
+
+	const (
+		socksName       = "skysocks"
+		passcodeArgName = "-passcode"
+	)
+
+	updateFunc := func(config *Config) {
+		node.updateArg(config, socksName, passcodeArgName, password)
+	}
+
+	if err := node.updateConfig(updateFunc); err != nil {
+		return err
+	}
+
+	node.logger.Infof("Updated %v password, restarting it", socksName)
+
+	return node.RestartApp(socksName)
+}
+
+// SetSocksClientPK sets skysocks-client PK.
+func (node *Node) SetSocksClientPK(pk cipher.PubKey) error {
+	node.logger.Infof("Changing skysocks-client PK to %q", pk)
+
+	const (
+		socksClientName = "skysocks-client"
+		pkArgName       = "-srv"
+	)
+
+	updateFunc := func(config *Config) {
+		node.updateArg(config, socksClientName, pkArgName, pk.String())
+	}
+
+	if err := node.updateConfig(updateFunc); err != nil {
+		return err
+	}
+
+	node.logger.Infof("Updated %v PK, restarting it", socksClientName)
+
+	return node.RestartApp(socksClientName)
+}
+
+func (node *Node) updateArg(config *Config, appName, argName, value string) {
+	changed := false
+
+	for i := range config.Apps {
+		if config.Apps[i].App == appName {
+			for j := range config.Apps[i].Args {
+				if config.Apps[i].Args[j] == argName && j+1 < len(config.Apps[i].Args) {
+					config.Apps[i].Args[j+1] = value
+					changed = true
+					break
+				}
+			}
+
+			if !changed {
+				config.Apps[i].Args = append(config.Apps[i].Args, argName, value)
+			}
+
+			return
+		}
+	}
+}
+
+func (node *Node) updateConfig(f func(*Config)) error {
 	if node.confPath == nil {
 		return nil
 	}
@@ -582,36 +640,9 @@ func (node *Node) updateConfigSocksPassword(password string) error {
 		return err
 	}
 
-	node.logger.Infof("Saving socks password = %q", password)
-
-	node.updateSocksPassword(config, password)
+	f(config)
 
 	return node.writeConfig(config)
-}
-
-func (node *Node) updateSocksPassword(config *Config, password string) {
-	const socksName = "skysocks"
-	const passcodeArgName = "-passcode"
-
-	changed := false
-
-	for i := range config.Apps {
-		if config.Apps[i].App == socksName {
-			for j := range config.Apps[i].Args {
-				if config.Apps[i].Args[j] == passcodeArgName && j+1 < len(config.Apps[i].Args) {
-					config.Apps[i].Args[j+1] = password
-					changed = true
-					break
-				}
-			}
-
-			if !changed {
-				config.Apps[i].Args = append(config.Apps[i].Args, passcodeArgName, password)
-			}
-
-			break
-		}
-	}
 }
 
 func (node *Node) readConfig() (*Config, error) {
