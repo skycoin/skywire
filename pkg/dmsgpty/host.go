@@ -112,14 +112,15 @@ func NewHostFromDmsgClient(
 	dmsgPort uint16,
 	cliNet, cliAddr string,
 ) (*Host, error) {
-
 	if log == nil {
 		log = logging.MustGetLogger("ptycli-host")
 	}
+
 	dmsgL, err := dmsgC.Listen(dmsgPort)
 	if err != nil {
 		return nil, err
 	}
+
 	ptyS, err := pty.NewServer(
 		logging.MustGetLogger("dmsgpty-server"),
 		pk,
@@ -128,16 +129,19 @@ func NewHostFromDmsgClient(
 	if err != nil {
 		return nil, err
 	}
+
 	// Ensure directory exists for socket file (if unix connection).
 	if cliNet == "unix" {
 		if err := ensureDir(cliAddr); err != nil {
 			return nil, err
 		}
 	}
+
 	cliL, err := net.Listen(cliNet, cliAddr)
 	if err != nil {
 		return nil, err
 	}
+
 	return &Host{
 		log:     log,
 		pk:      pk,
