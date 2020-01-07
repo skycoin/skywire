@@ -71,7 +71,6 @@ type AppState struct {
 	AutoStart bool         `json:"autostart"`
 	Port      routing.Port `json:"port"`
 	Status    AppStatus    `json:"status"`
-	Args      []string     `json:"args"`
 }
 
 // Node provides messaging runtime for Apps by setting up all
@@ -399,7 +398,7 @@ func (node *Node) Apps() []*AppState {
 	res := make([]*AppState, 0)
 
 	for _, app := range node.appsConf {
-		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped, nil}
+		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
 
 		if node.procManager.Exists(app.App) {
 			state.Status = AppStatusRunning
@@ -510,6 +509,7 @@ func (node *Node) StopApp(appName string) error {
 	return nil
 }
 
+// RestartApp restarts running App.
 func (node *Node) RestartApp(name string) error {
 	if err := node.StopApp(name); err != nil {
 		return err

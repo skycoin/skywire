@@ -426,25 +426,10 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 func (mc *mockRPCClient) SetSocksPassword(password string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
-		const passcodeArgName = "-passcode"
-
-		changed := false
 
 		for i := range mc.s.Apps {
 			if mc.s.Apps[i].Name == socksName {
-				for j := range mc.s.Apps[i].Args {
-					if mc.s.Apps[i].Args[j] == passcodeArgName && j+1 < len(mc.s.Apps[i].Args) {
-						mc.s.Apps[i].Args[j+1] = password
-						changed = true
-						break
-					}
-				}
-
-				if !changed {
-					mc.s.Apps[i].Args = append(mc.s.Apps[i].Args, passcodeArgName, password)
-				}
-
-				break
+				return nil
 			}
 		}
 
@@ -456,25 +441,10 @@ func (mc *mockRPCClient) SetSocksPassword(password string) error {
 func (mc *mockRPCClient) SetSocksClientPK(pk cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
-		const pkArgName = "-srv"
-
-		changed := false
 
 		for i := range mc.s.Apps {
 			if mc.s.Apps[i].Name == socksName {
-				for j := range mc.s.Apps[i].Args {
-					if mc.s.Apps[i].Args[j] == pkArgName && j+1 < len(mc.s.Apps[i].Args) {
-						mc.s.Apps[i].Args[j+1] = pk.String()
-						changed = true
-						break
-					}
-				}
-
-				if !changed {
-					mc.s.Apps[i].Args = append(mc.s.Apps[i].Args, pkArgName, pk.String())
-				}
-
-				break
+				return nil
 			}
 		}
 
