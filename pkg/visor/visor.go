@@ -3,9 +3,12 @@ package visor
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net"
 	"net/rpc"
 	"os"
@@ -19,9 +22,11 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	skycoin_cipher "github.com/SkycoinProject/skycoin/src/cipher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
@@ -33,6 +38,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	spd "github.com/SkycoinProject/skywire-peering-daemon/src/daemon"
+	"github.com/rjeczalik/notify"
 )
 
 var log = logging.MustGetLogger("node")
@@ -87,6 +94,7 @@ type Node struct {
 	restartCtx *restart.Context
 
 	pidMu sync.Mutex
+	spdMu sync.Mutex
 
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
@@ -273,6 +281,79 @@ func (node *Node) Start() error {
 	}
 
 	return nil
+}
+
+// RunDaemon starts a skywire-peering-daemon as an external process
+func (node *Node) RunDaemon() {
+	bin, err := exec.LookPath("daemon")
+	if err != nil {
+		node.logger.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
+	}
+
+	dir, err := ioutil.TempDir("", "named_pipes")
+	if err != nil {
+		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
+	}
+
+	namedPipe := filepath.Join(dir, "stdout")
+	lAddr := node.conf.STCP.LocalAddr
+	pubKey := node.conf.Node.StaticPubKey.Hex()
+	err = syscall.Mkfifo(namedPipe, 0600)
+	if err != nil {
+		node.logger.Error(err)
+	}
+
+	if err := execute(bin, pubKey, namedPipe, lAddr); err != nil {
+		node.logger.Errorf("Failed to start daemon as an external process: ", err)
+	}
+
+	node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
+	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
+	if err != nil {
+		node.logger.Error(err)
+	}
+
+	c := make(chan notify.EventInfo, 5)
+	err = notify.Watch(namedPipe, c, notify.Write)
+	if err != nil {
+		node.logger.Error(err)
+	}
+
+	go func() {
+		// Read packets from named pipe
+		for {
+			var (
+				packet spd.Packet
+				buff   bytes.Buffer
+			)
+
+			<-c
+			_, err = io.Copy(&buff, stdOut)
+			if err != nil {
+				node.logger.Error(err)
+			}
+
+			packet, err = spd.Deserialize(buff.Bytes())
+			if err != nil {
+				node.logger.Error(err)
+			}
+
+			node.spdMu.Lock()
+
+			rPK := skycoin_cipher.MustPubKeyFromHex(packet.PublicKey)
+			node.conf.STCP.PubKeyTable[cipher.PubKey(rPK)] = packet.IP
+			node.logger.Infof("Packets received from skywire-peering-daemon:\n\t{%s: %s}", packet.PublicKey, packet.IP)
+
+			conn, err := createTransport(node.n, snet.STcpType, packet)
+			if err != nil {
+				node.logger.Errorf("Couldn't establish transport to remote visor: %s", err)
+			}
+
+			node.logger.Infof("Transport established to remote visor: \n\t{%s: %s}", conn.RemotePK(), conn.RemoteAddr())
+
+			node.spdMu.Unlock()
+		}
+	}()
 }
 
 func (node *Node) dir() string {
