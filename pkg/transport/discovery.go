@@ -3,9 +3,9 @@ package transport
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
-	"fmt"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
