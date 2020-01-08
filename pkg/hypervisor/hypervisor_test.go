@@ -69,19 +69,24 @@ func TestNewNode(t *testing.T) {
 	}
 
 	type TestCase struct {
-		Method     string
-		URI        string
-		Body       io.Reader
+		ReqMethod  string
+		ReqURI     string
+		ReqBody    io.Reader
+		ReqMod     func(req *http.Request)
 		RespStatus int
 		RespBody   func(t *testing.T, resp *http.Response)
 	}
 
 	testCases := func(t *testing.T, addr string, client *http.Client, cases []TestCase) {
 		for i, tc := range cases {
-			testTag := fmt.Sprintf("[%d] %s", i, tc.URI)
+			testTag := fmt.Sprintf("[%d] %s", i, tc.ReqURI)
 
-			req, err := http.NewRequest(tc.Method, "https://"+addr+tc.URI, tc.Body)
+			req, err := http.NewRequest(tc.ReqMethod, "https://"+addr+tc.ReqURI, tc.ReqBody)
 			require.NoError(t, err, testTag)
+
+			if tc.ReqMod != nil {
+				tc.ReqMod(req)
+			}
 
 			resp, err := client.Do(req)
 			require.NoError(t, err, testTag)
@@ -99,9 +104,9 @@ func TestNewNode(t *testing.T) {
 
 		makeCase := func(method string, uri string, body io.Reader) TestCase {
 			return TestCase{
-				Method:     method,
-				URI:        uri,
-				Body:       body,
+				ReqMethod:  method,
+				ReqURI:     uri,
+				ReqBody:    body,
 				RespStatus: http.StatusUnauthorized,
 				RespBody: func(t *testing.T, r *http.Response) {
 					body, err := decodeErrorBody(r.Body)
@@ -124,9 +129,9 @@ func TestNewNode(t *testing.T) {
 
 		testCases(t, addr, client, []TestCase{
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/create-account",
-				Body:       strings.NewReader(`{"username":"invalid_user","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/create-account",
+				ReqBody:    strings.NewReader(`{"username":"invalid_user","password":"Secure1234"}`),
 				RespStatus: http.StatusForbidden,
 				RespBody: func(t *testing.T, r *http.Response) {
 					body, err := decodeErrorBody(r.Body)
@@ -135,9 +140,9 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/create-account",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/create-account",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -154,9 +159,9 @@ func TestNewNode(t *testing.T) {
 
 		testCases(t, addr, client, []TestCase{
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/create-account",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/create-account",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -165,9 +170,9 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/login",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/login",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -176,9 +181,9 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/login",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/login",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusForbidden,
 				RespBody: func(t *testing.T, r *http.Response) {
 					body, err := decodeErrorBody(r.Body)
@@ -195,9 +200,9 @@ func TestNewNode(t *testing.T) {
 
 		testCases(t, addr, client, []TestCase{
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/create-account",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/create-account",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -206,9 +211,9 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/login",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/login",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -217,13 +222,13 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodGet,
-				URI:        "/api/user",
+				ReqMethod:  http.MethodGet,
+				ReqURI:     "/api/user",
 				RespStatus: http.StatusOK,
 			},
 			{
-				Method:     http.MethodGet,
-				URI:        "/api/nodes",
+				ReqMethod:  http.MethodGet,
+				ReqURI:     "/api/nodes",
 				RespStatus: http.StatusOK,
 			},
 		})
@@ -235,9 +240,9 @@ func TestNewNode(t *testing.T) {
 
 		testCases(t, addr, client, []TestCase{
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/create-account",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/create-account",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -246,9 +251,9 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/login",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/login",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -257,8 +262,8 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/logout",
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/logout",
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -267,8 +272,8 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodGet,
-				URI:        "/api/user",
+				ReqMethod:  http.MethodGet,
+				ReqURI:     "/api/user",
 				RespStatus: http.StatusUnauthorized,
 				RespBody: func(t *testing.T, r *http.Response) {
 					body, err := decodeErrorBody(r.Body)
@@ -277,8 +282,8 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodGet,
-				URI:        "/api/nodes",
+				ReqMethod:  http.MethodGet,
+				ReqURI:     "/api/nodes",
 				RespStatus: http.StatusUnauthorized,
 				RespBody: func(t *testing.T, r *http.Response) {
 					body, err := decodeErrorBody(r.Body)
@@ -293,6 +298,7 @@ func TestNewNode(t *testing.T) {
 		// - Create account.
 		// - Login.
 		// - Change Password.
+		// - Attempt action (should fail).
 		// - Logout.
 		// - Login with old password (should fail).
 		// - Login with new password (should succeed).
@@ -300,11 +306,14 @@ func TestNewNode(t *testing.T) {
 		addr, client, stop := startNode(defaultMockConfig())
 		defer stop()
 
+		// To emulate an active session.
+		var cookies []*http.Cookie
+
 		testCases(t, addr, client, []TestCase{
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/create-account",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/create-account",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -313,9 +322,21 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/login",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/login",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				RespStatus: http.StatusOK,
+				RespBody: func(t *testing.T, r *http.Response) {
+					cookies = r.Cookies()
+					var ok bool
+					assert.NoError(t, json.NewDecoder(r.Body).Decode(&ok))
+					assert.True(t, ok)
+				},
+			},
+			{
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/change-password",
+				ReqBody:    strings.NewReader(`{"old_password":"Secure1234","new_password":"NewSecure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -324,9 +345,18 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/change-password",
-				Body:       strings.NewReader(`{"old_password":"Secure1234","new_password":"NewSecure1234"}`),
+				ReqMethod: http.MethodGet,
+				ReqURI:    "/api/nodes",
+				ReqMod: func(req *http.Request) {
+					for _, cookie := range cookies {
+						req.AddCookie(cookie)
+					}
+				},
+				RespStatus: http.StatusUnauthorized,
+			},
+			{
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/logout",
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
@@ -335,19 +365,9 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/logout",
-				RespStatus: http.StatusOK,
-				RespBody: func(t *testing.T, r *http.Response) {
-					var ok bool
-					assert.NoError(t, json.NewDecoder(r.Body).Decode(&ok))
-					assert.True(t, ok)
-				},
-			},
-			{
-				Method:     http.MethodPost,
-				URI:        "/api/login",
-				Body:       strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/login",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"Secure1234"}`),
 				RespStatus: http.StatusUnauthorized,
 				RespBody: func(t *testing.T, r *http.Response) {
 					b, err := decodeErrorBody(r.Body)
@@ -356,9 +376,9 @@ func TestNewNode(t *testing.T) {
 				},
 			},
 			{
-				Method:     http.MethodPost,
-				URI:        "/api/login",
-				Body:       strings.NewReader(`{"username":"admin","password":"NewSecure1234"}`),
+				ReqMethod:  http.MethodPost,
+				ReqURI:     "/api/login",
+				ReqBody:    strings.NewReader(`{"username":"admin","password":"NewSecure1234"}`),
 				RespStatus: http.StatusOK,
 				RespBody: func(t *testing.T, r *http.Response) {
 					var ok bool
