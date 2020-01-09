@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20191106075825-cabc26522b11 => ../dmsg
+# github.com/SkycoinProject/dmsg v0.0.0-20191107094546-85c27858fca6
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
@@ -38,9 +38,11 @@ github.com/google/uuid
 github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
 github.com/gorilla/securecookie
+# github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
+github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/mattn/go-colorable v0.1.4
 github.com/mattn/go-colorable
@@ -50,8 +52,6 @@ github.com/mattn/go-isatty
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b
 github.com/mgutz/ansi
-# github.com/mitchellh/go-homedir v1.1.0
-github.com/mitchellh/go-homedir
 # github.com/pkg/profile v1.3.0
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0

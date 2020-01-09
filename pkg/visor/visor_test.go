@@ -88,7 +88,8 @@ func TestNodeStartClose(t *testing.T) {
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
 
-	apps := []AppConfig{
+	apps := make(map[string]AppConfig)
+	appCfg := []AppConfig{
 		{
 			App:       "skychat",
 			Version:   "1.0",
@@ -100,6 +101,10 @@ func TestNodeStartClose(t *testing.T) {
 			Version:   "1.0",
 			AutoStart: false,
 		},
+	}
+
+	for _, app := range appCfg {
+		apps[app.App] = app
 	}
 
 	defer func() {
@@ -117,17 +122,17 @@ func TestNodeStartClose(t *testing.T) {
 
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
-		Name:         apps[0].App,
-		Version:      apps[0].Version,
+		Name:         apps["skychat"].App,
+		Version:      apps["skychat"].Version,
 		SockFilePath: nodeCfg.AppServerSockFile,
 		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", apps[0].App, fmt.Sprintf("v%s", apps[0].Version)),
+		WorkDir:      filepath.Join("", apps["skychat"].App, fmt.Sprintf("v%s", apps["skychat"].Version)),
 	}
-	appArgs1 := append([]string{filepath.Join(node.dir(), apps[0].App)}, apps[0].Args...)
+	appArgs1 := append([]string{filepath.Join(node.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
 	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
-	pm.On("Wait", apps[0].App).Return(testhelpers.NoErr)
+	pm.On("Wait", apps["skychat"].App).Return(testhelpers.NoErr)
 
 	pm.On("StopAll").Return()
 
@@ -180,12 +185,15 @@ func TestNodeSpawnApp(t *testing.T) {
 		Args:      []string{"foo"},
 	}
 
+	apps := make(map[string]AppConfig)
+	apps["skychat"] = app
+
 	nodeCfg := Config{}
 	nodeCfg.Node.StaticPubKey = pk
 
 	node := &Node{
 		router:   r,
-		appsConf: []AppConfig{app},
+		appsConf: apps,
 		logger:   logging.MustGetLogger("test"),
 		conf:     &nodeCfg,
 	}
@@ -248,9 +256,9 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 		app := AppConfig{
 			App:     "skychat",
 			Version: "1.0",
-			Port:    2,
+			Port:    3,
 		}
-		wantErr := "can't bind to reserved port 2"
+		wantErr := "can't bind to reserved port 3"
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{

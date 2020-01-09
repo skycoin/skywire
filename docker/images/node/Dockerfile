@@ -18,11 +18,9 @@ RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
     go build  -mod=vendor -ldflags="-w -s" -o skywire-cli ./cmd/skywire-cli	&&\
     go build  -mod=vendor -ldflags="-w -s" -o ./apps/skychat.v1.0 ./cmd/apps/skychat	&&\
 	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld &&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/socksproxy.v1.0 ./cmd/apps/therealproxy &&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/socksproxy-client.v1.0  ./cmd/apps/therealproxy-client &&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/SSH.v1.0  ./cmd/apps/therealssh &&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/SSH-client.v1.0  ./cmd/apps/therealssh-client
-
+	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks &&\
+	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	
 
 ## Resulting image
 FROM ${base} as node-runner
