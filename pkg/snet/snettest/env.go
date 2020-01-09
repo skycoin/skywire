@@ -82,7 +82,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		var stcpClient *stcp.Client
 
 		if hasDmsg {
-			dmsgClient = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD)
+			dmsgClient = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
 		}
 
 		if hasStcp {
@@ -133,11 +133,10 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 	require.NoError(t, err)
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-	srv, err = dmsg.NewServer(pk, sk, "", l, dc)
-	require.NoError(t, err)
+	srv = dmsg.NewServer(pk, sk, dc)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Serve()
+		errCh <- srv.Serve(l, "")
 		close(errCh)
 	}()
 	return srv, errCh

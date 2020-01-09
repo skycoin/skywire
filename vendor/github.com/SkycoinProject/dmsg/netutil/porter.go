@@ -2,7 +2,10 @@ package netutil
 
 import (
 	"context"
+	"io"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -99,4 +102,29 @@ func (p *Porter) makePortFreer(port uint16) func() {
 			p.Unlock()
 		})
 	}
+}
+
+// CloseAll closes all contained variables that implement io.Closer
+func (p *Porter) CloseAll(log logrus.FieldLogger) {
+	if log == nil {
+		log = logrus.New()
+	}
+
+	wg := new(sync.WaitGroup)
+	p.Lock()
+	for _, v := range p.ports {
+		if c, ok := v.(io.Closer); ok {
+
+			wg.Add(1)
+			go func(c io.Closer) {
+				if err := c.Close(); err != nil {
+					log.WithError(err).
+						Debug("On (*netutil.Porter).CloseAll(), closing contained value resulted in error.")
+				}
+				wg.Done()
+			}(c)
+		}
+	}
+	p.Unlock()
+	wg.Wait()
 }

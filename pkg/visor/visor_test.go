@@ -138,7 +138,9 @@ func TestNodeStartClose(t *testing.T) {
 
 	node.procManager = pm
 
-	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock())
+	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock(), nil)
+	go dmsgC.Serve()
+
 	netConf := snet.Config{
 		PubKey:       cipher.PubKey{},
 		SecKey:       cipher.SecKey{},
