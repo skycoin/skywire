@@ -28,8 +28,6 @@ type Node struct {
 
 // NewNode constructs a new SetupNode.
 func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
-	ctx := context.Background()
-
 	logger := logging.NewMasterLogger()
 
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
@@ -43,11 +41,11 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 		conf.PubKey,
 		conf.SecKey,
 		disc.NewHTTP(conf.Messaging.Discovery),
-		dmsg.SetLogger(logger.PackageLogger(dmsg.Type)),
+		&dmsg.Config{MinSessions: conf.Messaging.ServerCount},
 	)
-	if err := dmsgC.InitiateServerConnections(ctx, conf.Messaging.ServerCount); err != nil {
-		return nil, fmt.Errorf("failed to init dmsg: %s", err)
-	}
+	dmsgC.SetLogger(logger.PackageLogger(dmsg.Type))
+
+	go dmsgC.Serve()
 
 	log.Info("connected to dmsg servers")
 
@@ -88,12 +86,13 @@ func (sn *Node) Serve() error {
 			return err
 		}
 
-		sn.logger.WithField("requester", conn.RemotePK()).Infof("Received request.")
+		remote := conn.RemoteAddr().(dmsg.Addr)
+		sn.logger.WithField("requester", remote.PK).Infof("Received request.")
 
 		const timeout = 30 * time.Second
 
 		rpcS := rpc.NewServer()
-		if err := rpcS.Register(NewRPCGateway(conn.RemotePK(), sn, timeout)); err != nil {
+		if err := rpcS.Register(NewRPCGateway(remote.PK, sn, timeout)); err != nil {
 			return err
 		}
 
