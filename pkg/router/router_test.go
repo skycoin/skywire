@@ -350,7 +350,8 @@ func testClosePacketRemote(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubKey,
 	err = r1.handleTransportPacket(context.TODO(), recvPacket)
 	require.NoError(t, err)
 
-	require.True(t, rg1.isClosed())
+	require.True(t, rg1.isRemoteClosed())
+	require.False(t, rg1.isClosed())
 	require.Len(t, r1.rgs, 0)
 	require.Len(t, r0.rt.AllRules(), 0)
 	require.Len(t, r1.rt.AllRules(), 0)

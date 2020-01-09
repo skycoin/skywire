@@ -1,9 +1,7 @@
 package router
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
@@ -123,16 +121,20 @@ func TestRouteGroup_Close(t *testing.T) {
 	err = rg0.Close()
 	require.NoError(t, err)
 	require.True(t, rg0.isClosed())
-	var rg1DoneClosed bool
-	select {
-	case <-rg1.done:
-		rg1DoneClosed = true
-	default:
-	}
-	require.True(t, rg1DoneClosed)
+	require.True(t, rg1.isRemoteClosed())
 	// rg1 should be done (not getting any new data, returning `io.EOF` on further reads)
 	// but not closed
 	require.False(t, rg1.isClosed())
+
+	err = rg0.Close()
+	require.Equal(t, io.ErrClosedPipe, err)
+
+	err = rg1.Close()
+	require.NoError(t, err)
+	require.True(t, rg1.isClosed())
+
+	err = rg1.Close()
+	require.Equal(t, io.ErrClosedPipe, err)
 }
 
 func TestRouteGroup_Read(t *testing.T) {
@@ -268,9 +270,9 @@ func testReadWrite(t *testing.T, iterations int) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	go pushPackets(ctx, t, m1, rg1)
+	go pushPackets(ctx, m1, rg1)
 
-	go pushPackets(ctx, t, m2, rg2)
+	go pushPackets(ctx, m2, rg2)
 
 	testRouteGroupReadWrite(t, iterations, rg1, rg2)
 
@@ -280,9 +282,6 @@ func testReadWrite(t *testing.T, iterations int) {
 	assert.NoError(t, rg2.Close())
 
 	teardownEnv()
-
-	require.NoError(t, rg1.Close())
-	require.NoError(t, rg2.Close())
 }
 
 func testRouteGroupReadWrite(t *testing.T, iterations int, rg1, rg2 io.ReadWriter) {
@@ -480,9 +479,9 @@ func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
 		teardownEnv()
 	}()
 
-	go pushPackets(ctx, t, m1, rg1)
+	go pushPackets(ctx, m1, rg1)
 
-	go pushPackets(ctx, t, m2, rg2)
+	go pushPackets(ctx, m2, rg2)
 
 	chunkSize := 1024
 
@@ -520,9 +519,9 @@ func testArbitrarySizeOneMessage(t *testing.T, size int) {
 		teardownEnv()
 	}()
 
-	go pushPackets(ctx, t, m1, rg1)
+	go pushPackets(ctx, m1, rg1)
 
-	go pushPackets(ctx, t, m2, rg2)
+	go pushPackets(ctx, m2, rg2)
 
 	msg := []byte(strings.Repeat("A", size))
 
@@ -561,18 +560,6 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
-		/*rg1 := createRouteGroup()
-		rg2 := createRouteGroup()
-
-		c1, c2 = rg1, rg2
-
-		m1, m2, teardownEnv := createTransports(t, rg1, rg2, stcp.Type)
-		ctx, cancel := context.WithCancel(context.Background())
-
-		go pushPackets(ctx, t, m1, rg1)
-
-		go pushPackets(ctx, t, m2, rg2)*/
-
 		keys := snettest.GenKeyPairs(2)
 
 		pk1 := keys[0].PK
@@ -619,92 +606,10 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		rg1.fwd = append(rg1.fwd, r1FwdRule)
 
 		ctx, cancel := context.WithCancel(context.Background())
-		// push close packet from transport to route group
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				packet, err := m2.ReadPacket()
-				if err != nil {
-					panic(err)
-				}
-
-				fmt.Printf("PACKET WITH TYPE %s MOVING TO RG1\n", packet.Type())
-
-				payload := packet.Payload()
-				if len(payload) != int(packet.Size()) {
-					panic("malformed packet")
-				}
-
-				if packet.Type() == routing.ClosePacket {
-					select {
-					case <-rg1.done:
-						panic(io.ErrClosedPipe)
-					default:
-					}
-
-					if err := rg1.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
-						panic(err)
-					}
-
-					return
-				} else {
-					if packet.Type() == routing.DataPacket {
-						if safeSend(ctx, rg1, payload) {
-							return
-						}
-					} else {
-						panic(fmt.Sprintf("wrong packet type %v", packet.Type()))
-					}
-				}
-			}
-		}()
 
 		// push close packet from transport to route group
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				packet, err := m1.ReadPacket()
-				if err != nil {
-					panic(err)
-				}
-
-				payload := packet.Payload()
-				if len(payload) != int(packet.Size()) {
-					panic("malformed packet")
-				}
-
-				if packet.Type() == routing.ClosePacket {
-					select {
-					case <-rg0.done:
-						//panic(io.ErrClosedPipe)
-					default:
-					}
-
-					if err := rg0.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
-						panic(err)
-					}
-					return
-				} else {
-					if packet.Type() == routing.DataPacket {
-						if safeSend(ctx, rg0, payload) {
-							return
-						}
-					} else {
-						panic(fmt.Sprintf("wrong packet type %v", packet.Type()))
-					}
-				}
-			}
-		}()
+		go pushPackets(ctx, m2, rg1)
+		go pushPackets(ctx, m1, rg0)
 
 		stop = func() {
 			_ = rg0.Close()
@@ -717,258 +622,53 @@ func TestRouteGroup_TestConn(t *testing.T) {
 	}
 
 	nettest.TestConn(t, mp)
-
-	/*t.Run("basic io", func(t *testing.T) {
-		c1, c2, stop, err := mp()
-		require.NoError(t, err)
-
-		testBasicIO(t, c1, c2)
-		stop()
-	})
-
-	t.Run("ping pong", func(t *testing.T) {
-		c1, c2, stop, err := mp()
-		require.NoError(t, err)
-
-		testPingPong(t, c1, c2)
-		stop()
-	})
-
-	t.Run("racy read", func(t *testing.T) {
-		c1, c2, stop, err := mp()
-		require.NoError(t, err)
-
-		testRacyRead(t, c1, c2)
-		stop()
-	})*/
-
-	/*t.Run("present timeout", func(t *testing.T) {
-		c1, c2, stop, err := mp()
-		fmt.Println("AFTER MP")
-		require.NoError(t, err)
-
-		testPresentTimeout(t, c1, c2)
-		fmt.Println("AFTER PRESENT TIMEOUT")
-		stop()
-		fmt.Println("AFTER STOP IN PRESENT TIMEOUT")
-	})*/
 }
 
-var aLongTimeAgo = time.Unix(233431200, 0)
-
-// testPresentTimeout tests that a past deadline set while there are pending
-// Read and Write operations immediately times out those operations.
-func testPresentTimeout(t *testing.T, c1, c2 net.Conn) {
-	fmt.Println("INSIDE PRESENT TIMEOUT")
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(3)
-
-	deadlineSet := make(chan bool, 1)
-	go func() {
-		defer wg.Done()
-		time.Sleep(100 * time.Millisecond)
-		deadlineSet <- true
-		c1.SetReadDeadline(aLongTimeAgo)
-		fmt.Println("SET READ DEADLINE")
-		c1.SetWriteDeadline(aLongTimeAgo)
-		fmt.Println("SET WRITE DEADLINE")
-	}()
-	go func() {
-		defer wg.Done()
-		n, err := c1.Read(make([]byte, 1024))
-		if n != 0 {
-			t.Errorf("unexpected Read count: got %d, want 0", n)
-		}
-		fmt.Printf("GOT ERROR FROM READ: %v\n", err)
-		checkForTimeoutError(t, err)
-		if len(deadlineSet) == 0 {
-			t.Error("Read timed out before deadline is set")
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		var err error
-		for err == nil {
-			_, err = c1.Write(make([]byte, 1024))
-		}
-		fmt.Printf("GOT ERROR FROM WRITE: %v\n", err)
-		checkForTimeoutError(t, err)
-		if len(deadlineSet) == 0 {
-			t.Error("Write timed out before deadline is set")
-		}
-	}()
-}
-
-func testBasicIO(t *testing.T, c1, c2 net.Conn) {
-	want := make([]byte, 1<<20)
-	//want := make([]byte, 50)
-	rand.New(rand.NewSource(0)).Read(want)
-
-	dataCh := make(chan []byte)
-	go func() {
-		rd := bytes.NewReader(want)
-		if err := chunkedCopy(c1, rd); err != nil {
-			t.Errorf("unexpected c1.Write error: %v", err)
-		}
-		if err := c1.Close(); err != nil {
-			t.Errorf("unexpected c1.Close error: %v", err)
-		}
-	}()
-
-	//time.Sleep(10 * time.Second)
-
-	go func() {
-		wr := new(bytes.Buffer)
-		if err := chunkedCopy(wr, c2); err != nil {
-			t.Errorf("unexpected c2.Read error: %v", err)
-		}
-		if err := c2.Close(); err != nil {
-			t.Errorf("unexpected c2.Close error: %v", err)
-		}
-		dataCh <- wr.Bytes()
-	}()
-
-	if got := <-dataCh; !bytes.Equal(got, want) {
-		if len(got) != len(want) {
-			fmt.Printf("Data len differs, got: %d, want: %d\n", len(got), len(want))
-		} else {
-			for i := range got {
-				if got[i] != want[i] {
-					fmt.Printf("Data differs from %d\n", i)
-					fmt.Printf("Different data: got: %v, want: %v\n", got[i-10:i+10], want[i-10:i+10])
-					break
-				}
-			}
-		}
-
-		t.Error("transmitted data differs")
-	}
-}
-
-// testPingPong tests that the two endpoints can synchronously send data to
-// each other in a typical request-response pattern.
-func testPingPong(t *testing.T, c1, c2 net.Conn) {
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	pingPonger := func(c net.Conn) {
-		defer wg.Done()
-		buf := make([]byte, 8)
-		var prev uint64
-		for {
-			if _, err := io.ReadFull(c, buf); err != nil {
-				if err == io.EOF {
-					break
-				}
-				t.Errorf("unexpected Read error: %v", err)
-			}
-
-			v := binary.LittleEndian.Uint64(buf)
-			binary.LittleEndian.PutUint64(buf, v+1)
-			if prev != 0 && prev+2 != v {
-				t.Errorf("mismatching value: got %d, want %d", v, prev+2)
-			}
-			prev = v
-			if v == 1000 {
-				break
-			}
-
-			if _, err := c.Write(buf); err != nil {
-				t.Errorf("unexpected Write error: %v", err)
-				break
-			}
-		}
-		if err := c.Close(); err != nil {
-			t.Errorf("unexpected Close error: %v", err)
-		}
-	}
-
-	wg.Add(2)
-	go pingPonger(c1)
-	go pingPonger(c2)
-
-	// Start off the chain reaction.
-	if _, err := c1.Write(make([]byte, 8)); err != nil {
-		t.Errorf("unexpected c1.Write error: %v", err)
-	}
-}
-
-func testRacyRead(t *testing.T, c1, c2 net.Conn) {
-	go chunkedCopy(c2, rand.New(rand.NewSource(0)))
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	c1.SetReadDeadline(time.Now().Add(time.Millisecond))
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			b1 := make([]byte, 1024)
-			b2 := make([]byte, 1024)
-			for j := 0; j < 100; j++ {
-				_, err := c1.Read(b1)
-				copy(b1, b2) // Mutate b1 to trigger potential race
-				if err != nil {
-					checkForTimeoutError(t, err)
-					c1.SetReadDeadline(time.Now().Add(time.Millisecond))
-				}
-			}
-		}()
-	}
-}
-
-func checkForTimeoutError(t *testing.T, err error) {
-	t.Helper()
-	if nerr, ok := err.(net.Error); ok {
-		if !nerr.Timeout() {
-			t.Errorf("err.Timeout() = false, want true")
-		}
-	} else {
-		t.Errorf("got %T, want net.Error", err)
-	}
-}
-
-func chunkedCopy(w io.Writer, r io.Reader) error {
-	b := make([]byte, 1024)
-	_, err := io.CopyBuffer(struct{ io.Writer }{w}, struct{ io.Reader }{r}, b)
-	return err
-}
-
-func pushPackets(ctx context.Context, t *testing.T, from *transport.Manager, to *RouteGroup) {
+func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-to.done:
-			return
 		default:
-			packet, err := from.ReadPacket()
-			assert.NoError(t, err)
+		}
 
-			if packet.Type() != routing.DataPacket && packet.Type() != routing.ClosePacket {
-				continue
+		packet, err := from.ReadPacket()
+		if err != nil {
+			panic(err)
+		}
+
+		payload := packet.Payload()
+		if len(payload) != int(packet.Size()) {
+			panic("malformed packet")
+		}
+
+		switch packet.Type() {
+		case routing.ClosePacket:
+			if to.isClosed() {
+				// TODO: this panic rises on some subtests of `TestConn`, need to find out the reason
+				panic(io.ErrClosedPipe)
 			}
 
-			payload := packet.Payload()
-			if len(payload) != int(packet.Size()) {
-				panic("malformed packet")
+			if err := to.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
+				panic(err)
 			}
 
-			if safeSend(ctx, to, payload) {
+			return
+		case routing.DataPacket:
+			if !safeSend(ctx, to, payload) {
 				return
 			}
+		default:
+			panic(fmt.Sprintf("wrong packet type %v", packet.Type()))
 		}
 	}
 }
 
-func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (interrupt bool) {
+func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (keepSending bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			// TODO: come up with idea how to get rid of panic
-			interrupt = r != "send on closed channel"
+			keepSending = r == "send on closed channel"
 		}
 	}()
 
@@ -977,11 +677,11 @@ func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (interrupt bo
 
 	select {
 	case <-ctx.Done():
-		return true
-	case <-to.done:
-		return true
-	case to.readCh <- payload:
 		return false
+	case <-to.closed:
+		return false
+	case to.readCh <- payload:
+		return true
 	}
 }
 
