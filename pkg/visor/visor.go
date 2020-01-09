@@ -26,6 +26,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -55,7 +56,7 @@ const Version = "0.0.1"
 
 const supportedProtocolVersion = "0.0.1"
 
-var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "SSH", 3: "skysocks"}
+var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
@@ -80,9 +81,10 @@ type Node struct {
 
 	appsPath  string
 	localPath string
-	appsConf  []AppConfig
+	appsConf  map[string]AppConfig
 
-	startedAt time.Time
+	startedAt  time.Time
+	restartCtx *restart.Context
 
 	pidMu sync.Mutex
 
@@ -93,7 +95,7 @@ type Node struct {
 }
 
 // NewNode constructs new Node.
-func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) {
+func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *restart.Context) (*Node, error) {
 	ctx := context.Background()
 
 	node := &Node{
@@ -103,6 +105,15 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 	node.Logger = masterLogger
 	node.logger = node.Logger.PackageLogger("skywire")
+
+	restartCheckDelay, err := time.ParseDuration(config.RestartCheckDelay)
+	if err == nil {
+		restartCtx.SetCheckDelay(restartCheckDelay)
+	}
+
+	restartCtx.RegisterLogger(node.logger)
+
+	node.restartCtx = restartCtx
 
 	pk := config.Node.StaticPubKey
 	sk := config.Node.StaticSecKey
@@ -476,11 +487,12 @@ func (node *Node) StopApp(appName string) error {
 
 // SetAutoStart sets an app to auto start or not.
 func (node *Node) SetAutoStart(appName string, autoStart bool) error {
-	for i, ac := range node.appsConf {
-		if ac.App == appName {
-			node.appsConf[i].AutoStart = autoStart
-			return nil
-		}
+	appConf, ok := node.appsConf[appName]
+	if !ok {
+		return ErrUnknownApp
 	}
-	return ErrUnknownApp
+
+	appConf.AutoStart = autoStart
+	node.appsConf[appName] = appConf
+	return nil
 }

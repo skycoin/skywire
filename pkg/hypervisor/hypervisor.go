@@ -151,6 +151,7 @@ func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Put("/nodes/{pk}/routes/{rid}", m.putRoute())
 			r.Delete("/nodes/{pk}/routes/{rid}", m.deleteRoute())
 			r.Get("/nodes/{pk}/loops", m.getLoops())
+			r.Get("/nodes/{pk}/restart", m.restart())
 		})
 	})
 	r.ServeHTTP(w, req)
@@ -566,6 +567,18 @@ func (m *Node) getLoops() http.HandlerFunc {
 			resp[i] = makeLoopResp(l)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	})
+}
+
+// NOTE: Reply comes with a delay, because of check if new executable is started successfully.
+func (m *Node) restart() http.HandlerFunc {
+	return m.withCtx(m.nodeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if err := ctx.RPC.Restart(); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
 
