@@ -14,7 +14,7 @@ require (
 	github.com/gorilla/securecookie v1.1.1
 	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
 	github.com/pkg/profile v1.3.0
-	github.com/prometheus/client_golang v1.2.1
+	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.7.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/skycoin/dmsg v0.0.0-20190805065636-70f4c32a994f // indirect
@@ -25,4 +25,4 @@ require (
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
 )
 
-//replace github.com/SkycoinProject/dmsg => ../dmsg
+replace github.com/SkycoinProject/dmsg => ../dmsg

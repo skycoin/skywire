@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -25,7 +27,16 @@ func wrapDmsgC(dmsgC *dmsg.Client) *dmsgClientWrapper {
 }
 
 func (w *dmsgClientWrapper) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
-	return w.Client.Dial(ctx, remote, port)
+	addr := dmsg.Addr{
+		PK:   remote,
+		Port: port,
+	}
+
+	return w.Client.Dial(ctx, addr)
+}
+
+func (w *dmsgClientWrapper) Type() string {
+	return snet.DmsgType
 }
 
 // AddEdgeRules is a wrapper for (*Client).AddEdgeRules.
