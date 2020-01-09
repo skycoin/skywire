@@ -94,13 +94,13 @@ func TestAppsConfig(t *testing.T) {
 	appsConf, err := conf.AppsConfig()
 	require.NoError(t, err)
 
-	app1 := appsConf[0]
+	app1 := appsConf["foo"]
 	assert.Equal(t, "foo", app1.App)
 	assert.Equal(t, "1.1", app1.Version)
 	assert.Equal(t, routing.Port(1), app1.Port)
 	assert.False(t, app1.AutoStart)
 
-	app2 := appsConf[1]
+	app2 := appsConf["bar"]
 	assert.Equal(t, "bar", app2.App)
 	assert.Equal(t, "1.0", app2.Version)
 	assert.Equal(t, routing.Port(2), app2.Port)

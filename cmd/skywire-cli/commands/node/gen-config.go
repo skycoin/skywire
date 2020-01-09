@@ -1,7 +1,9 @@
 package node
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"path/filepath"
 	"time"
 
@@ -84,6 +86,13 @@ func defaultConfig() *visor.Config {
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
 
+	lIPaddr, err := getLocalIPAddress()
+	if err != nil {
+		log.Warn(err)
+	}
+
+	conf.STCP.LocalAddr = lIPaddr
+
 	if testenv {
 		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
 	} else {
@@ -94,14 +103,12 @@ func defaultConfig() *visor.Config {
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf
 
-	// TODO(evanlinjin): We have disabled skyproxy passcode by default for now - We should make a cli arg for this.
+	// TODO(evanlinjin): We have disabled skysocks passcode by default for now - We should make a cli arg for this.
 	//passcode := base64.StdEncoding.Strict().EncodeToString(cipher.RandByte(8))
 	conf.Apps = []visor.AppConfig{
 		defaultSkychatConfig(),
-		defaultSkysshConfig(),
-		defaultSkyproxyConfig(""),
-		defaultSkysshClientConfig(),
-		defaultSkyproxyClientConfig(),
+		defaultSkysocksConfig(""),
+		defaultSkysocksClientConfig(),
 	}
 	conf.TrustedNodes = []cipher.PubKey{}
 
@@ -140,7 +147,7 @@ func defaultConfig() *visor.Config {
 
 	conf.Interfaces.RPCAddress = "localhost:3435"
 
-	conf.AppServerSockFile = "app_server.sock"
+	conf.AppServerSockFile = "/tmp/visor_" + pk.Hex() + ".sock"
 
 	return conf
 }
@@ -164,43 +171,41 @@ func defaultSkychatConfig() visor.AppConfig {
 	}
 }
 
-func defaultSkysshConfig() visor.AppConfig {
-	return visor.AppConfig{
-		App:       skyenv.SkysshName,
-		Version:   skyenv.SkysshVersion,
-		AutoStart: true,
-		Port:      routing.Port(skyenv.SkysshPort),
-	}
-}
-
-func defaultSkyproxyConfig(passcode string) visor.AppConfig {
+func defaultSkysocksConfig(passcode string) visor.AppConfig {
 	var args []string
 	if passcode != "" {
 		args = []string{"-passcode", passcode}
 	}
 	return visor.AppConfig{
-		App:       skyenv.SkyproxyName,
-		Version:   skyenv.SkyproxyVersion,
+		App:       skyenv.SkysocksName,
+		Version:   skyenv.SkysocksVersion,
 		AutoStart: true,
-		Port:      routing.Port(skyenv.SkyproxyPort),
+		Port:      routing.Port(skyenv.SkysocksPort),
 		Args:      args,
 	}
 }
 
-func defaultSkysshClientConfig() visor.AppConfig {
+func defaultSkysocksClientConfig() visor.AppConfig {
 	return visor.AppConfig{
-		App:       skyenv.SkysshClientName,
-		Version:   skyenv.SkysshVersion,
-		AutoStart: true,
-		Port:      routing.Port(skyenv.SkysshClientPort),
+		App:       skyenv.SkysocksClientName,
+		Version:   skyenv.SkysocksClientVersion,
+		AutoStart: false,
+		Port:      routing.Port(skyenv.SkysocksClientPort),
 	}
 }
 
-func defaultSkyproxyClientConfig() visor.AppConfig {
-	return visor.AppConfig{
-		App:       skyenv.SkyproxyClientName,
-		Version:   skyenv.SkyproxyClientVersion,
-		AutoStart: false,
-		Port:      routing.Port(skyenv.SkyproxyClientPort),
+func getLocalIPAddress() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
 	}
+
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String() + ":7777", nil
+			}
+		}
+	}
+	return "", errors.New("could not find local IP address")
 }

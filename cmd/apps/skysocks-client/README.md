@@ -1,0 +1,11 @@
+# Skywire SOCKS5 proxy client app
+
+`skysocks-client` app implements client for the SOCKS5 app.
+
+It opens persistent `skywire` connection to the configured remote node
+and local TCP port, all incoming TCP traffics is forwarded to the
+~skywire~ connection.
+
+Any conventional SOCKS5 client should be able to connect to the proxy client.
+
+Please check docs for `skysocks` app for further instructions.
