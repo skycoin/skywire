@@ -18,25 +18,25 @@
   - [Testing](#testing)
     - [Testing with default settings](#testing-with-default-settings)
     - [Customization with environment variables](#customization-with-environment-variables)
-      - [$TEST_OPTS](#testopts)
-      - [$TEST_LOGGING_LEVEL](#testlogginglevel)
-      - [$SYSLOG_OPTS](#syslogopts)
+      - [$TEST_OPTS](#test_opts)
+      - [$TEST_LOGGING_LEVEL](#test_logging_level)
+      - [$SYSLOG_OPTS](#syslog_opts)
   - [Running skywire in docker containers](#running-skywire-in-docker-containers)
     - [Run dockerized `skywire-visor`](#run-dockerized-skywire-visor)
       - [Structure of `./node`](#structure-of-node)
     - [Refresh and restart `SKY01`](#refresh-and-restart-sky01)
     - [Customization of dockers](#customization-of-dockers)
-      - [1. DOCKER_IMAGE](#1-dockerimage)
-      - [2. DOCKER_NETWORK](#2-dockernetwork)
-      - [3. DOCKER_NODE](#3-dockernode)
-      - [4. DOCKER_OPTS](#4-dockeropts)
+      - [1. DOCKER_IMAGE](#1-docker_image)
+      - [2. DOCKER_NETWORK](#2-docker_network)
+      - [3. DOCKER_NODE](#3-docker_node)
+      - [4. DOCKER_OPTS](#4-docker_opts)
     - [Dockerized `skywire-visor` recipes](#dockerized-skywire-visor-recipes)
       - [1. Get Public Key of docker-node](#1-get-public-key-of-docker-node)
       - [2. Get an IP of node](#2-get-an-ip-of-node)
       - [3. Open in browser containerized `skychat` application](#3-open-in-browser-containerized-skychat-application)
       - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
       - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
-      - [6. "Hello-Mike-Hello-Joe" test](#6-%22hello-mike-hello-joe%22-test)
+      - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
 
 **NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
@@ -185,8 +185,7 @@ After `skywire-visor` is up and running with default environment, default apps a
 
 - [Chat](/cmd/apps/skychat)
 - [Hello World](/cmd/apps/helloworld)
-- [The Real Proxy](/cmd/apps/therealproxy) ([Client](/cmd/apps/therealproxy-client))
-- [The Real SSH](/cmd/apps/therealssh) ([Client](/cmd/apps/therealssh-client))
+- [Sky Socks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
 
 ### Transports
 
@@ -305,14 +304,11 @@ This will:
 ├── apps                            # node `apps` compiled with DOCKER_OPTS
 │   ├── skychat.v1.0                #
 │   ├── helloworld.v1.0             #
-│   ├── socksproxy-client.v1.0      #
-│   ├── socksproxy.v1.0             #
-│   ├── SSH-client.v1.0             #
-│   └── SSH.v1.0                    #
+│   ├── skysocks-client.v1.0      #
+│   └── skysocks.v1.0             #
 ├── local                           # **Created inside docker**
 │   ├── skychat                     #  according to "local_path" in skywire-config.json
-│   ├── socksproxy                  #
-│   └── SSH                         #
+│   └── skysocks                  #
 ├── PK                              # contains public key of node
 ├── skywire                         # db & logs. **Created inside docker**
 │   ├── routing.db                  #
@@ -412,9 +408,7 @@ $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/skywire-visor ./cmd/skywire
 # 3. compile apps
 $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/skychat.v1.0 ./cmd/apps/skychat
 $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/helloworld.v1.0 ./cmd/apps/helloworld
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/socksproxy.v1.0 ./cmd/apps/therealproxy
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/SSH.v1.0  ./cmd/apps/SSH
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/SSH-client.v1.0  ./cmd/apps/SSH-client
+$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/skysocks.v1.0 ./cmd/apps/skysocks
 # 4. Create skywire-config.json for node
 $ skywire-cli node gen-config -o /tmp/SKYNODE/skywire-config.json
 # 2019/03/15 16:43:49 Done!
@@ -423,9 +417,7 @@ $ tree /tmp/SKYNODE
 # ├── apps
 # │   ├── skychat.v1.0
 # │   ├── helloworld.v1.0
-# │   ├── socksproxy.v1.0
-# │   ├── SSH-client.v1.0
-# │   └── SSH.v1.0
+# │   └── skysocks.v1.0
 # ├── skywire-config.json
 # └── skywire-visor
 # So far so good. We prepared docker volume. Now we can:
@@ -435,18 +427,15 @@ $ docker run -it -v /tmp/SKYNODE:/sky --network=SKYNET --name=SKYNODE skywire-ru
 # [2019-03-15T13:55:10Z] INFO [skywire]: Connected to messaging servers
 # [2019-03-15T13:55:10Z] INFO [skywire]: Starting skychat.v1.0
 # [2019-03-15T13:55:10Z] INFO [skywire]: Starting RPC interface on 127.0.0.1:3435
-# [2019-03-15T13:55:10Z] INFO [skywire]: Starting socksproxy.v1.0
-# [2019-03-15T13:55:10Z] INFO [skywire]: Starting SSH.v1.0
+# [2019-03-15T13:55:10Z] INFO [skywire]: Starting skysocks.v1.0
 # [2019-03-15T13:55:10Z] INFO [skywire]: Starting packet router
 # [2019-03-15T13:55:10Z] INFO [router]: Starting router
 # [2019-03-15T13:55:10Z] INFO [trmanager]: Starting transport manager
 # [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skychat",# "app-version":"1.0","protocol-version":"0.0.1"}
 # [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skychat.v1.0
 # [2019-03-15T13:55:10Z] INFO [skychat.v1.0]: 2019/03/15 13:55:10 Serving HTTP on :8000
-# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"SSH",# "app-version":"1.0","protocol-version":"0.0.1"}
-# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app SSH.v1.0
-# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"socksproxy",# "app-version":"1.0","protocol-version":"0.0.1"}
-# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app socksproxy.v1.0
+# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skysocks",# "app-version":"1.0","protocol-version":"0.0.1"}
+# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skysocks.v1.0
 ```
 
 Note that in this example docker is running in non-detached mode - it could be useful in some scenarios.
