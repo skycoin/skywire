@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
@@ -632,6 +633,8 @@ func TestRouteGroup_TestConn(t *testing.T) {
 					panic(err)
 				}
 
+				fmt.Printf("PACKET WITH TYPE %s MOVING TO RG1\n", packet.Type())
+
 				payload := packet.Payload()
 				if len(payload) != int(packet.Size()) {
 					panic("malformed packet")
@@ -683,7 +686,7 @@ func TestRouteGroup_TestConn(t *testing.T) {
 				if packet.Type() == routing.ClosePacket {
 					select {
 					case <-rg0.done:
-						panic(io.ErrClosedPipe)
+						//panic(io.ErrClosedPipe)
 					default:
 					}
 
@@ -714,11 +717,87 @@ func TestRouteGroup_TestConn(t *testing.T) {
 	}
 
 	nettest.TestConn(t, mp)
-	/*c1, c2, stop, err := mp()
-	require.NoError(t, err)
-	defer stop()
 
-	testBasicIO(t, c1, c2)*/
+	/*t.Run("basic io", func(t *testing.T) {
+		c1, c2, stop, err := mp()
+		require.NoError(t, err)
+
+		testBasicIO(t, c1, c2)
+		stop()
+	})
+
+	t.Run("ping pong", func(t *testing.T) {
+		c1, c2, stop, err := mp()
+		require.NoError(t, err)
+
+		testPingPong(t, c1, c2)
+		stop()
+	})
+
+	t.Run("racy read", func(t *testing.T) {
+		c1, c2, stop, err := mp()
+		require.NoError(t, err)
+
+		testRacyRead(t, c1, c2)
+		stop()
+	})*/
+
+	/*t.Run("present timeout", func(t *testing.T) {
+		c1, c2, stop, err := mp()
+		fmt.Println("AFTER MP")
+		require.NoError(t, err)
+
+		testPresentTimeout(t, c1, c2)
+		fmt.Println("AFTER PRESENT TIMEOUT")
+		stop()
+		fmt.Println("AFTER STOP IN PRESENT TIMEOUT")
+	})*/
+}
+
+var aLongTimeAgo = time.Unix(233431200, 0)
+
+// testPresentTimeout tests that a past deadline set while there are pending
+// Read and Write operations immediately times out those operations.
+func testPresentTimeout(t *testing.T, c1, c2 net.Conn) {
+	fmt.Println("INSIDE PRESENT TIMEOUT")
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(3)
+
+	deadlineSet := make(chan bool, 1)
+	go func() {
+		defer wg.Done()
+		time.Sleep(100 * time.Millisecond)
+		deadlineSet <- true
+		c1.SetReadDeadline(aLongTimeAgo)
+		fmt.Println("SET READ DEADLINE")
+		c1.SetWriteDeadline(aLongTimeAgo)
+		fmt.Println("SET WRITE DEADLINE")
+	}()
+	go func() {
+		defer wg.Done()
+		n, err := c1.Read(make([]byte, 1024))
+		if n != 0 {
+			t.Errorf("unexpected Read count: got %d, want 0", n)
+		}
+		fmt.Printf("GOT ERROR FROM READ: %v\n", err)
+		checkForTimeoutError(t, err)
+		if len(deadlineSet) == 0 {
+			t.Error("Read timed out before deadline is set")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		var err error
+		for err == nil {
+			_, err = c1.Write(make([]byte, 1024))
+		}
+		fmt.Printf("GOT ERROR FROM WRITE: %v\n", err)
+		checkForTimeoutError(t, err)
+		if len(deadlineSet) == 0 {
+			t.Error("Write timed out before deadline is set")
+		}
+	}()
 }
 
 func testBasicIO(t *testing.T, c1, c2 net.Conn) {
@@ -764,6 +843,91 @@ func testBasicIO(t *testing.T, c1, c2 net.Conn) {
 		}
 
 		t.Error("transmitted data differs")
+	}
+}
+
+// testPingPong tests that the two endpoints can synchronously send data to
+// each other in a typical request-response pattern.
+func testPingPong(t *testing.T, c1, c2 net.Conn) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	pingPonger := func(c net.Conn) {
+		defer wg.Done()
+		buf := make([]byte, 8)
+		var prev uint64
+		for {
+			if _, err := io.ReadFull(c, buf); err != nil {
+				if err == io.EOF {
+					break
+				}
+				t.Errorf("unexpected Read error: %v", err)
+			}
+
+			v := binary.LittleEndian.Uint64(buf)
+			binary.LittleEndian.PutUint64(buf, v+1)
+			if prev != 0 && prev+2 != v {
+				t.Errorf("mismatching value: got %d, want %d", v, prev+2)
+			}
+			prev = v
+			if v == 1000 {
+				break
+			}
+
+			if _, err := c.Write(buf); err != nil {
+				t.Errorf("unexpected Write error: %v", err)
+				break
+			}
+		}
+		if err := c.Close(); err != nil {
+			t.Errorf("unexpected Close error: %v", err)
+		}
+	}
+
+	wg.Add(2)
+	go pingPonger(c1)
+	go pingPonger(c2)
+
+	// Start off the chain reaction.
+	if _, err := c1.Write(make([]byte, 8)); err != nil {
+		t.Errorf("unexpected c1.Write error: %v", err)
+	}
+}
+
+func testRacyRead(t *testing.T, c1, c2 net.Conn) {
+	go chunkedCopy(c2, rand.New(rand.NewSource(0)))
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	c1.SetReadDeadline(time.Now().Add(time.Millisecond))
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			b1 := make([]byte, 1024)
+			b2 := make([]byte, 1024)
+			for j := 0; j < 100; j++ {
+				_, err := c1.Read(b1)
+				copy(b1, b2) // Mutate b1 to trigger potential race
+				if err != nil {
+					checkForTimeoutError(t, err)
+					c1.SetReadDeadline(time.Now().Add(time.Millisecond))
+				}
+			}
+		}()
+	}
+}
+
+func checkForTimeoutError(t *testing.T, err error) {
+	t.Helper()
+	if nerr, ok := err.(net.Error); ok {
+		if !nerr.Timeout() {
+			t.Errorf("err.Timeout() = false, want true")
+		}
+	} else {
+		t.Errorf("got %T, want net.Error", err)
 	}
 }
 
