@@ -232,6 +232,7 @@ func (m *Node) exec() http.HandlerFunc {
 
 type summaryResp struct {
 	TCPAddr string `json:"tcp_addr"`
+	Online  bool   `json:"online"`
 	*visor.Summary
 }
 
@@ -248,6 +249,7 @@ func (m *Node) getNodes() http.HandlerFunc {
 			}
 			summaries = append(summaries, summaryResp{
 				TCPAddr: c.Addr.Addr.String(),
+				Online:  err == nil,
 				Summary: summary,
 			})
 		}
@@ -663,7 +665,7 @@ func (m *Node) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
 }
 
 func (m *Node) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := m.appCtx(w, r)
+	ctx, ok := m.nodeCtx(w, r)
 	if !ok {
 		return nil, false
 	}
