@@ -21,7 +21,7 @@ import (
 
 const (
 	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
-	defaultReadChBufSize               = 1024000000
+	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 )
 
@@ -87,7 +87,6 @@ type RouteGroup struct {
 	readCh   chan []byte // push reads from Router
 	readChMu sync.Mutex
 	readBuf  bytes.Buffer // for read overflow
-	done     chan struct{}
 	once     sync.Once
 
 	readDeadline  deadline.PipeDeadline
@@ -95,6 +94,7 @@ type RouteGroup struct {
 
 	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated int32
+	remoteClosed   int32
 	closed         chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
@@ -116,7 +116,6 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		rvs:           make([]routing.Rule, 0),
 		readCh:        make(chan []byte, cfg.ReadChBufSize),
 		readBuf:       bytes.Buffer{},
-		done:          make(chan struct{}),
 		closed:        make(chan struct{}),
 		readDeadline:  deadline.MakePipeDeadline(),
 		writeDeadline: deadline.MakePipeDeadline(),
@@ -131,9 +130,9 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 // The Router, via transport.Manager, is responsible for reading incoming packets and pushing it
 // to the appropriate RouteGroup via (*RouteGroup).readCh.
 func (rg *RouteGroup) Read(p []byte) (n int, err error) {
-	/*if rg.isClosed() {
+	if rg.isClosed() {
 		return 0, io.ErrClosedPipe
-	}*/
+	}
 
 	if rg.readDeadline.Closed() {
 		rg.logger.Infoln("TIMEOUT ERROR?")
@@ -144,7 +143,13 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	// In case the read buffer is short.
+	return rg.read(p)
+}
+
+// read reads incoming data. It tries to fetch the data from the internal buffer.
+// If buffer is empty it blocks on receiving from the data channel
+func (rg *RouteGroup) read(p []byte) (int, error) {
+	// first try the buffer for any already received data
 	rg.mu.Lock()
 	if rg.readBuf.Len() > 0 {
 		n, err := rg.readBuf.Read(p)
@@ -154,45 +159,22 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 	}
 	rg.mu.Unlock()
 
-	var (
-		data []byte
-		ok   bool
-	)
 	select {
-	case <-rg.done:
-		if rg.isClosed() {
-			return 0, io.ErrClosedPipe
-		}
-
-		select {
-		case data, ok = <-rg.readCh:
-			if !ok || len(data) == 0 {
-				// route group got closed
-				return 0, io.EOF
-			}
-
-			rg.mu.Lock()
-			defer rg.mu.Unlock()
-
-			return ioutil.BufRead(&rg.readBuf, data, p)
-		default:
-		}
-
-		return 0, io.EOF
 	case <-rg.readDeadline.Wait():
 		return 0, timeoutError{}
-	case data, ok = <-rg.readCh:
+	case data, ok := <-rg.readCh:
+		if !ok || len(data) == 0 {
+			// route group got closed or empty data received. Behavior on the empty
+			// data is equivalent to the behavior of `read()` unix syscall as described here:
+			// https://www.ibm.com/support/knowledgecenter/en/SSLTBW_2.4.0/com.ibm.zos.v2r4.bpxbd00/rtrea.htm
+			return 0, io.EOF
+		}
+
+		rg.mu.Lock()
+		defer rg.mu.Unlock()
+
+		return ioutil.BufRead(&rg.readBuf, data, p)
 	}
-
-	if !ok || len(data) == 0 {
-		// route group got closed
-		return 0, io.EOF
-	}
-
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-
-	return ioutil.BufRead(&rg.readBuf, data, p)
 }
 
 // Write writes payload to a RouteGroup
@@ -280,21 +262,21 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 
 // Close closes a RouteGroup.
 func (rg *RouteGroup) Close() error {
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-
 	if rg.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	select {
-	case <-rg.done:
+	if rg.isRemoteClosed() {
+		// remote already closed, everything is cleaned up,
+		// we just need to close signal channel at this point
 		close(rg.closed)
 		return nil
-	default:
 	}
 
 	atomic.StoreInt32(&rg.closeInitiated, 1)
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
 
 	return rg.close(routing.CloseRequested)
 }
@@ -398,7 +380,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 
 	if closeInitiator {
 		// if this node initiated closing, we need to wait for close packets
-		// to come back, or to exit with a time out if anything goes wrong in
+		// to come back, or to exit with a timeout if anything goes wrong in
 		// the network
 		if err := rg.waitForCloseLoop(closeRoutineTimeout); err != nil {
 			rg.logger.Errorf("Error during close loop: %v", err)
@@ -417,7 +399,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 			close(rg.closed)
 		}
 
-		close(rg.done)
+		atomic.StoreInt32(&rg.remoteClosed, 1)
 		rg.readChMu.Lock()
 		close(rg.readCh)
 		rg.readChMu.Unlock()
@@ -442,7 +424,6 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) error {
-	//time.Sleep(2 * time.Second)
 	for i := 0; i < len(rg.tps); i++ {
 		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
 		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
@@ -476,6 +457,10 @@ func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
 
 func (rg *RouteGroup) isCloseInitiator() bool {
 	return atomic.LoadInt32(&rg.closeInitiated) == 1
+}
+
+func (rg *RouteGroup) isRemoteClosed() bool {
+	return atomic.LoadInt32(&rg.remoteClosed) == 1
 }
 
 func (rg *RouteGroup) isClosed() bool {
