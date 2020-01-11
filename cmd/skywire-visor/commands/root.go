@@ -171,6 +171,16 @@ func (cfg *runCfg) runNode() *runCfg {
 		cfg.logger.Fatal("Failed to initialize node: ", err)
 	}
 
+	if cfg.conf.DmsgPty != nil {
+		err = node.UnlinkSocketFiles(cfg.conf.AppServerSockFile, cfg.conf.DmsgPty.CLIAddr)
+	} else {
+		err = node.UnlinkSocketFiles(cfg.conf.AppServerSockFile)
+	}
+
+	if err != nil {
+		cfg.logger.Fatal("failed to unlink socket files: ", err)
+	}
+
 	if cfg.conf.Uptime.Tracker != "" {
 		uptimeTracker, err := utclient.NewHTTP(cfg.conf.Uptime.Tracker, cfg.conf.Node.StaticPubKey, cfg.conf.Node.StaticSecKey)
 		if err != nil {
