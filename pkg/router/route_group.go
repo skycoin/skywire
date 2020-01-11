@@ -21,7 +21,7 @@ import (
 
 const (
 	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
-	defaultRouteGroupIOTimeout         = 3 * time.Second
+	defaultRouteGroupIOTimeout         = 300 * time.Second
 	defaultReadChBufSize               = 1024
 )
 
