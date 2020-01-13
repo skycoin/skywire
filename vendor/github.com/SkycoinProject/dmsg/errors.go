@@ -5,42 +5,42 @@ import (
 	"sync"
 )
 
-// Entity Errors (10-19).
+// Errors for dmsg discovery (1xx).
 var (
-	ErrEntityClosed               = NewError(10, "local entity closed", nil)
-	ErrSessionClosed              = NewError(11, "local session closed", nil)
-	ErrCannotConnectToDelegated   = NewError(12, "cannot connect to delegated server", nil)
-	ErrSessionHandshakeExtraBytes = NewError(13, "extra bytes received during session handshake", nil)
+	ErrDiscEntryNotFound       = NewError(100, "discovery entry is not found", nil)
+	ErrDiscEntryIsNotServer    = NewError(101, "discovery entry is not of server", nil)
+	ErrDiscEntryIsNotClient    = NewError(102, "discovery entry is not of client", nil)
+	ErrDiscEntryHasNoDelegated = NewError(103, "discovery client entry has no delegated servers", nil)
 )
 
-// Errors for dmsg discovery (30-39).
+// Entity Errors (2xx).
 var (
-	ErrDiscEntryNotFound       = NewError(30, "discovery entry is not found", nil)
-	ErrDiscEntryIsNotServer    = NewError(31, "discovery entry is not of server", nil)
-	ErrDiscEntryIsNotClient    = NewError(32, "discovery entry is not of client", nil)
-	ErrDiscEntryHasNoDelegated = NewError(33, "discovery client entry has no delegated servers", nil)
+	ErrEntityClosed               = NewError(200, "local entity closed", nil)
+	ErrSessionClosed              = NewError(201, "local session closed", nil)
+	ErrCannotConnectToDelegated   = NewError(202, "cannot connect to delegated server", nil)
+	ErrSessionHandshakeExtraBytes = NewError(203, "extra bytes received during session handshake", nil)
 )
 
-// Errors for dial request/response (50-69).
+// Errors for dial request/response (3xx).
 var (
-	ErrReqInvalidSig       = NewError(50, "request has invalid signature", nil)
-	ErrReqInvalidTimestamp = NewError(51, "request timestamp should be higher than last", nil)
-	ErrReqInvalidSrcPK     = NewError(52, "request has invalid source public key", nil)
-	ErrReqInvalidDstPK     = NewError(53, "request has invalid destination public key", nil)
-	ErrReqInvalidSrcPort   = NewError(54, "request has invalid source port", nil)
-	ErrReqInvalidDstPort   = NewError(55, "request has invalid destination port", nil)
-	ErrReqNoListener       = NewError(56, "request has no associated listener", nil)
-	ErrReqNoSession        = NewError(57, "request has no associated session on the dmsg server", nil)
+	ErrReqInvalidSig       = NewError(300, "request has invalid signature", nil)
+	ErrReqInvalidTimestamp = NewError(301, "request timestamp should be higher than last", nil)
+	ErrReqInvalidSrcPK     = NewError(302, "request has invalid source public key", nil)
+	ErrReqInvalidDstPK     = NewError(303, "request has invalid destination public key", nil)
+	ErrReqInvalidSrcPort   = NewError(304, "request has invalid source port", nil)
+	ErrReqInvalidDstPort   = NewError(305, "request has invalid destination port", nil)
+	ErrReqNoListener       = NewError(306, "request has no associated listener", nil)
+	ErrReqNoSession        = NewError(307, "request has no associated session on the dmsg server", nil)
 
-	ErrDialRespInvalidSig  = NewError(60, "response has invalid signature", nil)
-	ErrDialRespInvalidHash = NewError(61, "response has invalid hash of associated request", nil)
-	ErrDialRespNotAccepted = NewError(62, "response rejected associated request without reason", nil)
+	ErrDialRespInvalidSig  = NewError(350, "response has invalid signature", nil)
+	ErrDialRespInvalidHash = NewError(351, "response has invalid hash of associated request", nil)
+	ErrDialRespNotAccepted = NewError(352, "response rejected associated request without reason", nil)
 )
 
-// Listener errors (80-89).
+// Listener errors (4xx).
 var (
-	ErrPortOccupied    = NewError(80, "port already occupied", nil)
-	ErrAcceptChanMaxed = NewError(81, "listener accept chan maxed", nil)
+	ErrPortOccupied    = NewError(400, "port already occupied", nil)
+	ErrAcceptChanMaxed = NewError(401, "listener accept chan maxed", nil)
 )
 
 // NetworkErrorOptions provides 'timeout' and 'temporary' options for NetworkError.
@@ -66,15 +66,15 @@ func (err NetworkError) Temporary() bool { return err.Opts.Temporary }
 
 var (
 	errFmt  = "code %d - %s"
-	errMap  = make(map[uint8]error)
-	codeMap = make(map[error]uint8)
+	errMap  = make(map[uint16]error)
+	codeMap = make(map[error]uint16)
 	errMx   sync.RWMutex
 )
 
 // NewError creates a new dmsg error.
 // - code '0' represents a miscellaneous error and is not saved in 'errMap'.
 // - netOpts is only needed if it needs to implement 'net.Error'.
-func NewError(code uint8, msg string, netOpts *NetworkErrorOptions) error {
+func NewError(code uint16, msg string, netOpts *NetworkErrorOptions) error {
 	// No need to check errMap if code 0.
 	if code != 0 {
 		errMx.Lock()
@@ -96,7 +96,7 @@ func NewError(code uint8, msg string, netOpts *NetworkErrorOptions) error {
 }
 
 // ErrorFromCode returns a saved error (if exists) from given error code.
-func ErrorFromCode(code uint8) (bool, error) {
+func ErrorFromCode(code uint16) (bool, error) {
 	errMx.RLock()
 	err, ok := errMap[code]
 	errMx.RUnlock()
@@ -104,7 +104,7 @@ func ErrorFromCode(code uint8) (bool, error) {
 }
 
 // CodeFromError returns code from a given error.
-func CodeFromError(err error) uint8 {
+func CodeFromError(err error) uint16 {
 	errMx.RLock()
 	code, ok := codeMap[err]
 	errMx.RUnlock()

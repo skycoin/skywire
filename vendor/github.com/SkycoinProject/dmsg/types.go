@@ -116,7 +116,7 @@ func (dr StreamDialRequest) Verify(lastTimestamp int64) error {
 type StreamDialResponse struct {
 	ReqHash  cipher.SHA256 // Hash of associated dial request.
 	Accepted bool          // Whether the request is accepted.
-	ErrCode  uint8         // Check if not accepted.
+	ErrCode  uint16        // Check if not accepted.
 	NoiseMsg []byte
 	Sig      cipher.Sig // Signature of this DialRequest, signed with public key of receiving node.
 }
