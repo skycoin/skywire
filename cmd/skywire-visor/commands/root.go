@@ -177,7 +177,6 @@ func (cfg *runCfg) runNode() *runCfg {
 			cfg.logger.Error("Failed to connect to uptime tracker: ", err)
 		} else {
 			ticker := time.NewTicker(1 * time.Second)
-			defer ticker.Stop()
 
 			go func() {
 				for range ticker.C {
