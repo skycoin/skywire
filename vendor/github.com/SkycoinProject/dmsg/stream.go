@@ -2,6 +2,7 @@ package dmsg
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -74,6 +75,8 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamDialRequest, err error) {
 		NoiseMsg:  nsMsg,
 	}
 	req.Sign(s.ses.localSK())
+	fmt.Printf("SIGNATURE AFTER RETURN: %v\n", req.Sig)
+	fmt.Printf("WRITING TIMESTAMP: %d\n", req.Timestamp)
 
 	// Write request.
 	err = s.ses.writeEncryptedGob(s.yStr, req)

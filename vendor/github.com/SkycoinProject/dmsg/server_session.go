@@ -1,6 +1,8 @@
 package dmsg
 
 import (
+	"fmt"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"io"
 	"net"
 
@@ -62,11 +64,27 @@ func (ss *ServerSession) Serve() {
 
 func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
 	readRequest := func() (StreamDialRequest, error) {
-		var req StreamDialRequest
-		if err := ss.readEncryptedGob(yStr, &req); err != nil {
-			return req, err
+		gob, err := ss.readEncryptedGob2(yStr)
+		if err != nil {
+			return StreamDialRequest{}, err
 		}
-		if err := req.Verify(0); err != nil { // TODO(evanlinjin): timestamp tracker.
+
+		var req StreamDialRequest
+		if err := decodeGob(&req, gob); err != nil {
+			return StreamDialRequest{}, err
+		}
+
+		for i := len(gob) - len(cipher.Sig{}); i < len(gob); i++ {
+			gob[i] = 0
+		}
+
+		/*if err := ss.readEncryptedGob(yStr, &req); err != nil {
+			return req, err
+		}*/
+
+		if err := req.Verify2(0, gob); err != nil { // TODO(evanlinjin): timestamp tracker.
+			fmt.Printf("TIMESTAMP IS %d\n", req.Timestamp)
+			fmt.Printf("ERROR VERIFYING TIMESTAMP: %v\n", err)
 			return req, ErrReqInvalidTimestamp
 		}
 		if req.SrcAddr.PK != ss.rPK {
