@@ -24,7 +24,7 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 	return cSes, nil
 }
 
-// DialStream attempts to dial a stream to a remote client via the dsmg server that this session is connected to.
+// DialStream attempts to dial a stream to a remote client via the dmsg server that this session is connected to.
 func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 	if dStr, err = newInitiatingStream(cs); err != nil {
 		return nil, err
