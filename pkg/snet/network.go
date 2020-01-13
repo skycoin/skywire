@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 
@@ -88,7 +89,9 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
 // Init initiates server connections.
 func (n *Network) Init(ctx context.Context) error {
 	if n.dmsgC != nil {
+		time.Sleep(200 * time.Millisecond)
 		go n.dmsgC.Serve()
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	if n.stcpC != nil {

@@ -72,7 +72,12 @@ func (dr *StreamDialRequest) Empty() bool {
 func (dr *StreamDialRequest) Sign(sk cipher.SecKey) {
 	dr.Sig = cipher.Sig{}
 	b := encodeGob(dr)
+	fmt.Printf("ENCODED: %v\n", b)
+	fmt.Printf("ENCODED REQ: Timestamp: %d, SRC PK: %s, SRC PORT: %d, DST PK: %s, DST PORT: %d, NOISE: %v\n, SIG: %v",
+		dr.Timestamp, dr.SrcAddr.PK.Hex(), dr.SrcAddr.Port, dr.DstAddr.PK.Hex(), dr.DstAddr.Port, dr.NoiseMsg, dr.Sig)
+	fmt.Printf("SIGNING WITH SK: %s\n", sk.Hex())
 	sig, err := cipher.SignPayload(b, sk)
+	fmt.Printf("SIGNATURE: %v\n", sig)
 	if err != nil {
 		panic(err)
 	}
@@ -105,8 +110,54 @@ func (dr StreamDialRequest) Verify(lastTimestamp int64) error {
 
 	sig := dr.Sig
 	dr.Sig = cipher.Sig{}
+	pb := encodeGob(dr)
+	fmt.Printf("PK: %s, sig: %v, payload: %v\n", dr.SrcAddr.PK, sig, pb)
+	var req2 StreamDialRequest
+	if err := decodeGob(&req2, pb); err != nil {
+		panic(err)
+	}
+	fmt.Printf("REDECODED TIMESTAMP: %v\n", req2.Timestamp)
 
 	if err := cipher.VerifyPubKeySignedPayload(dr.SrcAddr.PK, sig, encodeGob(dr)); err != nil {
+		fmt.Printf("ERROR VERIFYING: %v\n", err)
+		return ErrReqInvalidSig
+	}
+	return nil
+}
+
+func (dr *StreamDialRequest) Verify2(lastTimestamp int64, gob []byte) error {
+	if dr.SrcAddr.PK.Null() {
+		return ErrReqInvalidSrcPK
+	}
+	if dr.SrcAddr.Port == 0 {
+		return ErrReqInvalidSrcPort
+	}
+	if dr.DstAddr.PK.Null() {
+		return ErrReqInvalidDstPK
+	}
+	if dr.DstAddr.Port == 0 {
+		return ErrReqInvalidDstPort
+	}
+	if dr.Timestamp <= lastTimestamp {
+		return ErrReqInvalidTimestamp
+	}
+
+	sig := dr.Sig
+	dr.Sig = cipher.Sig{}
+	fmt.Printf("ENCODED REQ TO VERIFY: Timestamp: %d, SRC PK: %s, SRC PORT: %d, DST PK: %s, DST PORT: %d, NOISE: %v\n",
+		dr.Timestamp, dr.SrcAddr.PK.Hex(), dr.SrcAddr.Port, dr.DstAddr.PK.Hex(), dr.DstAddr.Port, dr.NoiseMsg)
+	pb := encodeGob(dr)
+	fmt.Printf("PK: %s, sig: %v, payload: %v\n", dr.SrcAddr.PK, sig, pb)
+	var req2 StreamDialRequest
+	if err := decodeGob(&req2, pb); err != nil {
+		panic(err)
+	}
+	fmt.Printf("REDECODED REQ TO VERIFY: Timestamp: %d, SRC PK: %s, SRC PORT: %d, DST PK: %s, DST PORT: %d, NOISE: %v, SIG: %v\n",
+		req2.Timestamp, req2.SrcAddr.PK.Hex(), req2.SrcAddr.Port, req2.DstAddr.PK.Hex(), req2.DstAddr.Port, req2.NoiseMsg, req2.Sig)
+
+	fmt.Printf("PASSING GOB TO VERIFY: %v\n", pb)
+	if err := cipher.VerifyPubKeySignedPayload(dr.SrcAddr.PK, sig, pb); err != nil {
+		fmt.Printf("ERROR VERIFYING: %v\n", err)
 		return ErrReqInvalidSig
 	}
 	return nil
