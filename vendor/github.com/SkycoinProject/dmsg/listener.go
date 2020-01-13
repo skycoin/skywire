@@ -115,5 +115,8 @@ func (l *Listener) isClosed() bool {
 // Addr returns the listener's address.
 func (l *Listener) Addr() net.Addr { return l.addr }
 
+// DmsgAddr returns the listener's address in as `dmsg.Addr`.
+func (l *Listener) DmsgAddr() Addr { return l.addr }
+
 // Type returns the stream type.
 func (l *Listener) Type() string { return Type }
