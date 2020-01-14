@@ -422,7 +422,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}
 
 	if err := rg.handleClosePacket(closeCode); err != nil {
-		return fmt.Errorf("error handling close packet with code %d by route group with descriptor %s: %w",
+		return fmt.Errorf("error handling close packet with code %d by route group with descriptor %s: %v",
 			closeCode, &desc, err)
 	}
 
