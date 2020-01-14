@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20191107094546-85c27858fca6 => ../dmsg
+# github.com/SkycoinProject/dmsg v0.0.0-20191107094546-85c27858fca6
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
