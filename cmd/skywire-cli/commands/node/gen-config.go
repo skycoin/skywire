@@ -94,11 +94,11 @@ func defaultConfig() *visor.Config {
 	conf.STCP.LocalAddr = lIPaddr
 
 	if testenv {
-		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
+		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	} else {
-		conf.Messaging.Discovery = skyenv.DefaultDmsgDiscAddr
+		conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
 	}
-	conf.Messaging.ServerCount = 1
+	conf.Dmsg.ServerCount = 1
 
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf
