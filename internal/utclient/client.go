@@ -24,7 +24,7 @@ type Error struct {
 	Error string `json:"error"`
 }
 
-// APIClient implements messaging discovery API client.
+// APIClient implements DMSG discovery API client.
 type APIClient interface {
 	UpdateNodeUptime(context.Context) error
 }
