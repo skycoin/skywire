@@ -612,8 +612,12 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		go pushPackets(ctx, m1, rg0)
 
 		stop = func() {
-			_ = rg0.Close()
-			_ = rg1.Close()
+			if err := rg0.Close(); err != nil {
+				panic(err)
+			}
+			if err := rg1.Close(); err != nil {
+				panic(err)
+			}
 			nEnv.Teardown()
 			cancel()
 		}
