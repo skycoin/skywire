@@ -101,13 +101,19 @@ func TestListApps(t *testing.T) {
 	require.NoError(t, rpc.Apps(nil, &reply))
 	require.Len(t, reply, 2)
 
-	app1 := reply[0]
+	app1, app2 := reply[0], reply[1]
+	if app1.Name != "foo" {
+		// apps inside node are stored inside a map, so their order
+		// is not deterministic, we should be ready for this and
+		// rearrange the outer array to check values correctly
+		app1, app2 = reply[1], reply[0]
+	}
+
 	assert.Equal(t, "foo", app1.Name)
 	assert.False(t, app1.AutoStart)
 	assert.Equal(t, routing.Port(10), app1.Port)
 	assert.Equal(t, AppStatusStopped, app1.Status)
 
-	app2 := reply[1]
 	assert.Equal(t, "bar", app2.Name)
 	assert.True(t, app2.AutoStart)
 	assert.Equal(t, routing.Port(11), app2.Port)
