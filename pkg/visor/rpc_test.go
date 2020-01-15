@@ -66,7 +66,6 @@ func TestUptime(t *testing.T) {
 	assert.Contains(t, fmt.Sprintf("%f", res), "1.0")
 }
 
-// TODO (Darkren): fix tests
 func TestListApps(t *testing.T) {
 	apps := make(map[string]AppConfig)
 	appCfg := []AppConfig{
