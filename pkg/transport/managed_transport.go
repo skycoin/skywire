@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -135,28 +136,23 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 		}
 	}()
 
-	// Redial loop.
-	for {
-		select {
-		case <-mt.done:
-			return
+	r := netutil.NewRetrier(50*time.Millisecond, 5, 2)
+	var err error
 
-		case <-logTicker.C:
-			if mt.logMod() {
-				if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
-					mt.log.Warnf("Failed to record log entry: %s", err)
-				}
-			} else {
-				// If there has not been any activity, ensure underlying 'write' tp is still up.
-				mt.connMx.Lock()
-				if mt.conn == nil {
-					if err := mt.dial(ctx); err != nil {
-						mt.log.Warnf("failed to redial underlying connection: %v", err)
-					}
-				}
-				mt.connMx.Unlock()
-			}
+	// redial underlying connection
+	err = r.Do(func() error {
+		if mt.logMod() {
+			err = mt.ls.Record(mt.Entry.ID, mt.LogEntry)
+			return err
 		}
+		err = mt.dial(ctx)
+		return err
+	})
+
+	if err != nil {
+		mt.log.Warn("failed to redial underlying connection")
+	} else {
+		mt.log.Info("successfully redialed underlying connection")
 	}
 }
 
