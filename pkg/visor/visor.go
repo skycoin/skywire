@@ -361,6 +361,13 @@ func (node *Node) Close() (err error) {
 	} else {
 		node.logger.Info("router stopped successfully")
 	}
+
+	if err := node.UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
+		node.logger.WithError(err).Errorf("Failed to unlink socket file %s", node.conf.AppServerSockFile)
+	} else {
+		node.logger.Infof("Socket file %s removed successfully", node.conf.AppServerSockFile)
+	}
+
 	return err
 }
 
@@ -494,5 +501,20 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 
 	appConf.AutoStart = autoStart
 	node.appsConf[appName] = appConf
+	return nil
+}
+
+// UnlinkSocketFiles removes unix socketFiles from file system
+func (node *Node) UnlinkSocketFiles(socketFiles ...string) error {
+	for _, f := range socketFiles {
+		if err := syscall.Unlink(f); err != nil {
+			if strings.Contains(err.Error(), "no such file or directory") {
+				continue
+			} else {
+				return err
+			}
+		}
+	}
+
 	return nil
 }

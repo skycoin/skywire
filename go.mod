@@ -22,6 +22,7 @@ require (
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.3
 	golang.org/x/crypto v0.0.0-20191106202628-ed6320f186d4
+	golang.org/x/lint v0.0.0-20191125180803-fdd1cda4f05f // indirect
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
 )
 
