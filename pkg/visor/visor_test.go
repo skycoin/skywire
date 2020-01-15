@@ -142,11 +142,11 @@ func TestNodeStartClose(t *testing.T) {
 	go dmsgC.Serve()
 
 	netConf := snet.Config{
-		PubKey:       cipher.PubKey{},
-		SecKey:       cipher.SecKey{},
-		TpNetworks:   nil,
-		DmsgDiscAddr: "",
-		DmsgMinSrvs:  0,
+		PubKey:          cipher.PubKey{},
+		SecKey:          cipher.SecKey{},
+		TpNetworks:      nil,
+		DmsgDiscAddr:    "",
+		DmsgMinSessions: 0,
 	}
 
 	network := snet.NewRaw(netConf, dmsgC, nil)
