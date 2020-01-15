@@ -136,7 +136,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 		}
 	}()
 
-	r := netutil.NewRetrier(50*time.Millisecond, 5, 2)
+	r := netutil.NewRetrier(3*time.Second, 5, 2)
 	var err error
 
 	// redial underlying connection
