@@ -34,7 +34,7 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 	defer func() {
 		if err != nil {
 			cs.log.WithError(dStr.Close()).
-				Debug("On DialStream() failure, close stream resulted in error.")
+				Debug("On DialStream() failure, close stream resulted in error.") // TODO(evanlinjin): Race condition?
 		}
 	}()
 
@@ -98,11 +98,11 @@ func (cs *ClientSession) acceptStream() (dStr *Stream, err error) {
 	}
 
 	// Do stream handshake.
-	var req StreamDialRequest
-	if req, err = dStr.readRequest(); err != nil {
+	req, err := dStr.readRequest()
+	if err != nil {
 		return nil, err
 	}
-	if err = dStr.writeResponse(req); err != nil {
+	if err = dStr.writeResponse(req.raw.Hash()); err != nil {
 		return nil, err
 	}
 
