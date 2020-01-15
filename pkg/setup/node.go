@@ -19,11 +19,11 @@ import (
 
 // Node performs routes setup operations over messaging channel.
 type Node struct {
-	logger   *logging.Logger
-	dmsgC    *dmsg.Client
-	dmsgL    *dmsg.Listener
-	srvCount int
-	metrics  metrics.Recorder
+	logger        *logging.Logger
+	dmsgC         *dmsg.Client
+	dmsgL         *dmsg.Listener
+	sessionsCount int
+	metrics       metrics.Recorder
 }
 
 // NewNode constructs a new SetupNode.
@@ -41,7 +41,7 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 		conf.PubKey,
 		conf.SecKey,
 		disc.NewHTTP(conf.Messaging.Discovery),
-		&dmsg.Config{MinSessions: conf.Messaging.ServerCount},
+		&dmsg.Config{MinSessions: conf.Messaging.SessionsCount},
 	)
 	dmsgC.SetLogger(logger.PackageLogger(dmsg.Type))
 
@@ -57,11 +57,11 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	log.Info("started listening for dmsg connections")
 
 	node := &Node{
-		logger:   log,
-		dmsgC:    dmsgC,
-		dmsgL:    dmsgL,
-		srvCount: conf.Messaging.ServerCount,
-		metrics:  metrics,
+		logger:        log,
+		dmsgC:         dmsgC,
+		dmsgL:         dmsgL,
+		sessionsCount: conf.Messaging.SessionsCount,
+		metrics:       metrics,
 	}
 
 	return node, nil

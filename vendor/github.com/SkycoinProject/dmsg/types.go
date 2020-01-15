@@ -54,153 +54,149 @@ func (a Addr) ShortString() string {
 
 /* Request & Response */
 
-// StreamDialRequest represents a stream dial request object.
-type StreamDialRequest struct {
+const sigLen = len(cipher.Sig{})
+
+// SignedObject represents a gob-encoded structure prepended with a signature.
+type SignedObject []byte
+
+// MakeSignedStreamRequest encodes and signs a StreamRequest into a SignedObject format.
+func MakeSignedStreamRequest(req *StreamRequest, sk cipher.SecKey) SignedObject {
+	obj := encodeGob(req)
+	sig := SignBytes(obj, sk)
+	signedObj := append(sig[:], obj...)
+	req.raw = signedObj
+	return signedObj
+}
+
+// MakeSignedStreamResponse encodes and signs a StreamResponse into a SignedObject format.
+func MakeSignedStreamResponse(resp *StreamResponse, sk cipher.SecKey) SignedObject {
+	obj := encodeGob(resp)
+	sig := SignBytes(obj, sk)
+	signedObj := append(sig[:], obj...)
+	resp.raw = signedObj
+	return signedObj
+}
+
+// Valid returns true if the SignedObject has a valid length.
+func (so SignedObject) Valid() bool {
+	return len(so) > sigLen
+}
+
+// Hash returns the hash of the SignedObject.
+func (so SignedObject) Hash() cipher.SHA256 {
+	return cipher.SumSHA256(so)
+}
+
+// Sig returns the prepended signature section of the SignedObject.
+func (so SignedObject) Sig() cipher.Sig {
+	var sig cipher.Sig
+	copy(sig[:], so)
+	return sig
+}
+
+// Object returns the bytes of the SignedObject that contain the encoded object.
+func (so SignedObject) Object() []byte {
+	return so[sigLen:]
+}
+
+// ObtainStreamRequest obtains a StreamRequest from the encoded object bytes.
+func (so SignedObject) ObtainStreamRequest() (StreamRequest, error) {
+	if !so.Valid() {
+		return StreamRequest{}, ErrSignedObjectInvalid
+	}
+	var req StreamRequest
+	err := decodeGob(&req, so[sigLen:])
+	req.raw = so
+	return req, err
+}
+
+// ObtainStreamResponse obtains a StreamResponse from the encoded object bytes.
+func (so SignedObject) ObtainStreamResponse() (StreamResponse, error) {
+	if !so.Valid() {
+		return StreamResponse{}, ErrSignedObjectInvalid
+	}
+	var resp StreamResponse
+	err := decodeGob(&resp, so[sigLen:])
+	resp.raw = so
+	return resp, err
+}
+
+// StreamRequest represents a stream dial request object.
+type StreamRequest struct {
 	Timestamp int64
 	SrcAddr   Addr
 	DstAddr   Addr
 	NoiseMsg  []byte
-	Sig       cipher.Sig
+
+	raw SignedObject `enc:"-"` // back reference.
 }
 
-// Empty returns true if the dial request is empty.
-func (dr *StreamDialRequest) Empty() bool {
-	return dr.Timestamp == 0
-}
-
-// Sign signs the dial request with the given secret key.
-func (dr *StreamDialRequest) Sign(sk cipher.SecKey) {
-	dr.Sig = cipher.Sig{}
-	b := encodeGob(dr)
-	fmt.Printf("ENCODED: %v\n", b)
-	fmt.Printf("ENCODED REQ: Timestamp: %d, SRC PK: %s, SRC PORT: %d, DST PK: %s, DST PORT: %d, NOISE: %v\n, SIG: %v",
-		dr.Timestamp, dr.SrcAddr.PK.Hex(), dr.SrcAddr.Port, dr.DstAddr.PK.Hex(), dr.DstAddr.Port, dr.NoiseMsg, dr.Sig)
-	fmt.Printf("SIGNING WITH SK: %s\n", sk.Hex())
-	sig, err := cipher.SignPayload(b, sk)
-	fmt.Printf("SIGNATURE: %v\n", sig)
-	if err != nil {
-		panic(err)
-	}
-	dr.Sig = sig
-}
-
-// Hash returns the hash of the dial request object.
-func (dr StreamDialRequest) Hash() cipher.SHA256 {
-	dr.Sig = cipher.Sig{}
-	return cipher.SumSHA256(encodeGob(dr))
-}
-
-// Verify verifies the dial request object.
-func (dr StreamDialRequest) Verify(lastTimestamp int64) error {
-	if dr.SrcAddr.PK.Null() {
+// Verify verifies the StreamRequest.
+func (req StreamRequest) Verify(lastTimestamp int64) error {
+	// Check fields.
+	if req.SrcAddr.PK.Null() {
 		return ErrReqInvalidSrcPK
 	}
-	if dr.SrcAddr.Port == 0 {
+	if req.SrcAddr.Port == 0 {
 		return ErrReqInvalidSrcPort
 	}
-	if dr.DstAddr.PK.Null() {
+	if req.DstAddr.PK.Null() {
 		return ErrReqInvalidDstPK
 	}
-	if dr.DstAddr.Port == 0 {
+	if req.DstAddr.Port == 0 {
 		return ErrReqInvalidDstPort
 	}
-	if dr.Timestamp <= lastTimestamp {
+	if req.Timestamp <= lastTimestamp {
 		return ErrReqInvalidTimestamp
 	}
 
-	sig := dr.Sig
-	dr.Sig = cipher.Sig{}
-	pb := encodeGob(dr)
-	fmt.Printf("PK: %s, sig: %v, payload: %v\n", dr.SrcAddr.PK, sig, pb)
-	var req2 StreamDialRequest
-	if err := decodeGob(&req2, pb); err != nil {
-		panic(err)
-	}
-	fmt.Printf("REDECODED TIMESTAMP: %v\n", req2.Timestamp)
-
-	if err := cipher.VerifyPubKeySignedPayload(dr.SrcAddr.PK, sig, encodeGob(dr)); err != nil {
-		fmt.Printf("ERROR VERIFYING: %v\n", err)
+	// Check signature.
+	if err := cipher.VerifyPubKeySignedPayload(req.SrcAddr.PK, req.raw.Sig(), req.raw.Object()); err != nil {
 		return ErrReqInvalidSig
 	}
+
 	return nil
 }
 
-func (dr *StreamDialRequest) Verify2(lastTimestamp int64, gob []byte) error {
-	if dr.SrcAddr.PK.Null() {
-		return ErrReqInvalidSrcPK
-	}
-	if dr.SrcAddr.Port == 0 {
-		return ErrReqInvalidSrcPort
-	}
-	if dr.DstAddr.PK.Null() {
-		return ErrReqInvalidDstPK
-	}
-	if dr.DstAddr.Port == 0 {
-		return ErrReqInvalidDstPort
-	}
-	if dr.Timestamp <= lastTimestamp {
-		return ErrReqInvalidTimestamp
-	}
-
-	sig := dr.Sig
-	dr.Sig = cipher.Sig{}
-	fmt.Printf("ENCODED REQ TO VERIFY: Timestamp: %d, SRC PK: %s, SRC PORT: %d, DST PK: %s, DST PORT: %d, NOISE: %v\n",
-		dr.Timestamp, dr.SrcAddr.PK.Hex(), dr.SrcAddr.Port, dr.DstAddr.PK.Hex(), dr.DstAddr.Port, dr.NoiseMsg)
-	pb := encodeGob(dr)
-	fmt.Printf("PK: %s, sig: %v, payload: %v\n", dr.SrcAddr.PK, sig, pb)
-	var req2 StreamDialRequest
-	if err := decodeGob(&req2, pb); err != nil {
-		panic(err)
-	}
-	fmt.Printf("REDECODED REQ TO VERIFY: Timestamp: %d, SRC PK: %s, SRC PORT: %d, DST PK: %s, DST PORT: %d, NOISE: %v, SIG: %v\n",
-		req2.Timestamp, req2.SrcAddr.PK.Hex(), req2.SrcAddr.Port, req2.DstAddr.PK.Hex(), req2.DstAddr.Port, req2.NoiseMsg, req2.Sig)
-
-	fmt.Printf("PASSING GOB TO VERIFY: %v\n", pb)
-	if err := cipher.VerifyPubKeySignedPayload(dr.SrcAddr.PK, sig, pb); err != nil {
-		fmt.Printf("ERROR VERIFYING: %v\n", err)
-		return ErrReqInvalidSig
-	}
-	return nil
-}
-
-// StreamDialResponse is the response of a StreamDialRequest.
-type StreamDialResponse struct {
+// StreamResponse is the response of a StreamRequest.
+type StreamResponse struct {
 	ReqHash  cipher.SHA256 // Hash of associated dial request.
 	Accepted bool          // Whether the request is accepted.
 	ErrCode  uint16        // Check if not accepted.
 	NoiseMsg []byte
-	Sig      cipher.Sig // Signature of this DialRequest, signed with public key of receiving node.
+
+	raw SignedObject `enc:"-"` // back reference.
 }
 
-// Sign signs the dial response.
-func (dr *StreamDialResponse) Sign(sk cipher.SecKey) {
-	dr.Sig = cipher.Sig{}
-	b := encodeGob(dr)
-	sig, err := cipher.SignPayload(b, sk)
-	if err != nil {
-		panic(err)
-	}
-	dr.Sig = sig
-}
-
-// Verify verifies the dial response.
-func (dr StreamDialResponse) Verify(reqDstPK cipher.PubKey, reqHash cipher.SHA256) error {
-	if dr.ReqHash != reqHash {
+// Verify verifies the StreamResponse.
+func (resp StreamResponse) Verify(req StreamRequest) error {
+	// Check fields.
+	if resp.ReqHash != req.raw.Hash() {
 		return ErrDialRespInvalidHash
 	}
 
-	sig := dr.Sig
-	dr.Sig = cipher.Sig{}
-
-	if err := cipher.VerifyPubKeySignedPayload(reqDstPK, sig, encodeGob(dr)); err != nil {
+	// Check signature.
+	if err := cipher.VerifyPubKeySignedPayload(req.DstAddr.PK, resp.raw.Sig(), resp.raw.Object()); err != nil {
 		return ErrDialRespInvalidSig
 	}
-	if !dr.Accepted {
-		ok, err := ErrorFromCode(dr.ErrCode)
+
+	// Check whether response states that the request is accepted.
+	if !resp.Accepted {
+		ok, err := ErrorFromCode(resp.ErrCode)
 		if !ok {
-			return ErrDialRespNotAccepted
+			err = ErrDialRespNotAccepted
 		}
 		return err
 	}
+
 	return nil
+}
+
+// SignBytes signs the provided bytes with the given secret key.
+func SignBytes(b []byte, sk cipher.SecKey) cipher.Sig {
+	sig, err := cipher.SignPayload(b, sk)
+	if err != nil {
+		panic(fmt.Errorf("dmsg: unexpected error occurred during StreamDialObject.Sign(): %v", err))
+	}
+	return sig
 }
