@@ -92,11 +92,11 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		port := 7033
 		n := snet.NewRaw(
 			snet.Config{
-				PubKey:        pairs.PK,
-				SecKey:        pairs.SK,
-				TpNetworks:    networks,
-				DmsgMinSrvs:   1,
-				STCPLocalAddr: "127.0.0.1:" + strconv.Itoa(port+i),
+				PubKey:          pairs.PK,
+				SecKey:          pairs.SK,
+				TpNetworks:      networks,
+				DmsgMinSessions: 1,
+				STCPLocalAddr:   "127.0.0.1:" + strconv.Itoa(port+i),
 			},
 			dmsgClient,
 			stcpClient,
