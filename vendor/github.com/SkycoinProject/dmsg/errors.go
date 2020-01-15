@@ -35,6 +35,8 @@ var (
 	ErrDialRespInvalidSig  = NewError(350, "response has invalid signature", nil)
 	ErrDialRespInvalidHash = NewError(351, "response has invalid hash of associated request", nil)
 	ErrDialRespNotAccepted = NewError(352, "response rejected associated request without reason", nil)
+
+	ErrSignedObjectInvalid = NewError(370, "signed object is invalid", nil)
 )
 
 // Listener errors (4xx).

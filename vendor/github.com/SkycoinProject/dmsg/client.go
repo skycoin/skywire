@@ -35,8 +35,7 @@ type Client struct {
 	done   chan struct{}
 	once   sync.Once
 
-	sesMx  sync.Mutex
-	dialMx sync.Mutex // stream dial mutex.
+	sesMx sync.Mutex
 }
 
 // NewClient creates a dmsg client entity.
@@ -172,14 +171,6 @@ func (ce *Client) Dial(ctx context.Context, addr Addr) (net.Conn, error) {
 
 // DialStream dials to a remote client entity with the given address.
 func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
-
-	safeDialStream := func(dSes ClientSession) (*Stream, error) {
-		ce.dialMx.Lock()
-		str, err := dSes.DialStream(addr)
-		ce.dialMx.Unlock()
-		return str, err
-	}
-
 	entry, err := getClientEntry(ctx, ce.dc, addr.PK)
 	if err != nil {
 		return nil, err
@@ -189,7 +180,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// See if we are already connected to a delegated server.
 	for _, srvPK := range entry.Client.DelegatedServers {
 		if dSes, ok := ce.ClientSession(ce.porter, srvPK); ok {
-			return safeDialStream(dSes)
+			return dSes.DialStream(addr)
 		}
 	}
 
@@ -200,7 +191,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		if err != nil {
 			continue
 		}
-		return safeDialStream(dSes)
+		return dSes.DialStream(addr)
 	}
 
 	return nil, ErrCannotConnectToDelegated

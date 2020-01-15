@@ -434,7 +434,6 @@ func VerifyPubKeySignedHash(pubkey PubKey, sig Sig, hash SHA256) error {
 		return ErrInvalidSigPubKeyRecovery
 	}
 	if pubkeyRec != pubkey {
-		fmt.Printf("Recovered: %s, original: %s\n", pubkeyRec.Hex(), pubkey.Hex())
 		return ErrPubKeyRecoverMismatch
 	}
 	if secp256k1.VerifyPubkey(pubkey[:]) != 1 {

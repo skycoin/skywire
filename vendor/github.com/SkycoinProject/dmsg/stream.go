@@ -2,13 +2,13 @@ package dmsg
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"time"
 
 	"github.com/SkycoinProject/yamux"
 	"github.com/sirupsen/logrus"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 )
 
@@ -53,7 +53,7 @@ func (s *Stream) Close() error {
 	return s.yStr.Close()
 }
 
-func (s *Stream) writeRequest(rAddr Addr) (req StreamDialRequest, err error) {
+func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Reserve stream in porter.
 	var lPort uint16
 	if lPort, s.close, err = s.ses.porter.ReserveEphemeral(context.Background(), s); err != nil {
@@ -68,27 +68,28 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamDialRequest, err error) {
 	if nsMsg, err = s.ns.MakeHandshakeMessage(); err != nil {
 		return
 	}
-	req = StreamDialRequest{
+	req = StreamRequest{
 		Timestamp: time.Now().UnixNano(),
 		SrcAddr:   s.lAddr,
 		DstAddr:   s.rAddr,
 		NoiseMsg:  nsMsg,
 	}
-	req.Sign(s.ses.localSK())
-	fmt.Printf("SIGNATURE AFTER RETURN: %v\n", req.Sig)
-	fmt.Printf("WRITING TIMESTAMP: %d\n", req.Timestamp)
+	obj := MakeSignedStreamRequest(&req, s.ses.localSK())
 
 	// Write request.
-	err = s.ses.writeEncryptedGob(s.yStr, req)
+	err = s.ses.writeObject(s.yStr, obj)
 	return
 }
 
-func (s *Stream) readRequest() (req StreamDialRequest, err error) {
-	if err = s.ses.readEncryptedGob(s.yStr, &req); err != nil {
+func (s *Stream) readRequest() (req StreamRequest, err error) {
+	var obj SignedObject
+	if obj, err = s.ses.readObject(s.yStr); err != nil {
+		return
+	}
+	if req, err = obj.ObtainStreamRequest(); err != nil {
 		return
 	}
 	if err = req.Verify(0); err != nil {
-		err = ErrReqInvalidTimestamp
 		return
 	}
 	if req.DstAddr.PK != s.ses.LocalPK() {
@@ -105,7 +106,7 @@ func (s *Stream) readRequest() (req StreamDialRequest, err error) {
 	return
 }
 
-func (s *Stream) writeResponse(req StreamDialRequest) error {
+func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 	// Obtain associated local listener.
 	pVal, ok := s.ses.porter.PortValue(s.lAddr.Port)
 	if !ok {
@@ -121,13 +122,14 @@ func (s *Stream) writeResponse(req StreamDialRequest) error {
 	if err != nil {
 		return err
 	}
-	resp := StreamDialResponse{
-		ReqHash:  req.Hash(),
+	resp := StreamResponse{
+		ReqHash:  reqHash,
 		Accepted: true,
 		NoiseMsg: nsMsg,
 	}
-	resp.Sign(s.ses.localSK())
-	if err := s.ses.writeEncryptedGob(s.yStr, resp); err != nil {
+	obj := MakeSignedStreamResponse(&resp, s.ses.localSK())
+
+	if err := s.ses.writeObject(s.yStr, obj); err != nil {
 		return err
 	}
 
@@ -135,13 +137,16 @@ func (s *Stream) writeResponse(req StreamDialRequest) error {
 	return lis.introduceStream(s)
 }
 
-func (s *Stream) readResponse(req StreamDialRequest) error {
-	// Read and process response.
-	var resp StreamDialResponse
-	if err := s.ses.readEncryptedGob(s.yStr, &resp); err != nil {
+func (s *Stream) readResponse(req StreamRequest) error {
+	obj, err := s.ses.readObject(s.yStr)
+	if err != nil {
 		return err
 	}
-	if err := resp.Verify(req.DstAddr.PK, req.Hash()); err != nil {
+	resp, err := obj.ObtainStreamResponse()
+	if err != nil {
+		return err
+	}
+	if err := resp.Verify(req); err != nil {
 		return err
 	}
 	return s.ns.ProcessHandshakeMessage(resp.NoiseMsg)

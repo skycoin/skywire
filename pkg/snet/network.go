@@ -43,9 +43,8 @@ type Config struct {
 	SecKey     cipher.SecKey
 	TpNetworks []string // networks to be used with transports
 
-	DmsgDiscAddr string
-	// TODO (Darkren): rename to sessions along with all the dependent configs and config files
-	DmsgMinSrvs int
+	DmsgDiscAddr    string
+	DmsgMinSessions int
 
 	STCPLocalAddr string // if empty, don't listen.
 	STCPTable     map[cipher.PubKey]string
@@ -64,7 +63,7 @@ func New(conf Config) *Network {
 		conf.PubKey,
 		conf.SecKey,
 		disc.NewHTTP(conf.DmsgDiscAddr), &dmsg.Config{
-			MinSessions: conf.DmsgMinSrvs,
+			MinSessions: conf.DmsgMinSessions,
 		})
 	dmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 

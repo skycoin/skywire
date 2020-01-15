@@ -1,8 +1,6 @@
 package dmsg
 
 import (
-	"fmt"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"io"
 	"net"
 
@@ -63,32 +61,21 @@ func (ss *ServerSession) Serve() {
 }
 
 func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
-	readRequest := func() (StreamDialRequest, error) {
-		gob, err := ss.readEncryptedGob2(yStr)
+	readRequest := func() (StreamRequest, error) {
+		obj, err := ss.readObject(yStr)
 		if err != nil {
-			return StreamDialRequest{}, err
+			return StreamRequest{}, err
 		}
-
-		var req StreamDialRequest
-		if err := decodeGob(&req, gob); err != nil {
-			return StreamDialRequest{}, err
+		req, err := obj.ObtainStreamRequest()
+		if err != nil {
+			return StreamRequest{}, err
 		}
-
-		for i := len(gob) - len(cipher.Sig{}); i < len(gob); i++ {
-			gob[i] = 0
-		}
-
-		/*if err := ss.readEncryptedGob(yStr, &req); err != nil {
-			return req, err
-		}*/
-
-		if err := req.Verify2(0, gob); err != nil { // TODO(evanlinjin): timestamp tracker.
-			fmt.Printf("TIMESTAMP IS %d\n", req.Timestamp)
-			fmt.Printf("ERROR VERIFYING TIMESTAMP: %v\n", err)
-			return req, ErrReqInvalidTimestamp
+		// TODO(evanlinjin): Implement timestamp tracker.
+		if err := req.Verify(0); err != nil {
+			return StreamRequest{}, err
 		}
 		if req.SrcAddr.PK != ss.rPK {
-			return req, ErrReqInvalidSrcPK
+			return StreamRequest{}, ErrReqInvalidSrcPK
 		}
 		return req, nil
 	}
@@ -112,7 +99,7 @@ func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
 	}
 
 	// Forward response.
-	if err := ss.writeEncryptedGob(yStr, resp); err != nil {
+	if err := ss.writeObject(yStr, resp); err != nil {
 		return err
 	}
 
@@ -120,23 +107,28 @@ func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
 }
 
-func (ss *ServerSession) forwardRequest(req StreamDialRequest) (*yamux.Stream, StreamDialResponse, error) {
+func (ss *ServerSession) forwardRequest(req StreamRequest) (*yamux.Stream, SignedObject, error) {
 	yStr, err := ss.ys.OpenStream()
 	if err != nil {
-		return nil, StreamDialResponse{}, err
+		return nil, nil, err
 	}
-	if err := ss.writeEncryptedGob(yStr, req); err != nil {
+	if err := ss.writeObject(yStr, req.raw); err != nil {
 		_ = yStr.Close() //nolint:errcheck
-		return nil, StreamDialResponse{}, err
+		return nil, nil, err
 	}
-	var resp StreamDialResponse
-	if err := ss.readEncryptedGob(yStr, &resp); err != nil {
+	respObj, err := ss.readObject(yStr)
+	if err != nil {
 		_ = yStr.Close() //nolint:errcheck
-		return nil, StreamDialResponse{}, err
+		return nil, nil, err
 	}
-	if err := resp.Verify(req.DstAddr.PK, req.Hash()); err != nil {
+	resp, err := respObj.ObtainStreamResponse()
+	if err != nil {
 		_ = yStr.Close() //nolint:errcheck
-		return nil, StreamDialResponse{}, err
+		return nil, nil, err
 	}
-	return yStr, resp, nil
+	if err := resp.Verify(req); err != nil {
+		_ = yStr.Close() //nolint:errcheck
+		return nil, nil, err
+	}
+	return yStr, respObj, nil
 }

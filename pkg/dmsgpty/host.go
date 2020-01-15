@@ -28,10 +28,9 @@ type HostConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
 	SecKey cipher.SecKey `json:"secret_key"`
 
-	DmsgDiscAddr string `json:"dmsg_discovery_address"`
-	// TODO (Darkren): rename to min sessions
-	DmsgMinSrv int    `json:"dmsg_minimum_servers"`
-	DmsgPort   uint16 `json:"dmsg_port"` // port to listen on
+	DmsgDiscAddr    string `json:"dmsg_discovery_address"`
+	DmsgMinSessions int    `json:"dmsg_minimum_sessions"`
+	DmsgPort        uint16 `json:"dmsg_port"` // port to listen on
 
 	AuthFile string `json:"authorization_file"`
 
@@ -44,8 +43,8 @@ func (c *HostConfig) SetDefaults() {
 	if c.DmsgDiscAddr == "" {
 		c.DmsgDiscAddr = skyenv.DefaultDmsgDiscAddr
 	}
-	if c.DmsgMinSrv == 0 {
-		c.DmsgMinSrv = 1
+	if c.DmsgMinSessions == 0 {
+		c.DmsgMinSessions = 1
 	}
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DefaultDmsgPtyPort
@@ -85,7 +84,7 @@ func NewHost(ctx context.Context, log logrus.FieldLogger, conf HostConfig) (*Hos
 	dmsgC := dmsg.NewClient(
 		conf.PubKey,
 		conf.SecKey,
-		disc.NewHTTP(conf.DmsgDiscAddr), &dmsg.Config{MinSessions: conf.DmsgMinSrv})
+		disc.NewHTTP(conf.DmsgDiscAddr), &dmsg.Config{MinSessions: conf.DmsgMinSessions})
 	dmsgC.SetLogger(logging.MustGetLogger("dmsg-client"))
 
 	go dmsgC.Serve()
