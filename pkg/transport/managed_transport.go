@@ -145,7 +145,9 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 			err = mt.ls.Record(mt.Entry.ID, mt.LogEntry)
 			return err
 		}
+		mt.connMx.Lock()
 		err = mt.dial(ctx)
+		mt.connMx.Unlock()
 		return err
 	})
 
