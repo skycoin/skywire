@@ -18,9 +18,8 @@ type Config struct {
 	SecKey cipher.SecKey `json:"secret_key"`
 
 	Messaging struct {
-		Discovery string `json:"discovery"`
-		// TODO (Darkren): rename to sessions count
-		ServerCount int `json:"server_count"`
+		Discovery     string `json:"discovery"`
+		SessionsCount int    `json:"sessions_count"`
 	}
 
 	TransportDiscovery string `json:"transport_discovery"`
