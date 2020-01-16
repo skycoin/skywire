@@ -13,7 +13,7 @@ go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m
  
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor -run TestNewNode >> ./logs/pkg/TestNewNode.log
 
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestMessagingDiscovery >> ./logs/pkg/TestMessagingDiscovery.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestDmsgDiscovery >> ./logs/pkg/TestDmsgDiscovery.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestTransportDiscovery >> ./logs/pkg/TestTransportDiscovery.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestTransportLogStore >> ./logs/pkg/TestTransportLogStore.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestRoutingTable >> ./logs/pkg/TestRoutingTable.log
