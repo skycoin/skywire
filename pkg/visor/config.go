@@ -41,7 +41,7 @@ type Config struct {
 
 	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
 
-	Retrier *BackoffConfig `json:"retrier"`
+	Retrier *RetrierConfig `json:"retrier"`
 
 	Transport struct {
 		Discovery string `json:"discovery"`
@@ -208,10 +208,11 @@ type DmsgPtyConfig struct {
 	CLIAddr  string `json:"cli_address"`
 }
 
-type BackoffConfig struct {
+// RetrierConfig configures backoff reconnection for transport edges
+type RetrierConfig struct {
 	BackoffTime Duration `json:"backoff_time"`
-	Times uint32 `json:"times"`
-	Factor uint32 `json:"factor"`
+	Times       uint32   `json:"times"`
+	Factor      uint32   `json:"factor"`
 }
 
 // AppConfig defines app startup parameters.
