@@ -34,10 +34,10 @@ type Config struct {
 		LocalAddr   string                   `json:"local_address"`
 	} `json:"stcp"`
 
-	Messaging struct {
+	Dmsg struct {
 		Discovery     string `json:"discovery"`
 		SessionsCount int    `json:"sessions_count"`
-	} `json:"messaging"`
+	} `json:"dmsg"`
 
 	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
 
@@ -77,18 +77,18 @@ type Config struct {
 	RestartCheckDelay string `json:"restart_check_delay"`
 }
 
-// MessagingConfig returns config for dmsg client.
-func (c *Config) MessagingConfig() (*DmsgConfig, error) {
-	msgConfig := c.Messaging
+// DmsgConfig returns config for dmsg client.
+func (c *Config) DmsgConfig() (*DmsgConfig, error) {
+	dmsgConfig := c.Dmsg
 
-	if msgConfig.Discovery == "" {
+	if dmsgConfig.Discovery == "" {
 		return nil, errors.New("empty discovery")
 	}
 
 	return &DmsgConfig{
 		PubKey:     c.Node.StaticPubKey,
 		SecKey:     c.Node.StaticSecKey,
-		Discovery:  disc.NewHTTP(msgConfig.Discovery),
+		Discovery:  disc.NewHTTP(dmsgConfig.Discovery),
 		Retries:    5,
 		RetryDelay: time.Second,
 	}, nil

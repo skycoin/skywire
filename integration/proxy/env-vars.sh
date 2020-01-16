@@ -11,9 +11,9 @@ alias CLI_A='./skywire-cli --rpc $RPC_A'
 alias CLI_B='./skywire-cli --rpc $RPC_B'
 alias CLI_C='./skywire-cli --rpc $RPC_C'
 
-export MSGD=https://messaging.discovery.skywire.skycoin.net
-export TRD=https://transport.discovery.skywire.skycoin.net
-export RF=https://routefinder.skywire.skycoin.net
+export MSGD=https://dmsg.discovery.skywire.skycoin.com
+export TRD=https://transport.discovery.skywire.skycoin.com
+export RF=https://routefinder.skywire.skycoin.com
 
 alias RUN_A='go run ./cmd/skywire-visor ./integration/messaging/nodeA.json --tag NodeA'
 alias RUN_B='go run ./cmd/skywire-visor ./integration/intermediary-nodeB.json --tag NodeB'

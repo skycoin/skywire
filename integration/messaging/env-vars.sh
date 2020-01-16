@@ -10,9 +10,9 @@ export RPC_C=$(jq -r ".interfaces.rpc" ./integration/messaging/nodeC.json)
 export CHAT_A=http://localhost:8000/message
 export CHAT_C=http://localhost$(jq -r '.apps [] |select(.app=="skychat")| .args[1] ' ./integration/messaging/nodeC.json)/message
 
-export MSGD=https://messaging.discovery.skywire.skycoin.net
-export TRD=https://transport.discovery.skywire.skycoin.net
-export RF=https://routefinder.skywire.skycoin.net
+export MSGD=https://dmsg.discovery.skywire.skycoin.com
+export TRD=https://transport.discovery.skywire.skycoin.com
+export RF=https://routefinder.skywire.skycoin.com
 
 alias CLI_A='./skywire-cli --rpc $RPC_A'
 alias CLI_B='./skywire-cli --rpc $RPC_B'
