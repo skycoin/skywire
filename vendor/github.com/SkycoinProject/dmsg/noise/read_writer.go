@@ -13,17 +13,14 @@ import (
 	"github.com/SkycoinProject/dmsg/ioutil"
 )
 
-// MaxWriteSize is the largest amount for a single write.
-const MaxWriteSize = maxPayloadSize
-
-// Frame format: [ len (2 bytes) | auth & nonce (24 bytes) | payload (<= maxPayloadSize bytes) ]
+// Frame format: [ len (2 bytes) | auth (16 bytes) | payload (<= maxPayloadSize bytes) ]
 const (
 	maxFrameSize   = 4096                                 // maximum frame size (4096)
 	maxPayloadSize = maxFrameSize - prefixSize - authSize // maximum payload size
 	maxPrefixValue = maxFrameSize - prefixSize            // maximum value contained in the 'len' prefix
 
 	prefixSize = 2  // len prefix size
-	authSize   = 24 // noise auth data size
+	authSize   = 16 // noise auth data size
 )
 
 type timeoutError struct{}
@@ -45,10 +42,9 @@ type ReadWriter struct {
 
 	rawInput *bufio.Reader
 	input    bytes.Buffer
-	rMx      sync.Mutex
 
-	wPad bytes.Reader
-	wMx  sync.Mutex
+	rMx sync.Mutex
+	wMx sync.Mutex
 }
 
 // NewReadWriter constructs a new ReadWriter.
@@ -67,15 +63,13 @@ func (rw *ReadWriter) Read(p []byte) (int, error) {
 	if rw.input.Len() > 0 {
 		return rw.input.Read(p)
 	}
-
-	ciphertext, err := ReadRawFrame(rw.rawInput)
+	ciphertext, err := rw.readPacket()
 	if err != nil {
 		return 0, err
 	}
 	plaintext, err := rw.ns.DecryptUnsafe(ciphertext)
 	if err != nil {
-		// TODO(evanlinjin): log error here.
-		return 0, nil
+		return 0, &netError{Err: err}
 	}
 	if len(plaintext) == 0 {
 		return 0, nil
@@ -83,51 +77,69 @@ func (rw *ReadWriter) Read(p []byte) (int, error) {
 	return ioutil.BufRead(&rw.input, plaintext, p)
 }
 
+func (rw *ReadWriter) readPacket() ([]byte, error) {
+	return readWithBuf(rw.rawInput)
+}
+
+func readWithBuf(in *bufio.Reader) (out []byte, err error) {
+	prefixB, err := in.Peek(prefixSize)
+	if err != nil {
+		return nil, err
+	}
+
+	// obtain payload size
+	prefix := int(binary.BigEndian.Uint16(prefixB))
+	if prefix > maxPrefixValue {
+		return nil, &netError{
+			Err: fmt.Errorf("noise prefix value %dB exceeds maximum %dB", prefix, maxPrefixValue),
+		}
+	}
+
+	// obtain payload
+	b, err := in.Peek(prefixSize + prefix)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := in.Discard(prefixSize + prefix); err != nil {
+		panic(fmt.Errorf("unexpected error when discarding %d bytes: %v", prefixSize+prefix, err))
+	}
+	return b[prefixSize:], nil
+}
+
 func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 	rw.wMx.Lock()
 	defer rw.wMx.Unlock()
 
-	if _, err = rw.origin.Write(nil); err != nil {
-		return 0, err
-	}
-
-	for rw.wPad.Len() > 0 {
-		if _, err = rw.wPad.WriteTo(rw.origin); err != nil {
-			return 0, err
-		}
-	}
-
-	// Enforce max frame size.
+	// Enforce max write size.
 	if len(p) > maxPayloadSize {
 		p, err = p[:maxPayloadSize], io.ErrShortWrite
 	}
-
-	writtenB, wErr := WriteRawFrame(rw.origin, rw.ns.EncryptUnsafe(p))
-
-	if !IsCompleteFrame(writtenB) {
-		rw.wPad.Reset(FillIncompleteFrame(writtenB))
+	if err := rw.writeFrame(rw.ns.EncryptUnsafe(p)); err != nil {
+		return 0, err
 	}
-
-	if wErr != nil {
-		return 0, wErr
-	}
-
 	return len(p), err
+}
+
+func (rw *ReadWriter) writeFrame(p []byte) error {
+	buf := make([]byte, prefixSize+len(p))
+	binary.BigEndian.PutUint16(buf, uint16(len(p)))
+	copy(buf[prefixSize:], p)
+	_, err := rw.origin.Write(buf)
+	return err
 }
 
 // Handshake performs a Noise handshake using the provided io.ReadWriter.
 func (rw *ReadWriter) Handshake(hsTimeout time.Duration) error {
-	errCh := make(chan error, 1)
+	doneChan := make(chan error)
 	go func() {
 		if rw.ns.init {
-			errCh <- InitiatorHandshake(rw.ns, rw.rawInput, rw.origin)
+			doneChan <- rw.initiatorHandshake()
 		} else {
-			errCh <- ResponderHandshake(rw.ns, rw.rawInput, rw.origin)
+			doneChan <- rw.responderHandshake()
 		}
-		close(errCh)
 	}()
 	select {
-	case err := <-errCh:
+	case err := <-doneChan:
 		return err
 	case <-time.After(hsTimeout):
 		return timeoutError{}
@@ -144,112 +156,54 @@ func (rw *ReadWriter) RemoteStatic() cipher.PubKey {
 	return rw.ns.RemoteStatic()
 }
 
-// InitiatorHandshake performs a noise handshake as an initiator.
-func InitiatorHandshake(ns *Noise, r *bufio.Reader, w io.Writer) error {
+func (rw *ReadWriter) initiatorHandshake() error {
 	for {
-		msg, err := ns.MakeHandshakeMessage()
+		msg, err := rw.ns.HandshakeMessage()
 		if err != nil {
 			return err
 		}
-		if _, err := WriteRawFrame(w, msg); err != nil {
+		if err := rw.writeFrame(msg); err != nil {
 			return err
 		}
-		if ns.HandshakeFinished() {
+		if rw.ns.HandshakeFinished() {
 			break
 		}
-		res, err := ReadRawFrame(r)
+		res, err := rw.readPacket()
 		if err != nil {
 			return err
 		}
-		if err = ns.ProcessHandshakeMessage(res); err != nil {
+		if err = rw.ns.ProcessMessage(res); err != nil {
 			return err
 		}
-		if ns.HandshakeFinished() {
+		if rw.ns.HandshakeFinished() {
 			break
 		}
 	}
 	return nil
 }
 
-// ResponderHandshake performs a noise handshake as a responder.
-func ResponderHandshake(ns *Noise, r *bufio.Reader, w io.Writer) error {
+func (rw *ReadWriter) responderHandshake() error {
 	for {
-		msg, err := ReadRawFrame(r)
+		msg, err := rw.readPacket()
 		if err != nil {
 			return err
 		}
-		if err := ns.ProcessHandshakeMessage(msg); err != nil {
+		if err := rw.ns.ProcessMessage(msg); err != nil {
 			return err
 		}
-		if ns.HandshakeFinished() {
+		if rw.ns.HandshakeFinished() {
 			break
 		}
-		res, err := ns.MakeHandshakeMessage()
+		res, err := rw.ns.HandshakeMessage()
 		if err != nil {
 			return err
 		}
-		if _, err := WriteRawFrame(w, res); err != nil {
+		if err := rw.writeFrame(res); err != nil {
 			return err
 		}
-		if ns.HandshakeFinished() {
+		if rw.ns.HandshakeFinished() {
 			break
 		}
 	}
 	return nil
-}
-
-// WriteRawFrame writes a raw frame (data prefixed with a uint16 len).
-// It returns the bytes written.
-func WriteRawFrame(w io.Writer, p []byte) ([]byte, error) {
-	buf := make([]byte, prefixSize+len(p))
-	binary.BigEndian.PutUint16(buf, uint16(len(p)))
-	copy(buf[prefixSize:], p)
-
-	n, err := w.Write(buf)
-	return buf[:n], err
-}
-
-// ReadRawFrame attempts to read a raw frame from a buffered reader.
-func ReadRawFrame(r *bufio.Reader) (p []byte, err error) {
-	prefixB, err := r.Peek(prefixSize)
-	if err != nil {
-		return nil, err
-	}
-
-	// obtain payload size
-	prefix := int(binary.BigEndian.Uint16(prefixB))
-	if prefix > maxPrefixValue {
-		return nil, &netError{
-			Err: fmt.Errorf("noise prefix value %dB exceeds maximum %dB", prefix, maxPrefixValue),
-		}
-	}
-
-	// obtain payload
-	b, err := r.Peek(prefixSize + prefix)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := r.Discard(prefixSize + prefix); err != nil {
-		panic(fmt.Errorf("unexpected error when discarding %d bytes: %v", prefixSize+prefix, err))
-	}
-	return b[prefixSize:], nil
-}
-
-// IsCompleteFrame determines if a frame is fully formed.
-func IsCompleteFrame(b []byte) bool {
-	if len(b) < prefixSize || len(b[prefixSize:]) != int(binary.BigEndian.Uint16(b)) {
-		return false
-	}
-	return true
-}
-
-// FillIncompleteFrame takes in an incomplete frame, and returns empty bytes to fill the incomplete frame.
-func FillIncompleteFrame(b []byte) []byte {
-	originalLen := len(b)
-
-	for len(b) < prefixSize {
-		b = append(b, byte(0))
-	}
-	b = append(b, make([]byte, binary.BigEndian.Uint16(b))...)
-	return b[originalLen:]
 }

@@ -2,6 +2,8 @@ package noise
 
 import (
 	"errors"
+	"io"
+	"math"
 	"net"
 	"net/rpc"
 	"sync"
@@ -17,22 +19,13 @@ var (
 	// that is currently running.
 	ErrAlreadyServing = errors.New("already serving")
 
+	// ErrPacketTooBig occurs when data is too large.
+	ErrPacketTooBig = errors.New("data too large to contain within a packet")
+
 	// HandshakeXK is the XK handshake pattern.
-	// 		legend: s(static) e(ephemeral)
-	//	<- s
-	//	...
-	//	-> e, es
-	//	<- e, ee
-	//	-> s, se
 	HandshakeXK = noise.HandshakeXK
 
 	// HandshakeKK is the KK handshake pattern.
-	// 		legend: s(static) e(ephemeral)
-	//	-> s
-	//	<- s
-	//	...
-	//	-> e, es, ss
-	//	<- e, ee, se
 	HandshakeKK = noise.HandshakeKK
 
 	// AcceptHandshakeTimeout determines how long a noise hs should take.
@@ -179,6 +172,9 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write writes to the noise-encrypted connection.
 func (c *Conn) Write(b []byte) (int, error) {
+	if len(b) > math.MaxUint16 {
+		return 0, io.ErrShortWrite
+	}
 	return c.ns.Write(b)
 }
 

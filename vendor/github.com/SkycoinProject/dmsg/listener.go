@@ -26,14 +26,15 @@ func newListener(addr Addr) *Listener {
 	}
 }
 
-// addCloseCallback adds a function that triggers when listener is closed.
+// AddCloseCallback adds a function that triggers when listener is closed.
 // This should be called right after the listener is created and is not thread safe.
-func (l *Listener) addCloseCallback(cb func()) { l.doneFunc = cb }
+func (l *Listener) AddCloseCallback(cb func()) { l.doneFunc = cb }
 
-// introduceStream handles a stream after receiving a REQUEST frame.
-func (l *Listener) introduceStream(tp *Stream) error {
+// IntroduceStream handles a stream after receiving a REQUEST frame.
+func (l *Listener) IntroduceStream(tp *Stream) error {
 	if tp.LocalAddr() != l.addr {
-		return fmt.Errorf("local addresses do not match: expected %s but got %s", l.addr, tp.LocalAddr())
+		return fmt.Errorf("failed to accept stream as local addresses does not match: we expected %s but got %s",
+			l.addr, tp.LocalAddr())
 	}
 
 	l.mx.Lock()
@@ -41,7 +42,7 @@ func (l *Listener) introduceStream(tp *Stream) error {
 
 	if l.isClosed() {
 		_ = tp.Close() //nolint:errcheck
-		return ErrEntityClosed
+		return ErrClientClosed
 	}
 
 	select {
@@ -49,10 +50,10 @@ func (l *Listener) introduceStream(tp *Stream) error {
 		return nil
 	case <-l.done:
 		_ = tp.Close() //nolint:errcheck
-		return ErrEntityClosed
+		return ErrClientClosed
 	default:
 		_ = tp.Close() //nolint:errcheck
-		return ErrAcceptChanMaxed
+		return ErrClientAcceptMaxed
 	}
 }
 
@@ -65,10 +66,10 @@ func (l *Listener) Accept() (net.Conn, error) {
 func (l *Listener) AcceptStream() (*Stream, error) {
 	select {
 	case <-l.done:
-		return nil, ErrEntityClosed
+		return nil, ErrClientClosed
 	case tp, ok := <-l.accept:
 		if !ok {
-			return nil, ErrEntityClosed
+			return nil, ErrClientClosed
 		}
 		return tp, nil
 	}
@@ -79,7 +80,7 @@ func (l *Listener) Close() error {
 	if l.close() {
 		return nil
 	}
-	return ErrEntityClosed
+	return ErrClientClosed
 }
 
 func (l *Listener) close() (closed bool) {
@@ -114,9 +115,6 @@ func (l *Listener) isClosed() bool {
 
 // Addr returns the listener's address.
 func (l *Listener) Addr() net.Addr { return l.addr }
-
-// DmsgAddr returns the listener's address in as `dmsg.Addr`.
-func (l *Listener) DmsgAddr() Addr { return l.addr }
 
 // Type returns the stream type.
 func (l *Listener) Type() string { return Type }

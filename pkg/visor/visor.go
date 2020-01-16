@@ -368,15 +368,12 @@ func (node *Node) Close() (err error) {
 		node.logger.Info("router stopped successfully")
 	}
 
-<<<<<<< HEAD
 	if err := UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
 		node.logger.WithError(err).Errorf("Failed to unlink socket file %s", node.conf.AppServerSockFile)
 	} else {
 		node.logger.Infof("Socket file %s removed successfully", node.conf.AppServerSockFile)
 	}
 
-=======
->>>>>>> fix conflicts
 	return err
 }
 
