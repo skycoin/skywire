@@ -6,7 +6,7 @@
   },
   "dmsg": {
     "discovery": "https://dmsg.discovery.skywire.skycoin.com",
-    "server_count": 1
+    "sessions_count": 1
   },
   "transport": {
     "discovery": "https://transport.discovery.skywire.skycoin.com",
