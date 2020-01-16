@@ -152,7 +152,7 @@ func (req StreamRequest) Verify(lastTimestamp int64) error {
 
 	// Check signature.
 	if err := cipher.VerifyPubKeySignedPayload(req.SrcAddr.PK, req.raw.Sig(), req.raw.Object()); err != nil {
-		return ErrReqInvalidSig
+		return ErrReqInvalidSig.Wrap(err)
 	}
 
 	return nil
@@ -162,7 +162,7 @@ func (req StreamRequest) Verify(lastTimestamp int64) error {
 type StreamResponse struct {
 	ReqHash  cipher.SHA256 // Hash of associated dial request.
 	Accepted bool          // Whether the request is accepted.
-	ErrCode  uint16        // Check if not accepted.
+	ErrCode  errorCode     // Check if not accepted.
 	NoiseMsg []byte
 
 	raw SignedObject `enc:"-"` // back reference.
@@ -177,7 +177,7 @@ func (resp StreamResponse) Verify(req StreamRequest) error {
 
 	// Check signature.
 	if err := cipher.VerifyPubKeySignedPayload(req.DstAddr.PK, resp.raw.Sig(), resp.raw.Object()); err != nil {
-		return ErrDialRespInvalidSig
+		return ErrDialRespInvalidSig.Wrap(err)
 	}
 
 	// Check whether response states that the request is accepted.

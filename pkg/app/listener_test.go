@@ -19,7 +19,7 @@ func TestListener_Accept(t *testing.T) {
 	lisID := uint16(1)
 	visorPK, _ := cipher.GenerateKeyPair()
 	local := appnet.Addr{
-		Net:    appnet.TypeDMSG,
+		Net:    appnet.TypeDmsg,
 		PubKey: visorPK,
 		Port:   routing.Port(100),
 	}
@@ -28,7 +28,7 @@ func TestListener_Accept(t *testing.T) {
 		acceptConnID := uint16(1)
 		acceptRemotePK, _ := cipher.GenerateKeyPair()
 		acceptRemote := appnet.Addr{
-			Net:    appnet.TypeDMSG,
+			Net:    appnet.TypeDmsg,
 			PubKey: acceptRemotePK,
 			Port:   routing.Port(100),
 		}
@@ -75,7 +75,7 @@ func TestListener_Accept(t *testing.T) {
 		acceptConnID := uint16(1)
 		acceptRemotePK, _ := cipher.GenerateKeyPair()
 		acceptRemote := appnet.Addr{
-			Net:    appnet.TypeDMSG,
+			Net:    appnet.TypeDmsg,
 			PubKey: acceptRemotePK,
 			Port:   routing.Port(100),
 		}
@@ -107,7 +107,7 @@ func TestListener_Accept(t *testing.T) {
 		acceptConnID := uint16(1)
 		acceptRemotePK, _ := cipher.GenerateKeyPair()
 		acceptRemote := appnet.Addr{
-			Net:    appnet.TypeDMSG,
+			Net:    appnet.TypeDmsg,
 			PubKey: acceptRemotePK,
 			Port:   routing.Port(100),
 		}
@@ -163,7 +163,7 @@ func TestListener_Close(t *testing.T) {
 	lisID := uint16(1)
 	localPK, _ := cipher.GenerateKeyPair()
 	local := appnet.Addr{
-		Net:    appnet.TypeDMSG,
+		Net:    appnet.TypeDmsg,
 		PubKey: localPK,
 		Port:   routing.Port(100),
 	}

@@ -107,27 +107,29 @@ func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
 }
 
-func (ss *ServerSession) forwardRequest(req StreamRequest) (*yamux.Stream, SignedObject, error) {
-	yStr, err := ss.ys.OpenStream()
-	if err != nil {
+func (ss *ServerSession) forwardRequest(req StreamRequest) (yStr *yamux.Stream, respObj SignedObject, err error) {
+	defer func() {
+		if err != nil && yStr != nil {
+			ss.log.
+				WithError(yStr.Close()).
+				Debugf("After forwardRequest failed, the yamux stream is closed.")
+		}
+	}()
+
+	if yStr, err = ss.ys.OpenStream(); err != nil {
 		return nil, nil, err
 	}
-	if err := ss.writeObject(yStr, req.raw); err != nil {
-		_ = yStr.Close() //nolint:errcheck
+	if err = ss.writeObject(yStr, req.raw); err != nil {
 		return nil, nil, err
 	}
-	respObj, err := ss.readObject(yStr)
-	if err != nil {
-		_ = yStr.Close() //nolint:errcheck
+	if respObj, err = ss.readObject(yStr); err != nil {
 		return nil, nil, err
 	}
-	resp, err := respObj.ObtainStreamResponse()
-	if err != nil {
-		_ = yStr.Close() //nolint:errcheck
+	var resp StreamResponse
+	if resp, err = respObj.ObtainStreamResponse(); err != nil {
 		return nil, nil, err
 	}
-	if err := resp.Verify(req); err != nil {
-		_ = yStr.Close() //nolint:errcheck
+	if err = resp.Verify(req); err != nil {
 		return nil, nil, err
 	}
 	return yStr, respObj, nil
