@@ -61,7 +61,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 
 	n.On("DialContext", mock.Anything, remote).Return(conn, noErr)
 
-	err = appnet.AddNetworker(appnet.TypeDMSG, n)
+	err = appnet.AddNetworker(appnet.TypeDmsg, n)
 	require.NoError(t, err)
 
 	cl, err := app.NewClient(logging.MustGetLogger("app_client"), clientConfig)
@@ -95,7 +95,7 @@ func prepAddrs() (dmsgLocal, dmsgRemote dmsg.Addr, remote appnet.Addr) {
 		Port: remotePort,
 	}
 	remote = appnet.Addr{
-		Net:    appnet.TypeDMSG,
+		Net:    appnet.TypeDmsg,
 		PubKey: remotePK,
 		Port:   routing.Port(remotePort),
 	}
