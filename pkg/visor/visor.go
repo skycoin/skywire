@@ -157,8 +157,11 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *res
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
+	var retrier *netutil.Retrier
+	if config.Retrier != nil {
+		retrier = netutil.NewRetrier(time.Duration(config.Retrier.BackoffTime), config.Retrier.Times, config.Retrier.Factor)
+	}
 
-	retrier := netutil.NewRetrier(time.Duration(config.Retrier.BackoffTime), config.Retrier.Times, config.Retrier.Factor)
 	node.tm, err = transport.NewManager(node.n, tmConfig, retrier)
 	if err != nil {
 		return nil, fmt.Errorf("transport manager: %s", err)
@@ -365,12 +368,15 @@ func (node *Node) Close() (err error) {
 		node.logger.Info("router stopped successfully")
 	}
 
+<<<<<<< HEAD
 	if err := UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
 		node.logger.WithError(err).Errorf("Failed to unlink socket file %s", node.conf.AppServerSockFile)
 	} else {
 		node.logger.Infof("Socket file %s removed successfully", node.conf.AppServerSockFile)
 	}
 
+=======
+>>>>>>> fix conflicts
 	return err
 }
 
