@@ -1,7 +1,9 @@
 package node
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"path/filepath"
 	"time"
 
@@ -84,12 +86,19 @@ func defaultConfig() *visor.Config {
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
 
+	lIPaddr, err := getLocalIPAddress()
+	if err != nil {
+		log.Warn(err)
+	}
+
+	conf.STCP.LocalAddr = lIPaddr
+
 	if testenv {
 		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
 	} else {
 		conf.Messaging.Discovery = skyenv.DefaultDmsgDiscAddr
 	}
-	conf.Messaging.ServerCount = 1
+	conf.Messaging.SessionsCount = 1
 
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf
@@ -183,4 +192,20 @@ func defaultSkysocksClientConfig() visor.AppConfig {
 		AutoStart: false,
 		Port:      routing.Port(skyenv.SkysocksClientPort),
 	}
+}
+
+func getLocalIPAddress() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String() + ":7777", nil
+			}
+		}
+	}
+	return "", errors.New("could not find local IP address")
 }
