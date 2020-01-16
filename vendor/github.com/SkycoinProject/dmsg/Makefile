@@ -1,8 +1,9 @@
 .DEFAULT_GOAL := help
 .PHONY : check lint install-linters dep test 
 
-OPTS?=GO111MODULE=on 
+OPTS?=GO111MODULE=on GOBIN=${PWD}/bin
 TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
+BIN_DIR?=./bin
 
 check: lint test ## Run linters and tests
 
@@ -19,7 +20,7 @@ test: ## Run tests
 	${OPTS} go test ${TEST_OPTS} ./...
 
 install-linters: ## Install linters
-	- VERSION=1.21.0 ./ci_scripts/install-golangci-lint.sh
+	- VERSION=1.22.2 ./ci_scripts/install-golangci-lint.sh
 	# GO111MODULE=off go get -u github.com/FiloSottile/vendorcheck
 	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
 	# However, they suggest `curl ... | bash` which we should not do
@@ -32,6 +33,9 @@ format: ## Formats the code. Must have goimports installed (use make install-lin
 dep: ## Sorts dependencies
 	${OPTS} go mod download
 	${OPTS} go mod tidy -v
+
+build: ## Build binaries into ./bin
+	${OPTS} go install ./cmd/*
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

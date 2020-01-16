@@ -118,15 +118,15 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *res
 	pk := config.Node.StaticPubKey
 	sk := config.Node.StaticSecKey
 
-	fmt.Println("min servers:", config.Dmsg.ServerCount)
+	fmt.Println("min sessions:", config.Dmsg.SessionsCount)
 	node.n = snet.New(snet.Config{
-		PubKey:        pk,
-		SecKey:        sk,
-		TpNetworks:    []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
-		DmsgDiscAddr:  config.Dmsg.Discovery,
-		DmsgMinSrvs:   config.Dmsg.ServerCount,
-		STCPLocalAddr: config.STCP.LocalAddr,
-		STCPTable:     config.STCP.PubKeyTable,
+		PubKey:          pk,
+		SecKey:          sk,
+		TpNetworks:      []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
+		DmsgDiscAddr:    config.Dmsg.Discovery,
+		DmsgMinSessions: config.Dmsg.SessionsCount,
+		STCPLocalAddr:   config.STCP.LocalAddr,
+		STCPTable:       config.STCP.PubKeyTable,
 	})
 	if err := node.n.Init(ctx); err != nil {
 		return nil, fmt.Errorf("failed to init network: %v", err)
@@ -362,7 +362,7 @@ func (node *Node) Close() (err error) {
 		node.logger.Info("router stopped successfully")
 	}
 
-	if err := node.UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
+	if err := UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
 		node.logger.WithError(err).Errorf("Failed to unlink socket file %s", node.conf.AppServerSockFile)
 	} else {
 		node.logger.Infof("Socket file %s removed successfully", node.conf.AppServerSockFile)
@@ -505,7 +505,7 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 }
 
 // UnlinkSocketFiles removes unix socketFiles from file system
-func (node *Node) UnlinkSocketFiles(socketFiles ...string) error {
+func UnlinkSocketFiles(socketFiles ...string) error {
 	for _, f := range socketFiles {
 		if err := syscall.Unlink(f); err != nil {
 			if strings.Contains(err.Error(), "no such file or directory") {

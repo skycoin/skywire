@@ -28,9 +28,9 @@ type HostConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
 	SecKey cipher.SecKey `json:"secret_key"`
 
-	DmsgDiscAddr string `json:"dmsg_discovery_address"`
-	DmsgMinSrv   int    `json:"dmsg_minimum_servers"`
-	DmsgPort     uint16 `json:"dmsg_port"` // port to listen on
+	DmsgDiscAddr    string `json:"dmsg_discovery_address"`
+	DmsgMinSessions int    `json:"dmsg_minimum_sessions"`
+	DmsgPort        uint16 `json:"dmsg_port"` // port to listen on
 
 	AuthFile string `json:"authorization_file"`
 
@@ -43,8 +43,8 @@ func (c *HostConfig) SetDefaults() {
 	if c.DmsgDiscAddr == "" {
 		c.DmsgDiscAddr = skyenv.DefaultDmsgDiscAddr
 	}
-	if c.DmsgMinSrv == 0 {
-		c.DmsgMinSrv = 1
+	if c.DmsgMinSessions == 0 {
+		c.DmsgMinSessions = 1
 	}
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DefaultDmsgPtyPort
@@ -84,12 +84,10 @@ func NewHost(ctx context.Context, log logrus.FieldLogger, conf HostConfig) (*Hos
 	dmsgC := dmsg.NewClient(
 		conf.PubKey,
 		conf.SecKey,
-		disc.NewHTTP(conf.DmsgDiscAddr),
-		dmsg.SetLogger(logging.MustGetLogger("dmsg-client")))
+		disc.NewHTTP(conf.DmsgDiscAddr), &dmsg.Config{MinSessions: conf.DmsgMinSessions})
+	dmsgC.SetLogger(logging.MustGetLogger("dmsg-client"))
 
-	if err := dmsgC.InitiateServerConnections(ctx, conf.DmsgMinSrv); err != nil {
-		return nil, err
-	}
+	go dmsgC.Serve()
 
 	return NewHostFromDmsgClient(
 		log,
@@ -255,7 +253,10 @@ func (h *Host) handlePtyReq(ctx context.Context, log logrus.FieldLogger, req *Pt
 	}
 
 	var dialRemotePty = func(ctx context.Context, data *PtyReq) (net.Conn, *rpc.Server, error) {
-		dmsgConn, err := h.dmsgC.Dial(ctx, data.DstPK, data.DstPort)
+		dmsgConn, err := h.dmsgC.Dial(ctx, dmsg.Addr{
+			PK:   data.DstPK,
+			Port: data.DstPort,
+		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to dial dmsg: %v", err)
 		}
