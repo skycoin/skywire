@@ -86,8 +86,8 @@ func XKAndSecp256k1(config Config) (*Noise, error) {
 	return New(noise.HandshakeXK, config)
 }
 
-// HandshakeMessage generates handshake message for a current handshake state.
-func (ns *Noise) HandshakeMessage() (res []byte, err error) {
+// MakeHandshakeMessage generates handshake message for a current handshake state.
+func (ns *Noise) MakeHandshakeMessage() (res []byte, err error) {
 	if ns.hs.MessageIndex() < len(ns.pattern.Messages)-1 {
 		res, _, _, err = ns.hs.WriteMessage(nil, nil)
 		return
@@ -97,8 +97,8 @@ func (ns *Noise) HandshakeMessage() (res []byte, err error) {
 	return res, err
 }
 
-// ProcessMessage processes a received handshake message and appends the payload.
-func (ns *Noise) ProcessMessage(msg []byte) (err error) {
+// ProcessHandshakeMessage processes a received handshake message and appends the payload.
+func (ns *Noise) ProcessHandshakeMessage(msg []byte) (err error) {
 	if ns.hs.MessageIndex() < len(ns.pattern.Messages)-1 {
 		_, _, _, err = ns.hs.ReadMessage(nil, msg)
 		return
@@ -106,6 +106,11 @@ func (ns *Noise) ProcessMessage(msg []byte) (err error) {
 
 	_, ns.enc, ns.dec, err = ns.hs.ReadMessage(nil, msg)
 	return err
+}
+
+// HandshakeFinished indicate whether handshake was completed.
+func (ns *Noise) HandshakeFinished() bool {
+	return ns.hs.MessageIndex() == len(ns.pattern.Messages)
 }
 
 // LocalStatic returns the local static public key.
@@ -134,11 +139,9 @@ func (ns *Noise) EncryptUnsafe(plaintext []byte) []byte {
 // DecryptUnsafe decrypts ciphertext without interlocking, should only
 // be used with external lock.
 func (ns *Noise) DecryptUnsafe(ciphertext []byte) ([]byte, error) {
-	if len(ciphertext) == 0 {
-		return make([]byte, 0), nil
-	}
 	if len(ciphertext) < nonceSize {
-		panic("noise decrypt unsafe: cipher text cannot be less than 8 bytes")
+		//TODO(evanlinjin): Log the following: "noise decrypt unsafe: cipher text cannot be less than 8 bytes".
+		return make([]byte, 0), nil
 	}
 	recvSeq := binary.BigEndian.Uint64(ciphertext[:nonceSize])
 	if recvSeq <= ns.decNonce {
@@ -148,7 +151,18 @@ func (ns *Noise) DecryptUnsafe(ciphertext []byte) ([]byte, error) {
 	return ns.dec.Cipher().Decrypt(nil, recvSeq, nil, ciphertext[nonceSize:])
 }
 
-// HandshakeFinished indicate whether handshake was completed.
-func (ns *Noise) HandshakeFinished() bool {
-	return ns.hs.MessageIndex() == len(ns.pattern.Messages)
+// NonceMap is a map of used nonces.
+type NonceMap map[uint64]struct{}
+
+// DecryptWithNonceMap is equivalent to DecryptNonce, instead it uses NonceMap to track nonces instead of a counter.
+func (ns *Noise) DecryptWithNonceMap(nm NonceMap, ciphertext []byte) ([]byte, error) {
+	if len(ciphertext) < nonceSize {
+		//TODO(evanlinjin): Log the following: "noise decrypt unsafe: cipher text cannot be less than 8 bytes".
+		return make([]byte, 0), nil
+	}
+	recvSeq := binary.BigEndian.Uint64(ciphertext[:nonceSize])
+	if _, ok := nm[recvSeq]; ok {
+		return nil, fmt.Errorf("received decryption nonce (%d) is repeated", recvSeq)
+	}
+	return ns.dec.Cipher().Decrypt(nil, recvSeq, nil, ciphertext[nonceSize:])
 }
