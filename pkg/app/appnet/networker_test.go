@@ -14,7 +14,7 @@ import (
 func TestAddNetworker(t *testing.T) {
 	ClearNetworkers()
 
-	nType := TypeDMSG
+	nType := TypeDmsg
 
 	var n Networker
 
@@ -28,7 +28,7 @@ func TestAddNetworker(t *testing.T) {
 func TestResolveNetworker(t *testing.T) {
 	ClearNetworkers()
 
-	nType := TypeDMSG
+	nType := TypeDmsg
 
 	var n Networker
 
@@ -110,7 +110,7 @@ func prepAddr() Addr {
 	addrPort := routing.Port(100)
 
 	return Addr{
-		Net:    TypeDMSG,
+		Net:    TypeDmsg,
 		PubKey: addrPK,
 		Port:   addrPort,
 	}

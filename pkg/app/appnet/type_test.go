@@ -14,7 +14,7 @@ func TestType_IsValid(t *testing.T) {
 	}{
 		{
 			name: "valid",
-			t:    TypeDMSG,
+			t:    TypeDmsg,
 			want: true,
 		},
 		{

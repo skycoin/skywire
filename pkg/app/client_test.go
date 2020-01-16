@@ -106,7 +106,7 @@ func TestClient_Dial(t *testing.T) {
 	remotePK, _ := cipher.GenerateKeyPair()
 	remotePort := routing.Port(120)
 	remote := appnet.Addr{
-		Net:    appnet.TypeDMSG,
+		Net:    appnet.TypeDmsg,
 		PubKey: remotePK,
 		Port:   remotePort,
 	}
@@ -215,7 +215,7 @@ func TestClient_Listen(t *testing.T) {
 
 	port := routing.Port(1)
 	local := appnet.Addr{
-		Net:    appnet.TypeDMSG,
+		Net:    appnet.TypeDmsg,
 		PubKey: visorPK,
 		Port:   port,
 	}
@@ -235,7 +235,7 @@ func TestClient_Listen(t *testing.T) {
 			addr: local,
 		}
 
-		listener, err := cl.Listen(appnet.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDmsg, port)
 		require.Nil(t, err)
 
 		appListener, ok := listener.(*Listener)
@@ -262,7 +262,7 @@ func TestClient_Listen(t *testing.T) {
 		_, err := cl.lm.Add(listenLisID, nil)
 		require.NoError(t, err)
 
-		listener, err := cl.Listen(appnet.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDmsg, port)
 		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, listener)
 	})
@@ -282,7 +282,7 @@ func TestClient_Listen(t *testing.T) {
 		_, err := cl.lm.Add(listenLisID, nil)
 		require.NoError(t, err)
 
-		listener, err := cl.Listen(appnet.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDmsg, port)
 		require.Equal(t, err, idmanager.ErrValueAlreadyExists)
 		require.Nil(t, listener)
 	})
@@ -295,7 +295,7 @@ func TestClient_Listen(t *testing.T) {
 
 		cl := prepClient(l, visorPK, rpc)
 
-		listener, err := cl.Listen(appnet.TypeDMSG, port)
+		listener, err := cl.Listen(appnet.TypeDmsg, port)
 		require.Equal(t, listenErr, err)
 		require.Nil(t, listener)
 	})
