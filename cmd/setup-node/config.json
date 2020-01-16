@@ -3,7 +3,7 @@
   "secret_key": "42bca4df2f3189b28872d40e6c61aacd5e85b8e91f8fea65780af27c142419e5",
   "dmsg": {
     "discovery": "http://skywire.skycoin.net:8001",
-    "server_count": 1
+    "sessions_count": 1
   },
   "transport_discovery": "http://skywire.skycoin.net:8003",
   "log_level": "info"

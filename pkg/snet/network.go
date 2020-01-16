@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 
@@ -42,8 +43,8 @@ type Config struct {
 	SecKey     cipher.SecKey
 	TpNetworks []string // networks to be used with transports
 
-	DmsgDiscAddr string
-	DmsgMinSrvs  int
+	DmsgDiscAddr    string
+	DmsgMinSessions int
 
 	STCPLocalAddr string // if empty, don't listen.
 	STCPTable     map[cipher.PubKey]string
@@ -61,8 +62,10 @@ func New(conf Config) *Network {
 	dmsgC := dmsg.NewClient(
 		conf.PubKey,
 		conf.SecKey,
-		disc.NewHTTP(conf.DmsgDiscAddr),
-		dmsg.SetLogger(logging.MustGetLogger("snet.dmsgC")))
+		disc.NewHTTP(conf.DmsgDiscAddr), &dmsg.Config{
+			MinSessions: conf.DmsgMinSessions,
+		})
+	dmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 
 	stcpC := stcp.NewClient(
 		logging.MustGetLogger("snet.stcpC"),
@@ -85,10 +88,11 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
 // Init initiates server connections.
 func (n *Network) Init(ctx context.Context) error {
 	if n.dmsgC != nil {
-		if err := n.dmsgC.InitiateServerConnections(ctx, n.conf.DmsgMinSrvs); err != nil {
-			return fmt.Errorf("failed to initiate 'dmsg': %v", err)
-		}
+		time.Sleep(200 * time.Millisecond)
+		go n.dmsgC.Serve()
+		time.Sleep(200 * time.Millisecond)
 	}
+
 	if n.stcpC != nil {
 		if n.conf.STCPLocalAddr != "" {
 			if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
@@ -98,6 +102,7 @@ func (n *Network) Init(ctx context.Context) error {
 			fmt.Println("No config found for stcp")
 		}
 	}
+
 	return nil
 }
 
@@ -154,10 +159,16 @@ type Dialer interface {
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
 	switch network {
 	case DmsgType:
-		conn, err := n.dmsgC.Dial(ctx, pk, port)
+		addr := dmsg.Addr{
+			PK:   pk,
+			Port: port,
+		}
+
+		conn, err := n.dmsgC.Dial(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
+
 		return makeConn(conn, network), nil
 	case STcpType:
 		conn, err := n.stcpC.Dial(ctx, pk, port)

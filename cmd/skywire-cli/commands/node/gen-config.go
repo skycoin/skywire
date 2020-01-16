@@ -98,7 +98,7 @@ func defaultConfig() *visor.Config {
 	} else {
 		conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
 	}
-	conf.Dmsg.ServerCount = 1
+	conf.Dmsg.SessionsCount = 1
 
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf

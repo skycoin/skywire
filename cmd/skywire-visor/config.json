@@ -6,7 +6,7 @@
   },
   "dmsg": {
     "discovery": "http://skywire.skycoin.net:8001",
-    "server_count": 5
+    "sessions_count": 5
   },
   "apps": [
     {
