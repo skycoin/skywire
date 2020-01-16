@@ -52,7 +52,9 @@ func testRPCGatewayDialOK(t *testing.T, l *logging.Logger, nType appnet.Type, di
 	localPort := routing.Port(100)
 
 	dialCtx := context.Background()
-	dialConn := dmsg.NewStream(nil, nil, dmsg.Addr{Port: uint16(localPort)}, dmsg.Addr{}, 0, 10, func() {})
+	dialConn := &appcommon.MockConn{}
+	dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
+	dialConn.On("RemoteAddr").Return(dmsg.Addr{})
 
 	var dialErr error
 
