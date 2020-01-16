@@ -7,111 +7,110 @@ import (
 
 // Errors for dmsg discovery (1xx).
 var (
-	ErrDiscEntryNotFound       = NewError(100, "discovery entry is not found", nil)
-	ErrDiscEntryIsNotServer    = NewError(101, "discovery entry is not of server", nil)
-	ErrDiscEntryIsNotClient    = NewError(102, "discovery entry is not of client", nil)
-	ErrDiscEntryHasNoDelegated = NewError(103, "discovery client entry has no delegated servers", nil)
+	ErrDiscEntryNotFound       = registerErr(Error{code: 100, msg: "discovery entry is not found"})
+	ErrDiscEntryIsNotServer    = registerErr(Error{code: 101, msg: "discovery entry is not of server"})
+	ErrDiscEntryIsNotClient    = registerErr(Error{code: 102, msg: "discovery entry is not of client"})
+	ErrDiscEntryHasNoDelegated = registerErr(Error{code: 103, msg: "discovery client entry has no delegated servers"})
 )
 
 // Entity Errors (2xx).
 var (
-	ErrEntityClosed               = NewError(200, "local entity closed", nil)
-	ErrSessionClosed              = NewError(201, "local session closed", nil)
-	ErrCannotConnectToDelegated   = NewError(202, "cannot connect to delegated server", nil)
-	ErrSessionHandshakeExtraBytes = NewError(203, "extra bytes received during session handshake", nil)
+	ErrEntityClosed               = registerErr(Error{code: 200, msg: "local entity closed"})
+	ErrSessionClosed              = registerErr(Error{code: 201, msg: "local session closed"})
+	ErrCannotConnectToDelegated   = registerErr(Error{code: 202, msg: "cannot connect to delegated server"})
+	ErrSessionHandshakeExtraBytes = registerErr(Error{code: 203, msg: "extra bytes received during session handshake"})
 )
 
 // Errors for dial request/response (3xx).
 var (
-	ErrReqInvalidSig       = NewError(300, "request has invalid signature", nil)
-	ErrReqInvalidTimestamp = NewError(301, "request timestamp should be higher than last", nil)
-	ErrReqInvalidSrcPK     = NewError(302, "request has invalid source public key", nil)
-	ErrReqInvalidDstPK     = NewError(303, "request has invalid destination public key", nil)
-	ErrReqInvalidSrcPort   = NewError(304, "request has invalid source port", nil)
-	ErrReqInvalidDstPort   = NewError(305, "request has invalid destination port", nil)
-	ErrReqNoListener       = NewError(306, "request has no associated listener", nil)
-	ErrReqNoSession        = NewError(307, "request has no associated session on the dmsg server", nil)
+	ErrReqInvalidSig       = registerErr(Error{code: 300, msg: "request has invalid signature"})
+	ErrReqInvalidTimestamp = registerErr(Error{code: 301, msg: "request timestamp should be higher than last"})
+	ErrReqInvalidSrcPK     = registerErr(Error{code: 302, msg: "request has invalid source public key"})
+	ErrReqInvalidDstPK     = registerErr(Error{code: 303, msg: "request has invalid destination public key"})
+	ErrReqInvalidSrcPort   = registerErr(Error{code: 304, msg: "request has invalid source port"})
+	ErrReqInvalidDstPort   = registerErr(Error{code: 305, msg: "request has invalid destination port"})
+	ErrReqNoListener       = registerErr(Error{code: 306, msg: "request has no associated listener"})
+	ErrReqNoSession        = registerErr(Error{code: 307, msg: "request has no associated session on the dmsg server"})
 
-	ErrDialRespInvalidSig  = NewError(350, "response has invalid signature", nil)
-	ErrDialRespInvalidHash = NewError(351, "response has invalid hash of associated request", nil)
-	ErrDialRespNotAccepted = NewError(352, "response rejected associated request without reason", nil)
+	ErrDialRespInvalidSig  = registerErr(Error{code: 350, msg: "response has invalid signature"})
+	ErrDialRespInvalidHash = registerErr(Error{code: 351, msg: "response has invalid hash of associated request"})
+	ErrDialRespNotAccepted = registerErr(Error{code: 352, msg: "response rejected associated request without reason"})
 
-	ErrSignedObjectInvalid = NewError(370, "signed object is invalid", nil)
+	ErrSignedObjectInvalid = registerErr(Error{code: 370, msg: "signed object is invalid"})
 )
 
 // Listener errors (4xx).
 var (
-	ErrPortOccupied    = NewError(400, "port already occupied", nil)
-	ErrAcceptChanMaxed = NewError(401, "listener accept chan maxed", nil)
+	ErrPortOccupied    = registerErr(Error{code: 400, msg: "port already occupied"})
+	ErrAcceptChanMaxed = registerErr(Error{code: 401, msg: "listener accept chan maxed"})
 )
-
-// NetworkErrorOptions provides 'timeout' and 'temporary' options for NetworkError.
-type NetworkErrorOptions struct {
-	Timeout   bool
-	Temporary bool
-}
-
-// NetworkError implements 'net.Error'.
-type NetworkError struct {
-	Err  error
-	Opts NetworkErrorOptions
-}
-
-// Error implements error
-func (err NetworkError) Error() string { return err.Err.Error() }
-
-// Timeout implements net.Error
-func (err NetworkError) Timeout() bool { return err.Opts.Timeout }
-
-// Temporary implements net.Error
-func (err NetworkError) Temporary() bool { return err.Opts.Temporary }
-
-var (
-	errFmt  = "code %d - %s"
-	errMap  = make(map[uint16]error)
-	codeMap = make(map[error]uint16)
-	errMx   sync.RWMutex
-)
-
-// NewError creates a new dmsg error.
-// - code '0' represents a miscellaneous error and is not saved in 'errMap'.
-// - netOpts is only needed if it needs to implement 'net.Error'.
-func NewError(code uint16, msg string, netOpts *NetworkErrorOptions) error {
-	// No need to check errMap if code 0.
-	if code != 0 {
-		errMx.Lock()
-		defer errMx.Unlock()
-		if _, ok := errMap[code]; ok {
-			panic(fmt.Errorf("error of code %d already exists", code))
-		}
-	}
-	err := fmt.Errorf(errFmt, code, msg)
-	if netOpts != nil {
-		err = &NetworkError{Err: err, Opts: *netOpts}
-	}
-	// Don't save error if code is '0'.
-	if code != 0 {
-		errMap[code] = err
-		codeMap[err] = code
-	}
-	return err
-}
 
 // ErrorFromCode returns a saved error (if exists) from given error code.
-func ErrorFromCode(code uint16) (bool, error) {
+func ErrorFromCode(code errorCode) (bool, error) {
 	errMx.RLock()
 	err, ok := errMap[code]
 	errMx.RUnlock()
 	return ok, err
 }
 
-// CodeFromError returns code from a given error.
-func CodeFromError(err error) uint16 {
-	errMx.RLock()
-	code, ok := codeMap[err]
-	errMx.RUnlock()
-	if !ok {
-		return 0
+type errorCode uint16
+
+var (
+	errMap = make(map[errorCode]error)
+	errMx  sync.RWMutex
+)
+
+func registerErr(e Error) Error {
+	e.nxt = nil
+
+	errMx.Lock()
+	if _, ok := errMap[e.code]; ok {
+		panic(fmt.Errorf("error of code %d already exists", e.code))
 	}
-	return code
+	errMap[e.code] = e
+	errMx.Unlock()
+
+	return e
+}
+
+// Error represents a dmsg-related error.
+type Error struct {
+	code      errorCode
+	msg       string
+	timeout   bool
+	temporary bool
+	nxt       error
+}
+
+// Error implements error
+func (e Error) Error() string {
+	return fmt.Sprintf("%d - %s", e.code, e.errorString())
+}
+
+func (e Error) errorString() string {
+	msg := e.msg
+	if e.nxt != nil {
+		if nxt, ok := e.nxt.(Error); ok {
+			msg += ": " + nxt.errorString()
+		} else {
+			msg += ": " + e.nxt.Error()
+		}
+	}
+	return msg
+}
+
+// Timeout implements net.Error
+func (e Error) Timeout() bool {
+	return e.timeout
+}
+
+// Temporary implements net.Error
+func (e Error) Temporary() bool {
+	return e.temporary
+}
+
+// Wrap wraps an error and returns the new error.
+func (e Error) Wrap(err error) Error {
+	e.nxt = err
+	return e
 }

@@ -1,17 +1,17 @@
 
-echo -e "\n\n" MESSAGING-DISCOVERY 
+echo -e "\n\n" DMSG-DISCOVERY
 
-echo -e "\n\n" $MSGD/messaging-discovery/available_servers"\n"
-curl $MSGD/messaging-discovery/available_servers
+echo -e "\n\n" $MSGD/dmsg-discovery/available_servers"\n"
+curl $MSGD/dmsg-discovery/available_servers
 
-echo -e "\n\n" $MSGD/messaging-discovery/entry/PK_A"\n"
-curl $MSGD/messaging-discovery/entry/$PK_A
+echo -e "\n\n" $MSGD/dmsg-discovery/entry/PK_A"\n"
+curl $MSGD/dmsg-discovery/entry/$PK_A
 
-echo -e "\n\n" $MSGD/messaging-discovery/entry/PK_B"\n"
-curl $MSGD/messaging-discovery/entry/$PK_B
+echo -e "\n\n" $MSGD/dmsg-discovery/entry/PK_B"\n"
+curl $MSGD/dmsg-discovery/entry/$PK_B
 
-echo -e "\n\n" $MSGD/messaging-discovery/entry/PK_C"\n"
-curl $MSGD/messaging-discovery/entry/$PK_C
+echo -e "\n\n" $MSGD/dmsg-discovery/entry/PK_C"\n"
+curl $MSGD/dmsg-discovery/entry/$PK_C
 
 
 echo -e "\n\n" TRANSPORT-DISCOVERY 

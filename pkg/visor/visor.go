@@ -127,13 +127,13 @@ func NewNode(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Cont
 	pk := cfg.Node.StaticPubKey
 	sk := cfg.Node.StaticSecKey
 
-	fmt.Println("min servers:", cfg.Messaging.SessionsCount)
+	fmt.Println("min sessions:", cfg.Dmsg.SessionsCount)
 	node.n = snet.New(snet.Config{
 		PubKey:          pk,
 		SecKey:          sk,
 		TpNetworks:      []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
-		DmsgDiscAddr:    cfg.Messaging.Discovery,
-		DmsgMinSessions: cfg.Messaging.SessionsCount,
+		DmsgDiscAddr:    cfg.Dmsg.Discovery,
+		DmsgMinSessions: cfg.Dmsg.SessionsCount,
 		STCPLocalAddr:   cfg.STCP.LocalAddr,
 		STCPTable:       cfg.STCP.PubKeyTable,
 	})
@@ -153,7 +153,7 @@ func NewNode(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Cont
 
 	trDiscovery, err := cfg.TransportDiscovery()
 	if err != nil {
-		return nil, fmt.Errorf("invalid MessagingConfig: %s", err)
+		return nil, fmt.Errorf("invalid transport discovery config: %s", err)
 	}
 	logStore, err := cfg.TransportLogStore()
 	if err != nil {
