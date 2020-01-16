@@ -341,7 +341,6 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 
 func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
-
 	if err != nil {
 		return err
 	}
@@ -369,31 +368,63 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
 	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
 
-	if rg.isClosed() {
-		r.logger.Infoln("RG IS CLOSED")
-		return io.ErrClosedPipe
-	}
-
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-
 	select {
-	case <-rg.done:
-		r.logger.Infof("RG IS DONE")
+	case <-rg.closed:
 		return io.ErrClosedPipe
 	case rg.readCh <- packet.Payload():
-		r.logger.Infof("PUT PAYLOAD INTO RG READ CHAN")
 		return nil
 	}
 }
 
-func (r *router) handleClosePacket(_ context.Context, packet routing.Packet) error {
+func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) error {
 	routeID := packet.RouteID()
 
-	r.logger.Infof("Received keepalive packet for route ID %v", routeID)
+	r.logger.Infof("Received close packet for route ID %v", routeID)
 
-	rules := []routing.RouteID{routeID}
-	r.rt.DelRules(rules)
+	rule, err := r.GetRule(routeID)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		routeIDs := []routing.RouteID{routeID}
+		r.rt.DelRules(routeIDs)
+	}()
+
+	if t := rule.Type(); t == routing.RuleIntermediaryForward {
+		r.logger.Infoln("Handling intermediary close packet")
+		return r.forwardPacket(ctx, packet, rule)
+	}
+
+	desc := rule.RouteDescriptor()
+	rg, ok := r.routeGroup(desc)
+
+	r.logger.Infof("Handling close packet with descriptor %s", &desc)
+
+	if !ok {
+		r.logger.Infof("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
+		return errors.New("route descriptor does not exist")
+	}
+
+	defer r.removeRouteGroup(desc)
+
+	if rg == nil {
+		return errors.New("RouteGroup is nil")
+	}
+
+	r.logger.Infof("Got new remote close packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
+	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
+
+	closeCode := routing.CloseCode(packet.Payload()[0])
+
+	if rg.isClosed() {
+		return io.ErrClosedPipe
+	}
+
+	if err := rg.handleClosePacket(closeCode); err != nil {
+		return fmt.Errorf("error handling close packet with code %d by route group with descriptor %s: %v",
+			closeCode, &desc, err)
+	}
 
 	return nil
 }
@@ -477,6 +508,8 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		p = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
+	case routing.ClosePacket:
+		p = routing.MakeClosePacket(rule.NextRouteID(), routing.CloseCode(packet.Payload()[0]))
 	default:
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}
@@ -576,6 +609,13 @@ func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	rg, ok := r.rgs[desc]
 
 	return rg, ok
+}
+
+func (r *router) removeRouteGroup(desc routing.RouteDescriptor) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+
+	delete(r.rgs, desc)
 }
 
 func (r *router) IntroduceRules(rules routing.EdgeRules) error {
