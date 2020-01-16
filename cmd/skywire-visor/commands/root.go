@@ -188,6 +188,16 @@ func (cfg *runCfg) runNode() *runCfg {
 
 	time.Sleep(startDelay)
 
+	if cfg.conf.DmsgPty != nil {
+		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile, cfg.conf.DmsgPty.CLIAddr)
+	} else {
+		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile)
+	}
+
+	if err != nil {
+		cfg.logger.Fatal("failed to unlink socket files: ", err)
+	}
+
 	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx, cfg.configPath)
 	if err != nil {
 		cfg.logger.Fatal("Failed to initialize node: ", err)
@@ -199,7 +209,6 @@ func (cfg *runCfg) runNode() *runCfg {
 			cfg.logger.Error("Failed to connect to uptime tracker: ", err)
 		} else {
 			ticker := time.NewTicker(1 * time.Second)
-			defer ticker.Stop()
 
 			go func() {
 				for range ticker.C {

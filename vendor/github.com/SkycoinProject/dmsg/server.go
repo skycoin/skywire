@@ -2,208 +2,133 @@ package dmsg
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/SkycoinProject/dmsg/netutil"
 )
 
-// ErrListenerAlreadyWrappedToNoise occurs when the provided net.Listener is already wrapped with noise.Listener
-var ErrListenerAlreadyWrappedToNoise = errors.New("listener is already wrapped to *noise.Listener")
-
-// Server represents a dms_server.
+// Server represents a dsmg server entity.
 type Server struct {
-	log *logging.Logger
+	EntityCommon
 
-	pk cipher.PubKey
-	sk cipher.SecKey
-	dc disc.APIClient
-
-	addr  string
-	lis   net.Listener
-	conns map[cipher.PubKey]*ServerConn
-	mx    sync.RWMutex
-
-	wg sync.WaitGroup
-
-	lisDone  int32
-	doneOnce sync.Once
+	done chan struct{}
+	once sync.Once
+	wg   sync.WaitGroup
 }
 
-// NewServer creates a new dmsg_server.
-func NewServer(pk cipher.PubKey, sk cipher.SecKey, addr string, l net.Listener, dc disc.APIClient) (*Server, error) {
-	if addr == "" {
-		addr = l.Addr().String()
-	}
-
-	if _, ok := l.(*noise.Listener); ok {
-		return nil, ErrListenerAlreadyWrappedToNoise
-	}
-
-	return &Server{
-		log:   logging.MustGetLogger("dmsg_server"),
-		pk:    pk,
-		sk:    sk,
-		addr:  addr,
-		lis:   noise.WrapListener(l, pk, sk, false, noise.HandshakeXK),
-		dc:    dc,
-		conns: make(map[cipher.PubKey]*ServerConn),
-	}, nil
+// NewServer creates a new dmsg server entity.
+func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient) *Server {
+	s := new(Server)
+	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
+	s.done = make(chan struct{})
+	return s
 }
 
-// SetLogger set's the logger.
-func (s *Server) SetLogger(log *logging.Logger) {
-	s.log = log
-}
-
-// Addr returns the server's listening address.
-func (s *Server) Addr() string {
-	return s.addr
-}
-
-func (s *Server) setConn(l *ServerConn) {
-	s.mx.Lock()
-	s.conns[l.remoteClient] = l
-	s.mx.Unlock()
-}
-
-func (s *Server) delConn(pk cipher.PubKey) {
-	s.mx.Lock()
-	delete(s.conns, pk)
-	s.mx.Unlock()
-}
-
-func (s *Server) getConn(pk cipher.PubKey) (*ServerConn, bool) {
-	s.mx.RLock()
-	l, ok := s.conns[pk]
-	s.mx.RUnlock()
-	return l, ok
-}
-
-func (s *Server) connCount() int {
-	s.mx.RLock()
-	n := len(s.conns)
-	s.mx.RUnlock()
-	return n
-}
-
-func (s *Server) close() (closed bool, err error) {
-	s.doneOnce.Do(func() {
-		closed = true
-		atomic.StoreInt32(&s.lisDone, 1)
-
-		if err = s.lis.Close(); err != nil {
-			return
-		}
-
-		s.mx.Lock()
-		s.conns = make(map[cipher.PubKey]*ServerConn)
-		s.mx.Unlock()
-	})
-
-	return closed, err
-}
-
-// Close closes the dmsg_server.
+// Close implements io.Closer
 func (s *Server) Close() error {
-	closed, err := s.close()
-	if !closed {
-		return errors.New("server is already closed")
+	if s == nil {
+		return nil
 	}
-	if err != nil {
-		return err
-	}
-
-	s.wg.Wait()
+	s.once.Do(func() {
+		close(s.done)
+		s.wg.Wait()
+	})
 	return nil
 }
 
-func (s *Server) isLisClosed() bool {
-	return atomic.LoadInt32(&s.lisDone) == 1
-}
+// Serve serves the server.
+func (s *Server) Serve(lis net.Listener, addr string) error {
+	var log logrus.FieldLogger //nolint:gosimple
+	log = s.log.WithField("local_addr", addr).WithField("local_pk", s.pk)
 
-// Serve serves the dmsg_server.
-func (s *Server) Serve() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	log.Info("Serving server.")
+	s.wg.Add(1)
 
-	if err := s.retryUpdateEntry(ctx, StreamHandshakeTimeout); err != nil {
-		return fmt.Errorf("updating server's client entry failed with: %s", err)
+	defer func() {
+		log.Info("Stopped server.")
+		s.wg.Done()
+	}()
+
+	go func() {
+		<-s.done
+		log.WithError(lis.Close()).
+			Info("Stopping server, net.Listener closed.")
+	}()
+
+	log.Info("Updating discovery entry...")
+	if addr == "" {
+		addr = lis.Addr().String()
+	}
+	if err := s.updateEntryLoop(addr); err != nil {
+		return err
 	}
 
-	s.log.Infof("serving: pk(%s) addr(%s)", s.pk, s.addr)
-
+	log.Info("Accepting sessions...")
 	for {
-		rawConn, err := s.lis.Accept()
+		conn, err := lis.Accept()
 		if err != nil {
-			// if the listener is closed, it means that this error is not interesting
-			// for the outer client
-			if s.isLisClosed() {
+			// If server is closed, there is no error to report.
+			if isClosed(s.done) {
 				return nil
 			}
-			// Continue if error is temporary.
-			if err, ok := err.(net.Error); ok {
-				if err.Temporary() {
-					continue
-				}
-			}
 			return err
 		}
-		s.log.Infof("newConn: %v", rawConn.RemoteAddr())
-		conn := NewServerConn(s.log, rawConn, rawConn.RemoteAddr().(*noise.Addr).PK)
-		s.setConn(conn)
 
 		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			err := conn.Serve(ctx, s.getConn)
-			s.log.Infof("connection with client %s closed: error(%v)", conn.PK(), err)
-			s.delConn(conn.PK())
-		}()
+		go func(conn net.Conn) {
+			s.handleSession(conn)
+			s.wg.Done()
+		}(conn)
 	}
 }
 
-func (s *Server) updateDiscEntry(ctx context.Context) error {
-	entry, err := s.dc.Entry(ctx, s.pk)
-	if err != nil {
-		entry = disc.NewServerEntry(s.pk, 0, s.addr, 10)
-		if err := entry.Sign(s.sk); err != nil {
-			fmt.Println("err in sign")
-			return err
-		}
-		return s.dc.SetEntry(ctx, entry)
-	}
-
-	entry.Server.Address = s.Addr()
-	s.log.Infoln("updatingEntry:", entry)
-
-	return s.dc.UpdateEntry(ctx, s.sk, entry)
-}
-
-func (s *Server) retryUpdateEntry(ctx context.Context, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+func (s *Server) updateEntryLoop(addr string) error {
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	for {
-		if err := s.updateDiscEntry(ctx); err != nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				retry := time.Second
-				s.log.WithError(err).Warnf("updateEntry failed: trying again in %d second...", retry)
-				time.Sleep(retry)
-				continue
-			}
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-s.done:
+			cancel()
 		}
-		return nil
+	}()
+	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
+		return s.updateServerEntry(ctx, addr)
+	})
+}
+
+func (s *Server) handleSession(conn net.Conn) {
+	var log logrus.FieldLogger //nolint:gosimple
+	log = s.log.WithField("remote_tcp", conn.RemoteAddr())
+
+	dSes, err := makeServerSession(&s.EntityCommon, conn)
+	if err != nil {
+		log = log.WithError(err)
+		if err := conn.Close(); err != nil {
+			s.log.WithError(err).
+				Debug("On handleSession() failure, close connection resulted in error.")
+		}
+		return
 	}
+
+	log = log.WithField("remote_pk", dSes.RemotePK())
+	log.Info("Started session.")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		awaitDone(ctx, s.done)
+		log.WithError(dSes.Close()).Info("Stopped session.")
+	}()
+
+	if s.setSession(ctx, dSes.SessionCommon) {
+		dSes.Serve()
+	}
+	s.delSession(ctx, dSes.RemotePK())
+	cancel()
 }

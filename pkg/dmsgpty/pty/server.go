@@ -74,10 +74,11 @@ func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 			return
 		}
 
-		log := s.log.WithField("remote_pk", st.RemotePK())
+		remote := st.RemoteAddr().(dmsg.Addr)
+		log := s.log.WithField("remote_pk", remote.PK)
 		log.Info("received request")
 
-		ok, err := s.auth.Get(st.RemotePK())
+		ok, err := s.auth.Get(remote.PK)
 		if err != nil {
 			log.WithError(err).Error("dmsgpty-server whitelist error")
 			return
@@ -107,7 +108,7 @@ func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 					_ = st.Close() //nolint:errcheck
 				}
 			}()
-			s.handleConn(log, st.RemotePK(), st)
+			s.handleConn(log, remote.PK, st)
 		}(st)
 	}
 }
