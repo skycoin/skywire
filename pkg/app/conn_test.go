@@ -180,12 +180,12 @@ func TestConn_TestConn(t *testing.T) {
 		fmt.Printf("C2 Local: %s\n", keys[1].PK)
 		p1, p2 := net.Pipe()
 		a1 := appnet.Addr{
-			Net:    appnet.Type(netType),
+			Net:    netType,
 			PubKey: keys[0].PK,
 			Port:   0,
 		}
 		a2 := appnet.Addr{
-			Net:    appnet.Type(netType),
+			Net:    netType,
 			PubKey: keys[1].PK,
 			Port:   0,
 		}
@@ -207,17 +207,15 @@ func TestConn_TestConn(t *testing.T) {
 		n.On("DialContext", mock.Anything, a2).Return(wc2, testhelpers.NoErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(appnet.Type(netType), n)
+		err := appnet.AddNetworker(netType, n)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 
 		rpcL, err := nettest.NewLocalListener("tcp")
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 
 		rpcS := rpc.NewServer()
 
@@ -229,12 +227,10 @@ func TestConn_TestConn(t *testing.T) {
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 		err = rpcS.RegisterName(appKeys[1].PK.Hex(), gateway2)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 
 		go rpcS.Accept(rpcL)
 
@@ -242,7 +238,6 @@ func TestConn_TestConn(t *testing.T) {
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 
 		cl1 := Client{
 			log:     logging.MustGetLogger("test_client_1"),
@@ -256,7 +251,6 @@ func TestConn_TestConn(t *testing.T) {
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 
 		cl2 := Client{
 			log:     logging.MustGetLogger("test_client_2"),
@@ -270,59 +264,20 @@ func TestConn_TestConn(t *testing.T) {
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 
 		c2, err := cl2.Dial(a1)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		//require.NoError(t, err)
 
 		stop := func() {
-			/*err := c1.Close()
-			require.NoError(t, err)
-			err = c2.Close()
-			require.NoError(t, err)
-			err = rpcL.Close()
-			require.NoError(t, err)*/
+			_ = c1.Close()   //nolint:errcheck
+			_ = c2.Close()   //nolint:errcheck
+			_ = rpcL.Close() //nolint:errcheck
 		}
 
 		return c1, c2, stop, nil
 	}
-
-	/*payload := []byte("hello")
-
-	  errC := make(chan error)
-	  nC := make(chan int)
-	  bufC := make(chan []byte)
-	  go func() {
-	  	buf := make([]byte, 10)
-	  	n, err := c2.Read(buf)
-	  	fmt.Printf("Err is %v\n", err)
-	  	errC <- err
-	  	if err != nil {
-	  		return
-	  	}
-
-	  	nC <- n
-	  	bufC <- buf[:n]
-	  }()
-
-	  written, err := c1.Write(payload)
-	  require.NoError(t, err)
-	  require.Equal(t, len(payload), written)
-
-	  require.NoError(t, <-errC)
-	  close(errC)
-	  require.Equal(t, len(payload), <-nC)
-	  close(nC)
-	  require.Equal(t, payload, <-bufC)
-	  close(bufC)
-
-	  err = c1.Close()
-	  require.NoError(t, err)
-	  err = c2.Close()
-	  require.NoError(t, err)*/
 
 	nettest.TestConn(t, mp)
 }

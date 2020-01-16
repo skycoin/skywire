@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 //	conf.Node.StaticPubKey = pk
 //	conf.Node.StaticSecKey = sk
 //	conf.Messaging.Discovery = "http://skywire.skycoin.net:8001"
-//	conf.Messaging.ServerCount = 10
+//	conf.Messaging.SessionsCount = 10
 //	conf.Transport.Discovery = srv.URL
 //	conf.Apps = []AppConfig{
 //		{App: "foo", Version: "1.1", Port: 1},
@@ -82,7 +82,6 @@ func TestMain(m *testing.M) {
 //	assert.NotNil(t, node.startedApps)
 //}
 
-// TODO (Darkren): fix tests
 func TestNodeStartClose(t *testing.T) {
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
@@ -138,13 +137,15 @@ func TestNodeStartClose(t *testing.T) {
 
 	node.procManager = pm
 
-	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock())
+	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock(), nil)
+	go dmsgC.Serve()
+
 	netConf := snet.Config{
-		PubKey:       cipher.PubKey{},
-		SecKey:       cipher.SecKey{},
-		TpNetworks:   nil,
-		DmsgDiscAddr: "",
-		DmsgMinSrvs:  0,
+		PubKey:          cipher.PubKey{},
+		SecKey:          cipher.SecKey{},
+		TpNetworks:      nil,
+		DmsgDiscAddr:    "",
+		DmsgMinSessions: 0,
 	}
 
 	network := snet.NewRaw(netConf, dmsgC, nil)
