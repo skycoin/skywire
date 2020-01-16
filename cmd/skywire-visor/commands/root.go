@@ -166,19 +166,19 @@ func (cfg *runCfg) runNode() *runCfg {
 
 	time.Sleep(startDelay)
 
-	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx)
-	if err != nil {
-		cfg.logger.Fatal("Failed to initialize node: ", err)
-	}
-
 	if cfg.conf.DmsgPty != nil {
-		err = node.UnlinkSocketFiles(cfg.conf.AppServerSockFile, cfg.conf.DmsgPty.CLIAddr)
+		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile, cfg.conf.DmsgPty.CLIAddr)
 	} else {
-		err = node.UnlinkSocketFiles(cfg.conf.AppServerSockFile)
+		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile)
 	}
 
 	if err != nil {
 		cfg.logger.Fatal("failed to unlink socket files: ", err)
+	}
+
+	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx)
+	if err != nil {
+		cfg.logger.Fatal("Failed to initialize node: ", err)
 	}
 
 	if cfg.conf.Uptime.Tracker != "" {
