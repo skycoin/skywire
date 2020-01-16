@@ -14,6 +14,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -674,6 +675,7 @@ func NewTestEnv(t *testing.T, nets []*snet.Network) *TestEnv {
 
 	mConfs := make([]*transport.ManagerConfig, len(nets))
 	ms := make([]*transport.Manager, len(nets))
+	retrier := netutil.NewRetrier(3*time.Second, 5, 2)
 
 	for i, n := range nets {
 		var err error
@@ -685,7 +687,7 @@ func NewTestEnv(t *testing.T, nets []*snet.Network) *TestEnv {
 			LogStore:        transport.InMemoryTransportLogStore(),
 		}
 
-		ms[i], err = transport.NewManager(n, mConfs[i])
+		ms[i], err = transport.NewManager(n, mConfs[i], retrier)
 		require.NoError(t, err)
 
 		go ms[i].Serve(context.TODO())

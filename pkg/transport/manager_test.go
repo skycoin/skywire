@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -55,7 +56,7 @@ func TestNewManager(t *testing.T) {
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
 		LogStore:        ls0,
-	})
+	}, nil)
 	require.NoError(t, err)
 	go m0.Serve(context.TODO())
 	defer func() { require.NoError(t, m0.Close()) }()
@@ -63,12 +64,13 @@ func TestNewManager(t *testing.T) {
 	// Prepare tp manager 1.
 	pk1, sk1 := keys[1].PK, keys[1].SK
 	ls1 := transport.InMemoryTransportLogStore()
+	retrier := netutil.NewRetrier(3*time.Second, 5, 2)
 	m2, err := transport.NewManager(nEnv.Nets[1], &transport.ManagerConfig{
 		PubKey:          pk1,
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,
 		LogStore:        ls1,
-	})
+	}, retrier)
 	require.NoError(t, err)
 	go m2.Serve(context.TODO())
 	defer func() { require.NoError(t, m2.Close()) }()

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"net"
 	"net/rpc"
 	"os"
@@ -156,7 +157,9 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *res
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
-	node.tm, err = transport.NewManager(node.n, tmConfig)
+
+	retrier := netutil.NewRetrier(time.Duration(config.Retrier.BackoffTime), config.Retrier.Times, config.Retrier.Factor)
+	node.tm, err = transport.NewManager(node.n, tmConfig, retrier)
 	if err != nil {
 		return nil, fmt.Errorf("transport manager: %s", err)
 	}

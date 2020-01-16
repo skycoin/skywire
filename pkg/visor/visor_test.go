@@ -2,6 +2,7 @@ package visor
 
 import (
 	"fmt"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -154,7 +155,8 @@ func TestNodeStartClose(t *testing.T) {
 		DiscoveryClient: transport.NewDiscoveryMock(),
 	}
 
-	tm, err := transport.NewManager(network, tmConf)
+	retrier := netutil.NewRetrier(3*time.Second, 5, 2)
+	tm, err := transport.NewManager(network, tmConf, retrier)
 	node.tm = tm
 	require.NoError(t, err)
 

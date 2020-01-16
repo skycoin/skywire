@@ -54,10 +54,22 @@ type ManagedTransport struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
+
+	retrier *Retrier
+}
+
+type Retrier struct {
+	r     *netutil.Retrier
+	alive bool
 }
 
 // NewManagedTransport creates a new ManagedTransport.
-func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK cipher.PubKey, netName string) *ManagedTransport {
+func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK cipher.PubKey, netName string, retrier *netutil.Retrier) *ManagedTransport {
+	rt := &Retrier{
+		r:     retrier,
+		alive: false,
+	}
+
 	mt := &ManagedTransport{
 		log:      logging.MustGetLogger(fmt.Sprintf("tp:%s", rPK.String()[:6])),
 		rPK:      rPK,
@@ -69,6 +81,7 @@ func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK c
 		LogEntry: new(LogEntry),
 		connCh:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
+		retrier:  rt,
 	}
 	mt.wg.Add(2)
 	return mt
@@ -136,26 +149,46 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 		}
 	}()
 
-	r := netutil.NewRetrier(3*time.Second, 5, 2)
-	var err error
+	// Redial loop.
+	for {
+		select {
+		case <-mt.done:
+			return
 
-	// redial underlying connection
-	err = r.Do(func() error {
-		if mt.logMod() {
-			err = mt.ls.Record(mt.Entry.ID, mt.LogEntry)
-			return err
+		case <-logTicker.C:
+			if mt.logMod() {
+				if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
+					mt.log.Warnf("Failed to record log entry: %s", err)
+				}
+			} else {
+				// If there has not been any activity, ensure underlying 'write' tp is still up.
+				mt.connMx.Lock()
+				if mt.conn == nil {
+					if !mt.retrier.alive {
+						if err := mt.redialConn(ctx); err != nil {
+							mt.log.Warn("failed to redial underlying connection")
+							mt.retrier.alive = false
+						}
+					}
+				}
+				mt.connMx.Unlock()
+			}
 		}
-		mt.connMx.Lock()
-		err = mt.dial(ctx)
-		mt.connMx.Unlock()
-		return err
+	}
+}
+
+// redialConn redials an underlying connection using an exponetial backoff
+func (mt *ManagedTransport) redialConn(ctx context.Context) error {
+	mt.retrier.alive = true
+	err := mt.retrier.r.Do(func() error {
+		return mt.dial(ctx)
 	})
 
 	if err != nil {
-		mt.log.Warn("failed to redial underlying connection")
-	} else {
-		mt.log.Info("successfully redialed underlying connection")
+		return err
 	}
+
+	return nil
 }
 
 func (mt *ManagedTransport) isServing() bool {

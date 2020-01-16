@@ -41,6 +41,8 @@ type Config struct {
 
 	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
 
+	Retrier *BackoffConfig `json:"retrier"`
+
 	Transport struct {
 		Discovery string `json:"discovery"`
 		LogStore  struct {
@@ -204,6 +206,12 @@ type DmsgPtyConfig struct {
 	AuthFile string `json:"authorization_file"`
 	CLINet   string `json:"cli_network"`
 	CLIAddr  string `json:"cli_address"`
+}
+
+type BackoffConfig struct {
+	BackoffTime Duration `json:"backoff_time"`
+	Times uint32 `json:"times"`
+	Factor uint32 `json:"factor"`
 }
 
 // AppConfig defines app startup parameters.
