@@ -82,7 +82,6 @@ func TestMain(m *testing.M) {
 //	assert.NotNil(t, node.startedApps)
 //}
 
-// TODO (Darkren): fix tests
 func TestNodeStartClose(t *testing.T) {
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
