@@ -189,8 +189,10 @@ func prepClients(
 		t.Logf("client[%d] PK: %s\n", i, pk)
 
 		clientLogger := logging.MustGetLogger(fmt.Sprintf("client_%d:%s:%d", i, pk, port))
-		c := dmsg.NewClient(pk, sk, nEnv.DmsgD, dmsg.SetLogger(clientLogger))
-		require.NoError(t, c.InitiateServerConnections(context.TODO(), 1))
+		c := dmsg.NewClient(pk, sk, nEnv.DmsgD, &dmsg.Config{MinSessions: 1})
+		c.SetLogger(clientLogger)
+
+		go c.Serve()
 
 		listener, err := c.Listen(port)
 		require.NoError(t, err)
