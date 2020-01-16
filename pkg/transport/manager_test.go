@@ -3,6 +3,7 @@ package transport_test
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"testing"
@@ -20,18 +21,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var masterLogger *logging.MasterLogger
+
 func TestMain(m *testing.M) {
+	masterLogger = logging.NewMasterLogger()
 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
 	if ok {
 		lvl, err := logging.LevelFromString(loggingLevel)
 		if err != nil {
 			log.Fatal(err)
 		}
-		logger := logging.MustGetLogger("transport-test")
-		dmsg.SetLogger(logger)
-		logging.SetLevel(lvl)
+		masterLogger.SetLevel(lvl)
 	} else {
-		logging.Disable()
+		masterLogger.Out = ioutil.Discard
 	}
 
 	os.Exit(m.Run())
