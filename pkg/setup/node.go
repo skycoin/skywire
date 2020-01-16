@@ -40,8 +40,8 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	dmsgC := dmsg.NewClient(
 		conf.PubKey,
 		conf.SecKey,
-		disc.NewHTTP(conf.Messaging.Discovery),
-		&dmsg.Config{MinSessions: conf.Messaging.SessionsCount},
+		disc.NewHTTP(conf.Dmsg.Discovery),
+		&dmsg.Config{MinSessions: conf.Dmsg.SessionsCount},
 	)
 	dmsgC.SetLogger(logger.PackageLogger(dmsg.Type))
 
@@ -60,7 +60,7 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 		logger:        log,
 		dmsgC:         dmsgC,
 		dmsgL:         dmsgL,
-		sessionsCount: conf.Messaging.SessionsCount,
+		sessionsCount: conf.Dmsg.SessionsCount,
 		metrics:       metrics,
 	}
 
