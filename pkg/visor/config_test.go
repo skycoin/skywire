@@ -18,15 +18,15 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-func TestMessagingDiscovery(t *testing.T) {
+func TestDmsgDiscovery(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 	conf := Config{}
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
-	conf.Messaging.Discovery = "skywire.skycoin.net:8001"
-	conf.Messaging.SessionsCount = 10
+	conf.Dmsg.Discovery = "skywire.skycoin.net:8001"
+	conf.Dmsg.SessionsCount = 10
 
-	c, err := conf.MessagingConfig()
+	c, err := conf.DmsgConfig()
 	require.NoError(t, err)
 
 	assert.NotNil(t, c.Discovery)
