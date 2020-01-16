@@ -4,8 +4,8 @@ package appnet
 type Type string
 
 const (
-	// TypeDMSG is a network type for DMSG communication.
-	TypeDMSG Type = "dmsg"
+	// TypeDmsg is a network type for dmsg communication.
+	TypeDmsg Type = "dmsg"
 	// TypeSkynet is a network type for skywire communication.
 	TypeSkynet Type = "skynet"
 )
@@ -18,7 +18,7 @@ func (n Type) IsValid() bool {
 
 var (
 	validNetworks = map[Type]struct{}{
-		TypeDMSG:   {},
+		TypeDmsg:   {},
 		TypeSkynet: {},
 	}
 )

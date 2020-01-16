@@ -45,7 +45,7 @@ func TestRPCClient_Dial(t *testing.T) {
 		n.On("DialContext", dialCtx, remote).Return(dialConn, testhelpers.NoErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(appnet.TypeDMSG, n)
+		err := appnet.AddNetworker(appnet.TypeDmsg, n)
 		require.NoError(t, err)
 
 		connID, localPort, err := cl.Dial(remote)
@@ -72,7 +72,7 @@ func TestRPCClient_Dial(t *testing.T) {
 		n.On("DialContext", dialCtx, remote).Return(dialConn, dialErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(appnet.TypeDMSG, n)
+		err := appnet.AddNetworker(appnet.TypeDmsg, n)
 		require.NoError(t, err)
 
 		connID, localPort, err := cl.Dial(remote)
@@ -102,7 +102,7 @@ func TestRPCClient_Listen(t *testing.T) {
 		n.On("ListenContext", listenCtx, local).Return(listenLis, noErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(appnet.TypeDMSG, n)
+		err := appnet.AddNetworker(appnet.TypeDmsg, n)
 		require.NoError(t, err)
 
 		lisID, err := cl.Listen(local)
@@ -128,7 +128,7 @@ func TestRPCClient_Listen(t *testing.T) {
 		n.On("ListenContext", listenCtx, local).Return(listenLis, listenErr)
 
 		appnet.ClearNetworkers()
-		err := appnet.AddNetworker(appnet.TypeDMSG, n)
+		err := appnet.AddNetworker(appnet.TypeDmsg, n)
 		require.NoError(t, err)
 
 		lisID, err := cl.Listen(local)
@@ -165,7 +165,7 @@ func TestRPCClient_Accept(t *testing.T) {
 		cl := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
 
 		wantRemote := appnet.Addr{
-			Net:    appnet.TypeDMSG,
+			Net:    appnet.TypeDmsg,
 			PubKey: dmsgRemote.PK,
 			Port:   routing.Port(dmsgRemote.Port),
 		}
@@ -667,7 +667,7 @@ func prepNetworkerWithListener(t *testing.T, lis *appcommon.MockListener, local 
 	n := &appnet.MockNetworker{}
 	n.On("ListenContext", mock.Anything, local).Return(lis, noErr)
 
-	err := appnet.AddNetworker(appnet.TypeDMSG, n)
+	err := appnet.AddNetworker(appnet.TypeDmsg, n)
 	require.NoError(t, err)
 }
 
@@ -678,7 +678,7 @@ func prepNetworkerWithConn(t *testing.T, conn *appcommon.MockConn, remote appnet
 	networker.On("DialContext", mock.Anything, remote).Return(conn, noErr)
 
 	appnet.ClearNetworkers()
-	err := appnet.AddNetworker(appnet.TypeDMSG, networker)
+	err := appnet.AddNetworker(appnet.TypeDmsg, networker)
 	require.NoError(t, err)
 }
 
@@ -720,7 +720,7 @@ func prepAddrs() (dmsgLocal, dmsgRemote dmsg.Addr, local, remote appnet.Addr) {
 		Port: localPort,
 	}
 	local = appnet.Addr{
-		Net:    appnet.TypeDMSG,
+		Net:    appnet.TypeDmsg,
 		PubKey: localPK,
 		Port:   routing.Port(localPort),
 	}
@@ -732,7 +732,7 @@ func prepAddrs() (dmsgLocal, dmsgRemote dmsg.Addr, local, remote appnet.Addr) {
 		Port: remotePort,
 	}
 	remote = appnet.Addr{
-		Net:    appnet.TypeDMSG,
+		Net:    appnet.TypeDmsg,
 		PubKey: remotePK,
 		Port:   routing.Port(remotePort),
 	}

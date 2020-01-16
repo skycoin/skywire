@@ -25,7 +25,7 @@ import (
 
 func TestRPCGateway_Dial(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
-	nType := appnet.TypeDMSG
+	nType := appnet.TypeDmsg
 
 	dialAddr := prepAddr(nType)
 
@@ -142,7 +142,7 @@ func testRPCGatewayDialErrorWrappingConn(t *testing.T, l *logging.Logger, nType 
 
 func TestRPCGateway_Listen(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
-	nType := appnet.TypeDMSG
+	nType := appnet.TypeDmsg
 
 	listenAddr := prepAddr(nType)
 
@@ -268,7 +268,7 @@ func testRPCGatewayAcceptOK(t *testing.T, l *logging.Logger) {
 	var resp AcceptResp
 	err := rpc.Accept(&lisID, &resp)
 	require.NoError(t, err)
-	require.Equal(t, resp.Remote, appnet.Addr{Net: appnet.TypeDMSG})
+	require.Equal(t, resp.Remote, appnet.Addr{Net: appnet.TypeDmsg})
 }
 
 func testRPCGatewayAcceptNoSuchListener(t *testing.T, l *logging.Logger) {

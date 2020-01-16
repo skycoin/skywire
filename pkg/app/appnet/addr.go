@@ -44,7 +44,7 @@ func ConvertAddr(addr net.Addr) (Addr, error) {
 	switch a := addr.(type) {
 	case dmsg.Addr:
 		return Addr{
-			Net:    TypeDMSG,
+			Net:    TypeDmsg,
 			PubKey: a.PK,
 			Port:   routing.Port(a.Port),
 		}, nil
