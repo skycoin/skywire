@@ -23,8 +23,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-// TODO (Darkren): fix test
-/*func TestRPCGateway_Dial(t *testing.T) {
+func TestRPCGateway_Dial(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 	nType := appnet.TypeDMSG
 
@@ -53,7 +52,9 @@ func testRPCGatewayDialOK(t *testing.T, l *logging.Logger, nType appnet.Type, di
 	localPort := routing.Port(100)
 
 	dialCtx := context.Background()
-	dialConn := dmsg.NewStream(nil, nil, dmsg.Addr{Port: uint16(localPort)}, dmsg.Addr{}, 0, 10, func() {})
+	dialConn := &appcommon.MockConn{}
+	dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
+	dialConn.On("RemoteAddr").Return(dmsg.Addr{})
 
 	var dialErr error
 
@@ -137,7 +138,7 @@ func testRPCGatewayDialErrorWrappingConn(t *testing.T, l *logging.Logger, nType 
 	var resp DialResp
 	err = rpc.Dial(&dialAddr, &resp)
 	require.Equal(t, err, appnet.ErrUnknownAddrType)
-}*/
+}
 
 func TestRPCGateway_Listen(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")

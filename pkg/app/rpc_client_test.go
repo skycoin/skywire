@@ -25,8 +25,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 )
 
-// TODO (Darkren): fix test
-/*func TestRPCClient_Dial(t *testing.T) {
+func TestRPCClient_Dial(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		s := prepRPCServer(t, prepGateway())
 		rpcL, lisCleanup := prepListener(t)
@@ -38,12 +37,12 @@ import (
 		dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 		dialCtx := context.Background()
-		dialConn := dmsg.NewStream(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
-			dmsgLocal, dmsgRemote, 0, 1024, func() {})
-		var noErr error
+		dialConn := &appcommon.MockConn{}
+		dialConn.On("LocalAddr").Return(dmsgLocal)
+		dialConn.On("RemoteAddr").Return(dmsgRemote)
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, remote).Return(dialConn, noErr)
+		n.On("DialContext", dialCtx, remote).Return(dialConn, testhelpers.NoErr)
 
 		appnet.ClearNetworkers()
 		err := appnet.AddNetworker(appnet.TypeDMSG, n)
@@ -82,7 +81,7 @@ import (
 		require.Equal(t, connID, uint16(0))
 		require.Equal(t, localPort, routing.Port(0))
 	})
-}*/
+}
 
 func TestRPCClient_Listen(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
@@ -139,19 +138,18 @@ func TestRPCClient_Listen(t *testing.T) {
 	})
 }
 
-// TODO (Darkren): fix test
-/*func TestRPCClient_Accept(t *testing.T) {
+func TestRPCClient_Accept(t *testing.T) {
 	dmsgLocal, dmsgRemote, local, _ := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
 		gateway := prepGateway()
 
-		lisConn := dmsg.NewStream(&appcommon.MockConn{}, logging.MustGetLogger("dmsg_tp"),
-			dmsgLocal, dmsgRemote, 0, 1024, func() {})
-		var noErr error
+		lisConn := &appcommon.MockConn{}
+		lisConn.On("LocalAddr").Return(dmsgLocal)
+		lisConn.On("RemoteAddr").Return(dmsgRemote)
 
 		lis := &appcommon.MockListener{}
-		lis.On("Accept").Return(lisConn, noErr)
+		lis.On("Accept").Return(lisConn, testhelpers.NoErr)
 
 		prepNetworkerWithListener(t, lis, local)
 
@@ -206,7 +204,7 @@ func TestRPCClient_Listen(t *testing.T) {
 		require.Equal(t, connID, uint16(0))
 		require.Equal(t, remote, appnet.Addr{})
 	})
-}*/
+}
 
 func TestRPCClient_Write(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
