@@ -141,7 +141,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport,
 	return summary
 }
 
-// Summary provides a summary of an AppNode.
+// Summary provides a summary of a Skywire Visor.
 type Summary struct {
 	PubKey          cipher.PubKey       `json:"local_pk"`
 	NodeVersion     string              `json:"node_version"`

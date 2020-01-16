@@ -35,8 +35,8 @@ type Config struct {
 	} `json:"stcp"`
 
 	Messaging struct {
-		Discovery   string `json:"discovery"`
-		ServerCount int    `json:"server_count"`
+		Discovery     string `json:"discovery"`
+		SessionsCount int    `json:"sessions_count"`
 	} `json:"messaging"`
 
 	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
