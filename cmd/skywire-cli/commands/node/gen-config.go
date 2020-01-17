@@ -94,11 +94,11 @@ func defaultConfig() *visor.Config {
 	conf.STCP.LocalAddr = lIPaddr
 
 	if testenv {
-		conf.Messaging.Discovery = skyenv.TestDmsgDiscAddr
+		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	} else {
-		conf.Messaging.Discovery = skyenv.DefaultDmsgDiscAddr
+		conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
 	}
-	conf.Messaging.SessionsCount = 1
+	conf.Dmsg.SessionsCount = 1
 
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf
@@ -151,9 +151,9 @@ func defaultConfig() *visor.Config {
 
 	if conf.Retrier == nil {
 		conf.Retrier = &visor.RetrierConfig{
-			BackoffTime: 3,
-			Times:       5,
-			Factor:      2,
+			BackoffTime: skyenv.BackoffTime,
+			Times:       skyenv.Times,
+			Factor:      skyenv.Factor,
 		}
 	}
 

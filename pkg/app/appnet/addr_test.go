@@ -33,7 +33,7 @@ func TestConvertAddr(t *testing.T) {
 			},
 			want: want{
 				addr: Addr{
-					Net:    TypeDMSG,
+					Net:    TypeDmsg,
 					PubKey: pk,
 					Port:   routing.Port(port),
 				},

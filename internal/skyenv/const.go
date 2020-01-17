@@ -51,3 +51,10 @@ const (
 	SkysocksClientAddr    = ":1080"
 	// TODO(evanlinjin): skysocks-client requires
 )
+
+// Default RetrierConfig constants
+const (
+	BackoffTime = 3
+	Times = 2
+	Factor = 1
+)
