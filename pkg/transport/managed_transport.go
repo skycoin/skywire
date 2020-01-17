@@ -180,15 +180,10 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 // redialConn redials an underlying connection using an exponetial backoff
 func (mt *ManagedTransport) redialConn(ctx context.Context) error {
 	mt.retrier.alive = true
-	err := mt.retrier.r.Do(func() error {
+	return mt.retrier.r.Do(func() error {
 		return mt.dial(ctx)
 	})
 
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (mt *ManagedTransport) isServing() bool {
