@@ -16,6 +16,7 @@ func (n Type) IsValid() bool {
 	return ok
 }
 
+// nolint: gochecknoglobals
 var (
 	validNetworks = map[Type]struct{}{
 		TypeDmsg:   {},

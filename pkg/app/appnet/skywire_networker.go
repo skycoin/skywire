@@ -15,6 +15,11 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
+var (
+	// ErrPortAlreadyBound is being returned when the desired port is already bound to.
+	ErrPortAlreadyBound = errors.New("port already bound")
+)
+
 // SkywireNetworker implements `Networker` for skynet.
 type SkywireNetworker struct {
 	log       *logging.Logger
@@ -62,10 +67,12 @@ func (r *SkywireNetworker) Listen(addr Addr) (net.Listener, error) {
 
 // ListenContext starts listening on local `addr` in the skynet with context.
 func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Listener, error) {
+	const bufSize = 1000000
+
 	lis := &skywireListener{
 		addr: addr,
 		// TODO: pass buf size
-		connsCh:  make(chan net.Conn, 1000000),
+		connsCh:  make(chan net.Conn, bufSize),
 		freePort: nil,
 	}
 
