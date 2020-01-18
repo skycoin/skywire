@@ -16,6 +16,7 @@ var (
 	ErrNetworkerAlreadyExists = errors.New("networker already exists")
 )
 
+// nolint: gochecknoglobals
 var (
 	networkers   = make(map[Type]Networker)
 	networkersMx sync.RWMutex
