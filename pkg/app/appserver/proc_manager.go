@@ -22,7 +22,7 @@ var (
 
 // ProcManager allows to manage skywire applications.
 type ProcManager interface {
-	Run(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (appcommon.ProcID, error)
+	Start(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (appcommon.ProcID, error)
 	Exists(name string) bool
 	Stop(name string) error
 	Wait(name string) error
@@ -33,21 +33,23 @@ type ProcManager interface {
 // procManager allows to manage skywire applications.
 // Implements `ProcManager`.
 type procManager struct {
-	log   *logging.Logger
-	procs map[string]*Proc
-	mx    sync.RWMutex
+	log       *logging.Logger
+	procs     map[string]*Proc
+	mx        sync.RWMutex
+	rpcServer *Server
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(log *logging.Logger) ProcManager {
+func NewProcManager(log *logging.Logger, rpcServer *Server) ProcManager {
 	return &procManager{
-		log:   log,
-		procs: make(map[string]*Proc),
+		log:       log,
+		procs:     make(map[string]*Proc),
+		rpcServer: rpcServer,
 	}
 }
 
-// Run runs the application according to its config and additional args.
-func (m *procManager) Run(log *logging.Logger, c appcommon.Config, args []string,
+// Start start the application according to its config and additional args.
+func (m *procManager) Start(log *logging.Logger, c appcommon.Config, args []string,
 	stdout, stderr io.Writer) (appcommon.ProcID, error) {
 	if m.Exists(c.Name) {
 		return 0, ErrAppAlreadyStarted
@@ -58,23 +60,17 @@ func (m *procManager) Run(log *logging.Logger, c appcommon.Config, args []string
 		return 0, err
 	}
 
-	if err := p.Run(); err != nil {
+	if err := m.rpcServer.Register(p.key); err != nil {
 		return 0, err
 	}
 
 	m.mx.Lock()
-	if _, ok := m.procs[c.Name]; ok {
-		m.mx.Unlock()
-
-		if err := p.Stop(); err != nil {
-			m.log.WithError(err).Error("error stopping app")
-		}
-
-		return 0, ErrAppAlreadyStarted
-	}
-
 	m.procs[c.Name] = p
 	m.mx.Unlock()
+
+	if err := p.Start(); err != nil {
+		return 0, err
+	}
 
 	return appcommon.ProcID(p.cmd.Process.Pid), nil
 }
@@ -101,7 +97,7 @@ func (m *procManager) Stop(name string) error {
 
 // Wait waits for the application to exit.
 func (m *procManager) Wait(name string) error {
-	p, err := m.pop(name)
+	p, err := m.get(name)
 	if err != nil {
 		return err
 	}
@@ -111,10 +107,16 @@ func (m *procManager) Wait(name string) error {
 			err = fmt.Errorf("failed to run app executable %s: %v", name, err)
 		}
 
+		if _, err := m.pop(name); err != nil {
+			m.log.Debugf("Pop app: %v", err)
+		}
+
 		return err
 	}
 
-	return nil
+	_, err = m.pop(name)
+
+	return err
 }
 
 // Range allows to iterate over running skywire apps. Calls `next` on
@@ -157,6 +159,19 @@ func (m *procManager) pop(name string) (*Proc, error) {
 	}
 
 	delete(m.procs, name)
+
+	return p, nil
+}
+
+// get returns application from the manager instance.
+func (m *procManager) get(name string) (*Proc, error) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	p, ok := m.procs[name]
+	if !ok {
+		return nil, errNoSuchApp
+	}
 
 	return p, nil
 }

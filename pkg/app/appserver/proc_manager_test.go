@@ -9,7 +9,9 @@ import (
 )
 
 func TestProcManager_Exists(t *testing.T) {
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"))
+	srv := New(nil, "")
+
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
 	require.True(t, ok)
 
@@ -25,8 +27,11 @@ func TestProcManager_Exists(t *testing.T) {
 }
 
 func TestProcManager_Range(t *testing.T) {
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"))
+	srv := New(nil, "")
+
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
+
 	require.True(t, ok)
 
 	wantAppNames := []string{"app1", "app2", "app3"}
@@ -52,7 +57,9 @@ func TestProcManager_Range(t *testing.T) {
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"))
+	srv := New(nil, "")
+
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
 	require.True(t, ok)
 
