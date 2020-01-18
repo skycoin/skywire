@@ -60,9 +60,7 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		Log.Println("Opened session skysocks client")
 
-		go func() {
-			c.handleStream(conn, stream)
-		}()
+		go c.handleStream(conn, stream)
 	}
 }
 
