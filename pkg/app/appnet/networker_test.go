@@ -107,7 +107,8 @@ func TestListen(t *testing.T) {
 
 func prepAddr() Addr {
 	addrPK, _ := cipher.GenerateKeyPair()
-	addrPort := routing.Port(100)
+
+	const addrPort routing.Port = 100
 
 	return Addr{
 		Net:    TypeDmsg,

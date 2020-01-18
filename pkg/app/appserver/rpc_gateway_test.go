@@ -49,7 +49,7 @@ func TestRPCGateway_Dial(t *testing.T) {
 func testRPCGatewayDialOK(t *testing.T, l *logging.Logger, nType appnet.Type, dialAddr appnet.Addr) {
 	appnet.ClearNetworkers()
 
-	localPort := routing.Port(100)
+	const localPort routing.Port = 100
 
 	dialCtx := context.Background()
 	dialConn := &appcommon.MockConn{}
@@ -69,7 +69,10 @@ func testRPCGatewayDialOK(t *testing.T, l *logging.Logger, nType appnet.Type, di
 	var resp DialResp
 	err = rpc.Dial(&dialAddr, &resp)
 	require.NoError(t, err)
-	require.Equal(t, resp.ConnID, uint16(1))
+
+	const wantConnID uint16 = 1
+
+	require.Equal(t, resp.ConnID, wantConnID)
 	require.Equal(t, resp.LocalPort, localPort)
 }
 
@@ -179,7 +182,10 @@ func testRPCGatewayListenOK(t *testing.T, l *logging.Logger, nType appnet.Type, 
 
 	err = rpc.Listen(&listenAddr, &lisID)
 	require.NoError(t, err)
-	require.Equal(t, lisID, uint16(1))
+
+	const wantLisID uint16 = 1
+
+	require.Equal(t, lisID, wantLisID)
 }
 
 func testRPCGatewayListenNoMoreSlots(t *testing.T, l *logging.Logger, listenAddr appnet.Addr) {
@@ -274,7 +280,7 @@ func testRPCGatewayAcceptOK(t *testing.T, l *logging.Logger) {
 func testRPCGatewayAcceptNoSuchListener(t *testing.T, l *logging.Logger) {
 	rpc := NewRPCGateway(l)
 
-	lisID := uint16(1)
+	lisID := uint16(1) // nolint: gomnd
 
 	var resp AcceptResp
 	err := rpc.Accept(&lisID, &resp)
@@ -403,10 +409,9 @@ func testRPCGatewayWriteOK(t *testing.T, l *logging.Logger, writeBuff []byte) {
 }
 
 func testRPCGatewayWriteNoSuchConn(t *testing.T, l *logging.Logger, writeBuff []byte) {
+	const connID uint16 = 1
+
 	rpc := NewRPCGateway(l)
-
-	connID := uint16(1)
-
 	req := WriteReq{
 		ConnID: connID,
 		B:      writeBuff,
@@ -440,7 +445,7 @@ func testRPCGatewayWriteError(t *testing.T, l *logging.Logger, writeBuff []byte)
 	writeErr := errors.New("write error")
 
 	conn := &appcommon.MockConn{}
-	conn.On("Write", writeBuff).Return(len(writeBuff)/2, writeErr)
+	conn.On("Write", writeBuff).Return(len(writeBuff)/2, writeErr) // nolint: gomnd
 
 	connID := addConn(t, rpc, conn)
 
@@ -450,7 +455,7 @@ func testRPCGatewayWriteError(t *testing.T, l *logging.Logger, writeBuff []byte)
 	}
 
 	wantResp := WriteResp{
-		N: len(writeBuff) / 2,
+		N: len(writeBuff) / 2, // nolint: gomnd
 		Err: &RPCIOErr{
 			Text:           writeErr.Error(),
 			IsNetErr:       false,
@@ -515,10 +520,9 @@ func testRPCGatewayReadOK(t *testing.T, l *logging.Logger, readBuf []byte) {
 }
 
 func testRPCGatewayReadNoSuchConn(t *testing.T, l *logging.Logger, readBufLen int) {
+	const connID uint16 = 1
+
 	rpc := NewRPCGateway(l)
-
-	connID := uint16(1)
-
 	req := ReadReq{
 		ConnID: connID,
 		BufLen: readBufLen,
@@ -582,7 +586,9 @@ func testRPCGatewayReadError(t *testing.T, l *logging.Logger, readBuf []byte) {
 func TestRPCGateway_SetWriteDeadline(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 
-	deadline := time.Now().Add(1 * time.Hour)
+	const delay = 1 * time.Hour
+
+	deadline := time.Now().Add(delay)
 
 	t.Run("ok", func(t *testing.T) {
 		testRPCGatewaySetWriteDeadlineOK(t, l, deadline)
@@ -626,12 +632,13 @@ func testRPCGatewaySetWriteDeadlineOK(t *testing.T, l *logging.Logger, deadline 
 func testRPCGatewaySetWriteDeadlineNoSuchConn(t *testing.T, l *logging.Logger, deadline time.Time) {
 	rpc := NewRPCGateway(l)
 
-	connID := uint16(1)
+	const connID uint16 = 1
 
 	req := DeadlineReq{
 		ConnID:   connID,
 		Deadline: deadline,
 	}
+
 	err := rpc.SetWriteDeadline(&req, nil)
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "no conn"))
@@ -676,7 +683,9 @@ func testRPCGatewaySetWriteDeadlineError(t *testing.T, l *logging.Logger, deadli
 func TestRPCGateway_SetReadDeadline(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 
-	deadline := time.Now().Add(1 * time.Hour)
+	const delay = 1 * time.Hour
+
+	deadline := time.Now().Add(delay)
 
 	t.Run("ok", func(t *testing.T) {
 		testRPCGatewaySetReadDeadlineOK(t, l, deadline)
@@ -720,7 +729,7 @@ func testRPCGatewaySetReadDeadlineOK(t *testing.T, l *logging.Logger, deadline t
 func testRPCGatewaySetReadDeadlineNoSuchConn(t *testing.T, l *logging.Logger, deadline time.Time) {
 	rpc := NewRPCGateway(l)
 
-	connID := uint16(1)
+	const connID uint16 = 1
 
 	req := DeadlineReq{
 		ConnID:   connID,
@@ -770,7 +779,9 @@ func testRPCGatewaySetReadDeadlineError(t *testing.T, l *logging.Logger, deadlin
 func TestRPCGateway_SetDeadline(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 
-	deadline := time.Now().Add(1 * time.Hour)
+	const delay = 1 * time.Hour
+
+	deadline := time.Now().Add(delay)
 
 	t.Run("ok", func(t *testing.T) {
 		testRPCGatewaySetDeadlineOK(t, l, deadline)
@@ -814,7 +825,7 @@ func testRPCGatewaySetDeadlineOK(t *testing.T, l *logging.Logger, deadline time.
 func testRPCGatewaySetDeadlineNoSuchConn(t *testing.T, l *logging.Logger, deadline time.Time) {
 	rpc := NewRPCGateway(l)
 
-	connID := uint16(1)
+	const connID uint16 = (1)
 
 	req := DeadlineReq{
 		ConnID:   connID,
@@ -901,7 +912,7 @@ func testRPCGatewayCloseConnOK(l *logging.Logger, t *testing.T) {
 func testRPCGatewayCloseNoSuchConn(t *testing.T, l *logging.Logger) {
 	rpc := NewRPCGateway(l)
 
-	connID := uint16(1)
+	connID := uint16(1) // nolint: gomnd
 
 	err := rpc.CloseConn(&connID, nil)
 	require.Error(t, err)
@@ -972,7 +983,7 @@ func testRPCGatewayCloseListenerOK(t *testing.T, l *logging.Logger) {
 func testRPCGatewayCloseListenerNoSuchListener(t *testing.T, l *logging.Logger) {
 	rpc := NewRPCGateway(l)
 
-	lisID := uint16(1)
+	lisID := uint16(1) // nolint: gomnd
 
 	err := rpc.CloseListener(&lisID, nil)
 	require.Error(t, err)
@@ -1005,7 +1016,8 @@ func testRPCGatewayCloseListenerError(t *testing.T, l *logging.Logger) {
 
 func prepAddr(nType appnet.Type) appnet.Addr {
 	pk, _ := cipher.GenerateKeyPair()
-	port := routing.Port(100)
+
+	const port routing.Port = 100
 
 	return appnet.Addr{
 		Net:    nType,
