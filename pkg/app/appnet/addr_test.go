@@ -18,7 +18,8 @@ func TestConvertAddr(t *testing.T) {
 	}
 
 	pk, _ := cipher.GenerateKeyPair()
-	port := uint16(100)
+
+	const port uint16 = 100
 
 	tt := []struct {
 		name string

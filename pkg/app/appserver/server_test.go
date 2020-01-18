@@ -19,13 +19,19 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
+const (
+	sockFile   = "/tmp/app.sock"
+	sleepDelay = 500 * time.Millisecond
+)
+
 func TestServer_ListenAndServe(t *testing.T) {
 	l := logging.MustGetLogger("app_server")
-	sockFile := "app.sock"
+
+	s := appserver.New(l, sockFile)
+
 	appKey := appcommon.GenerateAppKey()
 
-	s, err := appserver.New(l, sockFile, appKey)
-	require.NoError(t, err)
+	require.NoError(t, s.Register(appKey))
 
 	visorPK, _ := cipher.GenerateKeyPair()
 	clientConfig := app.ClientConfig{
@@ -34,7 +40,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 		AppKey:   appKey,
 	}
 
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 
 	go func() {
 		err := s.ListenAndServe()
@@ -44,7 +50,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 		errCh <- err
 	}()
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(sleepDelay)
 
 	dmsgLocal, dmsgRemote, remote := prepAddrs()
 
@@ -61,8 +67,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 
 	n.On("DialContext", mock.Anything, remote).Return(conn, noErr)
 
-	err = appnet.AddNetworker(appnet.TypeDmsg, n)
-	require.NoError(t, err)
+	require.NoError(t, appnet.AddNetworker(appnet.TypeDmsg, n))
 
 	cl, err := app.NewClient(logging.MustGetLogger("app_client"), clientConfig)
 	require.NoError(t, err)
@@ -72,8 +77,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 	require.NotNil(t, gotConn)
 	require.Equal(t, remote, gotConn.RemoteAddr())
 
-	err = s.Close()
-	require.NoError(t, err)
+	require.NoError(t, s.Close())
 
 	err = <-errCh
 	require.Error(t, err)
@@ -82,18 +86,23 @@ func TestServer_ListenAndServe(t *testing.T) {
 
 func prepAddrs() (dmsgLocal, dmsgRemote dmsg.Addr, remote appnet.Addr) {
 	localPK, _ := cipher.GenerateKeyPair()
-	localPort := uint16(10)
+	remotePK, _ := cipher.GenerateKeyPair()
+
+	const (
+		localPort  uint16 = 10
+		remotePort uint16 = 11
+	)
+
 	dmsgLocal = dmsg.Addr{
 		PK:   localPK,
 		Port: localPort,
 	}
 
-	remotePK, _ := cipher.GenerateKeyPair()
-	remotePort := uint16(11)
 	dmsgRemote = dmsg.Addr{
 		PK:   remotePK,
 		Port: remotePort,
 	}
+
 	remote = appnet.Addr{
 		Net:    appnet.TypeDmsg,
 		PubKey: remotePK,

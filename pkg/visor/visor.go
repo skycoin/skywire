@@ -38,8 +38,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
-var log = logging.MustGetLogger("node")
-
 // AppStatus defines running status of an App.
 type AppStatus int
 
@@ -99,7 +97,8 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	procManager appserver.ProcManager
+	procManager  appserver.ProcManager
+	appRPCServer *appserver.Server
 }
 
 // NewNode constructs new Node.
@@ -107,9 +106,8 @@ func NewNode(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Cont
 	ctx := context.Background()
 
 	node := &Node{
-		conf:        cfg,
-		confPath:    cfgPath,
-		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager")),
+		conf:     cfg,
+		confPath: cfgPath,
 	}
 
 	node.Logger = logger
@@ -230,6 +228,16 @@ func NewNode(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Cont
 		})
 	}
 
+	node.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), node.conf.AppServerSockFile)
+
+	go func() {
+		if err := node.appRPCServer.ListenAndServe(); err != nil {
+			node.logger.WithError(err).Error("error serving RPC")
+		}
+	}()
+
+	node.procManager = appserver.NewProcManager(logging.MustGetLogger("proc_manager"), node.appRPCServer)
+
 	return node, err
 }
 
@@ -261,7 +269,7 @@ func (node *Node) Start() error {
 
 		go func(a AppConfig) {
 			if err := node.SpawnApp(&a, nil); err != nil {
-				node.logger.Warnf("Failed to start %s: %s\n", a.App, err)
+				node.logger.Warnf("App %s stopped working: %v", a.App, err)
 			}
 		}(ac)
 	}
@@ -383,6 +391,10 @@ func (node *Node) Close() (err error) {
 		node.logger.Info("router stopped successfully")
 	}
 
+	if err := node.appRPCServer.Close(); err != nil {
+		node.logger.WithError(err).Error("error closing RPC server")
+	}
+
 	if err := UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
 		node.logger.WithError(err).Errorf("Failed to unlink socket file %s", node.conf.AppServerSockFile)
 	} else {
@@ -425,7 +437,7 @@ func (node *Node) StartApp(appName string) error {
 
 			go func(app AppConfig) {
 				if err := node.SpawnApp(&app, startCh); err != nil {
-					node.logger.Warnf("Failed to start app %s: %s", appName, err)
+					node.logger.Warnf("App %s stopped working: %v", appName, err)
 				}
 			}(app)
 
@@ -440,7 +452,6 @@ func (node *Node) StartApp(appName string) error {
 // SpawnApp configures and starts new App.
 func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
 	node.logger.Infof("Starting %s.v%s", config.App, config.Version)
-	node.logger.Warnf("here: config.Args: %+v, with len %d", config.Args, len(config.Args))
 
 	if app, ok := reservedPorts[config.Port]; ok && app != config.App {
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
@@ -461,15 +472,22 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
 	logger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
+	errLogger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s[ERROR]", config.App, config.Version)).Writer()
 
 	defer func() {
 		if logErr := logger.Close(); err == nil && logErr != nil {
 			err = logErr
 		}
+
+		if logErr := errLogger.Close(); err == nil && logErr != nil {
+			err = logErr
+		}
 	}()
 
-	pid, err := node.procManager.Run(logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)),
-		appCfg, append([]string{filepath.Join(node.dir(), config.App)}, config.Args...), logger, logger)
+	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
+	appArgs := append([]string{filepath.Join(node.dir(), config.App)}, config.Args...)
+
+	pid, err := node.procManager.Start(appLogger, appCfg, appArgs, logger, errLogger)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}
@@ -483,18 +501,14 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	node.persistPID(config.App, pid)
 	node.pidMu.Unlock()
 
-	if err := node.procManager.Wait(config.App); err != nil {
-		return err
-	}
-
-	return nil
+	return node.procManager.Wait(config.App)
 }
 
 func (node *Node) persistPID(name string, pid appcommon.ProcID) {
 	pidF := node.pidFile()
 	pidFName := pidF.Name()
 	if err := pidF.Close(); err != nil {
-		log.WithError(err).Warn("Failed to close PID file")
+		node.logger.WithError(err).Warn("Failed to close PID file")
 	}
 
 	pathutil.AtomicAppendToFile(pidFName, []byte(fmt.Sprintf("%s %d\n", name, pid)))
@@ -518,6 +532,8 @@ func (node *Node) StopApp(appName string) error {
 
 // RestartApp restarts running App.
 func (node *Node) RestartApp(name string) error {
+	node.logger.Infof("Restarting app %v", name)
+
 	if err := node.StopApp(name); err != nil {
 		return fmt.Errorf("stop app %v: %w", name, err)
 	}
