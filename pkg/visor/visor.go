@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"net"
 	"net/rpc"
 	"os"
@@ -20,14 +20,13 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2/appserver"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -57,7 +56,7 @@ const Version = "0.0.1"
 
 const supportedProtocolVersion = "0.0.1"
 
-var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 2: "SSH", 3: "socksproxy"}
+var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
@@ -67,18 +66,11 @@ type AppState struct {
 	Status    AppStatus    `json:"status"`
 }
 
-// PacketRouter performs routing of the skywire packets.
-type PacketRouter interface {
-	io.Closer
-	Serve(ctx context.Context) error
-	SetupIsTrusted(sPK cipher.PubKey) bool
-}
-
 // Node provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Node struct {
 	conf   *Config
-	router PacketRouter
+	router router.Router
 	n      *snet.Network
 	tm     *transport.Manager
 	rt     routing.Table
@@ -89,20 +81,21 @@ type Node struct {
 
 	appsPath  string
 	localPath string
-	appsConf  []AppConfig
+	appsConf  map[string]AppConfig
 
-	startedAt time.Time
+	startedAt  time.Time
+	restartCtx *restart.Context
 
 	pidMu sync.Mutex
 
 	rpcListener net.Listener
 	rpcDialers   []*RPCClientDialer
 
-	procManager *appserver.ProcManager
+	procManager appserver.ProcManager
 }
 
 // NewNode constructs new Node.
-func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) {
+func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *restart.Context) (*Node, error) {
 	ctx := context.Background()
 
 	node := &Node{
@@ -113,18 +106,27 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	node.Logger = masterLogger
 	node.logger = node.Logger.PackageLogger("skywire")
 
+	restartCheckDelay, err := time.ParseDuration(config.RestartCheckDelay)
+	if err == nil {
+		restartCtx.SetCheckDelay(restartCheckDelay)
+	}
+
+	restartCtx.RegisterLogger(node.logger)
+
+	node.restartCtx = restartCtx
+
 	pk := config.Node.StaticPubKey
 	sk := config.Node.StaticSecKey
 
-	fmt.Println("min servers:", config.Messaging.ServerCount)
+	fmt.Println("min sessions:", config.Dmsg.SessionsCount)
 	node.n = snet.New(snet.Config{
-		PubKey:        pk,
-		SecKey:        sk,
-		TpNetworks:    []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
-		DmsgDiscAddr:  config.Messaging.Discovery,
-		DmsgMinSrvs:   config.Messaging.ServerCount,
-		STCPLocalAddr: config.STCP.LocalAddr,
-		STCPTable:     config.STCP.PubKeyTable,
+		PubKey:          pk,
+		SecKey:          sk,
+		TpNetworks:      []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
+		DmsgDiscAddr:    config.Dmsg.Discovery,
+		DmsgMinSessions: config.Dmsg.SessionsCount,
+		STCPLocalAddr:   config.STCP.LocalAddr,
+		STCPTable:       config.STCP.PubKeyTable,
 	})
 	if err := node.n.Init(ctx); err != nil {
 		return nil, fmt.Errorf("failed to init network: %v", err)
@@ -141,7 +143,7 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 
 	trDiscovery, err := config.TransportDiscovery()
 	if err != nil {
-		return nil, fmt.Errorf("invalid MessagingConfig: %s", err)
+		return nil, fmt.Errorf("invalid transport discovery config: %s", err)
 	}
 	logStore, err := config.TransportLogStore()
 	if err != nil {
@@ -206,7 +208,12 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger) (*Node, error) 
 	}
 	node.rpcDialers = make([]*RPCClientDialer, len(config.Hypervisors))
 	for i, entry := range config.Hypervisors {
-		node.rpcDialers[i] = NewRPCClientDialer(node.n, entry.PubKey, entry.Port)
+		_, rpcPort, err := httputil.SplitRPCAddr(entry.Addr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse rpc port from rpc address: %s", err)
+		}
+
+		node.rpcDialers[i] = NewRPCClientDialer(node.n, entry.PubKey, rpcPort)
 	}
 
 	return node, err
@@ -340,26 +347,20 @@ func (node *Node) Close() (err error) {
 		}
 	}
 
-	var procs []string
-	node.procManager.Range(func(name string, _ *appserver.Proc) bool {
-		procs = append(procs, name)
-		return true
-	})
-
-	for _, name := range procs {
-		if err := node.procManager.Stop(name); err != nil {
-			node.logger.WithError(err).Errorf("(%s) failed to stop app", name)
-			break
-		}
-
-		node.logger.Infof("(%s) app stopped successfully", name)
-	}
+	node.procManager.StopAll()
 
 	if err = node.router.Close(); err != nil {
 		node.logger.WithError(err).Error("failed to stop router")
 	} else {
 		node.logger.Info("router stopped successfully")
 	}
+
+	if err := UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
+		node.logger.WithError(err).Errorf("Failed to unlink socket file %s", node.conf.AppServerSockFile)
+	} else {
+		node.logger.Infof("Socket file %s removed successfully", node.conf.AppServerSockFile)
+	}
+
 	return err
 }
 
@@ -416,12 +417,12 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	}
 
 	appCfg := appcommon.Config{
-		Name:      config.App,
-		Version:   config.Version,
-		SockFile:  node.config.AppServerSockFile,
-		VisorPK:   node.config.Node.StaticPubKey.Hex(),
-		BinaryDir: node.appsPath,
-		WorkDir:   filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
+		Name:         config.App,
+		Version:      config.Version,
+		SockFilePath: node.conf.AppServerSockFile,
+		VisorPK:      node.conf.Node.StaticPubKey.Hex(),
+		BinaryDir:    node.appsPath,
+		WorkDir:      filepath.Join(node.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {
@@ -472,6 +473,10 @@ func (node *Node) persistPID(name string, pid appcommon.ProcID) {
 func (node *Node) StopApp(appName string) error {
 	node.logger.Infof("Stopping app %s and closing ports", appName)
 
+	if !node.procManager.Exists(appName) {
+		return ErrUnknownApp
+	}
+
 	if err := node.procManager.Stop(appName); err != nil {
 		node.logger.Warn("Failed to stop app: ", err)
 		return err
@@ -482,11 +487,27 @@ func (node *Node) StopApp(appName string) error {
 
 // SetAutoStart sets an app to auto start or not.
 func (node *Node) SetAutoStart(appName string, autoStart bool) error {
-	for i, ac := range node.appsConf {
-		if ac.App == appName {
-			node.appsConf[i].AutoStart = autoStart
-			return nil
+	appConf, ok := node.appsConf[appName]
+	if !ok {
+		return ErrUnknownApp
+	}
+
+	appConf.AutoStart = autoStart
+	node.appsConf[appName] = appConf
+	return nil
+}
+
+// UnlinkSocketFiles removes unix socketFiles from file system
+func UnlinkSocketFiles(socketFiles ...string) error {
+	for _, f := range socketFiles {
+		if err := syscall.Unlink(f); err != nil {
+			if strings.Contains(err.Error(), "no such file or directory") {
+				continue
+			} else {
+				return err
+			}
 		}
 	}
-	return ErrUnknownApp
+
+	return nil
 }

@@ -4,11 +4,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -148,15 +147,5 @@ func (c *InterfaceConfig) FillDefaults() {
 
 // SplitRPCAddr returns host and port and whatever error results from parsing the rpc address interface
 func (c *InterfaceConfig) SplitRPCAddr() (host string, port uint16, err error) {
-	addr, err := url.Parse(c.RPCAddr)
-	if err != nil {
-		return
-	}
-
-	uint64port, err := strconv.ParseUint(addr.Port(), 10, 16)
-	if err != nil {
-		return
-	}
-
-	return addr.Host, uint16(uint64port), nil
+	return httputil.SplitRPCAddr(c.RPCAddr)
 }

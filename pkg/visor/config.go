@@ -34,10 +34,10 @@ type Config struct {
 		LocalAddr   string                   `json:"local_address"`
 	} `json:"stcp"`
 
-	Messaging struct {
-		Discovery   string `json:"discovery"`
-		ServerCount int    `json:"server_count"`
-	} `json:"messaging"`
+	Dmsg struct {
+		Discovery     string `json:"discovery"`
+		SessionsCount int    `json:"sessions_count"`
+	} `json:"dmsg"`
 
 	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
 
@@ -73,20 +73,22 @@ type Config struct {
 	Interfaces InterfaceConfig `json:"interfaces"`
 
 	AppServerSockFile string `json:"app_server_sock_file"`
+
+	RestartCheckDelay string `json:"restart_check_delay"`
 }
 
-// MessagingConfig returns config for dmsg client.
-func (c *Config) MessagingConfig() (*DmsgConfig, error) {
-	msgConfig := c.Messaging
+// DmsgConfig returns config for dmsg client.
+func (c *Config) DmsgConfig() (*DmsgConfig, error) {
+	dmsgConfig := c.Dmsg
 
-	if msgConfig.Discovery == "" {
+	if dmsgConfig.Discovery == "" {
 		return nil, errors.New("empty discovery")
 	}
 
 	return &DmsgConfig{
 		PubKey:     c.Node.StaticPubKey,
 		SecKey:     c.Node.StaticSecKey,
-		Discovery:  disc.NewHTTP(msgConfig.Discovery),
+		Discovery:  disc.NewHTTP(dmsgConfig.Discovery),
 		Retries:    5,
 		RetryDelay: time.Second,
 	}, nil
@@ -132,13 +134,13 @@ func (c *Config) RoutingTable() (routing.Table, error) {
 }
 
 // AppsConfig decodes AppsConfig from a local json config file.
-func (c *Config) AppsConfig() ([]AppConfig, error) {
-	apps := make([]AppConfig, 0)
+func (c *Config) AppsConfig() (map[string]AppConfig, error) {
+	apps := make(map[string]AppConfig)
 	for _, app := range c.Apps {
 		if app.Version == "" {
 			app.Version = c.Version
 		}
-		apps = append(apps, app)
+		apps[app.App] = app
 	}
 
 	return apps, nil
@@ -184,7 +186,7 @@ func ensureDir(path string) (string, error) {
 // HypervisorConfig represents hypervisor configuration.
 type HypervisorConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
-	Port   uint16        `json:"port"`
+	Addr   string        `json:"address"`
 }
 
 // DmsgConfig represents dmsg configuration.

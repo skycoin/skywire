@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
@@ -29,6 +30,9 @@ var (
 
 	// ErrNotFound is returned when a requested resource is not found.
 	ErrNotFound = errors.New("not found")
+
+	// ErrMalformedRestartContext is returned when restart context is malformed.
+	ErrMalformedRestartContext = errors.New("restart context is malformed")
 )
 
 // RPC defines RPC methods for Node.
@@ -93,7 +97,7 @@ type AppLogsRequest struct {
 
 // LogsSince returns all logs from an specific app since the timestamp
 func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) error {
-	ls, err := app2.NewLogStore(filepath.Join(r.node.dir(), in.AppName), in.AppName, "bbolt")
+	ls, err := app.NewLogStore(filepath.Join(r.node.dir(), in.AppName), in.AppName, "bbolt")
 	if err != nil {
 		return err
 	}
@@ -137,7 +141,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport,
 	return summary
 }
 
-// Summary provides a summary of an AppNode.
+// Summary provides a summary of a Skywire Visor.
 type Summary struct {
 	PubKey          cipher.PubKey       `json:"local_pk"`
 	NodeVersion     string              `json:"node_version"`
@@ -345,7 +349,7 @@ func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) error {
 }
 
 // SaveRoutingRule saves a routing rule.
-func (r *RPC) SaveRoutingRule(in *routing.Rule, out *struct{}) error {
+func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) error {
 	return r.node.rt.SaveRule(*in)
 }
 
@@ -389,4 +393,28 @@ func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
 
 	*out = loops
 	return nil
+}
+
+/*
+	<<< VISOR MANAGEMENT >>>
+*/
+
+const exitDelay = 100 * time.Millisecond
+
+// Restart restarts visor.
+func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
+	defer func() {
+		if err == nil {
+			go func() {
+				time.Sleep(exitDelay)
+				os.Exit(0)
+			}()
+		}
+	}()
+
+	if r.node.restartCtx == nil {
+		return ErrMalformedRestartContext
+	}
+
+	return r.node.restartCtx.Start()
 }

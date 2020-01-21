@@ -18,15 +18,15 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-func TestMessagingDiscovery(t *testing.T) {
+func TestDmsgDiscovery(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 	conf := Config{}
 	conf.Node.StaticPubKey = pk
 	conf.Node.StaticSecKey = sk
-	conf.Messaging.Discovery = "skywire.skycoin.net:8001"
-	conf.Messaging.ServerCount = 10
+	conf.Dmsg.Discovery = "skywire.skycoin.net:8001"
+	conf.Dmsg.SessionsCount = 10
 
-	c, err := conf.MessagingConfig()
+	c, err := conf.DmsgConfig()
 	require.NoError(t, err)
 
 	assert.NotNil(t, c.Discovery)
@@ -94,13 +94,13 @@ func TestAppsConfig(t *testing.T) {
 	appsConf, err := conf.AppsConfig()
 	require.NoError(t, err)
 
-	app1 := appsConf[0]
+	app1 := appsConf["foo"]
 	assert.Equal(t, "foo", app1.App)
 	assert.Equal(t, "1.1", app1.Version)
 	assert.Equal(t, routing.Port(1), app1.Port)
 	assert.False(t, app1.AutoStart)
 
-	app2 := appsConf[1]
+	app2 := appsConf["bar"]
 	assert.Equal(t, "bar", app2.App)
 	assert.Equal(t, "1.0", app2.Version)
 	assert.Equal(t, routing.Port(2), app2.Port)
