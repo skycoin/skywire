@@ -59,7 +59,7 @@ func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 	defer cancel()
 
 	for {
-		tp, err := lis.AcceptTransport()
+		st, err := lis.AcceptStream()
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Temporary() {
 				s.log.WithError(err).Warn("acceptTransport temporary error.")
@@ -69,25 +69,28 @@ func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 			return
 		}
 
-		log := s.log.WithField("remote_pk", tp.RemotePK())
+		remote := st.RemoteAddr().(dmsg.Addr)
+		log := s.log.WithField("remote_pk", remote.PK)
 		log.Info("received request")
 
-		ok, err := s.auth.Get(tp.RemotePK())
+		ok, err := s.auth.Get(remote.PK)
 		if err != nil {
 			log.WithError(err).Error("dmsgpty-server whitelist error")
 			return
 		}
 		if !ok {
 			log.Warn("rejected by whitelist")
-			if err := tp.Close(); err != nil {
+			if err := st.Close(); err != nil {
 				log.WithError(err).Warn("close transport error")
 			}
+
 			continue
 		}
 
 		log.Info("request accepted")
 		wg.Add(1)
-		go func(tp *dmsg.Transport) {
+
+		go func(st *dmsg.Stream) {
 			done := make(chan struct{})
 			defer func() {
 				close(done)
@@ -97,11 +100,11 @@ func (s *Server) Serve(ctx context.Context, lis *dmsg.Listener) {
 				select {
 				case <-done:
 				case <-ctx.Done():
-					_ = tp.Close() //nolint:errcheck
+					_ = st.Close() //nolint:errcheck
 				}
 			}()
-			s.handleConn(log, tp.RemotePK(), tp)
-		}(tp)
+			s.handleConn(log, remote.PK, st)
+		}(st)
 	}
 }
 
@@ -126,6 +129,7 @@ func (s *Server) handleConn(log logrus.FieldLogger, _ cipher.PubKey, conn net.Co
 
 	// Prepare and serve gateway to connection.
 	ptyG := NewDirectGateway()
+
 	defer func() { _ = ptyG.Stop(nil, nil) }() //nolint:errcheck
 
 	rpcS := rpc.NewServer()

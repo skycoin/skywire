@@ -1,10 +1,10 @@
 package visor
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"math/rand"
 	"net"
 	"net/http"
@@ -12,14 +12,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
@@ -58,6 +59,8 @@ type RPCClient interface {
 	RemoveRoutingRule(key routing.RouteID) error
 
 	Loops() ([]LoopInfo, error)
+
+	Restart() error
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -258,10 +261,7 @@ func (d *RPCClientDialer) Run(srv *rpc.Server, retry time.Duration) error {
 	}
 	for {
 		if err := d.establishConn(); err != nil {
-			// Only return if not network error.
-			if err != dmsg.ErrRequestRejected {
-				return err
-			}
+			return err
 		} else {
 			// Only serve when then dial succeeds.
 			srv.ServeConn(d.conn)
@@ -297,7 +297,7 @@ func (d *RPCClientDialer) establishConn() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	conn, err := d.dialer.Dial(snet.DmsgType, d.pk, d.port)
+	conn, err := d.dialer.Dial(context.Background(), snet.DmsgType, d.pk, d.port)
 	if err != nil {
 		return err
 	}
@@ -327,6 +327,10 @@ func (d *RPCClientDialer) clearDone() {
 	d.mu.Unlock()
 }
 
+// Restart calls Restart.
+func (rc *rpcClient) Restart() error {
+	return rc.Call("Restart", &struct{}{}, &struct{}{})
+}
 
 // MockRPCClient mocks RPCClient.
 type mockRPCClient struct {
@@ -334,7 +338,7 @@ type mockRPCClient struct {
 	s         *Summary
 	tpTypes   []string
 	rt        routing.Table
-	appls     app2.LogStore
+	appls     app.LogStore
 	sync.RWMutex
 }
 
@@ -359,39 +363,53 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 		}
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
+
 	rt := routing.NewTable(routing.DefaultConfig())
 	ruleKeepAlive := router.DefaultRouteKeepAlive
+
 	for i := 0; i < r.Intn(maxRules+1); i++ {
 		remotePK, _ := cipher.GenerateKeyPair()
 		var lpRaw, rpRaw [2]byte
+
 		if _, err := r.Read(lpRaw[:]); err != nil {
 			return cipher.PubKey{}, nil, err
 		}
+
 		if _, err := r.Read(rpRaw[:]); err != nil {
 			return cipher.PubKey{}, nil, err
 		}
+
 		lp := routing.Port(binary.BigEndian.Uint16(lpRaw[:]))
 		rp := routing.Port(binary.BigEndian.Uint16(rpRaw[:]))
+
 		fwdRID, err := rt.ReserveKeys(1)
 		if err != nil {
 			panic(err)
 		}
-		fwdRule := routing.IntermediaryForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New())
+
+		keys := snettest.GenKeyPairs(2)
+
+		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
 		if err := rt.SaveRule(fwdRule); err != nil {
 			panic(err)
 		}
+
 		appRID, err := rt.ReserveKeys(1)
 		if err != nil {
 			panic(err)
 		}
-		consumeRule := routing.ConsumeRule(ruleKeepAlive, appRID[0], remotePK, lp, rp)
+
+		consumeRule := routing.ConsumeRule(ruleKeepAlive, appRID[0], localPK, remotePK, lp, rp)
 		if err := rt.SaveRule(consumeRule); err != nil {
 			panic(err)
 		}
+
 		log.Infof("rt[%2da]: %v %v", i, fwdRID, fwdRule.Summary().ForwardFields)
 		log.Infof("rt[%2db]: %v %v", i, appRID[0], consumeRule.Summary().ConsumeFields)
 	}
+
 	log.Printf("rtCount: %d", rt.Count())
+
 	client := &mockRPCClient{
 		s: &Summary{
 			PubKey:          localPK,
@@ -408,6 +426,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 		rt:        rt,
 		startedAt: time.Now(),
 	}
+
 	return localPK, client, nil
 }
 
@@ -634,4 +653,9 @@ func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
 	}
 
 	return loops, nil
+}
+
+// Restart implements RPCClient.
+func (mc *mockRPCClient) Restart() error {
+	return nil
 }

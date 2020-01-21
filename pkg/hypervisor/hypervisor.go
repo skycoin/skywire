@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/SkycoinProject/dmsg"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/rpc"
 	"strconv"
@@ -16,13 +15,12 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app2"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
@@ -70,6 +68,7 @@ func (m *Node) ServeRPC(lis *dmsg.Listener) error {
 			return err
 		}
 		addr := conn.RemoteAddr().(dmsg.Addr)
+		log.Infoln("accepted: ", addr.PK)
 		m.mu.Lock()
 		m.nodes[addr.PK] = appNodeConn{
 			Addr:   addr,
@@ -153,6 +152,7 @@ func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Put("/nodes/{pk}/routes/{rid}", m.putRoute())
 			r.Delete("/nodes/{pk}/routes/{rid}", m.deleteRoute())
 			r.Get("/nodes/{pk}/loops", m.getLoops())
+			r.Get("/nodes/{pk}/restart", m.restart())
 		})
 	})
 	r.ServeHTTP(w, req)
@@ -233,6 +233,7 @@ func (m *Node) exec() http.HandlerFunc {
 
 type summaryResp struct {
 	TCPAddr string `json:"tcp_addr"`
+	Online  bool   `json:"online"`
 	*visor.Summary
 }
 
@@ -249,6 +250,7 @@ func (m *Node) getNodes() http.HandlerFunc {
 			}
 			summaries = append(summaries, summaryResp{
 				TCPAddr: c.Addr.String(),
+				Online:  err == nil,
 				Summary: summary,
 			})
 		}
@@ -359,7 +361,7 @@ func (m *Node) appLogsSince() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: app2.TimestampFromLog(logs[len(logs)-1]),
+			LastLogTimestamp: app.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
 	})
@@ -469,7 +471,7 @@ func (m *Node) getRoutes() http.HandlerFunc {
 		}
 		resp := make([]routingRuleResp, len(rules))
 		for i, rule := range rules {
-			resp[i] = makeRoutingRuleResp(rule.Key, rule.Value, qSummary)
+			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
 	})
@@ -572,6 +574,18 @@ func (m *Node) getLoops() http.HandlerFunc {
 	})
 }
 
+// NOTE: Reply comes with a delay, because of check if new executable is started successfully.
+func (m *Node) restart() http.HandlerFunc {
+	return m.withCtx(m.nodeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if err := ctx.RPC.Restart(); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, true)
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -653,7 +667,7 @@ func (m *Node) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
 }
 
 func (m *Node) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := m.appCtx(w, r)
+	ctx, ok := m.nodeCtx(w, r)
 	if !ok {
 		return nil, false
 	}

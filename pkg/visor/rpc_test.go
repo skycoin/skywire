@@ -4,16 +4,24 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHealth(t *testing.T) {
@@ -59,27 +67,52 @@ func TestUptime(t *testing.T) {
 }
 
 func TestListApps(t *testing.T) {
-	apps := []AppConfig{
-		{App: "foo", AutoStart: false, Port: 10},
-		{App: "bar", AutoStart: true, Port: 11},
+	apps := make(map[string]AppConfig)
+	appCfg := []AppConfig{
+		{
+			App:       "foo",
+			AutoStart: false,
+			Port:      10,
+		},
+		{
+			App:       "bar",
+			AutoStart: true,
+			Port:      11,
+		},
 	}
 
-	sApps := map[string]*appBind{
-		"bar": {},
+	for _, app := range appCfg {
+		apps[app.App] = app
 	}
-	rpc := &RPC{&Node{appsConf: apps, startedApps: sApps}}
+
+	pm := &appserver.MockProcManager{}
+	pm.On("Exists", apps["foo"].App).Return(false)
+	pm.On("Exists", apps["bar"].App).Return(true)
+
+	n := Node{
+		appsConf:    apps,
+		procManager: pm,
+	}
+
+	rpc := &RPC{node: &n}
 
 	var reply []*AppState
 	require.NoError(t, rpc.Apps(nil, &reply))
 	require.Len(t, reply, 2)
 
-	app1 := reply[0]
+	app1, app2 := reply[0], reply[1]
+	if app1.Name != "foo" {
+		// apps inside node are stored inside a map, so their order
+		// is not deterministic, we should be ready for this and
+		// rearrange the outer array to check values correctly
+		app1, app2 = reply[1], reply[0]
+	}
+
 	assert.Equal(t, "foo", app1.Name)
 	assert.False(t, app1.AutoStart)
 	assert.Equal(t, routing.Port(10), app1.Port)
 	assert.Equal(t, AppStatusStopped, app1.Status)
 
-	app2 := reply[1]
 	assert.Equal(t, "bar", app2.Name)
 	assert.True(t, app2.AutoStart)
 	assert.Equal(t, routing.Port(11), app2.Port)
@@ -88,23 +121,63 @@ func TestListApps(t *testing.T) {
 
 func TestStartStopApp(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	router := new(mockRouter)
-	executer := new(MockExecuter)
+	r := &router.MockRouter{}
+	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
+	r.On("Close").Return(testhelpers.NoErr)
+
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	apps := []AppConfig{{App: "foo", Version: "1.0", AutoStart: false, Port: 10}}
-	node := &Node{router: router, exec: executer, appsConf: apps, startedApps: map[string]*appBind{}, logger: logging.MustGetLogger("test"), conf: &Config{}}
-	node.conf.Node.StaticPubKey = pk
+	appCfg := []AppConfig{
+		{
+			App:       "foo",
+			Version:   "1.0",
+			AutoStart: false,
+			Port:      10,
+		},
+	}
+	apps := map[string]AppConfig{
+		"foo": appCfg[0],
+	}
+
+	unknownApp := "bar"
+	app := apps["foo"].App
+
+	nodeCfg := Config{}
+	nodeCfg.Node.StaticPubKey = pk
+
+	node := &Node{
+		router:   r,
+		appsConf: apps,
+		logger:   logging.MustGetLogger("test"),
+		conf:     &nodeCfg,
+	}
 	pathutil.EnsureDir(node.dir())
 	defer func() {
 		require.NoError(t, os.RemoveAll(node.dir()))
 	}()
 
+	pm := &appserver.MockProcManager{}
+	appCfg1 := appcommon.Config{
+		Name:         app,
+		Version:      apps["foo"].Version,
+		SockFilePath: nodeCfg.AppServerSockFile,
+		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		WorkDir:      filepath.Join("", app, fmt.Sprintf("v%s", apps["foo"].Version)),
+	}
+	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps["foo"].Args...)
+	appPID1 := appcommon.ProcID(10)
+	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+		Return(appPID1, testhelpers.NoErr)
+	pm.On("Wait", app).Return(testhelpers.NoErr)
+	pm.On("Stop", app).Return(testhelpers.NoErr)
+	pm.On("Exists", app).Return(true)
+	pm.On("Exists", unknownApp).Return(false)
+
+	node.procManager = pm
+
 	rpc := &RPC{node: node}
-	unknownApp := "bar"
-	app := "foo"
 
 	err := rpc.StartApp(&unknownApp, nil)
 	require.Error(t, err)
@@ -113,25 +186,12 @@ func TestStartStopApp(t *testing.T) {
 	require.NoError(t, rpc.StartApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
 
-	executer.Lock()
-	require.Len(t, executer.cmds, 1)
-	assert.Equal(t, "foo.v1.0", executer.cmds[0].Path)
-	assert.Equal(t, "foo/v1.0", executer.cmds[0].Dir)
-	executer.Unlock()
-	node.startedMu.Lock()
-	assert.NotNil(t, node.startedApps["foo"])
-	node.startedMu.Unlock()
-
 	err = rpc.StopApp(&unknownApp, nil)
 	require.Error(t, err)
 	assert.Equal(t, ErrUnknownApp, err)
 
 	require.NoError(t, rpc.StopApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
-
-	node.startedMu.Lock()
-	assert.Nil(t, node.startedApps["foo"])
-	node.startedMu.Unlock()
 }
 
 type TestRPC struct{}

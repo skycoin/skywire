@@ -18,13 +18,13 @@ import (
 var mdAddr string
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of messaging discovery server")
+	RootCmd.PersistentFlags().StringVar(&mdAddr, "addr", skyenv.DefaultDmsgDiscAddr, "address of DMSG discovery server")
 }
 
-// RootCmd is the command that contains sub-commands which interacts with messaging services.
+// RootCmd is the command that contains sub-commands which interacts with DMSG services.
 var RootCmd = &cobra.Command{
 	Use:   "mdisc",
-	Short: "Contains sub-commands that interact with a remote Messaging Discovery",
+	Short: "Contains sub-commands that interact with a remote DMSG Discovery",
 }
 
 func init() {
@@ -36,7 +36,7 @@ func init() {
 
 var entryCmd = &cobra.Command{
 	Use:   "entry <node-public-key>",
-	Short: "fetches an entry from messaging-discovery",
+	Short: "fetches an entry from DMSG discovery",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -50,7 +50,7 @@ var entryCmd = &cobra.Command{
 
 var availableServersCmd = &cobra.Command{
 	Use:   "available-servers",
-	Short: "fetch available servers from messaging-discovery",
+	Short: "fetch available servers from DMSG discovery",
 	Run: func(_ *cobra.Command, _ []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
