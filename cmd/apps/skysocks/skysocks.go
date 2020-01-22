@@ -6,6 +6,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+	"os/signal"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -16,9 +18,9 @@ import (
 )
 
 const (
-	appName = "skysocks"
-	netType = appnet.TypeSkynet
-	port    = routing.Port(3)
+	appName              = "skysocks"
+	netType              = appnet.TypeSkynet
+	port    routing.Port = 3
 )
 
 func main() {
@@ -26,6 +28,7 @@ func main() {
 	skysocks.Log = log.PackageLogger("skysocks")
 
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
+
 	flag.Parse()
 
 	config, err := app.ClientConfigFromEnv()
@@ -37,6 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
+
 	defer func() {
 		socksApp.Close()
 	}()
@@ -53,5 +57,18 @@ func main() {
 
 	log.Infoln("Starting serving proxy server")
 
-	log.Fatal(srv.Serve(l))
+	termCh := make(chan os.Signal, 1)
+	signal.Notify(termCh, os.Interrupt)
+
+	go func() {
+		<-termCh
+
+		if err := srv.Close(); err != nil {
+			log.Fatalf("Failed to close server: %v", err)
+		}
+	}()
+
+	if err := srv.Serve(l); err != nil {
+		log.Fatal(err)
+	}
 }

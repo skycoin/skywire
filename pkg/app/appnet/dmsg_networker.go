@@ -30,6 +30,7 @@ func (n *DmsgNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn, e
 		PK:   addr.PubKey,
 		Port: uint16(addr.Port),
 	}
+
 	return n.dmsgC.Dial(ctx, remote)
 }
 
@@ -39,6 +40,6 @@ func (n *DmsgNetworker) Listen(addr Addr) (net.Listener, error) {
 }
 
 // ListenContext starts listening on local `addr` in the dmsg network with context.
-func (n *DmsgNetworker) ListenContext(ctx context.Context, addr Addr) (net.Listener, error) {
+func (n *DmsgNetworker) ListenContext(_ context.Context, addr Addr) (net.Listener, error) {
 	return n.dmsgC.Listen(uint16(addr.Port))
 }
