@@ -545,8 +545,7 @@ func (node *Node) RestartApp(name string) error {
 	return nil
 }
 
-// SetAutoStart sets an app to auto start or not.
-func (node *Node) SetAutoStart(appName string, autoStart bool) error {
+func (node *Node) setAutoStart(appName string, autoStart bool) error {
 	appConf, ok := node.appsConf[appName]
 	if !ok {
 		return ErrUnknownApp
@@ -587,8 +586,7 @@ func (node *Node) updateConfigAppAutoStart(appName string, autoStart bool) error
 	return node.writeConfig(config)
 }
 
-// SetSocksPassword sets skysocks password.
-func (node *Node) SetSocksPassword(password string) error {
+func (node *Node) setSocksPassword(password string) error {
 	node.logger.Infof("Changing skysocks password to %q", password)
 
 	const (
@@ -609,8 +607,7 @@ func (node *Node) SetSocksPassword(password string) error {
 	return node.RestartApp(socksName)
 }
 
-// SetSocksClientPK sets skysocks-client PK.
-func (node *Node) SetSocksClientPK(pk cipher.PubKey) error {
+func (node *Node) setSocksClientPK(pk cipher.PubKey) error {
 	node.logger.Infof("Changing skysocks-client PK to %q", pk)
 
 	const (
