@@ -205,17 +205,17 @@ type SetAutoStartIn struct {
 
 // SetAutoStart sets auto-start settings for an app.
 func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) error {
-	return r.node.SetAutoStart(in.AppName, in.AutoStart)
+	return r.node.setAutoStart(in.AppName, in.AutoStart)
 }
 
 // SetSocksPassword sets password for skysocks.
 func (r *RPC) SetSocksPassword(in *string, _ *struct{}) error {
-	return r.node.SetSocksPassword(*in)
+	return r.node.setSocksPassword(*in)
 }
 
 // SetSocksClientPK sets PK for skysocks-client.
 func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) error {
-	return r.node.SetSocksClientPK(*in)
+	return r.node.setSocksClientPK(*in)
 }
 
 /*
