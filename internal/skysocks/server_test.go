@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			Log.Fatal(err)
 		}
+
 		logging.SetLevel(lvl)
 	} else {
 		logging.Disable()
@@ -40,11 +41,14 @@ func TestProxy(t *testing.T) {
 	require.NoError(t, err)
 
 	errChan := make(chan error)
+
 	go func() {
 		errChan <- srv.Serve(l)
 	}()
 
-	time.Sleep(100 * time.Millisecond)
+	const delay = 100 * time.Millisecond
+
+	time.Sleep(delay)
 
 	conn, err := net.Dial("tcp", l.Addr().String())
 	require.NoError(t, err)
@@ -53,11 +57,12 @@ func TestProxy(t *testing.T) {
 	require.NoError(t, err)
 
 	errChan2 := make(chan error)
+
 	go func() {
 		errChan2 <- client.ListenAndServe(":10080")
 	}()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(delay)
 
 	proxyDial, err := proxy.SOCKS5("tcp", ":10080", nil, proxy.Direct)
 	require.NoError(t, err)
