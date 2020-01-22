@@ -29,16 +29,21 @@ func NewServer(log logrus.FieldLogger, pk cipher.PubKey, sk cipher.SecKey, authF
 	if log == nil {
 		log = logging.MustGetLogger("dmsgpty-server")
 	}
+
 	auth, err := ptycfg.NewJSONFileWhiteList(authFile)
 	if err != nil {
 		return nil, err
 	}
+
 	authAll, err := auth.All()
 	if err != nil {
 		return nil, err
 	}
+
 	authStr, _ := json.MarshalIndent(authAll, "", "\t") //nolint:errcheck
+
 	log.Info("whitelist:", string(authStr))
+
 	return &Server{
 		log:  log,
 		pk:   pk,

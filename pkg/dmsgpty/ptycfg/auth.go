@@ -23,9 +23,11 @@ func NewJSONFileWhiteList(fileName string) (Whitelist, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if err := os.MkdirAll(filepath.Dir(fileName), 0750); err != nil {
 		return nil, err
 	}
+
 	return &jsonFileWhitelist{fileName: fileName}, nil
 }
 
