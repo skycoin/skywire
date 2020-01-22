@@ -3,6 +3,7 @@ package skysocks
 import (
 	"fmt"
 	"net"
+	"sync/atomic"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/armon/go-socks5"
@@ -14,6 +15,7 @@ type Server struct {
 	socks    *socks5.Server
 	listener net.Listener
 	log      *logging.MasterLogger
+	closed   uint32
 }
 
 // NewServer constructs a new Server.
@@ -35,9 +37,18 @@ func NewServer(passcode string, l *logging.MasterLogger) (*Server, error) {
 // the incoming connections.
 func (s *Server) Serve(l net.Listener) error {
 	s.listener = l
+
 	for {
+		if s.isClosed() {
+			return nil
+		}
+
 		conn, err := l.Accept()
 		if err != nil {
+			if s.isClosed() {
+				return nil
+			}
+
 			return fmt.Errorf("accept: %s", err)
 		}
 
@@ -59,7 +70,18 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
+
+	s.close()
+
 	return s.listener.Close()
+}
+
+func (s *Server) close() {
+	atomic.StoreUint32(&s.closed, 1)
+}
+
+func (s *Server) isClosed() bool {
+	return atomic.LoadUint32(&s.closed) != 0
 }
 
 type passcodeCredentials string
@@ -68,5 +90,6 @@ func (s passcodeCredentials) Valid(user, password string) bool {
 	if len(s) == 0 {
 		return true
 	}
+
 	return user == string(s) || password == string(s)
 }

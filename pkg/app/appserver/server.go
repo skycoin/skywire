@@ -22,20 +22,21 @@ type Server struct {
 }
 
 // New constructs server.
-func New(log *logging.Logger, sockFile string, appKey appcommon.Key) (*Server, error) {
-	rpcS := rpc.NewServer()
-	gateway := NewRPCGateway(logging.MustGetLogger(fmt.Sprintf("rpc_server_%s", appKey)))
-
-	if err := rpcS.RegisterName(string(appKey), gateway); err != nil {
-		return nil, fmt.Errorf("error registering RPC server for app: %v", err)
-	}
-
+func New(log *logging.Logger, sockFile string) *Server {
 	return &Server{
 		log:      log,
 		sockFile: sockFile,
-		rpcS:     rpcS,
+		rpcS:     rpc.NewServer(),
 		stopCh:   make(chan struct{}),
-	}, nil
+	}
+}
+
+// Register registers an app key in RPC server.
+func (s *Server) Register(appKey appcommon.Key) error {
+	logger := logging.MustGetLogger(fmt.Sprintf("rpc_server_%s", appKey))
+	gateway := NewRPCGateway(logger)
+
+	return s.rpcS.RegisterName(string(appKey), gateway)
 }
 
 // ListenAndServe starts listening for incoming app connections via unix socket.
@@ -53,7 +54,7 @@ func (s *Server) ListenAndServe() error {
 			return err
 		}
 
-		s.done.Add(1)
+		s.done.Add(1) // nolint: gomnd
 
 		go s.serveConn(conn)
 	}

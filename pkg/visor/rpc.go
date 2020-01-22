@@ -205,7 +205,17 @@ type SetAutoStartIn struct {
 
 // SetAutoStart sets auto-start settings for an app.
 func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) error {
-	return r.node.SetAutoStart(in.AppName, in.AutoStart)
+	return r.node.setAutoStart(in.AppName, in.AutoStart)
+}
+
+// SetSocksPassword sets password for skysocks.
+func (r *RPC) SetSocksPassword(in *string, _ *struct{}) error {
+	return r.node.setSocksPassword(*in)
+}
+
+// SetSocksClientPK sets PK for skysocks-client.
+func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) error {
+	return r.node.setSocksClientPK(*in)
 }
 
 /*
@@ -279,6 +289,7 @@ type AddTransportIn struct {
 // AddTransport creates a transport for the node.
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
 	ctx := context.Background()
+
 	if in.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Second*20)
@@ -289,6 +300,7 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
 	if err != nil {
 		return err
 	}
+
 	*out = *newTransportSummary(r.node.tm, tp, false, r.node.router.SetupIsTrusted(tp.Remote()))
 	return nil
 }
@@ -309,10 +321,12 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 	if err != nil {
 		return err
 	}
+
 	entries, err := tpD.GetTransportsByEdge(context.Background(), *pk)
 	if err != nil {
 		return err
 	}
+
 	*out = entries
 	return nil
 }
@@ -323,10 +337,12 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatu
 	if err != nil {
 		return err
 	}
+
 	entry, err := tpD.GetTransportByID(context.Background(), *id)
 	if err != nil {
 		return err
 	}
+
 	*out = *entry
 	return nil
 }
@@ -385,6 +401,7 @@ func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
 		if err != nil {
 			return err
 		}
+
 		loops = append(loops, LoopInfo{
 			ConsumeRule: rule,
 			FwdRule:     rule,
