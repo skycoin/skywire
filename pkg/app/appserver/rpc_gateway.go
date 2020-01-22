@@ -169,7 +169,7 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 
 	conn, err := lis.Accept()
 	if err != nil {
-		r.log.Infoln("Error accepting conn on RPC Accept server side")
+		r.log.Warnf("Error accepting conn on RPC Accept server side: %v", err)
 		free()
 
 		return err
