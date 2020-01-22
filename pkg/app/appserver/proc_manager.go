@@ -102,6 +102,8 @@ func (m *procManager) Wait(name string) error {
 		return err
 	}
 
+	// While waiting for p.Wait() call, we need app to present in the processes list,
+	// so we cannot pop it before p.Wait().
 	if err := p.Wait(); err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
 			err = fmt.Errorf("failed to run app executable %s: %v", name, err)
