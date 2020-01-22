@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/SkycoinProject/dmsg"
 	"math/rand"
 	"net/http"
 	"net/rpc"
@@ -14,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"

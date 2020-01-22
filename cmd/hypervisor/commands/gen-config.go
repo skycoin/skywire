@@ -14,7 +14,7 @@ var (
 	output        string
 	replace       bool
 	configLocType = pathutil.WorkingDirLoc
-	testenv		bool
+	testenv       bool
 )
 
 func init() {

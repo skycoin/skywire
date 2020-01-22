@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"io/ioutil"
 	"net"
 	"net/rpc"
@@ -23,12 +21,14 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
@@ -95,7 +95,7 @@ type Node struct {
 	pidMu sync.Mutex
 
 	rpcListener net.Listener
-	rpcDialers   []*RPCClientDialer
+	rpcDialers  []*RPCClientDialer
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server

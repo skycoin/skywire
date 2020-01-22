@@ -274,11 +274,10 @@ func (d *RPCClientDialer) Run(srv *rpc.Server, retry time.Duration) error {
 	for {
 		if err := d.establishConn(); err != nil {
 			return err
-		} else {
-			// Only serve when then dial succeeds.
-			srv.ServeConn(d.conn)
-			d.setConn(nil)
 		}
+		// Only serve when then dial succeeds.
+		srv.ServeConn(d.conn)
+		d.setConn(nil)
 		select {
 		case <-d.done:
 			d.clearDone()
@@ -326,7 +325,7 @@ func (d *RPCClientDialer) setConn(conn net.Conn) {
 
 func (d *RPCClientDialer) setDone() (ok bool) {
 	d.mu.Lock()
-	if ok = d.done == nil; ok {
+	if d.done == nil {
 		d.done = make(chan struct{})
 	}
 	d.mu.Unlock()
