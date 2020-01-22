@@ -52,7 +52,7 @@ type Config struct {
 	Routing struct {
 		SetupNodes         []cipher.PubKey `json:"setup_nodes"`
 		RouteFinder        string          `json:"route_finder"`
-		RouteFinderTimeout Duration        `json:"route_finder_timeout"`
+		RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	} `json:"routing"`
 
 	Uptime struct {
@@ -68,13 +68,13 @@ type Config struct {
 	LocalPath string `json:"local_path"`
 
 	LogLevel        string   `json:"log_level"`
-	ShutdownTimeout Duration `json:"shutdown_timeout"` // time value, examples: 10s, 1m, etc
+	ShutdownTimeout Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 
 	Interfaces InterfaceConfig `json:"interfaces"`
 
 	AppServerSockFile string `json:"app_server_sock_file"`
 
-	RestartCheckDelay string `json:"restart_check_delay"`
+	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
 }
 
 // DmsgConfig returns config for dmsg client.
@@ -99,6 +99,7 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	if c.DmsgPty == nil {
 		return nil, errors.New("'dmsg_pty' config field not defined")
 	}
+
 	return dmsgpty.NewHostFromDmsgClient(
 		nil,
 		dmsgC,
@@ -107,7 +108,8 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 		c.DmsgPty.AuthFile,
 		c.DmsgPty.Port,
 		c.DmsgPty.CLINet,
-		c.DmsgPty.CLIAddr)
+		c.DmsgPty.CLIAddr,
+	)
 }
 
 // TransportDiscovery returns transport discovery client.

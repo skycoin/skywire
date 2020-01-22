@@ -10,7 +10,7 @@ import (
 )
 
 // Log is skysocks package level logger, it can be replaced with a different one from outside the package
-var Log = logging.MustGetLogger("skysocks")
+var Log = logging.MustGetLogger("skysocks") // nolint: gochecknoglobals
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
@@ -19,20 +19,22 @@ type Client struct {
 }
 
 // NewClient constructs a new Client.
-func NewClient(conn net.Conn) (*Client, error) {
+func NewClient(conn io.ReadWriteCloser) (*Client, error) {
 	session, err := yamux.Client(conn, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating client: yamux: %s", err)
 	}
 
-	return &Client{session: session}, nil
+	c := &Client{
+		session: session,
+	}
+
+	return c, nil
 }
 
 // ListenAndServe start tcp listener on addr and proxies incoming
 // connection to a remote proxy server.
 func (c *Client) ListenAndServe(addr string) error {
-	var err error
-
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen: %s", err)
@@ -41,6 +43,7 @@ func (c *Client) ListenAndServe(addr string) error {
 	Log.Printf("Listening skysocks client on %s", addr)
 
 	c.listener = l
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -49,6 +52,7 @@ func (c *Client) ListenAndServe(addr string) error {
 		}
 
 		Log.Println("Accepted skysocks client")
+
 		stream, err := c.session.Open()
 		if err != nil {
 			return fmt.Errorf("error on `ListenAndServe`: yamux: %s", err)
@@ -56,52 +60,59 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		Log.Println("Opened session skysocks client")
 
-		go func() {
-			errCh := make(chan error, 2)
+		go c.handleStream(conn, stream)
+	}
+}
 
-			go func() {
-				_, err := io.Copy(stream, conn)
-				errCh <- err
-			}()
+func (c *Client) handleStream(conn, stream net.Conn) {
+	const errorCount = 2
 
-			go func() {
-				_, err := io.Copy(conn, stream)
-				errCh <- err
-			}()
+	errCh := make(chan error, errorCount)
 
-			var connClosed, streamClosed bool
-			for err := range errCh {
-				if !connClosed {
-					if err := conn.Close(); err != nil {
-						Log.WithError(err).Warn("Failed to close connection")
-					}
+	go func() {
+		_, err := io.Copy(stream, conn)
+		errCh <- err
+	}()
 
-					connClosed = true
-				}
+	go func() {
+		_, err := io.Copy(conn, stream)
+		errCh <- err
+	}()
 
-				if !streamClosed {
-					if err := stream.Close(); err != nil {
-						Log.WithError(err).Warn("Failed to close stream")
-					}
+	var connClosed, streamClosed bool
 
-					streamClosed = true
-				}
-
-				if err != nil {
-					Log.Error("Copy error:", err)
-				}
+	for err := range errCh {
+		if !connClosed {
+			if err := conn.Close(); err != nil {
+				Log.WithError(err).Warn("Failed to close connection")
 			}
 
-			close(errCh)
-		}()
+			connClosed = true
+		}
+
+		if !streamClosed {
+			if err := stream.Close(); err != nil {
+				Log.WithError(err).Warn("Failed to close stream")
+			}
+
+			streamClosed = true
+		}
+
+		if err != nil {
+			Log.Error("Copy error:", err)
+		}
 	}
+
+	close(errCh)
 }
 
 // Close implement io.Closer.
 func (c *Client) Close() error {
 	Log.Infoln("Closing proxy client")
+
 	if c == nil {
 		return nil
 	}
+
 	return c.listener.Close()
 }

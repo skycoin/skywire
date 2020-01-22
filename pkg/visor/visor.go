@@ -4,8 +4,10 @@ package visor
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/rpc"
 	"os"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -35,8 +38,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
-var log = logging.MustGetLogger("node")
-
 // AppStatus defines running status of an App.
 type AppStatus int
 
@@ -48,8 +49,12 @@ const (
 	AppStatusRunning
 )
 
-// ErrUnknownApp represents lookup error for App related calls.
-var ErrUnknownApp = errors.New("unknown app")
+var (
+	// ErrUnknownApp represents lookup error for App related calls.
+	ErrUnknownApp = errors.New("unknown app")
+	// ErrNoConfigPath is returned on attempt to read/write config when node contains no config path.
+	ErrNoConfigPath = errors.New("no config path")
+)
 
 // Version is the node version.
 const Version = "0.0.1"
@@ -79,6 +84,7 @@ type Node struct {
 	Logger *logging.MasterLogger
 	logger *logging.Logger
 
+	confPath  *string
 	appsPath  string
 	localPath string
 	appsConf  map[string]AppConfig
@@ -91,22 +97,23 @@ type Node struct {
 	rpcListener net.Listener
 	rpcDialers  []*noise.RPCClientDialer
 
-	procManager appserver.ProcManager
+	procManager  appserver.ProcManager
+	appRPCServer *appserver.Server
 }
 
 // NewNode constructs new Node.
-func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *restart.Context) (*Node, error) {
+func NewNode(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Context, cfgPath *string) (*Node, error) {
 	ctx := context.Background()
 
 	node := &Node{
-		conf:        config,
-		procManager: appserver.NewProcManager(logging.MustGetLogger("proc_manager")),
+		conf:     cfg,
+		confPath: cfgPath,
 	}
 
-	node.Logger = masterLogger
+	node.Logger = logger
 	node.logger = node.Logger.PackageLogger("skywire")
 
-	restartCheckDelay, err := time.ParseDuration(config.RestartCheckDelay)
+	restartCheckDelay, err := time.ParseDuration(cfg.RestartCheckDelay)
 	if err == nil {
 		restartCtx.SetCheckDelay(restartCheckDelay)
 	}
@@ -115,44 +122,45 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *res
 
 	node.restartCtx = restartCtx
 
-	pk := config.Node.StaticPubKey
-	sk := config.Node.StaticSecKey
+	pk := cfg.Node.StaticPubKey
+	sk := cfg.Node.StaticSecKey
 
-	fmt.Println("min sessions:", config.Dmsg.SessionsCount)
+	fmt.Println("min sessions:", cfg.Dmsg.SessionsCount)
 	node.n = snet.New(snet.Config{
 		PubKey:          pk,
 		SecKey:          sk,
 		TpNetworks:      []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
-		DmsgDiscAddr:    config.Dmsg.Discovery,
-		DmsgMinSessions: config.Dmsg.SessionsCount,
-		STCPLocalAddr:   config.STCP.LocalAddr,
-		STCPTable:       config.STCP.PubKeyTable,
+		DmsgDiscAddr:    cfg.Dmsg.Discovery,
+		DmsgMinSessions: cfg.Dmsg.SessionsCount,
+		STCPLocalAddr:   cfg.STCP.LocalAddr,
+		STCPTable:       cfg.STCP.PubKeyTable,
 	})
 	if err := node.n.Init(ctx); err != nil {
 		return nil, fmt.Errorf("failed to init network: %v", err)
 	}
 
-	if config.DmsgPty != nil {
-		pty, err := config.DmsgPtyHost(node.n.Dmsg())
+	if cfg.DmsgPty != nil {
+		pty, err := cfg.DmsgPtyHost(node.n.Dmsg())
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup pty: %v", err)
 		}
 		node.pty = pty
 	}
-	masterLogger.Info("'dmsgpty' is not configured, skipping...")
 
-	trDiscovery, err := config.TransportDiscovery()
+	logger.Info("'dmsgpty' is not configured, skipping...")
+
+	trDiscovery, err := cfg.TransportDiscovery()
 	if err != nil {
 		return nil, fmt.Errorf("invalid transport discovery config: %s", err)
 	}
-	logStore, err := config.TransportLogStore()
+	logStore, err := cfg.TransportLogStore()
 	if err != nil {
 		return nil, fmt.Errorf("invalid TransportLogStore: %s", err)
 	}
 	tmConfig := &transport.ManagerConfig{
 		PubKey:          pk,
 		SecKey:          sk,
-		DefaultNodes:    config.TrustedNodes,
+		DefaultNodes:    cfg.TrustedNodes,
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
@@ -161,53 +169,57 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *res
 		return nil, fmt.Errorf("transport manager: %s", err)
 	}
 
-	node.rt, err = config.RoutingTable()
+	node.rt, err = cfg.RoutingTable()
 	if err != nil {
 		return nil, fmt.Errorf("routing table: %s", err)
 	}
+
 	rConfig := &router.Config{
 		Logger:           node.Logger.PackageLogger("router"),
 		PubKey:           pk,
 		SecKey:           sk,
 		TransportManager: node.tm,
 		RoutingTable:     node.rt,
-		RouteFinder:      rfclient.NewHTTP(config.Routing.RouteFinder, time.Duration(config.Routing.RouteFinderTimeout)),
-		SetupNodes:       config.Routing.SetupNodes,
+		RouteFinder:      rfclient.NewHTTP(cfg.Routing.RouteFinder, time.Duration(cfg.Routing.RouteFinderTimeout)),
+		SetupNodes:       cfg.Routing.SetupNodes,
 	}
+
 	r, err := router.New(node.n, rConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup router: %v", err)
 	}
 	node.router = r
 
-	node.appsConf, err = config.AppsConfig()
+	node.appsConf, err = cfg.AppsConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid AppsConfig: %s", err)
 	}
 
-	node.appsPath, err = config.AppsDir()
+	node.appsPath, err = cfg.AppsDir()
 	if err != nil {
 		return nil, fmt.Errorf("invalid AppsPath: %s", err)
 	}
 
-	node.localPath, err = config.LocalDir()
+	node.localPath, err = cfg.LocalDir()
 	if err != nil {
 		return nil, fmt.Errorf("invalid LocalPath: %s", err)
 	}
 
-	if lvl, err := logging.LevelFromString(config.LogLevel); err == nil {
+	if lvl, err := logging.LevelFromString(cfg.LogLevel); err == nil {
 		node.Logger.SetLevel(lvl)
 	}
 
-	if config.Interfaces.RPCAddress != "" {
-		l, err := net.Listen("tcp", config.Interfaces.RPCAddress)
+	if cfg.Interfaces.RPCAddress != "" {
+		l, err := net.Listen("tcp", cfg.Interfaces.RPCAddress)
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
 		}
 		node.rpcListener = l
 	}
-	node.rpcDialers = make([]*noise.RPCClientDialer, len(config.Hypervisors))
-	for i, entry := range config.Hypervisors {
+
+	node.rpcDialers = make([]*noise.RPCClientDialer, len(cfg.Hypervisors))
+
+	for i, entry := range cfg.Hypervisors {
 		node.rpcDialers[i] = noise.NewRPCClientDialer(entry.Addr, noise.HandshakeXK, noise.Config{
 			LocalPK:   pk,
 			LocalSK:   sk,
@@ -215,6 +227,16 @@ func NewNode(config *Config, masterLogger *logging.MasterLogger, restartCtx *res
 			Initiator: true,
 		})
 	}
+
+	node.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), node.conf.AppServerSockFile)
+
+	go func() {
+		if err := node.appRPCServer.ListenAndServe(); err != nil {
+			node.logger.WithError(err).Error("error serving RPC")
+		}
+	}()
+
+	node.procManager = appserver.NewProcManager(logging.MustGetLogger("proc_manager"), node.appRPCServer)
 
 	return node, err
 }
@@ -244,9 +266,10 @@ func (node *Node) Start() error {
 		if !ac.AutoStart {
 			continue
 		}
+
 		go func(a AppConfig) {
 			if err := node.SpawnApp(&a, nil); err != nil {
-				node.logger.Warnf("Failed to start %s: %s\n", a.App, err)
+				node.logger.Warnf("App %s stopped working: %v", a.App, err)
 			}
 		}(ac)
 	}
@@ -255,10 +278,13 @@ func (node *Node) Start() error {
 	if err := rpcSvr.RegisterName(RPCPrefix, &RPC{node: node}); err != nil {
 		return fmt.Errorf("rpc server created failed: %s", err)
 	}
+
 	if node.rpcListener != nil {
 		node.logger.Info("Starting RPC interface on ", node.rpcListener.Addr())
+
 		go rpcSvr.Accept(node.rpcListener)
 	}
+
 	for _, dialer := range node.rpcDialers {
 		go func(dialer *noise.RPCClientDialer) {
 			if err := dialer.Run(rpcSvr, time.Second); err != nil {
@@ -268,6 +294,7 @@ func (node *Node) Start() error {
 	}
 
 	node.logger.Info("Starting packet router")
+
 	if err := node.router.Serve(ctx); err != nil {
 		return fmt.Errorf("failed to start Node: %s", err)
 	}
@@ -339,6 +366,7 @@ func (node *Node) Close() (err error) {
 	if node == nil {
 		return nil
 	}
+
 	if node.rpcListener != nil {
 		if err = node.rpcListener.Close(); err != nil {
 			node.logger.WithError(err).Error("failed to stop RPC interface")
@@ -346,6 +374,7 @@ func (node *Node) Close() (err error) {
 			node.logger.Info("RPC interface stopped successfully")
 		}
 	}
+
 	for i, dialer := range node.rpcDialers {
 		if err = dialer.Close(); err != nil {
 			node.logger.WithError(err).Errorf("(%d) failed to stop RPC dialer", i)
@@ -360,6 +389,10 @@ func (node *Node) Close() (err error) {
 		node.logger.WithError(err).Error("failed to stop router")
 	} else {
 		node.logger.Info("router stopped successfully")
+	}
+
+	if err := node.appRPCServer.Close(); err != nil {
+		node.logger.WithError(err).Error("error closing RPC server")
 	}
 
 	if err := UnlinkSocketFiles(node.conf.AppServerSockFile); err != nil {
@@ -382,6 +415,7 @@ func (node *Node) Exec(command string) ([]byte, error) {
 func (node *Node) Apps() []*AppState {
 	// TODO: move app states to the app module
 	res := make([]*AppState, 0)
+
 	for _, app := range node.appsConf {
 		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
 
@@ -400,9 +434,10 @@ func (node *Node) StartApp(appName string) error {
 	for _, app := range node.appsConf {
 		if app.App == appName {
 			startCh := make(chan struct{})
+
 			go func(app AppConfig) {
 				if err := node.SpawnApp(&app, startCh); err != nil {
-					node.logger.Warnf("Failed to start app %s: %s", appName, err)
+					node.logger.Warnf("App %s stopped working: %v", appName, err)
 				}
 			}(app)
 
@@ -417,7 +452,6 @@ func (node *Node) StartApp(appName string) error {
 // SpawnApp configures and starts new App.
 func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
 	node.logger.Infof("Starting %s.v%s", config.App, config.Version)
-	node.logger.Warnf("here: config.Args: %+v, with len %d", config.Args, len(config.Args))
 
 	if app, ok := reservedPorts[config.Port]; ok && app != config.App {
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
@@ -438,14 +472,22 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
 	logger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
+	errLogger := node.logger.WithField("_module", fmt.Sprintf("%s.v%s[ERROR]", config.App, config.Version)).Writer()
+
 	defer func() {
 		if logErr := logger.Close(); err == nil && logErr != nil {
 			err = logErr
 		}
+
+		if logErr := errLogger.Close(); err == nil && logErr != nil {
+			err = logErr
+		}
 	}()
 
-	pid, err := node.procManager.Run(logging.MustGetLogger(fmt.Sprintf("app_%s", config.App)),
-		appCfg, append([]string{filepath.Join(node.dir(), config.App)}, config.Args...), logger, logger)
+	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
+	appArgs := append([]string{filepath.Join(node.dir(), config.App)}, config.Args...)
+
+	pid, err := node.procManager.Start(appLogger, appCfg, appArgs, logger, errLogger)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}
@@ -459,18 +501,14 @@ func (node *Node) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err erro
 	node.persistPID(config.App, pid)
 	node.pidMu.Unlock()
 
-	if err := node.procManager.Wait(config.App); err != nil {
-		return err
-	}
-
-	return nil
+	return node.procManager.Wait(config.App)
 }
 
 func (node *Node) persistPID(name string, pid appcommon.ProcID) {
 	pidF := node.pidFile()
 	pidFName := pidF.Name()
 	if err := pidF.Close(); err != nil {
-		log.WithError(err).Warn("Failed to close PID file")
+		node.logger.WithError(err).Warn("Failed to close PID file")
 	}
 
 	pathutil.AtomicAppendToFile(pidFName, []byte(fmt.Sprintf("%s %d\n", name, pid)))
@@ -492,8 +530,22 @@ func (node *Node) StopApp(appName string) error {
 	return nil
 }
 
-// SetAutoStart sets an app to auto start or not.
-func (node *Node) SetAutoStart(appName string, autoStart bool) error {
+// RestartApp restarts running App.
+func (node *Node) RestartApp(name string) error {
+	node.logger.Infof("Restarting app %v", name)
+
+	if err := node.StopApp(name); err != nil {
+		return fmt.Errorf("stop app %v: %w", name, err)
+	}
+
+	if err := node.StartApp(name); err != nil {
+		return fmt.Errorf("start app %v: %w", name, err)
+	}
+
+	return nil
+}
+
+func (node *Node) setAutoStart(appName string, autoStart bool) error {
 	appConf, ok := node.appsConf[appName]
 	if !ok {
 		return ErrUnknownApp
@@ -501,7 +553,154 @@ func (node *Node) SetAutoStart(appName string, autoStart bool) error {
 
 	appConf.AutoStart = autoStart
 	node.appsConf[appName] = appConf
-	return nil
+
+	return node.updateConfigAppAutoStart(appName, autoStart)
+}
+
+func (node *Node) updateConfigAppAutoStart(appName string, autoStart bool) error {
+	if node.confPath == nil {
+		return nil
+	}
+
+	config, err := node.readConfig()
+	if err != nil {
+		return err
+	}
+
+	node.logger.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
+
+	changed := false
+
+	for i := range config.Apps {
+		if config.Apps[i].App == appName {
+			config.Apps[i].AutoStart = autoStart
+			changed = true
+			break
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	return node.writeConfig(config)
+}
+
+func (node *Node) setSocksPassword(password string) error {
+	node.logger.Infof("Changing skysocks password to %q", password)
+
+	const (
+		socksName       = "skysocks"
+		passcodeArgName = "-passcode"
+	)
+
+	updateFunc := func(config *Config) {
+		node.updateArg(config, socksName, passcodeArgName, password)
+	}
+
+	if err := node.updateConfig(updateFunc); err != nil {
+		return err
+	}
+
+	node.logger.Infof("Updated %v password, restarting it", socksName)
+
+	return node.RestartApp(socksName)
+}
+
+func (node *Node) setSocksClientPK(pk cipher.PubKey) error {
+	node.logger.Infof("Changing skysocks-client PK to %q", pk)
+
+	const (
+		socksClientName = "skysocks-client"
+		pkArgName       = "-srv"
+	)
+
+	updateFunc := func(config *Config) {
+		node.updateArg(config, socksClientName, pkArgName, pk.String())
+	}
+
+	if err := node.updateConfig(updateFunc); err != nil {
+		return err
+	}
+
+	node.logger.Infof("Updated %v PK, restarting it", socksClientName)
+
+	return node.RestartApp(socksClientName)
+}
+
+func (node *Node) updateArg(config *Config, appName, argName, value string) {
+	changed := false
+
+	for i := range config.Apps {
+		if config.Apps[i].App == appName {
+			for j := range config.Apps[i].Args {
+				if config.Apps[i].Args[j] == argName && j+1 < len(config.Apps[i].Args) {
+					config.Apps[i].Args[j+1] = value
+					changed = true
+					break
+				}
+			}
+
+			if !changed {
+				config.Apps[i].Args = append(config.Apps[i].Args, argName, value)
+			}
+
+			return
+		}
+	}
+}
+
+func (node *Node) updateConfig(f func(*Config)) error {
+	if node.confPath == nil {
+		return nil
+	}
+
+	config, err := node.readConfig()
+	if err != nil {
+		return err
+	}
+
+	f(config)
+
+	return node.writeConfig(config)
+}
+
+func (node *Node) readConfig() (*Config, error) {
+	if node.confPath == nil {
+		return nil, ErrNoConfigPath
+	}
+
+	configPath := *node.confPath
+
+	bytes, err := ioutil.ReadFile(filepath.Clean(configPath))
+	if err != nil {
+		return nil, err
+	}
+
+	var config Config
+	if err := json.Unmarshal(bytes, &config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+func (node *Node) writeConfig(config *Config) error {
+	if node.confPath == nil {
+		return ErrNoConfigPath
+	}
+
+	configPath := *node.confPath
+
+	node.logger.Infof("Updating visor config to %+v", config)
+
+	bytes, err := json.MarshalIndent(config, "", "\t")
+	if err != nil {
+		return err
+	}
+
+	const filePerm = 0644
+	return ioutil.WriteFile(configPath, bytes, filePerm)
 }
 
 // UnlinkSocketFiles removes unix socketFiles from file system

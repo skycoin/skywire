@@ -3,6 +3,7 @@ package appserver
 import (
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -18,7 +19,6 @@ type Proc struct {
 	key    appcommon.Key
 	config appcommon.Config
 	log    *logging.Logger
-	rpcS   *Server
 	cmd    *exec.Cmd
 }
 
@@ -47,57 +47,27 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, std
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	rpcS, err := New(logging.MustGetLogger(fmt.Sprintf("app_rpc_server_%s", key)),
-		c.SockFilePath, key)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Proc{
 		key:    key,
 		config: c,
 		log:    log,
 		cmd:    cmd,
-		rpcS:   rpcS,
 	}, nil
 }
 
-// Run runs the application. It starts the process and runs the
-// RPC communication server.
-func (p *Proc) Run() error {
-	go func() {
-		if err := p.rpcS.ListenAndServe(); err != nil {
-			p.log.WithError(err).Error("error serving RPC")
-		}
-	}()
-
-	if err := p.cmd.Run(); err != nil {
-		p.closeRPCServer()
-		return err
-	}
-
-	return nil
+// Start starts the application.
+func (p *Proc) Start() error {
+	return p.cmd.Start()
 }
 
-// Stop stops the application. It stops the process and
-// shuts down the RPC server.
+// Stop stops the application.
 func (p *Proc) Stop() error {
-	p.closeRPCServer()
-	return p.cmd.Process.Kill()
+	return p.cmd.Process.Signal(os.Interrupt)
 }
 
-// Wait shuts down the RPC server and waits for the
-// application cmd to exit.
+// Wait waits for the application cmd to exit.
 func (p *Proc) Wait() error {
-	p.closeRPCServer()
 	return p.cmd.Wait()
-}
-
-// closeRPCServer closes RPC server and logs error if any.
-func (p *Proc) closeRPCServer() {
-	if err := p.rpcS.Close(); err != nil {
-		p.log.WithError(err).Error("error closing RPC server")
-	}
 }
 
 // getBinaryPath formats binary path using app dir, name and version.
