@@ -197,7 +197,7 @@ func NewSingleUserStore(username string, users UserStore) *SingleUserStore {
 
 // User gets a user.
 func (s *SingleUserStore) User(name string) (*User, error) {
-	if !s.allowName(name) {
+	if !s.isNameAllowed(name) {
 		return nil, ErrNameNotAllowed
 	}
 
@@ -206,7 +206,7 @@ func (s *SingleUserStore) User(name string) (*User, error) {
 
 // AddUser adds a new user.
 func (s *SingleUserStore) AddUser(user User) error {
-	if !s.allowName(user.Name) {
+	if !s.isNameAllowed(user.Name) {
 		return ErrNameNotAllowed
 	}
 
@@ -215,7 +215,7 @@ func (s *SingleUserStore) AddUser(user User) error {
 
 // SetUser sets an existing user.
 func (s *SingleUserStore) SetUser(user User) error {
-	if !s.allowName(user.Name) {
+	if !s.isNameAllowed(user.Name) {
 		return ErrNameNotAllowed
 	}
 
@@ -224,14 +224,14 @@ func (s *SingleUserStore) SetUser(user User) error {
 
 // RemoveUser removes a user.
 func (s *SingleUserStore) RemoveUser(name string) error {
-	if !s.allowName(name) {
+	if !s.isNameAllowed(name) {
 		return ErrNameNotAllowed
 	}
 
 	return s.UserStore.RemoveUser(name)
 }
 
-func (s *SingleUserStore) allowName(name string) bool {
+func (s *SingleUserStore) isNameAllowed(name string) bool {
 	return name == s.username
 }
 
