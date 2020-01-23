@@ -73,6 +73,10 @@ var rootCmd = &cobra.Command{
 			go dmsgC.Serve()
 
 			l, err := dmsgC.Listen(rpcPort)
+			if err != nil {
+				log.Fatalln("Failed to bind tcp port:", err)
+			}
+
 			if err := m.ServeRPC(l); err != nil {
 				log.Fatalln("Failed to serve RPC:", err)
 			}

@@ -80,11 +80,6 @@ func (m *Node) ServeRPC(lis *dmsg.Listener) error {
 	}
 }
 
-type mockAddr string
-
-func (mockAddr) Network() string  { return "mock" }
-func (a mockAddr) String() string { return string(a) }
-
 // MockConfig configures how mock data is to be added.
 type MockConfig struct {
 	Nodes            int
