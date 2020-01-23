@@ -3,10 +3,12 @@ package hypervisor
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"time"
+	"unicode"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"go.etcd.io/bbolt"
@@ -16,8 +18,21 @@ const (
 	boltTimeout        = 10 * time.Second
 	boltUserBucketName = "users"
 	passwordSaltLen    = 16
+	minPasswordLen     = 6
+	maxPasswordLen     = 64
+	ownerRW            = 0600
+	ownerRWX           = 0700
 )
 
+// Errors returned by UserStore.
+var (
+	ErrBadPasswordLen = fmt.Errorf("password length should be between %d and %d chars", minPasswordLen, maxPasswordLen)
+	ErrSimplePassword = fmt.Errorf("password must have at least one upper, lower, digit and special character")
+	ErrUserExists     = fmt.Errorf("username already exists")
+	ErrNameNotAllowed = fmt.Errorf("name not allowed")
+)
+
+// nolint: gochecknoinits
 func init() {
 	gob.Register(User{})
 }
@@ -31,21 +46,25 @@ type User struct {
 
 // SetName checks the provided name, and sets the name if format is valid.
 func (u *User) SetName(name string) bool {
-	if !UsernameFormatOkay(name) {
+	if !checkUsernameFormat(name) {
 		return false
 	}
+
 	u.Name = name
+
 	return true
 }
 
 // SetPassword checks the provided password, and sets the password if format is valid.
-func (u *User) SetPassword(password string) bool {
-	if !PasswordFormatOkay(password) {
-		return false
+func (u *User) SetPassword(password string) error {
+	if err := checkPasswordFormat(password); err != nil {
+		return err
 	}
+
 	u.PwSalt = cipher.RandByte(passwordSaltLen)
 	u.PwHash = cipher.SumSHA256(append([]byte(password), u.PwSalt...))
-	return true
+
+	return nil
 }
 
 // VerifyPassword verifies the password input with hash and salt.
@@ -54,29 +73,31 @@ func (u *User) VerifyPassword(password string) bool {
 }
 
 // Encode encodes the user to bytes.
-func (u *User) Encode() []byte {
+func (u *User) Encode() ([]byte, error) {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(u); err != nil {
-		catch(err, "unexpected user encode error:")
+		return nil, fmt.Errorf("unexpected user encode error: %w", err)
 	}
-	return buf.Bytes()
+
+	return buf.Bytes(), nil
 }
 
 // DecodeUser decodes the user from bytes.
-func DecodeUser(raw []byte) User {
+func DecodeUser(raw []byte) (*User, error) {
 	var user User
 	if err := gob.NewDecoder(bytes.NewReader(raw)).Decode(&user); err != nil {
-		catch(err, "unexpected decode user error:")
+		return nil, fmt.Errorf("unexpected decode user error: %w", err)
 	}
-	return user
+
+	return &user, nil
 }
 
 // UserStore stores users.
 type UserStore interface {
-	User(name string) (User, bool)
-	AddUser(user User) bool
-	SetUser(user User) bool
-	RemoveUser(name string)
+	User(name string) (*User, error)
+	AddUser(user User) error
+	SetUser(user User) error
+	RemoveUser(name string) error
 }
 
 // BoltUserStore implements UserStore, storing users in a bbolt database file.
@@ -86,130 +107,173 @@ type BoltUserStore struct {
 
 // NewBoltUserStore creates a new BoltUserStore.
 func NewBoltUserStore(path string) (*BoltUserStore, error) {
-	if err := os.MkdirAll(filepath.Dir(path), os.FileMode(0700)); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), os.FileMode(ownerRWX)); err != nil {
 		return nil, err
 	}
-	db, err := bbolt.Open(path, os.FileMode(0600), &bbolt.Options{Timeout: boltTimeout})
+
+	db, err := bbolt.Open(path, os.FileMode(ownerRW), &bbolt.Options{Timeout: boltTimeout})
 	if err != nil {
 		return nil, err
 	}
+
 	err = db.Update(func(tx *bbolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(boltUserBucketName))
 		return err
 	})
+
 	return &BoltUserStore{DB: db}, err
 }
 
-// User obtains a single user. Returns true if user exists.
-func (s *BoltUserStore) User(name string) (user User, ok bool) {
-	catch(s.View(func(tx *bbolt.Tx) error {
+// User obtains a single user. Returns nil if user does not exist.
+func (s *BoltUserStore) User(name string) (user *User, err error) {
+	err = s.View(func(tx *bbolt.Tx) error {
 		users := tx.Bucket([]byte(boltUserBucketName))
 		rawUser := users.Get([]byte(name))
 		if rawUser == nil {
-			ok = false
 			return nil
 		}
-		user = DecodeUser(rawUser)
-		ok = true
-		return nil
-	}))
-	return user, ok
+
+		user, err = DecodeUser(rawUser)
+		return err
+	})
+
+	return user, err
 }
 
-// AddUser adds a new user; ok is true when successful.
-func (s *BoltUserStore) AddUser(user User) (ok bool) {
-	catch(s.Update(func(tx *bbolt.Tx) error {
+// AddUser adds a new user.
+func (s *BoltUserStore) AddUser(user User) error {
+	return s.Update(func(tx *bbolt.Tx) error {
 		users := tx.Bucket([]byte(boltUserBucketName))
 		if users.Get([]byte(user.Name)) != nil {
-			ok = false
-			return nil
+			return ErrUserExists
 		}
-		ok = true
-		return users.Put([]byte(user.Name), user.Encode())
-	}))
-	return ok
+
+		encoded, err := user.Encode()
+		if err != nil {
+			return err
+		}
+
+		return users.Put([]byte(user.Name), encoded)
+	})
 }
 
-// SetUser changes an existing user. Returns true on success.
-func (s *BoltUserStore) SetUser(user User) (ok bool) {
-	catch(s.Update(func(tx *bbolt.Tx) error {
+// SetUser changes an existing user.
+func (s *BoltUserStore) SetUser(user User) error {
+	return s.Update(func(tx *bbolt.Tx) error {
 		users := tx.Bucket([]byte(boltUserBucketName))
 		if users.Get([]byte(user.Name)) == nil {
-			ok = false
-			return nil
+			return ErrUserNotFound
 		}
-		ok = true
-		return users.Put([]byte(user.Name), user.Encode())
-	}))
-	return ok
+
+		encoded, err := user.Encode()
+		if err != nil {
+			return err
+		}
+
+		return users.Put([]byte(user.Name), encoded)
+	})
 }
 
 // RemoveUser removes a user of given username.
-func (s *BoltUserStore) RemoveUser(name string) {
-	catch(s.Update(func(tx *bbolt.Tx) error {
+func (s *BoltUserStore) RemoveUser(name string) error {
+	return s.Update(func(tx *bbolt.Tx) error {
 		return tx.Bucket([]byte(boltUserBucketName)).Delete([]byte(name))
-	}))
+	})
 }
 
 // SingleUserStore implements UserStore while enforcing only having a single user.
 type SingleUserStore struct {
-	username string
 	UserStore
+	username string
 }
 
 // NewSingleUserStore creates a new SingleUserStore with provided username and UserStore.
 func NewSingleUserStore(username string, users UserStore) *SingleUserStore {
 	return &SingleUserStore{
-		username:  username,
 		UserStore: users,
+		username:  username,
 	}
 }
 
 // User gets a user.
-func (s *SingleUserStore) User(name string) (User, bool) {
-	if s.allowName(name) {
-		return s.UserStore.User(name)
+func (s *SingleUserStore) User(name string) (*User, error) {
+	if !s.allowName(name) {
+		return nil, ErrNameNotAllowed
 	}
-	return User{}, false
+
+	return s.UserStore.User(name)
 }
 
 // AddUser adds a new user.
-func (s *SingleUserStore) AddUser(user User) bool {
-	if s.allowName(user.Name) {
-		return s.UserStore.AddUser(user)
+func (s *SingleUserStore) AddUser(user User) error {
+	if !s.allowName(user.Name) {
+		return ErrNameNotAllowed
 	}
-	return false
+
+	return s.UserStore.AddUser(user)
 }
 
 // SetUser sets an existing user.
-func (s *SingleUserStore) SetUser(user User) bool {
-	if s.allowName(user.Name) {
-		return s.UserStore.SetUser(user)
+func (s *SingleUserStore) SetUser(user User) error {
+	if !s.allowName(user.Name) {
+		return ErrNameNotAllowed
 	}
-	return false
+
+	return s.UserStore.SetUser(user)
 }
 
 // RemoveUser removes a user.
-func (s *SingleUserStore) RemoveUser(name string) {
-	if s.allowName(name) {
-		s.UserStore.RemoveUser(name)
+func (s *SingleUserStore) RemoveUser(name string) error {
+	if !s.allowName(name) {
+		return ErrNameNotAllowed
 	}
+
+	return s.UserStore.RemoveUser(name)
 }
 
 func (s *SingleUserStore) allowName(name string) bool {
 	return name == s.username
 }
 
-// UsernameFormatOkay checks if the username format is valid.
-func UsernameFormatOkay(name string) bool {
+func checkUsernameFormat(name string) bool {
 	return regexp.MustCompile(`^[a-z0-9_-]{4,21}$`).MatchString(name)
 }
 
-// PasswordFormatOkay checks if the password format is valid.
-func PasswordFormatOkay(pass string) bool {
-	if len(pass) < 6 || len(pass) > 64 {
-		return false
+func checkPasswordFormat(password string) error {
+	if len(password) < minPasswordLen || len(password) > maxPasswordLen {
+		return ErrBadPasswordLen
 	}
-	// TODO: implement more advanced password checking.
-	return true
+
+	return checkPasswordStrength(password)
+}
+
+func checkPasswordStrength(password string) error {
+	if len(password) == 0 {
+		return ErrSimplePassword
+	}
+
+	passwordClasses := [][]*unicode.RangeTable{
+		{unicode.Upper, unicode.Title},
+		{unicode.Lower},
+		{unicode.Number, unicode.Digit},
+		{unicode.Space, unicode.Symbol, unicode.Punct, unicode.Mark},
+	}
+
+	seen := make([]bool, len(passwordClasses))
+
+	for _, r := range password {
+		for i, class := range passwordClasses {
+			if unicode.IsOneOf(class, r) {
+				seen[i] = true
+			}
+		}
+	}
+
+	for _, v := range seen {
+		if !v {
+			return ErrSimplePassword
+		}
+	}
+
+	return nil
 }
