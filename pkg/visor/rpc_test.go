@@ -168,7 +168,7 @@ func TestStartStopApp(t *testing.T) {
 	}
 	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps["foo"].Args...)
 	appPID1 := appcommon.ProcID(10)
-	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", app).Return(testhelpers.NoErr)
 	pm.On("Stop", app).Return(testhelpers.NoErr)
