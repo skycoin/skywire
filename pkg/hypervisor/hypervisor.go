@@ -6,15 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/rpc"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
+
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -32,7 +33,7 @@ var (
 )
 
 type appNodeConn struct {
-	Addr   *noise.Addr
+	Addr   dmsg.Addr
 	Client visor.RPCClient
 }
 
@@ -61,13 +62,15 @@ func NewNode(config Config) (*Node, error) {
 }
 
 // ServeRPC serves RPC of a Node.
-func (m *Node) ServeRPC(lis net.Listener) error {
+func (m *Node) ServeRPC(lis *dmsg.Listener) error {
 	for {
-		conn, err := noise.WrapListener(lis, m.c.PK, m.c.SK, false, noise.HandshakeXK).Accept()
+		conn, err := lis.Accept()
 		if err != nil {
 			return err
 		}
-		addr := conn.RemoteAddr().(*noise.Addr)
+
+		addr := conn.RemoteAddr().(dmsg.Addr)
+		log.Infoln("accepted: ", addr.PK)
 		m.mu.Lock()
 		m.nodes[addr.PK] = appNodeConn{
 			Addr:   addr,
@@ -100,9 +103,9 @@ func (m *Node) AddMockData(config MockConfig) error {
 		}
 		m.mu.Lock()
 		m.nodes[pk] = appNodeConn{
-			Addr: &noise.Addr{
+			Addr: dmsg.Addr{
 				PK:   pk,
-				Addr: mockAddr(fmt.Sprintf("0.0.0.0:%d", i)),
+				Port: uint16(i),
 			},
 			Client: client,
 		}
@@ -248,7 +251,7 @@ func (m *Node) getNodes() http.HandlerFunc {
 				summary = &visor.Summary{PubKey: pk}
 			}
 			summaries = append(summaries, summaryResp{
-				TCPAddr: c.Addr.Addr.String(),
+				TCPAddr: c.Addr.String(),
 				Online:  err == nil,
 				Summary: summary,
 			})
@@ -267,7 +270,7 @@ func (m *Node) getNode() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, summaryResp{
-			TCPAddr: ctx.Addr.Addr.String(),
+			TCPAddr: ctx.Addr.String(),
 			Summary: summary,
 		})
 	})
@@ -366,6 +369,7 @@ type LogsRes struct {
 func (m *Node) appLogsSince() http.HandlerFunc {
 	return m.withCtx(m.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		since := r.URL.Query().Get("since")
+		since = strings.Replace(since, " ", "+", 1) // we need to put '+' again that was replaced in the query string
 
 		// if time is not parseable or empty default to return all logs
 		t, err := time.Parse(time.RFC3339Nano, since)
@@ -613,7 +617,7 @@ func (m *Node) restart() http.HandlerFunc {
 	<<< Helper functions >>>
 */
 
-func (m *Node) client(pk cipher.PubKey) (*noise.Addr, visor.RPCClient, bool) {
+func (m *Node) client(pk cipher.PubKey) (dmsg.Addr, visor.RPCClient, bool) {
 	m.mu.RLock()
 	conn, ok := m.nodes[pk]
 	m.mu.RUnlock()
@@ -623,7 +627,7 @@ func (m *Node) client(pk cipher.PubKey) (*noise.Addr, visor.RPCClient, bool) {
 type httpCtx struct {
 	// Node
 	PK   cipher.PubKey
-	Addr *noise.Addr
+	Addr dmsg.Addr
 	RPC  visor.RPCClient
 
 	// App
