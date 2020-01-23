@@ -124,7 +124,7 @@ func TestNodeStartClose(t *testing.T) {
 	}
 	appArgs1 := append([]string{filepath.Join(node.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
-	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", apps["skychat"].App).Return(testhelpers.NoErr)
 
