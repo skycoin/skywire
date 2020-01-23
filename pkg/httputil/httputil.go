@@ -84,4 +84,3 @@ func SplitRPCAddr(rpcAddr string) (host string, port uint16, err error) {
 
 	return addrToken[0], uint16(uint64port), nil
 }
-

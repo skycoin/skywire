@@ -2,17 +2,16 @@ package commands
 
 import (
 	"fmt"
-	"github.com/SkycoinProject/dmsg/disc"
 	"net/http"
 	"os"
 
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
-
-	"github.com/SkycoinProject/dmsg"
 )
 
 const configEnv = "SW_HYPERVISOR_CONFIG"

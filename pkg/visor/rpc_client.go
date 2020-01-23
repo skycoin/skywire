@@ -42,6 +42,8 @@ type RPCClient interface {
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
+	SetSocksPassword(password string) error
+	SetSocksClientPK(pk cipher.PubKey) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -131,6 +133,16 @@ func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 		AppName:   appName,
 		AutoStart: autostart,
 	}, &struct{}{})
+}
+
+// SetSocksPassword calls SetSocksPassword.
+func (rc *rpcClient) SetSocksPassword(password string) error {
+	return rc.Call("SetSocksPassword", &password, &struct{}{})
+}
+
+// SetSocksClientPK calls SetSocksClientPK.
+func (rc *rpcClient) SetSocksClientPK(pk cipher.PubKey) error {
+	return rc.Call("SetSocksClientPK", &pk, &struct{}{})
 }
 
 // LogsSince calls LogsSince
@@ -262,11 +274,10 @@ func (d *RPCClientDialer) Run(srv *rpc.Server, retry time.Duration) error {
 	for {
 		if err := d.establishConn(); err != nil {
 			return err
-		} else {
-			// Only serve when then dial succeeds.
-			srv.ServeConn(d.conn)
-			d.setConn(nil)
 		}
+		// Only serve when then dial succeeds.
+		srv.ServeConn(d.conn)
+		d.setConn(nil)
 		select {
 		case <-d.done:
 			d.clearDone()
@@ -314,7 +325,7 @@ func (d *RPCClientDialer) setConn(conn net.Conn) {
 
 func (d *RPCClientDialer) setDone() (ok bool) {
 	d.mu.Lock()
-	if ok = d.done == nil; ok {
+	if d.done == nil {
 		d.done = make(chan struct{})
 	}
 	d.mu.Unlock()
@@ -514,6 +525,36 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	})
 }
 
+// SetSocksPassword implements RPCClient.
+func (mc *mockRPCClient) SetSocksPassword(password string) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetSocksClientPK implements RPCClient.
+func (mc *mockRPCClient) SetSocksClientPK(pk cipher.PubKey) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks-client"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
 // LogsSince implements RPCClient. Manually set (*mockRPPClient).appls before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.appls.LogsSince(timestamp)
@@ -635,6 +676,7 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 // Loops implements RPCClient.
 func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
 	var loops []LoopInfo
+
 	rules := mc.rt.AllRules()
 	for _, rule := range rules {
 		if rule.Type() != routing.RuleConsume {

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/SkycoinProject/dmsg"
 	"math/rand"
 	"net/http"
 	"net/rpc"
@@ -14,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
@@ -296,13 +296,17 @@ func (m *Node) getApp() http.HandlerFunc {
 func (m *Node) putApp() http.HandlerFunc {
 	return m.withCtx(m.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody struct {
-			Autostart *bool `json:"autostart,omitempty"`
-			Status    *int  `json:"status,omitempty"`
+			Autostart *bool          `json:"autostart,omitempty"`
+			Status    *int           `json:"status,omitempty"`
+			Passcode  *string        `json:"passcode,omitempty"`
+			PK        *cipher.PubKey `json:"pk,omitempty"`
 		}
+
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
+
 		if reqBody.Autostart != nil {
 			if *reqBody.Autostart != ctx.App.AutoStart {
 				if err := ctx.RPC.SetAutoStart(ctx.App.Name, *reqBody.Autostart); err != nil {
@@ -311,6 +315,7 @@ func (m *Node) putApp() http.HandlerFunc {
 				}
 			}
 		}
+
 		if reqBody.Status != nil {
 			switch *reqBody.Status {
 			case 0:
@@ -329,6 +334,26 @@ func (m *Node) putApp() http.HandlerFunc {
 				return
 			}
 		}
+
+		const (
+			skysocksName       = "skysocks"
+			skysocksClientName = "skysocks-client"
+		)
+
+		if reqBody.Passcode != nil && ctx.App.Name == skysocksName {
+			if err := ctx.RPC.SetSocksPassword(*reqBody.Passcode); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.PK != nil && ctx.App.Name == skysocksClientName {
+			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
 	})
 }

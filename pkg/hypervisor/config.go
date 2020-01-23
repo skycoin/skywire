@@ -3,15 +3,14 @@ package hypervisor
 import (
 	"encoding/hex"
 	"encoding/json"
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
@@ -37,12 +36,12 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // Config configures the hypervisor.
 type Config struct {
-	PK         cipher.PubKey   `json:"public_key"`
-	SK         cipher.SecKey   `json:"secret_key"`
-	DBPath     string          `json:"db_path"`     // Path to store database file.
-	EnableAuth bool            `json:"enable_auth"` // Whether to enable user management.
-	Cookies    CookieConfig    `json:"cookies"`     // Configures cookies (for session management).
-	Interfaces InterfaceConfig `json:"interfaces"`  // Configures exposed interfaces.
+	PK            cipher.PubKey   `json:"public_key"`
+	SK            cipher.SecKey   `json:"secret_key"`
+	DBPath        string          `json:"db_path"`        // Path to store database file.
+	EnableAuth    bool            `json:"enable_auth"`    // Whether to enable user management.
+	Cookies       CookieConfig    `json:"cookies"`        // Configures cookies (for session management).
+	Interfaces    InterfaceConfig `json:"interfaces"`     // Configures exposed interfaces.
 	DmsgDiscovery string          `json:"dmsg_discovery"` // DmsgDiscovery address for dmsg usage
 }
 
@@ -52,7 +51,7 @@ func makeConfig(testenv bool) Config {
 	c.PK = pk
 	c.SK = sk
 
-	if testenv{
+	if testenv {
 		c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
 	} else {
 		c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
