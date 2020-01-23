@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewNode(t *testing.T) {
-	config := makeConfig()
+	config := makeConfig(false)
 
 	confDir, err := ioutil.TempDir(os.TempDir(), "SWHV")
 	require.NoError(t, err)
