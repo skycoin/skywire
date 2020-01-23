@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/prometheus/common/log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -270,8 +269,7 @@ func NewRPCClientDialer(dialer *snet.Network, pk cipher.PubKey, port uint16) *RP
 // It exposes a RPC Server.
 // It will return if Close is called or crypto fails.
 func (d *RPCClientDialer) Run(srv *rpc.Server, retry time.Duration) error {
-	if ok := d.setDone(); ok {
-		log.Info(ok)
+	if ok := d.setDone(); !ok {
 		return ErrAlreadyServing
 	}
 	for {
@@ -328,7 +326,7 @@ func (d *RPCClientDialer) setConn(conn net.Conn) {
 
 func (d *RPCClientDialer) setDone() (ok bool) {
 	d.mu.Lock()
-	if d.done == nil {
+	if ok = d.done == nil; ok {
 		d.done = make(chan struct{})
 	}
 	d.mu.Unlock()
