@@ -20,9 +20,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
@@ -95,7 +96,7 @@ type Node struct {
 	pidMu sync.Mutex
 
 	rpcListener net.Listener
-	rpcDialers  []*noise.RPCClientDialer
+	rpcDialers  []*RPCClientDialer
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
@@ -217,15 +218,15 @@ func NewNode(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Cont
 		node.rpcListener = l
 	}
 
-	node.rpcDialers = make([]*noise.RPCClientDialer, len(cfg.Hypervisors))
+	node.rpcDialers = make([]*RPCClientDialer, len(cfg.Hypervisors))
 
 	for i, entry := range cfg.Hypervisors {
-		node.rpcDialers[i] = noise.NewRPCClientDialer(entry.Addr, noise.HandshakeXK, noise.Config{
-			LocalPK:   pk,
-			LocalSK:   sk,
-			RemotePK:  entry.PubKey,
-			Initiator: true,
-		})
+		_, rpcPort, err := httputil.SplitRPCAddr(entry.Addr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse rpc port from rpc address: %s", err)
+		}
+
+		node.rpcDialers[i] = NewRPCClientDialer(node.n, entry.PubKey, rpcPort)
 	}
 
 	node.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), node.conf.AppServerSockFile)
@@ -286,9 +287,9 @@ func (node *Node) Start() error {
 	}
 
 	for _, dialer := range node.rpcDialers {
-		go func(dialer *noise.RPCClientDialer) {
+		go func(dialer *RPCClientDialer) {
 			if err := dialer.Run(rpcSvr, time.Second); err != nil {
-				node.logger.Errorf("Dialer exited with error: %v", err)
+				node.logger.Errorf("Hypervisor Dmsg Dial exited with error: %v", err)
 			}
 		}(dialer)
 	}
