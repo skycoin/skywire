@@ -15,6 +15,11 @@ func Test_checkPasswordFormat(t *testing.T) {
 		err      error
 	}{
 		{
+			name:     "OK",
+			password: strings.Repeat("Aa1!", 4),
+			err:      nil,
+		},
+		{
 			name:     "Too short",
 			password: "1",
 			err:      ErrBadPasswordLen,
