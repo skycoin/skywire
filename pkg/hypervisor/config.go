@@ -13,6 +13,12 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
+const (
+	defaultCookieExpiration = 12 * time.Hour
+	hashKeyLen              = 64
+	blockKeyLen             = 32
+)
+
 // Key allows a byte slice to be marshaled or unmarshaled from a hex string.
 type Key []byte
 
@@ -30,28 +36,32 @@ func (hk Key) MarshalText() ([]byte, error) {
 func (hk *Key) UnmarshalText(text []byte) error {
 	*hk = make([]byte, hex.DecodedLen(len(text)))
 	_, err := hex.Decode(*hk, text)
+
 	return err
 }
 
 // Config configures the hypervisor.
 type Config struct {
-	PK         cipher.PubKey   `json:"public_key"`
-	SK         cipher.SecKey   `json:"secret_key"`
-	DBPath     string          `json:"db_path"`     // Path to store database file.
-	EnableAuth bool            `json:"enable_auth"` // Whether to enable user management.
 	Cookies    CookieConfig    `json:"cookies"`     // Configures cookies (for session management).
 	Interfaces InterfaceConfig `json:"interfaces"`  // Configures exposed interfaces.
+	DBPath     string          `json:"db_path"`     // Path to store database file.
+	EnableAuth bool            `json:"enable_auth"` // Whether to enable user management.
+	PK         cipher.PubKey   `json:"public_key"`
+	SK         cipher.SecKey   `json:"secret_key"`
 }
 
 func makeConfig() Config {
 	var c Config
+
 	pk, sk := cipher.GenerateKeyPair()
 	c.PK = pk
 	c.SK = sk
 	c.EnableAuth = true
-	c.Cookies.HashKey = cipher.RandByte(64)
-	c.Cookies.BlockKey = cipher.RandByte(32)
+	c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
+	c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
+
 	c.FillDefaults()
+
 	return c
 }
 
@@ -61,8 +71,10 @@ func GenerateWorkDirConfig() Config {
 	if err != nil {
 		log.Fatalf("failed to generate WD config: %s", dir)
 	}
+
 	c := makeConfig()
 	c.DBPath = filepath.Join(dir, "users.db")
+
 	return c
 }
 
@@ -70,6 +82,7 @@ func GenerateWorkDirConfig() Config {
 func GenerateHomeConfig() Config {
 	c := makeConfig()
 	c.DBPath = filepath.Join(pathutil.HomeDir(), ".skycoin/hypervisor/users.db")
+
 	return c
 }
 
@@ -77,6 +90,7 @@ func GenerateHomeConfig() Config {
 func GenerateLocalConfig() Config {
 	c := makeConfig()
 	c.DBPath = "/usr/local/SkycoinProject/hypervisor/users.db"
+
 	return c
 }
 
@@ -92,11 +106,18 @@ func (c *Config) Parse(path string) error {
 	if path, err = filepath.Abs(path); err != nil {
 		return err
 	}
+
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return err
 	}
-	defer func() { catch(f.Close()) }()
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Fatalf("Failed to close file %s: %v", f.Name(), err)
+		}
+	}()
+
 	return json.NewDecoder(f).Decode(c)
 }
 
@@ -116,7 +137,7 @@ type CookieConfig struct {
 
 // FillDefaults fills config with default values.
 func (c *CookieConfig) FillDefaults() {
-	c.ExpiresDuration = time.Hour * 12
+	c.ExpiresDuration = defaultCookieExpiration
 	c.Path = "/"
 	c.Secure = true
 	c.HTTPOnly = true
