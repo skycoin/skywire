@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/gorilla/handlers"
@@ -70,4 +72,15 @@ func WriteLog(writer io.Writer, params handlers.LogFormatterParams) {
 	if err != nil {
 		log.WithError(err).Warn("Failed to write log")
 	}
+}
+
+// SplitRPCAddr returns host and port and whatever error results from parsing the rpc address interface
+func SplitRPCAddr(rpcAddr string) (host string, port uint16, err error) {
+	addrToken := strings.Split(rpcAddr, ":")
+	uint64port, err := strconv.ParseUint(addrToken[1], 10, 16)
+	if err != nil {
+		return
+	}
+
+	return addrToken[0], uint16(uint64port), nil
 }
