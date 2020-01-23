@@ -143,8 +143,6 @@ func (s *UserManager) Authorize(next http.Handler) http.Handler {
 // ChangePassword returns a HandlerFunc for changing the user's password.
 func (s *UserManager) ChangePassword() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var user = r.Context().Value(userKey).(User)
-
 		var rb struct {
 			OldPassword string `json:"old_password"`
 			NewPassword string `json:"new_password"`
@@ -155,6 +153,7 @@ func (s *UserManager) ChangePassword() http.HandlerFunc {
 			return
 		}
 
+		user := r.Context().Value(userKey).(User)
 		if ok := user.VerifyPassword(rb.OldPassword); !ok {
 			httputil.WriteJSON(w, r, http.StatusUnauthorized, ErrBadLogin)
 			return
