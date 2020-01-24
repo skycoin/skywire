@@ -20,6 +20,11 @@ func Test_checkPasswordFormat(t *testing.T) {
 			err:      nil,
 		},
 		{
+			name:     "Non ASCII",
+			password: strings.Repeat("Aå1!", 4),
+			err:      ErrNonASCII,
+		},
+		{
 			name:     "Too short",
 			password: "1",
 			err:      ErrBadPasswordLen,
