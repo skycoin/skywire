@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -26,9 +27,18 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
-var (
-	log           = logging.MustGetLogger("hypervisor")
+const (
 	healthTimeout = 5 * time.Second
+	httpTimeout   = 30 * time.Second
+)
+
+const (
+	statusStop = iota
+	statusStart
+)
+
+var (
+	log = logging.MustGetLogger("hypervisor") // nolint: gochecknoglobals
 )
 
 type appNodeConn struct {
@@ -50,6 +60,7 @@ func NewNode(config Config) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	singleUserDB := NewSingleUserStore("admin", boltUserDB)
 
 	return &Node{
@@ -67,7 +78,9 @@ func (m *Node) ServeRPC(lis net.Listener) error {
 		if err != nil {
 			return err
 		}
+
 		addr := conn.RemoteAddr().(*noise.Addr)
+
 		m.mu.Lock()
 		m.nodes[addr.PK] = appNodeConn{
 			Addr:   addr,
@@ -93,11 +106,13 @@ type MockConfig struct {
 // AddMockData adds mock data to Node.
 func (m *Node) AddMockData(config MockConfig) error {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	for i := 0; i < config.Nodes; i++ {
 		pk, client, err := visor.NewMockRPCClient(r, config.MaxTpsPerNode, config.MaxRoutesPerNode)
 		if err != nil {
 			return err
 		}
+
 		m.mu.Lock()
 		m.nodes[pk] = appNodeConn{
 			Addr: &noise.Addr{
@@ -108,15 +123,19 @@ func (m *Node) AddMockData(config MockConfig) error {
 		}
 		m.mu.Unlock()
 	}
+
 	m.c.EnableAuth = config.EnableAuth
+
 	return nil
 }
 
 // ServeHTTP implements http.Handler
 func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
-	r.Use(middleware.Timeout(time.Second * 30))
+
+	r.Use(middleware.Timeout(httpTimeout))
 	r.Use(middleware.Logger)
+
 	r.Route("/api", func(r chi.Router) {
 		if m.c.EnableAuth {
 			r.Group(func(r chi.Router) {
@@ -125,13 +144,14 @@ func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				r.Post("/logout", m.users.Logout())
 			})
 		}
+
 		r.Group(func(r chi.Router) {
 			if m.c.EnableAuth {
 				r.Use(m.users.Authorize)
 			}
+
 			r.Get("/user", m.users.UserInfo())
 			r.Post("/change-password", m.users.ChangePassword())
-			r.Post("/exec/{pk}", m.exec())
 			r.Get("/nodes", m.getNodes())
 			r.Get("/nodes/{pk}/health", m.getHealth())
 			r.Get("/nodes/{pk}/uptime", m.getUptime())
@@ -152,8 +172,10 @@ func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Delete("/nodes/{pk}/routes/{rid}", m.deleteRoute())
 			r.Get("/nodes/{pk}/loops", m.getLoops())
 			r.Get("/nodes/{pk}/restart", m.restart())
+			r.Post("/nodes/{pk}/exec", m.exec())
 		})
 	})
+
 	r.ServeHTTP(w, req)
 }
 
@@ -175,10 +197,12 @@ func (m *Node) getHealth() http.HandlerFunc {
 
 		resCh := make(chan healthRes)
 		tCh := time.After(healthTimeout)
+
 		go func() {
 			hi, err := ctx.RPC.Health()
 			resCh <- healthRes{hi, err}
 		}()
+
 		select {
 		case res := <-resCh:
 			if res.err != nil {
@@ -187,6 +211,7 @@ func (m *Node) getHealth() http.HandlerFunc {
 				vh.HealthInfo = res.h
 				vh.Status = http.StatusOK
 			}
+
 			httputil.WriteJSON(w, r, http.StatusOK, vh)
 		case <-tCh:
 			httputil.WriteJSON(w, r, http.StatusRequestTimeout, &VisorHealth{Status: http.StatusRequestTimeout})
@@ -202,6 +227,7 @@ func (m *Node) getUptime() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, u)
 	})
 }
@@ -212,8 +238,14 @@ func (m *Node) exec() http.HandlerFunc {
 		var reqBody struct {
 			Command string `json:"command"`
 		}
+
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("exec request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
@@ -226,6 +258,7 @@ func (m *Node) exec() http.HandlerFunc {
 		output := struct {
 			Output string `json:"output"`
 		}{string(out)}
+
 		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
 }
@@ -240,13 +273,16 @@ type summaryResp struct {
 func (m *Node) getNodes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var summaries []summaryResp
+
 		m.mu.RLock()
 		for pk, c := range m.nodes {
 			summary, err := c.Client.Summary()
 			if err != nil {
-				log.Printf("failed to obtain summary from AppNode with pk %s. Error: %v", pk, err)
+				log.Errorf("failed to obtain summary from AppNode with pk %s. Error: %v", pk, err)
+
 				summary = &visor.Summary{PubKey: pk}
 			}
+
 			summaries = append(summaries, summaryResp{
 				TCPAddr: c.Addr.Addr.String(),
 				Online:  err == nil,
@@ -254,6 +290,7 @@ func (m *Node) getNodes() http.HandlerFunc {
 			})
 		}
 		m.mu.RUnlock()
+
 		httputil.WriteJSON(w, r, http.StatusOK, summaries)
 	}
 }
@@ -266,6 +303,7 @@ func (m *Node) getNode() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, summaryResp{
 			TCPAddr: ctx.Addr.Addr.String(),
 			Summary: summary,
@@ -281,6 +319,7 @@ func (m *Node) getApps() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, apps)
 	})
 }
@@ -292,23 +331,30 @@ func (m *Node) getApp() http.HandlerFunc {
 	})
 }
 
+// TODO: simplify
+// nolint: funlen,gocognit,godox
 func (m *Node) putApp() http.HandlerFunc {
 	return m.withCtx(m.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody struct {
-			Autostart *bool          `json:"autostart,omitempty"`
+			AutoStart *bool          `json:"autostart,omitempty"`
 			Status    *int           `json:"status,omitempty"`
 			Passcode  *string        `json:"passcode,omitempty"`
 			PK        *cipher.PubKey `json:"pk,omitempty"`
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("putApp request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
-		if reqBody.Autostart != nil {
-			if *reqBody.Autostart != ctx.App.AutoStart {
-				if err := ctx.RPC.SetAutoStart(ctx.App.Name, *reqBody.Autostart); err != nil {
+		if reqBody.AutoStart != nil {
+			if *reqBody.AutoStart != ctx.App.AutoStart {
+				if err := ctx.RPC.SetAutoStart(ctx.App.Name, *reqBody.AutoStart); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
@@ -317,19 +363,19 @@ func (m *Node) putApp() http.HandlerFunc {
 
 		if reqBody.Status != nil {
 			switch *reqBody.Status {
-			case 0:
+			case statusStop:
 				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
-			case 1:
+			case statusStart:
 				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
 			default:
-				httputil.WriteJSON(w, r, http.StatusBadRequest,
-					fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status))
+				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
+				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
 				return
 			}
 		}
@@ -367,11 +413,12 @@ func (m *Node) appLogsSince() http.HandlerFunc {
 	return m.withCtx(m.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		since := r.URL.Query().Get("since")
 
-		// if time is not parseable or empty default to return all logs
+		// if time is not parsable or empty default to return all logs
 		t, err := time.Parse(time.RFC3339Nano, since)
 		if err != nil {
 			t = time.Unix(0, 0)
 		}
+
 		logs, err := ctx.RPC.LogsSince(t, ctx.App.Name)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
@@ -397,27 +444,27 @@ func (m *Node) getTransportTypes() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, types)
 	})
 }
 
 func (m *Node) getTransports() http.HandlerFunc {
 	return m.withCtx(m.nodeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var (
-			qTypes []string
-			qPKs   []cipher.PubKey
-			qLogs  bool
-		)
-		var err error
-		qTypes = strSliceFromQuery(r, "type", nil)
-		if qPKs, err = pkSliceFromQuery(r, "pk", nil); err != nil {
+		qTypes := strSliceFromQuery(r, "type", nil)
+
+		qPKs, err := pkSliceFromQuery(r, "pk", nil)
+		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
-		if qLogs, err = httputil.BoolFromQuery(r, "logs", true); err != nil {
+
+		qLogs, err := httputil.BoolFromQuery(r, "logs", true)
+		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
+
 		transports, err := ctx.RPC.Transports(qTypes, qPKs, qLogs)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
@@ -430,19 +477,28 @@ func (m *Node) getTransports() http.HandlerFunc {
 func (m *Node) postTransport() http.HandlerFunc {
 	return m.withCtx(m.nodeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody struct {
-			Remote cipher.PubKey `json:"remote_pk"`
 			TpType string        `json:"transport_type"`
+			Remote cipher.PubKey `json:"remote_pk"`
 			Public bool          `json:"public"`
 		}
+
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("postTransport request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
-		summary, err := ctx.RPC.AddTransport(reqBody.Remote, reqBody.TpType, reqBody.Public, 30*time.Second)
+
+		const timeout = 30 * time.Second
+		summary, err := ctx.RPC.AddTransport(reqBody.Remote, reqBody.TpType, reqBody.Public, timeout)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})
 }
@@ -459,6 +515,7 @@ func (m *Node) deleteTransport() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
@@ -474,9 +531,11 @@ func makeRoutingRuleResp(key routing.RouteID, rule routing.Rule, summary bool) r
 		Key:  key,
 		Rule: hex.EncodeToString(rule),
 	}
+
 	if summary {
 		resp.Summary = rule.Summary()
 	}
+
 	return resp
 }
 
@@ -487,15 +546,18 @@ func (m *Node) getRoutes() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
+
 		rules, err := ctx.RPC.RoutingRules()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		resp := make([]routingRuleResp, len(rules))
 		for i, rule := range rules {
 			resp[i] = makeRoutingRuleResp(rule.KeyRouteID(), rule, qSummary)
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
 	})
 }
@@ -504,9 +566,15 @@ func (m *Node) postRoute() http.HandlerFunc {
 	return m.withCtx(m.nodeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("postRoute request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
+
 		rule, err := summary.ToRule()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
@@ -517,6 +585,7 @@ func (m *Node) postRoute() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, makeRoutingRuleResp(rule.KeyRouteID(), rule, true))
 	})
 }
@@ -528,11 +597,13 @@ func (m *Node) getRoute() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
+
 		rule, err := ctx.RPC.RoutingRule(ctx.RtKey)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, makeRoutingRuleResp(ctx.RtKey, rule, qSummary))
 	})
 }
@@ -541,18 +612,26 @@ func (m *Node) putRoute() http.HandlerFunc {
 	return m.withCtx(m.routeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("putRoute request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
+
 		rule, err := summary.ToRule()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
+
 		if err := ctx.RPC.SaveRoutingRule(rule); err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, makeRoutingRuleResp(ctx.RtKey, rule, true))
 	})
 }
@@ -563,6 +642,7 @@ func (m *Node) deleteRoute() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
@@ -576,6 +656,7 @@ func makeLoopResp(info visor.LoopInfo) loopResp {
 	if len(info.FwdRule) == 0 || len(info.ConsumeRule) == 0 {
 		return loopResp{}
 	}
+
 	return loopResp{
 		RuleConsumeFields: *info.ConsumeRule.Summary().ConsumeFields,
 		FwdRule:           *info.FwdRule.Summary().ForwardFields,
@@ -589,10 +670,12 @@ func (m *Node) getLoops() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
 		resp := make([]loopResp, len(loops))
 		for i, l := range loops {
 			resp[i] = makeLoopResp(l)
 		}
+
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
 	})
 }
@@ -617,15 +700,11 @@ func (m *Node) client(pk cipher.PubKey) (*noise.Addr, visor.RPCClient, bool) {
 	m.mu.RLock()
 	conn, ok := m.nodes[pk]
 	m.mu.RUnlock()
+
 	return conn.Addr, conn.Client, ok
 }
 
 type httpCtx struct {
-	// Node
-	PK   cipher.PubKey
-	Addr *noise.Addr
-	RPC  visor.RPCClient
-
 	// App
 	App *visor.AppState
 
@@ -634,6 +713,11 @@ type httpCtx struct {
 
 	// Route
 	RtKey routing.RouteID
+
+	// Node
+	PK   cipher.PubKey
+	Addr *noise.Addr
+	RPC  visor.RPCClient
 }
 
 type (
@@ -655,11 +739,13 @@ func (m *Node) nodeCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) 
 		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 		return nil, false
 	}
+
 	addr, client, ok := m.client(pk)
 	if !ok {
 		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("node of pk '%s' not found", pk))
 		return nil, false
 	}
+
 	return &httpCtx{
 		PK:   pk,
 		Addr: addr,
@@ -672,20 +758,25 @@ func (m *Node) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	appName := chi.URLParam(r, "app")
+
 	apps, err := ctx.RPC.Apps()
 	if err != nil {
 		httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 		return nil, false
 	}
-	for _, app := range apps {
-		if app.Name == appName {
-			ctx.App = app
+
+	for _, a := range apps {
+		if a.Name == appName {
+			ctx.App = a
 			return ctx, true
 		}
 	}
-	httputil.WriteJSON(w, r, http.StatusNotFound,
-		fmt.Errorf("can not find app of name %s from node %s", appName, ctx.PK))
+
+	errMsg := fmt.Errorf("can not find app of name %s from node %s", appName, ctx.PK)
+	httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
+
 	return nil, false
 }
 
@@ -694,41 +785,53 @@ func (m *Node) tpCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	tid, err := uuidFromParam(r, "tid")
 	if err != nil {
 		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 		return nil, false
 	}
+
 	tp, err := ctx.RPC.Transport(tid)
 	if err != nil {
 		if err.Error() == visor.ErrNotFound.Error() {
-			httputil.WriteJSON(w, r, http.StatusNotFound,
-				fmt.Errorf("transport of ID %s is not found", tid))
+			errMsg := fmt.Errorf("transport of ID %s is not found", tid)
+			httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
+
 			return nil, false
 		}
+
 		httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+
 		return nil, false
 	}
+
 	ctx.Tp = tp
+
 	return ctx, true
 }
 
 func (m *Node) routeCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	ctx, ok := m.tpCtx(w, r)
+	ctx, ok := m.nodeCtx(w, r)
 	if !ok {
 		return nil, false
 	}
-	rid, err := ridFromParam(r, "key")
+
+	rid, err := ridFromParam(r, "rid")
 	if err != nil {
 		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+		return nil, false
 	}
+
 	ctx.RtKey = rid
+
 	return ctx, true
 }
 
 func pkFromParam(r *http.Request, key string) (cipher.PubKey, error) {
 	pk := cipher.PubKey{}
 	err := pk.UnmarshalText([]byte(chi.URLParam(r, key)))
+
 	return pk, err
 }
 
@@ -741,6 +844,7 @@ func ridFromParam(r *http.Request, key string) (routing.RouteID, error) {
 	if err != nil {
 		return 0, errors.New("invalid route ID provided")
 	}
+
 	return routing.RouteID(rid), nil
 }
 
@@ -749,6 +853,7 @@ func strSliceFromQuery(r *http.Request, key string, defaultVal []string) []strin
 	if !ok {
 		return defaultVal
 	}
+
 	return slice
 }
 
@@ -757,23 +862,17 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 	if !ok {
 		return defaultVal, nil
 	}
+
 	pks := make([]cipher.PubKey, len(qPKs))
+
 	for i, qPK := range qPKs {
 		pk := cipher.PubKey{}
 		if err := pk.UnmarshalText([]byte(qPK)); err != nil {
 			return nil, err
 		}
+
 		pks[i] = pk
 	}
-	return pks, nil
-}
 
-func catch(err error, msgs ...string) {
-	if err != nil {
-		if len(msgs) > 0 {
-			log.Fatalln(append(msgs, err.Error()))
-		} else {
-			log.Fatalln(err)
-		}
-	}
+	return pks, nil
 }
