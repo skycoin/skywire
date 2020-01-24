@@ -105,13 +105,18 @@ func TestNodeStartClose(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	nodeCfg := Config{}
+	var (
+		nodeCfg = Config{}
+		logger  = logging.MustGetLogger("test")
+		server  = appserver.New(logger, nodeCfg.AppServerSockFile)
+	)
 
 	node := &Node{
-		conf:     &nodeCfg,
-		router:   r,
-		appsConf: apps,
-		logger:   logging.MustGetLogger("test"),
+		conf:         &nodeCfg,
+		router:       r,
+		appsConf:     apps,
+		logger:       logger,
+		appRPCServer: server,
 	}
 
 	pm := &appserver.MockProcManager{}
@@ -124,7 +129,7 @@ func TestNodeStartClose(t *testing.T) {
 	}
 	appArgs1 := append([]string{filepath.Join(node.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
-	pm.On("Run", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", apps["skychat"].App).Return(testhelpers.NoErr)
 
@@ -210,7 +215,7 @@ func TestNodeSpawnApp(t *testing.T) {
 	pm.On("Wait", app.App).Return(testhelpers.NoErr)
 
 	appPID := appcommon.ProcID(10)
-	pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+	pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
 		Return(appPID, testhelpers.NoErr)
 	pm.On("Exists", app.App).Return(true)
 	pm.On("Stop", app.App).Return(testhelpers.NoErr)
@@ -303,7 +308,7 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 		appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
 
 		appPID := appcommon.ProcID(10)
-		pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+		pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
 			Return(appPID, appserver.ErrAppAlreadyStarted)
 		pm.On("Exists", app.App).Return(true)
 
