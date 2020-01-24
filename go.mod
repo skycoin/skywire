@@ -24,7 +24,7 @@ require (
 	golang.org/x/crypto v0.0.0-20191106202628-ed6320f186d4
 	golang.org/x/lint v0.0.0-20191125180803-fdd1cda4f05f // indirect
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
-	golang.org/x/tools v0.0.0-20200123162537-45e69182d161 // indirect
+	golang.org/x/tools v0.0.0-20200124021010-5c352bb417e0 // indirect
 )
 
 //replace github.com/SkycoinProject/dmsg => ../dmsg
