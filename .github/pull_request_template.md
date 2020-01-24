@@ -1,3 +1,5 @@
+Did you run `make format && make check`?
+
 Fixes #	
 
  Changes:	

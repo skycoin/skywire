@@ -10,6 +10,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
+// nolint:gochecknoglobals
 var (
 	output        string
 	replace       bool
@@ -17,6 +18,7 @@ var (
 	testenv       bool
 )
 
+// nolint:gochecknoinits
 func init() {
 	rootCmd.AddCommand(genConfigCmd)
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
@@ -25,6 +27,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
 }
 
+// nolint:gochecknoglobals
 var genConfigCmd = &cobra.Command{
 	Use:   "gen-config",
 	Short: "generates a configuration file",

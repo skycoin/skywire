@@ -15,6 +15,12 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
+const (
+	defaultCookieExpiration = 12 * time.Hour
+	hashKeyLen              = 64
+	blockKeyLen             = 32
+)
+
 // Key allows a byte slice to be marshaled or unmarshaled from a hex string.
 type Key []byte
 
@@ -32,6 +38,7 @@ func (hk Key) MarshalText() ([]byte, error) {
 func (hk *Key) UnmarshalText(text []byte) error {
 	*hk = make([]byte, hex.DecodedLen(len(text)))
 	_, err := hex.Decode(*hk, text)
+
 	return err
 }
 
@@ -48,6 +55,7 @@ type Config struct {
 
 func makeConfig(testenv bool) Config {
 	var c Config
+
 	pk, sk := cipher.GenerateKeyPair()
 	c.PK = pk
 	c.SK = sk
@@ -59,9 +67,11 @@ func makeConfig(testenv bool) Config {
 	}
 
 	c.EnableAuth = true
-	c.Cookies.HashKey = cipher.RandByte(64)
-	c.Cookies.BlockKey = cipher.RandByte(32)
+	c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
+	c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
+
 	c.FillDefaults()
+
 	return c
 }
 
@@ -73,6 +83,7 @@ func GenerateWorkDirConfig(testenv bool) Config {
 	}
 	c := makeConfig(testenv)
 	c.DBPath = filepath.Join(dir, "users.db")
+
 	return c
 }
 
@@ -80,6 +91,7 @@ func GenerateWorkDirConfig(testenv bool) Config {
 func GenerateHomeConfig(testenv bool) Config {
 	c := makeConfig(testenv)
 	c.DBPath = filepath.Join(pathutil.HomeDir(), ".skycoin/hypervisor/users.db")
+
 	return c
 }
 
@@ -87,6 +99,7 @@ func GenerateHomeConfig(testenv bool) Config {
 func GenerateLocalConfig(testenv bool) Config {
 	c := makeConfig(testenv)
 	c.DBPath = "/usr/local/SkycoinProject/hypervisor/users.db"
+
 	return c
 }
 
@@ -102,11 +115,18 @@ func (c *Config) Parse(path string) error {
 	if path, err = filepath.Abs(path); err != nil {
 		return err
 	}
+
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return err
 	}
-	defer func() { catch(f.Close()) }()
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Fatalf("Failed to close file %s: %v", f.Name(), err)
+		}
+	}()
+
 	return json.NewDecoder(f).Decode(c)
 }
 
@@ -126,7 +146,7 @@ type CookieConfig struct {
 
 // FillDefaults fills config with default values.
 func (c *CookieConfig) FillDefaults() {
-	c.ExpiresDuration = time.Hour * 12
+	c.ExpiresDuration = defaultCookieExpiration
 	c.Path = "/"
 	c.Secure = true
 	c.HTTPOnly = true

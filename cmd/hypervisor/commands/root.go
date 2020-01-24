@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -17,6 +16,7 @@ import (
 
 const configEnv = "SW_HYPERVISOR_CONFIG"
 
+// nolint:gochecknoglobals
 var (
 	log = logging.MustGetLogger("hypervisor")
 
@@ -28,6 +28,7 @@ var (
 	mockMaxRoutes  int
 )
 
+// nolint:gochecknoinits
 func init() {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "./hypervisor-config.json", "hypervisor config path")
 	rootCmd.Flags().BoolVarP(&mock, "mock", "m", false, "whether to run hypervisor with mock data")
@@ -37,6 +38,7 @@ func init() {
 	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per node")
 }
 
+// nolint:gochecknoglobals
 var rootCmd = &cobra.Command{
 	Use:   "hypervisor",
 	Short: "Manages Skywire App Nodes",
@@ -50,7 +52,8 @@ var rootCmd = &cobra.Command{
 		if err := config.Parse(configPath); err != nil {
 			log.WithError(err).Fatalln("failed to parse config file")
 		}
-		fmt.Println(config)
+
+		fmt.Println("Config: \n", config)
 
 		var (
 			httpAddr = config.Interfaces.HTTPAddr
@@ -106,7 +109,6 @@ var rootCmd = &cobra.Command{
 // Execute executes root CLI command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }
