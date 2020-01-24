@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -20,10 +21,11 @@ const (
 
 // Errors associated with user management.
 var (
-	ErrBadBody           = errors.New("ill-formatted request body")
+	ErrNotLoggedIn       = errors.New("not logged in")
 	ErrNotLoggedOut      = errors.New("not logged out")
 	ErrBadLogin          = errors.New("incorrect username or password")
 	ErrBadSession        = errors.New("session cookie is either non-existent, expired, or ill-formatted")
+	ErrMalformedRequest  = errors.New("request format is malformed")
 	ErrBadUsernameFormat = errors.New("format of 'username' is not accepted")
 	ErrUserNotFound      = errors.New("user is either deleted or not found")
 )
@@ -77,7 +79,17 @@ func (s *UserManager) Login() http.HandlerFunc {
 		}
 
 		if err := httputil.ReadJSON(r, &rb); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrBadBody)
+			if err != io.EOF {
+				log.Warnf("Login request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
+			return
+		}
+
+		if !checkUsernameFormat(rb.Username) {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrBadUsernameFormat)
 			return
 		}
 
@@ -115,7 +127,7 @@ func (s *UserManager) Login() http.HandlerFunc {
 func (s *UserManager) Logout() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := s.delSession(w, r); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, errors.New("not logged in"))
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrNotLoggedIn)
 			return
 		}
 
@@ -149,7 +161,12 @@ func (s *UserManager) ChangePassword() http.HandlerFunc {
 		}
 
 		if err := httputil.ReadJSON(r, &rb); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("ChangePassword request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
@@ -185,7 +202,12 @@ func (s *UserManager) CreateAccount() http.HandlerFunc {
 		}
 
 		if err := httputil.ReadJSON(r, &rb); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("CreateAccount request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
