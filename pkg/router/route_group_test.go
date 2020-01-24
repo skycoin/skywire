@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNewRouteGroup(t *testing.T) {
