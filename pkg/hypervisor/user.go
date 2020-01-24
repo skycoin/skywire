@@ -30,6 +30,7 @@ var (
 	ErrSimplePassword = fmt.Errorf("password must have at least one upper, lower, digit and special character")
 	ErrUserExists     = fmt.Errorf("username already exists")
 	ErrNameNotAllowed = fmt.Errorf("name not allowed")
+	ErrNonASCII       = fmt.Errorf("non-ASCII character found")
 )
 
 // nolint: gochecknoinits
@@ -262,6 +263,10 @@ func checkPasswordStrength(password string) error {
 	seen := make([]bool, len(passwordClasses))
 
 	for _, r := range password {
+		if r < '!' || r > unicode.MaxASCII {
+			return ErrNonASCII
+		}
+
 		for i, class := range passwordClasses {
 			if unicode.IsOneOf(class, r) {
 				seen[i] = true
