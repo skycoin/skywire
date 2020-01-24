@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"

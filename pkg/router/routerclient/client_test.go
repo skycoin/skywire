@@ -9,6 +9,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
