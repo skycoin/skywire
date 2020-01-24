@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
