@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -151,7 +152,6 @@ func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 			r.Get("/user", m.users.UserInfo())
 			r.Post("/change-password", m.users.ChangePassword())
-			r.Post("/exec/{pk}", m.exec())
 			r.Get("/nodes", m.getNodes())
 			r.Get("/nodes/{pk}/health", m.getHealth())
 			r.Get("/nodes/{pk}/uptime", m.getUptime())
@@ -172,6 +172,7 @@ func (m *Node) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Delete("/nodes/{pk}/routes/{rid}", m.deleteRoute())
 			r.Get("/nodes/{pk}/loops", m.getLoops())
 			r.Get("/nodes/{pk}/restart", m.restart())
+			r.Post("/nodes/{pk}/exec", m.exec())
 		})
 	})
 
@@ -239,7 +240,12 @@ func (m *Node) exec() http.HandlerFunc {
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("exec request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
@@ -337,7 +343,12 @@ func (m *Node) putApp() http.HandlerFunc {
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("putApp request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
@@ -472,7 +483,12 @@ func (m *Node) postTransport() http.HandlerFunc {
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("postTransport request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
@@ -550,7 +566,12 @@ func (m *Node) postRoute() http.HandlerFunc {
 	return m.withCtx(m.nodeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("postRoute request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
@@ -591,7 +612,12 @@ func (m *Node) putRoute() http.HandlerFunc {
 	return m.withCtx(m.routeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			if err != io.EOF {
+				log.Warnf("putRoute request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
 			return
 		}
 
