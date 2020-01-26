@@ -75,6 +75,7 @@ type Config struct {
 	AppServerSockFile string `json:"app_server_sock_file"`
 
 	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
+	AutoStartSpd      bool   `json:"auto_start_spd"`
 }
 
 // DmsgConfig returns config for dmsg client.

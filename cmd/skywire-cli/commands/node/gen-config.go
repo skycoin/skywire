@@ -149,6 +149,8 @@ func defaultConfig() *visor.Config {
 
 	conf.AppServerSockFile = "/tmp/visor_" + pk.Hex() + ".sock"
 
+	conf.AutoStartSpd = false
+
 	return conf
 }
 

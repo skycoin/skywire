@@ -23,6 +23,7 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/rjeczalik/notify"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -93,6 +94,7 @@ type Node struct {
 	restartCtx *restart.Context
 
 	pidMu sync.Mutex
+	spdMu sync.Mutex
 
 	rpcListener net.Listener
 	rpcDialers  []*RPCClientDialer
@@ -300,6 +302,47 @@ func (node *Node) Start() error {
 	}
 
 	return nil
+}
+
+// RunDaemon starts a skywire-peering-daemon as an external process
+func (node *Node) RunDaemon() {
+	bin, err := exec.LookPath("daemon")
+	if err != nil {
+		node.logger.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
+	}
+
+	dir, err := ioutil.TempDir("", "named_pipes")
+	if err != nil {
+		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
+	}
+
+	namedPipe := filepath.Join(dir, "stdout")
+	lAddr := node.conf.STCP.LocalAddr
+	pubKey := node.conf.Node.StaticPubKey.Hex()
+	err = syscall.Mkfifo(namedPipe, 0600)
+	if err != nil {
+		node.logger.Error(err)
+	}
+
+	if err := execute(bin, pubKey, namedPipe, lAddr); err != nil {
+		node.logger.Errorf("Failed to start daemon as an external process: ", err)
+	}
+
+	node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
+	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
+	if err != nil {
+		node.logger.Error(err)
+	}
+
+	c := make(chan notify.EventInfo, 5)
+	errCh := make(chan error)
+	watchNamedPipe(namedPipe, c, errCh)
+
+	if err != nil {
+		node.logger.Error(err)
+	}
+
+	go readPacket(stdOut, c, node.conf, node.n)
 }
 
 func (node *Node) dir() string {

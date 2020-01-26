@@ -21,6 +21,7 @@ pkg/visor/foo/
 /node
 /users.db
 /hypervisor
+/*-daemon
 /*-node
 /*-visor
 /*-cli

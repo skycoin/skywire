@@ -5,9 +5,15 @@ github.com/SkycoinProject/dmsg/disc
 github.com/SkycoinProject/dmsg/ioutil
 github.com/SkycoinProject/dmsg/netutil
 github.com/SkycoinProject/dmsg/noise
-# github.com/SkycoinProject/skycoin v0.26.0
+# github.com/SkycoinProject/skycoin v0.27.0
 github.com/SkycoinProject/skycoin/src/cipher
+github.com/SkycoinProject/skycoin/src/cipher/base58
+github.com/SkycoinProject/skycoin/src/cipher/ripemd160
+github.com/SkycoinProject/skycoin/src/cipher/secp256k1-go
+github.com/SkycoinProject/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/SkycoinProject/skycoin/src/util/logging
+# github.com/SkycoinProject/skywire-peering-daemon v0.0.0-20200124203902-9cc8464cc5de => ../skywire-peering-daemon
+github.com/SkycoinProject/skywire-peering-daemon/pkg/daemon
 # github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 github.com/SkycoinProject/yamux
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
@@ -72,14 +78,11 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/rjeczalik/notify v0.9.2
+github.com/rjeczalik/notify
 # github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.26.0
-github.com/skycoin/skycoin/src/cipher/base58
-github.com/skycoin/skycoin/src/cipher/ripemd160
-github.com/skycoin/skycoin/src/cipher/secp256k1-go
-github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 # github.com/spf13/cobra v0.0.5
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.3
@@ -92,12 +95,12 @@ github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20191106202628-ed6320f186d4
+# golang.org/x/crypto v0.0.0-20191227163750-53104e6ec876
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
+golang.org/x/crypto/chacha20
 golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/curve25519
-golang.org/x/crypto/internal/chacha20
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh/terminal

@@ -1,9 +1,10 @@
 .DEFAULT_GOAL := help
-.PHONY : check lint install-linters dep test 
+.PHONY : check lint install-linters dep test bin build
 
 OPTS?=GO111MODULE=on GOBIN=${PWD}/bin
 TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
 BIN_DIR?=./bin
+BUILD_OPTS?=
 
 check: lint test ## Run linters and tests
 
@@ -36,6 +37,10 @@ dep: ## Sorts dependencies
 
 build: ## Build binaries into ./bin
 	${OPTS} go install ./cmd/*
+
+bin: ## Build `dmsg-discovery`, `dmsg-server`
+	${OPTS} go build ${BUILD_OPTS} -o ./dmsg-discovery ./cmd/dmsg-discovery
+	${OPTS} go build ${BUILD_OPTS} -o ./dmsg-server  ./cmd/dmsg-server
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
