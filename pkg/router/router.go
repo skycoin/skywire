@@ -108,7 +108,7 @@ type Router interface {
 	SetupIsTrusted(cipher.PubKey) bool
 }
 
-// Router implements node.PacketRouter. It manages routing table by
+// Router implements visor.PacketRouter. It manages routing table by
 // communicating with setup nodes, forward packets according to local
 // rules and manages loops for apps.
 type router struct {
@@ -295,7 +295,7 @@ func (r *router) serveSetup() {
 		}
 
 		if !r.SetupIsTrusted(conn.RemotePK()) {
-			r.logger.Warnf("closing conn from untrusted setup node: %v", conn.Close())
+			r.logger.Warnf("closing conn from untrusted setup visor: %v", conn.Close())
 			continue
 		}
 
@@ -573,7 +573,7 @@ fetchRoutesAgain:
 	return paths[forward][0], paths[backward][0], nil
 }
 
-// SetupIsTrusted checks if setup node is trusted.
+// SetupIsTrusted checks if setup visor is trusted.
 func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
 	_, ok := r.trustedNodes[sPK]
 	return ok

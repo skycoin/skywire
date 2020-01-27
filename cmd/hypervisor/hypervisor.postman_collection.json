@@ -6,7 +6,7 @@
   },
   "item": [
     {
-      "name": "/api/nodes",
+      "name": "/api/visors",
       "request": {
         "method": "GET",
         "header": [],
@@ -15,7 +15,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes",
+          "raw": "http://localhost:8080/api/visors",
           "protocol": "http",
           "host": [
             "localhost"
@@ -23,14 +23,14 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes"
+            "visors"
           ]
         },
-        "description": "Provides a summary of all connected app nodes."
+        "description": "Provides a summary of all connected app visors."
       },
       "response": [
         {
-          "name": "/api/nodes",
+          "name": "/api/visors",
           "originalRequest": {
             "method": "GET",
             "header": [],
@@ -39,7 +39,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes",
+              "raw": "http://localhost:8080/api/visors",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -47,7 +47,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes"
+                "visors"
               ]
             }
           },
@@ -74,7 +74,7 @@
       ]
     },
     {
-      "name": "/api/nodes/{pk}",
+      "name": "/api/visors/{pk}",
       "request": {
         "method": "GET",
         "header": [],
@@ -83,7 +83,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02",
+          "raw": "http://localhost:8080/api/visors/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02",
           "protocol": "http",
           "host": [
             "localhost"
@@ -91,7 +91,7 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02"
           ],
           "query": [
@@ -102,11 +102,11 @@
             }
           ]
         },
-        "description": "Provides a summary of a given connected app node of public key."
+        "description": "Provides a summary of a given connected app visor of public key."
       },
       "response": [
         {
-          "name": "/api/nodes/:pk",
+          "name": "/api/visors/:pk",
           "originalRequest": {
             "method": "GET",
             "header": [],
@@ -115,7 +115,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2",
+              "raw": "http://localhost:8080/api/visors/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -123,7 +123,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2"
               ],
               "query": [
@@ -158,7 +158,7 @@
       ]
     },
     {
-      "name": "/api/nodes/{pk}/apps",
+      "name": "/api/visors/{pk}/apps",
       "request": {
         "method": "GET",
         "header": [],
@@ -167,7 +167,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02/apps",
+          "raw": "http://localhost:8080/api/visors/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02/apps",
           "protocol": "http",
           "host": [
             "localhost"
@@ -175,16 +175,16 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02",
             "apps"
           ]
         },
-        "description": "Provides a summary of an AppNode's apps."
+        "description": "Provides a summary of an AppVisor's apps."
       },
       "response": [
         {
-          "name": "/api/nodes/:pk/apps",
+          "name": "/api/visors/:pk/apps",
           "originalRequest": {
             "method": "GET",
             "header": [],
@@ -193,7 +193,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2/apps",
+              "raw": "http://localhost:8080/api/visors/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2/apps",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -201,7 +201,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2",
                 "apps"
               ]
@@ -230,7 +230,7 @@
       ]
     },
     {
-      "name": "/api/nodes/{pk}/apps/{app}",
+      "name": "/api/visors/{pk}/apps/{app}",
       "request": {
         "method": "GET",
         "header": [],
@@ -239,7 +239,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02/apps/foo.v1.0",
+          "raw": "http://localhost:8080/api/visors/021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02/apps/foo.v1.0",
           "protocol": "http",
           "host": [
             "localhost"
@@ -247,17 +247,17 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "021c535e45756c63151820c8f31bfbb0efd6d7d49305e133e1650aae889d60ff02",
             "apps",
             "foo.v1.0"
           ]
         },
-        "description": "Starts an app on an AppNode."
+        "description": "Starts an app on an AppVisor."
       },
       "response": [
         {
-          "name": "/api/nodes/:pk/apps/:app/start",
+          "name": "/api/visors/:pk/apps/:app/start",
           "originalRequest": {
             "method": "POST",
             "header": [],
@@ -266,7 +266,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2/apps/foo.v1.0/start",
+              "raw": "http://localhost:8080/api/visors/02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2/apps/foo.v1.0/start",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -274,7 +274,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2",
                 "apps",
                 "foo.v1.0",
@@ -300,12 +300,12 @@
             }
           ],
           "cookie": [],
-          "body": "{\n    \"node\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n    \"app\": \"foo.v1.0\",\n    \"command\": \"StartApp\",\n    \"success\": true\n}"
+          "body": "{\n    \"visor\": \"02500488fc25814e55e6c740537ed14ca677aebe8a883681bae718a36516a7b0a2\",\n    \"app\": \"foo.v1.0\",\n    \"command\": \"StartApp\",\n    \"success\": true\n}"
         }
       ]
     },
     {
-      "name": "/api/nodes/{pk}/apps/{app}",
+      "name": "/api/visors/{pk}/apps/{app}",
       "request": {
         "method": "PUT",
         "header": [
@@ -321,7 +321,7 @@
           "raw": "{\n\t\"autostart\": true,\n\t\"status\": 1\n}"
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/apps/foo.v1.0",
+          "raw": "http://localhost:8080/api/visors/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/apps/foo.v1.0",
           "protocol": "http",
           "host": [
             "localhost"
@@ -329,17 +329,17 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
             "apps",
             "foo.v1.0"
           ]
         },
-        "description": "Starts an app on an AppNode."
+        "description": "Starts an app on an AppVisor."
       },
       "response": [
         {
-          "name": "/api/nodes/{pk}/apps/{app}",
+          "name": "/api/visors/{pk}/apps/{app}",
           "originalRequest": {
             "method": "PUT",
             "header": [
@@ -355,7 +355,7 @@
               "raw": "{\n\t\"autostart\": true,\n\t\"status\": 1\n}"
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/apps/foo.v1.0",
+              "raw": "http://localhost:8080/api/visors/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/apps/foo.v1.0",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -363,7 +363,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
                 "apps",
                 "foo.v1.0"
@@ -393,7 +393,7 @@
       ]
     },
     {
-      "name": "/api/nodes/{pk}/transport-types",
+      "name": "/api/visors/{pk}/transport-types",
       "request": {
         "method": "GET",
         "header": [],
@@ -402,7 +402,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transport-types",
+          "raw": "http://localhost:8080/api/visors/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transport-types",
           "protocol": "http",
           "host": [
             "localhost"
@@ -410,16 +410,16 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
             "transport-types"
           ]
         },
-        "description": "Lists supported transport types of the given AppNode."
+        "description": "Lists supported transport types of the given AppVisor."
       },
       "response": [
         {
-          "name": "/api/nodes/:pk/transport-types",
+          "name": "/api/visors/:pk/transport-types",
           "originalRequest": {
             "method": "GET",
             "header": [],
@@ -428,7 +428,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transport-types",
+              "raw": "http://localhost:8080/api/visors/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transport-types",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -436,7 +436,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
                 "transport-types"
               ]
@@ -465,7 +465,7 @@
       ]
     },
     {
-      "name": "/api/nodes/{pk}/transports",
+      "name": "/api/visors/{pk}/transports",
       "request": {
         "method": "GET",
         "header": [],
@@ -474,7 +474,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports?logs=true",
+          "raw": "http://localhost:8080/api/visors/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports?logs=true",
           "protocol": "http",
           "host": [
             "localhost"
@@ -482,7 +482,7 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
             "transports"
           ],
@@ -494,11 +494,11 @@
             }
           ]
         },
-        "description": "List transports of given AppNode."
+        "description": "List transports of given AppVisor."
       },
       "response": [
         {
-          "name": "/api/nodes/:pk/transports",
+          "name": "/api/visors/:pk/transports",
           "originalRequest": {
             "method": "GET",
             "header": [],
@@ -507,7 +507,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports?logs=true",
+              "raw": "http://localhost:8080/api/visors/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports?logs=true",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -515,7 +515,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
                 "transports"
               ],
@@ -551,7 +551,7 @@
       ]
     },
     {
-      "name": "/api/nodes/{pk}/transports",
+      "name": "/api/visors/{pk}/transports",
       "request": {
         "method": "POST",
         "header": [
@@ -567,7 +567,7 @@
           "raw": "{\n\t\"remote_pk\": \"03c497380efd87e19208bb484ee322ede1e091b2a0b653e6d25475f641602376a9\",\n\t\"transport_type\": \"native\",\n\t\"public\": true\n}"
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports",
+          "raw": "http://localhost:8080/api/visors/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports",
           "protocol": "http",
           "host": [
             "localhost"
@@ -575,16 +575,16 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
             "transports"
           ]
         },
-        "description": "Adds a transport to a given AppNode."
+        "description": "Adds a transport to a given AppVisor."
       },
       "response": [
         {
-          "name": "POST /api/nodes/transports",
+          "name": "POST /api/visors/transports",
           "originalRequest": {
             "method": "POST",
             "header": [
@@ -600,7 +600,7 @@
               "raw": "{\n\t\"remote_pk\": \"03c497380efd87e19208bb484ee322ede1e091b2a0b653e6d25475f641602376a9\",\n\t\"transport_type\": \"native\",\n\t\"public\": true\n}"
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports",
+              "raw": "http://localhost:8080/api/visors/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -608,7 +608,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
                 "transports"
               ]
@@ -637,7 +637,7 @@
       ]
     },
     {
-      "name": "/api/nodes/{pk}/transports/{tid}",
+      "name": "/api/visors/{pk}/transports/{tid}",
       "request": {
         "method": "GET",
         "header": [],
@@ -646,7 +646,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports/70836b44-f6e5-4c17-a5e8-e1cbef89a10f",
+          "raw": "http://localhost:8080/api/visors/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports/70836b44-f6e5-4c17-a5e8-e1cbef89a10f",
           "protocol": "http",
           "host": [
             "localhost"
@@ -654,17 +654,17 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
             "transports",
             "70836b44-f6e5-4c17-a5e8-e1cbef89a10f"
           ]
         },
-        "description": "Obtains summary of transport of given TransportID and AppNode."
+        "description": "Obtains summary of transport of given TransportID and AppVisor."
       },
       "response": [
         {
-          "name": "/api/nodes/:pk/transports/:tid",
+          "name": "/api/visors/:pk/transports/:tid",
           "originalRequest": {
             "method": "GET",
             "header": [],
@@ -673,7 +673,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports/2ff2d608-fe14-4c17-938c-3af8afd053ae",
+              "raw": "http://localhost:8080/api/visors/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports/2ff2d608-fe14-4c17-938c-3af8afd053ae",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -681,7 +681,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
                 "transports",
                 "2ff2d608-fe14-4c17-938c-3af8afd053ae"
@@ -711,7 +711,7 @@
       ]
     },
     {
-      "name": "DELETE /api/nodes/{pk}/transports/{tid}",
+      "name": "DELETE /api/visors/{pk}/transports/{tid}",
       "request": {
         "method": "DELETE",
         "header": [],
@@ -720,7 +720,7 @@
           "raw": ""
         },
         "url": {
-          "raw": "http://localhost:8080/api/nodes/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports/d5ace20e-06c8-4867-bda2-9449459a9e5a",
+          "raw": "http://localhost:8080/api/visors/023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64/transports/d5ace20e-06c8-4867-bda2-9449459a9e5a",
           "protocol": "http",
           "host": [
             "localhost"
@@ -728,17 +728,17 @@
           "port": "8080",
           "path": [
             "api",
-            "nodes",
+            "visors",
             "023ab9f45c0eb3625f9848a9ff6822c6d0965a94d3e7955f1869f38153df0e5b64",
             "transports",
             "d5ace20e-06c8-4867-bda2-9449459a9e5a"
           ]
         },
-        "description": "Removes transport of given TransportID and AppNode."
+        "description": "Removes transport of given TransportID and AppVisor."
       },
       "response": [
         {
-          "name": "DELETE /api/nodes/:pk/transports/:tid",
+          "name": "DELETE /api/visors/:pk/transports/:tid",
           "originalRequest": {
             "method": "DELETE",
             "header": [],
@@ -747,7 +747,7 @@
               "raw": ""
             },
             "url": {
-              "raw": "http://localhost:8080/api/nodes/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports/2ff2d608-fe14-4c17-938c-3af8afd053ae",
+              "raw": "http://localhost:8080/api/visors/039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2/transports/2ff2d608-fe14-4c17-938c-3af8afd053ae",
               "protocol": "http",
               "host": [
                 "localhost"
@@ -755,7 +755,7 @@
               "port": "8080",
               "path": [
                 "api",
-                "nodes",
+                "visors",
                 "039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2",
                 "transports",
                 "2ff2d608-fe14-4c17-938c-3af8afd053ae"
@@ -780,7 +780,7 @@
             }
           ],
           "cookie": [],
-          "body": "{\n    \"node\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n    \"transport\": \"2ff2d608-fe14-4c17-938c-3af8afd053ae\",\n    \"command\": \"RemoveTransport\",\n    \"success\": true\n}"
+          "body": "{\n    \"visor\": \"039337a306ffbd6a7495f79b65aec91ce65756e4fd1cb2cd726840b2eee4fa59c2\",\n    \"transport\": \"2ff2d608-fe14-4c17-938c-3af8afd053ae\",\n    \"command\": \"RemoveTransport\",\n    \"success\": true\n}"
         }
       ]
     }

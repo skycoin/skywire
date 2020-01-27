@@ -90,7 +90,7 @@ func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
 	}, nil
 }
 
-// Dial dials the remote node using `remote`.
+// Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	connID, localPort, err := c.rpc.Dial(remote)
 	if err != nil {

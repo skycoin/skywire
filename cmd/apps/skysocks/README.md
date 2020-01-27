@@ -10,7 +10,7 @@ If none are provided, the server does not require authentication.
 
 ## Local setup
 
-Create 2 node config files:
+Create 2 visor config files:
 
 - `skywire1.json`
 
@@ -44,7 +44,7 @@ Create 2 node config files:
 }
 ```
 
-Compile binaries and start 2 nodes:
+Compile binaries and start 2 visors:
 
 ```sh
 $ go build -o apps/skysocks.v1.0 ./cmd/apps/skysocks
@@ -53,7 +53,7 @@ $ ./skywire-visor skywire1.json
 $ ./skywire-visor skywire2.json
 ```
 
-You should be able to connect to a secondary node via `curl`:
+You should be able to connect to a secondary visor via `curl`:
 
 ```sh
 $ curl -v -x socks5://123456:@localhost:1080 https://api.ipify.org

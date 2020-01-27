@@ -11,7 +11,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-// RPCGateway is a RPC interface for setup node.
+// RPCGateway is a RPC interface for setup visor.
 type RPCGateway struct {
 	logger  *logging.Logger
 	reqPK   cipher.PubKey
