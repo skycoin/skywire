@@ -15,8 +15,9 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	skycoin_cipher "github.com/SkycoinProject/skycoin/src/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	spd "github.com/SkycoinProject/skywire-peering-daemon/pkg/daemon"
 	"github.com/rjeczalik/notify"
+
+	spd "github.com/SkycoinProject/skywire-peering-daemon/pkg/daemon"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
