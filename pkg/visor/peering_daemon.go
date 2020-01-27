@@ -14,8 +14,9 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	skycoin_cipher "github.com/SkycoinProject/skycoin/src/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	spd "github.com/SkycoinProject/skywire-peering-daemon/pkg/daemon"
 	"github.com/rjeczalik/notify"
+
+	spd "github.com/SkycoinProject/skywire-peering-daemon/pkg/daemon"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
@@ -49,15 +50,15 @@ func client() (RPCClient, error) {
 }
 
 // transport establshes an stcp transport to a remote visor
-func createTransport(networkType string, packet spd.Packet) (*TransportSummary, error) {
+func createTransport(pubKey string) (*TransportSummary, error) {
 	client, err := client()
 	if err != nil {
 		return nil, err
 	}
 
 	logger.Infof("Establishing transport to remote visor")
-	rPK := skycoin_cipher.MustPubKeyFromHex(packet.PublicKey)
-	tpSummary, err := client.AddTransport(cipher.PubKey(rPK), networkType, true, 0)
+	rPK := skycoin_cipher.MustPubKeyFromHex(pubKey)
+	tpSummary, err := client.AddTransport(cipher.PubKey(rPK), snet.STcpType, true, 0)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to establish stcp transport: %s", err)
 	}
@@ -74,7 +75,7 @@ func watchNamedPipe(file string, c chan notify.EventInfo) error {
 	return nil
 }
 
-func readPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]string) {
+func readSPDPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]string) {
 	// Read packets from named pipe
 	for {
 		var (
@@ -99,7 +100,7 @@ func readPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]st
 		spdMu.Unlock()
 
 		logger.Infof("Packets received from skywire-peering-daemon:\n\t{%s: %s}", packet.PublicKey, packet.IP)
-		tp, err := createTransport(snet.STcpType, packet)
+		tp, err := createTransport(packet.PublicKey)
 		if err != nil {
 			logger.Errorf("Couldn't establish transport to remote visor: %s", err)
 		}

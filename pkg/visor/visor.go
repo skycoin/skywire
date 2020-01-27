@@ -338,6 +338,9 @@ func (node *Node) RunDaemon() error {
 		return err
 	}
 
+	if node.conf.STCP.PubKeyTable == nil {
+		node.conf.STCP.PubKeyTable = make(map[cipher.PubKey]string)
+	}
 	pubKeyTable := node.conf.STCP.PubKeyTable
 	c := make(chan notify.EventInfo, 5)
 
@@ -346,7 +349,7 @@ func (node *Node) RunDaemon() error {
 		return err
 	}
 
-	readPacket(stdOut, c, pubKeyTable)
+	readSPDPacket(stdOut, c, pubKeyTable)
 
 	return nil
 }
