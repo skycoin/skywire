@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands/mdisc"
-	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands/node"
+	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands/visor"
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands/rtfind"
 )
 
@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(
-		node.RootCmd,
+		visor.RootCmd,
 		mdisc.RootCmd,
 		rtfind.RootCmd,
 	)

@@ -14,7 +14,7 @@ import (
 
 const rpcName = "RPCGateway"
 
-// Client is an RPC client for setup node.
+// Client is an RPC client for setup visor.
 type Client struct {
 	log        *logging.Logger
 	n          *snet.Network
@@ -47,14 +47,14 @@ func (c *Client) dial(ctx context.Context) (*snet.Conn, error) {
 	for _, sPK := range c.setupNodes {
 		conn, err := c.n.Dial(ctx, snet.DmsgType, sPK, snet.SetupPort)
 		if err != nil {
-			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
+			c.log.WithError(err).Warnf("failed to dial to setup visor: setupPK(%s)", sPK)
 			continue
 		}
 
 		return conn, nil
 	}
 
-	return nil, errors.New("failed to dial to a setup node")
+	return nil, errors.New("failed to dial to a setup visor")
 }
 
 // Close closes a Client.

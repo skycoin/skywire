@@ -67,7 +67,7 @@ func TestUpdateNodeUptime(t *testing.T) {
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	err = c.UpdateNodeUptime(context.TODO())
+	err = c.UpdateVisorUptime(context.TODO())
 	require.NoError(t, err)
 
 	assert.Equal(t, "/update", <-urlCh)

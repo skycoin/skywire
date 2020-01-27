@@ -21,9 +21,9 @@ import (
 // Default ports.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
-	SetupPort      = uint16(36)  // Listening port of a setup node.
-	AwaitSetupPort = uint16(136) // Listening port of a visor node for setup operations.
-	TransportPort  = uint16(45)  // Listening port of a visor node for incoming transports.
+	SetupPort      = uint16(36)  // Listening port of a setup visor.
+	AwaitSetupPort = uint16(136) // Listening port of a visor visor for setup operations.
+	TransportPort  = uint16(45)  // Listening port of a visor visor for incoming transports.
 )
 
 // Network types.
@@ -155,7 +155,7 @@ type Dialer interface {
 	Type() string
 }
 
-// Dial dials a node by its public key and returns a connection.
+// Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
 	switch network {
 	case DmsgType:

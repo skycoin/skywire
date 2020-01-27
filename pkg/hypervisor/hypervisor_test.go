@@ -42,7 +42,7 @@ const (
 	badCreateAccountPayload = `{"username":"invalid_user","password":"Secure1234!"}`
 )
 
-func TestNewNode(t *testing.T) {
+func TestNewVisor(t *testing.T) {
 	config := makeConfig(false)
 
 	confDir, err := ioutil.TempDir(os.TempDir(), "SWHV")
@@ -51,45 +51,45 @@ func TestNewNode(t *testing.T) {
 	config.DBPath = filepath.Join(confDir, "users.db")
 
 	t.Run("no_access_without_login", func(t *testing.T) {
-		testNodeNoAccessWithoutLogin(t, config)
+		testVisorNoAccessWithoutLogin(t, config)
 	})
 
 	t.Run("only_admin_account_allowed", func(t *testing.T) {
-		testNodeOnlyAdminAccountAllowed(t, config)
+		testVisorOnlyAdminAccountAllowed(t, config)
 	})
 
 	t.Run("cannot_login_twice", func(t *testing.T) {
-		testNodeCannotLoginTwice(t, config)
+		testVisorCannotLoginTwice(t, config)
 	})
 
 	t.Run("access_after_login", func(t *testing.T) {
-		testNodeAccessAfterLogin(t, config)
+		testVisorAccessAfterLogin(t, config)
 	})
 
 	t.Run("no_access_after_logout", func(t *testing.T) {
-		testNodeNoAccessAfterLogout(t, config)
+		testVisorNoAccessAfterLogout(t, config)
 	})
 
 	t.Run("change_password", func(t *testing.T) {
-		testNodeChangePassword(t, config)
+		testVisorChangePassword(t, config)
 	})
 }
 
-func makeStartNode(t *testing.T, config Config) (string, *http.Client, func()) {
+func makeStartVisor(t *testing.T, config Config) (string, *http.Client, func()) {
 	// nolint: gomnd
 	defaultMockConfig := MockConfig{
-		Nodes:            5,
-		MaxTpsPerNode:    10,
-		MaxRoutesPerNode: 10,
-		EnableAuth:       true,
+		Visors:            5,
+		MaxTpsPerVisor:    10,
+		MaxRoutesPerVisor: 10,
+		EnableAuth:        true,
 	}
 
-	node, err := NewNode(config)
+	visor, err := NewVisor(config)
 	require.NoError(t, err)
-	require.NoError(t, node.AddMockData(defaultMockConfig))
+	require.NoError(t, visor.AddMockData(defaultMockConfig))
 
-	srv := httptest.NewTLSServer(node)
-	node.c.Cookies.Domain = srv.Listener.Addr().String()
+	srv := httptest.NewTLSServer(visor)
+	visor.c.Cookies.Domain = srv.Listener.Addr().String()
 
 	client := srv.Client()
 	jar, err := cookiejar.New(&cookiejar.Options{})
@@ -143,8 +143,8 @@ func testCase(t *testing.T, addr string, client *http.Client, tc TestCase, testT
 	}
 }
 
-func testNodeNoAccessWithoutLogin(t *testing.T, config Config) {
-	addr, client, stop := makeStartNode(t, config)
+func testVisorNoAccessWithoutLogin(t *testing.T, config Config) {
+	addr, client, stop := makeStartVisor(t, config)
 	defer stop()
 
 	makeCase := func(method string, uri string, body io.Reader) TestCase {
@@ -164,12 +164,12 @@ func testNodeNoAccessWithoutLogin(t *testing.T, config Config) {
 	testCases(t, addr, client, []TestCase{
 		makeCase(http.MethodGet, "/api/user", nil),
 		makeCase(http.MethodPost, "/api/change-password", strings.NewReader(`{"old_password":"old","new_password":"new"}`)),
-		makeCase(http.MethodGet, "/api/nodes", nil),
+		makeCase(http.MethodGet, "/api/visors", nil),
 	})
 }
 
-func testNodeOnlyAdminAccountAllowed(t *testing.T, config Config) {
-	addr, client, stop := makeStartNode(t, config)
+func testVisorOnlyAdminAccountAllowed(t *testing.T, config Config) {
+	addr, client, stop := makeStartVisor(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -198,8 +198,8 @@ func testNodeOnlyAdminAccountAllowed(t *testing.T, config Config) {
 	})
 }
 
-func testNodeCannotLoginTwice(t *testing.T, config Config) {
-	addr, client, stop := makeStartNode(t, config)
+func testVisorCannotLoginTwice(t *testing.T, config Config) {
+	addr, client, stop := makeStartVisor(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -239,8 +239,8 @@ func testNodeCannotLoginTwice(t *testing.T, config Config) {
 	})
 }
 
-func testNodeAccessAfterLogin(t *testing.T, config Config) {
-	addr, client, stop := makeStartNode(t, config)
+func testVisorAccessAfterLogin(t *testing.T, config Config) {
+	addr, client, stop := makeStartVisor(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -273,14 +273,14 @@ func testNodeAccessAfterLogin(t *testing.T, config Config) {
 		},
 		{
 			ReqMethod:  http.MethodGet,
-			ReqURI:     "/api/nodes",
+			ReqURI:     "/api/visors",
 			RespStatus: http.StatusOK,
 		},
 	})
 }
 
-func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
-	addr, client, stop := makeStartNode(t, config)
+func testVisorNoAccessAfterLogout(t *testing.T, config Config) {
+	addr, client, stop := makeStartVisor(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -328,7 +328,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
 		},
 		{
 			ReqMethod:  http.MethodGet,
-			ReqURI:     "/api/nodes",
+			ReqURI:     "/api/visors",
 			RespStatus: http.StatusUnauthorized,
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
@@ -347,8 +347,8 @@ func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
 // - Login with old password (should fail).
 // - Login with new password (should succeed).
 // nolint: funlen
-func testNodeChangePassword(t *testing.T, config Config) {
-	addr, client, stop := makeStartNode(t, config)
+func testVisorChangePassword(t *testing.T, config Config) {
+	addr, client, stop := makeStartVisor(t, config)
 	defer stop()
 
 	// To emulate an active session.
@@ -391,7 +391,7 @@ func testNodeChangePassword(t *testing.T, config Config) {
 		},
 		{
 			ReqMethod: http.MethodGet,
-			ReqURI:    "/api/nodes",
+			ReqURI:    "/api/visors",
 			ReqMod: func(req *http.Request) {
 				for _, cookie := range cookies {
 					req.AddCookie(cookie)
