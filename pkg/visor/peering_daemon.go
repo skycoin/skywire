@@ -74,7 +74,7 @@ func watchNamedPipe(file string, c chan notify.EventInfo) error {
 	return nil
 }
 
-func readPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]string) TransportSummary {
+func readPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]string) {
 	// Read packets from named pipe
 	for {
 		var (
