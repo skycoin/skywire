@@ -30,9 +30,6 @@ var (
 )
 
 func execute(cmd *exec.Cmd) error {
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig: syscall.SIGTERM,
-	}
 	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
 		return err
