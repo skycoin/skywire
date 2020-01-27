@@ -5,16 +5,12 @@ Hypervisor exposes node management operations via web API.
 **Generate config file:**
 
 ```bash
-
+$ hypervisor gen-config
 ```
 
 **Run with mock data:**
 
 ```bash
-# Generate config file.
-$ hypervisor gen-config
-
-# Run.
 $ hypervisor --mock
 ```
 
