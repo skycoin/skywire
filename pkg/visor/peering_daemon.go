@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"

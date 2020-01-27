@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/SkycoinProject/dmsg v0.0.0-20200116114634-91be578a1895
 	github.com/SkycoinProject/skycoin v0.27.0
-	github.com/SkycoinProject/skywire-peering-daemon v0.0.0-20200124203902-9cc8464cc5de
+	github.com/SkycoinProject/skywire-peering-daemon v0.0.0-20200127113205-a3b6ccb52180
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.9

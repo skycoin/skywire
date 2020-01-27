@@ -346,7 +346,7 @@ func (node *Node) RunDaemon() error {
 		return err
 	}
 
-	go readPacket(stdOut, c, pubKeyTable)
+	readPacket(stdOut, c, pubKeyTable)
 
 	return nil
 }
