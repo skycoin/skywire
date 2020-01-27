@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Route is a succession of transport entries that denotes a path from source node to destination node
+// Route is a succession of transport entries that denotes a path from source visor to destination visor
 type Route struct {
 	Desc      RouteDescriptor `json:"desc"`
 	Path      Path            `json:"path"`

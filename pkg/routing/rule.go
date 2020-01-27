@@ -37,12 +37,12 @@ func (rt RuleType) String() string {
 }
 
 const (
-	// RuleConsume represents a hop to the route's destination node.
+	// RuleConsume represents a hop to the route's destination visor.
 	// A packet referencing this rule is to be consumed locally.
 	RuleConsume = RuleType(0)
 
-	// RuleForward represents a hop from the route's source node.
-	// A packet referencing this rule is to be sent to a remote node.
+	// RuleForward represents a hop from the route's source visor.
+	// A packet referencing this rule is to be sent to a remote visor.
 	RuleForward = RuleType(1)
 
 	// RuleIntermediaryForward represents a hop which is not from the route's source,
