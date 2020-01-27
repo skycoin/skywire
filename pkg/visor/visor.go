@@ -94,13 +94,15 @@ type Node struct {
 	restartCtx *restart.Context
 
 	pidMu sync.Mutex
-	spdMu sync.Mutex
 
 	rpcListener net.Listener
 	rpcDialers  []*RPCClientDialer
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
+
+	Onspd  bool
+	spdCmd *exec.Cmd
 }
 
 // NewNode constructs new Node.
@@ -305,15 +307,16 @@ func (node *Node) Start() error {
 }
 
 // RunDaemon starts a skywire-peering-daemon as an external process
-func (node *Node) RunDaemon() {
+func (node *Node) RunDaemon() error {
+	node.Onspd = true
 	bin, err := exec.LookPath("daemon")
 	if err != nil {
-		node.logger.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
+		return fmt.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
 	}
 
 	dir, err := ioutil.TempDir("", "named_pipes")
 	if err != nil {
-		node.logger.Errorf("Couldn't create named_pipes dir: %s", err)
+		return fmt.Errorf("Couldn't create named_pipes dir: %s", err)
 	}
 
 	namedPipe := filepath.Join(dir, "stdout")
@@ -321,28 +324,43 @@ func (node *Node) RunDaemon() {
 	pubKey := node.conf.Node.StaticPubKey.Hex()
 	err = syscall.Mkfifo(namedPipe, 0600)
 	if err != nil {
-		node.logger.Error(err)
+		return err
 	}
 
-	if err := execute(bin, pubKey, namedPipe, lAddr); err != nil {
-		node.logger.Errorf("Failed to start daemon as an external process: ", err)
+	node.spdCmd = exec.Command(bin, pubKey, lAddr, namedPipe)
+	if err := execute(node.spdCmd); err != nil {
+		return fmt.Errorf("Failed to start daemon as an external process: %s", err)
 	}
 
 	node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
 	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
 	if err != nil {
-		node.logger.Error(err)
+		return err
 	}
 
+	pubKeyTable := node.conf.STCP.PubKeyTable
 	c := make(chan notify.EventInfo, 5)
-	errCh := make(chan error)
-	watchNamedPipe(namedPipe, c, errCh)
 
+	err = watchNamedPipe(namedPipe, c)
 	if err != nil {
-		node.logger.Error(err)
+		return err
 	}
 
-	go readPacket(stdOut, c, node.conf, node.n)
+	go readPacket(stdOut, c, pubKeyTable)
+
+	return nil
+}
+
+// StopDaemon kills the the skywire-peering-daemon started as an external process
+// and all child processes.
+func (node *Node) StopDaemon() {
+	node.Onspd = false
+	node.logger.Info("Shutting down skywire-peering-daemon")
+	if err := node.spdCmd.Process.Kill(); err != nil {
+		node.logger.Errorf("Failed to kill skywire-peering-daemon process: %s", err)
+	}
+
+	node.logger.Info("Skywire-peering-daemon closed successfully")
 }
 
 func (node *Node) dir() string {
@@ -442,6 +460,10 @@ func (node *Node) Close() (err error) {
 		node.logger.WithError(err).Errorf("Failed to unlink socket file %s", node.conf.AppServerSockFile)
 	} else {
 		node.logger.Infof("Socket file %s removed successfully", node.conf.AppServerSockFile)
+	}
+
+	if node.Onspd {
+		node.StopDaemon()
 	}
 
 	return err

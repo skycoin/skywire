@@ -27,6 +27,7 @@ require (
 	golang.org/x/crypto v0.0.0-20191227163750-53104e6ec876
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
 	golang.org/x/text v0.3.2 // indirect
+	golang.org/x/tools v0.0.0-20200125223703-d33eef8e6825 // indirect
 )
 
 replace (

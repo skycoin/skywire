@@ -228,7 +228,12 @@ func (cfg *runCfg) runNode() *runCfg {
 	}()
 
 	if cfg.conf.AutoStartSpd {
-		go node.RunDaemon()
+		go func() {
+			if err := node.RunDaemon(); err != nil {
+				cfg.logger.Error(err)
+				node.StopDaemon()
+			}
+		}()
 	}
 
 	if cfg.conf.ShutdownTimeout == 0 {

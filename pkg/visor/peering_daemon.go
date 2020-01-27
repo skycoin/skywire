@@ -3,18 +3,20 @@ package visor
 import (
 	"bytes"
 	"fmt"
-	"github.com/rjeczalik/notify"
 	"io"
 	"net"
 	"net/rpc"
 	"os"
 	"os/exec"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	skycoin_cipher "github.com/SkycoinProject/skycoin/src/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	spd "github.com/SkycoinProject/skywire-peering-daemon/pkg/daemon"
+	"github.com/rjeczalik/notify"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
@@ -24,10 +26,13 @@ var (
 	logger          = logging.MustGetLogger("SPD")
 	rpcDialTimeout  = time.Duration(5 * time.Second)
 	rpcConnDuration = time.Duration(60 * time.Second)
+	spdMu           sync.Mutex
 )
 
-func execute(binPath, publicKey, namedPipe, lAddr string) error {
-	cmd := exec.Command(binPath, publicKey, lAddr, namedPipe)
+func execute(cmd *exec.Cmd) error {
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig: syscall.SIGTERM,
+	}
 	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
 		return err
@@ -36,20 +41,20 @@ func execute(binPath, publicKey, namedPipe, lAddr string) error {
 	return nil
 }
 
-func RpcClient() (RPCClient, error) {
+func client() (RPCClient, error) {
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
-		logger.Fatal("RPC connection failed:", err)
+		return nil, fmt.Errorf("RPC connection failed: %s", err)
 	}
 	if err := conn.SetDeadline(time.Now().Add(rpcConnDuration)); err != nil {
-		logger.Fatal("RPC connection failed:", err)
+		return nil, fmt.Errorf("RPC connection failed: %s", err)
 	}
 	return NewRPCClient(rpc.NewClient(conn), RPCPrefix), nil
 }
 
 // transport establshes an stcp transport to a remote visor
-func createTransport(network *snet.Network, networkType string, packet spd.Packet) (*TransportSummary, error) {
-	client, err := RpcClient()
+func createTransport(networkType string, packet spd.Packet) (*TransportSummary, error) {
+	client, err := client()
 	if err != nil {
 		return nil, err
 	}
@@ -64,16 +69,16 @@ func createTransport(network *snet.Network, networkType string, packet spd.Packe
 	return tpSummary, nil
 }
 
-func watchNamedPipe(file string, c chan notify.EventInfo, errCh chan error) {
-	go func() {
-		err := notify.Watch(file, c, notify.Write)
-		if err != nil {
-			errCh <- err
-		}
-	}()
+func watchNamedPipe(file string, c chan notify.EventInfo) error {
+	err := notify.Watch(file, c, notify.Write)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func readPacket(stdOut *os.File, c chan notify.EventInfo, conf *Config, n *snet.Network) TransportSummary {
+func readPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]string) TransportSummary {
 	// Read packets from named pipe
 	for {
 		var (
@@ -81,7 +86,7 @@ func readPacket(stdOut *os.File, c chan notify.EventInfo, conf *Config, n *snet.
 			buff   bytes.Buffer
 		)
 
-		<- c
+		<-c
 		_, err := io.Copy(&buff, stdOut)
 		if err != nil {
 			logger.Error(err)
@@ -92,10 +97,13 @@ func readPacket(stdOut *os.File, c chan notify.EventInfo, conf *Config, n *snet.
 			logger.Error(err)
 		}
 
+		spdMu.Lock()
 		rpk := skycoin_cipher.MustPubKeyFromHex(packet.PublicKey)
-		conf.STCP.PubKeyTable[cipher.PubKey(rpk)] = packet.IP
+		m[cipher.PubKey(rpk)] = packet.IP
+		spdMu.Unlock()
+
 		logger.Infof("Packets received from skywire-peering-daemon:\n\t{%s: %s}", packet.PublicKey, packet.IP)
-		tp, err := createTransport(n, snet.STcpType, packet)
+		tp, err := createTransport(snet.STcpType, packet)
 		if err != nil {
 			logger.Errorf("Couldn't establish transport to remote visor: %s", err)
 		}
