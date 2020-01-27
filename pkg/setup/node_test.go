@@ -56,7 +56,7 @@ type clientWithDMSGAddrAndListener struct {
 }
 
 func TestNode(t *testing.T) {
-	// We are generating five key pairs - one for the `Router` of setup node,
+	// We are generating five key pairs - one for the `Router` of setup visor,
 	// the other ones - for the clients along the desired route.
 	keys := snettest.GenKeyPairs(5)
 
@@ -66,20 +66,20 @@ func TestNode(t *testing.T) {
 
 	reservedIDs := []routing.RouteID{1, 2}
 
-	// TEST: Emulates the communication between 4 visor nodes and a setup node,
-	// where the first client node initiates a route to the last.
+	// TEST: Emulates the communication between 4 visor nodes and a setup visor,
+	// where the first client visor initiates a route to the last.
 	t.Run("DialRouteGroup", func(t *testing.T) {
 		testDialRouteGroup(t, keys, nEnv, reservedIDs)
 	})
 }
 
 func testDialRouteGroup(t *testing.T, keys []snettest.KeyPair, nEnv *snettest.Env, reservedIDs []routing.RouteID) {
-	// client index 0 is for setup node.
+	// client index 0 is for setup visor.
 	// clients index 1 to 4 are for visor nodes.
 	clients, closeClients := prepClients(t, keys, nEnv, reservedIDs, 5)
 	defer closeClients()
 
-	// prepare and serve setup node (using client 0).
+	// prepare and serve setup visor (using client 0).
 	_, closeSetup := prepSetupNode(t, clients[0].Client, clients[0].Listener)
 	defer closeSetup()
 
@@ -120,7 +120,7 @@ func testDialRouteGroup(t *testing.T, keys []snettest.KeyPair, nEnv *snettest.En
 }
 
 func prepBidirectionalRoute(clients []clientWithDMSGAddrAndListener) routing.BidirectionalRoute {
-	// prepare loop creation (client_1 will use this to request loop creation with setup node).
+	// prepare loop creation (client_1 will use this to request loop creation with setup visor).
 	desc := routing.NewRouteDescriptor(clients[1].Addr.PK, clients[4].Addr.PK, 1, 1)
 
 	forwardHops := []routing.Hop{
@@ -178,7 +178,7 @@ func prepClients(
 
 	for i := 0; i < n; i++ {
 		var port uint16
-		// setup node
+		// setup visor
 		if i == 0 {
 			port = skyenv.DmsgSetupPort
 		} else {
@@ -208,7 +208,7 @@ func prepClients(
 
 		fmt.Printf("Client %d PK: %s\n", i, clients[i].Addr.PK)
 
-		// exclude setup node
+		// exclude setup visor
 		if i == 0 {
 			continue
 		}
@@ -227,7 +227,7 @@ func prepClients(
 
 func prepRouter(client *clientWithDMSGAddrAndListener, reservedIDs []routing.RouteID, last bool) *router.MockRouter {
 	r := &router.MockRouter{}
-	// passing two rules to each node (forward and reverse routes). Simulate
+	// passing two rules to each visor (forward and reverse routes). Simulate
 	// applying intermediary rules.
 	r.On("SaveRoutingRules", mock.Anything, mock.Anything).
 		Return(func(rules ...routing.Rule) error {
@@ -238,7 +238,7 @@ func prepRouter(client *clientWithDMSGAddrAndListener, reservedIDs []routing.Rou
 	// simulate reserving IDs.
 	r.On("ReserveKeys", 2).Return(reservedIDs, testhelpers.NoErr)
 
-	// destination node. Simulate applying edge rules.
+	// destination visor. Simulate applying edge rules.
 	if last {
 		r.On("IntroduceRules", mock.Anything).Return(func(rules routing.EdgeRules) error {
 			client.AppliedEdgeRules = rules

@@ -29,14 +29,14 @@ func TestHealth(t *testing.T) {
 	sPK, sSK := cipher.GenerateKeyPair()
 
 	c := &Config{}
-	c.Node.StaticPubKey = sPK
-	c.Node.StaticSecKey = sSK
+	c.Visor.StaticPubKey = sPK
+	c.Visor.StaticSecKey = sSK
 	c.Transport.Discovery = "foo"
 	c.Routing.SetupNodes = []cipher.PubKey{sPK}
 	c.Routing.RouteFinder = "foo"
 
 	t.Run("Report all the services as available", func(t *testing.T) {
-		rpc := &RPC{&Node{conf: c}}
+		rpc := &RPC{&Visor{conf: c}}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestHealth(t *testing.T) {
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
-		rpc := &RPC{&Node{conf: &Config{}}}
+		rpc := &RPC{&Visor{conf: &Config{}}}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestUptime(t *testing.T) {
-	rpc := &RPC{&Node{startedAt: time.Now()}}
+	rpc := &RPC{&Visor{startedAt: time.Now()}}
 	time.Sleep(time.Second)
 	var res float64
 	err := rpc.Uptime(nil, &res)
@@ -90,12 +90,12 @@ func TestListApps(t *testing.T) {
 	pm.On("Exists", apps["foo"].App).Return(false)
 	pm.On("Exists", apps["bar"].App).Return(true)
 
-	n := Node{
+	n := Visor{
 		appsConf:    apps,
 		procManager: pm,
 	}
 
-	rpc := &RPC{node: &n}
+	rpc := &RPC{visor: &n}
 
 	var reply []*AppState
 	require.NoError(t, rpc.Apps(nil, &reply))
@@ -103,7 +103,7 @@ func TestListApps(t *testing.T) {
 
 	app1, app2 := reply[0], reply[1]
 	if app1.Name != "foo" {
-		// apps inside node are stored inside a map, so their order
+		// apps inside visor are stored inside a map, so their order
 		// is not deterministic, we should be ready for this and
 		// rearrange the outer array to check values correctly
 		app1, app2 = reply[1], reply[0]
@@ -146,9 +146,9 @@ func TestStartStopApp(t *testing.T) {
 	app := apps["foo"].App
 
 	nodeCfg := Config{}
-	nodeCfg.Node.StaticPubKey = pk
+	nodeCfg.Visor.StaticPubKey = pk
 
-	node := &Node{
+	node := &Visor{
 		router:   r,
 		appsConf: apps,
 		logger:   logging.MustGetLogger("test"),
@@ -164,7 +164,7 @@ func TestStartStopApp(t *testing.T) {
 		Name:         app,
 		Version:      apps["foo"].Version,
 		SockFilePath: nodeCfg.AppServerSockFile,
-		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		VisorPK:      nodeCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", app, fmt.Sprintf("v%s", apps["foo"].Version)),
 	}
 	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps["foo"].Args...)
@@ -178,7 +178,7 @@ func TestStartStopApp(t *testing.T) {
 
 	node.procManager = pm
 
-	rpc := &RPC{node: node}
+	rpc := &RPC{visor: node}
 
 	err := rpc.StartApp(&unknownApp, nil)
 	require.Error(t, err)
@@ -227,8 +227,8 @@ These tests have been commented out for the following reasons:
 //		{App: "bar", Version: "2.0", AutoStart: false, Port: 20},
 //	}
 //	conf := &Config{}
-//	conf.Node.StaticPubKey = pk1
-//	node := &Node{
+//	conf.Visor.StaticPubKey = pk1
+//	visor := &Visor{
 //		config:      conf,
 //		router:      r,
 //		tm:          tm1,
@@ -238,17 +238,17 @@ These tests have been commented out for the following reasons:
 //		startedApps: map[string]*appBind{},
 //		logger:      logging.MustGetLogger("test"),
 //	}
-//	pathutil.EnsureDir(node.dir())
+//	pathutil.EnsureDir(visor.dir())
 //	defer func() {
-//		if err := os.RemoveAll(node.dir()); err != nil {
+//		if err := os.RemoveAll(visor.dir()); err != nil {
 //			log.WithError(err).Warn(err)
 //		}
 //	}()
 //
-//	require.NoError(t, node.StartApp("foo"))
+//	require.NoError(t, visor.StartApp("foo"))
 //
 //	time.Sleep(time.Second)
-//	gateway := &RPC{node: node}
+//	gateway := &RPC{visor: visor}
 //
 //	sConn, cConn := net.Pipe()
 //	defer func() {
@@ -345,10 +345,10 @@ These tests have been commented out for the following reasons:
 //		assert.Equal(t, ErrUnknownApp, err)
 //
 //		require.NoError(t, gateway.SetAutoStart(&in2, &struct{}{}))
-//		assert.True(t, node.appsConf[0].AutoStart)
+//		assert.True(t, visor.appsConf[0].AutoStart)
 //
 //		require.NoError(t, gateway.SetAutoStart(&in3, &struct{}{}))
-//		assert.False(t, node.appsConf[0].AutoStart)
+//		assert.False(t, visor.appsConf[0].AutoStart)
 //
 //		// Test with RPC Client
 //
@@ -357,10 +357,10 @@ These tests have been commented out for the following reasons:
 //		assert.Equal(t, ErrUnknownApp.Error(), err.Error())
 //
 //		require.NoError(t, client.SetAutoStart(in2.AppName, in2.AutoStart))
-//		assert.True(t, node.appsConf[0].AutoStart)
+//		assert.True(t, visor.appsConf[0].AutoStart)
 //
 //		require.NoError(t, client.SetAutoStart(in3.AppName, in3.AutoStart))
-//		assert.False(t, node.appsConf[0].AutoStart)
+//		assert.False(t, visor.appsConf[0].AutoStart)
 //	})
 //
 //	t.Run("TransportTypes", func(t *testing.T) {
@@ -378,7 +378,7 @@ These tests have been commented out for the following reasons:
 //
 //	t.Run("Transport", func(t *testing.T) {
 //		var ids []uuid.UUID
-//		node.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+//		visor.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 //			ids = append(ids, tp.RuleEntry.ID)
 //			return true
 //		})

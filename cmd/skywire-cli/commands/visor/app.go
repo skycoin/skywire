@@ -1,4 +1,4 @@
-package node
+package visor
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ func init() {
 
 var lsAppsCmd = &cobra.Command{
 	Use:   "ls-apps",
-	Short: "Lists apps running on the local node",
+	Short: "Lists apps running on the local visor",
 	Run: func(_ *cobra.Command, _ []string) {
 		states, err := rpcClient().Apps()
 		internal.Catch(err)
