@@ -5,6 +5,6 @@ const (
 	EnvAppKey = "APP_KEY"
 	// EnvSockFile is a name for env arg containing unix socket file name.
 	EnvSockFile = "SW_UNIX"
-	// EnvVisorPK is a name for env arg containing public key of visor node.
+	// EnvVisorPK is a name for env arg containing public key of visor visor.
 	EnvVisorPK = "VISOR_PK"
 )

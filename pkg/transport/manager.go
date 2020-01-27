@@ -23,7 +23,7 @@ import (
 type ManagerConfig struct {
 	PubKey          cipher.PubKey
 	SecKey          cipher.SecKey
-	DefaultNodes    []cipher.PubKey // Nodes to automatically connect to
+	DefaultVisors   []cipher.PubKey // Visors to automatically connect to
 	DiscoveryClient DiscoveryClient
 	LogStore        LogStore
 }
@@ -139,7 +139,7 @@ func (tm *Manager) initTransports(ctx context.Context) {
 
 	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
 	if err != nil {
-		log.Warnf("No transports found for local node: %v", err)
+		log.Warnf("No transports found for local visor: %v", err)
 	}
 	for _, entry := range entries {
 		var (
@@ -188,7 +188,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	return nil
 }
 
-// SaveTransport begins to attempt to establish data transports to the given 'remote' node.
+// SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()

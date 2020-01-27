@@ -21,8 +21,8 @@ import (
 func TestDmsgDiscovery(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 	conf := Config{}
-	conf.Node.StaticPubKey = pk
-	conf.Node.StaticSecKey = sk
+	conf.Visor.StaticPubKey = pk
+	conf.Visor.StaticSecKey = sk
 	conf.Dmsg.Discovery = "skywire.skycoin.net:8001"
 	conf.Dmsg.SessionsCount = 10
 
