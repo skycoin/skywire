@@ -319,6 +319,7 @@ func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
 	for {
 		select {
 		case <-rg.closed:
+			rg.logger.Infoln("Route group closed, stopping keep-alive loop")
 			return
 		case <-ticker.C:
 			lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
