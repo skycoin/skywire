@@ -240,7 +240,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 
 		// Deregister transport.
 		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
-			tm.Logger.WithError(err).Warn("Failed to deregister transport %s from discovery.", id)
+			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
 		} else {
 			tm.Logger.Infof("Deregistered transport of ID %s from discovery.", id)
 		}
