@@ -94,7 +94,7 @@ type RouteGroup struct {
 
 	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated int32
-	remoteClosed   int32
+	remoteClosed   chan struct{}
 	closed         chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
@@ -116,6 +116,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		rvs:           make([]routing.Rule, 0),
 		readCh:        make(chan []byte, cfg.ReadChBufSize),
 		readBuf:       bytes.Buffer{},
+		remoteClosed:  make(chan struct{}),
 		closed:        make(chan struct{}),
 		readDeadline:  deadline.MakePipeDeadline(),
 		writeDeadline: deadline.MakePipeDeadline(),
@@ -318,8 +319,8 @@ func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
 
 	for {
 		select {
-		case <-rg.closed:
-			rg.logger.Infoln("Route group closed, stopping keep-alive loop")
+		case <-rg.remoteClosed:
+			rg.logger.Infoln("Remote got closed, stopping keep-alive loop")
 			return
 		case <-ticker.C:
 			lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
@@ -405,7 +406,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 			close(rg.closed)
 		}
 
-		atomic.StoreInt32(&rg.remoteClosed, 1)
+		close(rg.remoteClosed)
 		rg.readChMu.Lock()
 		close(rg.readCh)
 		rg.readChMu.Unlock()
@@ -466,7 +467,13 @@ func (rg *RouteGroup) isCloseInitiator() bool {
 }
 
 func (rg *RouteGroup) isRemoteClosed() bool {
-	return atomic.LoadInt32(&rg.remoteClosed) == 1
+	select {
+	case <-rg.remoteClosed:
+		return true
+	default:
+	}
+
+	return false
 }
 
 func (rg *RouteGroup) isClosed() bool {
