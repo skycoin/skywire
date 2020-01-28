@@ -46,7 +46,7 @@ type appVisorConn struct {
 	Client visor.RPCClient
 }
 
-// Visor manages AppVides.
+// Visor manages AppVisors.
 type Visor struct {
 	c      Config
 	visors map[cipher.PubKey]appVisorConn // connected remote visors.
