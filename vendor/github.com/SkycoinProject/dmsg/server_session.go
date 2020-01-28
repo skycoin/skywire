@@ -87,7 +87,7 @@ func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
 	}
 
 	// Obtain next session.
-	ss2, ok := ss.entity.ServerSession(req.DstAddr.PK)
+	ss2, ok := ss.entity.serverSession(req.DstAddr.PK)
 	if !ok {
 		return ErrReqNoSession
 	}
