@@ -34,13 +34,12 @@ func TestSettlementHS(t *testing.T) {
 			}
 			errCh1 <- transport.MakeSettlementHS(false).Do(context.TODO(), tpDisc, conn1, keys[1].SK)
 		}()
-		defer func() {
-			require.NoError(t, <-errCh1)
-		}()
 
 		conn0, err := nEnv.Nets[0].Dial(context.TODO(), dmsg.Type, keys[1].PK, skyenv.DmsgTransportPort)
 		require.NoError(t, err)
-		require.NoError(t, transport.MakeSettlementHS(true).Do(context.TODO(), tpDisc, conn0, keys[0].SK), "fucked up")
+		require.NoError(t, transport.MakeSettlementHS(true).Do(context.TODO(), tpDisc, conn0, keys[0].SK))
+
+		require.NoError(t, <-errCh1)
 	})
 }
 
