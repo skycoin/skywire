@@ -157,7 +157,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	tmConfig := &transport.ManagerConfig{
 		PubKey:          pk,
 		SecKey:          sk,
-		DefaultVisors:   cfg.TrustedVisors,
+		DefaultVisors:   cfg.TrustedNodes,
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
