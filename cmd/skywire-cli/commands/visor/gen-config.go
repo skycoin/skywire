@@ -40,7 +40,7 @@ var genConfigCmd = &cobra.Command{
 	Short: "Generates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
 		if output == "" {
-			output = pathutil.Defaults().Get(configLocType)
+			output = pathutil.VisorDefaults().Get(configLocType)
 			log.Infof("No 'output' set; using default path: %s", output)
 		}
 		var err error
@@ -110,7 +110,7 @@ func defaultConfig() *visor.Config {
 		defaultSkysocksConfig(""),
 		defaultSkysocksClientConfig(),
 	}
-	conf.Trusteds = []cipher.PubKey{}
+	conf.TrustedNodes = []cipher.PubKey{}
 
 	if testenv {
 		conf.Transport.Discovery = skyenv.TestTpDiscAddr

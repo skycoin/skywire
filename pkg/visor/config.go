@@ -61,8 +61,8 @@ type Config struct {
 
 	Apps []AppConfig `json:"apps"`
 
-	TrustedVisors []cipher.PubKey    `json:"trusted_nodes"`
-	Hypervisors   []HypervisorConfig `json:"hypervisors"`
+	TrustedNodes []cipher.PubKey    `json:"trusted_nodes"`
+	Hypervisors  []HypervisorConfig `json:"hypervisors"`
 
 	AppsPath  string `json:"apps_path"`
 	LocalPath string `json:"local_path"`

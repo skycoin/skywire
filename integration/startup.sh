@@ -8,8 +8,8 @@
 ./skywire-cli --rpc $RPC_C visor add-tp $PK_B
 sleep 1
 
-echo "NodeA Transports:"
+echo "VisorA Transports:"
 ./skywire-cli --rpc $RPC_A visor ls-tp
 
-echo "NodeB Transports:"
+echo "VisorB Transports:"
 ./skywire-cli --rpc $RPC_B visor ls-tp

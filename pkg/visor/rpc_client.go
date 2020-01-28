@@ -425,7 +425,11 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 	client := &mockRPCClient{
 		s: &Summary{
 			PubKey:          localPK,
+<<<<<<< HEAD
 			BuildInfo:       buildinfo.Get(),
+=======
+			VisorVersion:    Version,
+>>>>>>> rename node to visor in README.md
 			AppProtoVersion: supportedProtocolVersion,
 			Apps: []*AppState{
 				{Name: "foo.v1.0", AutoStart: false, Port: 10},
