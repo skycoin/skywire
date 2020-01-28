@@ -151,7 +151,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 				mt.connMx.Lock()
 				if mt.conn == nil {
 					if err := mt.dial(ctx); err != nil {
-						mt.log.Warnf("failed to redial underlying connection: %v", err)
+						mt.log.Warnf("failed to redial underlying connection (redial loop): %v", err)
 					}
 				}
 				mt.connMx.Unlock()
