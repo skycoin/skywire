@@ -316,15 +316,20 @@ func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
+	for {
+		select {
+		case <-rg.closed:
+			return
+		case <-ticker.C:
+			lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
 
-		if time.Since(lastSent) < interval {
-			continue
-		}
+			if time.Since(lastSent) < interval {
+				continue
+			}
 
-		if err := rg.sendKeepAlive(); err != nil {
-			rg.logger.Warnf("Failed to send keepalive: %v", err)
+			if err := rg.sendKeepAlive(); err != nil {
+				rg.logger.Warnf("Failed to send keepalive: %v", err)
+			}
 		}
 	}
 }
