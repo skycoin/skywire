@@ -57,7 +57,7 @@ func TestClientAuth(t *testing.T) {
 	wg.Wait()
 }
 
-func TestUpdateNodeUptime(t *testing.T) {
+func TestUpdateVisorUptime(t *testing.T) {
 	urlCh := make(chan string, 1)
 	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		urlCh <- r.URL.String()

@@ -17,7 +17,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-// Visor performs routes setup operations over messaging channel.
+// Node performs routes setup operations over messaging channel.
 type Node struct {
 	logger        *logging.Logger
 	dmsgC         *dmsg.Client
