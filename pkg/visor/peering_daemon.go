@@ -105,6 +105,6 @@ func readSPDPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey
 			logger.Errorf("Couldn't establish transport to remote visor: %s", err)
 		}
 
-		logger.Infof("Transport established to remote visor: \n%s", tp.Local)
+		logger.Infof("Transport established to remote visor: \n%s", tp.Remote)
 	}
 }
