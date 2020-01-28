@@ -145,29 +145,29 @@ func TestStartStopApp(t *testing.T) {
 	unknownApp := "bar"
 	app := apps["foo"].App
 
-	nodeCfg := Config{}
-	nodeCfg.Visor.StaticPubKey = pk
+	visorCfg := Config{}
+	visorCfg.Visor.StaticPubKey = pk
 
-	node := &Visor{
+	visor := &Visor{
 		router:   r,
 		appsConf: apps,
 		logger:   logging.MustGetLogger("test"),
-		conf:     &nodeCfg,
+		conf:     &visorCfg,
 	}
-	pathutil.EnsureDir(node.dir())
+	pathutil.EnsureDir(visor.dir())
 	defer func() {
-		require.NoError(t, os.RemoveAll(node.dir()))
+		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:         app,
 		Version:      apps["foo"].Version,
-		SockFilePath: nodeCfg.AppServerSockFile,
-		VisorPK:      nodeCfg.Visor.StaticPubKey.Hex(),
+		SockFilePath: visorCfg.AppServerSockFile,
+		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", app, fmt.Sprintf("v%s", apps["foo"].Version)),
 	}
-	appArgs1 := append([]string{filepath.Join(node.dir(), app)}, apps["foo"].Args...)
+	appArgs1 := append([]string{filepath.Join(visor.dir(), app)}, apps["foo"].Args...)
 	appPID1 := appcommon.ProcID(10)
 	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
@@ -176,9 +176,9 @@ func TestStartStopApp(t *testing.T) {
 	pm.On("Exists", app).Return(true)
 	pm.On("Exists", unknownApp).Return(false)
 
-	node.procManager = pm
+	visor.procManager = pm
 
-	rpc := &RPC{visor: node}
+	rpc := &RPC{visor: visor}
 
 	err := rpc.StartApp(&unknownApp, nil)
 	require.Error(t, err)

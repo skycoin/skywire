@@ -107,8 +107,8 @@ func TestVisorStartClose(t *testing.T) {
 
 	var (
 		visorCfg = Config{}
-		logger  = logging.MustGetLogger("test")
-		server  = appserver.New(logger, visorCfg.AppServerSockFile)
+		logger   = logging.MustGetLogger("test")
+		server   = appserver.New(logger, visorCfg.AppServerSockFile)
 	)
 
 	visor := &Visor{

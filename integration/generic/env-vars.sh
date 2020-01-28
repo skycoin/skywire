@@ -1,10 +1,10 @@
 # This script needs to be `source`d from bash-compatible shell
 # E.g. `source ./integration/generic/env-vars.sh` or `. ./integration/generic/env-vars.sh`
-export PK_A=$(jq -r ".node.static_public_key" ./integration/generic/visorA.json)
+export PK_A=$(jq -r ".visor.static_public_key" ./integration/generic/visorA.json)
 export RPC_A=$(jq -r ".interfaces.rpc" ./integration/generic/visorA.json)
-export PK_B=$(jq -r ".node.static_public_key" ./integration/intermediary-nodeB.json)
-export RPC_B=$(jq -r ".interfaces.rpc" ./integration/intermediary-nodeB.json)
-export PK_C=$(jq -r ".node.static_public_key" ./integration/generic/visorC.json)
+export PK_B=$(jq -r ".visor.static_public_key" ./integration/intermediary-visorB.json)
+export RPC_B=$(jq -r ".interfaces.rpc" ./integration/intermediary-visorB.json)
+export PK_C=$(jq -r ".visor.static_public_key" ./integration/generic/visorC.json)
 export RPC_C=$(jq -r ".interfaces.rpc" ./integration/generic/visorC.json)
 
 export CHAT_A=http://localhost:8000/message

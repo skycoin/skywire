@@ -66,7 +66,7 @@ func TestNode(t *testing.T) {
 
 	reservedIDs := []routing.RouteID{1, 2}
 
-	// TEST: Emulates the communication between 4 visor nodes and a setup visor,
+	// TEST: Emulates the communication between 4 visor nodes and a setup node,
 	// where the first client visor initiates a route to the last.
 	t.Run("DialRouteGroup", func(t *testing.T) {
 		testDialRouteGroup(t, keys, nEnv, reservedIDs)
