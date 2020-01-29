@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/SkycoinProject/dmsg v0.0.0-20200128120244-669ad29a4e6b
-	github.com/SkycoinProject/skycoin v0.26.0
+	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.9
@@ -13,6 +13,7 @@ require (
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/securecookie v1.1.1
 	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
+	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.7.0
@@ -21,10 +22,10 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.3
-	golang.org/x/crypto v0.0.0-20191106202628-ed6320f186d4
+	golang.org/x/crypto v0.0.0-20200117160349-530e935923ad
 	golang.org/x/lint v0.0.0-20191125180803-fdd1cda4f05f // indirect
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
-	golang.org/x/tools v0.0.0-20200128002243-345141a36859 // indirect
+	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9 // indirect
 )
 
 //replace github.com/SkycoinProject/dmsg => ../dmsg
