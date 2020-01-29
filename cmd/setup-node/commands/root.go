@@ -14,6 +14,7 @@ import (
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
 )
@@ -29,6 +30,9 @@ var rootCmd = &cobra.Command{
 	Use:   "setup-node [config.json]",
 	Short: "Route Setup Node for skywire",
 	Run: func(_ *cobra.Command, args []string) {
+		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
 
 		logger := logging.MustGetLogger(tag)
 		if syslogAddr != "" {

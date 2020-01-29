@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -10,6 +11,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
@@ -43,6 +45,10 @@ var rootCmd = &cobra.Command{
 	Use:   "hypervisor",
 	Short: "Manages Skywire App Nodes",
 	Run: func(_ *cobra.Command, args []string) {
+		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
+
 		if configPath == "" {
 			configPath = pathutil.FindConfigPath(args, -1, configEnv, pathutil.HypervisorDefaults())
 		}
