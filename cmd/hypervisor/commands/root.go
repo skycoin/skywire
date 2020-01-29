@@ -11,8 +11,8 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 

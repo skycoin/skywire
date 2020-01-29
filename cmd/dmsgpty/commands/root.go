@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 var ptyCLI dmsgpty.CLI
