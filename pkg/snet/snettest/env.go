@@ -83,6 +83,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 		if hasDmsg {
 			dmsgClient = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go dmsgClient.Serve()
 		}
 
 		if hasStcp {
@@ -139,5 +140,6 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 		errCh <- srv.Serve(l, "")
 		close(errCh)
 	}()
+	<-srv.Ready()
 	return srv, errCh
 }
