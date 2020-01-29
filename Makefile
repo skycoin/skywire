@@ -7,7 +7,7 @@
 .PHONY : docker-apps docker-bin docker-volume 
 .PHONY : docker-run docker-stop     
 
-VERSION := 0.1.0 # 0.1.0 is the first possible version in semver
+VERSION := $(shell git describe)
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
