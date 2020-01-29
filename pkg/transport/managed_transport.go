@@ -251,6 +251,9 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 // redial only actually dials if transport is still registered in transport discovery.
 // The 'retry' output specifies whether we can retry dial on failure.
 func (mt *ManagedTransport) redial(ctx context.Context) (retry bool, err error) {
+	if !mt.isServing() {
+		return false, ErrNotServing
+	}
 
 	if _, err = mt.dc.GetTransportByID(ctx, mt.Entry.ID); err != nil {
 
@@ -273,6 +276,10 @@ func (mt *ManagedTransport) redial(ctx context.Context) (retry bool, err error) 
 }
 
 func (mt *ManagedTransport) getConn() *snet.Conn {
+	if !mt.isServing() {
+		return nil
+	}
+
 	mt.connMx.Lock()
 	conn := mt.conn
 	mt.connMx.Unlock()
@@ -308,6 +315,10 @@ func (mt *ManagedTransport) setIfConnNil(ctx context.Context, conn *snet.Conn) e
 }
 
 func (mt *ManagedTransport) clearConn(ctx context.Context) {
+	if !mt.isServing() {
+		return
+	}
+
 	if mt.conn != nil {
 		if err := mt.conn.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close connection")
@@ -316,6 +327,7 @@ func (mt *ManagedTransport) clearConn(ctx context.Context) {
 	}
 	if _, err := mt.dc.UpdateStatuses(ctx, &Status{ID: mt.Entry.ID, IsUp: false}); err != nil {
 		mt.log.Warnf("Failed to update transport status: %s", err)
+		return
 	}
 	mt.log.Infoln("Status updated: DOWN")
 }
@@ -324,10 +336,6 @@ func (mt *ManagedTransport) clearConn(ctx context.Context) {
 func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
 	mt.connMx.Lock()
 	defer mt.connMx.Unlock()
-
-	if !mt.isServing() {
-		return ErrNotServing
-	}
 
 	if mt.conn == nil {
 		if _, err := mt.redial(ctx); err != nil {
