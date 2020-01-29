@@ -56,9 +56,6 @@ var (
 	ErrNoConfigPath = errors.New("no config path")
 )
 
-// Version is the node version.
-const Version = "0.0.1"
-
 const supportedProtocolVersion = "0.0.1"
 
 var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
