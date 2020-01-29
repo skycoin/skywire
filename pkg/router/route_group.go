@@ -230,8 +230,14 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet) chan error {
 	errCh := make(chan error)
 	go func() {
-		errCh <- tp.WritePacket(ctx, packet)
-		close(errCh)
+		defer close(errCh)
+		err := tp.WritePacket(ctx, packet)
+		select {
+		case <-ctx.Done():
+			return
+		case errCh <- err:
+			return
+		}
 	}()
 
 	return errCh
