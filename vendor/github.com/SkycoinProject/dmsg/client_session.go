@@ -34,7 +34,7 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 	defer func() {
 		if err != nil {
 			cs.log.WithError(dStr.Close()).
-				Debug("On DialStream() failure, close stream resulted in error.")
+				Debug("Stream closed on DialStream() failure.")
 		}
 	}()
 

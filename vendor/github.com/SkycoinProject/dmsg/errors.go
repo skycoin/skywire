@@ -7,10 +7,10 @@ import (
 
 // Errors for dmsg discovery (1xx).
 var (
-	ErrDiscEntryNotFound       = registerErr(Error{code: 100, msg: "discovery entry is not found"})
-	ErrDiscEntryIsNotServer    = registerErr(Error{code: 101, msg: "discovery entry is not of server"})
-	ErrDiscEntryIsNotClient    = registerErr(Error{code: 102, msg: "discovery entry is not of client"})
-	ErrDiscEntryHasNoDelegated = registerErr(Error{code: 103, msg: "discovery client entry has no delegated servers"})
+	ErrDiscEntryNotFound       = registerErr(Error{code: 100, msg: "entry is not found in discovery"})
+	ErrDiscEntryIsNotServer    = registerErr(Error{code: 101, msg: "entry is not of server in discovery"})
+	ErrDiscEntryIsNotClient    = registerErr(Error{code: 102, msg: "entry is not of client in discovery"})
+	ErrDiscEntryHasNoDelegated = registerErr(Error{code: 103, msg: "client entry in discovery has no delegated servers"})
 )
 
 // Entity Errors (2xx).
@@ -84,7 +84,7 @@ type Error struct {
 
 // Error implements error
 func (e Error) Error() string {
-	return fmt.Sprintf("%d - %s", e.code, e.errorString())
+	return fmt.Sprintf("dmsg error %d - %s", e.code, e.errorString())
 }
 
 func (e Error) errorString() string {
