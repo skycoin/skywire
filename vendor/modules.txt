@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20200128130016-bdcb95cea9ac
+# github.com/SkycoinProject/dmsg v0.0.0-20200129011427-cd48108c339f
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
@@ -91,7 +91,7 @@ github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200117160349-530e935923ad
+# golang.org/x/crypto v0.0.0-20200128174031-69ecbb4d6d5d
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
