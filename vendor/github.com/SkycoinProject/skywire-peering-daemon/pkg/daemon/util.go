@@ -32,12 +32,7 @@ func BroadCast(broadCastIP string, port int, data []byte) error {
 		return err
 	}
 
-	defer func() {
-		err := conn.Close()
-		if err != nil {
-			logger(moduleName).WithError(err)
-		}
-	}()
+	defer conn.Close()
 
 	_, err = conn.Write(data)
 	if err != nil {
@@ -78,7 +73,6 @@ func write(data []byte, filePath string) error {
 	return nil
 }
 
-// Deserialize decodes a byte to a packet type
 func Deserialize(data []byte) (Packet, error) {
 	var packet Packet
 	decoder := gob.NewDecoder(bytes.NewReader(data))
