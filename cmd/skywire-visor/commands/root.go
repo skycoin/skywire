@@ -59,6 +59,10 @@ var rootCmd = &cobra.Command{
 	Use:   "skywire-visor [config-path]",
 	Short: "Visor for skywire",
 	Run: func(_ *cobra.Command, args []string) {
+		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
+
 		cfg.args = args
 
 		cfg.startProfiler().
