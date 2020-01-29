@@ -354,6 +354,7 @@ func (rg *RouteGroup) sendKeepAlive() error {
 
 	packet := routing.MakeKeepAlivePacket(rule.KeyRouteID())
 	if err := tp.WritePacket(context.Background(), packet); err != nil {
+		rg.logger.WithError(err).Error("Failed to send keep-alive packet")
 		return err
 	}
 
@@ -380,10 +381,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		rg.closeDone.Add(len(rg.tps))
 	}
 
-	if err := rg.broadcastClosePackets(code); err != nil {
-		// TODO: decide if we should return this error, or close route group anyway
-		return err
-	}
+	rg.broadcastClosePackets(code)
 
 	if closeInitiator {
 		// if this node initiated closing, we need to wait for close packets
@@ -430,18 +428,14 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 	return rg.close(code)
 }
 
-func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) error {
+func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	rg.logger.Infof("Broadcasting Close packets to %d addresses", len(rg.tps))
-
 	for i := 0; i < len(rg.tps); i++ {
 		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
 		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
-			// TODO: decide if we should return this error, or close route group anyway
-			return err
+			rg.logger.WithError(err).Error("Failed to send close packet")
 		}
 	}
-
-	return nil
 }
 
 func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
