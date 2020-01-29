@@ -416,11 +416,11 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 }
 
 func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
-	rg.logger.Infof("Got close packet with code %d", code)
+	rg.logger.Infof("Got close packet with code %d on %s", code, rg.LocalAddr().String())
 
 	if rg.isCloseInitiator() {
 		// this route group initiated close loop and got response
-		rg.logger.Debugf("Handling response close packet with code %d", code)
+		rg.logger.Debugf("Handling response close packet with code %d on %s", code, rg.LocalAddr().String())
 
 		rg.closeDone.Done()
 		return nil
@@ -431,6 +431,8 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 }
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) error {
+	rg.logger.Infof("Broadcasting Close packets to %d addresses", len(rg.tps))
+
 	for i := 0; i < len(rg.tps); i++ {
 		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
 		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
