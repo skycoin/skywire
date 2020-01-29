@@ -17,15 +17,12 @@ const (
 	packetLength       = 10
 )
 
-// Packet defines a packet type
 type Packet struct {
 	PublicKey string
 	IP        string
 	T         int64
 }
 
-// Daemon provides configuration parameters for a
-// skywire-peering-daemon.
 type Daemon struct {
 	PublicKey string
 	localAddr string
@@ -37,13 +34,13 @@ type Daemon struct {
 }
 
 // NewDaemon returns a Daemon type
-func NewDaemon(pubKey, lAddr, namedPipe string) *Daemon {
+func NewDaemon(pubKey, rAddr, namedPipe string) *Daemon {
 	return &Daemon{
 		PublicKey: pubKey,
-		localAddr: lAddr,
+		localAddr: rAddr,
 		PacketMap: make(map[string]string),
 		DoneCh:    make(chan error),
-		PacketCh:  make(chan []byte, packetLength),
+		PacketCh:  make(chan []byte),
 		Logger:    logger("SPD"),
 		NamedPipe: namedPipe,
 	}
@@ -52,7 +49,7 @@ func NewDaemon(pubKey, lAddr, namedPipe string) *Daemon {
 // BroadCastPacket broadcasts a UDP packet which contains a public key
 // to the local network's broadcast address.
 func (d *Daemon) BroadCastPacket(broadCastIP string, timer *time.Ticker, port int, data []byte) {
-	d.Logger.Infof("Broadcasting packet on address %s:%d", defaultBroadCastIP, port)
+	d.Logger.Infof("broadcasting packet on address %s:%d", defaultBroadCastIP, port)
 	for range timer.C {
 		err := BroadCast(broadCastIP, port, data)
 		if err != nil {
@@ -80,14 +77,8 @@ func (d *Daemon) Listen(port int) {
 		return
 	}
 
-	defer func() {
-		err := conn.Close()
-		if err != nil {
-			d.Logger.WithError(err)
-		}
-	}()
-
-	d.Logger.Infof("Listening on address %s", address)
+	defer conn.Close()
+	d.Logger.Infof("listening on address %s", address)
 
 	for {
 		buffer := make([]byte, 1024)
@@ -100,6 +91,7 @@ func (d *Daemon) Listen(port int) {
 
 		data := buffer[:n]
 		if !verifyPacket(d.PublicKey, data) {
+			d.Logger.Infof("Packets received: %s", string(buffer[:n]))
 			d.PacketCh <- data
 		}
 	}
@@ -129,6 +121,22 @@ func (d *Daemon) Run() {
 
 	// listen for incoming broadcasts
 	go d.Listen(port)
+
+	go func() {
+		d.Logger.Info("ASLEEP...")
+		time.Sleep(15*time.Second)
+		d.Logger.Info("AWAKE...")
+		for range t.C {
+			d.Logger.Info("Sending...")
+			packet = Packet{
+				PublicKey: "031b80cd5773143a39d940dc0710b93dcccc262a85108018a7a95ab9af734f8055",
+				IP: "127.0.0.1:9498",
+			}
+
+			b, _ := serialize(packet)
+			write(b, d.NamedPipe)
+		}
+	}()
 
 	for {
 		select {
