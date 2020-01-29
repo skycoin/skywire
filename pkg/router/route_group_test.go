@@ -3,10 +3,8 @@ package router
 import (
 	"context"
 	"fmt"
-	"golang.org/x/net/nettest"
 	"io"
 	"math/rand"
-	"net"
 	"strconv"
 	"strings"
 	"sync"
