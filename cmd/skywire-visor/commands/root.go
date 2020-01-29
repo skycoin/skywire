@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
@@ -67,7 +68,7 @@ var rootCmd = &cobra.Command{
 			waitOsSignals().
 			stopNode()
 	},
-	Version: visor.Version,
+	Version: buildinfo.Get().Version,
 }
 
 func init() {

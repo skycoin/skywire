@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	if _, err := buildinfo.WriteTo(log.Writer()); err != nil {
+	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 		log.Printf("Failed to output build info: %v", err)
 	}
 
