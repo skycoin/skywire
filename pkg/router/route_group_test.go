@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"golang.org/x/net/nettest"
 	"io"
 	"math/rand"
 	"net"
@@ -16,6 +15,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
@@ -24,7 +24,7 @@ import (
 )
 
 func TestNewRouteGroup(t *testing.T) {
-	rg := createRouteGroup()
+	rg := createRouteGroup(DefaultRouteGroupConfig())
 	require.NotNil(t, rg)
 	require.Equal(t, DefaultRouteGroupConfig(), rg.cfg)
 }
@@ -49,8 +49,8 @@ func TestRouteGroup_Close(t *testing.T) {
 	require.NotNil(t, tp1.Entry)
 	require.NotNil(t, tp2.Entry)
 
-	rg0 := createRouteGroup()
-	rg1 := createRouteGroup()
+	rg0 := createRouteGroup(DefaultRouteGroupConfig())
+	rg1 := createRouteGroup(DefaultRouteGroupConfig())
 
 	// reserve FWD and CNSM IDs for r0.
 	r0RtIDs, err := rg0.rt.ReserveKeys(2)
@@ -146,8 +146,8 @@ func TestRouteGroup_Read(t *testing.T) {
 	buf3 := make([]byte, len(msg2)/2)
 	buf4 := make([]byte, len(msg2)/2)
 
-	rg1 := createRouteGroup()
-	rg2 := createRouteGroup()
+	rg1 := createRouteGroup(DefaultRouteGroupConfig())
+	rg2 := createRouteGroup(DefaultRouteGroupConfig())
 
 	_, _, teardown := createTransports(t, rg1, rg2, stcp.Type)
 	defer teardown()
@@ -188,15 +188,15 @@ func TestRouteGroup_Read(t *testing.T) {
 func TestRouteGroup_Write(t *testing.T) {
 	msg1 := []byte("hello1")
 
-	rg1 := createRouteGroup()
+	rg1 := createRouteGroup(DefaultRouteGroupConfig())
 	require.NotNil(t, rg1)
 
 	_, err := rg1.Write(msg1)
 	require.Equal(t, ErrNoTransports, err)
 	require.NoError(t, rg1.Close())
 
-	rg1 = createRouteGroup()
-	rg2 := createRouteGroup()
+	rg1 = createRouteGroup(DefaultRouteGroupConfig())
+	rg2 := createRouteGroup(DefaultRouteGroupConfig())
 
 	m1, m2, teardown := createTransports(t, rg1, rg2, stcp.Type)
 	defer teardown()
@@ -264,8 +264,8 @@ func TestRouteGroup_ReadWrite(t *testing.T) {
 }
 
 func testReadWrite(t *testing.T, iterations int) {
-	rg1 := createRouteGroup()
-	rg2 := createRouteGroup()
+	rg1 := createRouteGroup(DefaultRouteGroupConfig())
+	rg2 := createRouteGroup(DefaultRouteGroupConfig())
 	m1, m2, teardownEnv := createTransports(t, rg1, rg2, stcp.Type)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -486,10 +486,8 @@ func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
 	require.NotNil(t, tp1.Entry)
 	require.NotNil(t, tp2.Entry)
 
-	rg0 := createRouteGroup()
-	fmt.Printf("RG0 Addr: %s\n", rg0.LocalAddr().String())
-	rg1 := createRouteGroup()
-	fmt.Printf("RG Addr: %s\n", rg1.LocalAddr().String())
+	rg0 := createRouteGroup(DefaultRouteGroupConfig())
+	rg1 := createRouteGroup(DefaultRouteGroupConfig())
 
 	r0RtIDs, err := rg0.rt.ReserveKeys(1)
 	require.NoError(t, err)
@@ -589,10 +587,8 @@ func testArbitrarySizeOneMessage(t *testing.T, size int) {
 	require.NotNil(t, tp1.Entry)
 	require.NotNil(t, tp2.Entry)
 
-	rg0 := createRouteGroup()
-	fmt.Printf("RG0 Addr: %s\n", rg0.LocalAddr().String())
-	rg1 := createRouteGroup()
-	fmt.Printf("RG Addr: %s\n", rg1.LocalAddr().String())
+	rg0 := createRouteGroup(DefaultRouteGroupConfig())
+	rg1 := createRouteGroup(DefaultRouteGroupConfig())
 
 	r0RtIDs, err := rg0.rt.ReserveKeys(1)
 	require.NoError(t, err)
@@ -668,14 +664,14 @@ func testArbitrarySizeOneMessage(t *testing.T, size int) {
 }
 
 func TestRouteGroup_LocalAddr(t *testing.T) {
-	rg := createRouteGroup()
+	rg := createRouteGroup(DefaultRouteGroupConfig())
 	require.Equal(t, rg.desc.Dst(), rg.LocalAddr())
 
 	require.NoError(t, rg.Close())
 }
 
 func TestRouteGroup_RemoteAddr(t *testing.T) {
-	rg := createRouteGroup()
+	rg := createRouteGroup(DefaultRouteGroupConfig())
 	require.Equal(t, rg.desc.Src(), rg.RemoteAddr())
 
 	require.NoError(t, rg.Close())
@@ -702,8 +698,15 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		require.NotNil(t, tp1.Entry)
 		require.NotNil(t, tp2.Entry)
 
-		rg0 := createRouteGroup()
-		rg1 := createRouteGroup()
+		// because some subtests of `TestConn` are highly specific in their behaviour,
+		// it's best to exceed the `readCh` size
+		rgCfg := &RouteGroupConfig{
+			ReadChBufSize:     defaultReadChBufSize * 3,
+			KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
+		}
+
+		rg0 := createRouteGroup(rgCfg)
+		rg1 := createRouteGroup(rgCfg)
 
 		r0RtIDs, err := rg0.rt.ReserveKeys(1)
 		require.NoError(t, err)
@@ -739,9 +742,11 @@ func TestRouteGroup_TestConn(t *testing.T) {
 			if err := rg0.Close(); err != nil {
 				//panic(err)
 			}
+			fmt.Printf("CLOSED 0 %s\n", rg0.LocalAddr().String())
 			if err := rg1.Close(); err != nil {
 				//panic(err)
 			}
+			fmt.Printf("CLOSED 1 %s\n", rg1.LocalAddr().String())
 			cancel()
 			nEnv.Teardown()
 		}
@@ -772,9 +777,10 @@ func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 
 		switch packet.Type() {
 		case routing.ClosePacket:
+			fmt.Printf("GOT CLOSE PACKET ON %s\n", to.LocalAddr().String())
 			if to.isClosed() {
-				// TODO: this panic rises on some subtests of `TestConn`, need to find out the reason
 				panic(io.ErrClosedPipe)
+				return
 			}
 
 			if err := to.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
@@ -813,7 +819,7 @@ func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (keepSending 
 	}
 }
 
-func createRouteGroup() *RouteGroup {
+func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
 	rt := routing.NewTable(routing.DefaultConfig())
 
 	pk1, _ := cipher.GenerateKeyPair()
@@ -822,7 +828,7 @@ func createRouteGroup() *RouteGroup {
 	port2 := routing.Port(2)
 	desc := routing.NewRouteDescriptor(pk1, pk2, port1, port2)
 
-	rg := NewRouteGroup(nil, rt, desc)
+	rg := NewRouteGroup(cfg, rt, desc)
 
 	return rg
 }
