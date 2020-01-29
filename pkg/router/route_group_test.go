@@ -3,8 +3,10 @@ package router
 import (
 	"context"
 	"fmt"
+	"golang.org/x/net/nettest"
 	"io"
 	"math/rand"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -419,7 +421,6 @@ func testMultipleWR(t *testing.T, iterations int, rg1, rg2 io.ReadWriter, msg1, 
 	}
 }
 
-// TODO (Darkren) uncomment and fix
 func TestArbitrarySizeOneMessage(t *testing.T) {
 	// Test fails if message size is above 4059
 	const (
@@ -467,43 +468,106 @@ func TestArbitrarySizeMultipleMessagesByChunks(t *testing.T) {
 }
 
 func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
+	keys := snettest.GenKeyPairs(2)
+
+	pk1 := keys[0].PK
+	pk2 := keys[1].PK
+
+	// create test env
+	nEnv := snettest.NewEnv(t, keys, []string{stcp.Type})
+
+	tpDisc := transport.NewDiscoveryMock()
+	tpKeys := snettest.GenKeyPairs(2)
+
+	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, stcp.Type)
+	require.NoError(t, err)
+	require.NotNil(t, tp1)
+	require.NotNil(t, tp2)
+	require.NotNil(t, tp1.Entry)
+	require.NotNil(t, tp2.Entry)
+
+	rg0 := createRouteGroup()
+	fmt.Printf("RG0 Addr: %s\n", rg0.LocalAddr().String())
 	rg1 := createRouteGroup()
-	rg2 := createRouteGroup()
-	m1, m2, teardownEnv := createTransports(t, rg1, rg2, stcp.Type)
+	fmt.Printf("RG Addr: %s\n", rg1.LocalAddr().String())
+
+	r0RtIDs, err := rg0.rt.ReserveKeys(1)
+	require.NoError(t, err)
+
+	r1RtIDs, err := rg1.rt.ReserveKeys(1)
+	require.NoError(t, err)
+
+	r0FwdRule := routing.ForwardRule(ruleKeepAlive, r0RtIDs[0], r1RtIDs[0], tp1.Entry.ID, pk2, pk1, 0, 0)
+	err = rg0.rt.SaveRule(r0FwdRule)
+	require.NoError(t, err)
+
+	r1FwdRule := routing.ForwardRule(ruleKeepAlive, r1RtIDs[0], r0RtIDs[0], tp2.Entry.ID, pk1, pk2, 0, 0)
+	err = rg1.rt.SaveRule(r1FwdRule)
+	require.NoError(t, err)
+
+	r0FwdRtDesc := r0FwdRule.RouteDescriptor()
+	rg0.desc = r0FwdRtDesc.Invert()
+	rg0.tps = append(rg0.tps, tp1)
+	rg0.fwd = append(rg0.fwd, r0FwdRule)
+
+	r1FwdRtDesc := r1FwdRule.RouteDescriptor()
+	rg1.desc = r1FwdRtDesc.Invert()
+	rg1.tps = append(rg1.tps, tp2)
+	rg1.fwd = append(rg1.fwd, r1FwdRule)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// push close packet from transport to route group
+	go pushPackets(ctx, m2, rg1)
+	go pushPackets(ctx, m1, rg0)
+
 	defer func() {
 		cancel()
-		teardownEnv()
+		nEnv.Teardown()
 	}()
-
-	go pushPackets(ctx, m1, rg1)
-
-	go pushPackets(ctx, m2, rg2)
 
 	chunkSize := 1024
 
 	msg := []byte(strings.Repeat("A", size))
 
 	for offset := 0; offset < size; offset += chunkSize {
-		_, err := rg1.Write(msg[offset : offset+chunkSize])
+		_, err := rg0.Write(msg[offset : offset+chunkSize])
 		require.NoError(t, err)
 	}
 
 	for offset := 0; offset < size; offset += chunkSize {
 		buf := make([]byte, chunkSize)
-		n, err := rg2.Read(buf)
+		n, err := rg1.Read(buf)
 		require.NoError(t, err)
 		require.Equal(t, chunkSize, n)
 		require.Equal(t, msg[offset:offset+chunkSize], buf)
 	}
 
-	buf := make([]byte, chunkSize)
-	n, err := rg2.Read(buf)
-	assert.Equal(t, io.EOF, err)
-	assert.Equal(t, 0, n)
-	assert.Equal(t, make([]byte, chunkSize), buf)
+	errCh := make(chan error)
+	nCh := make(chan int)
+	bufCh := make(chan []byte)
+	go func() {
+		buf := make([]byte, size)
+		n, err := rg1.Read(buf)
+		errCh <- err
+		nCh <- n
+		bufCh <- buf
+	}()
+
+	// close remote to simulate `io.EOF` on local connection
+	require.NoError(t, rg0.Close())
+
+	err = <-errCh
+	n := <-nCh
+	readBuf := <-bufCh
+	close(nCh)
+	close(errCh)
+	close(bufCh)
+	require.Equal(t, io.EOF, err)
+	require.Equal(t, 0, n)
+	require.Equal(t, make([]byte, size), readBuf)
+
+	require.NoError(t, rg1.Close())
 }
 
 func testArbitrarySizeOneMessage(t *testing.T, size int) {
@@ -673,10 +737,10 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 
 		stop = func() {
 			if err := rg0.Close(); err != nil {
-				panic(err)
+				//panic(err)
 			}
 			if err := rg1.Close(); err != nil {
-				panic(err)
+				//panic(err)
 			}
 			nEnv.Teardown()
 			cancel()
