@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -18,13 +17,6 @@ import (
 // Config configures a dmsg client entity.
 type Config struct {
 	MinSessions int
-}
-
-func (c Config) PrintWarnings(log logrus.FieldLogger) {
-	log = log.WithField("location", "dmsg.Config")
-	if c.MinSessions < 1 {
-		log.Warn("Field 'MinSessions' has value < 1 : This will disallow establishment of dmsg streams.")
-	}
 }
 
 // DefaultConfig returns the default configuration for a dmsg client entity.
@@ -48,9 +40,16 @@ type Client struct {
 
 // NewClient creates a dmsg client entity.
 func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Config) *Client {
-	c := new(Client)
+	if conf == nil {
+		conf = DefaultConfig()
+	}
 
-	// Init common fields.
+	c := new(Client)
+	c.conf = conf
+	c.porter = netutil.NewPorter(netutil.PorterMinEphemeral)
+	c.errCh = make(chan error, 10)
+	c.done = make(chan struct{})
+
 	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"))
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
 		return c.EntityCommon.updateClientEntry(ctx, c.done)
@@ -58,17 +57,6 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	c.EntityCommon.delSessionCallback = func(ctx context.Context) error {
 		return c.EntityCommon.updateClientEntry(ctx, c.done)
 	}
-
-	// Init config.
-	if conf == nil {
-		conf = DefaultConfig()
-	}
-	c.conf = conf
-	c.conf.PrintWarnings(c.log)
-
-	c.porter = netutil.NewPorter(netutil.PorterMinEphemeral)
-	c.errCh = make(chan error, 10)
-	c.done = make(chan struct{})
 
 	return c
 }
@@ -191,7 +179,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Range client's delegated servers.
 	// See if we are already connected to a delegated server.
 	for _, srvPK := range entry.Client.DelegatedServers {
-		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+		if dSes, ok := ce.ClientSession(ce.porter, srvPK); ok {
 			return dSes.DialStream(addr)
 		}
 	}
@@ -199,7 +187,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Range client's delegated servers.
 	// Attempt to connect to a delegated server.
 	for _, srvPK := range entry.Client.DelegatedServers {
-		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
+		dSes, err := ce.obtainSession(ctx, srvPK)
 		if err != nil {
 			continue
 		}
@@ -209,24 +197,27 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	return nil, ErrCannotConnectToDelegated
 }
 
-// Session obtains an established session.
-func (ce *Client) Session(pk cipher.PubKey) (ClientSession, bool) {
-	return ce.clientSession(ce.porter, pk)
-}
-
-// AllSessions obtains all established sessions.
-func (ce *Client) AllSessions() []ClientSession {
-	return ce.allClientSessions(ce.porter)
-}
-
-// EnsureAndObtainSession attempts to obtain a session.
-// If the session does not exist, we will attempt to establish one.
+// ensureSession ensures the existence of a session.
 // It returns an error if the session does not exist AND cannot be established.
-func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKey) (ClientSession, error) {
+func (ce *Client) ensureSession(ctx context.Context, entry *disc.Entry) error {
 	ce.sesMx.Lock()
 	defer ce.sesMx.Unlock()
 
-	if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+	// If session with server of pk already exists, skip.
+	if _, ok := ce.ClientSession(ce.porter, entry.Static); ok {
+		return nil
+	}
+
+	// Dial session.
+	_, err := ce.dialSession(ctx, entry)
+	return err
+}
+
+func (ce *Client) obtainSession(ctx context.Context, srvPK cipher.PubKey) (ClientSession, error) {
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+
+	if dSes, ok := ce.ClientSession(ce.porter, srvPK); ok {
 		return dSes, nil
 	}
 
@@ -238,25 +229,9 @@ func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKe
 	return ce.dialSession(ctx, srvEntry)
 }
 
-// ensureSession ensures the existence of a session.
-// It returns an error if the session does not exist AND cannot be established.
-func (ce *Client) ensureSession(ctx context.Context, entry *disc.Entry) error {
-	ce.sesMx.Lock()
-	defer ce.sesMx.Unlock()
-
-	// If session with server of pk already exists, skip.
-	if _, ok := ce.clientSession(ce.porter, entry.Static); ok {
-		return nil
-	}
-
-	// Dial session.
-	_, err := ce.dialSession(ctx, entry)
-	return err
-}
-
 // It is expected that the session is created and served before the context cancels, otherwise an error will be returned.
 // NOTE: This should not be called directly as it may lead to session duplicates.
-// Only `ensureSession` or `EnsureAndObtainSession` should call this function.
+// Only `ensureSession` or `obtainSession` should call this function.
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
 	ce.log.WithField("remote_pk", entry.Static).Info("Dialing session...")
 
@@ -275,7 +250,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSes
 	}
 	go func() {
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
-		if err := dSes.serve(); !isClosed(ce.done) {
+		if err := dSes.Serve(); !isClosed(ce.done) {
 			ce.errCh <- err
 			ce.delSession(ctx, dSes.RemotePK())
 		}

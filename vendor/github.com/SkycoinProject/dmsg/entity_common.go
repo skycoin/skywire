@@ -49,26 +49,16 @@ func (c *EntityCommon) session(pk cipher.PubKey) (*SessionCommon, bool) {
 	return dSes, ok
 }
 
-// serverSession obtains a session as a server.
-func (c *EntityCommon) serverSession(pk cipher.PubKey) (ServerSession, bool) {
+// ServerSession obtains a session as a server.
+func (c *EntityCommon) ServerSession(pk cipher.PubKey) (ServerSession, bool) {
 	ses, ok := c.session(pk)
 	return ServerSession{SessionCommon: ses}, ok
 }
 
-// clientSession obtains a session as a client.
-func (c *EntityCommon) clientSession(porter *netutil.Porter, pk cipher.PubKey) (ClientSession, bool) {
+// ClientSession obtains a session as a client.
+func (c *EntityCommon) ClientSession(porter *netutil.Porter, pk cipher.PubKey) (ClientSession, bool) {
 	ses, ok := c.session(pk)
 	return ClientSession{SessionCommon: ses, porter: porter}, ok
-}
-
-func (c *EntityCommon) allClientSessions(porter *netutil.Porter) []ClientSession {
-	c.sessionsMx.Lock()
-	sessions := make([]ClientSession, 0, len(c.sessions))
-	for _, ses := range c.sessions {
-		sessions = append(sessions, ClientSession{SessionCommon: ses, porter: porter})
-	}
-	c.sessionsMx.Unlock()
-	return sessions
 }
 
 // SessionCount returns the number of sessions.

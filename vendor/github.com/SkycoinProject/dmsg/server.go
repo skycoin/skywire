@@ -17,9 +17,6 @@ import (
 type Server struct {
 	EntityCommon
 
-	ready     chan struct{} // Closed once dmsg.Server is serving.
-	readyOnce sync.Once
-
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
@@ -29,7 +26,6 @@ type Server struct {
 func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient) *Server {
 	s := new(Server)
 	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
-	s.ready = make(chan struct{})
 	s.done = make(chan struct{})
 	return s
 }
@@ -74,7 +70,6 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 	}
 
 	log.Info("Accepting sessions...")
-	s.readyOnce.Do(func() { close(s.ready) })
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
@@ -91,11 +86,6 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 			s.wg.Done()
 		}(conn)
 	}
-}
-
-// Ready returns a chan which blocks until the server begins serving.
-func (s *Server) Ready() <-chan struct{} {
-	return s.ready
 }
 
 func (s *Server) updateEntryLoop(addr string) error {

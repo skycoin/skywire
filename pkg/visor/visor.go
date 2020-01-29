@@ -349,7 +349,7 @@ func (node *Node) RunDaemon() error {
 		return err
 	}
 
-	readSPDPacket(stdOut, c, pubKeyTable)
+	readSPDPacket(stdOut, c, pubKeyTable, node.conf.Interfaces.RPCAddress)
 
 	return nil
 }

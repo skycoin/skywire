@@ -22,7 +22,6 @@ import (
 )
 
 var (
-	rpcAddr         = "localhost:3435"
 	logger          = logging.MustGetLogger("SPD")
 	rpcDialTimeout  = time.Duration(5 * time.Second)
 	rpcConnDuration = time.Duration(60 * time.Second)
@@ -38,7 +37,7 @@ func execute(cmd *exec.Cmd) error {
 	return nil
 }
 
-func client() (RPCClient, error) {
+func client(rpcAddr string) (RPCClient, error) {
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("RPC connection failed: %s", err)
@@ -50,8 +49,8 @@ func client() (RPCClient, error) {
 }
 
 // transport establshes an stcp transport to a remote visor
-func createTransport(pubKey string) (*TransportSummary, error) {
-	client, err := client()
+func createTransport(pubKey string, rpcAddr string) (*TransportSummary, error) {
+	client, err := client(rpcAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +74,7 @@ func watchNamedPipe(file string, c chan notify.EventInfo) error {
 	return nil
 }
 
-func readSPDPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]string) {
+func readSPDPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey]string, rpcAddr string) {
 	// Read packets from named pipe
 	for {
 		var (
@@ -100,7 +99,7 @@ func readSPDPacket(stdOut *os.File, c chan notify.EventInfo, m map[cipher.PubKey
 		spdMu.Unlock()
 
 		logger.Infof("Packets received from skywire-peering-daemon:\n\t{%s: %s}", packet.PublicKey, packet.IP)
-		tp, err := createTransport(packet.PublicKey)
+		tp, err := createTransport(packet.PublicKey, rpcAddr)
 		if err != nil {
 			logger.Errorf("Couldn't establish transport to remote visor: %s", err)
 		}
