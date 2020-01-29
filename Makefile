@@ -22,7 +22,7 @@ DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker con
 TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
 TEST_OPTS_NOCI?=-race -cover -timeout=5m -v
 
-BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
+BUILDINFO_PATH := $(PROJECT_BASE)/pkg/util/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
