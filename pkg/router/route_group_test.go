@@ -3,8 +3,10 @@ package router
 import (
 	"context"
 	"fmt"
+	"golang.org/x/net/nettest"
 	"io"
 	"math/rand"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -680,7 +682,7 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 }
 
 // TODO (Darkren): uncomment and fix
-/*func TestRouteGroup_TestConn(t *testing.T) {
+func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
 		keys := snettest.GenKeyPairs(2)
 
@@ -740,15 +742,15 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 			if err := rg1.Close(); err != nil {
 				//panic(err)
 			}
-			nEnv.Teardown()
 			cancel()
+			nEnv.Teardown()
 		}
 
 		return rg0, rg1, stop, nil
 	}
 
 	nettest.TestConn(t, mp)
-}*/
+}
 
 func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 	for {
