@@ -17,12 +17,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 var (
