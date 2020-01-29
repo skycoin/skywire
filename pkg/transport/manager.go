@@ -233,18 +233,20 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		return
 	}
 
+	// Deregister transport before closing the underlying connection.
 	if tp, ok := tm.tps[id]; ok {
-		tp.Close()
-		tm.Logger.Infof("Deregister transport %s from manager", id)
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id)
-		if err != nil {
-			tm.Logger.Errorf("Deregister transport %s from discovery failed with error: %s", id, err)
-		}
-		tm.Logger.Infof("Deregister transport %s from discovery", id)
 
+		// Deregister transport.
+		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
+			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
+		} else {
+			tm.Logger.Infof("Deregistered transport of ID %s from discovery.", id)
+		}
+
+		// Close underlying connection.
+		tp.close()
 		delete(tm.tps, id)
 	}
 }
