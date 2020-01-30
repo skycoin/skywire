@@ -11,15 +11,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNewRouteGroup(t *testing.T) {
@@ -29,7 +29,7 @@ func TestNewRouteGroup(t *testing.T) {
 }
 
 func TestRouteGroup_Close(t *testing.T) {
-	rg1, rg2, m1, m2, _, _, teardown := setupEnv(t)
+	rg1, rg2, m1, m2, teardown := setupEnv(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -60,7 +60,7 @@ func TestRouteGroup_Close(t *testing.T) {
 }
 
 func TestRouteGroup_Read(t *testing.T) {
-	rg1, rg2, m1, m2, _, _, teardown := setupEnv(t)
+	rg1, rg2, m1, m2, teardown := setupEnv(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -112,7 +112,7 @@ func TestRouteGroup_Read(t *testing.T) {
 }
 
 func TestRouteGroup_Write(t *testing.T) {
-	rg1, rg2, m1, m2, _, _, teardown := setupEnv(t)
+	rg1, rg2, m1, m2, teardown := setupEnv(t)
 
 	testWrite(t, rg1, rg2, m1, m2)
 
@@ -178,7 +178,7 @@ func TestRouteGroup_ReadWrite(t *testing.T) {
 }
 
 func testReadWrite(t *testing.T, iterations int) {
-	rg1, rg2, m1, m2, _, _, teardown := setupEnv(t)
+	rg1, rg2, m1, m2, teardown := setupEnv(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -378,7 +378,7 @@ func TestArbitrarySizeMultipleMessagesByChunks(t *testing.T) {
 }
 
 func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
-	rg1, rg2, m1, m2, _, _, teardown := setupEnv(t)
+	rg1, rg2, m1, m2, teardown := setupEnv(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -438,7 +438,7 @@ func testArbitrarySizeMultipleMessagesByChunks(t *testing.T, size int) {
 }
 
 func testArbitrarySizeOneMessage(t *testing.T, size int) {
-	rg1, rg2, m1, m2, _, _, teardown := setupEnv(t)
+	rg1, rg2, m1, m2, teardown := setupEnv(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -507,7 +507,7 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
-		rg1, rg2, m1, m2, _, _, teardown := setupEnv(t)
+		rg1, rg2, m1, m2, teardown := setupEnv(t)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -602,8 +602,7 @@ func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
 	return rg
 }
 
-func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager,
-	tp1, tp2 *transport.ManagedTransport, teardown func()) {
+func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager, teardown func()) {
 	keys := snettest.GenKeyPairs(2)
 
 	pk1 := keys[0].PK
@@ -660,5 +659,5 @@ func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager,
 		nEnv.Teardown()
 	}
 
-	return rg1, rg2, m1, m2, tp1, tp2, teardown
+	return rg1, rg2, m1, m2, teardown
 }
