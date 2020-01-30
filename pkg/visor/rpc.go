@@ -161,13 +161,8 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 		return true
 	})
 	*out = Summary{
-<<<<<<< HEAD
-		PubKey:          r.node.conf.Node.StaticPubKey,
-		BuildInfo:       buildinfo.Get(),
-=======
 		PubKey:          r.visor.conf.Visor.StaticPubKey,
-		VisorVersion:    Version,
->>>>>>> rename node to visor in README.md
+		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.Apps(),
 		Transports:      summaries,

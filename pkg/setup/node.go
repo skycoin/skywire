@@ -78,7 +78,7 @@ func (sn *Node) Close() error {
 
 // Serve starts transport listening loop.
 func (sn *Node) Serve() error {
-	sn.logger.Info("Serving setup visor")
+	sn.logger.Info("Serving setup node")
 
 	for {
 		conn, err := sn.dmsgL.AcceptStream()
