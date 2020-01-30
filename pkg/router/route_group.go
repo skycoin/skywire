@@ -194,8 +194,6 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	//defer rg.mu.Unlock()
-
 	tp, err := rg.tp()
 	if err != nil {
 		rg.mu.Unlock()
@@ -207,7 +205,7 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 		rg.mu.Unlock()
 		return 0, err
 	}
-
+	// we don't need to keep holding mutex from this point on
 	rg.mu.Unlock()
 
 	return rg.write(p, tp, rule)
