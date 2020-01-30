@@ -41,11 +41,11 @@ var genConfigCmd = &cobra.Command{
 	PreRun: func(_ *cobra.Command, _ []string) {
 		if output == "" {
 			output = pathutil.VisorDefaults().Get(configLocType)
-			log.Infof("No 'output' set; using default path: %s", output)
+			logger.Infof("No 'output' set; using default path: %s", output)
 		}
 		var err error
 		if output, err = filepath.Abs(output); err != nil {
-			log.WithError(err).Fatalln("invalid output provided")
+			logger.WithError(err).Fatalln("invalid output provided")
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
@@ -58,7 +58,7 @@ var genConfigCmd = &cobra.Command{
 		case pathutil.LocalLoc:
 			conf = localConfig()
 		default:
-			log.Fatalln("invalid config type:", configLocType)
+			logger.Fatalln("invalid config type:", configLocType)
 		}
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
@@ -88,7 +88,7 @@ func defaultConfig() *visor.Config {
 
 	lIPaddr, err := getLocalIPAddress()
 	if err != nil {
-		log.Warn(err)
+		logger.Warn(err)
 	}
 
 	conf.STCP.LocalAddr = lIPaddr
@@ -129,7 +129,7 @@ func defaultConfig() *visor.Config {
 
 	var sPK cipher.PubKey
 	if err := sPK.UnmarshalText([]byte(skyenv.DefaultSetupPK)); err != nil {
-		log.WithError(err).Warnf("Failed to unmarshal default setup-node public key %s", skyenv.DefaultSetupPK)
+		logger.WithError(err).Warnf("Failed to unmarshal default setup-node public key %s", skyenv.DefaultSetupPK)
 	}
 	conf.Routing.SetupNodes = []cipher.PubKey{sPK}
 	conf.Routing.RouteFinderTimeout = visor.Duration(10 * time.Second)
