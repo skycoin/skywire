@@ -110,7 +110,7 @@ func defaultConfig() *visor.Config {
 		defaultSkysocksConfig(""),
 		defaultSkysocksClientConfig(),
 	}
-	conf.TrustedNodes = []cipher.PubKey{}
+	conf.TrustedVisors = []cipher.PubKey{}
 
 	if testenv {
 		conf.Transport.Discovery = skyenv.TestTpDiscAddr
@@ -129,7 +129,7 @@ func defaultConfig() *visor.Config {
 
 	var sPK cipher.PubKey
 	if err := sPK.UnmarshalText([]byte(skyenv.DefaultSetupPK)); err != nil {
-		log.WithError(err).Warnf("Failed to unmarshal default setup visor public key %s", skyenv.DefaultSetupPK)
+		log.WithError(err).Warnf("Failed to unmarshal default setup-node public key %s", skyenv.DefaultSetupPK)
 	}
 	conf.Routing.SetupNodes = []cipher.PubKey{sPK}
 	conf.Routing.RouteFinderTimeout = visor.Duration(10 * time.Second)

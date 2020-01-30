@@ -43,7 +43,7 @@ stop: ## Stop running skywire-visor on host
 	-bash -c "kill $$(ps aux |grep '[s]kywire-visor' |awk '{print $$2}')"
 
 config: ## Generate skywire.json
-	-./skywire-cli node gen-config -o  ./skywire.json -r
+	-./skywire-cli visor gen-config -o  ./skywire.json -r
 
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
@@ -53,8 +53,8 @@ install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `dmsgpty`
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/dmsgpty
 
 rerun: stop
-	${OPTS} go build ${BUILD_OPTS} -race -o ./skywire-visor ./cmd/skywire-visor
-	-./skywire-cli node gen-config -o  ./skywire.json -r
+	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
+	-./skywire-cli visor gen-config -o  ./skywire.json -r
 	perl -pi -e 's/localhost//g' ./skywire.json
 	./skywire-visor skywire.json
 
@@ -135,21 +135,21 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 	-docker network create ${DOCKER_NETWORK}
 
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
-	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/skychat.v1.0 ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/helloworld.v1.0 ./cmd/apps/helloworld
-	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/skysocks.v1.0 ./cmd/apps/skysocks
-	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat.v1.0 ./cmd/apps/skychat
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld.v1.0 ./cmd/apps/helloworld
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks.v1.0 ./cmd/apps/skysocks
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 
 docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`. `go build` with  ${DOCKER_OPTS}
-	${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/skywire-visor ./cmd/skywire-visor
+	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
 
 docker-volume: dep docker-apps docker-bin bin  ## Prepare docker volume for dockerized skywire-visor
-	-${DOCKER_OPTS} go build ${BUILD_OPTS} -o ./docker/skywire-services/setup-node ./cmd/setup-node
-	-./skywire-cli node gen-config -o  ./skywire-visor/skywire.json -r
-	perl -pi -e 's/localhost//g' ./node/skywire.json # To make node accessible from outside with skywire-cli
+	-${DOCKER_OPTS} go build  -o ./docker/skywire-services/setup-node ./cmd/setup-node
+	-./skywire-cli visor gen-config -o  ./skywire-visor/skywire.json -r
+	perl -pi -e 's/localhost//g' ./visor/skywire.json # To make visor accessible from outside with skywire-cli
 
 docker-run: docker-clean docker-image docker-network docker-volume ## Run dockerized skywire-visor ${DOCKER_NODE} in image ${DOCKER_IMAGE} with network ${DOCKER_NETWORK}
-	docker run -it -v $(shell pwd)/node:/sky --network=${DOCKER_NETWORK} \
+	docker run -it -v $(shell pwd)/visor:/sky --network=${DOCKER_NETWORK} \
 		--name=${DOCKER_NODE} ${DOCKER_IMAGE} bash -c "cd /sky && ./skywire-visor skywire.json"
 
 docker-setup-node:	## Runs setup-node in detached state in ${DOCKER_NETWORK}
@@ -163,9 +163,9 @@ docker-stop: ## Stop running dockerized skywire-visor ${DOCKER_NODE}
 	-docker container stop ${DOCKER_NODE}
 
 docker-rerun: docker-stop
-	-./skywire-cli gen-config -o ./node/skywire.json -r
-	perl -pi -e 's/localhost//g' ./node/skywire.json # To make node accessible from outside with skywire-cli
-	${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/skywire-visor ./cmd/skywire-visor
+	-./skywire-cli gen-config -o ./visor/skywire.json -r
+	perl -pi -e 's/localhost//g' ./visor/skywire.json # To make visor accessible from outside with skywire-cli
+	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
 	docker container start -i ${DOCKER_NODE}
 
 run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
