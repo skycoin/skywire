@@ -50,10 +50,10 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
 
 install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `dmsgpty`
-	${OPTS} go install ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/dmsgpty
+	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/dmsgpty
 
 rerun: stop
-	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -race -o ./skywire-visor ./cmd/skywire-visor
 	-./skywire-cli node gen-config -o  ./skywire.json -r
 	perl -pi -e 's/localhost//g' ./skywire.json
 	./skywire-visor skywire.json
@@ -114,14 +114,14 @@ bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
 	${OPTS} go build ${BUILD_OPTS} -o ./dmsgpty ./cmd/dmsgpty
 
 release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without -race flag
-	${OPTS} go build -o ./skywire-visor ./cmd/skywire-visor
-	${OPTS} go build -o ./skywire-cli  ./cmd/skywire-cli
-	${OPTS} go build -o ./setup-node ./cmd/setup-node
-	${OPTS} go build -o ./hypervisor ./cmd/hypervisor
-	${OPTS} go build -o ./apps/skychat.v1.0 ./cmd/apps/skychat
-	${OPTS} go build -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
-	${OPTS} go build -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
+	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
@@ -135,16 +135,16 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 	-docker network create ${DOCKER_NETWORK}
 
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
-	-${DOCKER_OPTS} go build -race -o ./node/apps/skychat.v1.0 ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build -race -o ./node/apps/helloworld.v1.0 ./cmd/apps/helloworld
-	-${DOCKER_OPTS} go build -race -o ./node/apps/skysocks.v1.0 ./cmd/apps/skysocks
-	-${DOCKER_OPTS} go build -race -o ./node/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/skychat.v1.0 ./cmd/apps/skychat
+	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/helloworld.v1.0 ./cmd/apps/helloworld
+	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/skysocks.v1.0 ./cmd/apps/skysocks
+	-${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 
 docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`. `go build` with  ${DOCKER_OPTS}
-	${DOCKER_OPTS} go build -race -o ./node/skywire-visor ./cmd/skywire-visor
+	${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/skywire-visor ./cmd/skywire-visor
 
 docker-volume: dep docker-apps docker-bin bin  ## Prepare docker volume for dockerized skywire-visor
-	-${DOCKER_OPTS} go build  -o ./docker/skywire-services/setup-node ./cmd/setup-node
+	-${DOCKER_OPTS} go build ${BUILD_OPTS} -o ./docker/skywire-services/setup-node ./cmd/setup-node
 	-./skywire-cli node gen-config -o  ./skywire-visor/skywire.json -r
 	perl -pi -e 's/localhost//g' ./node/skywire.json # To make node accessible from outside with skywire-cli
 
@@ -165,7 +165,7 @@ docker-stop: ## Stop running dockerized skywire-visor ${DOCKER_NODE}
 docker-rerun: docker-stop
 	-./skywire-cli gen-config -o ./node/skywire.json -r
 	perl -pi -e 's/localhost//g' ./node/skywire.json # To make node accessible from outside with skywire-cli
-	${DOCKER_OPTS} go build -race -o ./node/skywire-visor ./cmd/skywire-visor
+	${DOCKER_OPTS} go build ${BUILD_OPTS} -race -o ./node/skywire-visor ./cmd/skywire-visor
 	docker container start -i ${DOCKER_NODE}
 
 run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
