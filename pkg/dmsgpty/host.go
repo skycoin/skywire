@@ -69,9 +69,9 @@ type Host struct {
 	cliNet  string
 	cliAddr string
 
-	dmsgC *dmsg.Client   // Communicates with other 'ptycli.Host's.
-	dmsgL *dmsg.Listener //
-	ptyS  *pty.Server    // Access to local ptys.
+	dmsgC *dmsg.Client       // Communicates with other 'ptycli.Host's.
+	dmsgL *dmsg.Listener     //
+	ptyS  *pty.SessionServer // Access to local ptys.
 
 	cliL net.Listener // Listens for CLI connections.
 	cliI int32        // CLI index.
@@ -119,7 +119,7 @@ func NewHostFromDmsgClient(
 		return nil, err
 	}
 
-	ptyS, err := pty.NewServer(
+	ptyS, err := pty.NewSessionServer(
 		logging.MustGetLogger("dmsgpty-server"),
 		pk,
 		sk,
@@ -240,7 +240,7 @@ func (h *Host) handleCLIConn(ctx context.Context, cliConn net.Conn) {
 
 func (h *Host) handleCfgReq(ctx context.Context) (*rpc.Server, error) {
 	rpcS := rpc.NewServer()
-	if err := rpcS.RegisterName(ptycfg.GatewayName, ptycfg.NewGateway(ctx, h.ptyS.Auth())); err != nil {
+	if err := rpcS.RegisterName(ptycfg.GatewayName, ptycfg.NewConfigGateway(ctx, h.ptyS.Auth())); err != nil {
 		return nil, fmt.Errorf("failed to register 'CfgGateway': %v", err)
 	}
 	return rpcS, nil
@@ -251,7 +251,7 @@ func (h *Host) handlePtyReq(ctx context.Context, log logrus.FieldLogger, req *Pt
 	var dialLocalPty = func() (*rpc.Server, error) {
 		rpcS := rpc.NewServer()
 		if err := rpcS.RegisterName(pty.GatewayName, pty.NewDirectGateway()); err != nil {
-			return nil, fmt.Errorf("failed to register 'DirectGateway': %v", err)
+			return nil, fmt.Errorf("failed to register 'LocalSessionGateway': %v", err)
 		}
 		return rpcS, nil
 	}
@@ -265,11 +265,11 @@ func (h *Host) handlePtyReq(ctx context.Context, log logrus.FieldLogger, req *Pt
 			return nil, nil, fmt.Errorf("failed to dial dmsg: %v", err)
 		}
 		gateway := pty.NewProxyGateway(
-			pty.NewPtyClient(ctx, logging.MustGetLogger("pty_client"), dmsgConn))
+			pty.NewSessionClient(ctx, logging.MustGetLogger("pty_client"), dmsgConn))
 
 		rpcS := rpc.NewServer()
 		if err := rpcS.RegisterName(pty.GatewayName, gateway); err != nil {
-			return nil, nil, fmt.Errorf("failed to register 'DirectGateway': %v", err)
+			return nil, nil, fmt.Errorf("failed to register 'LocalSessionGateway': %v", err)
 		}
 		return dmsgConn, rpcS, nil
 	}

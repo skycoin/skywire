@@ -88,7 +88,7 @@ func (c *CLI) RequestPty() error {
 		return err
 	}
 
-	ptyC := pty.NewPtyClient(ctx, c.Log, conn)
+	ptyC := pty.NewSessionClient(ctx, c.Log, conn)
 
 	c.Log.
 		WithField("cmd", fmt.Sprint(append([]string{c.Cmd}, c.Arg...))).
@@ -140,7 +140,7 @@ func (c *CLI) RequestPty() error {
 }
 
 // Loop that informs the remote of changes to the local CLI terminal window size.
-func (c *CLI) ptyResizeLoop(ctx context.Context, ptyC *pty.Client) error {
+func (c *CLI) ptyResizeLoop(ctx context.Context, ptyC *pty.SessionClient) error {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
 
