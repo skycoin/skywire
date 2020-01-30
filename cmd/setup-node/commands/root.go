@@ -27,8 +27,8 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "setup-visor [config.json]",
-	Short: "Route Setup Visor for skywire",
+	Use:   "setup-node [config.json]",
+	Short: "Route Setup Node for skywire",
 	Run: func(_ *cobra.Command, args []string) {
 		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 			log.Printf("Failed to output build info: %v", err)
@@ -68,7 +68,7 @@ var rootCmd = &cobra.Command{
 
 		sn, err := setup.NewNode(conf, metrics.NewPrometheus("setupnode"))
 		if err != nil {
-			logger.Fatal("Failed to setup Visor: ", err)
+			logger.Fatal("Failed to create a setup node: ", err)
 		}
 
 		go func() {
@@ -85,7 +85,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", ":2121", "address to bind metrics API to")
 	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVar(&tag, "tag", "setup-visor", "logging tag")
+	rootCmd.Flags().StringVar(&tag, "tag", "setup-node", "logging tag")
 	rootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 }
 

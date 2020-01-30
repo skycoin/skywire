@@ -23,7 +23,7 @@
     "route_finder_timeout": "60s"
   },
   "apps": [],
-  "trusted_nodes": [],
+  "trusted_visors": [],
   "hypervisors": [],
   "apps_path": "./bin/apps",
   "local_path": "./local/localB",

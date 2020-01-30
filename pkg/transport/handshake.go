@@ -91,7 +91,7 @@ func MakeSettlementHS(init bool) SettlementHS {
 			}
 		}()
 
-		// create signed entry and send it to responding visor visor.
+		// create signed entry and send it to responding visor.
 		se, ok := NewSignedEntry(&entry, conn.LocalPK(), sk)
 		if !ok {
 			return errors.New("failed to sign entry")
