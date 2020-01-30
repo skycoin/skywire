@@ -56,7 +56,7 @@ type clientWithDMSGAddrAndListener struct {
 }
 
 func TestNode(t *testing.T) {
-	// We are generating five key pairs - one for the `Router` of setup visor,
+	// We are generating five key pairs - one for the `Router` of setup node,
 	// the other ones - for the clients along the desired route.
 	keys := snettest.GenKeyPairs(5)
 
@@ -74,12 +74,12 @@ func TestNode(t *testing.T) {
 }
 
 func testDialRouteGroup(t *testing.T, keys []snettest.KeyPair, nEnv *snettest.Env, reservedIDs []routing.RouteID) {
-	// client index 0 is for setup visor.
+	// client index 0 is for setup node.
 	// clients index 1 to 4 are for visor nodes.
 	clients, closeClients := prepClients(t, keys, nEnv, reservedIDs, 5)
 	defer closeClients()
 
-	// prepare and serve setup visor (using client 0).
+	// prepare and serve setup node (using client 0).
 	_, closeSetup := prepSetupNode(t, clients[0].Client, clients[0].Listener)
 	defer closeSetup()
 
@@ -120,7 +120,7 @@ func testDialRouteGroup(t *testing.T, keys []snettest.KeyPair, nEnv *snettest.En
 }
 
 func prepBidirectionalRoute(clients []clientWithDMSGAddrAndListener) routing.BidirectionalRoute {
-	// prepare loop creation (client_1 will use this to request loop creation with setup visor).
+	// prepare loop creation (client_1 will use this to request loop creation with setup node).
 	desc := routing.NewRouteDescriptor(clients[1].Addr.PK, clients[4].Addr.PK, 1, 1)
 
 	forwardHops := []routing.Hop{
@@ -178,7 +178,7 @@ func prepClients(
 
 	for i := 0; i < n; i++ {
 		var port uint16
-		// setup visor
+		// setup node
 		if i == 0 {
 			port = skyenv.DmsgSetupPort
 		} else {
@@ -208,7 +208,7 @@ func prepClients(
 
 		fmt.Printf("Client %d PK: %s\n", i, clients[i].Addr.PK)
 
-		// exclude setup visor
+		// exclude setup node
 		if i == 0 {
 			continue
 		}

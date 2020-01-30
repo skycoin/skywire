@@ -33,7 +33,7 @@
       ]
     }
   ],
-  "trusted_nodes": [],
+  "trusted_visors": [],
   "hypervisors": [],
   "apps_path": "./apps",
   "local_path": "./local/visorC",

@@ -31,7 +31,7 @@
       "args": []
     }
   ],
-  "trusted_nodes": [],
+  "trusted_visors": [],
   "hypervisors": [],
   "apps_path": "./apps",
   "shutdown_timeout": "30s",
