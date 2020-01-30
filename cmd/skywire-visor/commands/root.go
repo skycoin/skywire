@@ -24,6 +24,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -58,6 +59,10 @@ var rootCmd = &cobra.Command{
 	Use:   "skywire-visor [config-path]",
 	Short: "Visor for skywire",
 	Run: func(_ *cobra.Command, args []string) {
+		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
+
 		cfg.args = args
 
 		cfg.startProfiler().
@@ -67,7 +72,7 @@ var rootCmd = &cobra.Command{
 			waitOsSignals().
 			stopNode()
 	},
-	Version: visor.Version,
+	Version: buildinfo.Get().Version,
 }
 
 func init() {
