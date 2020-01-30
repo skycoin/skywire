@@ -12,15 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewRouteGroup(t *testing.T) {
@@ -698,7 +698,7 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		require.NotNil(t, tp1.Entry)
 		require.NotNil(t, tp2.Entry)
 
-		// because some subtests of `TestConn` are highly specific in their behaviour,
+		// because some subtests of `TestConn` are highly specific in their behavior,
 		// it's best to exceed the `readCh` size
 		rgCfg := &RouteGroupConfig{
 			ReadChBufSize:     defaultReadChBufSize * 3,
@@ -739,14 +739,8 @@ func TestRouteGroup_TestConn(t *testing.T) {
 		go pushPackets(ctx, m1, rg0)
 
 		stop = func() {
-			if err := rg0.Close(); err != nil {
-				//panic(err)
-			}
-			fmt.Printf("CLOSED 0 %s\n", rg0.LocalAddr().String())
-			if err := rg1.Close(); err != nil {
-				//panic(err)
-			}
-			fmt.Printf("CLOSED 1 %s\n", rg1.LocalAddr().String())
+			_ = rg0.Close() // nolint:errcheck
+			_ = rg1.Close() // nolint:errcheck
 			cancel()
 			nEnv.Teardown()
 		}
@@ -780,7 +774,6 @@ func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 			fmt.Printf("GOT CLOSE PACKET ON %s\n", to.LocalAddr().String())
 			if to.isClosed() {
 				panic(io.ErrClosedPipe)
-				return
 			}
 
 			if err := to.handleClosePacket(routing.CloseCode(packet.Payload()[0])); err != nil {
@@ -789,6 +782,7 @@ func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 
 			return
 		case routing.DataPacket:
+			//fmt.Println("GOT DATA PACKET")
 			if !safeSend(ctx, to, payload) {
 				return
 			}
