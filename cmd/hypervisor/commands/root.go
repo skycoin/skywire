@@ -43,7 +43,7 @@ func init() {
 // nolint:gochecknoglobals
 var rootCmd = &cobra.Command{
 	Use:   "hypervisor",
-	Short: "Manages Skywire App Visors",
+	Short: "Manages Skywire Visors",
 	Run: func(_ *cobra.Command, args []string) {
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
@@ -66,7 +66,7 @@ var rootCmd = &cobra.Command{
 			rpcAddr  = config.Interfaces.RPCAddr
 		)
 
-		m, err := hypervisor.NewVisor(config)
+		m, err := hypervisor.NewNode(config)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}

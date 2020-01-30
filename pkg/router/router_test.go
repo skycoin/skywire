@@ -70,7 +70,7 @@ func Test_router_DialRoutes(t *testing.T) {
 	r0.conf.RouteGroupDialer = setupclient.NewMockDialer()
 	r1.conf.RouteGroupDialer = setupclient.NewMockDialer()
 
-	// prepare loop creation (client_1 will use this to request loop creation with setup visor).
+	// prepare loop creation (client_1 will use this to request loop creation with setup node).
 	desc := routing.NewRouteDescriptor(r0.conf.PubKey, r1.conf.PubKey, 1, 1)
 
 	forwardHops := []routing.Hop{

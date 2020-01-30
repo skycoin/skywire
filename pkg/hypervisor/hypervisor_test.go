@@ -42,7 +42,7 @@ const (
 	badCreateAccountPayload = `{"username":"invalid_user","password":"Secure1234!"}`
 )
 
-func TestNewVisor(t *testing.T) {
+func TestNewNode(t *testing.T) {
 	config := makeConfig(false)
 
 	confDir, err := ioutil.TempDir(os.TempDir(), "SWHV")
@@ -51,31 +51,31 @@ func TestNewVisor(t *testing.T) {
 	config.DBPath = filepath.Join(confDir, "users.db")
 
 	t.Run("no_access_without_login", func(t *testing.T) {
-		testVisorNoAccessWithoutLogin(t, config)
+		testNodeNoAccessWithoutLogin(t, config)
 	})
 
 	t.Run("only_admin_account_allowed", func(t *testing.T) {
-		testVisorOnlyAdminAccountAllowed(t, config)
+		testNodeOnlyAdminAccountAllowed(t, config)
 	})
 
 	t.Run("cannot_login_twice", func(t *testing.T) {
-		testVisorCannotLoginTwice(t, config)
+		testNodeCannotLoginTwice(t, config)
 	})
 
 	t.Run("access_after_login", func(t *testing.T) {
-		testVisorAccessAfterLogin(t, config)
+		testNodeAccessAfterLogin(t, config)
 	})
 
 	t.Run("no_access_after_logout", func(t *testing.T) {
-		testVisorNoAccessAfterLogout(t, config)
+		testNodeNoAccessAfterLogout(t, config)
 	})
 
 	t.Run("change_password", func(t *testing.T) {
-		testVisorChangePassword(t, config)
+		testNodeChangePassword(t, config)
 	})
 }
 
-func makeStartVisor(t *testing.T, config Config) (string, *http.Client, func()) {
+func makeStartNode(t *testing.T, config Config) (string, *http.Client, func()) {
 	// nolint: gomnd
 	defaultMockConfig := MockConfig{
 		Visors:            5,
@@ -84,7 +84,7 @@ func makeStartVisor(t *testing.T, config Config) (string, *http.Client, func()) 
 		EnableAuth:        true,
 	}
 
-	visor, err := NewVisor(config)
+	visor, err := NewNode(config)
 	require.NoError(t, err)
 	require.NoError(t, visor.AddMockData(defaultMockConfig))
 
@@ -143,8 +143,8 @@ func testCase(t *testing.T, addr string, client *http.Client, tc TestCase, testT
 	}
 }
 
-func testVisorNoAccessWithoutLogin(t *testing.T, config Config) {
-	addr, client, stop := makeStartVisor(t, config)
+func testNodeNoAccessWithoutLogin(t *testing.T, config Config) {
+	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
 	makeCase := func(method string, uri string, body io.Reader) TestCase {
@@ -168,8 +168,8 @@ func testVisorNoAccessWithoutLogin(t *testing.T, config Config) {
 	})
 }
 
-func testVisorOnlyAdminAccountAllowed(t *testing.T, config Config) {
-	addr, client, stop := makeStartVisor(t, config)
+func testNodeOnlyAdminAccountAllowed(t *testing.T, config Config) {
+	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -198,8 +198,8 @@ func testVisorOnlyAdminAccountAllowed(t *testing.T, config Config) {
 	})
 }
 
-func testVisorCannotLoginTwice(t *testing.T, config Config) {
-	addr, client, stop := makeStartVisor(t, config)
+func testNodeCannotLoginTwice(t *testing.T, config Config) {
+	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -239,8 +239,8 @@ func testVisorCannotLoginTwice(t *testing.T, config Config) {
 	})
 }
 
-func testVisorAccessAfterLogin(t *testing.T, config Config) {
-	addr, client, stop := makeStartVisor(t, config)
+func testNodeAccessAfterLogin(t *testing.T, config Config) {
+	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -279,8 +279,8 @@ func testVisorAccessAfterLogin(t *testing.T, config Config) {
 	})
 }
 
-func testVisorNoAccessAfterLogout(t *testing.T, config Config) {
-	addr, client, stop := makeStartVisor(t, config)
+func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
+	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
 	testCases(t, addr, client, []TestCase{
@@ -347,8 +347,8 @@ func testVisorNoAccessAfterLogout(t *testing.T, config Config) {
 // - Login with old password (should fail).
 // - Login with new password (should succeed).
 // nolint: funlen
-func testVisorChangePassword(t *testing.T, config Config) {
-	addr, client, stop := makeStartVisor(t, config)
+func testNodeChangePassword(t *testing.T, config Config) {
+	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
 	// To emulate an active session.

@@ -157,7 +157,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	tmConfig := &transport.ManagerConfig{
 		PubKey:          pk,
 		SecKey:          sk,
-		DefaultVisors:   cfg.TrustedNodes,
+		DefaultVisors:   cfg.TrustedVisors,
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
@@ -358,7 +358,7 @@ func (visor *Visor) stopUnhandledApp(name string, pid int) {
 	visor.logger.Infof("Found and killed hanged app %s with pid %d previously ran by this visor", name, pid)
 }
 
-// Close safely stops spawned Apps and messaging Visor.
+// Close safely stops spawned Apps and Visor.
 func (visor *Visor) Close() (err error) {
 	if visor == nil {
 		return nil
