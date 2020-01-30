@@ -75,8 +75,7 @@ const (
 	ConfDir = ".dmsgpty"
 )
 
-// TODO(evanlinjin): Determine if this is still needed.
-//func DefaultKeysPath() string { return filepath.Join(pathutil.HomeDir(), ConfDir, "keys.json") }
-
 // DefaultAuthPath returns the default auth path.
-func DefaultAuthPath() string { return filepath.Join(pathutil.HomeDir(), ConfDir, "whitelist.json") }
+func DefaultAuthPath() string {
+	return filepath.Join(pathutil.HomeDir(), ConfDir, "whitelist.json")
+}
