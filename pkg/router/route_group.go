@@ -194,19 +194,27 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	defer rg.mu.Unlock()
+	//defer rg.mu.Unlock()
 
 	tp, err := rg.tp()
 	if err != nil {
+		rg.mu.Unlock()
 		return 0, err
 	}
 
 	rule, err := rg.rule()
 	if err != nil {
+		rg.mu.Unlock()
 		return 0, err
 	}
 
-	packet := routing.MakeDataPacket(rule.KeyRouteID(), p)
+	rg.mu.Unlock()
+
+	return rg.write(p, tp, rule)
+}
+
+func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
+	packet := routing.MakeDataPacket(rule.KeyRouteID(), data)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -221,9 +229,11 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 			return 0, err
 		}
 
+		fmt.Println()
+
 		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
 
-		return len(p), nil
+		return len(data), nil
 	}
 }
 
@@ -282,8 +292,10 @@ func (rg *RouteGroup) Close() error {
 
 	atomic.StoreInt32(&rg.closeInitiated, 1)
 
+	fmt.Println("BEFORE MU")
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
+	fmt.Println("MU ACQUIRED")
 
 	return rg.close(routing.CloseRequested)
 }
@@ -372,6 +384,7 @@ func (rg *RouteGroup) sendKeepAlive() error {
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
 // - Close all go channels.
 func (rg *RouteGroup) close(code routing.CloseCode) error {
+	fmt.Println("GOT IN close")
 	if rg.isClosed() {
 		return nil
 	}
