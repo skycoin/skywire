@@ -7,6 +7,13 @@
 .PHONY : docker-apps docker-bin docker-volume 
 .PHONY : docker-run docker-stop     
 
+VERSION := $(shell git describe)
+
+RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
+DATE := $(shell date -u $(RFC_3339))
+COMMIT := $(shell git rev-list -1 HEAD)
+
+PROJECT_BASE := github.com/SkycoinProject/skywire-mainnet
 OPTS?=GO111MODULE=on
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
 DOCKER_NETWORK?=SKYNET 
@@ -14,7 +21,16 @@ DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
 TEST_OPTS_NOCI?=-race -cover -timeout=5m -v
-BUILD_OPTS?=
+
+BUILDINFO_PATH := $(PROJECT_BASE)/pkg/util/buildinfo
+
+BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
+BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
+BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
+
+BUILDINFO?=-ldflags="$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)"
+
+BUILD_OPTS?=$(BUILDINFO)
 
 check: lint test ## Run linters and tests
 
@@ -75,9 +91,9 @@ install-linters: ## Install linters
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
 
 format: ## Formats the code. Must have goimports installed (use make install-linters).
-	${OPTS} goimports -w -local github.com/SkycoinProject/skywire ./pkg
-	${OPTS} goimports -w -local github.com/SkycoinProject/skywire ./cmd
-	${OPTS} goimports -w -local github.com/SkycoinProject/skywire ./internal
+	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
+	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
+	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
 
 dep: ## Sorts dependencies
 	${OPTS} go mod vendor -v
@@ -157,7 +173,6 @@ run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
 	-mkdir -p /tmp/syslog
 	-docker container rm syslog-ng -f
 	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest 
-
 
 integration-startup: ## Starts up the required transports between `skywire-visor`s of interactive testing environment
 	./integration/startup.sh
