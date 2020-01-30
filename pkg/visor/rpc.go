@@ -14,6 +14,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 const (
@@ -144,7 +145,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport,
 // Summary provides a summary of a Skywire Visor.
 type Summary struct {
 	PubKey          cipher.PubKey       `json:"local_pk"`
-	NodeVersion     string              `json:"node_version"`
+	BuildInfo       *buildinfo.Info     `json:"build_info"`
 	AppProtoVersion string              `json:"app_protocol_version"`
 	Apps            []*AppState         `json:"apps"`
 	Transports      []*TransportSummary `json:"transports"`
@@ -161,7 +162,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 	})
 	*out = Summary{
 		PubKey:          r.node.conf.Node.StaticPubKey,
-		NodeVersion:     Version,
+		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.node.Apps(),
 		Transports:      summaries,
