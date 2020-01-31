@@ -149,6 +149,14 @@ func defaultConfig() *visor.Config {
 
 	conf.AppServerSockFile = "/tmp/visor_" + pk.Hex() + ".sock"
 
+	if conf.Retrier == nil {
+		conf.Retrier = &visor.RetrierConfig{
+			BackoffTime: skyenv.BackoffTime,
+			Times:       skyenv.Times,
+			Factor:      skyenv.Factor,
+		}
+	}
+
 	return conf
 }
 

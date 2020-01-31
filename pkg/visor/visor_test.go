@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -151,7 +153,8 @@ func TestVisorStartClose(t *testing.T) {
 		DiscoveryClient: transport.NewDiscoveryMock(),
 	}
 
-	tm, err := transport.NewManager(network, tmConf)
+	retrier := netutil.NewRetrier(3*time.Second, 5, 2)
+	tm, err := transport.NewManager(network, tmConf, retrier)
 	visor.tm = tm
 	require.NoError(t, err)
 

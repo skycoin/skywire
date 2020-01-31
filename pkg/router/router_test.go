@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg"
@@ -685,7 +687,8 @@ func NewTestEnv(t *testing.T, nets []*snet.Network) *TestEnv {
 			LogStore:        transport.InMemoryTransportLogStore(),
 		}
 
-		ms[i], err = transport.NewManager(n, mConfs[i])
+		retrier := netutil.NewRetrier(3*time.Second, 5, 2)
+		ms[i], err = transport.NewManager(n, mConfs[i], retrier)
 		require.NoError(t, err)
 
 		go ms[i].Serve(context.TODO())

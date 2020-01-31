@@ -24,6 +24,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
@@ -162,7 +163,13 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
-	visor.tm, err = transport.NewManager(visor.n, tmConfig)
+
+	var retrier *netutil.Retrier
+	if cfg.Retrier != nil {
+		retrier = netutil.NewRetrier(time.Duration(cfg.Retrier.BackoffTime), cfg.Retrier.Times, cfg.Retrier.Factor)
+	}
+
+	visor.tm, err = transport.NewManager(visor.n, tmConfig, retrier)
 	if err != nil {
 		return nil, fmt.Errorf("transport manager: %s", err)
 	}

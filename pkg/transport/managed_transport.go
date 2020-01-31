@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 
@@ -54,10 +54,22 @@ type ManagedTransport struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
+
+	retrier *retrier
+}
+
+type retrier struct {
+	r     *netutil.Retrier
+	alive bool
 }
 
 // NewManagedTransport creates a new ManagedTransport.
-func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK cipher.PubKey, netName string) *ManagedTransport {
+func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK cipher.PubKey, netName string, r *netutil.Retrier) *ManagedTransport {
+	rt := &retrier{
+		r:     r,
+		alive: false,
+	}
+
 	mt := &ManagedTransport{
 		log:      logging.MustGetLogger(fmt.Sprintf("tp:%s", rPK.String()[:6])),
 		rPK:      rPK,
@@ -69,6 +81,7 @@ func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK c
 		LogEntry: new(LogEntry),
 		connCh:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
+		retrier:  rt,
 	}
 	mt.wg.Add(2)
 	return mt
@@ -152,11 +165,14 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 				// If there has not been any activity, ensure underlying 'write' tp is still up.
 				mt.connMx.Lock()
 				if mt.conn == nil {
-					if ok, err := mt.redial(ctx); err != nil {
-						mt.log.Warnf("failed to redial underlying connection (redial loop): %v", err)
-						if !ok {
-							mt.connMx.Unlock()
-							return
+					if !mt.retrier.alive {
+						if ok, err := mt.redialConn(ctx); err != nil {
+							mt.log.Warnf("failed to redial underlying connection (redial loop): %v", err)
+							if !ok {
+								mt.connMx.Unlock()
+								return
+							}
+							mt.retrier.alive = false
 						}
 					}
 				}
@@ -251,6 +267,17 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	}
 
 	return mt.setIfConnNil(ctx, tp)
+}
+
+// redialConn redials an underlying connection using an exponetial backoff
+func (mt *ManagedTransport) redialConn(ctx context.Context) (retry bool, err error) {
+	mt.retrier.alive = true
+	err = mt.retrier.r.Do(func() error {
+		retry, err = mt.redial(ctx)
+		return err
+	})
+
+	return
 }
 
 // redial only actually dials if transport is still registered in transport discovery.

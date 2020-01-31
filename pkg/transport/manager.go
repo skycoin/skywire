@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -43,23 +43,25 @@ type Manager struct {
 	serveOnce sync.Once // ensure we only serve once.
 	closeOnce sync.Once // ensure we only close once.
 	done      chan struct{}
+	retrier   *netutil.Retrier
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(n *snet.Network, config *ManagerConfig) (*Manager, error) {
+func NewManager(n *snet.Network, config *ManagerConfig, r *netutil.Retrier) (*Manager, error) {
 	nets := make(map[string]struct{})
 	for _, netType := range n.TransportNetworks() {
 		nets[netType] = struct{}{}
 	}
 	tm := &Manager{
-		Logger: logging.MustGetLogger("tp_manager"),
-		Conf:   config,
-		nets:   nets,
-		tps:    make(map[uuid.UUID]*ManagedTransport),
-		n:      n,
-		readCh: make(chan routing.Packet, 20),
-		done:   make(chan struct{}),
+		Logger:  logging.MustGetLogger("tp_manager"),
+		Conf:    config,
+		nets:    nets,
+		tps:     make(map[uuid.UUID]*ManagedTransport),
+		n:       n,
+		readCh:  make(chan routing.Packet, 20),
+		done:    make(chan struct{}),
+		retrier: r,
 	}
 	return tm, nil
 }
@@ -177,7 +179,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	mTp, ok := tm.tps[tpID]
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
-		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
+		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network(), tm.retrier)
 		if err := mTp.Accept(ctx, conn); err != nil {
 			return err
 		}
@@ -227,7 +229,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 		return tp, nil
 	}
 
-	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
+	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName, tm.retrier)
 	go mTp.Serve(tm.readCh, tm.done)
 	tm.tps[tpID] = mTp
 
@@ -366,7 +368,7 @@ func CreateTransportPair(
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
 		LogStore:        ls0,
-	})
+	}, nil)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -381,7 +383,7 @@ func CreateTransportPair(
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,
 		LogStore:        ls1,
-	})
+	}, nil)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
