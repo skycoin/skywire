@@ -278,8 +278,6 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 			return 0, err
 		}
 
-		fmt.Println()
-
 		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
 
 		return len(data), nil
