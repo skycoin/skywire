@@ -11,22 +11,22 @@ go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/app  -run TestProtocol >> ./logs/pkg/TestProtocol.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/app  -run TestProtocolParallel >> ./logs/pkg/TestProtocolParallel.log
  
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor -run TestNewNode >> ./logs/pkg/TestNewNode.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor -run TestNewVisor >> ./logs/pkg/TestNewVisor.log
 
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestDmsgDiscovery >> ./logs/pkg/TestDmsgDiscovery.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestTransportDiscovery >> ./logs/pkg/TestTransportDiscovery.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestTransportLogStore >> ./logs/pkg/TestTransportLogStore.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestRoutingTable >> ./logs/pkg/TestRoutingTable.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestAppsConfig >> ./logs/pkg/TestAppsConfig.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestAppsDir >> ./logs/pkg/TestAppsDir.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestLocalDir >> ./logs/pkg/TestLocalDir.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestNewNode >> ./logs/pkg/TestNewNode.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestNodeStartClose >> ./logs/pkg/TestNodeStartClose.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestNodeSpawnApp >> ./logs/pkg/TestNodeSpawnApp.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestNodeSpawnAppValidations >> ./logs/pkg/TestNodeSpawnAppValidations.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestListApps >> ./logs/pkg/TestListApps.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestStartStopApp >> ./logs/pkg/TestStartStopApp.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/node	 -run TestRPC >> ./logs/pkg/TestRPC.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestDmsgDiscovery >> ./logs/pkg/TestDmsgDiscovery.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestTransportDiscovery >> ./logs/pkg/TestTransportDiscovery.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestTransportLogStore >> ./logs/pkg/TestTransportLogStore.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestRoutingTable >> ./logs/pkg/TestRoutingTable.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestAppsConfig >> ./logs/pkg/TestAppsConfig.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestAppsDir >> ./logs/pkg/TestAppsDir.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestLocalDir >> ./logs/pkg/TestLocalDir.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestNewVisor >> ./logs/pkg/TestNewVisor.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestVisorStartClose >> ./logs/pkg/TestVisorStartClose.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestVisorSpawnApp >> ./logs/pkg/TestVisorSpawnApp.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestVisorSpawnAppValidations >> ./logs/pkg/TestVisorSpawnAppValidations.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestListApps >> ./logs/pkg/TestListApps.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestStartStopApp >> ./logs/pkg/TestStartStopApp.log
+go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestRPC >> ./logs/pkg/TestRPC.log
 
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/router -run  TestAppManagerInit >> ./logs/pkg/TestAppManagerInit.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/router -run  TestAppManagerSetupLoop >> ./logs/pkg/TestAppManagerSetupLoop.log
