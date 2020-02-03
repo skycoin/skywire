@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20200129011427-cd48108c339f
+# github.com/SkycoinProject/dmsg v0.0.0-20200203035036-dbbed345b710
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
@@ -105,7 +105,7 @@ golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9
+# golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows

@@ -3,7 +3,7 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.13
 
 require (
-	github.com/SkycoinProject/dmsg v0.0.0-20200129011427-cd48108c339f
+	github.com/SkycoinProject/dmsg v0.0.0-20200203035036-dbbed345b710
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -25,7 +25,7 @@ require (
 	go.etcd.io/bbolt v1.3.3
 	golang.org/x/crypto v0.0.0-20200128174031-69ecbb4d6d5d
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
-	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9 // indirect
+	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
 )
 
 //replace github.com/SkycoinProject/dmsg => ../dmsg
