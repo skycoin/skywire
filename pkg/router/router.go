@@ -108,25 +108,25 @@ type Router interface {
 	SetupIsTrusted(cipher.PubKey) bool
 }
 
-// Router implements node.PacketRouter. It manages routing table by
+// Router implements visor.PacketRouter. It manages routing table by
 // communicating with setup nodes, forward packets according to local
 // rules and manages loops for apps.
 type router struct {
-	mx           sync.Mutex
-	conf         *Config
-	logger       *logging.Logger
-	n            *snet.Network
-	sl           *snet.Listener
-	trustedNodes map[cipher.PubKey]struct{}
-	tm           *transport.Manager
-	rt           routing.Table
-	rfc          rfclient.Client                         // route finder client
-	rgs          map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
-	rpcSrv       *rpc.Server
-	accept       chan routing.EdgeRules
-	done         chan struct{}
-	wg           sync.WaitGroup
-	once         sync.Once
+	mx            sync.Mutex
+	conf          *Config
+	logger        *logging.Logger
+	n             *snet.Network
+	sl            *snet.Listener
+	trustedVisors map[cipher.PubKey]struct{}
+	tm            *transport.Manager
+	rt            routing.Table
+	rfc           rfclient.Client                         // route finder client
+	rgs           map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
+	rpcSrv        *rpc.Server
+	accept        chan routing.EdgeRules
+	done          chan struct{}
+	wg            sync.WaitGroup
+	once          sync.Once
 }
 
 // New constructs a new Router.
@@ -138,24 +138,24 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		return nil, err
 	}
 
-	trustedNodes := make(map[cipher.PubKey]struct{})
+	trustedVisors := make(map[cipher.PubKey]struct{})
 	for _, node := range config.SetupNodes {
-		trustedNodes[node] = struct{}{}
+		trustedVisors[node] = struct{}{}
 	}
 
 	r := &router{
-		conf:         config,
-		logger:       config.Logger,
-		n:            n,
-		tm:           config.TransportManager,
-		rt:           config.RoutingTable,
-		sl:           sl,
-		rfc:          config.RouteFinder,
-		rgs:          make(map[routing.RouteDescriptor]*RouteGroup),
-		rpcSrv:       rpc.NewServer(),
-		accept:       make(chan routing.EdgeRules, acceptSize),
-		done:         make(chan struct{}),
-		trustedNodes: trustedNodes,
+		conf:          config,
+		logger:        config.Logger,
+		n:             n,
+		tm:            config.TransportManager,
+		rt:            config.RoutingTable,
+		sl:            sl,
+		rfc:           config.RouteFinder,
+		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
+		rpcSrv:        rpc.NewServer(),
+		accept:        make(chan routing.EdgeRules, acceptSize),
+		done:          make(chan struct{}),
+		trustedVisors: trustedVisors,
 	}
 
 	if err := r.rpcSrv.Register(NewRPCGateway(r)); err != nil {
@@ -575,7 +575,7 @@ fetchRoutesAgain:
 
 // SetupIsTrusted checks if setup node is trusted.
 func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
-	_, ok := r.trustedNodes[sPK]
+	_, ok := r.trustedVisors[sPK]
 	return ok
 }
 

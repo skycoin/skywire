@@ -1,6 +1,6 @@
 # Hypervisor
 
-Hypervisor exposes node management operations via web API.
+Hypervisor exposes visor management operations via web API.
 
 **Generate config file:**
 
