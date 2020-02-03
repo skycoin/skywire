@@ -513,11 +513,11 @@ func (node *Node) persistPID(name string, pid appcommon.ProcID) {
 
 // StopApp stops running App.
 func (node *Node) StopApp(appName string) error {
-	node.logger.Infof("Stopping app %s and closing ports", appName)
-
 	if !node.procManager.Exists(appName) {
 		return ErrUnknownApp
 	}
+
+	node.logger.Infof("Stopping app %s and closing ports", appName)
 
 	if err := node.procManager.Stop(appName); err != nil {
 		node.logger.Warn("Failed to stop app: ", err)
