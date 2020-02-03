@@ -41,6 +41,7 @@ var (
 	log = logging.MustGetLogger("hypervisor") // nolint: gochecknoglobals
 )
 
+// VisorConn represents a visor connection.
 type VisorConn struct {
 	Addr   dmsg.Addr
 	Client visor.RPCClient
@@ -54,8 +55,8 @@ type Hypervisor struct {
 	mu     *sync.RWMutex
 }
 
-// NewNode creates a new Hypervisor.
-func NewNode(config Config) (*Hypervisor, error) {
+// New creates a new Hypervisor.
+func New(config Config) (*Hypervisor, error) {
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
 	if err != nil {
 		return nil, err
@@ -148,9 +149,9 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/user", m.users.UserInfo())
 			r.Post("/change-password", m.users.ChangePassword())
 			r.Get("/visors", m.getVisors())
+			r.Get("/visors/{pk}", m.getVisor())
 			r.Get("/visors/{pk}/health", m.getHealth())
 			r.Get("/visors/{pk}/uptime", m.getUptime())
-			r.Get("/visors/{pk}", m.getVisor())
 			r.Get("/visors/{pk}/apps", m.getApps())
 			r.Get("/visors/{pk}/apps/{app}", m.getApp())
 			r.Put("/visors/{pk}/apps/{app}", m.putApp())
