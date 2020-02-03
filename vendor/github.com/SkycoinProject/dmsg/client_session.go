@@ -34,11 +34,7 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 	defer func() {
 		if err != nil {
 			cs.log.WithError(dStr.Close()).
-<<<<<<< HEAD
 				Debug("On DialStream() failure, close stream resulted in error.") // TODO(evanlinjin): Race condition?
-=======
-				Debug("Stream closed on DialStream() failure.")
->>>>>>> 6ebf2252f61fff6eda902e0ecbde45f5a5647089
 		}
 	}()
 

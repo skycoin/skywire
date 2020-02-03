@@ -304,8 +304,8 @@ func (visor *Visor) Start() error {
 }
 
 // RunDaemon starts a skywire-peering-daemon as an external process
-func (node *Node) RunDaemon() error {
-	node.Onspd = true
+func (visor *Visor) RunDaemon() error {
+	visor.Onspd = true
 	bin, err := exec.LookPath("daemon")
 	if err != nil {
 		return fmt.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
@@ -317,28 +317,28 @@ func (node *Node) RunDaemon() error {
 	}
 
 	namedPipe := filepath.Join(dir, "stdout")
-	lAddr := node.conf.STCP.LocalAddr
-	pubKey := node.conf.Node.StaticPubKey.Hex()
+	lAddr := visor.conf.STCP.LocalAddr
+	pubKey := visor.conf.Visor.StaticPubKey.Hex()
 	err = syscall.Mkfifo(namedPipe, 0600)
 	if err != nil {
 		return err
 	}
 
-	node.spdCmd = exec.Command(bin, pubKey, lAddr, namedPipe)
-	if err := execute(node.spdCmd); err != nil {
+	visor.spdCmd = exec.Command(bin, pubKey, lAddr, namedPipe)
+	if err := execute(visor.spdCmd); err != nil {
 		return fmt.Errorf("Failed to start daemon as an external process: %s", err)
 	}
 
-	node.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
+	visor.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
 	stdOut, err := os.OpenFile(namedPipe, os.O_RDONLY, 0600)
 	if err != nil {
 		return err
 	}
 
-	if node.conf.STCP.PubKeyTable == nil {
-		node.conf.STCP.PubKeyTable = make(map[cipher.PubKey]string)
+	if visor.conf.STCP.PubKeyTable == nil {
+		visor.conf.STCP.PubKeyTable = make(map[cipher.PubKey]string)
 	}
-	pubKeyTable := node.conf.STCP.PubKeyTable
+	pubKeyTable := visor.conf.STCP.PubKeyTable
 	c := make(chan notify.EventInfo, 5)
 
 	err = watchNamedPipe(namedPipe, c)
@@ -346,25 +346,25 @@ func (node *Node) RunDaemon() error {
 		return err
 	}
 
-	readSPDPacket(stdOut, c, pubKeyTable, node.conf.Interfaces.RPCAddress)
+	readSPDPacket(stdOut, c, pubKeyTable, visor.conf.Interfaces.RPCAddress)
 
 	return nil
 }
 
 // StopDaemon kills the the skywire-peering-daemon started as an external process
 // and all child processes.
-func (node *Node) StopDaemon() {
-	node.Onspd = false
-	node.logger.Info("Shutting down skywire-peering-daemon")
-	if err := node.spdCmd.Process.Kill(); err != nil {
-		node.logger.Errorf("Failed to kill skywire-peering-daemon process: %s", err)
+func (visor *Visor) StopDaemon() {
+	visor.Onspd = false
+	visor.logger.Info("Shutting down skywire-peering-daemon")
+	if err := visor.spdCmd.Process.Kill(); err != nil {
+		visor.logger.Errorf("Failed to kill skywire-peering-daemon process: %s", err)
 	}
 
-	node.logger.Info("Skywire-peering-daemon closed successfully")
+	visor.logger.Info("Skywire-peering-daemon closed successfully")
 }
 
-func (node *Node) dir() string {
-	return pathutil.NodeDir(node.conf.Node.StaticPubKey)
+func (visor *Visor) dir() string {
+	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey)
 }
 
 func (visor *Visor) pidFile() *os.File {
