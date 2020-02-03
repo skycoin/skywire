@@ -66,7 +66,7 @@ func TestNode(t *testing.T) {
 
 	reservedIDs := []routing.RouteID{1, 2}
 
-	// TEST: Emulates the communication between 4 visor nodes and a setup node,
+	// TEST: Emulates the communication between 4 visors and a setup node,
 	// where the first client visor initiates a route to the last.
 	t.Run("DialRouteGroup", func(t *testing.T) {
 		testDialRouteGroup(t, keys, nEnv, reservedIDs)
@@ -75,7 +75,7 @@ func TestNode(t *testing.T) {
 
 func testDialRouteGroup(t *testing.T, keys []snettest.KeyPair, nEnv *snettest.Env, reservedIDs []routing.RouteID) {
 	// client index 0 is for setup node.
-	// clients index 1 to 4 are for visor nodes.
+	// clients index 1 to 4 are for visors.
 	clients, closeClients := prepClients(t, keys, nEnv, reservedIDs, 5)
 	defer closeClients()
 
