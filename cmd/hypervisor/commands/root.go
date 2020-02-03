@@ -35,8 +35,8 @@ func init() {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "./hypervisor-config.json", "hypervisor config path")
 	rootCmd.Flags().BoolVarP(&mock, "mock", "m", false, "whether to run hypervisor with mock data")
 	rootCmd.Flags().BoolVar(&mockEnableAuth, "mock-enable-auth", false, "whether to enable user management in mock mode")
-	rootCmd.Flags().IntVar(&mockVisors, "mock-visors", 5, "number of app visors to have in mock mode")
-	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock app visor")
+	rootCmd.Flags().IntVar(&mockVisors, "mock-visors", 5, "number of visors to have in mock mode")
+	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock visor")
 	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per visor")
 }
 
@@ -66,7 +66,7 @@ var rootCmd = &cobra.Command{
 			rpcAddr  = config.Interfaces.RPCAddr
 		)
 
-		m, err := hypervisor.NewNode(config)
+		m, err := hypervisor.New(config)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
