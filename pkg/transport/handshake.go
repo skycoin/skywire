@@ -130,7 +130,7 @@ func MakeSettlementHS(init bool) SettlementHS {
 			log.WithError(err).Error("Failed to register transports")
 		}
 
-		// inform initiating visor visor.
+		// inform initiating visor.
 		if _, err := conn.Write([]byte{1}); err != nil {
 			return fmt.Errorf("failed to accept transport settlement: write failed: %v", err)
 		}

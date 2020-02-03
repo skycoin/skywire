@@ -26,7 +26,7 @@
             "visors"
           ]
         },
-        "description": "Provides a summary of all connected app visors."
+        "description": "Provides a summary of all connected visors."
       },
       "response": [
         {
