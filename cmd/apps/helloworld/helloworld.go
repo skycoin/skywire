@@ -55,7 +55,7 @@ func main() {
 
 				log.Printf("Message from %s: %s\n", conn.RemoteAddr().String(), string(buf))
 				if _, err := conn.Write([]byte("pong")); err != nil {
-					log.Printf("Failed to write to a remote node: %v\n", err)
+					log.Printf("Failed to write to a remote visor: %v\n", err)
 					// TODO: close conn
 				}
 			}()
@@ -77,7 +77,7 @@ func main() {
 	}
 
 	if _, err := conn.Write([]byte("ping")); err != nil {
-		log.Fatalf("Failed to write to a remote node: %v\n", err)
+		log.Fatalf("Failed to write to a remote visor: %v\n", err)
 	}
 
 	buf := make([]byte, 4)

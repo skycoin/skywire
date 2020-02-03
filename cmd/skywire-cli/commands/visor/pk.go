@@ -1,4 +1,4 @@
-package node
+package visor
 
 import (
 	"fmt"
@@ -12,13 +12,13 @@ func init() {
 
 var pkCmd = &cobra.Command{
 	Use:   "pk",
-	Short: "Obtains the public key of the node",
+	Short: "Obtains the public key of the visor",
 	Run: func(_ *cobra.Command, _ []string) {
 
 		client := rpcClient()
 		summary, err := client.Summary()
 		if err != nil {
-			log.Fatal("Failed to connect:", err)
+			logger.Fatal("Failed to connect:", err)
 		}
 
 		fmt.Println(summary.PubKey)

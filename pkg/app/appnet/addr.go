@@ -29,7 +29,7 @@ func (a Addr) Network() string {
 	return string(a.Net)
 }
 
-// String returns public key and port of node split by colon.
+// String returns public key and port of visor split by colon.
 func (a Addr) String() string {
 	if a.Port == 0 {
 		return fmt.Sprintf("%s:~", a.PubKey)

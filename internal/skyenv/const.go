@@ -23,8 +23,8 @@ const (
 // Default dmsg ports.
 const (
 	DmsgSetupPort      = uint16(36)  // Listening port of a setup node.
-	DmsgAwaitSetupPort = uint16(136) // Listening port of a visor node for setup operations.
-	DmsgTransportPort  = uint16(45)  // Listening port of a visor node for incoming transports.
+	DmsgAwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
+	DmsgTransportPort  = uint16(45)  // Listening port of a visor for incoming transports.
 )
 
 // Default dmsgpty constants.
