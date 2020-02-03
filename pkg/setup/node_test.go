@@ -67,7 +67,7 @@ func TestNode(t *testing.T) {
 	reservedIDs := []routing.RouteID{1, 2}
 
 	// TEST: Emulates the communication between 4 visor nodes and a setup node,
-	// where the first client node initiates a route to the last.
+	// where the first client visor initiates a route to the last.
 	t.Run("DialRouteGroup", func(t *testing.T) {
 		testDialRouteGroup(t, keys, nEnv, reservedIDs)
 	})
@@ -227,7 +227,7 @@ func prepClients(
 
 func prepRouter(client *clientWithDMSGAddrAndListener, reservedIDs []routing.RouteID, last bool) *router.MockRouter {
 	r := &router.MockRouter{}
-	// passing two rules to each node (forward and reverse routes). Simulate
+	// passing two rules to each visor (forward and reverse routes). Simulate
 	// applying intermediary rules.
 	r.On("SaveRoutingRules", mock.Anything, mock.Anything).
 		Return(func(rules ...routing.Rule) error {
@@ -238,7 +238,7 @@ func prepRouter(client *clientWithDMSGAddrAndListener, reservedIDs []routing.Rou
 	// simulate reserving IDs.
 	r.On("ReserveKeys", 2).Return(reservedIDs, testhelpers.NoErr)
 
-	// destination node. Simulate applying edge rules.
+	// destination visor. Simulate applying edge rules.
 	if last {
 		r.On("IntroduceRules", mock.Anything).Return(func(rules routing.EdgeRules) error {
 			client.AppliedEdgeRules = rules
