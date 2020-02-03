@@ -68,7 +68,7 @@ var rootCmd = &cobra.Command{
 
 		sn, err := setup.NewNode(conf, metrics.NewPrometheus("setupnode"))
 		if err != nil {
-			logger.Fatal("Failed to setup Node: ", err)
+			logger.Fatal("Failed to create a setup node: ", err)
 		}
 
 		go func() {
