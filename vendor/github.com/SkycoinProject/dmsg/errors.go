@@ -30,7 +30,7 @@ var (
 	ErrReqInvalidSrcPort   = registerErr(Error{code: 304, msg: "request has invalid source port"})
 	ErrReqInvalidDstPort   = registerErr(Error{code: 305, msg: "request has invalid destination port"})
 	ErrReqNoListener       = registerErr(Error{code: 306, msg: "request has no associated listener"})
-	ErrReqNoSession        = registerErr(Error{code: 307, msg: "request has no associated session on the dmsg server"})
+	ErrReqNoNextSession    = registerErr(Error{code: 307, msg: "request cannot be forwarded because the next session is non-existent"})
 
 	ErrDialRespInvalidSig  = registerErr(Error{code: 350, msg: "response has invalid signature"})
 	ErrDialRespInvalidHash = registerErr(Error{code: 351, msg: "response has invalid hash of associated request"})
