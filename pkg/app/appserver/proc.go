@@ -20,6 +20,7 @@ type Proc struct {
 	config appcommon.Config
 	log    *logging.Logger
 	cmd    *exec.Cmd
+	doneC  chan struct{}
 }
 
 // NewProc constructs `Proc`.
@@ -52,6 +53,7 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, std
 		config: c,
 		log:    log,
 		cmd:    cmd,
+		doneC:  make(chan struct{}),
 	}, nil
 }
 
@@ -62,12 +64,21 @@ func (p *Proc) Start() error {
 
 // Stop stops the application.
 func (p *Proc) Stop() error {
-	return p.cmd.Process.Signal(os.Interrupt)
+	err := p.cmd.Process.Signal(os.Interrupt)
+	if err != nil {
+		return err
+	}
+
+	<-p.doneC
+
+	return nil
 }
 
 // Wait waits for the application cmd to exit.
 func (p *Proc) Wait() error {
-	return p.cmd.Wait()
+	err := p.cmd.Wait()
+	close(p.doneC)
+	return err
 }
 
 // getBinaryPath formats binary path using app dir, name and version.
