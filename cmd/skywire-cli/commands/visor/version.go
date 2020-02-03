@@ -1,6 +1,7 @@
-package node
+package visor
 
 import (
+	"log"
 	"os"
 
 	"github.com/spf13/cobra"

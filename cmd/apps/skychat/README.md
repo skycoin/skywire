@@ -8,7 +8,7 @@ Chat only supports one WEB client user at a time.
 
 ## Local setup
 
-Create 2 node config files:
+Create 2 visor config files:
 
 `skywire1.json`
 
@@ -41,7 +41,7 @@ Create 2 node config files:
 }
 ```
 
-Compile binaries and start 2 nodes:
+Compile binaries and start 2 visors:
 
 ```bash
 $ go build -o apps/skychat.v1.0 ./cmd/apps/skychat

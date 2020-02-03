@@ -19,7 +19,7 @@ import (
 
 const (
 	// RPCPrefix is the prefix used with all RPC calls.
-	RPCPrefix = "app-node"
+	RPCPrefix = "app-visor"
 )
 
 var (
@@ -36,9 +36,9 @@ var (
 	ErrMalformedRestartContext = errors.New("restart context is malformed")
 )
 
-// RPC defines RPC methods for Node.
+// RPC defines RPC methods for Visor.
 type RPC struct {
-	node *Node
+	visor *Visor
 }
 
 /*
@@ -58,16 +58,16 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) error {
 	out.RouteFinder = http.StatusOK
 	out.SetupNode = http.StatusOK
 
-	_, err := r.node.conf.TransportDiscovery()
+	_, err := r.visor.conf.TransportDiscovery()
 	if err != nil {
 		out.TransportDiscovery = http.StatusNotFound
 	}
 
-	if r.node.conf.Routing.RouteFinder == "" {
+	if r.visor.conf.Routing.RouteFinder == "" {
 		out.RouteFinder = http.StatusNotFound
 	}
 
-	if len(r.node.conf.Routing.SetupNodes) == 0 {
+	if len(r.visor.conf.Routing.SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
 	}
 
@@ -80,7 +80,7 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) error {
 
 // Uptime returns for how long the visor has been running in seconds
 func (r *RPC) Uptime(_ *struct{}, out *float64) error {
-	*out = time.Since(r.node.startedAt).Seconds()
+	*out = time.Since(r.visor.startedAt).Seconds()
 	return nil
 }
 
@@ -98,7 +98,7 @@ type AppLogsRequest struct {
 
 // LogsSince returns all logs from an specific app since the timestamp
 func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) error {
-	ls, err := app.NewLogStore(filepath.Join(r.node.dir(), in.AppName), in.AppName, "bbolt")
+	ls, err := app.NewLogStore(filepath.Join(r.visor.dir(), in.AppName), in.AppName, "bbolt")
 	if err != nil {
 		return err
 	}
@@ -155,18 +155,18 @@ type Summary struct {
 // Summary provides a summary of the AppNode.
 func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 	var summaries []*TransportSummary
-	r.node.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+	r.visor.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		summaries = append(summaries,
-			newTransportSummary(r.node.tm, tp, false, r.node.router.SetupIsTrusted(tp.Remote())))
+			newTransportSummary(r.visor.tm, tp, false, r.visor.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.node.conf.Node.StaticPubKey,
+		PubKey:          r.visor.conf.Visor.StaticPubKey,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
-		Apps:            r.node.Apps(),
+		Apps:            r.visor.Apps(),
 		Transports:      summaries,
-		RoutesCount:     r.node.rt.Count(),
+		RoutesCount:     r.visor.rt.Count(),
 	}
 	return nil
 }
@@ -174,7 +174,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 // Exec executes a given command in cmd and writes its output to out.
 func (r *RPC) Exec(cmd *string, out *[]byte) error {
 	var err error
-	*out, err = r.node.Exec(*cmd)
+	*out, err = r.visor.Exec(*cmd)
 	return err
 }
 
@@ -182,20 +182,20 @@ func (r *RPC) Exec(cmd *string, out *[]byte) error {
 	<<< APP MANAGEMENT >>>
 */
 
-// Apps returns list of Apps registered on the Node.
+// Apps returns list of Apps registered on the Visor.
 func (r *RPC) Apps(_ *struct{}, reply *[]*AppState) error {
-	*reply = r.node.Apps()
+	*reply = r.visor.Apps()
 	return nil
 }
 
 // StartApp start App with provided name.
 func (r *RPC) StartApp(name *string, _ *struct{}) error {
-	return r.node.StartApp(*name)
+	return r.visor.StartApp(*name)
 }
 
 // StopApp stops App with provided name.
 func (r *RPC) StopApp(name *string, _ *struct{}) error {
-	return r.node.StopApp(*name)
+	return r.visor.StopApp(*name)
 }
 
 // SetAutoStartIn is input for SetAutoStart.
@@ -206,26 +206,26 @@ type SetAutoStartIn struct {
 
 // SetAutoStart sets auto-start settings for an app.
 func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) error {
-	return r.node.setAutoStart(in.AppName, in.AutoStart)
+	return r.visor.setAutoStart(in.AppName, in.AutoStart)
 }
 
 // SetSocksPassword sets password for skysocks.
 func (r *RPC) SetSocksPassword(in *string, _ *struct{}) error {
-	return r.node.setSocksPassword(*in)
+	return r.visor.setSocksPassword(*in)
 }
 
 // SetSocksClientPK sets PK for skysocks-client.
 func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) error {
-	return r.node.setSocksClientPK(*in)
+	return r.visor.setSocksClientPK(*in)
 }
 
 /*
 	<<< TRANSPORT MANAGEMENT >>>
 */
 
-// TransportTypes lists all transport types supported by the Node.
+// TransportTypes lists all transport types supported by the Visor.
 func (r *RPC) TransportTypes(_ *struct{}, out *[]string) error {
-	*out = r.node.tm.Networks()
+	*out = r.visor.tm.Networks()
 	return nil
 }
 
@@ -236,7 +236,7 @@ type TransportsIn struct {
 	ShowLogs      bool
 }
 
-// Transports lists Transports of the Node and provides a summary of each.
+// Transports lists Transports of the Visor and provides a summary of each.
 func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) error {
 	typeIncluded := func(tType string) bool {
 		if in.FilterTypes != nil {
@@ -260,9 +260,9 @@ func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) error {
 		}
 		return true
 	}
-	r.node.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if typeIncluded(tp.Type()) && pkIncluded(r.node.tm.Local(), tp.Remote()) {
-			*out = append(*out, newTransportSummary(r.node.tm, tp, in.ShowLogs, r.node.router.SetupIsTrusted(tp.Remote())))
+	r.visor.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if typeIncluded(tp.Type()) && pkIncluded(r.visor.tm.Local(), tp.Remote()) {
+			*out = append(*out, newTransportSummary(r.visor.tm, tp, in.ShowLogs, r.visor.router.SetupIsTrusted(tp.Remote())))
 		}
 		return true
 	})
@@ -271,11 +271,11 @@ func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) error {
 
 // Transport obtains a Transport Summary of Transport of given Transport ID.
 func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) error {
-	tp := r.node.tm.Transport(*in)
+	tp := r.visor.tm.Transport(*in)
 	if tp == nil {
 		return ErrNotFound
 	}
-	*out = *newTransportSummary(r.node.tm, tp, true, r.node.router.SetupIsTrusted(tp.Remote()))
+	*out = *newTransportSummary(r.visor.tm, tp, true, r.visor.router.SetupIsTrusted(tp.Remote()))
 	return nil
 }
 
@@ -287,7 +287,7 @@ type AddTransportIn struct {
 	Timeout  time.Duration
 }
 
-// AddTransport creates a transport for the node.
+// AddTransport creates a transport for the visor.
 func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
 	ctx := context.Background()
 
@@ -297,18 +297,18 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
 		defer cancel()
 	}
 
-	tp, err := r.node.tm.SaveTransport(ctx, in.RemotePK, in.TpType)
+	tp, err := r.visor.tm.SaveTransport(ctx, in.RemotePK, in.TpType)
 	if err != nil {
 		return err
 	}
 
-	*out = *newTransportSummary(r.node.tm, tp, false, r.node.router.SetupIsTrusted(tp.Remote()))
+	*out = *newTransportSummary(r.visor.tm, tp, false, r.visor.router.SetupIsTrusted(tp.Remote()))
 	return nil
 }
 
-// RemoveTransport removes a Transport from the node.
+// RemoveTransport removes a Transport from the visor.
 func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) error {
-	r.node.tm.DeleteTransport(*tid)
+	r.visor.tm.DeleteTransport(*tid)
 	return nil
 }
 
@@ -318,7 +318,7 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) error {
 
 // DiscoverTransportsByPK obtains available transports via the transport discovery via given public key.
 func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) error {
-	tpD, err := r.node.conf.TransportDiscovery()
+	tpD, err := r.visor.conf.TransportDiscovery()
 	if err != nil {
 		return err
 	}
@@ -334,7 +334,7 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 
 // DiscoverTransportByID obtains available transports via the transport discovery via a given transport ID.
 func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) error {
-	tpD, err := r.node.conf.TransportDiscovery()
+	tpD, err := r.visor.conf.TransportDiscovery()
 	if err != nil {
 		return err
 	}
@@ -354,25 +354,25 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatu
 
 // RoutingRules obtains all routing rules of the RoutingTable.
 func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) error {
-	*out = r.node.rt.AllRules()
+	*out = r.visor.rt.AllRules()
 	return nil
 }
 
 // RoutingRule obtains a routing rule of given RouteID.
 func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) error {
 	var err error
-	*rule, err = r.node.rt.Rule(*key)
+	*rule, err = r.visor.rt.Rule(*key)
 	return err
 }
 
 // SaveRoutingRule saves a routing rule.
 func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) error {
-	return r.node.rt.SaveRule(*in)
+	return r.visor.rt.SaveRule(*in)
 }
 
 // RemoveRoutingRule removes a RoutingRule based on given RouteID key.
 func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) error {
-	r.node.rt.DelRules([]routing.RouteID{*key})
+	r.visor.rt.DelRules([]routing.RouteID{*key})
 	return nil
 }
 
@@ -391,14 +391,14 @@ type LoopInfo struct {
 func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
 	var loops []LoopInfo
 
-	rules := r.node.rt.AllRules()
+	rules := r.visor.rt.AllRules()
 	for _, rule := range rules {
 		if rule.Type() != routing.RuleConsume {
 			continue
 		}
 
 		fwdRID := rule.NextRouteID()
-		rule, err := r.node.rt.Rule(fwdRID)
+		rule, err := r.visor.rt.Rule(fwdRID)
 		if err != nil {
 			return err
 		}
@@ -430,9 +430,9 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 		}
 	}()
 
-	if r.node.restartCtx == nil {
+	if r.visor.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
 
-	return r.node.restartCtx.Start()
+	return r.visor.restartCtx.Start()
 }
