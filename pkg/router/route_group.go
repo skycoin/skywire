@@ -136,7 +136,6 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 	}
 
 	if rg.readDeadline.Closed() {
-		rg.logger.Infoln("TIMEOUT ERROR?")
 		return 0, timeoutError{}
 	}
 
@@ -145,37 +144,6 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 	}
 
 	return rg.read(p)
-}
-
-// read reads incoming data. It tries to fetch the data from the internal buffer.
-// If buffer is empty it blocks on receiving from the data channel
-func (rg *RouteGroup) read(p []byte) (int, error) {
-	// first try the buffer for any already received data
-	rg.mu.Lock()
-	if rg.readBuf.Len() > 0 {
-		n, err := rg.readBuf.Read(p)
-		rg.mu.Unlock()
-
-		return n, err
-	}
-	rg.mu.Unlock()
-
-	select {
-	case <-rg.readDeadline.Wait():
-		return 0, timeoutError{}
-	case data, ok := <-rg.readCh:
-		if !ok || len(data) == 0 {
-			// route group got closed or empty data received. Behavior on the empty
-			// data is equivalent to the behavior of `read()` unix syscall as described here:
-			// https://www.ibm.com/support/knowledgecenter/en/SSLTBW_2.4.0/com.ibm.zos.v2r4.bpxbd00/rtrea.htm
-			return 0, io.EOF
-		}
-
-		rg.mu.Lock()
-		defer rg.mu.Unlock()
-
-		return ioutil.BufRead(&rg.readBuf, data, p)
-	}
 }
 
 // Write writes payload to a RouteGroup
@@ -194,71 +162,21 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	defer rg.mu.Unlock()
-
 	tp, err := rg.tp()
 	if err != nil {
+		rg.mu.Unlock()
 		return 0, err
 	}
 
 	rule, err := rg.rule()
 	if err != nil {
+		rg.mu.Unlock()
 		return 0, err
 	}
+	// we don't need to keep holding mutex from this point on
+	rg.mu.Unlock()
 
-	packet := routing.MakeDataPacket(rule.KeyRouteID(), p)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	errCh := rg.writePacketAsync(ctx, tp, packet)
-	defer cancel()
-
-	select {
-	case <-rg.writeDeadline.Wait():
-		return 0, timeoutError{}
-	case err := <-errCh:
-		if err != nil {
-			return 0, err
-		}
-
-		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
-
-		return len(p), nil
-	}
-}
-
-func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet) chan error {
-	errCh := make(chan error)
-	go func() {
-		errCh <- tp.WritePacket(ctx, packet)
-		close(errCh)
-	}()
-
-	return errCh
-}
-
-func (rg *RouteGroup) rule() (routing.Rule, error) {
-	if len(rg.fwd) == 0 {
-		return nil, ErrNoRules
-	}
-
-	rule := rg.fwd[0]
-
-	return rule, nil
-}
-
-func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
-	if len(rg.tps) == 0 {
-		return nil, ErrNoTransports
-	}
-
-	tp := rg.tps[0]
-
-	if tp == nil {
-		return nil, ErrBadTransport
-	}
-
-	return tp, nil
+	return rg.write(p, tp, rule)
 }
 
 // Close closes a RouteGroup.
@@ -313,6 +231,103 @@ func (rg *RouteGroup) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
+// read reads incoming data. It tries to fetch the data from the internal buffer.
+// If buffer is empty it blocks on receiving from the data channel
+func (rg *RouteGroup) read(p []byte) (int, error) {
+	// first try the buffer for any already received data
+	rg.mu.Lock()
+	if rg.readBuf.Len() > 0 {
+		n, err := rg.readBuf.Read(p)
+		rg.mu.Unlock()
+
+		return n, err
+	}
+	rg.mu.Unlock()
+
+	select {
+	case <-rg.readDeadline.Wait():
+		return 0, timeoutError{}
+	case data, ok := <-rg.readCh:
+		if !ok || len(data) == 0 {
+			// route group got closed or empty data received. Behavior on the empty
+			// data is equivalent to the behavior of `read()` unix syscall as described here:
+			// https://www.ibm.com/support/knowledgecenter/en/SSLTBW_2.4.0/com.ibm.zos.v2r4.bpxbd00/rtrea.htm
+			return 0, io.EOF
+		}
+
+		rg.mu.Lock()
+		defer rg.mu.Unlock()
+
+		return ioutil.BufRead(&rg.readBuf, data, p)
+	}
+}
+
+func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
+	packet := routing.MakeDataPacket(rule.KeyRouteID(), data)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := rg.writePacketAsync(ctx, tp, packet)
+	defer cancel()
+
+	select {
+	case <-rg.writeDeadline.Wait():
+		return 0, timeoutError{}
+	case err := <-errCh:
+		if err != nil {
+			return 0, err
+		}
+
+		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
+
+		return len(data), nil
+	}
+}
+
+func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet) chan error {
+	errCh := make(chan error)
+	go func() {
+		defer close(errCh)
+		err := tp.WritePacket(ctx, packet)
+		select {
+		case <-ctx.Done():
+			return
+		case errCh <- err:
+			return
+		}
+	}()
+
+	return errCh
+}
+
+// rule fetches first available forward rule.
+// NOTE: not thread-safe.
+func (rg *RouteGroup) rule() (routing.Rule, error) {
+	if len(rg.fwd) == 0 {
+		return nil, ErrNoRules
+	}
+
+	rule := rg.fwd[0]
+
+	return rule, nil
+}
+
+// tp fetches first available transport.
+// NOTE: not thread-safe.
+func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
+	if len(rg.tps) == 0 {
+		return nil, ErrNoTransports
+	}
+
+	tp := rg.tps[0]
+
+	if tp == nil {
+		return nil, ErrBadTransport
+	}
+
+	return tp, nil
+}
+
 func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -354,7 +369,6 @@ func (rg *RouteGroup) sendKeepAlive() error {
 
 	packet := routing.MakeKeepAlivePacket(rule.KeyRouteID())
 	if err := tp.WritePacket(context.Background(), packet); err != nil {
-		rg.logger.WithError(err).Error("Failed to send keep-alive packet")
 		return err
 	}
 
@@ -384,7 +398,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	rg.broadcastClosePackets(code)
 
 	if closeInitiator {
-		// if this node initiated closing, we need to wait for close packets
+		// if this visor initiated closing, we need to wait for close packets
 		// to come back, or to exit with a timeout if anything goes wrong in
 		// the network
 		if err := rg.waitForCloseLoop(closeRoutineTimeout); err != nil {
@@ -432,7 +446,7 @@ func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	for i := 0; i < len(rg.tps); i++ {
 		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
 		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
-			rg.logger.WithError(err).Error("Failed to send close packet")
+			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
 		}
 	}
 }
