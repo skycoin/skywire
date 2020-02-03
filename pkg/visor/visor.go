@@ -599,9 +599,14 @@ func (node *Node) setSocksPassword(password string) error {
 		return err
 	}
 
-	node.logger.Infof("Updated %v password, restarting it", socksName)
+	if node.procManager.Exists(socksName) {
+		node.logger.Infof("Updated %v password, restarting it", socksName)
+		return node.RestartApp(socksName)
+	}
 
-	return node.RestartApp(socksName)
+	node.logger.Infof("Updated %v password", socksName)
+
+	return nil
 }
 
 func (node *Node) setSocksClientPK(pk cipher.PubKey) error {
@@ -620,9 +625,14 @@ func (node *Node) setSocksClientPK(pk cipher.PubKey) error {
 		return err
 	}
 
-	node.logger.Infof("Updated %v PK, restarting it", socksClientName)
+	if node.procManager.Exists(socksClientName) {
+		node.logger.Infof("Updated %v PK, restarting it", socksClientName)
+		return node.RestartApp(socksClientName)
+	}
 
-	return node.RestartApp(socksClientName)
+	node.logger.Infof("Updated %v PK", socksClientName)
+
+	return nil
 }
 
 func (node *Node) updateArg(config *Config, appName, argName, value string) {
