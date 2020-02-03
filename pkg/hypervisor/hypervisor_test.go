@@ -78,18 +78,18 @@ func TestNewNode(t *testing.T) {
 func makeStartNode(t *testing.T, config Config) (string, *http.Client, func()) {
 	// nolint: gomnd
 	defaultMockConfig := MockConfig{
-		Nodes:            5,
-		MaxTpsPerNode:    10,
-		MaxRoutesPerNode: 10,
-		EnableAuth:       true,
+		Visors:            5,
+		MaxTpsPerVisor:    10,
+		MaxRoutesPerVisor: 10,
+		EnableAuth:        true,
 	}
 
-	node, err := NewNode(config)
+	visor, err := New(config)
 	require.NoError(t, err)
-	require.NoError(t, node.AddMockData(defaultMockConfig))
+	require.NoError(t, visor.AddMockData(defaultMockConfig))
 
-	srv := httptest.NewTLSServer(node)
-	node.c.Cookies.Domain = srv.Listener.Addr().String()
+	srv := httptest.NewTLSServer(visor)
+	visor.c.Cookies.Domain = srv.Listener.Addr().String()
 
 	client := srv.Client()
 	jar, err := cookiejar.New(&cookiejar.Options{})
@@ -164,7 +164,7 @@ func testNodeNoAccessWithoutLogin(t *testing.T, config Config) {
 	testCases(t, addr, client, []TestCase{
 		makeCase(http.MethodGet, "/api/user", nil),
 		makeCase(http.MethodPost, "/api/change-password", strings.NewReader(`{"old_password":"old","new_password":"new"}`)),
-		makeCase(http.MethodGet, "/api/nodes", nil),
+		makeCase(http.MethodGet, "/api/visors", nil),
 	})
 }
 
@@ -273,7 +273,7 @@ func testNodeAccessAfterLogin(t *testing.T, config Config) {
 		},
 		{
 			ReqMethod:  http.MethodGet,
-			ReqURI:     "/api/nodes",
+			ReqURI:     "/api/visors",
 			RespStatus: http.StatusOK,
 		},
 	})
@@ -328,7 +328,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
 		},
 		{
 			ReqMethod:  http.MethodGet,
-			ReqURI:     "/api/nodes",
+			ReqURI:     "/api/visors",
 			RespStatus: http.StatusUnauthorized,
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
@@ -391,7 +391,7 @@ func testNodeChangePassword(t *testing.T, config Config) {
 		},
 		{
 			ReqMethod: http.MethodGet,
-			ReqURI:    "/api/nodes",
+			ReqURI:    "/api/visors",
 			ReqMod: func(req *http.Request) {
 				for _, cookie := range cookies {
 					req.AddCookie(cookie)

@@ -48,11 +48,11 @@ github.com/gorilla/securecookie
 github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/mattn/go-colorable v0.1.4
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.8
+# github.com/mattn/go-isatty v0.0.12
 github.com/mattn/go-isatty
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
@@ -95,7 +95,11 @@ github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
+<<<<<<< HEAD
 # golang.org/x/crypto v0.0.0-20191227163750-53104e6ec876
+=======
+# golang.org/x/crypto v0.0.0-20200128174031-69ecbb4d6d5d
+>>>>>>> 764384568ad9ad0a75c6da74e4e95d2da9147bfa
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
@@ -109,7 +113,7 @@ golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20191220142924-d4481acd189f
+# golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows

@@ -18,16 +18,16 @@ import (
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
-// Config defines configuration parameters for Node.
+// Config defines configuration parameters for Visor.
 // TODO(evanlinjin): Instead of having nested structs, make separate types for each field.
 // TODO(evanlinjin): Use pointers to allow nil-configs for non-crucial fields.
 type Config struct {
 	Version string `json:"version"`
 
-	Node struct {
+	Visor struct {
 		StaticPubKey cipher.PubKey `json:"static_public_key"`
 		StaticSecKey cipher.SecKey `json:"static_secret_key"`
-	} `json:"node"`
+	} `json:"visor"`
 
 	STCP struct {
 		PubKeyTable map[cipher.PubKey]string `json:"pk_table"`
@@ -61,8 +61,8 @@ type Config struct {
 
 	Apps []AppConfig `json:"apps"`
 
-	TrustedNodes []cipher.PubKey    `json:"trusted_nodes"`
-	Hypervisors  []HypervisorConfig `json:"hypervisors"`
+	TrustedVisors []cipher.PubKey    `json:"trusted_visors"`
+	Hypervisors   []HypervisorConfig `json:"hypervisors"`
 
 	AppsPath  string `json:"apps_path"`
 	LocalPath string `json:"local_path"`
@@ -87,8 +87,8 @@ func (c *Config) DmsgConfig() (*DmsgConfig, error) {
 	}
 
 	return &DmsgConfig{
-		PubKey:     c.Node.StaticPubKey,
-		SecKey:     c.Node.StaticSecKey,
+		PubKey:     c.Visor.StaticPubKey,
+		SecKey:     c.Visor.StaticSecKey,
 		Discovery:  disc.NewHTTP(dmsgConfig.Discovery),
 		Retries:    5,
 		RetryDelay: time.Second,
@@ -104,8 +104,8 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	return dmsgpty.NewHostFromDmsgClient(
 		nil,
 		dmsgC,
-		c.Node.StaticPubKey,
-		c.Node.StaticSecKey,
+		c.Visor.StaticPubKey,
+		c.Visor.StaticSecKey,
 		c.DmsgPty.AuthFile,
 		c.DmsgPty.Port,
 		c.DmsgPty.CLINet,
@@ -119,7 +119,7 @@ func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
 		return nil, errors.New("empty transport_discovery")
 	}
 
-	return trClient.NewHTTP(c.Transport.Discovery, c.Node.StaticPubKey, c.Node.StaticSecKey)
+	return trClient.NewHTTP(c.Transport.Discovery, c.Visor.StaticPubKey, c.Visor.StaticSecKey)
 }
 
 // TransportLogStore returns configure transport.LogStore.

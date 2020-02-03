@@ -147,7 +147,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 		return routing.EdgeRules{}, fmt.Errorf("failed to confirm loop with destination visor: %v", err)
 	}
 
-	sn.logger.Infof("Returning route rules to initiating node: %v", initRouteRules)
+	sn.logger.Infof("Returning route rules to initiating visor: %v", initRouteRules)
 
 	return initRouteRules, nil
 }
@@ -160,7 +160,7 @@ func (sn *Node) addIntermediaryRules(ctx context.Context, intermediaryRules Rule
 	for pk, rules := range intermediaryRules {
 		pk, rules := pk, rules
 
-		sn.logger.WithField("remote", pk).Info("Adding rules to intermediary node")
+		sn.logger.WithField("remote", pk).Info("Adding rules to intermediary visor")
 
 		wg.Add(1)
 

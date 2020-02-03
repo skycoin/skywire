@@ -16,6 +16,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 var (
@@ -29,6 +30,9 @@ var rootCmd = &cobra.Command{
 	Use:   "setup-node [config.json]",
 	Short: "Route Setup Node for skywire",
 	Run: func(_ *cobra.Command, args []string) {
+		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
 
 		logger := logging.MustGetLogger(tag)
 		if syslogAddr != "" {
@@ -64,7 +68,7 @@ var rootCmd = &cobra.Command{
 
 		sn, err := setup.NewNode(conf, metrics.NewPrometheus("setupnode"))
 		if err != nil {
-			logger.Fatal("Failed to setup Node: ", err)
+			logger.Fatal("Failed to create a setup node: ", err)
 		}
 
 		go func() {
