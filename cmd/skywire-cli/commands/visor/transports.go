@@ -1,4 +1,4 @@
-package node
+package visor
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ func init() {
 
 var lsTypesCmd = &cobra.Command{
 	Use:   "ls-types",
-	Short: "Lists transport types used by the local node",
+	Short: "Lists transport types used by the local visor",
 	Run: func(_ *cobra.Command, _ []string) {
 		types, err := rpcClient().TransportTypes()
 		internal.Catch(err)
@@ -45,7 +45,7 @@ var (
 
 func init() {
 	lsTpCmd.Flags().StringSliceVar(&filterTypes, "filter-types", filterTypes, "comma-separated; if specified, only shows transports of given types")
-	lsTpCmd.Flags().Var(&filterPubKeys, "filter-pks", "comma-separated; if specified, only shows transports associated with given nodes")
+	lsTpCmd.Flags().Var(&filterPubKeys, "filter-pks", "comma-separated; if specified, only shows transports associated with given visors")
 	lsTpCmd.Flags().BoolVar(&showLogs, "show-logs", true, "whether to show transport logs in output")
 }
 

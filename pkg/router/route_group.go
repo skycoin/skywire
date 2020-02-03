@@ -398,7 +398,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	rg.broadcastClosePackets(code)
 
 	if closeInitiator {
-		// if this node initiated closing, we need to wait for close packets
+		// if this visor initiated closing, we need to wait for close packets
 		// to come back, or to exit with a timeout if anything goes wrong in
 		// the network
 		if err := rg.waitForCloseLoop(closeRoutineTimeout); err != nil {

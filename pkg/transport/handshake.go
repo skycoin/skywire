@@ -91,7 +91,7 @@ func MakeSettlementHS(init bool) SettlementHS {
 			}
 		}()
 
-		// create signed entry and send it to responding visor node.
+		// create signed entry and send it to responding visor.
 		se, ok := NewSignedEntry(&entry, conn.LocalPK(), sk)
 		if !ok {
 			return errors.New("failed to sign entry")
@@ -130,7 +130,7 @@ func MakeSettlementHS(init bool) SettlementHS {
 			log.WithError(err).Error("Failed to register transports")
 		}
 
-		// inform initiating visor node.
+		// inform initiating visor visor.
 		if _, err := conn.Write([]byte{1}); err != nil {
 			return fmt.Errorf("failed to accept transport settlement: write failed: %v", err)
 		}
