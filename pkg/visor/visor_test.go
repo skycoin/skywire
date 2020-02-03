@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 }
 
 // TODO(nkryuchkov): fix and uncomment
-//func TestNewNode(t *testing.T) {
+//func TestNewVisor(t *testing.T) {
 //	pk, sk := cipher.GenerateKeyPair()
 //	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 //		require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: pk, NextNonce: 1}))
@@ -53,8 +53,8 @@ func TestMain(m *testing.M) {
 //	defer srv.Close()
 //
 //	conf := Config{Version: "1.0", LocalPath: "local", AppsPath: "apps"}
-//	conf.Node.StaticPubKey = pk
-//	conf.Node.StaticSecKey = sk
+//	conf.Visor.StaticPubKey = pk
+//	conf.Visor.StaticSecKey = sk
 //	conf.Dmsg.Discovery = "http://skywire.skycoin.com:8001"
 //	conf.Dmsg.ServerCount = 10
 //	conf.Transport.Discovery = srv.URL
@@ -67,17 +67,17 @@ func TestMain(m *testing.M) {
 //		require.NoError(t, os.RemoveAll("local"))
 //	}()
 //
-//	node, err := NewNode(&conf, masterLogger)
+//	visor, err := NewVisor(&conf, masterLogger)
 //	require.NoError(t, err)
 //
-//	assert.NotNil(t, node.router)
-//	assert.NotNil(t, node.appsConf)
-//	assert.NotNil(t, node.appsPath)
-//	assert.NotNil(t, node.localPath)
-//	assert.NotNil(t, node.startedApps)
+//	assert.NotNil(t, visor.router)
+//	assert.NotNil(t, visor.appsConf)
+//	assert.NotNil(t, visor.appsPath)
+//	assert.NotNil(t, visor.localPath)
+//	assert.NotNil(t, visor.startedApps)
 //}
 
-func TestNodeStartClose(t *testing.T) {
+func TestVisorStartClose(t *testing.T) {
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -106,13 +106,13 @@ func TestNodeStartClose(t *testing.T) {
 	}()
 
 	var (
-		nodeCfg = Config{}
-		logger  = logging.MustGetLogger("test")
-		server  = appserver.New(logger, nodeCfg.AppServerSockFile)
+		visorCfg = Config{}
+		logger   = logging.MustGetLogger("test")
+		server   = appserver.New(logger, visorCfg.AppServerSockFile)
 	)
 
-	node := &Node{
-		conf:         &nodeCfg,
+	visor := &Visor{
+		conf:         &visorCfg,
 		router:       r,
 		appsConf:     apps,
 		logger:       logger,
@@ -123,11 +123,11 @@ func TestNodeStartClose(t *testing.T) {
 	appCfg1 := appcommon.Config{
 		Name:         apps["skychat"].App,
 		Version:      apps["skychat"].Version,
-		SockFilePath: nodeCfg.AppServerSockFile,
-		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		SockFilePath: visorCfg.AppServerSockFile,
+		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", apps["skychat"].App, fmt.Sprintf("v%s", apps["skychat"].Version)),
 	}
-	appArgs1 := append([]string{filepath.Join(node.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
+	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
 	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
@@ -135,7 +135,7 @@ func TestNodeStartClose(t *testing.T) {
 
 	pm.On("StopAll").Return()
 
-	node.procManager = pm
+	visor.procManager = pm
 
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock(), nil)
 	go dmsgC.Serve()
@@ -155,20 +155,20 @@ func TestNodeStartClose(t *testing.T) {
 	}
 
 	tm, err := transport.NewManager(network, tmConf)
-	node.tm = tm
+	visor.tm = tm
 	require.NoError(t, err)
 
 	errCh := make(chan error)
 	go func() {
-		errCh <- node.Start()
+		errCh <- visor.Start()
 	}()
 
 	require.NoError(t, <-errCh)
 	time.Sleep(100 * time.Millisecond)
-	require.NoError(t, node.Close())
+	require.NoError(t, visor.Close())
 }
 
-func TestNodeSpawnApp(t *testing.T) {
+func TestVisorSpawnApp(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
@@ -189,29 +189,29 @@ func TestNodeSpawnApp(t *testing.T) {
 	apps := make(map[string]AppConfig)
 	apps["skychat"] = app
 
-	nodeCfg := Config{}
-	nodeCfg.Node.StaticPubKey = pk
+	visorCfg := Config{}
+	visorCfg.Visor.StaticPubKey = pk
 
-	node := &Node{
+	visor := &Visor{
 		router:   r,
 		appsConf: apps,
 		logger:   logging.MustGetLogger("test"),
-		conf:     &nodeCfg,
+		conf:     &visorCfg,
 	}
-	pathutil.EnsureDir(node.dir())
+	pathutil.EnsureDir(visor.dir())
 	defer func() {
-		require.NoError(t, os.RemoveAll(node.dir()))
+		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
 	pm := &appserver.MockProcManager{}
 	appCfg := appcommon.Config{
 		Name:         app.App,
 		Version:      app.Version,
-		SockFilePath: nodeCfg.AppServerSockFile,
-		VisorPK:      nodeCfg.Node.StaticPubKey.Hex(),
+		SockFilePath: visorCfg.AppServerSockFile,
+		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
 	}
-	appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
+	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 	pm.On("Wait", app.App).Return(testhelpers.NoErr)
 
 	appPID := appcommon.ProcID(10)
@@ -220,17 +220,17 @@ func TestNodeSpawnApp(t *testing.T) {
 	pm.On("Exists", app.App).Return(true)
 	pm.On("Stop", app.App).Return(testhelpers.NoErr)
 
-	node.procManager = pm
+	visor.procManager = pm
 
-	require.NoError(t, node.StartApp(app.App))
+	require.NoError(t, visor.StartApp(app.App))
 	time.Sleep(100 * time.Millisecond)
 
-	require.True(t, node.procManager.Exists(app.App))
+	require.True(t, visor.procManager.Exists(app.App))
 
-	require.NoError(t, node.StopApp(app.App))
+	require.NoError(t, visor.StopApp(app.App))
 }
 
-func TestNodeSpawnAppValidations(t *testing.T) {
+func TestVisorSpawnAppValidations(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
@@ -241,16 +241,16 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 	}()
 
 	c := &Config{}
-	c.Node.StaticPubKey = pk
+	c.Visor.StaticPubKey = pk
 
-	node := &Node{
+	visor := &Visor{
 		router: r,
 		logger: logging.MustGetLogger("test"),
 		conf:   c,
 	}
-	pathutil.EnsureDir(node.dir())
+	pathutil.EnsureDir(visor.dir())
 	defer func() {
-		require.NoError(t, os.RemoveAll(node.dir()))
+		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
 	t.Run("fail - can't bind to reserved port", func(t *testing.T) {
@@ -266,21 +266,21 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 			Name:         app.App,
 			Version:      app.Version,
 			SockFilePath: c.AppServerSockFile,
-			VisorPK:      c.Node.StaticPubKey.Hex(),
+			VisorPK:      c.Visor.StaticPubKey.Hex(),
 			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
 		}
-		appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
+		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
 		appPID := appcommon.ProcID(10)
 		pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
 			Return(appPID, testhelpers.NoErr)
 		pm.On("Exists", app.App).Return(false)
 
-		node.procManager = pm
+		visor.procManager = pm
 
 		errCh := make(chan error)
 		go func() {
-			errCh <- node.SpawnApp(&app, nil)
+			errCh <- visor.SpawnApp(&app, nil)
 		}()
 
 		time.Sleep(100 * time.Millisecond)
@@ -302,21 +302,21 @@ func TestNodeSpawnAppValidations(t *testing.T) {
 			Name:         app.App,
 			Version:      app.Version,
 			SockFilePath: c.AppServerSockFile,
-			VisorPK:      c.Node.StaticPubKey.Hex(),
+			VisorPK:      c.Visor.StaticPubKey.Hex(),
 			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
 		}
-		appArgs := append([]string{filepath.Join(node.dir(), app.App)}, app.Args...)
+		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
 		appPID := appcommon.ProcID(10)
 		pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
 			Return(appPID, appserver.ErrAppAlreadyStarted)
 		pm.On("Exists", app.App).Return(true)
 
-		node.procManager = pm
+		visor.procManager = pm
 
 		errCh := make(chan error)
 		go func() {
-			errCh <- node.SpawnApp(&app, nil)
+			errCh <- visor.SpawnApp(&app, nil)
 		}()
 
 		time.Sleep(100 * time.Millisecond)

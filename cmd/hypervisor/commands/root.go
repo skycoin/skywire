@@ -25,7 +25,7 @@ var (
 	configPath     string
 	mock           bool
 	mockEnableAuth bool
-	mockNodes      int
+	mockVisors     int
 	mockMaxTps     int
 	mockMaxRoutes  int
 )
@@ -35,15 +35,15 @@ func init() {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "./hypervisor-config.json", "hypervisor config path")
 	rootCmd.Flags().BoolVarP(&mock, "mock", "m", false, "whether to run hypervisor with mock data")
 	rootCmd.Flags().BoolVar(&mockEnableAuth, "mock-enable-auth", false, "whether to enable user management in mock mode")
-	rootCmd.Flags().IntVar(&mockNodes, "mock-nodes", 5, "number of app nodes to have in mock mode")
-	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock app node")
-	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per node")
+	rootCmd.Flags().IntVar(&mockVisors, "mock-visors", 5, "number of app visors to have in mock mode")
+	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock app visor")
+	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per visor")
 }
 
 // nolint:gochecknoglobals
 var rootCmd = &cobra.Command{
 	Use:   "hypervisor",
-	Short: "Manages Skywire App Nodes",
+	Short: "Manages Skywire Visors",
 	Run: func(_ *cobra.Command, args []string) {
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
@@ -93,10 +93,10 @@ var rootCmd = &cobra.Command{
 
 		if mock {
 			err := m.AddMockData(hypervisor.MockConfig{
-				Nodes:            mockNodes,
-				MaxTpsPerNode:    mockMaxTps,
-				MaxRoutesPerNode: mockMaxRoutes,
-				EnableAuth:       mockEnableAuth,
+				Visors:            mockVisors,
+				MaxTpsPerVisor:    mockMaxTps,
+				MaxRoutesPerVisor: mockMaxRoutes,
+				EnableAuth:        mockEnableAuth,
 			})
 			if err != nil {
 				log.Fatalln("Failed to add mock data:", err)

@@ -57,7 +57,7 @@ func TestClientAuth(t *testing.T) {
 	wg.Wait()
 }
 
-func TestUpdateNodeUptime(t *testing.T) {
+func TestUpdateVisorUptime(t *testing.T) {
 	urlCh := make(chan string, 1)
 	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		urlCh <- r.URL.String()
@@ -67,7 +67,7 @@ func TestUpdateNodeUptime(t *testing.T) {
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	err = c.UpdateNodeUptime(context.TODO())
+	err = c.UpdateVisorUptime(context.TODO())
 	require.NoError(t, err)
 
 	assert.Equal(t, "/update", <-urlCh)
