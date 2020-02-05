@@ -2,6 +2,7 @@ package dmsg
 
 import (
 	"context"
+	"net/http"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -115,21 +116,28 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 				Warn("delSession() callback returned non-nil error.")
 		}
 	}
-	c.sessionsMx.Unlock()
 }
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string) error {
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, availableSessions, maxSessions int) error {
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
-		entry = disc.NewServerEntry(c.pk, 0, addr, 10)
+		entry = disc.NewServerEntry(c.pk, 0, addr, maxSessions, availableSessions)
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
-		return c.dc.SetEntry(ctx, entry)
+		return c.dc.SetEntry(ctx, entry, http.MethodPost)
 	}
+
+	if availableSessions != 0 {
+		c.log.Info("Updating server sessions...")
+		entry.Server.AvailableSessions += availableSessions
+		return c.dc.UpdateEntry(ctx, c.sk, entry, http.MethodPut)
+	}
+
 	entry.Server.Address = addr
-	return c.dc.UpdateEntry(ctx, c.sk, entry)
+	entry.Server.AvailableSessions = availableSessions
+	return c.dc.UpdateEntry(ctx, c.sk, entry, http.MethodPost)
 }
 
 func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}) error {
@@ -147,11 +155,11 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
-		return c.dc.SetEntry(ctx, entry)
+		return c.dc.SetEntry(ctx, entry, http.MethodPost)
 	}
 	entry.Client.DelegatedServers = srvPKs
 	c.log.WithField("entry", entry).Info("Updating entry.")
-	return c.dc.UpdateEntry(ctx, c.sk, entry)
+	return c.dc.UpdateEntry(ctx, c.sk, entry, http.MethodPost)
 }
 
 func getServerEntry(ctx context.Context, dc disc.APIClient, srvPK cipher.PubKey) (*disc.Entry, error) {

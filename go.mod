@@ -13,7 +13,6 @@ require (
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/securecookie v1.1.1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
-	github.com/kr/pretty v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/pkg/profile v1.3.0
@@ -29,4 +28,4 @@ require (
 	golang.org/x/sys v0.0.0-20200301040627-c5d0d7b4ec88 // indirect
 )
 
-//replace github.com/SkycoinProject/dmsg => ../dmsg
+replace github.com/SkycoinProject/dmsg => ../dmsg

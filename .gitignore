@@ -28,6 +28,7 @@ pkg/visor/foo/
 /*.json
 /*.sh
 /*.log
+/*.out
 dmsgpty
 
 # Ignore backup go.mod after running '/ci_scripts/go_mod_replace.sh'.

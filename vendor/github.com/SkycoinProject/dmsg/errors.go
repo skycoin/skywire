@@ -42,7 +42,7 @@ var (
 // Listener errors (4xx).
 var (
 	ErrPortOccupied    = registerErr(Error{code: 400, msg: "port already occupied"})
-	ErrAcceptChanMaxed = registerErr(Error{code: 401, msg: "listener accept chan maxed"})
+	ErrAcceptChanMaxed = registerErr(Error{code: 401, msg: "listener accept chan maxed", temp: true})
 )
 
 // ErrorFromCode returns a saved error (if exists) from given error code.
