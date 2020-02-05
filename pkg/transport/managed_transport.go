@@ -164,17 +164,16 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 			} else {
 				// If there has not been any activity, ensure underlying 'write' tp is still up.
 				mt.connMx.Lock()
-				if mt.conn == nil {
-					if !mt.retrier.alive {
-						if ok, err := mt.redialConn(ctx); err != nil {
-							mt.log.Warnf("failed to redial underlying connection (redial loop): %v", err)
-							if !ok {
-								mt.connMx.Unlock()
-								return
-							}
-							mt.retrier.alive = false
+				if mt.conn == nil && !mt.retrier.alive {
+					if ok, err := mt.redialConn(ctx); err != nil {
+						mt.log.Warnf("failed to redial underlying connection (redial loop): %v", err)
+						if !ok {
+							mt.connMx.Unlock()
+							return
 						}
+						mt.retrier.alive = false
 					}
+
 				}
 				mt.connMx.Unlock()
 			}
@@ -269,7 +268,7 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	return mt.setIfConnNil(ctx, tp)
 }
 
-// redialConn redials an underlying connection using an exponetial backoff
+// redialConn redials an underlying connection using an exponential backoff
 func (mt *ManagedTransport) redialConn(ctx context.Context) (retry bool, err error) {
 	mt.retrier.alive = true
 	err = mt.retrier.r.Do(func() error {
