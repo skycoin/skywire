@@ -29,6 +29,8 @@ type Table interface {
 	// Rule returns RoutingRule with a given RouteID.
 	Rule(RouteID) (Rule, error)
 
+	UpdateActivity(RouteID) error
+
 	// AllRules returns all non timed out rules with a given route descriptor.
 	RulesWithDesc(RouteDescriptor) []Rule
 
@@ -123,6 +125,8 @@ func (mt *memTable) SaveRule(rule Rule) error {
 	return nil
 }
 
+// Rule fetches rule with the `key` route ID. It updates rule activity
+// ONLY for the consume type of rules.
 func (mt *memTable) Rule(key RouteID) (Rule, error) {
 	mt.Lock()
 	defer mt.Unlock()
@@ -136,9 +140,32 @@ func (mt *memTable) Rule(key RouteID) (Rule, error) {
 		return nil, ErrRuleTimedOut
 	}
 
-	mt.activity[key] = time.Now()
+	// crucial, we do this when we have nowhere in the network to forward packet to.
+	// In this case we update activity immediately not to acquire the lock for the second time
+	ruleType := rule.Type()
+	if ruleType == RuleConsume {
+		mt.activity[key] = time.Now()
+	}
 
 	return rule, nil
+}
+
+func (mt *memTable) UpdateActivity(key RouteID) error {
+	mt.Lock()
+	defer mt.Unlock()
+
+	rule, ok := mt.rules[key]
+	if !ok {
+		return fmt.Errorf("rule of id %v not found", key)
+	}
+
+	if mt.ruleIsTimedOut(key, rule) {
+		return ErrRuleTimedOut
+	}
+
+	mt.activity[key] = time.Now()
+
+	return nil
 }
 
 func (mt *memTable) RulesWithDesc(desc RouteDescriptor) []Rule {
