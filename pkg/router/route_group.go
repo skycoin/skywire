@@ -76,8 +76,9 @@ type RouteGroup struct {
 	// - fwd/tps should have the same number of elements.
 	// - the corresponding element of tps should have tpID of the corresponding rule in fwd.
 	// - fwd references 'ForwardRule' rules for writes.
-	fwd []routing.Rule // forward rules (for writing)
-	rvs []routing.Rule // reverse rules (for reading)
+	fwd                  []routing.Rule // forward rules (for writing)
+	rvs                  []routing.Rule // reverse rules (for reading)
+	rvsRouteLastActivity time.Time
 
 	lastSent int64
 
@@ -123,6 +124,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
+	go rg.checkRouteIsAliveLoop()
 
 	return rg
 }
@@ -427,6 +429,33 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	return nil
 }
 
+func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
+	rg.mu.Lock()
+	// no need to check rule expiry, since router won't allow packet in
+	// in case it's expired, so simply update the activity
+	rg.rvsRouteLastActivity = time.Now()
+	rg.mu.Unlock()
+
+	switch packet.Type() {
+	case routing.ClosePacket:
+		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
+	case routing.DataPacket:
+		return rg.handleDataPacket(packet)
+	}
+
+	return nil
+}
+
+func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
+	select {
+	case <-rg.closed:
+		return io.ErrClosedPipe
+	case rg.readCh <- packet.Payload():
+	}
+
+	return nil
+}
+
 func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 	rg.logger.Infof("Got close packet with code %d", code)
 
@@ -469,6 +498,33 @@ func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
 	}
 
 	return nil
+}
+
+func (rg *RouteGroup) checkRouteIsAliveLoop() {
+	ticker := time.NewTicker(routing.DefaultGCInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		rg.mu.Lock()
+		rule, err := rg.rule()
+		if err != nil {
+			rg.mu.Unlock()
+			rg.logger.Errorf("Error getting rule to check activity: %v", err)
+			continue
+		}
+
+		idling := time.Since(rg.rvsRouteLastActivity)
+		keepAlive := rule.KeepAlive()
+
+		if idling > keepAlive {
+			// rule is timed out, remote closed, stop this loop
+
+			rg.mu.Unlock()
+			return
+		}
+
+		rg.mu.Unlock()
+	}
 }
 
 func (rg *RouteGroup) isCloseInitiator() bool {
