@@ -471,6 +471,16 @@ func (r *router) GetRule(routeID routing.RouteID) (routing.Rule, error) {
 	return rule, nil
 }
 
+// UpdateRuleActivity updates routing rule activity
+func (r *router) UpdateRuleActivity(routeID routing.RouteID) error {
+	err := r.rt.UpdateActivity(routeID)
+	if err != nil {
+		return fmt.Errorf("error updating activity for route ID %d: %v", routeID, err)
+	}
+
+	return nil
+}
+
 // Close safely stops Router.
 func (r *router) Close() error {
 	if r == nil {
@@ -516,6 +526,11 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 
 	if err := tp.WritePacket(ctx, p); err != nil {
 		return err
+	}
+
+	// successfully forwarded packet, may update the rule activity now
+	if err := r.UpdateRuleActivity(rule.KeyRouteID()); err != nil {
+		r.logger.Errorf("Failed to update activity for rule with route ID %d: %v", rule.KeyRouteID(), err)
 	}
 
 	r.logger.Infof("Forwarded packet via Transport %s using rule %d", rule.NextTransportID(), rule.KeyRouteID())
