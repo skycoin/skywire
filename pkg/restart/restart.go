@@ -64,6 +64,11 @@ func (c *Context) SetCheckDelay(delay time.Duration) {
 	}
 }
 
+// CmdPath returns path of cmd to be run.
+func (c *Context) CmdPath() string {
+	return c.cmd.Path
+}
+
 // Start starts a new executable using Context.
 func (c *Context) Start() error {
 	if !atomic.CompareAndSwapInt32(&c.isStarting, 0, 1) {

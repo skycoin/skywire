@@ -23,9 +23,6 @@ const (
 )
 
 var (
-	// ErrInvalidInput occurs when an input is invalid.
-	ErrInvalidInput = errors.New("invalid input")
-
 	// ErrNotImplemented occurs when a method is not implemented.
 	ErrNotImplemented = errors.New("not implemented")
 
@@ -169,13 +166,6 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 		RoutesCount:     r.visor.rt.Count(),
 	}
 	return nil
-}
-
-// Exec executes a given command in cmd and writes its output to out.
-func (r *RPC) Exec(cmd *string, out *[]byte) error {
-	var err error
-	*out, err = r.visor.Exec(*cmd)
-	return err
 }
 
 /*
@@ -435,4 +425,16 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	}
 
 	return r.visor.restartCtx.Start()
+}
+
+// Exec executes a given command in cmd and writes its output to out.
+func (r *RPC) Exec(cmd *string, out *[]byte) error {
+	var err error
+	*out, err = r.visor.Exec(*cmd)
+	return err
+}
+
+// Update updates visor.
+func (r *RPC) Update(_ *struct{}, _ *struct{}) (err error) {
+	return r.visor.Update()
 }
