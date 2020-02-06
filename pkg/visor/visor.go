@@ -513,11 +513,11 @@ func (visor *Visor) persistPID(name string, pid appcommon.ProcID) {
 
 // StopApp stops running App.
 func (visor *Visor) StopApp(appName string) error {
-	visor.logger.Infof("Stopping app %s and closing ports", appName)
-
 	if !visor.procManager.Exists(appName) {
 		return ErrUnknownApp
 	}
+
+	visor.logger.Infof("Stopping app %s and closing ports", appName)
 
 	if err := visor.procManager.Stop(appName); err != nil {
 		visor.logger.Warn("Failed to stop app: ", err)
@@ -599,9 +599,14 @@ func (visor *Visor) setSocksPassword(password string) error {
 		return err
 	}
 
-	visor.logger.Infof("Updated %v password, restarting it", socksName)
+	if visor.procManager.Exists(socksName) {
+		visor.logger.Infof("Updated %v password, restarting it", socksName)
+		return visor.RestartApp(socksName)
+	}
 
-	return visor.RestartApp(socksName)
+	visor.logger.Infof("Updated %v password", socksName)
+
+	return nil
 }
 
 func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
@@ -620,9 +625,14 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 		return err
 	}
 
-	visor.logger.Infof("Updated %v PK, restarting it", socksClientName)
+	if visor.procManager.Exists(socksClientName) {
+		visor.logger.Infof("Updated %v PK, restarting it", socksClientName)
+		return visor.RestartApp(socksClientName)
+	}
 
-	return visor.RestartApp(socksClientName)
+	visor.logger.Infof("Updated %v PK", socksClientName)
+
+	return nil
 }
 
 func (visor *Visor) updateArg(config *Config, appName, argName, value string) {
