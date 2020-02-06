@@ -160,7 +160,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 			}
 		}()
 
-		cfg.logger.Info("Reading config from %v", configPath)
+		cfg.logger.Infof("Reading config from %v", configPath)
 
 		rdr = file
 		cfg.configPath = &configPath
@@ -203,7 +203,7 @@ func (cfg *runCfg) runVisor() *runCfg {
 		cfg.logger.Fatal("failed to unlink socket files: ", err)
 	}
 
-	visor, err := visor.NewVisor(&cfg.conf, cfg.masterLogger, cfg.restartCtx, cfg.configPath)
+	vis, err := visor.NewVisor(&cfg.conf, cfg.masterLogger, cfg.restartCtx, cfg.configPath)
 	if err != nil {
 		cfg.logger.Fatal("Failed to initialize visor: ", err)
 	}
@@ -227,7 +227,7 @@ func (cfg *runCfg) runVisor() *runCfg {
 	}
 
 	go func() {
-		if err := visor.Start(); err != nil {
+		if err := vis.Start(); err != nil {
 			cfg.logger.Fatal("Failed to start visor: ", err)
 		}
 	}()
@@ -236,7 +236,7 @@ func (cfg *runCfg) runVisor() *runCfg {
 		cfg.conf.ShutdownTimeout = defaultShutdownTimeout
 	}
 
-	cfg.visor = visor
+	cfg.visor = vis
 
 	return cfg
 }
