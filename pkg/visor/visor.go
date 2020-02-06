@@ -36,6 +36,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
 // AppStatus defines running status of an App.
@@ -401,13 +402,6 @@ func (visor *Visor) Close() (err error) {
 	return err
 }
 
-// Exec executes a shell command. It returns combined stdout and stderr output and an error.
-func (visor *Visor) Exec(command string) ([]byte, error) {
-	args := strings.Split(command, " ")
-	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
-	return cmd.CombinedOutput()
-}
-
 // Apps returns list of AppStates for all registered apps.
 func (visor *Visor) Apps() []*AppState {
 	// TODO: move app states to the app module
@@ -537,6 +531,26 @@ func (visor *Visor) RestartApp(name string) error {
 
 	if err := visor.StartApp(name); err != nil {
 		return fmt.Errorf("start app %v: %w", name, err)
+	}
+
+	return nil
+}
+
+// Exec executes a shell command. It returns combined stdout and stderr output and an error.
+func (visor *Visor) Exec(command string) ([]byte, error) {
+	args := strings.Split(command, " ")
+	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
+	return cmd.CombinedOutput()
+}
+
+// Update checks if visor update is available.
+// If it is, the method downloads a new visor versions, starts it and kills the current process.
+func (visor *Visor) Update() error {
+	u := updater.New(visor.logger, visor.restartCtx)
+
+	if err := u.Update(); err != nil {
+		visor.logger.Errorf("Failed to update visor: %v", err)
+		return err
 	}
 
 	return nil
@@ -714,9 +728,7 @@ func (visor *Visor) writeConfig(config *Config) error {
 func UnlinkSocketFiles(socketFiles ...string) error {
 	for _, f := range socketFiles {
 		if err := syscall.Unlink(f); err != nil {
-			if strings.Contains(err.Error(), "no such file or directory") {
-				continue
-			} else {
+			if !strings.Contains(err.Error(), "no such file or directory") {
 				return err
 			}
 		}
