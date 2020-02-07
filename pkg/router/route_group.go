@@ -94,9 +94,10 @@ type RouteGroup struct {
 	writeDeadline deadline.PipeDeadline
 
 	// used as a bool to indicate if this particular route group initiated close loop
-	closeInitiated int32
-	remoteClosed   chan struct{}
-	closed         chan struct{}
+	closeInitiated   int32
+	remoteClosedOnce sync.Once
+	remoteClosed     chan struct{}
+	closed           chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
 }
@@ -420,7 +421,8 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 			close(rg.closed)
 		}
 
-		close(rg.remoteClosed)
+		rg.setRemoteClosed()
+
 		rg.readChMu.Lock()
 		close(rg.readCh)
 		rg.readChMu.Unlock()
@@ -504,31 +506,44 @@ func (rg *RouteGroup) checkRouteIsAliveLoop() {
 	ticker := time.NewTicker(routing.DefaultGCInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		rg.mu.Lock()
-		rule, err := rg.rule()
-		if err != nil {
-			rg.mu.Unlock()
-			rg.logger.Errorf("Error getting rule to check activity: %v", err)
-			continue
-		}
-
-		idling := time.Since(rg.rvsRouteLastActivity)
-		keepAlive := rule.KeepAlive()
-
-		if idling > keepAlive {
-			// rule is timed out, remote closed, stop this loop
-
-			rg.mu.Unlock()
+	for {
+		select {
+		case <-rg.remoteClosed:
+			rg.logger.Infoln("Remote got closed, stopping checking route live loop")
 			return
-		}
+		case <-ticker.C:
+			rg.mu.Lock()
+			rule, err := rg.rule()
+			if err != nil {
+				rg.mu.Unlock()
+				rg.logger.Errorf("Error getting rule to check activity: %v", err)
+				continue
+			}
 
-		rg.mu.Unlock()
+			idling := time.Since(rg.rvsRouteLastActivity)
+			keepAlive := rule.KeepAlive()
+
+			if idling > keepAlive {
+				// rule is timed out, remote closed, stop this loop
+				rg.setRemoteClosed()
+
+				rg.mu.Unlock()
+				return
+			}
+
+			rg.mu.Unlock()
+		}
 	}
 }
 
 func (rg *RouteGroup) isCloseInitiator() bool {
 	return atomic.LoadInt32(&rg.closeInitiated) == 1
+}
+
+func (rg *RouteGroup) setRemoteClosed() {
+	rg.remoteClosedOnce.Do(func() {
+		close(rg.remoteClosed)
+	})
 }
 
 func (rg *RouteGroup) isRemoteClosed() bool {
