@@ -37,6 +37,8 @@
       - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
       - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
       - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
+  - [Creating a GitHub release](#creating-a-github-release)
+    - [How to create a GitHub release](#how-to-create-a-github-release)
 
 **NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
@@ -473,3 +475,18 @@ $ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"System is working!"}
 # Teardown
 $ make stop && make docker-stop
 ```
+
+## Creating a GitHub release
+
+To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor` binaries. 
+Binaries for each version are uploaded to [GitHub releases](https://github.com/SkycoinProject/skywire-mainnet/releases/).
+We use [goreleaser](https://goreleaser.com) for creating them.
+
+### How to create a GitHub release
+
+1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
+2. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`, where `0.1.0` is release version and `First release` is release name.
+3. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
+4. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
+5. Run `GITHUB_TOKEN=your_token make github-release` 
+6. [Check the created GitHub release.](https://github.com/SkycoinProject/skywire-mainnet/releases/)
