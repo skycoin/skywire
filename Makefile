@@ -123,6 +123,9 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 
+github-release: ## Create a GitHub release
+	goreleaser --rm-dist
+
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
 	docker image build --tag=skywire-runner --rm  - < skywire-runner.Dockerfile
