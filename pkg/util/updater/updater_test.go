@@ -47,7 +47,7 @@ func Test_getChecksum(t *testing.T) {
 		wantErr   error
 	}{
 		{
-			name: "No Error",
+			name: "No Error 1",
 			checksums: `
 2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470 skywire-visor-0.1.0-linux-amd64
 2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92471 skywire-visor-0.1.0-linux-386
@@ -60,9 +60,36 @@ func Test_getChecksum(t *testing.T) {
 			wantErr:  nil,
 		},
 		{
-			name:      "ErrMalformedChecksumFile",
-			checksums: `skywire-visor-0.1.0-darwin-amd64`,
+			name: "No Error 2",
+			checksums: `
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470     	   skywire-visor-0.1.0-linux-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92471     	   skywire-visor-0.1.0-linux-386
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472     	   skywire-visor-0.1.0-darwin-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92473     	   skywire-visor-0.1.0-windows-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92474     	   skywire-visor-0.1.0-linux-arm64
+`,
+			filename: "skywire-visor-0.1.0-darwin-amd64",
+			want:     "2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472",
+			wantErr:  nil,
+		},
+		{
+			name:      "ErrMalformedChecksumFile 1",
+			checksums: "skywire-visor-0.1.0-darwin-amd64",
 			filename:  "skywire-visor-0.1.0-darwin-amd64",
+			want:      "",
+			wantErr:   ErrMalformedChecksumFile,
+		},
+		{
+			name:      "ErrMalformedChecksumFile 2",
+			checksums: " skywire-visor-0.1.0-darwin-amd64",
+			filename:  " skywire-visor-0.1.0-darwin-amd64",
+			want:      "",
+			wantErr:   ErrMalformedChecksumFile,
+		},
+		{
+			name:      "ErrMalformedChecksumFile 3",
+			checksums: "  \t skywire-visor-0.1.0-darwin-amd64",
+			filename:  "  \t skywire-visor-0.1.0-darwin-amd64",
 			want:      "",
 			wantErr:   ErrMalformedChecksumFile,
 		},
