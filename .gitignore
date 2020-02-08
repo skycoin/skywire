@@ -32,3 +32,6 @@ dmsgpty
 
 # Ignore backup go.mod after running '/ci_scripts/go_mod_replace.sh'.
 go.mod-e
+
+# goreleaser
+dist
