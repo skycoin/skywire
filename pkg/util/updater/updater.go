@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -215,13 +216,19 @@ func isChecksumValid(filename, wantSum string) (bool, error) {
 	return gotSum == wantSum, nil
 }
 
+// NOTE: getChecksum does not support Unicode in checksums file.
 func getChecksum(checksums, filename string) (string, error) {
 	idx := strings.Index(checksums, filename)
 	if idx == -1 {
 		return "", ErrNoChecksumFound
 	}
 
-	last := idx - 1 // space separator
+	// Remove space(s) separator.
+	last := idx
+	for last > 0 && unicode.IsSpace(rune(checksums[last-1])) {
+		last--
+	}
+
 	first := last - checkSumLength
 
 	if first < 0 {
