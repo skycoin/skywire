@@ -485,8 +485,10 @@ We use [goreleaser](https://goreleaser.com) for creating them.
 ### How to create a GitHub release
 
 1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
-2. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`, where `0.1.0` is release version and `First release` is release name.
-3. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
-4. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
-5. Run `GITHUB_TOKEN=your_token make github-release` 
-6. [Check the created GitHub release.](https://github.com/SkycoinProject/skywire-mainnet/releases/)
+2. Checkout to a commit you would like to create a release against.
+3. Make sure that `git status` is in clean state.
+4. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`, where `0.1.0` is release version and `First release` is release name.
+5. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
+6. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
+7. Run `GITHUB_TOKEN=your_token make github-release` 
+8. [Check the created GitHub release.](https://github.com/SkycoinProject/skywire-mainnet/releases/)
