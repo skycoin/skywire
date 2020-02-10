@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// DefaultGCInterval is the default duration for garbage collection of routing rules.
-const DefaultGCInterval = 5 * time.Second
-
 var (
 	// ErrRuleTimedOut is being returned while trying to access the rule which timed out
 	ErrRuleTimedOut = errors.New("rule keep-alive timeout exceeded")
@@ -42,42 +39,25 @@ type Table interface {
 
 	// Count returns the number of RoutingRule entries stored.
 	Count() int
+
+	// CollectGarbage checks all the stored rules, removes and returns ones that timed out.
+	CollectGarbage() []Rule
 }
 
 type memTable struct {
 	sync.RWMutex
 
-	config   Config
 	nextID   RouteID
 	rules    map[RouteID]Rule
 	activity map[RouteID]time.Time
 }
 
-// Config represents a routing table configuration.
-type Config struct {
-	GCInterval time.Duration
-}
-
-// DefaultConfig represents the default configuration of routing table.
-func DefaultConfig() Config {
-	return Config{
-		GCInterval: DefaultGCInterval,
-	}
-}
-
 // NewTable returns an in-memory routing table implementation with a specified configuration.
-func NewTable(config Config) Table {
-	if config.GCInterval <= 0 {
-		config.GCInterval = DefaultGCInterval
-	}
-
+func NewTable() Table {
 	mt := &memTable{
-		config:   config,
 		rules:    map[RouteID]Rule{},
 		activity: make(map[RouteID]time.Time),
 	}
-
-	go mt.gcLoop()
 
 	return mt
 }
@@ -216,25 +196,20 @@ func (mt *memTable) Count() int {
 	return len(mt.rules)
 }
 
-// Routing table garbage collect loop.
-func (mt *memTable) gcLoop() {
-	ticker := time.NewTicker(mt.config.GCInterval)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		mt.gc()
-	}
-}
-
-func (mt *memTable) gc() {
+func (mt *memTable) CollectGarbage() []Rule {
 	mt.Lock()
 	defer mt.Unlock()
 
+	var timedOutRules []Rule
 	for routeID, rule := range mt.rules {
-		if rule.Type() == RuleIntermediaryForward && mt.ruleIsTimedOut(routeID, rule) {
+		// exclude forward rules, they should be handled outside
+		if rule.Type() != RuleForward && mt.ruleIsTimedOut(routeID, rule) {
+			timedOutRules = append(timedOutRules, rule)
 			mt.delRule(routeID)
 		}
 	}
+
+	return timedOutRules
 }
 
 // ruleIsExpired checks whether rule's keep alive timeout is exceeded.
