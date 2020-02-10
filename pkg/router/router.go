@@ -44,7 +44,6 @@ type Config struct {
 	PubKey           cipher.PubKey
 	SecKey           cipher.SecKey
 	TransportManager *transport.Manager
-	RoutingTable     routing.Table
 	RouteFinder      rfclient.Client
 	RouteGroupDialer setupclient.RouteGroupDialer
 	SetupNodes       []cipher.PubKey
@@ -106,6 +105,13 @@ type Router interface {
 	IntroduceRules(rules routing.EdgeRules) error
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
+
+	// routing table related methods
+	RoutesCount() int
+	Rules() []routing.Rule
+	Rule(routing.RouteID) (routing.Rule, error)
+	SaveRule(routing.Rule) error
+	DelRules([]routing.RouteID)
 }
 
 // Router implements visor.PacketRouter. It manages routing table by
@@ -148,7 +154,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		logger:        config.Logger,
 		n:             n,
 		tm:            config.TransportManager,
-		rt:            config.RoutingTable,
+		rt:            routing.NewTable(routing.DefaultConfig()),
 		sl:            sl,
 		rfc:           config.RouteFinder,
 		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
@@ -643,4 +649,29 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 			return io.ErrClosedPipe
 		}
 	}
+}
+
+// RoutesCount returns count of the routes stored within the routing table.
+func (r *router) RoutesCount() int {
+	return r.rt.Count()
+}
+
+// Rules gets all the rules stored within the routing table.
+func (r *router) Rules() []routing.Rule {
+	return r.rt.AllRules()
+}
+
+// Rule fetches rule by the route `id`.
+func (r *router) Rule(id routing.RouteID) (routing.Rule, error) {
+	return r.rt.Rule(id)
+}
+
+// SaveRule stores the `rule` within the routing table.
+func (r *router) SaveRule(rule routing.Rule) error {
+	return r.rt.SaveRule(rule)
+}
+
+// DelRules removes rules associated with `ids` from the routing table.
+func (r *router) DelRules(ids []routing.RouteID) {
+	r.rt.DelRules(ids)
 }
