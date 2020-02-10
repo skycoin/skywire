@@ -707,7 +707,8 @@ func (r *router) rulesGC() {
 		// really care about the other ones, other rules removal
 		// doesn't affect our work here
 		if rule.Type() == routing.RuleConsume {
-			fwdRuleDesc := rule.RouteDescriptor().Invert()
+			cnsmRuleDesc := rule.RouteDescriptor()
+			fwdRuleDesc := cnsmRuleDesc.Invert()
 			rg, ok := r.routeGroup(fwdRuleDesc)
 			if !ok {
 				r.logger.Debugln("Couldn't remove route group after consume rule expired: route group not found")
