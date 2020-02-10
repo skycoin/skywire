@@ -202,8 +202,7 @@ func (mt *memTable) CollectGarbage() []Rule {
 
 	var timedOutRules []Rule
 	for routeID, rule := range mt.rules {
-		// exclude forward rules, they should be handled outside
-		if rule.Type() != RuleForward && mt.ruleIsTimedOut(routeID, rule) {
+		if mt.ruleIsTimedOut(routeID, rule) {
 			timedOutRules = append(timedOutRules, rule)
 			mt.delRule(routeID)
 		}

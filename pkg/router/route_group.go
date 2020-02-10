@@ -125,7 +125,6 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
-	go rg.checkRouteIsAliveLoop()
 
 	return rg
 }
@@ -502,40 +501,6 @@ func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
 	return nil
 }
 
-func (rg *RouteGroup) checkRouteIsAliveLoop() {
-	ticker := time.NewTicker(routing.DefaultGCInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-rg.remoteClosed:
-			rg.logger.Infoln("Remote got closed, stopping checking route live loop")
-			return
-		case <-ticker.C:
-			rg.mu.Lock()
-			rule, err := rg.rule()
-			if err != nil {
-				rg.mu.Unlock()
-				rg.logger.Errorf("Error getting rule to check activity: %v", err)
-				continue
-			}
-
-			idling := time.Since(rg.rvsRouteLastActivity)
-			keepAlive := rule.KeepAlive()
-
-			if idling > keepAlive {
-				// rule is timed out, remote closed, stop this loop
-				rg.setRemoteClosed()
-
-				rg.mu.Unlock()
-				return
-			}
-
-			rg.mu.Unlock()
-		}
-	}
-}
-
 func (rg *RouteGroup) isCloseInitiator() bool {
 	return atomic.LoadInt32(&rg.closeInitiated) == 1
 }
@@ -547,18 +512,16 @@ func (rg *RouteGroup) setRemoteClosed() {
 }
 
 func (rg *RouteGroup) isRemoteClosed() bool {
-	select {
-	case <-rg.remoteClosed:
-		return true
-	default:
-	}
-
-	return false
+	return chanClosed(rg.remoteClosed)
 }
 
 func (rg *RouteGroup) isClosed() bool {
+	return chanClosed(rg.closed)
+}
+
+func chanClosed(ch chan struct{}) bool {
 	select {
-	case <-rg.closed:
+	case <-ch:
 		return true
 	default:
 	}
