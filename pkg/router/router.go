@@ -27,7 +27,9 @@ import (
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes
 	DefaultRouteKeepAlive = 2 * time.Minute
-	acceptSize            = 1024
+	// DefaultRulesGCInterval is the default duration for garbage collection of routing rules.
+	DefaultRulesGCInterval = 5 * time.Second
+	acceptSize             = 1024
 
 	minHops = 0
 	maxHops = 50
@@ -47,6 +49,7 @@ type Config struct {
 	RouteFinder      rfclient.Client
 	RouteGroupDialer setupclient.RouteGroupDialer
 	SetupNodes       []cipher.PubKey
+	RulesGCInterval  time.Duration
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -57,6 +60,10 @@ func (c *Config) SetDefaults() {
 
 	if c.RouteGroupDialer == nil {
 		c.RouteGroupDialer = setupclient.NewSetupNodeDialer()
+	}
+
+	if c.RulesGCInterval <= 0 {
+		c.RulesGCInterval = DefaultRulesGCInterval
 	}
 }
 
@@ -154,7 +161,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		logger:        config.Logger,
 		n:             n,
 		tm:            config.TransportManager,
-		rt:            routing.NewTable(routing.DefaultConfig()),
+		rt:            routing.NewTable(),
 		sl:            sl,
 		rfc:           config.RouteFinder,
 		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
@@ -163,6 +170,8 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		done:          make(chan struct{}),
 		trustedVisors: trustedVisors,
 	}
+
+	go r.rulesGCLoop()
 
 	if err := r.rpcSrv.Register(NewRPCGateway(r)); err != nil {
 		return nil, fmt.Errorf("failed to register RPC server")
@@ -674,4 +683,24 @@ func (r *router) SaveRule(rule routing.Rule) error {
 // DelRules removes rules associated with `ids` from the routing table.
 func (r *router) DelRules(ids []routing.RouteID) {
 	r.rt.DelRules(ids)
+}
+
+func (r *router) rulesGCLoop() {
+	ticker := time.NewTicker(r.conf.RulesGCInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.done:
+			return
+		case <-ticker.C:
+			r.rulesGC()
+		}
+	}
+}
+
+func (r *router) rulesGC() {
+	removedRules := r.rt.CollectGarbage()
+
+	// handle removed rules
 }
