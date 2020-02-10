@@ -702,5 +702,28 @@ func (r *router) rulesGCLoop() {
 func (r *router) rulesGC() {
 	removedRules := r.rt.CollectGarbage()
 
-	// handle removed rules
+	for _, rule := range removedRules {
+		// we need to process only consume rules, cause we don't
+		// really care about the other ones, other rules removal
+		// doesn't affect our work here
+		if rule.Type() == routing.RuleConsume {
+			fwdRuleDesc := rule.RouteDescriptor().Invert()
+			rg, ok := r.routeGroup(fwdRuleDesc)
+			if !ok {
+				r.logger.Debugln("Couldn't remove route group after consume rule expired: route group not found")
+				continue
+			}
+
+			r.removeRouteGroup(fwdRuleDesc)
+
+			if !rg.isClosed() {
+				// instantly signal to route group that remote is closed, so that we
+				// won't need to initiate close loop in the network
+				rg.setRemoteClosed()
+				if err := rg.Close(); err != nil {
+					r.logger.Errorf("Error closing route group during rule GC: %v", err)
+				}
+			}
+		}
+	}
 }
