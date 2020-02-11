@@ -129,13 +129,13 @@ func testCase(t *testing.T, addr string, client *http.Client, tc TestCase, testT
 	}
 
 	resp, err := client.Do(req)
-	if resp != nil {
-		defer func() {
-			assert.NoError(t, resp.Body.Close())
-		}()
-	}
 
 	require.NoError(t, err, testTag)
+
+	defer func() {
+		assert.NoError(t, resp.Body.Close())
+	}()
+
 	assert.Equal(t, tc.RespStatus, resp.StatusCode, testTag)
 
 	if tc.RespBody != nil {
