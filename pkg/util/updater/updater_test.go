@@ -167,46 +167,76 @@ func Test_fileURL(t *testing.T) {
 
 func Test_checksumFile(t *testing.T) {
 	tests := []struct {
-		name    string
-		version string
-		want    string
+		name       string
+		binaryName string
+		version    string
+		want       string
 	}{
 		{
-			name:    "Case 1",
-			version: "1.2.3",
-			want:    "skywire-visor-1.2.3-checksums.txt",
+			name:       "Case 1",
+			binaryName: "skywire-visor",
+			version:    "1.2.3",
+			want:       "skywire-visor-1.2.3-checksums.txt",
 		},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, checksumFile(tc.version))
+			require.Equal(t, tc.want, checksumFile(tc.binaryName, tc.version))
 		})
 	}
 }
 
 func Test_binaryFilename(t *testing.T) {
 	tests := []struct {
-		name    string
-		version string
-		os      string
-		arch    string
-		want    string
+		name       string
+		binaryName string
+		version    string
+		os         string
+		arch       string
+		want       string
 	}{
 		{
-			name:    "Case 1",
-			version: "1.2.3",
-			os:      "linux",
-			arch:    "amd64",
-			want:    "skywire-visor-1.2.3-linux-amd64",
+			name:       "Case 1",
+			binaryName: "skywire-visor",
+			version:    "1.2.3",
+			os:         "linux",
+			arch:       "amd64",
+			want:       "skywire-visor-1.2.3-linux-amd64",
 		},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, binaryFilename(tc.version, tc.os, tc.arch))
+			require.Equal(t, tc.want, binaryFilename(tc.binaryName, tc.version, tc.os, tc.arch))
+		})
+	}
+}
+
+func Test_cliPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		visorPath string
+		want      string
+	}{
+		{
+			name:      "Case 1",
+			visorPath: "/dir1/dir2/visor",
+			want:      "/dir1/dir2/skywire-cli",
+		},
+		{
+			name:      "Case 2",
+			visorPath: "/dir3/dir4/../dir5/visor",
+			want:      "/dir3/dir5/skywire-cli",
+		},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := cliPath(tc.visorPath)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }
