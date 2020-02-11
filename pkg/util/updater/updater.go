@@ -42,8 +42,8 @@ var (
 	ErrMalformedChecksumFile = errors.New("malformed checksum file")
 )
 
-// Updater checks if a new version of skywire-visor is available, downloads its binary file
-// and runs it, substituting the current binary file.
+// Updater checks if a new version of skywire is available, downloads its binary files
+// and runs them, substituting the current binary files.
 type Updater struct {
 	log        *logging.Logger
 	restartCtx *restart.Context
@@ -64,7 +64,7 @@ func (u *Updater) Update() error {
 
 	lastVersion, err := lastVersion()
 	if err != nil {
-		return fmt.Errorf("failed to get last visor version: %w", err)
+		return fmt.Errorf("failed to get last Skywire version: %w", err)
 	}
 
 	u.log.Infof("Last Skywire version: %q", lastVersion.String())
