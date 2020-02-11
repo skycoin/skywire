@@ -24,6 +24,7 @@ type Conn struct {
 
 // Read reads from connection.
 func (c *Conn) Read(b []byte) (int, error) {
+	fmt.Println("LOCKIN ON READ APP CLIENT CONN")
 	n, err := c.rpc.Read(c.id, b)
 	if err == io.EOF {
 		fmt.Println("EOF READING FROM APP CONN")
