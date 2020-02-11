@@ -40,9 +40,9 @@ builds:
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
 archives:
-  - format: binary
-    wrap_in_directory: true
-    name_template: '{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+  - format: tar.gz
+    wrap_in_directory: false
+    name_template: 'skywire-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
