@@ -702,28 +702,40 @@ func (r *router) rulesGCLoop() {
 func (r *router) rulesGC() {
 	removedRules := r.rt.CollectGarbage()
 
+	r.logger.Debugf("Removed %d rules", len(removedRules))
+
 	for _, rule := range removedRules {
 		// we need to process only consume rules, cause we don't
 		// really care about the other ones, other rules removal
 		// doesn't affect our work here
 		if rule.Type() == routing.RuleConsume {
 			cnsmRuleDesc := rule.RouteDescriptor()
+			r.logger.Debugf("Removed consume rule with desc %s", &cnsmRuleDesc)
 			fwdRuleDesc := cnsmRuleDesc.Invert()
 			rg, ok := r.routeGroup(fwdRuleDesc)
 			if !ok {
 				r.logger.Debugln("Couldn't remove route group after consume rule expired: route group not found")
 				continue
 			}
+			r.logger.Debugln("Got route group for removed consume rule with desc %s", &cnsmRuleDesc)
 
 			r.removeRouteGroup(fwdRuleDesc)
 
+			r.logger.Debugln("Removed route group for removed consume rule with desc %s", &cnsmRuleDesc)
+
 			if !rg.isClosed() {
+				r.logger.Debugln("Closing route group")
 				// instantly signal to route group that remote is closed, so that we
 				// won't need to initiate close loop in the network
 				rg.setRemoteClosed()
+				r.logger.Debugln("Set remote closed for route group")
 				if err := rg.Close(); err != nil {
 					r.logger.Errorf("Error closing route group during rule GC: %v", err)
+				} else {
+					r.logger.Debugln("Successfully closed route group")
 				}
+			} else {
+				r.logger.Debugln("Route group is ALREADY closed")
 			}
 		}
 	}
