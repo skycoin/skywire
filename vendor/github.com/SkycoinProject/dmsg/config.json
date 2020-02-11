@@ -1,0 +1,8 @@
+{
+  "public_key": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+  "secret_key": "6eddf9399b14f29a60e6a652b321d082f9ed2f0172e02c9d9c1a2a22acf4bee3",
+  "discovery": "http://dmsg.discovery.skywire.cc",
+  "public_address": "192.168.0.100:8081",
+  "local_address": ":8081",
+  "log_level": "info"
+}
