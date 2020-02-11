@@ -133,16 +133,15 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	req = req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)
-	if resp != nil {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
-			}
-		}()
-	}
 	if err != nil {
 		return 0, err
 	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("error getting current nonce: status: %d <- %v", resp.StatusCode, extractError(resp.Body))

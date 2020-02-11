@@ -90,16 +90,15 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 	}
 
 	resp, err := c.Post(ctx, "/transports/", entries)
-	if resp != nil {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
-			}
-		}()
-	}
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
 
 	if resp.StatusCode == http.StatusCreated {
 		return nil
@@ -111,16 +110,15 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 // GetTransportByID returns Transport for corresponding ID.
 func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.EntryWithStatus, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
-	if resp != nil {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
-			}
-		}()
-	}
 	if err != nil {
 		return nil, err
 	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
@@ -137,16 +135,15 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 // GetTransportsByEdge returns all Transports registered for the edge.
 func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/edge:%s", pk))
-	if resp != nil {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
-			}
-		}()
-	}
 	if err != nil {
 		return nil, err
 	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
@@ -163,16 +160,16 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 // DeleteTransport deletes given transport by it's ID. A visor can only delete transports if he is one of it's edges.
 func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	resp, err := c.Delete(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
-	if resp != nil {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
-			}
-		}()
-	}
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
 	}
@@ -187,16 +184,15 @@ func (c *apiClient) UpdateStatuses(ctx context.Context, statuses ...*transport.S
 	}
 
 	resp, err := c.Post(ctx, "/statuses", statuses)
-	if resp != nil {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close HTTP response body")
-			}
-		}()
-	}
 	if err != nil {
 		return nil, err
 	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close HTTP response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
