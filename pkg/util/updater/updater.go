@@ -240,17 +240,15 @@ func getChecksum(checksums, filename string) (string, error) {
 
 func downloadChecksums(url string) (checksums string, err error) {
 	resp, err := http.Get(url) // nolint:gosec
-	if resp != nil {
-		defer func() {
-			if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-				err = closeErr
-			}
-		}()
-	}
-
 	if err != nil {
 		return "", err
 	}
+
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
@@ -266,17 +264,15 @@ func downloadChecksums(url string) (checksums string, err error) {
 
 func downloadFile(url, filename string) (path string, err error) {
 	resp, err := http.Get(url) // nolint:gosec
-	if resp != nil {
-		defer func() {
-			if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-				err = closeErr
-			}
-		}()
-	}
-
 	if err != nil {
 		return "", err
 	}
+
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	tmpDir := os.TempDir()
 	path = filepath.Join(tmpDir, filename)
@@ -341,17 +337,15 @@ func currentVersion() (*Version, error) {
 
 func lastVersionHTML() (data []byte, err error) {
 	resp, err := http.Get(releaseURL)
-	if resp != nil {
-		defer func() {
-			if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-				err = closeErr
-			}
-		}()
-	}
-
 	if err != nil {
 		return nil, err
 	}
+
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	return ioutil.ReadAll(resp.Body)
 }
