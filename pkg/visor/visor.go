@@ -89,6 +89,7 @@ type Visor struct {
 
 	startedAt  time.Time
 	restartCtx *restart.Context
+	updater    *updater.Updater
 
 	pidMu sync.Mutex
 
@@ -119,6 +120,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	restartCtx.RegisterLogger(visor.logger)
 
 	visor.restartCtx = restartCtx
+	visor.updater = updater.New(visor.logger, visor.restartCtx)
 
 	pk := cfg.Visor.StaticPubKey
 	sk := cfg.Visor.StaticSecKey
@@ -546,9 +548,7 @@ func (visor *Visor) Exec(command string) ([]byte, error) {
 // Update checks if visor update is available.
 // If it is, the method downloads a new visor versions, starts it and kills the current process.
 func (visor *Visor) Update() error {
-	u := updater.New(visor.logger, visor.restartCtx)
-
-	if err := u.Update(); err != nil {
+	if err := visor.updater.Update(); err != nil {
 		visor.logger.Errorf("Failed to update visor: %v", err)
 		return err
 	}
