@@ -165,52 +165,29 @@ func Test_fileURL(t *testing.T) {
 	}
 }
 
-func Test_checksumFile(t *testing.T) {
-	tests := []struct {
-		name       string
-		binaryName string
-		version    string
-		want       string
-	}{
-		{
-			name:       "Case 1",
-			binaryName: "skywire-visor",
-			version:    "1.2.3",
-			want:       "skywire-visor-1.2.3-checksums.txt",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, checksumFile(tc.binaryName, tc.version))
-		})
-	}
-}
-
 func Test_binaryFilename(t *testing.T) {
 	tests := []struct {
-		name       string
-		binaryName string
-		version    string
-		os         string
-		arch       string
-		want       string
+		name    string
+		file    string
+		version string
+		os      string
+		arch    string
+		want    string
 	}{
 		{
-			name:       "Case 1",
-			binaryName: "skywire-visor",
-			version:    "1.2.3",
-			os:         "linux",
-			arch:       "amd64",
-			want:       "skywire-visor-1.2.3-linux-amd64",
+			name:    "Case 1",
+			file:    "skywire-visor",
+			version: "1.2.3",
+			os:      "linux",
+			arch:    "amd64",
+			want:    "skywire-visor-1.2.3-linux-amd64.tar.gz",
 		},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, binaryFilename(tc.binaryName, tc.version, tc.os, tc.arch))
+			require.Equal(t, tc.want, archiveFilename(tc.file, tc.version, tc.os, tc.arch))
 		})
 	}
 }
