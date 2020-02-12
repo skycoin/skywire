@@ -14,9 +14,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/mholt/archiver/v3"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -24,13 +26,16 @@ import (
 
 const (
 	owner             = "SkycoinProject"
-	repo              = "skywire-mainnet"
-	releaseURL        = "https://github.com/" + owner + "/" + repo + "/releases"
-	urlText           = "/" + owner + "/" + repo + "/releases/tag/"
+	gitProjectName    = "skywire-mainnet"
+	projectName       = "skywire"
+	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
+	urlText           = "/" + owner + "/" + gitProjectName + "/releases/tag/"
 	checksumsFilename = "checksums.txt"
 	checkSumLength    = 64
 	permRWX           = 0755
+	exitDelay         = 100 * time.Millisecond
 	oldSuffix         = ".old"
+	archiveFormat     = ".tar.gz"
 	visorBinary       = "skywire-visor"
 	cliBinary         = "skywire-cli"
 )
@@ -59,7 +64,7 @@ func New(log *logging.Logger, restartCtx *restart.Context) *Updater {
 
 // Update performs an update operation.
 // NOTE: Update may call os.Exit.
-func (u *Updater) Update() error {
+func (u *Updater) Update() (err error) {
 	u.log.Infof("Looking for updates")
 
 	lastVersion, err := lastVersion()
@@ -76,15 +81,13 @@ func (u *Updater) Update() error {
 
 	u.log.Infof("Update found, version: %q", lastVersion.String())
 
-	downloadedVisorPath, err := u.download(visorBinary, lastVersion.String())
+	downloadedBinariesPath, err := u.download(lastVersion.String())
 	if err != nil {
 		return err
 	}
 
-	downloadedCLIPath, err := u.download(cliBinary, lastVersion.String())
-	if err != nil {
-		return err
-	}
+	downloadedCLIPath := filepath.Join(downloadedBinariesPath, cliBinary)
+	downloadedVisorPath := filepath.Join(downloadedBinariesPath, visorBinary)
 
 	currentVisorPath := u.restartCtx.CmdPath()
 	currentCLIPath := cliPath(currentVisorPath)
@@ -96,19 +99,31 @@ func (u *Updater) Update() error {
 		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
 	}
 
+	u.log.Infof("Successfully updated skywire-cli binary")
+
 	if err := u.updateBinary(downloadedVisorPath, currentVisorPath, oldVisorPath); err != nil {
 		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
 	}
+
+	u.log.Infof("Successfully updated skywire-visor binary")
 
 	if err := u.restartCurrentProcess(); err != nil {
 		u.restore(currentVisorPath, oldVisorPath)
 		return err
 	}
 
-	u.removeFiles(oldVisorPath, oldCLIPath)
+	u.removeFiles(oldVisorPath, oldCLIPath, downloadedBinariesPath)
 
-	u.log.Infof("Exiting")
-	os.Exit(0)
+	// Let RPC call complete and then exit.
+	defer func() {
+		if err == nil {
+			go func() {
+				time.Sleep(exitDelay)
+				u.log.Infof("Exiting")
+				os.Exit(0)
+			}()
+		}
+	}()
 
 	// Unreachable.
 	return nil
@@ -123,9 +138,9 @@ func (u *Updater) restore(currentBinaryPath string, toBeRemoved string) {
 	}
 }
 
-func (u *Updater) download(binaryName, version string) (string, error) {
-	checksumsURL := fileURL(version, checksumFile(binaryName, version))
-	u.log.Infof("Checksum file URL: %q", checksumsURL)
+func (u *Updater) download(version string) (string, error) {
+	checksumsURL := fileURL(version, checksumsFilename)
+	u.log.Infof("Checksums file URL: %q", checksumsURL)
 
 	checksums, err := downloadChecksums(checksumsURL)
 	if err != nil {
@@ -134,24 +149,25 @@ func (u *Updater) download(binaryName, version string) (string, error) {
 
 	u.log.Infof("Checksums file downloaded")
 
-	binaryFilename := binaryFilename(binaryName, version, runtime.GOOS, runtime.GOARCH)
-	u.log.Infof("Binary filename: %v", binaryFilename)
+	archiveFilename := archiveFilename(projectName, version, runtime.GOOS, runtime.GOARCH)
+	u.log.Infof("Archive filename: %v", archiveFilename)
 
-	checksum, err := getChecksum(checksums, binaryFilename)
+	checksum, err := getChecksum(checksums, archiveFilename)
 	if err != nil {
 		return "", fmt.Errorf("failed to get checksum: %w", err)
 	}
 
-	u.log.Infof("Binary checksum should be %q", checksum)
+	u.log.Infof("Archive checksum should be %q", checksum)
 
-	fileURL := fileURL(version, binaryFilename)
+	archiveURL := fileURL(version, archiveFilename)
+	u.log.Infof("Downloading archive from %q", archiveURL)
 
-	path, err := downloadFile(fileURL, binaryFilename)
+	path, err := downloadFile(archiveURL, archiveFilename)
 	if err != nil {
-		return "", fmt.Errorf("failed to download binary file from URL %q: %w", fileURL, err)
+		return "", fmt.Errorf("failed to download archive file from URL %q: %w", archiveURL, err)
 	}
 
-	u.log.Infof("Downloaded binary file to %q", path)
+	u.log.Infof("Downloaded archive file to %q", path)
 
 	valid, err := isChecksumValid(path, checksum)
 	if err != nil {
@@ -162,7 +178,19 @@ func (u *Updater) download(binaryName, version string) (string, error) {
 		return "", fmt.Errorf("checksum is not valid")
 	}
 
-	return path, nil
+	folderPath := filepath.Join(filepath.Dir(path), projectName)
+
+	if _, err := os.Stat(folderPath); err == nil {
+		u.removeFiles(folderPath)
+	}
+
+	if err := archiver.Unarchive(path, folderPath); err != nil {
+		return "", err
+	}
+
+	u.removeFiles(path)
+
+	return folderPath, nil
 }
 
 func (u *Updater) restartCurrentProcess() error {
@@ -201,8 +229,8 @@ func (u *Updater) updateBinary(downloadPath, currentPath, oldPath string) error 
 
 func (u *Updater) removeFiles(names ...string) {
 	for _, name := range names {
-		if err := os.Remove(name); err != nil {
-			u.log.Infof("Removing file %q", name)
+		u.log.Infof("Removing file %q", name)
+		if err := os.RemoveAll(name); err != nil {
 			u.log.Errorf("Failed to remove file %q: %v", name, err)
 		}
 	}
@@ -286,6 +314,10 @@ func downloadFile(url, filename string) (path string, err error) {
 		}
 	}()
 
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("bad HTTP response status code %d", resp.StatusCode)
+	}
+
 	tmpDir := os.TempDir()
 	path = filepath.Join(tmpDir, filename)
 
@@ -309,6 +341,10 @@ func downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+
 	return path, nil
 }
 
@@ -316,12 +352,8 @@ func fileURL(version, filename string) string {
 	return releaseURL + "/download/" + version + "/" + filename
 }
 
-func checksumFile(binaryName, version string) string {
-	return binaryName + "-" + version + "-" + checksumsFilename
-}
-
-func binaryFilename(binaryName, version, os, arch string) string {
-	return binaryName + "-" + version + "-" + os + "-" + arch
+func archiveFilename(file, version, os, arch string) string {
+	return file + "-" + version + "-" + os + "-" + arch + archiveFormat
 }
 
 func updateAvailable(last *Version) bool {
