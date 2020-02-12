@@ -134,7 +134,6 @@ func (u *Updater) Update() (err error) {
 		}
 	}()
 
-	// Unreachable.
 	return nil
 }
 
