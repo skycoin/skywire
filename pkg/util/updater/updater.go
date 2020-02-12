@@ -14,11 +14,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/mholt/archiver/v3"
+	"github.com/schollz/progressbar/v2"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -45,6 +47,8 @@ var (
 	ErrNoChecksumFound = errors.New("no checksum found")
 	// ErrMalformedChecksumFile happens when checksum is malformed.
 	ErrMalformedChecksumFile = errors.New("malformed checksum file")
+	// ErrAlreadyStarted is returned when updating is already started.
+	ErrAlreadyStarted = errors.New("updating already started")
 )
 
 // Updater checks if a new version of skywire is available, downloads its binary files
@@ -52,6 +56,7 @@ var (
 type Updater struct {
 	log        *logging.Logger
 	restartCtx *restart.Context
+	updating   uint32
 }
 
 // New returns a new Updater.
@@ -65,6 +70,10 @@ func New(log *logging.Logger, restartCtx *restart.Context) *Updater {
 // Update performs an update operation.
 // NOTE: Update may call os.Exit.
 func (u *Updater) Update() (err error) {
+	if !atomic.CompareAndSwapUint32(&u.updating, 0, 1) {
+		return ErrAlreadyStarted
+	}
+
 	u.log.Infof("Looking for updates")
 
 	lastVersion, err := lastVersion()
@@ -294,12 +303,22 @@ func downloadChecksums(url string) (checksums string, err error) {
 		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
 	}
 
-	data, err := ioutil.ReadAll(resp.Body)
+	r := io.TeeReader(resp.Body, progressBar(resp.ContentLength))
+
+	data, err := ioutil.ReadAll(r)
 	if err != nil {
 		return "", err
 	}
 
 	return string(data), nil
+}
+
+func progressBar(contentLength int64) io.Writer {
+	newline := progressbar.OptionOnCompletion(func() {
+		fmt.Println()
+	})
+
+	return progressbar.NewOptions64(contentLength, progressbar.OptionSetBytes64(contentLength), newline)
 }
 
 func downloadFile(url, filename string) (path string, err error) {
@@ -333,7 +352,9 @@ func downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	out := io.MultiWriter(f, progressBar(resp.ContentLength))
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
 		return "", err
 	}
 

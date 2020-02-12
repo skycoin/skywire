@@ -81,6 +81,8 @@ github.com/matttproud/golang_protobuf_extensions/pbutil
 github.com/mgutz/ansi
 # github.com/mholt/archiver/v3 v3.3.0
 github.com/mholt/archiver/v3
+# github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
+github.com/mitchellh/colorstring
 # github.com/nwaples/rardecode v1.0.0
 github.com/nwaples/rardecode
 # github.com/pierrec/lz4 v2.0.5+incompatible
@@ -106,6 +108,8 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/schollz/progressbar/v2 v2.15.0
+github.com/schollz/progressbar/v2
 # github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
