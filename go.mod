@@ -30,7 +30,7 @@ require (
 	golang.org/x/tools v0.0.0-20200203023011-6f24f261dadb // indirect
 )
 
-//replace (
-//github.com/SkycoinProject/dmsg => ../dmsg
-//github.com/SkycoinProject/skywire-peering-daemon => ../skywire-peering-daemon
-//)
+replace (
+	github.com/SkycoinProject/dmsg => ../dmsg
+	github.com/SkycoinProject/skywire-peering-daemon => ../skywire-peering-daemon
+)
