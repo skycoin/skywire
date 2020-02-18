@@ -34,7 +34,7 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 	defer func() {
 		if err != nil {
 			cs.log.WithError(dStr.Close()).
-				Debug("On DialStream() failure, close stream resulted in error.") // TODO(evanlinjin): Race condition?
+				Debug("Stream closed on DialStream() failure.")
 		}
 	}()
 
@@ -61,12 +61,12 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 	return dStr, err
 }
 
-// Serve accepts incoming streams from remote clients.
-func (cs *ClientSession) Serve() error {
+// serve accepts incoming streams from remote clients.
+func (cs *ClientSession) serve() error {
 	defer func() {
 		if err := cs.Close(); err != nil {
 			cs.log.WithError(err).
-				Debug("On (*ClientSession).Serve() return, close client session resulted in error.")
+				Debug("On (*ClientSession).serve() return, close client session resulted in error.")
 		}
 	}()
 	for {

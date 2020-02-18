@@ -28,7 +28,13 @@ var (
 	spdMu           sync.Mutex
 )
 
-func execute(cmd *exec.Cmd) error {
+func execute(cmd *exec.Cmd, pubKey, lAddr, namedPipe string) error {
+	pk := fmt.Sprintf("SPD_PUBKEY=%s", pubKey)
+	la := fmt.Sprintf("SPD_LADDR=%s", lAddr)
+	nm := fmt.Sprintf("SPD_NAMED-PIPE=%s", namedPipe)
+
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, pk, la, nm)
 	cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
 		return err

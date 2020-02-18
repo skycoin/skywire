@@ -234,9 +234,9 @@ func (cfg *runCfg) runVisor() *runCfg {
 
 	if cfg.conf.AutoStartSpd {
 		go func() {
-			if err := node.RunDaemon(); err != nil {
+			if err := visor.RunDaemon(); err != nil {
 				cfg.logger.Error(err)
-				node.StopDaemon()
+				visor.StopDaemon()
 			}
 		}()
 	}

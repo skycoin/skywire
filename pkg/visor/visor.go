@@ -306,7 +306,7 @@ func (visor *Visor) Start() error {
 // RunDaemon starts a skywire-peering-daemon as an external process
 func (visor *Visor) RunDaemon() error {
 	visor.Onspd = true
-	bin, err := exec.LookPath("daemon")
+	bin, err := exec.LookPath("skywire-peering-daemon")
 	if err != nil {
 		return fmt.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
 	}
@@ -324,8 +324,8 @@ func (visor *Visor) RunDaemon() error {
 		return err
 	}
 
-	visor.spdCmd = exec.Command(bin, pubKey, lAddr, namedPipe)
-	if err := execute(visor.spdCmd); err != nil {
+	visor.spdCmd = exec.Command(bin)
+	if err := execute(visor.spdCmd, pubKey, lAddr, namedPipe); err != nil {
 		return fmt.Errorf("Failed to start daemon as an external process: %s", err)
 	}
 
@@ -462,8 +462,8 @@ func (visor *Visor) Close() (err error) {
 		visor.logger.Infof("Socket file %s removed successfully", visor.conf.AppServerSockFile)
 	}
 
-	if node.Onspd {
-		node.StopDaemon()
+	if visor.Onspd {
+		visor.StopDaemon()
 	}
 
 	return err

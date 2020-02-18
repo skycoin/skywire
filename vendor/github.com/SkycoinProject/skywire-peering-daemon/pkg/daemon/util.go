@@ -10,7 +10,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
-var logger = func(moduleName string) *logging.Logger {
+var Logger = func(moduleName string) *logging.Logger {
 	masterLogger := logging.NewMasterLogger()
 	return masterLogger.PackageLogger(moduleName)
 }
@@ -23,7 +23,7 @@ func BroadCast(broadCastIP string, port int, data []byte) error {
 	address := fmt.Sprintf("%s:%d", broadCastIP, port)
 	bAddr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
-		logger(moduleName).Errorf("Couldn't resolve broadcast address: %v", err)
+		Logger(moduleName).Errorf("Couldn't resolve broadcast address: %v", err)
 		return err
 	}
 
@@ -35,7 +35,7 @@ func BroadCast(broadCastIP string, port int, data []byte) error {
 	defer func() {
 		err := conn.Close()
 		if err != nil {
-			logger(moduleName).WithError(err)
+			Logger(moduleName).WithError(err)
 		}
 	}()
 
@@ -59,7 +59,7 @@ func serialize(packet Packet) ([]byte, error) {
 }
 
 func write(data []byte, filePath string) error {
-	logger(moduleName).Info("Sending packet over pipe")
+	Logger(moduleName).Info("Sending packet over pipe")
 	stdOut, err := os.OpenFile(filePath, os.O_RDWR, 0600)
 	if err != nil {
 		return err
@@ -67,12 +67,12 @@ func write(data []byte, filePath string) error {
 
 	_, err = stdOut.Write(data)
 	if err != nil {
-		logger(moduleName).Fatal(err)
+		Logger(moduleName).Fatal(err)
 	}
 
 	err = stdOut.Close()
 	if err != nil {
-		logger(moduleName).Fatal(err)
+		Logger(moduleName).Fatal(err)
 	}
 
 	return nil
@@ -90,11 +90,11 @@ func Deserialize(data []byte) (Packet, error) {
 	return packet, nil
 }
 
-// verifyPacket checks if packet received is sent from local daemon
+// verifyPacket checks if packet received is sent from local skywire-peering-daemon
 func verifyPacket(pubKey string, data []byte) bool {
 	packet, err := Deserialize(data)
 	if err != nil {
-		logger(moduleName).Fatalf("Couldn't serialize packet: %s", err)
+		Logger(moduleName).Fatalf("Couldn't serialize packet: %s", err)
 	}
 
 	return packet.PublicKey == pubKey
