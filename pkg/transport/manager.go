@@ -106,6 +106,7 @@ func (tm *Manager) serve(ctx context.Context) {
 					return
 				default:
 					if err := tm.acceptTransport(ctx, lis); err != nil {
+						tm.Logger.Infof("ERROR ACCEPTING TRANSPORT: %v", err)
 						if strings.Contains(err.Error(), "closed") {
 							return
 						}
@@ -141,7 +142,9 @@ func (tm *Manager) initTransports(ctx context.Context) {
 	if err != nil {
 		log.Warnf("No transports found for local visor: %v", err)
 	}
+	tm.Logger.Infof("INITIALIZING %d TRANSPORTS", len(entries))
 	for _, entry := range entries {
+		tm.Logger.Infof("INITIALIZING %v", *entry.Entry)
 		var (
 			tpType = entry.Entry.Type
 			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
@@ -150,6 +153,7 @@ func (tm *Manager) initTransports(ctx context.Context) {
 		if _, err := tm.saveTransport(remote, tpType); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		}
+		tm.Logger.Infoln("SUCCESSFULLY INITIALIZED TRANSPORT")
 	}
 }
 
@@ -173,6 +177,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 
 	mTp, ok := tm.tps[tpID]
 	if !ok {
+		tm.Logger.Infoln("NO TRANSPORT FOUND, CREATING NEW ONE")
 		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
 		if err := mTp.Accept(ctx, conn); err != nil {
 			return err
@@ -180,8 +185,11 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 		go mTp.Serve(tm.readCh, tm.done)
 		tm.tps[tpID] = mTp
 
-	} else if err := mTp.Accept(ctx, conn); err != nil {
-		return err
+	} else {
+		tm.Logger.Infoln("TP FOUND, ACCEPTING")
+		if err := mTp.Accept(ctx, conn); err != nil {
+			return err
+		}
 	}
 
 	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
@@ -212,8 +220,11 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 
 	tpID := tm.tpIDFromPK(remote, netName)
 
+	tm.Logger.Infof("INITIALIZING TP WITH ID %s", tpID)
+
 	tp, ok := tm.tps[tpID]
 	if ok {
+		tm.Logger.Infoln("GOT TP FROM MAP")
 		return tp, nil
 	}
 
