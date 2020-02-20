@@ -369,7 +369,7 @@ func (rg *RouteGroup) sendKeepAlive() error {
 		return ErrBadTransport
 	}
 
-	packet := routing.MakeKeepAlivePacket(rule.KeyRouteID())
+	packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
 	if err := tp.WritePacket(context.Background(), packet); err != nil {
 		return err
 	}
@@ -474,7 +474,7 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	for i := 0; i < len(rg.tps); i++ {
-		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
+		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
 		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
 		}
