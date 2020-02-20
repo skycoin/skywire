@@ -55,7 +55,9 @@ func (s *Server) Serve(l net.Listener) error {
 			return fmt.Errorf("accept: %s", err)
 		}
 
-		session, err := yamux.Server(conn, nil)
+		sessionCfg := yamux.DefaultConfig()
+		sessionCfg.EnableKeepAlive = false
+		session, err := yamux.Server(conn, sessionCfg)
 		if err != nil {
 			return fmt.Errorf("yamux server failure: %s", err)
 		}
