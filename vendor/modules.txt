@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20200203035036-dbbed345b710
+# github.com/SkycoinProject/dmsg v0.0.0-20200220122410-79d9d7bac617
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
@@ -34,7 +34,7 @@ github.com/flynn/noise
 # github.com/go-chi/chi v4.0.2+incompatible
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
-# github.com/golang/protobuf v1.3.2
+# github.com/golang/protobuf v1.3.3
 github.com/golang/protobuf/proto
 # github.com/google/uuid v1.1.1
 github.com/google/uuid
@@ -113,5 +113,5 @@ golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc/eventlog
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 gopkg.in/alecthomas/kingpin.v2
-# gopkg.in/yaml.v2 v2.2.2
+# gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
