@@ -25,6 +25,10 @@ type Server struct {
 	wg   sync.WaitGroup
 }
 
+type SessionCount struct {
+	Cmd string
+}
+
 // NewServer creates a new dmsg server entity.
 func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient) *Server {
 	s := new(Server)
@@ -47,9 +51,10 @@ func (s *Server) Close() error {
 }
 
 // Serve serves the server.
-func (s *Server) Serve(lis net.Listener, addr string) error {
+func (s *Server) Serve(lis net.Listener, addr string, availableConns int) error {
 	var log logrus.FieldLogger //nolint:gosimple
 	log = s.log.WithField("local_addr", addr).WithField("local_pk", s.pk)
+	log.Infof("AVAILABLECONNS IS = %s", availableConns)
 
 	log.Info("Serving server.")
 	s.wg.Add(1)
@@ -69,7 +74,7 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 	if addr == "" {
 		addr = lis.Addr().String()
 	}
-	if err := s.updateEntryLoop(addr); err != nil {
+	if err := s.updateEntryLoop(addr, availableConns); err != nil {
 		return err
 	}
 
@@ -98,7 +103,7 @@ func (s *Server) Ready() <-chan struct{} {
 	return s.ready
 }
 
-func (s *Server) updateEntryLoop(addr string) error {
+func (s *Server) updateEntryLoop(addr string, conns int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -109,8 +114,12 @@ func (s *Server) updateEntryLoop(addr string) error {
 		}
 	}()
 	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, addr)
+		return s.updateServerEntry(ctx, addr , conns, nil)
 	})
+}
+
+func (s *Server) updateServerSession(ctx context.Context, cmd SessionCount) error {
+	return s.updateServerEntry(ctx, "", 0, cmd)
 }
 
 func (s *Server) handleSession(conn net.Conn) {
@@ -130,10 +139,28 @@ func (s *Server) handleSession(conn net.Conn) {
 	log = log.WithField("remote_pk", dSes.RemotePK())
 	log.Info("Started session.")
 
+	if err := s.updateServerSession(context.Background(), SessionCount{"incr"}); err != nil {
+		s.log.WithError(err).
+			Warn("Failed to increase server sessions")
+	} else {
+		s.log.Info("Available sessions updated")
+		e, err := s.dc.Entry(context.Background(), s.pk)
+		if err != nil {
+			s.log.Warn(err)
+		}
+
+		s.log.Infof("Current number of sessions: %d", e.Server.AvailableSessions)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		awaitDone(ctx, s.done)
 		log.WithError(dSes.Close()).Info("Stopped session.")
+
+		if err := s.updateServerSession(context.Background(), SessionCount{"dcr"}); err != nil {
+			s.log.WithError(err).
+				Warn("Failed to update server sessions")
+		}
 	}()
 
 	if s.setSession(ctx, dSes.SessionCommon) {

@@ -82,7 +82,7 @@ func (e EntryValidationError) Error() string {
 	return fmt.Sprintf("entry validation error: %s", e.Cause)
 }
 
-// Entry represents a Messaging Node's entry in the Discovery database.
+// Entry represents a Dmsg Node's entry in the Discovery database.
 type Entry struct {
 	// The data structure's version.
 	Version string `json:"version"`
@@ -96,10 +96,10 @@ type Entry struct {
 	// Static public key of an instance.
 	Static cipher.PubKey `json:"static"`
 
-	// Contains the instance's client meta if it's to be advertised as a Messaging Client.
+	// Contains the instance's client meta if it's to be advertised as a DMSG Client.
 	Client *Client `json:"client,omitempty"`
 
-	// Contains the instance's server meta if it's to be advertised as a Messaging Server.
+	// Contains the instance's server meta if it's to be advertised as a DMSG Server.
 	Server *Server `json:"server,omitempty"`
 
 	// Signature for proving authenticity of an Entry.
@@ -146,14 +146,17 @@ func (c *Client) String() string {
 
 // Server contains parameters for Server instances.
 type Server struct {
-	// IPv4 or IPv6 public address of the Messaging Server.
+	// IPv4 or IPv6 public address of the DMSG Server.
 	Address string `json:"address"`
 
-	// Port in which the Messaging Server is listening for connections.
+	// Port in which the DMSG Server is listening for connections.
 	Port string `json:"port"`
 
 	// Number of connections still available.
 	AvailableConnections int `json:"available_connections"`
+
+	// Number of sessions
+	AvailableSessions int `json:"available_sessions"`
 }
 
 // String implements stringer
@@ -178,11 +181,11 @@ func NewClientEntry(pubkey cipher.PubKey, sequence uint64, delegatedServers []ci
 }
 
 // NewServerEntry constructs a new Server entry.
-func NewServerEntry(pubkey cipher.PubKey, sequence uint64, address string, conns int) *Entry {
+func NewServerEntry(pubkey cipher.PubKey, sequence uint64, address string, conns int, sessions int) *Entry {
 	return &Entry{
 		Version:   currentVersion,
 		Sequence:  sequence,
-		Server:    &Server{Address: address, AvailableConnections: conns},
+		Server:    &Server{Address: address, AvailableConnections: conns, AvailableSessions: sessions},
 		Static:    pubkey,
 		Timestamp: time.Now().UnixNano(),
 	}

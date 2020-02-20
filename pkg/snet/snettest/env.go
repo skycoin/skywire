@@ -137,7 +137,7 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 	srv = dmsg.NewServer(pk, sk, dc)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Serve(l, "")
+		errCh <- srv.Serve(l, "", 10)
 		close(errCh)
 	}()
 	<-srv.Ready()
