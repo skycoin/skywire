@@ -20,7 +20,9 @@ type Client struct {
 
 // NewClient constructs a new Client.
 func NewClient(conn io.ReadWriteCloser) (*Client, error) {
-	session, err := yamux.Client(conn, nil)
+	sessionCfg := yamux.DefaultConfig()
+	sessionCfg.EnableKeepAlive = false
+	session, err := yamux.Client(conn, sessionCfg)
 	if err != nil {
 		return nil, fmt.Errorf("error creating client: yamux: %s", err)
 	}
