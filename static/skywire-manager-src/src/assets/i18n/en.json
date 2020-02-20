@@ -49,7 +49,6 @@
         "title": "Visor Info",
         "label": "Label:",
         "public-key": "Public key:",
-        "ip": "IP address:",
         "port": "Port:",
         "node-version": "Node version:",
         "app-protocol-version": "App protocol version:",
@@ -126,7 +125,7 @@
         "bad-old-password": "The provided old password is not correct.",
         "old-password-required": "Old password is required.",
         "new-password-error": "Password must be 6-64 characters long.",
-        "invalid-password-format": "The new password is not valid.",
+        "invalid-password-format": "Password must have at least one upper, lower, digit and special character and be 6-64 characters long.",
         "passwords-not-match": "Passwords do not match.",
         "default-password": "Don't use the default password (1234)."
       }
@@ -150,6 +149,10 @@
       "config": "Configuration",
       "update": "Update",
       "reboot": "Reboot"
+    },
+    "reboot": {
+      "confirmation": "Are you sure you want to reboot the node?",
+      "done": "The visor is restarting."
     },
     "config": {
       "title": "Discovery configuration",
@@ -327,14 +330,14 @@
         "title": "Rule summary",
         "keep-alive": "Keep alive:",
         "type": "Rule type:",
-        "request-route-id": "Request route ID:"
+        "key-route-id": "Key route ID:"
       },
       "app": {
         "title": "App fields",
-        "route-id": "Route ID:",
-        "remote-pk": "Remote public key:",
-        "remote-port": "Remote port:",
-        "local-port": "Local port:"
+        "destination-pk": "Destination public key:",
+        "source-pk": "Source public key:",
+        "destination-port": "Destination port:",
+        "source-port": "Source port:"
       },
       "forward": {
         "title": "Forward fields",

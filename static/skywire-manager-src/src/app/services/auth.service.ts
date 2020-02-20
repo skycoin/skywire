@@ -50,7 +50,7 @@ export class AuthService {
           }
 
           // The user is not logged.
-          if ((err as HttpErrorResponse).status === 401 || err.error.includes('Unauthorized')) {
+          if ((err as HttpErrorResponse).status === 401) {
             return of(AuthStates.NotLogged);
           }
         })

@@ -22,7 +22,7 @@
         <span>{{ 'routes.details.summary.type' | translate }}</span> {{ getRuleTypeName(routeRule.rule_summary.rule_type) }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.summary.request-route-id' | translate }}</span> {{ routeRule.rule_summary.request_route_id }}
+        <span>{{ 'routes.details.summary.key-route-id' | translate }}</span> {{ routeRule.rule_summary.key_route_id }}
       </div>
     </div>
 
@@ -31,16 +31,16 @@
         {{ 'routes.details.app.title' | translate }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.app.route-id' | translate }}</span> {{ routeRule.rule_summary.app_fields.resp_rid }}
+        <span>{{ 'routes.details.app.destination-pk' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.dst_pk }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.app.remote-pk' | translate }}</span> {{ routeRule.rule_summary.app_fields.remote_pk }}
+        <span>{{ 'routes.details.app.source-pk' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.src_pk }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.app.remote-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.remote_port }}
+        <span>{{ 'routes.details.app.destination-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.dst_port }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.app.local-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.local_port }}
+        <span>{{ 'routes.details.app.source-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.src_port }}
       </div>
     </div>
 

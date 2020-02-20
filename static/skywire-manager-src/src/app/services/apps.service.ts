@@ -19,7 +19,7 @@ export class AppsService {
    * Starts or stops an app.
    */
   changeAppState(nodeKey: string, appName: string, startApp: boolean) {
-    return this.apiService.put(`nodes/${nodeKey}/apps/${encodeURIComponent(appName)}`,
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`,
       { status: startApp ? 1 : 0 }
     );
   }
@@ -28,7 +28,7 @@ export class AppsService {
    * Changes the autostart setting of an app.
    */
   changeAppAutostart(nodeKey: string, appName: string, autostart: boolean) {
-    return this.apiService.put(`nodes/${nodeKey}/apps/${encodeURIComponent(appName)}`,
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`,
       { autostart: autostart }
     );
   }
@@ -42,7 +42,7 @@ export class AppsService {
     const since = days !== -1 ? Date.now() - (days * 86400000) : 0;
     const sinceString = formatDate(since, 'yyyy-MM-ddTHH:mm:ssZZZZZ', 'en-US');
 
-    return this.apiService.get(`nodes/${nodeKey}/apps/${encodeURIComponent(appName)}/logs?since=${sinceString}`
+    return this.apiService.get(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}/logs?since=${sinceString}`
     ).pipe(map(response => response.logs));
   }
 }

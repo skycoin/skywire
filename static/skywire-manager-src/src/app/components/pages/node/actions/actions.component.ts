@@ -10,6 +10,8 @@ import { SnackbarService } from '../../../../services/snackbar.service';
 import { NodeComponent } from '../node.component';
 import { SidenavService } from 'src/app/services/sidenav.service';
 import { Node } from '../../../../app.datatypes';
+import GeneralUtils from 'src/app/utils/generalUtils';
+import { NodeService } from 'src/app/services/node.service';
 
 /**
  * Component for making the options of the left bar of the nodes page to appear. It does not
@@ -35,12 +37,14 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
 
   private menuSubscription: Subscription;
   private nodeSubscription: Subscription;
+  private rebootSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
     private router: Router,
     private snackbarService: SnackbarService,
     private sidenavService: SidenavService,
+    private nodeService: NodeService,
   ) { }
 
   ngAfterViewInit() {
@@ -61,6 +65,11 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           actionName: 'terminal',
           icon: 'laptop'
         },
+        {
+          name: 'actions.menu.reboot',
+          actionName: 'reboot',
+          icon: 'rotate_right'
+        }
         // Options not implemented yet.
         /*
         {
@@ -73,12 +82,6 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           name: 'actions.menu.update',
           actionName: 'update',
           icon: 'get_app',
-          disabled: true
-        },
-        {
-          name: 'actions.menu.reboot',
-          actionName: 'reboot',
-          icon: 'rotate_right',
           disabled: true
         }*/], [
         {
@@ -113,13 +116,18 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   reboot() {
-    // this.nodeService.reboot().subscribe(
-    //   () => {
-    //     this.snackbarService.showDone('actions.config.success');
-    //     this.router.navigate(['nodes']);
-    //   },
-    //   (e) => this.snackbarService.showError(e.message),
-    // );
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.reboot.confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.rebootSubscription = this.nodeService.reboot(this.currentNode.local_pk).subscribe(() => {
+        this.snackbarService.showDone('actions.reboot.done');
+        confirmationDialog.close();
+      }, () => {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+      });
+    });
   }
 
   update() {

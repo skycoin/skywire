@@ -26,7 +26,7 @@ export class NodeService {
    * Get the list of the nodes connected to the hypervisor.
    */
   getNodes(): Observable<Node[]> {
-    return this.apiService.get('nodes').pipe(map((nodes: Node[]) => {
+    return this.apiService.get('visors').pipe(map((nodes: Node[]) => {
       nodes = nodes || [];
 
       // Process the node data and create a helper map.
@@ -79,7 +79,7 @@ export class NodeService {
     let currentNode: Node;
 
     // Get the basic node data.
-    return this.apiService.get(`nodes/${nodeKey}`).pipe(
+    return this.apiService.get(`visors/${nodeKey}`).pipe(
       flatMap((node: Node) => {
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
@@ -87,13 +87,13 @@ export class NodeService {
         currentNode = node;
 
         // Get the health info.
-        return this.apiService.get(`nodes/${nodeKey}/health`);
+        return this.apiService.get(`visors/${nodeKey}/health`);
       }),
       flatMap((health: HealthInfo) => {
         currentNode.health = health;
 
         // Get the node uptime.
-        return this.apiService.get(`nodes/${nodeKey}/uptime`);
+        return this.apiService.get(`visors/${nodeKey}/uptime`);
       }),
       flatMap((secondsOnline: string) => {
         currentNode.seconds_online = Math.floor(Number.parseFloat(secondsOnline));
@@ -129,5 +129,12 @@ export class NodeService {
     }
 
     return port;
+  }
+
+  /**
+   * Restarts a node.
+   */
+  reboot(nodeKey: string): Observable<any> {
+    return this.apiService.get(`visors/${nodeKey}/restart`).pipe();
   }
 }

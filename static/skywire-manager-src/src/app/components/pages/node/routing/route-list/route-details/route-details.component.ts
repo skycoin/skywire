@@ -19,16 +19,20 @@ class RouteRule {
 class RuleSumary {
   keep_alive: number;
   rule_type: number;
-  request_route_id: number;
+  key_route_id: number;
   app_fields?: AppRuleSumary;
   forward_fields?: ForwardRuleSumary;
 }
 
 class AppRuleSumary {
-  resp_rid: number;
-  remote_pk: string;
-  remote_port: number;
-  local_port: number;
+  route_descriptor: RouteDescriptor;
+}
+
+class RouteDescriptor {
+  dst_pk: string;
+  src_pk: string;
+  dst_port: number;
+  src_port: number;
 }
 
 class ForwardRuleSumary {

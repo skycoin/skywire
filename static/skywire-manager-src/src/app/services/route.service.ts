@@ -19,17 +19,17 @@ export class RouteService {
    * Get a list with the routes of a node.
    */
   getRoutes(nodeKey: string): Observable<Route[]> {
-    return this.apiService.get(`nodes/${nodeKey}/routes`);
+    return this.apiService.get(`visors/${nodeKey}/routes`);
   }
 
   /**
    * Gets the details of a specific route.
    */
   get(nodeKey: string, routeId: string) {
-    return this.apiService.get(`nodes/${nodeKey}/routes/${routeId}`);
+    return this.apiService.get(`visors/${nodeKey}/routes/${routeId}`);
   }
 
   delete(nodeKey: string, routeId: string) {
-    return this.apiService.delete(`nodes/${nodeKey}/routes/${routeId}`);
+    return this.apiService.delete(`visors/${nodeKey}/routes/${routeId}`);
   }
 }

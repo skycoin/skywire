@@ -19,11 +19,11 @@ export class TransportService {
    * Get a list with the transports of a node.
    */
   getTransports(nodeKey: string): Observable<Transport[]> {
-    return this.apiService.get(`nodes/${nodeKey}/transports`);
+    return this.apiService.get(`visors/${nodeKey}/transports`);
   }
 
   create(nodeKey: string, remoteKey: string, type: string): Observable<any> {
-    return this.apiService.post(`nodes/${nodeKey}/transports`, {
+    return this.apiService.post(`visors/${nodeKey}/transports`, {
       remote_pk: remoteKey,
       transport_type: type,
       public: true,
@@ -31,13 +31,13 @@ export class TransportService {
   }
 
   delete(nodeKey: string, transportId: string) {
-    return this.apiService.delete(`nodes/${nodeKey}/transports/${transportId}`);
+    return this.apiService.delete(`visors/${nodeKey}/transports/${transportId}`);
   }
 
   /**
    * Gets the list of the transport types the node can work with.
    */
   types(nodeKey: string): Observable<string[]> {
-    return this.apiService.get(`nodes/${nodeKey}/transport-types`);
+    return this.apiService.get(`visors/${nodeKey}/transport-types`);
   }
 }
