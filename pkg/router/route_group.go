@@ -265,7 +265,7 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 }
 
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
-	packet := routing.MakeDataPacket(rule.KeyRouteID(), data)
+	packet := routing.MakeDataPacket(rule.NextRouteID(), data)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
