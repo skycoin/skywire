@@ -38,6 +38,12 @@ func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClien
 // LocalPK returns the local public key of the entity.
 func (c *EntityCommon) LocalPK() cipher.PubKey { return c.pk }
 
+// LocalSK returns the local secret key of the entity.
+func (c *EntityCommon) LocalSK() cipher.SecKey { return c.sk }
+
+// Logger obtains the logger.
+func (c *EntityCommon) Logger() logrus.FieldLogger { return c.log }
+
 // SetLogger sets the internal logger.
 // This should be called before we serve.
 func (c *EntityCommon) SetLogger(log logrus.FieldLogger) { c.log = log }
