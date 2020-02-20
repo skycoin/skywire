@@ -54,7 +54,6 @@ func (s *Server) Close() error {
 func (s *Server) Serve(lis net.Listener, addr string, availableConns int) error {
 	var log logrus.FieldLogger //nolint:gosimple
 	log = s.log.WithField("local_addr", addr).WithField("local_pk", s.pk)
-	log.Infof("AVAILABLECONNS IS = %s", availableConns)
 
 	log.Info("Serving server.")
 	s.wg.Add(1)
