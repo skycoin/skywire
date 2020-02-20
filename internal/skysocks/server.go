@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/yamux"
 	"github.com/armon/go-socks5"
-	"github.com/hashicorp/yamux"
 )
 
 // Server implements multiplexing proxy server using yamux.
@@ -46,8 +46,11 @@ func (s *Server) Serve(l net.Listener) error {
 		conn, err := l.Accept()
 		if err != nil {
 			if s.isClosed() {
+				s.log.Errorf("GOT PROXY ACCEPT ERR %v, BUT SERVER IS CLOSED", err)
 				return nil
 			}
+
+			s.log.Errorf("PROXY ACCEPT ERROR: %v", err)
 
 			return fmt.Errorf("accept: %s", err)
 		}
