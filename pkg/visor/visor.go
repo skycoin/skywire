@@ -22,12 +22,12 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
@@ -76,7 +76,7 @@ type Visor struct {
 	n      *snet.Network
 	tm     *transport.Manager
 	rt     routing.Table
-	pty    *dmsgpty.Host // TODO(evanlinjin): Complete.
+	pty    *dmsgpty.Host
 
 	Logger *logging.MasterLogger
 	logger *logging.Logger
@@ -252,8 +252,34 @@ func (visor *Visor) Start() error {
 
 	// Start pty.
 	if visor.pty != nil {
-		go visor.pty.ServeRemoteRequests(ctx)
-		go visor.pty.ServeCLIRequests(ctx)
+
+		// dmsgpty cli
+		ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
+		if err != nil {
+			return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
+		}
+		go func() {
+			if err := visor.pty.ServeCLI(ctx, ptyL); err != nil {
+				visor.logger.
+					WithError(err).
+					WithField("entity", "dmsgpty-host").
+					WithField("func", ".ServeCLI()").
+					Error()
+				cancel()
+			}
+		}()
+
+		// dmsgpty serve
+		go func() {
+			if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
+				visor.logger.
+					WithError(err).
+					WithField("entity", "dmsgpty-host").
+					WithField("func", ".ListenAndServe()").
+					Error()
+				cancel()
+			}
+		}()
 	}
 
 	pathutil.EnsureDir(visor.dir())
