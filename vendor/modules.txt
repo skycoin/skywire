@@ -2,6 +2,8 @@
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
+github.com/SkycoinProject/dmsg/dmsgpty
+github.com/SkycoinProject/dmsg/httputil
 github.com/SkycoinProject/dmsg/ioutil
 github.com/SkycoinProject/dmsg/netutil
 github.com/SkycoinProject/dmsg/noise
@@ -46,6 +48,8 @@ github.com/gorilla/securecookie
 github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
+# github.com/klauspost/compress v1.10.0
+github.com/klauspost/compress/flate
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/mattn/go-colorable v0.1.4
@@ -115,3 +119,9 @@ golang.org/x/sys/windows/svc/eventlog
 gopkg.in/alecthomas/kingpin.v2
 # gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
+# nhooyr.io/websocket v1.8.2
+nhooyr.io/websocket
+nhooyr.io/websocket/internal/bpool
+nhooyr.io/websocket/internal/errd
+nhooyr.io/websocket/internal/wsjs
+nhooyr.io/websocket/internal/xsync
