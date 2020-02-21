@@ -39,6 +39,12 @@ func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClien
 // LocalPK returns the local public key of the entity.
 func (c *EntityCommon) LocalPK() cipher.PubKey { return c.pk }
 
+// LocalSK returns the local secret key of the entity.
+func (c *EntityCommon) LocalSK() cipher.SecKey { return c.sk }
+
+// Logger obtains the logger.
+func (c *EntityCommon) Logger() logrus.FieldLogger { return c.log }
+
 // SetLogger sets the internal logger.
 // This should be called before we serve.
 func (c *EntityCommon) SetLogger(log logrus.FieldLogger) { c.log = log }
@@ -114,7 +120,7 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 }
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, conns int , v interface{}) error {
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, conns int, v interface{}) error {
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewServerEntry(c.pk, 0, addr, conns, 0)
@@ -126,13 +132,13 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, conns
 
 	if v != nil {
 		c.log.Info("Updating server sessions...")
-		if v.(SessionCount).Cmd == "incr" {
-			entry.Server.AvailableSessions+=1
+		if v.(SessionCmd).Cmd == "incr" {
+			entry.Server.AvailableSessions++
 		} else {
-			entry.Server.AvailableSessions-=1
+			entry.Server.AvailableSessions--
 		}
 
-		return c.dc.UpdateEntry(ctx, c.sk,entry, &struct{}{})
+		return c.dc.UpdateEntry(ctx, c.sk, entry, &struct{}{})
 	}
 
 	entry.Server.Address = addr
