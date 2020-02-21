@@ -20,6 +20,7 @@ type Config struct {
 	MinSessions int
 }
 
+// PrintWarnings prints warnings with config.
 func (c Config) PrintWarnings(log logrus.FieldLogger) {
 	log = log.WithField("location", "dmsg.Config")
 	if c.MinSessions < 1 {
@@ -30,18 +31,22 @@ func (c Config) PrintWarnings(log logrus.FieldLogger) {
 // DefaultConfig returns the default configuration for a dmsg client entity.
 func DefaultConfig() *Config {
 	return &Config{
-		MinSessions: 1,
+		MinSessions: DefaultMinSessions,
 	}
 }
 
 // Client represents a dmsg client entity.
 type Client struct {
+	ready     chan struct{}
+	readyOnce sync.Once
+
 	EntityCommon
 	conf   *Config
 	porter *netutil.Porter
-	errCh  chan error
-	done   chan struct{}
-	once   sync.Once
+
+	errCh chan error
+	done  chan struct{}
+	once  sync.Once
 
 	sesMx sync.Mutex
 }
@@ -49,11 +54,18 @@ type Client struct {
 // NewClient creates a dmsg client entity.
 func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Config) *Client {
 	c := new(Client)
+	c.ready = make(chan struct{})
 
 	// Init common fields.
 	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"))
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
-		return c.EntityCommon.updateClientEntry(ctx, c.done)
+		err := c.EntityCommon.updateClientEntry(ctx, c.done)
+		if err == nil {
+			// Client is 'ready' once we have successfully updated the discovery entry
+			// with at least one delegated server.
+			c.readyOnce.Do(func() { close(c.ready) })
+		}
+		return err
 	}
 	c.EntityCommon.delSessionCallback = func(ctx context.Context) error {
 		return c.EntityCommon.updateClientEntry(ctx, c.done)
@@ -103,6 +115,11 @@ func (ce *Client) Serve() {
 			time.Sleep(time.Second) // TODO(evanlinjin): Implement exponential back off.
 			continue
 		}
+		if len(entries) == 0 {
+			wait := time.Second
+			ce.log.Warnf("No entries found. Retrying after %s...", wait.String())
+			time.Sleep(wait)
+		}
 
 		for _, entry := range entries {
 			if isClosed(ce.done) {
@@ -116,6 +133,9 @@ func (ce *Client) Serve() {
 					return
 				case err := <-ce.errCh:
 					ce.log.WithError(err).Info("Session stopped.")
+					if isClosed(ce.done) {
+						return
+					}
 				}
 			}
 
@@ -124,6 +144,12 @@ func (ce *Client) Serve() {
 			}
 		}
 	}
+}
+
+// Ready returns a chan which blocks until the client has at least one delegated server and has an entry in the
+// dmsg discovery.
+func (ce *Client) Ready() <-chan struct{} {
+	return ce.ready
 }
 
 func (ce *Client) discoverServers(ctx context.Context) (entries []*disc.Entry, err error) {

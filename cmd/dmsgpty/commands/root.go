@@ -11,6 +11,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 var ptyCLI dmsgpty.CLI
@@ -32,6 +33,10 @@ var rootCmd = &cobra.Command{
 	Use:   "dmsgpty",
 	Short: "Run commands over dmsg",
 	PreRunE: func(*cobra.Command, []string) error {
+		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
+
 		return readDstAddr()
 	},
 	RunE: func(*cobra.Command, []string) error {
