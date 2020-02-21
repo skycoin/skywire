@@ -128,7 +128,7 @@ func (s *Server) handleSession(conn net.Conn) {
 	log = s.log.WithField("remote_tcp", conn.RemoteAddr())
 
 	getSession := func() (int, error) {
-		e, err :=s.dc.Entry(context.Background(), s.pk)
+		e, err := s.dc.Entry(context.Background(), s.pk)
 		if err != nil {
 			return -1, err
 		}
