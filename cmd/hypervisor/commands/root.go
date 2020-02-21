@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
@@ -23,7 +25,7 @@ var (
 	configPath     string
 	mock           bool
 	mockEnableAuth bool
-	mockNodes      int
+	mockVisors     int
 	mockMaxTps     int
 	mockMaxRoutes  int
 )
@@ -33,16 +35,20 @@ func init() {
 	rootCmd.Flags().StringVarP(&configPath, "config", "c", "./hypervisor-config.json", "hypervisor config path")
 	rootCmd.Flags().BoolVarP(&mock, "mock", "m", false, "whether to run hypervisor with mock data")
 	rootCmd.Flags().BoolVar(&mockEnableAuth, "mock-enable-auth", false, "whether to enable user management in mock mode")
-	rootCmd.Flags().IntVar(&mockNodes, "mock-nodes", 5, "number of app nodes to have in mock mode")
-	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock app node")
-	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per node")
+	rootCmd.Flags().IntVar(&mockVisors, "mock-visors", 5, "number of visors to have in mock mode")
+	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock visor")
+	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per visor")
 }
 
 // nolint:gochecknoglobals
 var rootCmd = &cobra.Command{
 	Use:   "hypervisor",
-	Short: "Manages Skywire App Nodes",
+	Short: "Manages Skywire Visors",
 	Run: func(_ *cobra.Command, args []string) {
+		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
+
 		if configPath == "" {
 			configPath = pathutil.FindConfigPath(args, -1, configEnv, pathutil.HypervisorDefaults())
 		}
@@ -60,7 +66,7 @@ var rootCmd = &cobra.Command{
 			rpcAddr  = config.Interfaces.RPCAddr
 		)
 
-		m, err := hypervisor.NewNode(config)
+		m, err := hypervisor.New(config)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
@@ -87,10 +93,10 @@ var rootCmd = &cobra.Command{
 
 		if mock {
 			err := m.AddMockData(hypervisor.MockConfig{
-				Nodes:            mockNodes,
-				MaxTpsPerNode:    mockMaxTps,
-				MaxRoutesPerNode: mockMaxRoutes,
-				EnableAuth:       mockEnableAuth,
+				Visors:            mockVisors,
+				MaxTpsPerVisor:    mockMaxTps,
+				MaxRoutesPerVisor: mockMaxRoutes,
+				EnableAuth:        mockEnableAuth,
 			})
 			if err != nil {
 				log.Fatalln("Failed to add mock data:", err)

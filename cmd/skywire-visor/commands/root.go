@@ -24,6 +24,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -48,7 +49,7 @@ type runCfg struct {
 	logger       *logging.Logger
 	masterLogger *logging.MasterLogger
 	conf         visor.Config
-	node         *visor.Node
+	visor        *visor.Visor
 	restartCtx   *restart.Context
 }
 
@@ -58,16 +59,20 @@ var rootCmd = &cobra.Command{
 	Use:   "skywire-visor [config-path]",
 	Short: "Visor for skywire",
 	Run: func(_ *cobra.Command, args []string) {
+		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
+
 		cfg.args = args
 
 		cfg.startProfiler().
 			startLogger().
 			readConfig().
-			runNode().
+			runVisor().
 			waitOsSignals().
-			stopNode()
+			stopVisor()
 	},
-	Version: visor.Version,
+	Version: buildinfo.Get().Version,
 }
 
 func init() {
@@ -142,7 +147,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 	var rdr io.Reader
 
 	if !cfg.cfgFromStdin {
-		configPath := pathutil.FindConfigPath(cfg.args, 0, configEnv, pathutil.NodeDefaults())
+		configPath := pathutil.FindConfigPath(cfg.args, 0, configEnv, pathutil.VisorDefaults())
 
 		file, err := os.Open(filepath.Clean(configPath))
 		if err != nil {
@@ -174,7 +179,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 	return cfg
 }
 
-func (cfg *runCfg) runNode() *runCfg {
+func (cfg *runCfg) runVisor() *runCfg {
 	startDelay, err := time.ParseDuration(cfg.startDelay)
 	if err != nil {
 		cfg.logger.Warnf("Using no visor start delay due to parsing failure: %v", err)
@@ -198,13 +203,13 @@ func (cfg *runCfg) runNode() *runCfg {
 		cfg.logger.Fatal("failed to unlink socket files: ", err)
 	}
 
-	node, err := visor.NewNode(&cfg.conf, cfg.masterLogger, cfg.restartCtx, cfg.configPath)
+	visor, err := visor.NewVisor(&cfg.conf, cfg.masterLogger, cfg.restartCtx, cfg.configPath)
 	if err != nil {
-		cfg.logger.Fatal("Failed to initialize node: ", err)
+		cfg.logger.Fatal("Failed to initialize visor: ", err)
 	}
 
 	if cfg.conf.Uptime.Tracker != "" {
-		uptimeTracker, err := utclient.NewHTTP(cfg.conf.Uptime.Tracker, cfg.conf.Node.StaticPubKey, cfg.conf.Node.StaticSecKey)
+		uptimeTracker, err := utclient.NewHTTP(cfg.conf.Uptime.Tracker, cfg.conf.Visor.StaticPubKey, cfg.conf.Visor.StaticSecKey)
 		if err != nil {
 			cfg.logger.Error("Failed to connect to uptime tracker: ", err)
 		} else {
@@ -213,8 +218,8 @@ func (cfg *runCfg) runNode() *runCfg {
 			go func() {
 				for range ticker.C {
 					ctx := context.Background()
-					if err := uptimeTracker.UpdateNodeUptime(ctx); err != nil {
-						cfg.logger.Error("Failed to update node uptime: ", err)
+					if err := uptimeTracker.UpdateVisorUptime(ctx); err != nil {
+						cfg.logger.Error("Failed to update visor uptime: ", err)
 					}
 				}
 			}()
@@ -222,8 +227,8 @@ func (cfg *runCfg) runNode() *runCfg {
 	}
 
 	go func() {
-		if err := node.Start(); err != nil {
-			cfg.logger.Fatal("Failed to start node: ", err)
+		if err := visor.Start(); err != nil {
+			cfg.logger.Fatal("Failed to start visor: ", err)
 		}
 	}()
 
@@ -231,17 +236,17 @@ func (cfg *runCfg) runNode() *runCfg {
 		cfg.conf.ShutdownTimeout = defaultShutdownTimeout
 	}
 
-	cfg.node = node
+	cfg.visor = visor
 
 	return cfg
 }
 
-func (cfg *runCfg) stopNode() *runCfg {
+func (cfg *runCfg) stopVisor() *runCfg {
 	defer cfg.profileStop()
 
-	if err := cfg.node.Close(); err != nil {
+	if err := cfg.visor.Close(); err != nil {
 		if !strings.Contains(err.Error(), "closed") {
-			cfg.logger.Fatal("Failed to close node: ", err)
+			cfg.logger.Fatal("Failed to close visor: ", err)
 		}
 	}
 

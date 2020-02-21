@@ -23,11 +23,11 @@ RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
 	
 
 ## Resulting image
-FROM ${base} as node-runner
+FROM ${base} as visor-runner
 
 COPY --from=builder /go/skywire/skywire-visor skywire-visor
 COPY --from=builder /go/skywire/apps bin/apps
-COPY --from=builder /go/skywire/docker/images/node/update.sh update.sh
+COPY --from=builder /go/skywire/docker/images/visor/update.sh update.sh
 COPY --from=builder /go/skywire/skywire-cli bin/skywire-cli
 
 RUN ./update.sh
@@ -35,4 +35,4 @@ RUN ./update.sh
 ENTRYPOINT [ "./skywire-visor" ]
 
 # default target
-FROM  node-runner
+FROM  visor-runner

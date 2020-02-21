@@ -1,4 +1,4 @@
-package node
+package visor
 
 import (
 	"net"
@@ -11,7 +11,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
-var log = logging.MustGetLogger("skywire-cli")
+var logger = logging.MustGetLogger("skywire-cli")
 
 var rpcAddr string
 
@@ -21,17 +21,17 @@ func init() {
 
 // RootCmd contains commands that interact with the skywire-visor
 var RootCmd = &cobra.Command{
-	Use:   "node",
+	Use:   "visor",
 	Short: "Contains sub-commands that interact with the local Skywire Visor",
 }
 
 func rpcClient() visor.RPCClient {
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
-		log.Fatal("RPC connection failed:", err)
+		logger.Fatal("RPC connection failed:", err)
 	}
 	if err := conn.SetDeadline(time.Now().Add(rpcConnDuration)); err != nil {
-		log.Fatal("RPC connection failed:", err)
+		logger.Fatal("RPC connection failed:", err)
 	}
 	return visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix)
 }

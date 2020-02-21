@@ -26,7 +26,7 @@ type Error struct {
 
 // APIClient implements DMSG discovery API client.
 type APIClient interface {
-	UpdateNodeUptime(context.Context) error
+	UpdateVisorUptime(context.Context) error
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -61,8 +61,8 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 	return c.client.Do(req.WithContext(ctx))
 }
 
-// UpdateNodeUptime updates node uptime.
-func (c *httpClient) UpdateNodeUptime(ctx context.Context) error {
+// UpdateVisorUptime updates visor uptime.
+func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	resp, err := c.Get(ctx, "/update")
 	if resp != nil {
 		defer func() {
