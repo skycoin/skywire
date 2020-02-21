@@ -80,10 +80,10 @@ The configuration file provides the configuration for `skywire-visor`. It is a t
 You can generate a default configuration file by running:
 
 ```bash
-$ skywire-cli node gen-config
+$ skywire-cli visor gen-config
 ```
 
-Additional options are displayed when `skywire-cli node gen-config -h` is run.
+Additional options are displayed when `skywire-cli visor gen-config -h` is run.
 
 We will cover certain fields of the configuration file below.
 
@@ -138,7 +138,7 @@ For `dmsgpty` usage, refer to [#run-dmsgpty](#run-dmsgpty).
 
 ### Run `skywire-visor`
 
-`skywire-visor` hosts apps, proxies app's requests to remote nodes and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the node, communication between node and app is performed via unix pipes provided on app startup.
+`skywire-visor` hosts apps, proxies app's requests to remote visors and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the visor, communication between visor and app is performed via unix pipes provided on app startup.
 
 Note that `skywire-visor` requires a valid configuration file in order to execute.
 
@@ -195,17 +195,17 @@ Transports can be established via the `skywire-cli`.
 
 ```bash
 # Establish transport to `0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881`.
-$ skywire-cli node add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881
+$ skywire-cli visor add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881
 
 # List established transports.
-$ skywire-cli node ls-tp
+$ skywire-cli visor ls-tp
 ```
 
 ## App programming API
 
-App is a generic binary that can be executed by the node. On app
-startup node will open pair of unix pipes that will be used for
-communication between app and node. `app` packages exposes
+App is a generic binary that can be executed by the visor. On app
+startup visor will open pair of unix pipes that will be used for
+communication between app and visor. `app` packages exposes
 communication API over the pipe.
 
 ```golang
@@ -214,13 +214,13 @@ communication API over the pipe.
 // Setup setups app using default pair of pipes
 func Setup(config *Config) (*App, error) {}
 
-// Accept awaits for incoming loop confirmation request from a Node and
+// Accept awaits for incoming loop confirmation request from a Visor and
 // returns net.Conn for a received loop.
 func (app *App) Accept() (net.Conn, error) {}
 
 // Addr implements net.Addr for App connections.
 &Addr{PubKey: pk, Port: 12}
-// Dial sends create loop request to a Node and returns net.Conn for created loop.
+// Dial sends create loop request to a Visor and returns net.Conn for created loop.
 func (app *App) Dial(raddr *Addr) (net.Conn, error) {}
 
 // Close implements io.Closer for App.
@@ -277,7 +277,7 @@ E.g.
 $ make run_syslog ## run syslog-ng in docker container with logs mounted to /tmp/syslog
 $ export SYSLOG_OPTS='--syslog localhost:514'
 $ make integration-run-messaging ## or other integration-run-* goal
-$ sudo cat /tmp/syslog/messages ## collected logs from NodeA, NodeB, NodeC instances
+$ sudo cat /tmp/syslog/messages ## collected logs from VisorA, VisorB, VisorC instances
 ```
 
 ## Running skywire in docker containers
@@ -448,10 +448,10 @@ Instead of skywire-runner you can use:
 #### 5. Env-vars for development-/testing- purposes
 
 ```bash
-export SW_NODE_A=127.0.0.1
-export SW_NODE_A_PK=$(cat ./skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
-export SW_NODE_B=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01)
-export SW_NODE_B_PK=$(cat ./node/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
+export SW_VISOR_A=127.0.0.1
+export SW_VISOR_A_PK=$(cat ./skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
+export SW_VISOR_B=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01)
+export SW_VISOR_B_PK=$(cat ./visor/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
 ```
 
 #### 6. "Hello-Mike-Hello-Joe" test
@@ -463,13 +463,13 @@ Idea of test from Erlang classics: <https://youtu.be/uKfKtXYLG78?t=120>
 $ make run
 $ make docker-run
 # Open in browser skychat application
-$ firefox http://$SW_NODE_B:8000  &
+$ firefox http://$SW_VISOR_B:8000  &
 # add transport
-$ ./skywire-cli add-transport $SW_NODE_B_PK
+$ ./skywire-cli add-transport $SW_VISOR_B_PK
 # "Hello Mike!" - "Hello Joe!" - "System is working!"
-$ curl --data  {'"recipient":"'$SW_NODE_A_PK'", "message":"Hello Mike!"}' -X POST  http://$SW_NODE_B:8000/message
-$ curl --data  {'"recipient":"'$SW_NODE_B_PK'", "message":"Hello Joe!"}' -X POST  http://$SW_NODE_A:8000/message
-$ curl --data  {'"recipient":"'$SW_NODE_A_PK'", "message":"System is working!"}' -X POST  http://$SW_NODE_B:8000/message
+$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"Hello Mike!"}' -X POST  http://$SW_VISOR_B:8000/message
+$ curl --data  {'"recipient":"'$SW_VISOR_B_PK'", "message":"Hello Joe!"}' -X POST  http://$SW_VISOR_A:8000/message
+$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"System is working!"}' -X POST  http://$SW_VISOR_B:8000/message
 # Teardown
 $ make stop && make docker-stop
 ```

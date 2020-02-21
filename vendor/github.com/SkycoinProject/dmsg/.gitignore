@@ -6,6 +6,7 @@
 *.test
 *.out
 *.rdb
+*.json
 .DS_Store
 
 .idea/

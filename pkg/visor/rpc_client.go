@@ -22,6 +22,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 var (
@@ -424,7 +425,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 	client := &mockRPCClient{
 		s: &Summary{
 			PubKey:          localPK,
-			NodeVersion:     Version,
+			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
 			Apps: []*AppState{
 				{Name: "foo.v1.0", AutoStart: false, Port: 10},

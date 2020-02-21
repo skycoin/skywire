@@ -1,4 +1,4 @@
-package node
+package visor
 
 import (
 	"errors"
@@ -27,7 +27,7 @@ func init() {
 
 var lsRulesCmd = &cobra.Command{
 	Use:   "ls-rules",
-	Short: "Lists the local node's routing rules",
+	Short: "Lists the local visor's routing rules",
 	Run: func(_ *cobra.Command, _ []string) {
 		rules, err := rpcClient().RoutingRules()
 		internal.Catch(err)
