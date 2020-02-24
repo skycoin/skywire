@@ -10,8 +10,9 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 
+	"github.com/SkycoinProject/dmsg/httputil"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 

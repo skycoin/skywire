@@ -2,6 +2,7 @@ package visor
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -121,6 +122,10 @@ func TestListApps(t *testing.T) {
 }
 
 func TestStartStopApp(t *testing.T) {
+	tempDir, err := ioutil.TempDir(os.TempDir(), "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, os.RemoveAll(tempDir)) }()
+
 	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
@@ -180,7 +185,7 @@ func TestStartStopApp(t *testing.T) {
 
 	rpc := &RPC{visor: visor}
 
-	err := rpc.StartApp(&unknownApp, nil)
+	err = rpc.StartApp(&unknownApp, nil)
 	require.Error(t, err)
 	assert.Equal(t, ErrUnknownApp, err)
 
@@ -193,6 +198,9 @@ func TestStartStopApp(t *testing.T) {
 
 	require.NoError(t, rpc.StopApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
+
+	// remove files
+	require.NoError(t, os.RemoveAll("foo"))
 }
 
 /*
