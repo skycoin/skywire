@@ -89,7 +89,7 @@ github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200219234226-1ad67e1f0ef4
+# golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
