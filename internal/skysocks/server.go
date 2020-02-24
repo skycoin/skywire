@@ -55,6 +55,8 @@ func (s *Server) Serve(l net.Listener) error {
 			return fmt.Errorf("accept: %s", err)
 		}
 
+		s.log.Infoln("ACCEPTED NEW SKYSOCKS CONN")
+
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
 		session, err := yamux.Server(conn, sessionCfg)

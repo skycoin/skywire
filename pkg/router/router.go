@@ -330,13 +330,34 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 		r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
 		rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
 		r.rgs[rules.Desc] = rg
+
+		rg.fwd = append(rg.fwd, rules.Forward)
+		rg.rvs = append(rg.rvs, rules.Reverse)
+
+		tp := r.tm.Transport(rules.Forward.NextTransportID())
+		rg.tps = append(rg.tps, tp)
+	} else {
+		r.logger.Infoln("ROUTE GROUP ALREADY EXISTS")
+
+		if err := rg.Close(); err != nil {
+			r.logger.Errorf("Error closing already existing route group: %v", err)
+		}
+
+		rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
+		r.rgs[rules.Desc] = rg
+
+		rg.fwd = append(rg.fwd, rules.Forward)
+		rg.rvs = append(rg.rvs, rules.Reverse)
+
+		tp := r.tm.Transport(rules.Forward.NextTransportID())
+		rg.tps = append(rg.tps, tp)
 	}
 
-	rg.fwd = append(rg.fwd, rules.Forward)
+	/*rg.fwd = append(rg.fwd, rules.Forward)
 	rg.rvs = append(rg.rvs, rules.Reverse)
 
 	tp := r.tm.Transport(rules.Forward.NextTransportID())
-	rg.tps = append(rg.tps, tp)
+	rg.tps = append(rg.tps, tp)*/
 
 	return rg
 }
@@ -358,6 +379,14 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
 		return err
+	}
+
+	if rule.Type() == routing.RuleConsume {
+		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d", packet.Type(),
+			packet.RouteID())
+	} else {
+		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d AND NEXT ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
 	}
 
 	switch rule.Type() {
@@ -394,6 +423,14 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	rule, err := r.GetRule(routeID)
 	if err != nil {
 		return err
+	}
+
+	if rule.Type() == routing.RuleConsume {
+		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d", packet.Type(),
+			packet.RouteID())
+	} else {
+		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d AND NEXT ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
 	}
 
 	defer func() {
@@ -447,6 +484,14 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 	rule, err := r.GetRule(routeID)
 	if err != nil {
 		return err
+	}
+
+	if rule.Type() == routing.RuleConsume {
+		r.logger.Infof("HANDLING PACKET OF TYPE %S WITH ROUTE ID %d", packet.Type(),
+			packet.RouteID())
+	} else {
+		r.logger.Infof("HANDLING PACKET OF TYPE %S WITH ROUTE ID %d AND NEXT ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
 	}
 
 	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
