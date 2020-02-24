@@ -3,13 +3,12 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.13
 
 require (
-	github.com/SkycoinProject/dmsg v0.0.0-20200220122410-79d9d7bac617
+	github.com/SkycoinProject/dmsg v0.0.0-20200224064625-1b539081519c
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/google/uuid v1.1.1
-	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/securecookie v1.1.1
 	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect

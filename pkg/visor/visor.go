@@ -25,10 +25,11 @@ import (
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/dmsg/httputil"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
@@ -297,6 +298,7 @@ func (visor *Visor) Start() error {
 		}(ac)
 	}
 
+	// CLI and RPC server.
 	rpcSvr := rpc.NewServer()
 	if err := rpcSvr.RegisterName(RPCPrefix, &RPC{visor: visor}); err != nil {
 		return fmt.Errorf("rpc server created failed: %s", err)
@@ -432,6 +434,19 @@ func (visor *Visor) Exec(command string) ([]byte, error) {
 	args := strings.Split(command, " ")
 	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
 	return cmd.CombinedOutput()
+}
+
+// App returns a single app state of given name.
+func (visor *Visor) App(name string) (*AppState, bool) {
+	app, ok := visor.appsConf[name]
+	if !ok {
+		return nil, false
+	}
+	state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
+	if visor.procManager.Exists(app.App) {
+		state.Status = AppStatusRunning
+	}
+	return state, true
 }
 
 // Apps returns list of AppStates for all registered apps.

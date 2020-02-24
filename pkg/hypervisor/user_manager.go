@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
+	"github.com/SkycoinProject/dmsg/httputil"
 )
 
 const (
@@ -29,6 +29,8 @@ var (
 	ErrBadUsernameFormat = errors.New("format of 'username' is not accepted")
 	ErrUserNotFound      = errors.New("user is either deleted or not found")
 )
+
+// Other errors
 
 // for use with context.Context
 type ctxKey string

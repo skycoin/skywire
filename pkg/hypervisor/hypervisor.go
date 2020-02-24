@@ -16,13 +16,13 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -168,7 +168,6 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Delete("/visors/{pk}/routes/{rid}", m.deleteRoute())
 			r.Get("/visors/{pk}/loops", m.getLoops())
 			r.Get("/visors/{pk}/restart", m.restart())
-			r.Post("/visors/{pk}/exec", m.exec())
 		})
 	})
 
@@ -225,37 +224,6 @@ func (m *Hypervisor) getUptime() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, u)
-	})
-}
-
-// executes a command and returns its output
-func (m *Hypervisor) exec() http.HandlerFunc {
-	return m.withCtx(m.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			Command string `json:"command"`
-		}
-
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				log.Warnf("exec request: %v", err)
-			}
-
-			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
-
-			return
-		}
-
-		out, err := ctx.RPC.Exec(reqBody.Command)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		output := struct {
-			Output string `json:"output"`
-		}{string(out)}
-
-		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
 }
 
