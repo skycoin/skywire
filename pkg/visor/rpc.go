@@ -126,8 +126,7 @@ type TransportSummary struct {
 	IsSetup bool                `json:"is_setup"`
 }
 
-func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport,
-	includeLogs bool, isSetup bool) *TransportSummary {
+func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, incLogs bool, isSetup bool) *TransportSummary {
 
 	summary := &TransportSummary{
 		ID:      tp.Entry.ID,
@@ -136,7 +135,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport,
 		Type:    tp.Type(),
 		IsSetup: isSetup,
 	}
-	if includeLogs {
+	if incLogs {
 		summary.Log = tp.LogEntry
 	}
 	return summary
