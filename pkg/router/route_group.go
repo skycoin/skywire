@@ -267,6 +267,9 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
 	packet := routing.MakeDataPacket(rule.NextRouteID(), data)
 
+	rg.logger.Infof("WRITING PACKET OF TYPE %s AND ROUTE ID %d AND NEXT ID %d", packet.Type(),
+		rule.KeyRouteID(), rule.NextRouteID())
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	errCh := rg.writePacketAsync(ctx, tp, packet)
