@@ -24,7 +24,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
@@ -158,7 +157,7 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/visors/{pk}", m.getVisor())
 			r.Get("/visors/{pk}/health", m.getHealth())
 			r.Get("/visors/{pk}/uptime", m.getUptime())
-			r.Get("/visors/{pk}/pty", nil)
+			r.Get("/visors/{pk}/pty", m.getPty())
 			r.Get("/visors/{pk}/apps", m.getApps())
 			r.Get("/visors/{pk}/apps/{app}", m.getApp())
 			r.Put("/visors/{pk}/apps/{app}", m.putApp())
