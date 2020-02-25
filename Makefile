@@ -174,21 +174,6 @@ run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
 	-docker container rm syslog-ng -f
 	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest 
 
-integration-startup: ## Starts up the required transports between `skywire-visor`s of interactive testing environment
-	./integration/startup.sh
-
-integration-teardown: ## Tears down all saved configs and states of integration executables
-	./integration/tear-down.sh
-
-integration-run-generic: ## Runs the generic interactive testing environment
-	./integration/run-generic-env.sh
-
-integration-run-messaging: ## Runs the messaging interactive testing environment
-	./integration/run-messaging-env.sh
-
-integration-run-proxy: ## Runs the proxy interactive testing environment
-	./integration/run-proxy-env.sh
-
 mod-comm: ## Comments the 'replace' rule in go.mod
 	./ci_scripts/go_mod_replace.sh comment go.mod
 
