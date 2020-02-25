@@ -245,9 +245,23 @@ func (visor *Visor) Start() error {
 
 	visor.startedAt = time.Now()
 
+	pathutil.EnsureDir(visor.dir())
+	visor.closePreviousApps()
+
+	for _, ac := range visor.appsConf {
+		if !ac.AutoStart {
+			continue
+		}
+
+		go func(a AppConfig) {
+			if err := visor.SpawnApp(&a, nil); err != nil {
+				visor.logger.Warnf("App %s stopped working: %v", a.App, err)
+			}
+		}(ac)
+	}
+
 	// Start pty.
 	if visor.pty != nil {
-
 		// dmsgpty cli
 		ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
 		if err != nil {
@@ -263,7 +277,6 @@ func (visor *Visor) Start() error {
 				cancel()
 			}
 		}()
-
 		// dmsgpty serve
 		go func() {
 			if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
@@ -275,21 +288,6 @@ func (visor *Visor) Start() error {
 				cancel()
 			}
 		}()
-	}
-
-	pathutil.EnsureDir(visor.dir())
-	visor.closePreviousApps()
-
-	for _, ac := range visor.appsConf {
-		if !ac.AutoStart {
-			continue
-		}
-
-		go func(a AppConfig) {
-			if err := visor.SpawnApp(&a, nil); err != nil {
-				visor.logger.Warnf("App %s stopped working: %v", a.App, err)
-			}
-		}(ac)
 	}
 
 	// RPC server for CLI and Hypervisor.

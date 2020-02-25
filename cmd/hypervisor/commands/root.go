@@ -86,7 +86,7 @@ var rootCmd = &cobra.Command{
 				log.Fatalln("Failed to bind tcp port:", err)
 			}
 
-			if err := m.ServeRPC(l); err != nil {
+			if err := m.ServeRPC(dmsgC, l); err != nil {
 				log.Fatalln("Failed to serve RPC:", err)
 			}
 		}()
