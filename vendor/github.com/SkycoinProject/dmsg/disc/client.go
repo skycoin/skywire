@@ -21,8 +21,8 @@ var log = logging.MustGetLogger("disc")
 // APIClient implements dmsg discovery API client.
 type APIClient interface {
 	Entry(context.Context, cipher.PubKey) (*Entry, error)
-	SetEntry(context.Context, *Entry, string, interface{}) error
-	UpdateEntry(context.Context, cipher.SecKey, *Entry, *struct{}) error
+	SetEntry(context.Context, *Entry, string, *cipher.PubKey) error
+	UpdateEntry(context.Context, cipher.SecKey, *Entry, bool) error
 	AvailableServers(context.Context) ([]*Entry, error)
 }
 
@@ -85,20 +85,20 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 }
 
 // SetEntry creates a new Entry.
-func (c *httpClient) SetEntry(ctx context.Context, e *Entry, m string, v interface{}) error {
+func (c *httpClient) SetEntry(ctx context.Context, entry *Entry, method string, pk *cipher.PubKey) error {
 	var endpoint string
-	if m == http.MethodPost {
+	if method == http.MethodPost {
 		endpoint = c.address + "/dmsg-discovery/entry/"
 	} else {
-		endpoint = fmt.Sprintf("%s/dmsg-discovery/entry/%s", c.address, v.(cipher.PubKey))
+		endpoint = fmt.Sprintf("%s/dmsg-discovery/entry/%s", c.address, pk)
 	}
 
-	marshaledEntry, err := json.Marshal(e)
+	marshaledEntry, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest(m, endpoint, bytes.NewBuffer(marshaledEntry))
+	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(marshaledEntry))
 	if err != nil {
 		return err
 	}
@@ -137,12 +137,12 @@ func (c *httpClient) SetEntry(ctx context.Context, e *Entry, m string, v interfa
 }
 
 // UpdateEntry updates Entry in dmsg discovery.
-func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry, s *struct{}) error {
+func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry, update bool) error {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
-	if s != nil {
-		err := c.SetEntry(ctx, e, http.MethodPut, e.Static)
+	if update {
+		err := c.SetEntry(ctx, e, http.MethodPut, &e.Static)
 		if err != nil {
 			return err
 		}
