@@ -16,11 +16,14 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
+
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -43,8 +46,9 @@ var (
 
 // VisorConn represents a visor connection.
 type VisorConn struct {
-	Addr   dmsg.Addr
-	Client visor.RPCClient
+	Addr  dmsg.Addr
+	RPC   visor.RPCClient
+	PtyUI *dmsgpty.UI
 }
 
 // Hypervisor manages visors.
@@ -73,20 +77,22 @@ func New(config Config) (*Hypervisor, error) {
 }
 
 // ServeRPC serves RPC of a Hypervisor.
-func (m *Hypervisor) ServeRPC(lis *dmsg.Listener) error {
+func (m *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 	for {
-		conn, err := lis.Accept()
+		conn, err := lis.AcceptStream()
 		if err != nil {
 			return err
 		}
-
-		addr := conn.RemoteAddr().(dmsg.Addr)
+		addr := conn.RawRemoteAddr()
+		ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: addr.PK, Port: skyenv.DmsgPtyPort})
+		visorConn := VisorConn{
+			Addr:  addr,
+			RPC:   visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
+			PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+		}
 		log.Infoln("accepted: ", addr.PK)
 		m.mu.Lock()
-		m.visors[addr.PK] = VisorConn{
-			Addr:   addr,
-			Client: visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
-		}
+		m.visors[addr.PK] = visorConn
 		m.mu.Unlock()
 	}
 }
@@ -115,7 +121,7 @@ func (m *Hypervisor) AddMockData(config MockConfig) error {
 				PK:   pk,
 				Port: uint16(i),
 			},
-			Client: client,
+			RPC: client,
 		}
 		m.mu.Unlock()
 	}
@@ -152,6 +158,7 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/visors/{pk}", m.getVisor())
 			r.Get("/visors/{pk}/health", m.getHealth())
 			r.Get("/visors/{pk}/uptime", m.getUptime())
+			r.Get("/visors/{pk}/pty", nil)
 			r.Get("/visors/{pk}/apps", m.getApps())
 			r.Get("/visors/{pk}/apps/{app}", m.getApp())
 			r.Put("/visors/{pk}/apps/{app}", m.putApp())
@@ -240,7 +247,7 @@ func (m *Hypervisor) getVisors() http.HandlerFunc {
 
 		m.mu.RLock()
 		for pk, c := range m.visors {
-			summary, err := c.Client.Summary()
+			summary, err := c.RPC.Summary()
 			if err != nil {
 				log.Errorf("failed to obtain summary from Hypervisor with pk %s. Error: %v", pk, err)
 
@@ -272,6 +279,12 @@ func (m *Hypervisor) getVisor() http.HandlerFunc {
 			TCPAddr: ctx.Addr.String(),
 			Summary: summary,
 		})
+	})
+}
+
+func (m *Hypervisor) getPty() http.HandlerFunc {
+	return m.withCtx(m.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ctx.PtyUI.Handler()(w, r)
 	})
 }
 
@@ -661,19 +674,17 @@ func (m *Hypervisor) restart() http.HandlerFunc {
 	<<< Helper functions >>>
 */
 
-func (m *Hypervisor) client(pk cipher.PubKey) (dmsg.Addr, visor.RPCClient, bool) {
+func (m *Hypervisor) visorConn(pk cipher.PubKey) (VisorConn, bool) {
 	m.mu.RLock()
 	conn, ok := m.visors[pk]
 	m.mu.RUnlock()
 
-	return conn.Addr, conn.Client, ok
+	return conn, ok
 }
 
 type httpCtx struct {
 	// Hypervisor
-	PK   cipher.PubKey
-	Addr dmsg.Addr
-	RPC  visor.RPCClient
+	VisorConn
 
 	// App
 	App *visor.AppState
@@ -705,16 +716,14 @@ func (m *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx,
 		return nil, false
 	}
 
-	addr, client, ok := m.client(pk)
+	visor, ok := m.visorConn(pk)
 	if !ok {
 		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
 		return nil, false
 	}
 
 	return &httpCtx{
-		PK:   pk,
-		Addr: addr,
-		RPC:  client,
+		VisorConn: visor,
 	}, true
 }
 
@@ -739,7 +748,7 @@ func (m *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, b
 		}
 	}
 
-	errMsg := fmt.Errorf("can not find app of name %s from visor %s", appName, ctx.PK)
+	errMsg := fmt.Errorf("can not find app of name %s from visor %s", appName, ctx.Addr.PK)
 	httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
 
 	return nil, false
