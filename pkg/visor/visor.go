@@ -25,7 +25,7 @@ import (
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/dmsg/httputil"
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -92,8 +92,8 @@ type Visor struct {
 
 	pidMu sync.Mutex
 
-	rpcListener net.Listener
-	rpcDialers  []*RPCClientDialer
+	cliL net.Listener
+	hvE  map[cipher.PubKey]chan error
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
@@ -212,18 +212,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
 		}
-		visor.rpcListener = l
+		visor.cliL = l
 	}
 
-	visor.rpcDialers = make([]*RPCClientDialer, len(cfg.Hypervisors))
-
-	for i, entry := range cfg.Hypervisors {
-		_, rpcPort, err := httputil.SplitRPCAddr(entry.Addr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse rpc port from rpc address: %s", err)
-		}
-
-		visor.rpcDialers[i] = NewRPCClientDialer(visor.n, entry.PubKey, rpcPort)
+	visor.hvE = make(map[cipher.PubKey]chan error, len(cfg.Hypervisors))
+	for _, hv := range cfg.Hypervisors {
+		visor.hvE[hv.PubKey] = make(chan error, 1)
 	}
 
 	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerSockFile)
@@ -298,24 +292,21 @@ func (visor *Visor) Start() error {
 		}(ac)
 	}
 
-	// CLI and RPC server.
+	// RPC server for CLI and Hypervisor.
 	rpcSvr := rpc.NewServer()
 	if err := rpcSvr.RegisterName(RPCPrefix, &RPC{visor: visor}); err != nil {
 		return fmt.Errorf("rpc server created failed: %s", err)
 	}
-
-	if visor.rpcListener != nil {
-		visor.logger.Info("Starting RPC interface on ", visor.rpcListener.Addr())
-
-		go rpcSvr.Accept(visor.rpcListener)
+	if visor.cliL != nil {
+		visor.logger.Info("Starting RPC interface on ", visor.cliL.Addr())
+		go rpcSvr.Accept(visor.cliL)
 	}
-
-	for _, dialer := range visor.rpcDialers {
-		go func(dialer *RPCClientDialer) {
-			if err := dialer.Run(rpcSvr, time.Second); err != nil {
-				visor.logger.Errorf("Hypervisor Dmsg Dial exited with error: %v", err)
-			}
-		}(dialer)
+	if visor.hvE != nil {
+		for hvPK, hvErrs := range visor.hvE {
+			log := visor.Logger.PackageLogger("hypervisor:" + hvPK.String())
+			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
+			go ServeRPCClient(ctx, log, visor.n, rpcSvr, addr, hvErrs)
+		}
 	}
 
 	visor.logger.Info("Starting packet router")
@@ -392,19 +383,19 @@ func (visor *Visor) Close() (err error) {
 		return nil
 	}
 
-	if visor.rpcListener != nil {
-		if err = visor.rpcListener.Close(); err != nil {
-			visor.logger.WithError(err).Error("failed to stop RPC interface")
+	if visor.cliL != nil {
+		if err = visor.cliL.Close(); err != nil {
+			visor.logger.WithError(err).Error("failed to close CLI listener")
 		} else {
-			visor.logger.Info("RPC interface stopped successfully")
+			visor.logger.Info("CLI listener closed successfully")
 		}
 	}
-
-	for i, dialer := range visor.rpcDialers {
-		if err = dialer.Close(); err != nil {
-			visor.logger.WithError(err).Errorf("(%d) failed to stop RPC dialer", i)
-		} else {
-			visor.logger.Infof("(%d) RPC dialer closed successfully", i)
+	if visor.hvE != nil {
+		for hvPK, hvErr := range visor.hvE {
+			visor.logger.
+				WithError(<-hvErr).
+				WithField("hypervisor_pk", hvPK).
+				Info("Closed hypervisor connection.")
 		}
 	}
 

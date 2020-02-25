@@ -1,12 +1,10 @@
 package visor
 
 import (
-	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/rpc"
 	"sync"
@@ -19,7 +17,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -244,99 +241,6 @@ func (rc *rpcClient) Loops() ([]LoopInfo, error) {
 	var loops []LoopInfo
 	err := rc.Call("Loops", &struct{}{}, &loops)
 	return loops, err
-}
-
-// RPCClientDialer keeps track of an rpc connection and retries to connect if it fails at some point
-type RPCClientDialer struct {
-	dialer *snet.Network
-	pk     cipher.PubKey
-	port   uint16
-	conn   net.Conn
-	mu     sync.Mutex
-	done   chan struct{} // nil: loop is not running, non-nil: loop is running.
-}
-
-// NewRPCClientDialer creates a new RPCDialer to the given address
-func NewRPCClientDialer(dialer *snet.Network, pk cipher.PubKey, port uint16) *RPCClientDialer {
-	return &RPCClientDialer{
-		dialer: dialer,
-		pk:     pk,
-		port:   port,
-	}
-}
-
-// Run repeatedly dials to remote until a successful connection is established.
-// It exposes a RPC Server.
-// It will return if Close is called or crypto fails.
-func (d *RPCClientDialer) Run(srv *rpc.Server, retry time.Duration) error {
-	if ok := d.setDone(); !ok {
-		return ErrAlreadyServing
-	}
-	for {
-		if err := d.establishConn(); err != nil {
-			return err
-		}
-		// Only serve when then dial succeeds.
-		srv.ServeConn(d.conn)
-		d.setConn(nil)
-		select {
-		case <-d.done:
-			d.clearDone()
-			return nil
-		case <-time.After(retry):
-		}
-	}
-}
-
-// Close closes the handler.
-func (d *RPCClientDialer) Close() (err error) {
-	if d == nil {
-		return nil
-	}
-	d.mu.Lock()
-	if d.done != nil {
-		close(d.done)
-	}
-	if d.conn != nil {
-		err = d.conn.Close()
-	}
-	d.mu.Unlock()
-	return
-}
-
-// This operation should be atomic, hence protected by mutex.
-func (d *RPCClientDialer) establishConn() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	conn, err := d.dialer.Dial(context.Background(), snet.DmsgType, d.pk, d.port)
-	if err != nil {
-		return err
-	}
-
-	d.conn = conn
-	return nil
-}
-
-func (d *RPCClientDialer) setConn(conn net.Conn) {
-	d.mu.Lock()
-	d.conn = conn
-	d.mu.Unlock()
-}
-
-func (d *RPCClientDialer) setDone() (ok bool) {
-	d.mu.Lock()
-	if ok = d.done == nil; ok {
-		d.done = make(chan struct{})
-	}
-	d.mu.Unlock()
-	return
-}
-
-func (d *RPCClientDialer) clearDone() {
-	d.mu.Lock()
-	d.done = nil
-	d.mu.Unlock()
 }
 
 // Restart calls Restart.
