@@ -78,6 +78,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 
 	go func() {
 		_, err := io.Copy(conn, stream)
+		Log.WithError(err).Error("GOT ERROR FROM STREAM OF APP CONN")
 		errCh <- err
 	}()
 
