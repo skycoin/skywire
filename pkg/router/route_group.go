@@ -249,6 +249,8 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 	select {
 	case <-rg.readDeadline.Wait():
 		return 0, timeoutError{}
+	case <-rg.closed:
+		return 0, io.ErrClosedPipe
 	case data, ok := <-rg.readCh:
 		if !ok || len(data) == 0 {
 			// route group got closed or empty data received. Behavior on the empty
