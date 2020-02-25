@@ -113,8 +113,8 @@ func (s *Server) updateEntryLoop(addr string, conns int) error {
 	})
 }
 
-func (s *Server) updateServerSession(ctx context.Context, cmd int) error {
-	return s.updateServerEntry(ctx, "", 0, cmd)
+func (s *Server) updateServerSession(ctx context.Context, availableSessions int) error {
+	return s.updateServerEntry(ctx, "", 0, availableSessions)
 }
 
 func (s *Server) handleSession(conn net.Conn) {

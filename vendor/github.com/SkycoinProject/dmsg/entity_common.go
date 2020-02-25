@@ -116,11 +116,10 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 				Warn("delSession() callback returned non-nil error.")
 		}
 	}
-	c.sessionsMx.Unlock()
 }
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, conns int, cmd int) error {
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, conns int, availableSessions int) error {
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewServerEntry(c.pk, 0, addr, conns, 0)
@@ -130,9 +129,9 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, conns
 		return c.dc.SetEntry(ctx, entry, http.MethodPost, nil)
 	}
 
-	if cmd != 0 {
+	if availableSessions != 0 {
 		c.log.Info("Updating server sessions...")
-		entry.Server.AvailableSessions += cmd
+		entry.Server.AvailableSessions += availableSessions
 
 		return c.dc.UpdateEntry(ctx, c.sk, entry, true)
 	}
