@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-
 	"github.com/SkycoinProject/dmsg/httputil"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
