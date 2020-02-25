@@ -109,7 +109,16 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 			return nil, err
 		}
 	}
-	return dmsgpty.NewHost(dmsgC, wl), nil
+
+	// Whitelist hypervisor PKs.
+	hypervisorWL := dmsgpty.NewMemoryWhitelist()
+	for _, hv := range c.Hypervisors {
+		if err := hypervisorWL.Add(hv.PubKey); err != nil {
+			return nil, fmt.Errorf("failed to add hypervisor PK to whitelist: %v", err)
+		}
+	}
+	host := dmsgpty.NewHost(dmsgC, dmsgpty.NewCombinedWhitelist(0, wl, hypervisorWL))
+	return host, nil
 }
 
 // TransportDiscovery returns transport discovery client.

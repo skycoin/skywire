@@ -20,7 +20,7 @@ const (
 	AppProtocolVersion = "0.0.1"
 )
 
-// Default dmsg ports.
+// Dmsg port constants.
 const (
 	DmsgSetupPort      = uint16(36)  // Listening port of a setup node.
 	DmsgAwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
@@ -30,7 +30,8 @@ const (
 
 // Default dmsgpty constants.
 const (
-	DefaultDmsgPtyPort    = uint16(233)
+	DmsgPtyPort = uint16(22)
+
 	DefaultDmsgPtyCLINet  = "unix"
 	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
 )
@@ -50,5 +51,4 @@ const (
 	SkysocksClientVersion = "1.0"
 	SkysocksClientPort    = uint16(13)
 	SkysocksClientAddr    = ":1080"
-	// TODO(evanlinjin): skysocks-client requires
 )
