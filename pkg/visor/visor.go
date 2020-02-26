@@ -300,7 +300,7 @@ func (visor *Visor) Start() error {
 	}
 	if visor.hvE != nil {
 		for hvPK, hvErrs := range visor.hvE {
-			log := visor.Logger.PackageLogger("hypervisor:" + hvPK.String())
+			log := visor.Logger.PackageLogger("hypervisor_client:" + hvPK.String()[:8] + "...")
 			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
 			go ServeRPCClient(ctx, log, visor.n, rpcSvr, addr, hvErrs)
 		}
