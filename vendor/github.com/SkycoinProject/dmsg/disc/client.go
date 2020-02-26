@@ -18,7 +18,7 @@ import (
 
 var log = logging.MustGetLogger("disc")
 
-// APIClient implements dmsg discovery API client.
+// APIClient implements messaging discovery API client.
 type APIClient interface {
 	Entry(context.Context, cipher.PubKey) (*Entry, error)
 	SetEntry(context.Context, *Entry) error
@@ -130,7 +130,7 @@ func (c *httpClient) SetEntry(ctx context.Context, e *Entry) error {
 	return nil
 }
 
-// UpdateEntry updates Entry in dmsg discovery.
+// UpdateEntry updates Entry in messaging discovery.
 func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry) error {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
