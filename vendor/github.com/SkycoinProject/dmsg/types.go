@@ -1,7 +1,9 @@
 package dmsg
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -50,6 +52,44 @@ func (a Addr) ShortString() string {
 		return fmt.Sprintf("%s:~", a.PK.String()[:PKLen])
 	}
 	return fmt.Sprintf("%s:%d", a.PK.String()[:PKLen], a.Port)
+}
+
+// Set implements pflag.Value for Addr.
+func (a *Addr) Set(s string) error {
+	parts := strings.Split(s, ":")
+	for i, part := range parts {
+		parts[i] = strings.TrimSpace(part)
+	}
+	switch len(parts) {
+	case 0:
+		a.PK = cipher.PubKey{}
+		a.Port = 0
+		return nil
+	case 1:
+		return a.PK.Set(parts[0])
+	case 2:
+		if parts[0] == "" {
+			a.PK = cipher.PubKey{}
+		} else {
+			if err := a.PK.Set(parts[0]); err != nil {
+				return err
+			}
+		}
+		if parts[1] == "~" || parts[1] == "" {
+			a.Port = 0
+		} else {
+			_, err := fmt.Sscan(parts[1], &a.Port)
+			return err
+		}
+		return nil
+	default:
+		return errors.New("invalid dmsg.Addr string")
+	}
+}
+
+// Type implements pflag.Value for Addr.
+func (Addr) Type() string {
+	return "dmsg.Addr"
 }
 
 /* Request & Response */
