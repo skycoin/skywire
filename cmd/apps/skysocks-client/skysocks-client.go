@@ -6,7 +6,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -59,22 +58,9 @@ func main() {
 		log.Fatal("Invalid server PubKey: ", err)
 	}
 
-	var conn net.Conn
-	err = r.Do(func() error {
-		conn, err = socksApp.Dial(appnet.Addr{
-			Net:    netType,
-			PubKey: pk,
-			Port:   socksPort,
-		})
-		return err
-	})
-	if err != nil {
-		log.Fatal("Failed to dial to a server: ", err)
-	}
-
 	log.Printf("Connected to %v\n", pk)
 
-	client, err := skysocks.NewClient(conn)
+	client, err := skysocks.NewClient(socksApp, pk, netType, socksPort)
 	if err != nil {
 		log.Fatal("Failed to create a new client: ", err)
 	}
