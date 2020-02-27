@@ -36,6 +36,54 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
+  - id: skychat
+      binary: skychat
+      goos:
+        - linux
+        - darwin
+      goarch:
+        - amd64
+        - 386
+        - arm64
+        - arm
+      goarm:
+        - 7
+      env:
+        - CGO_ENABLED=0
+      main: ./cmd/apps/skychat/
+      ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
+  - id: skysocks
+      binary: skysocks
+      goos:
+        - linux
+        - darwin
+      goarch:
+        - amd64
+        - 386
+        - arm64
+        - arm
+      goarm:
+        - 7
+      env:
+        - CGO_ENABLED=0
+      main: ./cmd/apps/skysocks/
+      ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
+  - id: skysocks-client
+      binary: skysocks-client
+      goos:
+        - linux
+        - darwin
+      goarch:
+        - amd64
+        - 386
+        - arm64
+        - arm
+      goarm:
+        - 7
+      env:
+        - CGO_ENABLED=0
+      main: ./cmd/apps/skysocks-client/
+      ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
 archives:
   - format: tar.gz
     wrap_in_directory: false

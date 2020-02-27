@@ -57,7 +57,7 @@ var (
 	ErrNoConfigPath = errors.New("no config path")
 )
 
-const supportedProtocolVersion = "0.0.1"
+const supportedProtocolVersion = "0.1.0"
 
 var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
@@ -120,7 +120,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	restartCtx.RegisterLogger(visor.logger)
 
 	visor.restartCtx = restartCtx
-	visor.updater = updater.New(visor.logger, visor.restartCtx)
+	visor.updater = updater.New(visor.logger, visor.restartCtx, visor.appsPath)
 
 	pk := cfg.Visor.StaticPubKey
 	sk := cfg.Visor.StaticSecKey
@@ -444,7 +444,7 @@ func (visor *Visor) StartApp(appName string) error {
 
 // SpawnApp configures and starts new App.
 func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
-	visor.logger.Infof("Starting %s.v%s", config.App, config.Version)
+	visor.logger.Infof("Starting %s", config.App)
 
 	if app, ok := reservedPorts[config.Port]; ok && app != config.App {
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
@@ -452,11 +452,10 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 	appCfg := appcommon.Config{
 		Name:         config.App,
-		Version:      config.Version,
 		SockFilePath: visor.conf.AppServerSockFile,
 		VisorPK:      visor.conf.Visor.StaticPubKey.Hex(),
 		BinaryDir:    visor.appsPath,
-		WorkDir:      filepath.Join(visor.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
+		WorkDir:      filepath.Join(visor.localPath, config.App),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {
@@ -464,8 +463,8 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
-	logger := visor.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
-	errLogger := visor.logger.WithField("_module", fmt.Sprintf("%s.v%s[ERROR]", config.App, config.Version)).Writer()
+	logger := visor.logger.WithField("_module", config.App).Writer()
+	errLogger := visor.logger.WithField("_module", config.App+"[ERROR]").Writer()
 
 	defer func() {
 		if logErr := logger.Close(); err == nil && logErr != nil {
