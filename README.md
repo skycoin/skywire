@@ -212,7 +212,7 @@ communication API over the pipe.
 
 ```golang
 // Config defines configuration parameters for App
-&app.Config{AppName: "helloworld", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+&app.Config{AppName: "helloworld", ProtocolVersion: "0.0.1"}
 // Setup setups app using default pair of pipes
 func Setup(config *Config) (*App, error) {}
 

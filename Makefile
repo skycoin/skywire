@@ -100,10 +100,10 @@ dep: ## Sorts dependencies
 
 # Apps 
 host-apps: ## Build app 
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat	
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat	
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 
 # Bin 
 bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
@@ -118,10 +118,10 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
@@ -138,10 +138,10 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 	-docker network create ${DOCKER_NETWORK}
 
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat.v1.0 ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld.v1.0 ./cmd/apps/helloworld
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks.v1.0 ./cmd/apps/skysocks
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat ./cmd/apps/skychat
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld ./cmd/apps/helloworld
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks ./cmd/apps/skysocks
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client  ./cmd/apps/skysocks-client
 
 docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`. `go build` with  ${DOCKER_OPTS}
 	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor

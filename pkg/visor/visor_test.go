@@ -52,14 +52,14 @@ func TestMain(m *testing.M) {
 //	}))
 //	defer srv.Close()
 //
-//	conf := Config{Version: "1.0", LocalPath: "local", AppsPath: "apps"}
+//	conf := Config{LocalPath: "local", AppsPath: "apps"}
 //	conf.Visor.StaticPubKey = pk
 //	conf.Visor.StaticSecKey = sk
 //	conf.Dmsg.Discovery = "http://skywire.skycoin.com:8001"
 //	conf.Dmsg.ServerCount = 10
 //	conf.Transport.Discovery = srv.URL
 //	conf.Apps = []AppConfig{
-//		{App: "foo", Version: "1.1", Port: 1},
+//		{App: "foo", Port: 1},
 //		{App: "bar", AutoStart: true, Port: 2},
 //	}
 //
