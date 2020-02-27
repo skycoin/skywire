@@ -31,7 +31,7 @@ func (c Config) PrintWarnings(log logrus.FieldLogger) {
 // DefaultConfig returns the default configuration for a dmsg client entity.
 func DefaultConfig() *Config {
 	return &Config{
-		MinSessions: 1,
+		MinSessions: DefaultMinSessions,
 	}
 }
 
@@ -60,7 +60,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"))
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
 		err := c.EntityCommon.updateClientEntry(ctx, c.done)
-		if err != nil {
+		if err == nil {
 			// Client is 'ready' once we have successfully updated the discovery entry
 			// with at least one delegated server.
 			c.readyOnce.Do(func() { close(c.ready) })
@@ -115,6 +115,11 @@ func (ce *Client) Serve() {
 			time.Sleep(time.Second) // TODO(evanlinjin): Implement exponential back off.
 			continue
 		}
+		if len(entries) == 0 {
+			wait := time.Second
+			ce.log.Warnf("No entries found. Retrying after %s...", wait.String())
+			time.Sleep(wait)
+		}
 
 		for _, entry := range entries {
 			if isClosed(ce.done) {
@@ -128,6 +133,9 @@ func (ce *Client) Serve() {
 					return
 				case err := <-ce.errCh:
 					ce.log.WithError(err).Info("Session stopped.")
+					if isClosed(ce.done) {
+						return
+					}
 				}
 			}
 
