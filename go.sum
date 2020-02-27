@@ -25,6 +25,8 @@ github.com/SkycoinProject/dmsg v0.0.0-20200224064625-1b539081519c h1:TBwm7dzyUYn
 github.com/SkycoinProject/dmsg v0.0.0-20200224064625-1b539081519c/go.mod h1:eCoemDDyfyfNTFrapYKNEItwtRIj54UGpu4Ffcznuds=
 github.com/SkycoinProject/dmsg v0.0.0-20200226145926-514fc8d015a1 h1:51rz38hyi2RKpNr/CEJgsVwjy22yt8gEess2WlzibmA=
 github.com/SkycoinProject/dmsg v0.0.0-20200226145926-514fc8d015a1/go.mod h1:eCoemDDyfyfNTFrapYKNEItwtRIj54UGpu4Ffcznuds=
+github.com/SkycoinProject/dmsg v0.0.0-20200227084433-7605a550f502 h1:fxCUIQ5EXmo0LpryqsqREysixAqtjSO6m60nDbe12iQ=
+github.com/SkycoinProject/dmsg v0.0.0-20200227084433-7605a550f502/go.mod h1:eCoemDDyfyfNTFrapYKNEItwtRIj54UGpu4Ffcznuds=
 github.com/SkycoinProject/skycoin v0.26.0 h1:8/ZRZb2VM2DM4YTIitRJMZ3Yo/3H1FFmbCMx5o6ekmA=
 github.com/SkycoinProject/skycoin v0.26.0/go.mod h1:xqPLOKh5B6GBZlGA7B5IJfQmCy7mwimD9NlqxR3gMXo=
 github.com/SkycoinProject/skycoin v0.27.0 h1:N3IHxj8ossHOcsxLYOYugT+OaELLncYHJHxbbYLPPmY=
