@@ -221,8 +221,8 @@ These tests have been commented out for the following reasons:
 //	require.NoError(t, err)
 //
 //	apps := []AppConfig{
-//		{App: "foo", Version: "1.0", AutoStart: false, Port: 10},
-//		{App: "bar", Version: "2.0", AutoStart: false, Port: 20},
+//		{App: "foo", AutoStart: false, Port: 10},
+//		{App: "bar", AutoStart: false, Port: 20},
 //	}
 //	conf := &Config{}
 //	conf.Visor.StaticPubKey = pk1
