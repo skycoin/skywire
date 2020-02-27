@@ -139,9 +139,6 @@ func (c *Config) RoutingTable() (routing.Table, error) {
 func (c *Config) AppsConfig() (map[string]AppConfig, error) {
 	apps := make(map[string]AppConfig)
 	for _, app := range c.Apps {
-		if app.Version == "" {
-			app.Version = c.Version
-		}
 		apps[app.App] = app
 	}
 
@@ -162,7 +159,7 @@ func (c *Config) AppsDir() (string, error) {
 // will be created if necessary.
 func (c *Config) LocalDir() (string, error) {
 	if c.LocalPath == "" {
-		return "", errors.New("empty AppsPath")
+		return "", errors.New("empty LocalPath")
 	}
 
 	return ensureDir(c.LocalPath)
@@ -210,7 +207,6 @@ type DmsgPtyConfig struct {
 
 // AppConfig defines app startup parameters.
 type AppConfig struct {
-	Version   string       `json:"version"`
 	App       string       `json:"app"`
 	AutoStart bool         `json:"auto_start"`
 	Port      routing.Port `json:"port"`

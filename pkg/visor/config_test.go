@@ -89,7 +89,7 @@ func TestRoutingTable(t *testing.T) {
 func TestAppsConfig(t *testing.T) {
 	conf := Config{Version: "1.0"}
 	conf.Apps = []AppConfig{
-		{App: "foo", Version: "1.1", Port: 1},
+		{App: "foo", Port: 1},
 		{App: "bar", AutoStart: true, Port: 2},
 	}
 
@@ -98,13 +98,11 @@ func TestAppsConfig(t *testing.T) {
 
 	app1 := appsConf["foo"]
 	assert.Equal(t, "foo", app1.App)
-	assert.Equal(t, "1.1", app1.Version)
 	assert.Equal(t, routing.Port(1), app1.Port)
 	assert.False(t, app1.AutoStart)
 
 	app2 := appsConf["bar"]
 	assert.Equal(t, "bar", app2.App)
-	assert.Equal(t, "1.0", app2.Version)
 	assert.Equal(t, routing.Port(2), app2.Port)
 	assert.True(t, app2.AutoStart)
 }
