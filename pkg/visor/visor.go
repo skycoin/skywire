@@ -58,6 +58,8 @@ var (
 
 const supportedProtocolVersion = "0.0.1"
 
+const ownerRWX = 0700
+
 var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
 // AppState defines state parameters for a registered App.
@@ -96,6 +98,9 @@ type Visor struct {
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
+
+	// cancel is to be called when visor.Close is triggered.
+	cancel context.CancelFunc
 }
 
 // NewVisor constructs new Visor.
@@ -142,9 +147,9 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 			return nil, fmt.Errorf("failed to setup pty: %v", err)
 		}
 		visor.pty = pty
+	} else {
+		logger.Info("'dmsgpty' is not configured, skipping...")
 	}
-
-	logger.Info("'dmsgpty' is not configured, skipping...")
 
 	trDiscovery, err := cfg.TransportDiscovery()
 	if err != nil {
@@ -240,6 +245,7 @@ func (visor *Visor) Start() error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	visor.cancel = cancel
 	defer cancel()
 
 	visor.startedAt = time.Now()
@@ -261,15 +267,23 @@ func (visor *Visor) Start() error {
 
 	// Start pty.
 	if visor.pty != nil {
+		log := visor.Logger.PackageLogger("dmsgpty")
 		// dmsgpty cli
+		if visor.conf.DmsgPty.CLINet == "unix" {
+			if err := os.MkdirAll(filepath.Dir(visor.conf.DmsgPty.CLIAddr), ownerRWX); err != nil {
+				log.WithError(err).Debug("Failed to prepare unix file dir.")
+			}
+		}
 		ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
 		if err != nil {
 			return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
 		}
 		go func() {
+			log.WithField("net", visor.conf.DmsgPty.CLINet).
+				WithField("addr", visor.conf.DmsgPty.CLIAddr).
+				Info("Serving dmsgpty CLI.")
 			if err := visor.pty.ServeCLI(ctx, ptyL); err != nil {
-				visor.logger.
-					WithError(err).
+				log.WithError(err).
 					WithField("entity", "dmsgpty-host").
 					WithField("func", ".ServeCLI()").
 					Error()
@@ -278,9 +292,10 @@ func (visor *Visor) Start() error {
 		}()
 		// dmsgpty serve
 		go func() {
+			log.WithField("dmsg_port", visor.conf.DmsgPty.Port).
+				Info("Serving dmsg.")
 			if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
-				visor.logger.
-					WithError(err).
+				log.WithError(err).
 					WithField("entity", "dmsgpty-host").
 					WithField("func", ".ListenAndServe()").
 					Error()
@@ -300,7 +315,8 @@ func (visor *Visor) Start() error {
 	}
 	if visor.hvE != nil {
 		for hvPK, hvErrs := range visor.hvE {
-			log := visor.Logger.PackageLogger("hypervisor_client:" + hvPK.String()[:8] + "...")
+			log := visor.Logger.PackageLogger("hypervisor_client").
+				WithField("hypervisor_pk", hvPK)
 			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
 			go ServeRPCClient(ctx, log, visor.n, rpcSvr, addr, hvErrs)
 		}
@@ -378,6 +394,10 @@ func (visor *Visor) stopUnhandledApp(name string, pid int) {
 func (visor *Visor) Close() (err error) {
 	if visor == nil {
 		return nil
+	}
+
+	if visor.cancel != nil {
+		visor.cancel()
 	}
 
 	if visor.cliL != nil {

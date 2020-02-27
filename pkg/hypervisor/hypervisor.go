@@ -133,11 +133,15 @@ func (m *Hypervisor) AddMockData(config MockConfig) error {
 // ServeHTTP implements http.Handler
 func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
-
-	r.Use(middleware.Timeout(httpTimeout))
 	r.Use(middleware.Logger)
 
 	r.Route("/api", func(r chi.Router) {
+		r.Use(middleware.Timeout(httpTimeout))
+
+		r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`"PONG!"`)) //nolint:errcheck
+		})
+
 		if m.c.EnableAuth {
 			r.Group(func(r chi.Router) {
 				r.Post("/create-account", m.users.CreateAccount())
@@ -150,14 +154,12 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if m.c.EnableAuth {
 				r.Use(m.users.Authorize)
 			}
-
 			r.Get("/user", m.users.UserInfo())
 			r.Post("/change-password", m.users.ChangePassword())
 			r.Get("/visors", m.getVisors())
 			r.Get("/visors/{pk}", m.getVisor())
 			r.Get("/visors/{pk}/health", m.getHealth())
 			r.Get("/visors/{pk}/uptime", m.getUptime())
-			r.Get("/visors/{pk}/pty", m.getPty())
 			r.Get("/visors/{pk}/apps", m.getApps())
 			r.Get("/visors/{pk}/apps/{app}", m.getApp())
 			r.Put("/visors/{pk}/apps/{app}", m.putApp())
@@ -175,6 +177,13 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/visors/{pk}/loops", m.getLoops())
 			r.Get("/visors/{pk}/restart", m.restart())
 		})
+	})
+
+	r.Route("/pty", func(r chi.Router) {
+		if m.c.EnableAuth {
+			r.Use(m.users.Authorize)
+		}
+		r.Get("/{pk}", m.getPty())
 	})
 
 	r.ServeHTTP(w, req)
