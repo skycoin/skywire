@@ -116,16 +116,15 @@ func (u *Updater) Update() (err error) {
 	// Let RPC call complete and then exit.
 	defer func() {
 		if err == nil {
-			time.Sleep(exitDelay)
-
-			go u.exit()
+			go u.exitAfterDelay(exitDelay)
 		}
 	}()
 
 	return nil
 }
 
-func (u *Updater) exit() {
+func (u *Updater) exitAfterDelay(delay time.Duration) {
+	time.Sleep(delay)
 	u.log.Infof("Exiting")
 	os.Exit(0)
 }
@@ -155,12 +154,12 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 
 	if _, err := os.Stat(oldBinaryPath); err == nil {
 		if err := os.Remove(oldBinaryPath); err != nil {
-			return err
+			return fmt.Errorf("remove %s: %w", oldBinaryPath, err)
 		}
 	}
 
 	if err := os.Rename(currentBinaryPath, oldBinaryPath); err != nil {
-		return err
+		return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
 	}
 
 	if err := os.Rename(downloadedBinaryPath, currentBinaryPath); err != nil {
@@ -169,7 +168,7 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 			u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
 		}
 
-		return err
+		return fmt.Errorf("rename %s to %s: %w", downloadedBinaryPath, currentBinaryPath, err)
 	}
 
 	u.log.Infof("Successfully updated %s binary", binary)

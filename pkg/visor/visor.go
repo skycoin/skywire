@@ -120,7 +120,6 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	restartCtx.RegisterLogger(visor.logger)
 
 	visor.restartCtx = restartCtx
-	visor.updater = updater.New(visor.logger, visor.restartCtx, visor.appsPath)
 
 	pk := cfg.Visor.StaticPubKey
 	sk := cfg.Visor.StaticSecKey
@@ -237,6 +236,8 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	}()
 
 	visor.procManager = appserver.NewProcManager(logging.MustGetLogger("proc_manager"), visor.appRPCServer)
+
+	visor.updater = updater.New(visor.logger, visor.restartCtx, visor.appsPath)
 
 	return visor, err
 }
