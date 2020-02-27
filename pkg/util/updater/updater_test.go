@@ -191,29 +191,3 @@ func Test_binaryFilename(t *testing.T) {
 		})
 	}
 }
-
-func Test_cliPath(t *testing.T) {
-	tests := []struct {
-		name      string
-		visorPath string
-		want      string
-	}{
-		{
-			name:      "Case 1",
-			visorPath: "/dir1/dir2/visor",
-			want:      "/dir1/dir2/skywire-cli",
-		},
-		{
-			name:      "Case 2",
-			visorPath: "/dir3/dir4/../dir5/visor",
-			want:      "/dir3/dir5/skywire-cli",
-		},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			got := cliPath(tc.visorPath)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
