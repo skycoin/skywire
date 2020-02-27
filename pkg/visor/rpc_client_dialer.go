@@ -25,13 +25,16 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, n *snet.Network
 	for {
 		var conn *snet.Conn
 		err := netutil.NewDefaultRetrier(log).Do(ctx, func() (rErr error) {
+			log.Info("Dialing...")
 			conn, rErr = n.Dial(ctx, snet.DmsgType, rAddr.PK, rAddr.Port)
 			return rErr
 		})
 		if err != nil {
 			if errCh != nil {
+				log.WithError(err).Info("Pushed error into 'errCh'.")
 				errCh <- err
 			}
+			log.WithError(err).Info("Stopped Serving.")
 			return
 		}
 		if conn == nil {
@@ -39,6 +42,7 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, n *snet.Network
 				Fatal("An unexpected occurrence happened.")
 		}
 
+		log.Info("Serving RPC client...")
 		connCtx, cancel := context.WithCancel(ctx)
 		go func() {
 			rpcS.ServeConn(conn)
@@ -48,6 +52,6 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, n *snet.Network
 
 		log.WithError(conn.Close()).
 			WithField("context_done", isDone(ctx)).
-			Debug("ServeRPCClient: Closed conn.")
+			Debug("Conn closed. Redialing...")
 	}
 }
