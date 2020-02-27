@@ -56,14 +56,16 @@ var (
 type Updater struct {
 	log        *logging.Logger
 	restartCtx *restart.Context
+	appsPath   string
 	updating   uint32
 }
 
 // New returns a new Updater.
-func New(log *logging.Logger, restartCtx *restart.Context) *Updater {
+func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Updater {
 	return &Updater{
 		log:        log,
 		restartCtx: restartCtx,
+		appsPath:   appsPath,
 	}
 }
 
@@ -95,45 +97,82 @@ func (u *Updater) Update() (err error) {
 		return err
 	}
 
-	downloadedCLIPath := filepath.Join(downloadedBinariesPath, cliBinary)
-	downloadedVisorPath := filepath.Join(downloadedBinariesPath, visorBinary)
-
-	currentVisorPath := u.restartCtx.CmdPath()
-	currentCLIPath := cliPath(currentVisorPath)
-
-	oldCLIPath := downloadedCLIPath + oldSuffix
-	oldVisorPath := downloadedVisorPath + oldSuffix
-
-	if err := u.updateBinary(downloadedCLIPath, currentCLIPath, oldCLIPath); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
-	}
-
-	u.log.Infof("Successfully updated skywire-cli binary")
-
-	if err := u.updateBinary(downloadedVisorPath, currentVisorPath, oldVisorPath); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
-	}
-
-	u.log.Infof("Successfully updated skywire-visor binary")
-
-	if err := u.restartCurrentProcess(); err != nil {
-		u.restore(currentVisorPath, oldVisorPath)
+	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
+	if err := u.updateBinaries(downloadedBinariesPath, currentBasePath); err != nil {
 		return err
 	}
 
-	u.removeFiles(oldVisorPath, oldCLIPath, downloadedBinariesPath)
+	if err := u.restartCurrentProcess(); err != nil {
+		currentVisorPath := filepath.Join(currentBasePath, visorBinary)
+		oldVisorPath := filepath.Join(downloadedBinariesPath, visorBinary+oldSuffix)
+
+		u.restore(currentVisorPath, oldVisorPath)
+
+		return err
+	}
+
+	u.removeFiles(downloadedBinariesPath)
 
 	// Let RPC call complete and then exit.
 	defer func() {
 		if err == nil {
-			go func() {
-				time.Sleep(exitDelay)
-				u.log.Infof("Exiting")
-				os.Exit(0)
-			}()
+			time.Sleep(exitDelay)
+
+			go u.exit()
 		}
 	}()
 
+	return nil
+}
+
+func (u *Updater) exit() {
+	u.log.Infof("Exiting")
+	os.Exit(0)
+}
+
+func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath string) error {
+	for _, app := range apps() {
+		if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", app, err)
+		}
+	}
+
+	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
+		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
+	}
+
+	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
+		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
+	}
+
+	return nil
+}
+
+func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) error {
+	downloadedBinaryPath := filepath.Join(downloadedBinariesPath, binary)
+	currentBinaryPath := filepath.Join(basePath, binary)
+	oldBinaryPath := downloadedBinaryPath + oldSuffix
+
+	if _, err := os.Stat(oldBinaryPath); err == nil {
+		if err := os.Remove(oldBinaryPath); err != nil {
+			return err
+		}
+	}
+
+	if err := os.Rename(currentBinaryPath, oldBinaryPath); err != nil {
+		return err
+	}
+
+	if err := os.Rename(downloadedBinaryPath, currentBinaryPath); err != nil {
+		// Try to revert previous os.Rename
+		if err := os.Rename(oldBinaryPath, currentBinaryPath); err != nil {
+			u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
+		}
+
+		return err
+	}
+
+	u.log.Infof("Successfully updated %s binary", binary)
 	return nil
 }
 
@@ -170,35 +209,35 @@ func (u *Updater) download(version string) (string, error) {
 	archiveURL := fileURL(version, archiveFilename)
 	u.log.Infof("Downloading archive from %q", archiveURL)
 
-	path, err := downloadFile(archiveURL, archiveFilename)
+	archivePath, err := downloadFile(archiveURL, archiveFilename)
 	if err != nil {
 		return "", fmt.Errorf("failed to download archive file from URL %q: %w", archiveURL, err)
 	}
 
-	u.log.Infof("Downloaded archive file to %q", path)
+	u.log.Infof("Downloaded archive file to %q", archivePath)
 
-	valid, err := isChecksumValid(path, checksum)
+	valid, err := isChecksumValid(archivePath, checksum)
 	if err != nil {
-		return "", fmt.Errorf("failed to check file %q sum: %w", path, err)
+		return "", fmt.Errorf("failed to check file %q sum: %w", archivePath, err)
 	}
 
 	if !valid {
 		return "", fmt.Errorf("checksum is not valid")
 	}
 
-	folderPath := filepath.Join(filepath.Dir(path), projectName)
+	destPath := filepath.Join(filepath.Dir(archivePath), projectName)
 
-	if _, err := os.Stat(folderPath); err == nil {
-		u.removeFiles(folderPath)
+	if _, err := os.Stat(destPath); err == nil {
+		u.removeFiles(destPath)
 	}
 
-	if err := archiver.Unarchive(path, folderPath); err != nil {
+	if err := archiver.Unarchive(archivePath, destPath); err != nil {
 		return "", err
 	}
 
-	u.removeFiles(path)
+	u.removeFiles(archivePath)
 
-	return folderPath, nil
+	return destPath, nil
 }
 
 func (u *Updater) restartCurrentProcess() error {
@@ -206,29 +245,6 @@ func (u *Updater) restartCurrentProcess() error {
 
 	if err := u.restartCtx.Start(); err != nil {
 		u.log.Errorf("Failed to start binary: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (u *Updater) updateBinary(downloadPath, currentPath, oldPath string) error {
-	if _, err := os.Stat(oldPath); err == nil {
-		if err := os.Remove(oldPath); err != nil {
-			return err
-		}
-	}
-
-	if err := os.Rename(currentPath, oldPath); err != nil {
-		return err
-	}
-
-	if err := os.Rename(downloadPath, currentPath); err != nil {
-		// Try to revert previous os.Rename
-		if err := os.Rename(oldPath, currentPath); err != nil {
-			u.log.Errorf("Failed to rename file %q to %q: %v", oldPath, currentPath, err)
-		}
-
 		return err
 	}
 
@@ -431,6 +447,10 @@ func extractLastVersion(buffer string) string {
 	return versionWithRest[:idx]
 }
 
-func cliPath(visorPath string) string {
-	return filepath.Join(filepath.Dir(visorPath), cliBinary)
+func apps() []string {
+	return []string{
+		"skychat",
+		"skysocks",
+		"skysocks-client",
+	}
 }
