@@ -53,6 +53,11 @@ func (s *Stream) Close() error {
 	return s.yStr.Close()
 }
 
+// Logger returns the internal logrus.FieldLogger instance.
+func (s *Stream) Logger() logrus.FieldLogger {
+	return s.log
+}
+
 func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	// Reserve stream in porter.
 	var lPort uint16
@@ -175,8 +180,18 @@ func (s *Stream) LocalAddr() net.Addr {
 	return s.lAddr
 }
 
+// RawLocalAddr returns the local address as dmsg.Addr type.
+func (s *Stream) RawLocalAddr() Addr {
+	return s.lAddr
+}
+
 // RemoteAddr returns the remote address of the dmsg stream.
 func (s *Stream) RemoteAddr() net.Addr {
+	return s.rAddr
+}
+
+// RawRemoteAddr returns the remote address as dmsg.Addr type.
+func (s *Stream) RawRemoteAddr() Addr {
 	return s.rAddr
 }
 

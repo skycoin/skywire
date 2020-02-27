@@ -110,7 +110,7 @@ func (m *procManager) Wait(name string) error {
 		}
 
 		if _, err := m.pop(name); err != nil {
-			m.log.Debugf("Pop app: %v", err)
+			m.log.Debugf("Remove app <%v>: %v", name, err)
 		}
 
 		return err
