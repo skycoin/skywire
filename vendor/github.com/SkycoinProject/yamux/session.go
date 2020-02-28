@@ -462,6 +462,7 @@ func (s *Session) recvLoop() error {
 			if err != io.EOF && !strings.Contains(err.Error(), "closed") && !strings.Contains(err.Error(), "reset by peer") {
 				s.logger.Printf("[ERR] yamux: Failed to read header: %v", err)
 			}
+
 			return err
 		}
 
