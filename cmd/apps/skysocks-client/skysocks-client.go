@@ -6,6 +6,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"net"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -26,6 +28,24 @@ const (
 )
 
 var r = netutil.NewRetrier(time.Second, 0, 1)
+
+func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+	var conn net.Conn
+	err := r.Do(func() error {
+		var err error
+		conn, err = appCl.Dial(appnet.Addr{
+			Net:    netType,
+			PubKey: pk,
+			Port:   socksPort,
+		})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
 
 func main() {
 	log := app.NewLogger(appName)
@@ -58,16 +78,30 @@ func main() {
 		log.Fatal("Invalid server PubKey: ", err)
 	}
 
-	log.Printf("Connected to %v\n", pk)
+	for {
+		conn, err := dialServer(socksApp, pk)
+		if err != nil {
+			log.Fatalf("Failed to dial to a server: %v", err)
+		}
 
-	client, err := skysocks.NewClient(socksApp, pk, netType, socksPort)
-	if err != nil {
-		log.Fatal("Failed to create a new client: ", err)
-	}
+		log.Printf("Connected to %v\n", pk)
 
-	log.Printf("Serving proxy client %v\n", *addr)
+		client, err := skysocks.NewClient(conn)
+		if err != nil {
+			log.Fatal("Failed to create a new client: ", err)
+		}
 
-	if err := client.ListenAndServe(*addr); err != nil {
-		log.Fatalf("Error serving proxy client: %v\n", err)
+		log.Printf("Serving proxy client %v\n", *addr)
+
+		if err := client.ListenAndServe(*addr); err != nil {
+			log.Errorf("Error serving proxy client: %v\n", err)
+		}
+
+		// need to filter this out, cause usually client failure means app conn is already closed
+		if err := conn.Close(); err != nil && err != io.ErrClosedPipe {
+			log.Errorf("Error closing app conn: %v\n", err)
+		}
+
+		log.Println("Reconnecting to skysocks server")
 	}
 }
