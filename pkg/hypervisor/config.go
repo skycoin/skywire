@@ -50,7 +50,7 @@ type Config struct {
 	Cookies       CookieConfig  `json:"cookies"`        // Configures cookies (for session management).
 	DmsgDiscovery string        `json:"dmsg_discovery"` // Dmsg discovery address.
 	DmsgPort      uint16        `json:"dmsg_port"`      // Dmsg port to serve on.
-	HttpAddr      string        `json:"http_addr"`      // HTTP address to serve API/web UI on.
+	HTTPAddr      string        `json:"http_addr"`      // HTTP address to serve API/web UI on.
 }
 
 func makeConfig(testenv bool) Config {

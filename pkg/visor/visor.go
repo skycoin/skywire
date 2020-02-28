@@ -93,8 +93,8 @@ type Visor struct {
 
 	pidMu sync.Mutex
 
-	cliL net.Listener
-	hvE  map[cipher.PubKey]chan error
+	cliLis net.Listener
+	hvErrs map[cipher.PubKey]chan error // errors returned when the associated hypervisor ServeRPCClient returns
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
@@ -216,12 +216,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
 		}
-		visor.cliL = l
+		visor.cliLis = l
 	}
 
-	visor.hvE = make(map[cipher.PubKey]chan error, len(cfg.Hypervisors))
+	visor.hvErrs = make(map[cipher.PubKey]chan error, len(cfg.Hypervisors))
 	for _, hv := range cfg.Hypervisors {
-		visor.hvE[hv.PubKey] = make(chan error, 1)
+		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
 	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerSockFile)
@@ -309,12 +309,12 @@ func (visor *Visor) Start() error {
 	if err := rpcSvr.RegisterName(RPCPrefix, &RPC{visor: visor}); err != nil {
 		return fmt.Errorf("rpc server created failed: %s", err)
 	}
-	if visor.cliL != nil {
-		visor.logger.Info("Starting RPC interface on ", visor.cliL.Addr())
-		go rpcSvr.Accept(visor.cliL)
+	if visor.cliLis != nil {
+		visor.logger.Info("Starting RPC interface on ", visor.cliLis.Addr())
+		go rpcSvr.Accept(visor.cliLis)
 	}
-	if visor.hvE != nil {
-		for hvPK, hvErrs := range visor.hvE {
+	if visor.hvErrs != nil {
+		for hvPK, hvErrs := range visor.hvErrs {
 			log := visor.Logger.PackageLogger("hypervisor_client").
 				WithField("hypervisor_pk", hvPK)
 			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
@@ -400,15 +400,15 @@ func (visor *Visor) Close() (err error) {
 		visor.cancel()
 	}
 
-	if visor.cliL != nil {
-		if err = visor.cliL.Close(); err != nil {
+	if visor.cliLis != nil {
+		if err = visor.cliLis.Close(); err != nil {
 			visor.logger.WithError(err).Error("failed to close CLI listener")
 		} else {
 			visor.logger.Info("CLI listener closed successfully")
 		}
 	}
-	if visor.hvE != nil {
-		for hvPK, hvErr := range visor.hvE {
+	if visor.hvErrs != nil {
+		for hvPK, hvErr := range visor.hvErrs {
 			visor.logger.
 				WithError(<-hvErr).
 				WithField("hypervisor_pk", hvPK).
