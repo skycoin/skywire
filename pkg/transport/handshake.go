@@ -86,7 +86,8 @@ func MakeSettlementHS(init bool) SettlementHS {
 		entry := makeEntryFromTpConn(conn)
 
 		defer func() {
-			if _, err := dc.UpdateStatuses(ctx, &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
+			// @evanlinjin: I used background context to ensure status is always updated.
+			if _, err := dc.UpdateStatuses(context.Background(), &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
 				log.WithError(err).Error("Failed to update statuses")
 			}
 		}()
