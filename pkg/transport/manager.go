@@ -192,17 +192,39 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
+
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
-	mTp, err := tm.saveTransport(remote, tpType)
-	if err != nil {
-		return nil, err
+
+	const tries = 2
+
+	var err error
+	for i := 0; i < tries; i++ {
+
+		mTp, err := tm.saveTransport(remote, tpType)
+		if err != nil {
+			return nil, err
+		}
+
+		if err = mTp.Dial(ctx); err != nil {
+			if err == ErrNotServing {
+				mTp.wg.Wait()
+				delete(tm.tps, mTp.Entry.ID)
+				continue
+			}
+			tm.Logger.
+				WithError(err).
+				Warn("Underlying connection is not yet established. Will retry later.")
+		}
+		return mTp, nil
 	}
-	if err := mTp.Dial(ctx); err != nil {
-		tm.Logger.Warnf("underlying 'write' tp failed, will retry: %v", err)
-	}
-	return mTp, nil
+
+	tm.Logger.
+		WithError(err).
+		WithField("tries", tries).
+		Error("Failed to serve managed transport. This is unexpected.")
+	return nil, err
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
@@ -229,6 +251,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
+
 	if tm.isClosing() {
 		return
 	}
@@ -246,7 +269,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		}
 
 		// Close underlying connection.
-		tp.close()
+		tp.close(true)
 		delete(tm.tps, id)
 	}
 }
@@ -313,7 +336,7 @@ func (tm *Manager) close() {
 
 	statuses := make([]*Status, 0, len(tm.tps))
 	for _, tr := range tm.tps {
-		if closed := tr.close(); closed {
+		if closed := tr.close(true); closed {
 			statuses = append(statuses[0:], &Status{ID: tr.Entry.ID, IsUp: false})
 		}
 	}

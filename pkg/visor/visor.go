@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/rpc"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -304,21 +303,19 @@ func (visor *Visor) Start() error {
 		}()
 	}
 
-	// RPC server for CLI and Hypervisor.
-	rpcSvr := rpc.NewServer()
-	if err := rpcSvr.RegisterName(RPCPrefix, &RPC{visor: visor}); err != nil {
-		return fmt.Errorf("rpc server created failed: %s", err)
-	}
+	// prepare visor RPC
+
 	if visor.cliLis != nil {
 		visor.logger.Info("Starting RPC interface on ", visor.cliLis.Addr())
-		go rpcSvr.Accept(visor.cliLis)
+		go newRPCServer(visor, "CLI").Accept(visor.cliLis)
 	}
 	if visor.hvErrs != nil {
 		for hvPK, hvErrs := range visor.hvErrs {
 			log := visor.Logger.PackageLogger("hypervisor_client").
 				WithField("hypervisor_pk", hvPK)
 			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
-			go ServeRPCClient(ctx, log, visor.n, rpcSvr, addr, hvErrs)
+			rpcS := newRPCServer(visor, addr.PK.String()[:6])
+			go ServeRPCClient(ctx, log, visor.n, rpcS, addr, hvErrs)
 		}
 	}
 
