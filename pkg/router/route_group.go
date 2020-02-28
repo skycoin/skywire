@@ -76,9 +76,8 @@ type RouteGroup struct {
 	// - fwd/tps should have the same number of elements.
 	// - the corresponding element of tps should have tpID of the corresponding rule in fwd.
 	// - fwd references 'ForwardRule' rules for writes.
-	fwd                  []routing.Rule // forward rules (for writing)
-	rvs                  []routing.Rule // reverse rules (for reading)
-	rvsRouteLastActivity time.Time
+	fwd []routing.Rule // forward rules (for writing)
+	rvs []routing.Rule // reverse rules (for reading)
 
 	lastSent int64
 
@@ -436,12 +435,6 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 }
 
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
-	rg.mu.Lock()
-	// no need to check rule expiry, since router won't allow packet in
-	// in case it's expired, so simply update the activity
-	rg.rvsRouteLastActivity = time.Now()
-	rg.mu.Unlock()
-
 	switch packet.Type() {
 	case routing.ClosePacket:
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
