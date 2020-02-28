@@ -1,8 +1,6 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
-github.com/SkycoinProject/dmsg v0.0.0-20200226145926-514fc8d015a1 h1:51rz38hyi2RKpNr/CEJgsVwjy22yt8gEess2WlzibmA=
-github.com/SkycoinProject/dmsg v0.0.0-20200226145926-514fc8d015a1/go.mod h1:eCoemDDyfyfNTFrapYKNEItwtRIj54UGpu4Ffcznuds=
 github.com/SkycoinProject/dmsg v0.0.0-20200227084433-7605a550f502 h1:fxCUIQ5EXmo0LpryqsqREysixAqtjSO6m60nDbe12iQ=
 github.com/SkycoinProject/dmsg v0.0.0-20200227084433-7605a550f502/go.mod h1:eCoemDDyfyfNTFrapYKNEItwtRIj54UGpu4Ffcznuds=
 github.com/SkycoinProject/skycoin v0.26.0 h1:8/ZRZb2VM2DM4YTIitRJMZ3Yo/3H1FFmbCMx5o6ekmA=
