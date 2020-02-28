@@ -26,9 +26,9 @@ type Server struct {
 }
 
 // NewServer creates a new dmsg server entity.
-func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient) *Server {
+func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, maxSessions int) *Server {
 	s := new(Server)
-	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
+	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"), maxSessions)
 	s.ready = make(chan struct{})
 	s.done = make(chan struct{})
 	return s
@@ -47,7 +47,7 @@ func (s *Server) Close() error {
 }
 
 // Serve serves the server.
-func (s *Server) Serve(lis net.Listener, addr string, availableConns int) error {
+func (s *Server) Serve(lis net.Listener, addr string) error {
 	var log logrus.FieldLogger //nolint:gosimple
 	log = s.log.WithField("local_addr", addr).WithField("local_pk", s.pk)
 
@@ -69,7 +69,7 @@ func (s *Server) Serve(lis net.Listener, addr string, availableConns int) error 
 	if addr == "" {
 		addr = lis.Addr().String()
 	}
-	if err := s.updateEntryLoop(addr, availableConns); err != nil {
+	if err := s.updateEntryLoop(addr); err != nil {
 		return err
 	}
 
@@ -98,7 +98,7 @@ func (s *Server) Ready() <-chan struct{} {
 	return s.ready
 }
 
-func (s *Server) updateEntryLoop(addr string, conns int) error {
+func (s *Server) updateEntryLoop(addr string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -109,25 +109,13 @@ func (s *Server) updateEntryLoop(addr string, conns int) error {
 		}
 	}()
 	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, addr, conns, 0)
+		return s.updateServerEntry(ctx, addr, 0)
 	})
-}
-
-func (s *Server) updateServerSession(ctx context.Context, availableSessions int) error {
-	return s.updateServerEntry(ctx, "", 0, availableSessions)
 }
 
 func (s *Server) handleSession(conn net.Conn) {
 	var log logrus.FieldLogger //nolint:gosimple
 	log = s.log.WithField("remote_tcp", conn.RemoteAddr())
-
-	getSession := func() (int, error) {
-		e, err := s.dc.Entry(context.Background(), s.pk)
-		if err != nil {
-			return -1, err
-		}
-		return e.Server.AvailableSessions, nil
-	}
 
 	dSes, err := makeServerSession(&s.EntityCommon, conn)
 	if err != nil {
@@ -142,38 +130,27 @@ func (s *Server) handleSession(conn net.Conn) {
 	log = log.WithField("remote_pk", dSes.RemotePK())
 	log.Info("Started session.")
 
-	if err := s.updateServerSession(context.Background(), 1); err != nil {
-		s.log.WithError(err).
-			Warn("Failed to update server sessions")
-	} else {
-		s.log.Info("Server sessions updated")
-		i, err := getSession()
-		if err != nil {
-			s.log.Warn(err)
-		}
-
-		s.log.Infof("Current number of sessions: %d", i)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		awaitDone(ctx, s.done)
 		log.WithError(dSes.Close()).Info("Stopped session.")
 
-		if err := s.updateServerSession(context.Background(), -1); err != nil {
+		if err := s.updateServerEntry(context.Background(), "", -1); err != nil {
 			s.log.WithError(err).
 				Warn("Failed to update server sessions")
 		}
 
-		i, err := getSession()
-		if err != nil {
-			s.log.Warn(err)
-		}
-
-		s.log.Infof("Current number of server sessions: %d", i)
+		s.log.Infof("Current number of server sessions: %d", s.SessionCount())
 	}()
 
 	if s.setSession(ctx, dSes.SessionCommon) {
+		if err := s.updateServerEntry(context.Background(), "", 1); err != nil {
+			s.log.WithError(err).
+				Warn("Failed to update server sessions")
+		} else {
+			s.log.Infof("Server sessions updated.\nCurrent number of sessions: %d", s.SessionCount())
+		}
+
 		dSes.Serve()
 	}
 	s.delSession(ctx, dSes.RemotePK())

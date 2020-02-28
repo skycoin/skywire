@@ -57,7 +57,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	c.ready = make(chan struct{})
 
 	// Init common fields.
-	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"))
+	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"), 0)
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
 		err := c.EntityCommon.updateClientEntry(ctx, c.done)
 		if err == nil {
