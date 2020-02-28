@@ -98,10 +98,10 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Serve HTTP.
-		log.WithField("http_addr", conf.HttpAddr).
+		log.WithField("http_addr", conf.HTTPAddr).
 			Info("Serving HTTP.")
 
-		if err := http.ListenAndServe(conf.HttpAddr, m); err != nil {
+		if err := http.ListenAndServe(conf.HTTPAddr, m); err != nil {
 			log.WithError(err).
 				Fatal("Hypervisor exited with error.")
 		}
