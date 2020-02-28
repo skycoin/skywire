@@ -330,10 +330,10 @@ func (r Rule) Summary() *RuleSummary {
 		KeyRouteID: r.KeyRouteID(),
 	}
 
-	rd := r.RouteDescriptor()
-
 	switch t := summary.Type; t {
 	case RuleConsume:
+		rd := r.RouteDescriptor()
+
 		summary.ConsumeFields = &RuleConsumeFields{
 			RouteDescriptor: RouteDescriptorFields{
 				DstPK:   rd.DstPK(),
@@ -343,6 +343,8 @@ func (r Rule) Summary() *RuleSummary {
 			},
 		}
 	case RuleForward:
+		rd := r.RouteDescriptor()
+
 		summary.ForwardFields = &RuleForwardFields{
 			RouteDescriptor: RouteDescriptorFields{
 				DstPK:   rd.DstPK(),
