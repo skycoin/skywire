@@ -7,12 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/yamux"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 )
 
 // Log is skysocks package level logger, it can be replaced with a different one from outside the package
@@ -77,7 +75,7 @@ func (c *Client) ListenAndServe(addr string) error {
 		if err != nil {
 			c.close()
 
-			return errors.Wrap(err, "error opening yamux stream")
+			return fmt.Errorf("error opening yamux stream: %w", err)
 		}
 
 		Log.Println("Opened session skysocks client")
