@@ -7,17 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-
-	"github.com/SkycoinProject/dmsg/cipher"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-
-	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/yamux"
@@ -28,32 +20,17 @@ var Log = logging.MustGetLogger("skysocks") // nolint: gochecknoglobals
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
-	sessionMx      sync.RWMutex
-	session        *yamux.Session
-	listener       net.Listener
-	redialer       *netutil.Retrier
-	app            *app.Client
-	serverPK       cipher.PubKey
-	appNetType     appnet.Type
-	serverPort     routing.Port
-	sessionFailedC chan struct{}
-	closeC         chan struct{}
+	session  *yamux.Session
+	listener net.Listener
+	once     sync.Once
+	closeC   chan struct{}
 }
 
 // NewClient constructs a new Client.
-func NewClient(app *app.Client, serverPK cipher.PubKey, appNetType appnet.Type,
-	serverPort routing.Port) (*Client, error) {
+func NewClient(conn net.Conn) (*Client, error) {
 	c := &Client{
-		redialer:       netutil.NewRetrier(time.Second, 0, 1),
-		app:            app,
-		serverPK:       serverPK,
-		appNetType:     appNetType,
-		serverPort:     serverPort,
-		sessionFailedC: make(chan struct{}),
-		closeC:         make(chan struct{}),
+		closeC: make(chan struct{}),
 	}
-
-	conn, err := c.dialServer()
 
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
@@ -64,7 +41,6 @@ func NewClient(app *app.Client, serverPK cipher.PubKey, appNetType appnet.Type,
 
 	c.session = session
 
-	go c.redialLoop()
 	go c.sessionKeepAliveLoop()
 
 	return c, nil
@@ -83,6 +59,12 @@ func (c *Client) ListenAndServe(addr string) error {
 	c.listener = l
 
 	for {
+		select {
+		case <-c.closeC:
+			return nil
+		default:
+		}
+
 		conn, err := l.Accept()
 		if err != nil {
 			Log.Printf("Error accepting: %v\n", err)
@@ -91,19 +73,12 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		Log.Println("Accepted skysocks client")
 
-		c.sessionMx.RLock()
 		stream, err := c.session.Open()
 		if err != nil {
-			Log.Errorf("Session failed: %v, redialing...", err)
+			c.close()
 
-			select {
-			case <-c.closeC:
-				return nil
-			case c.sessionFailedC <- struct{}{}:
-			default:
-			}
+			return errors.Wrap(err, "error opening yamux stream")
 		}
-		c.sessionMx.RUnlock()
 
 		Log.Println("Opened session skysocks client")
 
@@ -112,72 +87,21 @@ func (c *Client) ListenAndServe(addr string) error {
 }
 
 func (c *Client) sessionKeepAliveLoop() {
+	ticker := time.NewTicker(router.DefaultRouteKeepAlive / 2)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-c.closeC:
 			return
-		default:
-		}
+		case <-ticker.C:
+			if c.session.IsClosed() {
+				c.close()
 
-		c.sessionMx.RLock()
-		if c.session.IsClosed() {
-			Log.Errorln("Session failed, redialing...")
-
-			select {
-			case c.sessionFailedC <- struct{}{}:
-			default:
+				return
 			}
 		}
-		c.sessionMx.RUnlock()
-
-		time.Sleep(router.DefaultRouteKeepAlive / 2)
 	}
-}
-
-func (c *Client) redialLoop() {
-	for {
-		select {
-		case <-c.closeC:
-			return
-		case <-c.sessionFailedC:
-			c.sessionMx.Lock()
-
-			conn, err := c.dialServer()
-			if err != nil {
-				c.sessionMx.Unlock()
-				Log.Fatal("Failed to dial to a server: ", err)
-			}
-
-			sessionCfg := yamux.DefaultConfig()
-			sessionCfg.EnableKeepAlive = false
-			session, err := yamux.Client(conn, sessionCfg)
-			if err != nil {
-				c.sessionMx.Unlock()
-				Log.Fatalf("error creating client: yamux: %s", err)
-			}
-
-			c.session = session
-			c.sessionMx.Unlock()
-		}
-	}
-}
-
-func (c *Client) dialServer() (net.Conn, error) {
-	var conn net.Conn
-	err := c.redialer.Do(func() error {
-		var err error
-		conn, err = c.app.Dial(appnet.Addr{
-			Net:    c.appNetType,
-			PubKey: c.serverPK,
-			Port:   c.serverPort,
-		})
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
 }
 
 func (c *Client) handleStream(conn, stream net.Conn) {
@@ -222,27 +146,32 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 
 	close(errCh)
 
-	c.sessionMx.RLock()
 	if c.session.IsClosed() {
-		Log.Errorln("Session failed, redialing...")
-
-		select {
-		case c.sessionFailedC <- struct{}{}:
-		default:
-		}
+		c.close()
 	}
-	c.sessionMx.RUnlock()
+}
+
+func (c *Client) close() {
+	Log.Error("Session failed, closing skysocks client")
+	if err := c.Close(); err != nil {
+		Log.WithError(err).Error("Error closing skysocks client")
+	}
 }
 
 // Close implement io.Closer.
 func (c *Client) Close() error {
-	Log.Infoln("Closing proxy client")
-
 	if c == nil {
 		return nil
 	}
 
-	close(c.closeC)
+	var err error
+	c.once.Do(func() {
+		Log.Infoln("Closing proxy client")
 
-	return c.listener.Close()
+		close(c.closeC)
+
+		err = c.listener.Close()
+	})
+
+	return err
 }
