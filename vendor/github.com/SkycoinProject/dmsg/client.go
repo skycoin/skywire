@@ -3,6 +3,7 @@ package dmsg
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -302,7 +303,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSes
 	go func() {
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
 		if err := dSes.serve(); !isClosed(ce.done) {
-			ce.errCh <- err
+			ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err)
 			ce.delSession(ctx, dSes.RemotePK())
 		}
 	}()

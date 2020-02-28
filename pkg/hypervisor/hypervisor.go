@@ -251,23 +251,33 @@ type summaryResp struct {
 // provides summary of all visors.
 func (m *Hypervisor) getVisors() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var summaries []summaryResp
-
 		m.mu.RLock()
+		wg := new(sync.WaitGroup)
+		wg.Add(len(m.visors))
+		summaries, i := make([]summaryResp, len(m.visors)), 0
+
 		for pk, c := range m.visors {
-			summary, err := c.RPC.Summary()
-			if err != nil {
-				log.Errorf("failed to obtain summary from Hypervisor with pk %s. Error: %v", pk, err)
+			go func(pk cipher.PubKey, c VisorConn, i int) {
+				log := log.WithField("visor_addr", c.Addr)
+				log.WithField("func", "c.RPC.Summary()").Debug("Calling RPC.")
 
-				summary = &visor.Summary{PubKey: pk}
-			}
-
-			summaries = append(summaries, summaryResp{
-				TCPAddr: c.Addr.String(),
-				Online:  err == nil,
-				Summary: summary,
-			})
+				summary, err := c.RPC.Summary()
+				if err != nil {
+					log.WithError(err).
+						Warn("Failed to obtain visor summary.")
+					summary = &visor.Summary{PubKey: pk}
+				}
+				summaries[i] = summaryResp{
+					TCPAddr: c.Addr.String(),
+					Online:  err == nil,
+					Summary: summary,
+				}
+				wg.Done()
+			}(pk, c, i)
+			i++
 		}
+
+		wg.Wait()
 		m.mu.RUnlock()
 
 		httputil.WriteJSON(w, r, http.StatusOK, summaries)
