@@ -126,7 +126,7 @@ type TransportSummary struct {
 	IsSetup bool                `json:"is_setup"`
 }
 
-func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, incLogs bool, isSetup bool) *TransportSummary {
+func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, incLogs, isSetup bool) *TransportSummary {
 
 	summary := &TransportSummary{
 		ID:      tp.Entry.ID,
