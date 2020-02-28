@@ -87,14 +87,18 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 	logTicker := time.NewTicker(logWriteInterval)
 	defer logTicker.Stop()
 
-	mt.log.Infof("serving: tpID(%v) rPK(%s) srvQty[%d]", mt.Entry.ID, mt.rPK, atomic.AddInt32(&mTpCount, 1))
-	defer mt.log.Infof("stopped: tpID(%v) rPK(%s) srvQty[%d]", mt.Entry.ID, mt.rPK, atomic.AddInt32(&mTpCount, -1))
+	log := mt.log.
+		WithField("tp_id", mt.Entry.ID).
+		WithField("remote_pk", mt.rPK).
+		WithField("tp_index", atomic.AddInt32(&mTpCount, 1))
+
+	log.Info("Serving.")
 
 	defer func() {
 		// Ensure logs tp logs are up to date before closing.
 		if mt.logMod() {
 			if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
-				mt.log.Warnf("Failed to record log entry: %s", err)
+				log.WithError(err).Warn("Failed to record log entry.")
 			}
 		}
 
@@ -103,18 +107,23 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 		close(mt.connCh)
 		if mt.conn != nil {
 			if err := mt.conn.Close(); err != nil {
-				mt.log.WithError(err).Warn("Failed to close connection")
+				log.WithError(err).Warn("Failed to close underlying connection.")
 			}
 			mt.conn = nil
 		}
 		mt.connMx.Unlock()
+
+		log.WithField("remaining_tps", atomic.AddInt32(&mTpCount, -1)).
+			Info("Stopped serving.")
 	}()
 
 	// Read loop.
 	go func() {
+		log := mt.log.WithField("src", "read_loop")
 		defer func() {
-			mt.log.Infof("closed readPacket loop.")
+			cancel()
 			mt.wg.Done()
+			log.Debug("Closed read loop.")
 		}()
 		for {
 			p, err := mt.readPacket()
@@ -125,7 +134,8 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 				mt.connMx.Lock()
 				mt.clearConn(ctx)
 				mt.connMx.Unlock()
-				mt.log.Warnf("failed to read packet: %v", err)
+				log.WithError(err).
+					Warn("Failed to read packet.")
 				continue
 			}
 			select {
@@ -151,7 +161,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 				// If there has not been any activity, ensure underlying 'write' tp is still up.
 				mt.connMx.Lock()
 				if mt.conn == nil {
-					if ok, err := mt.redial(ctx); err != nil {
+					if ok, err := mt.redial(ctx, false); err != nil {
 						mt.log.Warnf("failed to redial underlying connection (redial loop): %v", err)
 						if !ok {
 							mt.connMx.Unlock()
@@ -176,7 +186,7 @@ func (mt *ManagedTransport) isServing() bool {
 
 // Close stops serving the transport.
 func (mt *ManagedTransport) Close() {
-	if mt.close() {
+	if mt.close(true) {
 		// Update transport entry.
 		if _, err := mt.dc.UpdateStatuses(context.Background(), &Status{ID: mt.Entry.ID, IsUp: false}); err != nil {
 			mt.log.Warnf("Failed to update transport status: %s", err)
@@ -184,12 +194,16 @@ func (mt *ManagedTransport) Close() {
 	}
 }
 
-func (mt *ManagedTransport) close() (closed bool) {
+// close closes the 'mt.done' once.
+// It also waits until mt.Serve returns if specified.
+func (mt *ManagedTransport) close(wait bool) (closed bool) {
 	mt.once.Do(func() {
 		close(mt.done)
-		mt.wg.Wait()
 		closed = true
 	})
+	if wait {
+		mt.wg.Wait()
+	}
 	return closed
 }
 
@@ -241,16 +255,16 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
+
 	if err := MakeSettlementHS(true).Do(ctx, mt.dc, tp, mt.n.LocalSK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %v", err)
 	}
-
 	return mt.setIfConnNil(ctx, tp)
 }
 
 // redial only actually dials if transport is still registered in transport discovery.
 // The 'retry' output specifies whether we can retry dial on failure.
-func (mt *ManagedTransport) redial(ctx context.Context) (retry bool, err error) {
+func (mt *ManagedTransport) redial(ctx context.Context, waitOnClose bool) (retry bool, err error) {
 	if !mt.isServing() {
 		return false, ErrNotServing
 	}
@@ -259,12 +273,13 @@ func (mt *ManagedTransport) redial(ctx context.Context) (retry bool, err error) 
 
 		// If the error is a temporary network error, we should retry at a later stage.
 		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+
 			return true, err
 		}
 
 		// If the error is not temporary, it most likely means that the transport is no longer registered.
 		// Hence, we should close the managed transport.
-		mt.close()
+		mt.close(waitOnClose)
 		mt.log.
 			WithError(err).
 			Warn("Transport closed due to redial failure. Transport is likely no longer in discovery.")
@@ -338,7 +353,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 	defer mt.connMx.Unlock()
 
 	if mt.conn == nil {
-		if _, err := mt.redial(ctx); err != nil {
+		if _, err := mt.redial(ctx, true); err != nil {
 			return fmt.Errorf("failed to redial underlying connection: %v", err)
 		}
 	}

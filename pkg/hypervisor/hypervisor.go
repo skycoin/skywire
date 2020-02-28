@@ -258,14 +258,19 @@ func (m *Hypervisor) getVisors() http.HandlerFunc {
 
 		for pk, c := range m.visors {
 			go func(pk cipher.PubKey, c VisorConn, i int) {
-				log := log.WithField("visor_addr", c.Addr)
-				log.WithField("func", "c.RPC.Summary()").Debug("Calling RPC.")
+				log := log.
+					WithField("visor_addr", c.Addr).
+					WithField("func", "getVisors")
+
+				log.Debug("Requesting summary via RPC.")
 
 				summary, err := c.RPC.Summary()
 				if err != nil {
 					log.WithError(err).
-						Warn("Failed to obtain visor summary.")
+						Warn("Failed to obtain summary via RPC.")
 					summary = &visor.Summary{PubKey: pk}
+				} else {
+					log.Debug("Obtained summary via RPC.")
 				}
 				summaries[i] = summaryResp{
 					TCPAddr: c.Addr.String(),
