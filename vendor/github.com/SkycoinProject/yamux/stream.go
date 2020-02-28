@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"fmt"
 )
 
 type streamState int
@@ -91,13 +92,17 @@ func (s *Stream) Read(b []byte) (n int, err error) {
 	}
 
 	for {
+		fmt.Println("CHECKING STREAM STATE")
 		s.stateLock.Lock()
 		switch s.state {
 		case streamLocalClose:
+			fmt.Println("STREAM IS LOCALCLOSE")
 			fallthrough
 		case streamRemoteClose:
+			fmt.Println("STREAM IS REMOTECLOSE")
 			fallthrough
 		case streamClosed:
+			fmt.Println("STREAM IS CLOSED")
 			s.recvLock.Lock()
 			if s.recvBuf == nil || s.recvBuf.Len() == 0 {
 				s.recvLock.Unlock()
@@ -106,6 +111,7 @@ func (s *Stream) Read(b []byte) (n int, err error) {
 			}
 			s.recvLock.Unlock()
 		case streamReset:
+			fmt.Println("STREAM IS RESET")
 			s.stateLock.Unlock()
 			return 0, ErrConnectionReset
 		}
@@ -117,16 +123,23 @@ func (s *Stream) Read(b []byte) (n int, err error) {
 			s.recvLock.Unlock()
 		} else {
 			// Read any bytes
+			fmt.Println("LOCKING ON YAMUX READ FROM BUF")
 			n, _ = s.recvBuf.Read(b)
 			s.recvLock.Unlock()
 
+			fmt.Printf("READ %d BYTES FROM YAMUX BUF\n", n)
+
 			// Send a window update potentially
 			err = s.sendWindowUpdate()
+
+			fmt.Println("SENT WINDOW UPDATE")
 			return n, err
 		}
 
+		fmt.Println("LOCKING ON RECVNOTIFYCH")
 		select {
 		case <-s.recvNotifyCh:
+			fmt.Println("GOT SIGNAL FROM RECVNOTIFYCH")
 			continue
 		case <-s.readDeadline.wait():
 			return 0, ErrTimeout
