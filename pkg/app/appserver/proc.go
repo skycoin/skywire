@@ -37,7 +37,7 @@ type Proc struct {
 func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
 	key := appcommon.GenerateAppKey()
 
-	binaryPath := getBinaryPath(c.BinaryDir, c.Name, c.Version)
+	binaryPath := getBinaryPath(c.BinaryDir, c.Name)
 
 	const (
 		appKeyEnvFormat   = appcommon.EnvAppKey + "=%s"
@@ -123,7 +123,6 @@ func (p *Proc) IsRunning() bool {
 }
 
 // getBinaryPath formats binary path using app dir, name and version.
-func getBinaryPath(dir, name, ver string) string {
-	const binaryNameFormat = "%s.v%s"
-	return filepath.Join(dir, fmt.Sprintf(binaryNameFormat, name, ver))
+func getBinaryPath(dir, name string) string {
+	return filepath.Join(dir, name)
 }
