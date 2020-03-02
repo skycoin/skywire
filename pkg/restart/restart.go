@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	// ErrAlreadyStarting is returned on starting attempt when starting is in progress.
-	ErrAlreadyStarting = errors.New("already starting")
+	// ErrAlreadyStarted is returned when Start is already called.
+	ErrAlreadyStarted = errors.New("already started")
 )
 
 const (
@@ -28,7 +28,7 @@ type Context struct {
 	log         logrus.FieldLogger
 	cmd         *exec.Cmd
 	checkDelay  time.Duration
-	isStarting  int32
+	isStarted   int32
 	appendDelay bool // disabled in tests
 }
 
@@ -71,11 +71,9 @@ func (c *Context) CmdPath() string {
 
 // Start starts a new executable using Context.
 func (c *Context) Start() error {
-	if !atomic.CompareAndSwapInt32(&c.isStarting, 0, 1) {
-		return ErrAlreadyStarting
+	if !atomic.CompareAndSwapInt32(&c.isStarted, 0, 1) {
+		return ErrAlreadyStarted
 	}
-
-	defer atomic.StoreInt32(&c.isStarting, 0)
 
 	errCh := c.startExec()
 
