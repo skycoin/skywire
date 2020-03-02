@@ -130,11 +130,6 @@ func (c *Config) TransportLogStore() (transport.LogStore, error) {
 	return transport.InMemoryTransportLogStore(), nil
 }
 
-// RoutingTable returns configure routing.Table.
-func (c *Config) RoutingTable() (routing.Table, error) {
-	return routing.NewTable(routing.DefaultConfig()), nil
-}
-
 // AppsConfig decodes AppsConfig from a local json config file.
 func (c *Config) AppsConfig() (map[string]AppConfig, error) {
 	apps := make(map[string]AppConfig)

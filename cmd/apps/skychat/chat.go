@@ -111,6 +111,10 @@ func handleConn(conn net.Conn) {
 		n, err := conn.Read(buf)
 		if err != nil {
 			log.Println("Failed to read packet:", err)
+			raddr := conn.RemoteAddr().(appnet.Addr)
+			connsMu.Lock()
+			delete(chatConns, raddr.PubKey)
+			connsMu.Unlock()
 			return
 		}
 
