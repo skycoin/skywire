@@ -178,17 +178,21 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
-		if err := mTp.Accept(ctx, conn); err != nil {
-			return err
-		}
-		go mTp.Serve(tm.readCh, tm.done)
+		go func() {
+			mTp.Serve(tm.readCh)
+			tm.mx.Lock()
+			delete(tm.tps, mTp.Entry.ID)
+			tm.mx.Unlock()
+		}()
 		tm.tps[tpID] = mTp
 
 	} else {
 		tm.Logger.Debugln("TP found, accepting...")
-		if err := mTp.Accept(ctx, conn); err != nil {
-			return err
-		}
+
+	}
+
+	if err := mTp.Accept(ctx, conn); err != nil {
+		return err
 	}
 
 	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
@@ -250,14 +254,19 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 
 	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
-	go mTp.Serve(tm.readCh, tm.done)
+	go func() {
+		mTp.Serve(tm.readCh)
+		tm.mx.Lock()
+		delete(tm.tps, mTp.Entry.ID)
+		tm.mx.Unlock()
+	}()
 	tm.tps[tpID] = mTp
 
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
 	return mTp, nil
 }
 
-// DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.
+// DeleteTransport de-registers the Transport of Transport ID in transport discovery and deletes it locally.
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
@@ -275,11 +284,11 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
 			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
 		} else {
-			tm.Logger.Infof("Deregistered transport of ID %s from discovery.", id)
+			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
 		}
 
 		// Close underlying connection.
-		tp.close(true)
+		tp.close()
 		delete(tm.tps, id)
 	}
 }
@@ -346,9 +355,7 @@ func (tm *Manager) close() {
 
 	statuses := make([]*Status, 0, len(tm.tps))
 	for _, tr := range tm.tps {
-		if closed := tr.close(true); closed {
-			statuses = append(statuses[0:], &Status{ID: tr.Entry.ID, IsUp: false})
-		}
+		tr.close()
 	}
 	if _, err := tm.Conf.DiscoveryClient.UpdateStatuses(context.Background(), statuses...); err != nil {
 		tm.Logger.Warnf("failed to update transport statuses: %v", err)
