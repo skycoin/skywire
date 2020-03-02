@@ -2,7 +2,6 @@ package visor
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -72,18 +71,6 @@ func TestTransportLogStore(t *testing.T) {
 	ls, err = conf.TransportLogStore()
 	require.NoError(t, err)
 	require.NotNil(t, ls)
-}
-
-func TestRoutingTable(t *testing.T) {
-	tmpfile, err := ioutil.TempFile("", "routing")
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.Remove(tmpfile.Name()))
-	}()
-
-	conf := Config{}
-	_, err = conf.RoutingTable()
-	require.NoError(t, err)
 }
 
 func TestAppsConfig(t *testing.T) {

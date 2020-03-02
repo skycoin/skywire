@@ -70,46 +70,5 @@ func RoutingTableSuite(t *testing.T, tbl Table) {
 }
 
 func TestRoutingTable(t *testing.T) {
-	RoutingTableSuite(t, NewTable(DefaultConfig()))
-}
-
-func TestRoutingTableCleanup(t *testing.T) {
-	rt := &memTable{
-		rules:    map[RouteID]Rule{},
-		activity: make(map[RouteID]time.Time),
-		config:   Config{GCInterval: DefaultGCInterval},
-	}
-
-	id0, err := rt.ReserveKeys(1)
-	require.NoError(t, err)
-	err = rt.SaveRule(IntermediaryForwardRule(1*time.Hour, id0[0], 3, uuid.New()))
-	require.NoError(t, err)
-
-	id1, err := rt.ReserveKeys(1)
-	require.NoError(t, err)
-	err = rt.SaveRule(IntermediaryForwardRule(1*time.Hour, id1[0], 3, uuid.New()))
-	require.NoError(t, err)
-
-	id2, err := rt.ReserveKeys(1)
-	require.NoError(t, err)
-	err = rt.SaveRule(IntermediaryForwardRule(-1*time.Hour, id2[0], 3, uuid.New()))
-	require.NoError(t, err)
-
-	// rule should already be expired at this point due to the execution time.
-	// However, we'll just a bit to be sure
-	time.Sleep(1 * time.Millisecond)
-
-	assert.Equal(t, 3, rt.Count())
-
-	_, err = rt.Rule(id1[0])
-	require.NoError(t, err)
-
-	assert.NotNil(t, rt.activity[id1[0]])
-
-	rt.gc()
-	assert.Equal(t, 2, rt.Count())
-
-	rule, err := rt.Rule(id2[0])
-	require.Error(t, err)
-	assert.Nil(t, rule)
+	RoutingTableSuite(t, NewTable())
 }
