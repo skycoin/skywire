@@ -52,14 +52,14 @@ func TestMain(m *testing.M) {
 //	}))
 //	defer srv.Close()
 //
-//	conf := Config{Version: "1.0", LocalPath: "local", AppsPath: "apps"}
+//	conf := Config{LocalPath: "local", AppsPath: "apps"}
 //	conf.Visor.StaticPubKey = pk
 //	conf.Visor.StaticSecKey = sk
 //	conf.Dmsg.Discovery = "http://skywire.skycoin.com:8001"
 //	conf.Dmsg.ServerCount = 10
 //	conf.Transport.Discovery = srv.URL
 //	conf.Apps = []AppConfig{
-//		{App: "foo", Version: "1.1", Port: 1},
+//		{App: "foo", Port: 1},
 //		{App: "bar", AutoStart: true, Port: 2},
 //	}
 //
@@ -86,13 +86,11 @@ func TestVisorStartClose(t *testing.T) {
 	appCfg := []AppConfig{
 		{
 			App:       "skychat",
-			Version:   "1.0",
 			AutoStart: true,
 			Port:      1,
 		},
 		{
 			App:       "foo",
-			Version:   "1.0",
 			AutoStart: false,
 		},
 	}
@@ -122,10 +120,9 @@ func TestVisorStartClose(t *testing.T) {
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:         apps["skychat"].App,
-		Version:      apps["skychat"].Version,
 		SockFilePath: visorCfg.AppServerSockFile,
 		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", apps["skychat"].App, fmt.Sprintf("v%s", apps["skychat"].Version)),
+		WorkDir:      filepath.Join("", apps["skychat"].App),
 	}
 	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
@@ -180,7 +177,6 @@ func TestVisorSpawnApp(t *testing.T) {
 
 	app := AppConfig{
 		App:       "skychat",
-		Version:   "1.0",
 		AutoStart: false,
 		Port:      10,
 		Args:      []string{"foo"},
@@ -206,10 +202,9 @@ func TestVisorSpawnApp(t *testing.T) {
 	pm := &appserver.MockProcManager{}
 	appCfg := appcommon.Config{
 		Name:         app.App,
-		Version:      app.Version,
 		SockFilePath: visorCfg.AppServerSockFile,
 		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+		WorkDir:      filepath.Join("", app.App),
 	}
 	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 	pm.On("Wait", app.App).Return(testhelpers.NoErr)
@@ -255,19 +250,17 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 
 	t.Run("fail - can't bind to reserved port", func(t *testing.T) {
 		app := AppConfig{
-			App:     "skychat",
-			Version: "1.0",
-			Port:    3,
+			App:  "skychat",
+			Port: 3,
 		}
 		wantErr := "can't bind to reserved port 3"
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
 			Name:         app.App,
-			Version:      app.Version,
 			SockFilePath: c.AppServerSockFile,
 			VisorPK:      c.Visor.StaticPubKey.Hex(),
-			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+			WorkDir:      filepath.Join("", app.App),
 		}
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
@@ -291,19 +284,17 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 
 	t.Run("fail - app already started", func(t *testing.T) {
 		app := AppConfig{
-			App:     "skychat",
-			Version: "1.0",
-			Port:    10,
+			App:  "skychat",
+			Port: 10,
 		}
 		wantErr := fmt.Sprintf("error running app skychat: %s", appserver.ErrAppAlreadyStarted)
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
 			Name:         app.App,
-			Version:      app.Version,
 			SockFilePath: c.AppServerSockFile,
 			VisorPK:      c.Visor.StaticPubKey.Hex(),
-			WorkDir:      filepath.Join("", app.App, fmt.Sprintf("v%s", app.Version)),
+			WorkDir:      filepath.Join("", app.App),
 		}
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
