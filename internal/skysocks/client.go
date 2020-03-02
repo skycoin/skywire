@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/yamux"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 )
 
 // Log is skysocks package level logger, it can be replaced with a different one from outside the package
@@ -16,18 +20,26 @@ var Log = logging.MustGetLogger("skysocks") // nolint: gochecknoglobals
 type Client struct {
 	session  *yamux.Session
 	listener net.Listener
+	once     sync.Once
+	closeC   chan struct{}
 }
 
 // NewClient constructs a new Client.
-func NewClient(conn io.ReadWriteCloser) (*Client, error) {
-	session, err := yamux.Client(conn, nil)
+func NewClient(conn net.Conn) (*Client, error) {
+	c := &Client{
+		closeC: make(chan struct{}),
+	}
+
+	sessionCfg := yamux.DefaultConfig()
+	sessionCfg.EnableKeepAlive = false
+	session, err := yamux.Client(conn, sessionCfg)
 	if err != nil {
 		return nil, fmt.Errorf("error creating client: yamux: %s", err)
 	}
 
-	c := &Client{
-		session: session,
-	}
+	c.session = session
+
+	go c.sessionKeepAliveLoop()
 
 	return c, nil
 }
@@ -45,6 +57,12 @@ func (c *Client) ListenAndServe(addr string) error {
 	c.listener = l
 
 	for {
+		select {
+		case <-c.closeC:
+			return nil
+		default:
+		}
+
 		conn, err := l.Accept()
 		if err != nil {
 			Log.Printf("Error accepting: %v\n", err)
@@ -55,12 +73,32 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		stream, err := c.session.Open()
 		if err != nil {
-			return fmt.Errorf("error on `ListenAndServe`: yamux: %s", err)
+			c.close()
+
+			return fmt.Errorf("error opening yamux stream: %w", err)
 		}
 
 		Log.Println("Opened session skysocks client")
 
 		go c.handleStream(conn, stream)
+	}
+}
+
+func (c *Client) sessionKeepAliveLoop() {
+	ticker := time.NewTicker(router.DefaultRouteKeepAlive / 2)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.closeC:
+			return
+		case <-ticker.C:
+			if c.session.IsClosed() {
+				c.close()
+
+				return
+			}
+		}
 	}
 }
 
@@ -104,15 +142,33 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	}
 
 	close(errCh)
+
+	if c.session.IsClosed() {
+		c.close()
+	}
+}
+
+func (c *Client) close() {
+	Log.Error("Session failed, closing skysocks client")
+	if err := c.Close(); err != nil {
+		Log.WithError(err).Error("Error closing skysocks client")
+	}
 }
 
 // Close implement io.Closer.
 func (c *Client) Close() error {
-	Log.Infoln("Closing proxy client")
-
 	if c == nil {
 		return nil
 	}
 
-	return c.listener.Close()
+	var err error
+	c.once.Do(func() {
+		Log.Infoln("Closing proxy client")
+
+		close(c.closeC)
+
+		err = c.listener.Close()
+	})
+
+	return err
 }
