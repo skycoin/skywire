@@ -15,11 +15,6 @@ const (
 	TestRouteFinderAddr = "http://routefinder.skywire.cc"
 )
 
-// Common app constants.
-const (
-	AppProtocolVersion = "0.0.1"
-)
-
 // Default dmsg ports.
 const (
 	DmsgSetupPort      = uint16(36)  // Listening port of a setup node.
@@ -36,18 +31,15 @@ const (
 
 // Default skywire app constants.
 const (
-	SkychatName    = "skychat"
-	SkychatVersion = "1.0"
-	SkychatPort    = uint16(1)
-	SkychatAddr    = ":8000"
+	SkychatName = "skychat"
+	SkychatPort = uint16(1)
+	SkychatAddr = ":8000"
 
-	SkysocksName    = "skysocks"
-	SkysocksVersion = "1.0"
-	SkysocksPort    = uint16(3)
+	SkysocksName = "skysocks"
+	SkysocksPort = uint16(3)
 
-	SkysocksClientName    = "skysocks-client"
-	SkysocksClientVersion = "1.0"
-	SkysocksClientPort    = uint16(13)
-	SkysocksClientAddr    = ":1080"
+	SkysocksClientName = "skysocks-client"
+	SkysocksClientPort = uint16(13)
+	SkysocksClientAddr = ":1080"
 	// TODO(evanlinjin): skysocks-client requires
 )
