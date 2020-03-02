@@ -118,10 +118,9 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 		}()
 		for {
 			p, err := mt.readPacket()
-			mt.log.Infof("GOT FROM TP: %s, err: %v", p, err)
 			if err != nil {
 				if err == ErrNotServing {
-					fmt.Println("NOT SERVING IN READ LOOP")
+					mt.log.WithError(err).Debugf("Failed to read packet")
 					return
 				}
 				mt.connMx.Lock()
@@ -201,14 +200,11 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 	defer mt.connMx.Unlock()
 
 	if conn.Network() != mt.netName {
-		mt.log.Infoln("WRONG NETWORK")
 		return errors.New("wrong network") // TODO: Make global var.
 	}
 
-	mt.log.Infoln("NETWORK OK")
-
 	if !mt.isServing() {
-		mt.log.Infoln("MT NOT SERVING")
+		mt.log.Debugln(ErrNotServing.Error())
 		if err := conn.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close connection")
 		}
@@ -217,12 +213,12 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
-	mt.log.Infoln("PERFOMING HANDSHAKE...")
+	mt.log.Debugln("Performing handshake...")
 	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.n.LocalSK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %v", err)
 	}
 
-	mt.log.Infoln("SETTING TP CONN...")
+	mt.log.Debugln("Setting TP conn...")
 
 	return mt.setIfConnNil(ctx, conn)
 }
@@ -299,7 +295,7 @@ func (mt *ManagedTransport) getConn() *snet.Conn {
 // TODO: Add logging here.
 func (mt *ManagedTransport) setIfConnNil(ctx context.Context, conn *snet.Conn) error {
 	if mt.conn != nil {
-		mt.log.Infoln("CONN ALREADY EXISTS")
+		mt.log.Debugln("TP conn already exists, closing it")
 		if err := conn.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close connection")
 		}
@@ -319,7 +315,7 @@ func (mt *ManagedTransport) setIfConnNil(ctx context.Context, conn *snet.Conn) e
 	mt.conn = conn
 	select {
 	case mt.connCh <- struct{}{}:
-		mt.log.Infoln("SENT SIGNAL TO CONNCH")
+		mt.log.Debugln("Sent signal to connCh")
 	default:
 	}
 	return nil
@@ -370,7 +366,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	var conn *snet.Conn
 	for {
 		if conn = mt.getConn(); conn != nil {
-			mt.log.Infof("GO CONN IN MANAGED TP: %s", conn.RemoteAddr())
+			mt.log.Debugf("Got conn in managed TP: %s", conn.RemoteAddr())
 			break
 		}
 		select {
@@ -381,18 +377,18 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	}
 
 	h := make(routing.Packet, routing.PacketHeaderSize)
-	mt.log.Infoln("TRYING TO READ PACKET HEADER...")
+	mt.log.Debugln("Trying to read packet header...")
 	if _, err = io.ReadFull(conn, h); err != nil {
-		mt.log.Infof("ERROR READING PACKET HEADER: %v", err)
+		mt.log.WithError(err).Debugf("Failed to read packet header: %v", err)
 		return nil, err
 	}
-	mt.log.Infof("READ PACKET HEADER: %s", string(h))
+	mt.log.Debugf("Read packet header: %s", string(h))
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(conn, p); err != nil {
-		mt.log.Infof("ERROR READING PACKET PAYLOAD: %v", err)
+		mt.log.WithError(err).Debugf("Error reading packet payload: %v", err)
 		return nil, err
 	}
-	mt.log.Infoln("READ PACKET PAYLOAD: %s", string(p))
+	mt.log.Debugf("Read packet payload: %s", string(p))
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize))
