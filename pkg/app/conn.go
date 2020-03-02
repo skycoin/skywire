@@ -25,13 +25,6 @@ type Conn struct {
 // Read reads from connection.
 func (c *Conn) Read(b []byte) (int, error) {
 	n, err := c.rpc.Read(c.id, b)
-	if err == io.EOF {
-		fmt.Println("EOF READING FROM APP CONN")
-	}
-	/*if err != nil && err != io.EOF {
-		fmt.Printf("READ ERROR: %v\n", err)
-		return n, &net.OpError{Op: "read", Net: c.local.Network(), Source: c.local, Addr: c.remote, Err: err}
-	}*/
 
 	return n, err
 }

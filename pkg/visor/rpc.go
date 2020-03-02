@@ -219,14 +219,14 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.Apps(),
 		Transports:      summaries,
-		RoutesCount:     r.visor.rt.Count(),
+		RoutesCount:     r.visor.router.RoutesCount(),
 	}
 	return nil
 }
 
 // Exec executes a given command in cmd and writes its output to out.
 func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
-	defer r.logReq("LogsSince", cmd)(out, &err)
+	defer r.logReq("Exec", cmd)(out, &err)
 
 	*out, err = r.visor.Exec(*cmd)
 	return err
@@ -436,7 +436,7 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatu
 func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) (err error) {
 	defer r.logReq("AddTransport", nil)(out, &err)
 
-	*out = r.visor.rt.AllRules()
+	*out = r.visor.router.Rules()
 	return nil
 }
 
@@ -444,7 +444,7 @@ func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) (err error) {
 func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) (err error) {
 	defer r.logReq("RoutingRule", key)(rule, &err)
 
-	*rule, err = r.visor.rt.Rule(*key)
+	*rule, err = r.visor.router.Rule(*key)
 	return err
 }
 
@@ -452,14 +452,14 @@ func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) (err error) 
 func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) (err error) {
 	defer r.logReq("SaveRoutingRule", in)(nil, &err)
 
-	return r.visor.rt.SaveRule(*in)
+	return r.visor.router.SaveRule(*in)
 }
 
 // RemoveRoutingRule removes a RoutingRule based on given RouteID key.
 func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) (err error) {
 	defer r.logReq("RemoveRoutingRule", key)(nil, &err)
 
-	r.visor.rt.DelRules([]routing.RouteID{*key})
+	r.visor.router.DelRules([]routing.RouteID{*key})
 	return nil
 }
 
@@ -480,14 +480,14 @@ func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) (err error) {
 
 	var loops []LoopInfo
 
-	rules := r.visor.rt.AllRules()
+	rules := r.visor.router.Rules()
 	for _, rule := range rules {
 		if rule.Type() != routing.RuleConsume {
 			continue
 		}
 
 		fwdRID := rule.NextRouteID()
-		rule, err := r.visor.rt.Rule(fwdRID)
+		rule, err := r.visor.router.Rule(fwdRID)
 		if err != nil {
 			return err
 		}
