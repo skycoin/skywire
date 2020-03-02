@@ -534,7 +534,7 @@ func TestRouter_Rules(t *testing.T) {
 	env := snettest.NewEnv(t, []snettest.KeyPair{{PK: pk, SK: sk}}, []string{dmsg.Type})
 	defer env.Teardown()
 
-	rt := routing.NewTable(routing.Config{GCInterval: 100 * time.Millisecond})
+	rt := routing.NewTable()
 
 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
 	keys := snettest.GenKeyPairs(2)
@@ -711,7 +711,6 @@ func (e *TestEnv) GenRouterConfig(i int) *Config {
 		PubKey:           e.TpMngrConfs[i].PubKey,
 		SecKey:           e.TpMngrConfs[i].SecKey,
 		TransportManager: e.TpMngrs[i],
-		RoutingTable:     routing.NewTable(routing.DefaultConfig()),
 		RouteFinder:      rfclient.NewMock(),
 		SetupNodes:       nil, // TODO
 	}
