@@ -106,11 +106,10 @@ func (tm *Manager) serve(ctx context.Context) {
 					return
 				default:
 					if err := tm.acceptTransport(ctx, lis); err != nil {
-						tm.Logger.Infof("ERROR ACCEPTING TRANSPORT: %v", err)
+						tm.Logger.Warnf("Failed to accept connection: %s", err)
 						if strings.Contains(err.Error(), "closed") {
 							return
 						}
-						tm.Logger.Warnf("Failed to accept connection: %s", err)
 					}
 				}
 			}
@@ -142,9 +141,9 @@ func (tm *Manager) initTransports(ctx context.Context) {
 	if err != nil {
 		log.Warnf("No transports found for local visor: %v", err)
 	}
-	tm.Logger.Infof("INITIALIZING %d TRANSPORTS", len(entries))
+	tm.Logger.Debugf("Initializing %d transports", len(entries))
 	for _, entry := range entries {
-		tm.Logger.Infof("INITIALIZING %v", *entry.Entry)
+		tm.Logger.Debugf("Initializing TP %v", *entry.Entry)
 		var (
 			tpType = entry.Entry.Type
 			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
@@ -153,7 +152,7 @@ func (tm *Manager) initTransports(ctx context.Context) {
 		if _, err := tm.saveTransport(remote, tpType); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		}
-		tm.Logger.Infoln("SUCCESSFULLY INITIALIZED TRANSPORT")
+		tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
 	}
 }
 
@@ -177,7 +176,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 
 	mTp, ok := tm.tps[tpID]
 	if !ok {
-		tm.Logger.Infoln("NO TRANSPORT FOUND, CREATING NEW ONE")
+		tm.Logger.Debugln("No TP found, creating new one")
 		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
 		if err := mTp.Accept(ctx, conn); err != nil {
 			return err
@@ -186,7 +185,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 		tm.tps[tpID] = mTp
 
 	} else {
-		tm.Logger.Infoln("TP FOUND, ACCEPTING")
+		tm.Logger.Debugln("TP found, accepting...")
 		if err := mTp.Accept(ctx, conn); err != nil {
 			return err
 		}
@@ -220,11 +219,11 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 
 	tpID := tm.tpIDFromPK(remote, netName)
 
-	tm.Logger.Infof("INITIALIZING TP WITH ID %s", tpID)
+	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
 	tp, ok := tm.tps[tpID]
 	if ok {
-		tm.Logger.Infoln("GOT TP FROM MAP")
+		tm.Logger.Debugln("Got TP from map")
 		return tp, nil
 	}
 

@@ -46,16 +46,16 @@ func (s *Server) Serve(l net.Listener) error {
 		conn, err := l.Accept()
 		if err != nil {
 			if s.isClosed() {
-				s.log.Errorf("GOT PROXY ACCEPT ERR %v, BUT SERVER IS CLOSED", err)
+				s.log.WithError(err).Debugln("Failed to accept skysocks connection, but server is closed")
 				return nil
 			}
 
-			s.log.Errorf("PROXY ACCEPT ERROR: %v", err)
+			s.log.WithError(err).Debugln("Failed to accept skysocks connection")
 
 			return fmt.Errorf("accept: %s", err)
 		}
 
-		s.log.Infoln("ACCEPTED NEW SKYSOCKS CONN")
+		s.log.Infoln("Accepted new skysocks connection")
 
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false

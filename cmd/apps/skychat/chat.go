@@ -148,8 +148,6 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 	conn, ok := chatConns[pk]
 	connsMu.Unlock()
 
-	log.Printf("CHAT CONN IS %v\n", ok)
-
 	if !ok {
 		var err error
 		err = r.Do(func() error {
