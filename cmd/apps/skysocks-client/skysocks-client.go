@@ -19,6 +19,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 const (
@@ -50,6 +51,10 @@ func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 func main() {
 	log := app.NewLogger(appName)
 	skysocks.Log = log.PackageLogger("skysocks")
+
+	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+		log.Printf("Failed to output build info: %v", err)
+	}
 
 	var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
