@@ -749,6 +749,7 @@ func (r *router) rulesGC() {
 	r.logger.Infof("Removed %d rules", len(removedRules))
 
 	for _, rule := range removedRules {
+		r.logger.Infof("Removed rule of type %s", rule.Type())
 		// we need to process only consume rules, cause we don't
 		// really care about the other ones, other rules removal
 		// doesn't affect our work here
