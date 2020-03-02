@@ -46,7 +46,7 @@ func newRPCServer(v *Visor, remoteName string) *rpc.Server {
 	rpcS := rpc.NewServer()
 	rpcG := &RPC{
 		visor: v,
-		log:   v.Logger.PackageLogger("visor.RPC:" + remoteName),
+		log:   v.Logger.PackageLogger("visor_rpc:" + remoteName),
 	}
 	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
 		panic(fmt.Errorf("failed to create visor RPC server: %v", err))
@@ -59,29 +59,24 @@ func (r *RPC) logReq(name string, in interface{}) func(out interface{}, err *err
 	// Just in case r.log is not set.
 	// However, this is dangerous in production as it may result in a race condition.
 	if r.log == nil {
-		r.log = r.visor.Logger.PackageLogger("visor.RPC")
+		r.log = r.visor.Logger.PackageLogger("visor_rpc")
 	}
 
 	start := time.Now()
-	log := r.log.
-		WithField("received", start.Format(time.Kitchen)).
-		WithField("method", name)
+	log := r.log.WithField("req", name+"@"+start.Format(time.Kitchen))
 	if in != nil {
 		log = log.WithField("req_in", in)
 	}
-	log.Debug("Request received.")
 
 	return func(out interface{}, err *error) {
-		log := log.
-			WithField("duration", time.Since(start).String()).
-			WithField("req", name)
+		//log := log.WithField("duration", time.Since(start).String())
 		if out != nil {
 			log = log.WithField("req_out", out)
 		}
 		if err != nil {
 			log = log.WithError(*err)
 		}
-		log.Info("Request processed.")
+		log.Info("REQUEST:")
 	}
 }
 
@@ -423,7 +418,7 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatu
 
 // RoutingRules obtains all routing rules of the RoutingTable.
 func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) (err error) {
-	defer r.logReq("AddTransport", nil)(out, &err)
+	defer r.logReq("RoutingRules", nil)(out, &err)
 
 	*out = r.visor.router.Rules()
 	return nil
