@@ -44,15 +44,13 @@ github.com/google/uuid
 github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
 github.com/gorilla/securecookie
-# github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d
-github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
 # github.com/klauspost/compress v1.10.0
 github.com/klauspost/compress/flate
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/mattn/go-colorable v0.1.4
+# github.com/mattn/go-colorable v0.1.6
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
 github.com/mattn/go-isatty
@@ -95,7 +93,7 @@ github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200204104054-c9f3fb736b72
+# golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
@@ -109,7 +107,7 @@ golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5
+# golang.org/x/sys v0.0.0-20200301040627-c5d0d7b4ec88
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
