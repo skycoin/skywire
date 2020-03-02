@@ -63,20 +63,22 @@ func (r *RPC) logReq(name string, in interface{}) func(out interface{}, err *err
 	}
 
 	start := time.Now()
-	log := r.log.WithField("req", name+"@"+start.Format(time.Kitchen))
+	log := r.log.
+		WithField("_method", name).
+		WithField("_received", start.Format(time.Kitchen))
 	if in != nil {
-		log = log.WithField("req_in", in)
+		log = log.WithField("input", in)
 	}
 
 	return func(out interface{}, err *error) {
-		//log := log.WithField("duration", time.Since(start).String())
+		log := log.WithField("_period", time.Since(start).String())
 		if out != nil {
-			log = log.WithField("req_out", out)
+			log = log.WithField("output", out)
 		}
-		if err != nil {
+		if err != nil && *err != nil {
 			log = log.WithError(*err)
 		}
-		log.Info("REQUEST:")
+		log.Info("Request processed.")
 	}
 }
 
