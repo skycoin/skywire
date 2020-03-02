@@ -18,6 +18,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 )
 
+const maxSessions = 10
+
 // KeyPair holds a public/private key pair.
 type KeyPair struct {
 	PK cipher.PubKey
@@ -134,7 +136,7 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 	require.NoError(t, err)
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-	srv = dmsg.NewServer(pk, sk, dc, 10)
+	srv = dmsg.NewServer(pk, sk, dc, maxSessions)
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- srv.Serve(l, "")

@@ -153,17 +153,14 @@ type Server struct {
 	Port string `json:"port"`
 
 	// Number of connections still available.
-	MaxSessions int `json:"available_connections"`
-
-	// Number of sessions
-	AvailableSessions int `json:"available_sessions"`
+	AvailableConnections int `json:"available_connections"`
 }
 
 // String implements stringer
 func (s *Server) String() string {
 	res := fmt.Sprintf("\taddress: %s\n", s.Address)
 	res += fmt.Sprintf("\tport: %s\n", s.Port)
-	res += fmt.Sprintf("\tavailable connections: %d\n", s.MaxSessions)
+	res += fmt.Sprintf("\tavailable connections: %d\n", s.AvailableConnections)
 
 	return res
 }
@@ -181,11 +178,11 @@ func NewClientEntry(pubkey cipher.PubKey, sequence uint64, delegatedServers []ci
 }
 
 // NewServerEntry constructs a new Server entry.
-func NewServerEntry(pubkey cipher.PubKey, sequence uint64, address string, maxSessions int, sessions int) *Entry {
+func NewServerEntry(pubkey cipher.PubKey, sequence uint64, address string, conns int) *Entry {
 	return &Entry{
 		Version:   currentVersion,
 		Sequence:  sequence,
-		Server:    &Server{Address: address, MaxSessions: maxSessions, AvailableSessions: sessions},
+		Server:    &Server{Address: address, AvailableConnections: conns},
 		Static:    pubkey,
 		Timestamp: time.Now().UnixNano(),
 	}
