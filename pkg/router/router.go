@@ -326,38 +326,26 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 	defer r.mx.Unlock()
 
 	rg, ok := r.rgs[rules.Desc]
-	if !ok || rg == nil {
-		r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
-		rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
-		r.rgs[rules.Desc] = rg
-
-		rg.fwd = append(rg.fwd, rules.Forward)
-		rg.rvs = append(rg.rvs, rules.Reverse)
-
-		tp := r.tm.Transport(rules.Forward.NextTransportID())
-		rg.tps = append(rg.tps, tp)
-	} else {
-		r.logger.Infoln("ROUTE GROUP ALREADY EXISTS")
+	if ok && rg != nil {
+		r.logger.Infof("Route group with desc %s already exists, closing the old one and replacing...", &rules.Desc)
 
 		if err := rg.Close(); err != nil {
 			r.logger.Errorf("Error closing already existing route group: %v", err)
 		}
 
-		rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
-		r.rgs[rules.Desc] = rg
-
-		rg.fwd = append(rg.fwd, rules.Forward)
-		rg.rvs = append(rg.rvs, rules.Reverse)
-
-		tp := r.tm.Transport(rules.Forward.NextTransportID())
-		rg.tps = append(rg.tps, tp)
+		r.logger.Infoln("Successfully closed old route group")
 	}
 
-	/*rg.fwd = append(rg.fwd, rules.Forward)
+	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
+
+	rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
+	r.rgs[rules.Desc] = rg
+
+	rg.fwd = append(rg.fwd, rules.Forward)
 	rg.rvs = append(rg.rvs, rules.Reverse)
 
 	tp := r.tm.Transport(rules.Forward.NextTransportID())
-	rg.tps = append(rg.tps, tp)*/
+	rg.tps = append(rg.tps, tp)
 
 	return rg
 }
@@ -382,10 +370,9 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	if rule.Type() == routing.RuleConsume {
-		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d", packet.Type(),
-			packet.RouteID())
+		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
-		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d AND NEXT ID %d", packet.Type(),
+		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
 	}
 
@@ -426,10 +413,9 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}
 
 	if rule.Type() == routing.RuleConsume {
-		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d", packet.Type(),
-			packet.RouteID())
+		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
-		r.logger.Infof("HANDLING PACKET OF TYPE %s WITH ROUTE ID %d AND NEXT ID %d", packet.Type(),
+		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
 	}
 
@@ -487,10 +473,9 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 	}
 
 	if rule.Type() == routing.RuleConsume {
-		r.logger.Infof("HANDLING PACKET OF TYPE %S WITH ROUTE ID %d", packet.Type(),
-			packet.RouteID())
+		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
-		r.logger.Infof("HANDLING PACKET OF TYPE %S WITH ROUTE ID %d AND NEXT ID %d", packet.Type(),
+		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
 	}
 
