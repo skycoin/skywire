@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
+	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 )
