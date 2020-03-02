@@ -23,9 +23,6 @@ const (
 )
 
 var (
-	// ErrInvalidInput occurs when an input is invalid.
-	ErrInvalidInput = errors.New("invalid input")
-
 	// ErrNotImplemented occurs when a method is not implemented.
 	ErrNotImplemented = errors.New("not implemented")
 
@@ -166,16 +163,9 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.Apps(),
 		Transports:      summaries,
-		RoutesCount:     r.visor.rt.Count(),
+		RoutesCount:     r.visor.router.RoutesCount(),
 	}
 	return nil
-}
-
-// Exec executes a given command in cmd and writes its output to out.
-func (r *RPC) Exec(cmd *string, out *[]byte) error {
-	var err error
-	*out, err = r.visor.Exec(*cmd)
-	return err
 }
 
 /*
@@ -354,25 +344,25 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatu
 
 // RoutingRules obtains all routing rules of the RoutingTable.
 func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) error {
-	*out = r.visor.rt.AllRules()
+	*out = r.visor.router.Rules()
 	return nil
 }
 
 // RoutingRule obtains a routing rule of given RouteID.
 func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) error {
 	var err error
-	*rule, err = r.visor.rt.Rule(*key)
+	*rule, err = r.visor.router.Rule(*key)
 	return err
 }
 
 // SaveRoutingRule saves a routing rule.
 func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) error {
-	return r.visor.rt.SaveRule(*in)
+	return r.visor.router.SaveRule(*in)
 }
 
 // RemoveRoutingRule removes a RoutingRule based on given RouteID key.
 func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) error {
-	r.visor.rt.DelRules([]routing.RouteID{*key})
+	r.visor.router.DelRules([]routing.RouteID{*key})
 	return nil
 }
 
@@ -391,14 +381,14 @@ type LoopInfo struct {
 func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
 	var loops []LoopInfo
 
-	rules := r.visor.rt.AllRules()
+	rules := r.visor.router.Rules()
 	for _, rule := range rules {
 		if rule.Type() != routing.RuleConsume {
 			continue
 		}
 
 		fwdRID := rule.NextRouteID()
-		rule, err := r.visor.rt.Rule(fwdRID)
+		rule, err := r.visor.router.Rule(fwdRID)
 		if err != nil {
 			return err
 		}
@@ -435,4 +425,16 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	}
 
 	return r.visor.restartCtx.Start()
+}
+
+// Exec executes a given command in cmd and writes its output to out.
+func (r *RPC) Exec(cmd *string, out *[]byte) error {
+	var err error
+	*out, err = r.visor.Exec(*cmd)
+	return err
+}
+
+// Update updates visor.
+func (r *RPC) Update(_ *struct{}, _ *struct{}) (err error) {
+	return r.visor.Update()
 }

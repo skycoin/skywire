@@ -21,6 +21,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 const (
@@ -43,6 +44,10 @@ var (
 func main() {
 	log = app.NewLogger(appName)
 	flag.Parse()
+
+	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+		log.Printf("Failed to output build info: %v", err)
+	}
 
 	clientConfig, err := app.ClientConfigFromEnv()
 	if err != nil {
@@ -106,6 +111,10 @@ func handleConn(conn net.Conn) {
 		n, err := conn.Read(buf)
 		if err != nil {
 			log.Println("Failed to read packet:", err)
+			raddr := conn.RemoteAddr().(appnet.Addr)
+			connsMu.Lock()
+			delete(chatConns, raddr.PubKey)
+			connsMu.Unlock()
 			return
 		}
 
