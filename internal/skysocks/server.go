@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/yamux"
 	"github.com/armon/go-socks5"
-	"github.com/hashicorp/yamux"
 )
 
 // Server implements multiplexing proxy server using yamux.
@@ -46,13 +46,20 @@ func (s *Server) Serve(l net.Listener) error {
 		conn, err := l.Accept()
 		if err != nil {
 			if s.isClosed() {
+				s.log.WithError(err).Debugln("Failed to accept skysocks connection, but server is closed")
 				return nil
 			}
+
+			s.log.WithError(err).Debugln("Failed to accept skysocks connection")
 
 			return fmt.Errorf("accept: %s", err)
 		}
 
-		session, err := yamux.Server(conn, nil)
+		s.log.Infoln("Accepted new skysocks connection")
+
+		sessionCfg := yamux.DefaultConfig()
+		sessionCfg.EnableKeepAlive = false
+		session, err := yamux.Server(conn, sessionCfg)
 		if err != nil {
 			return fmt.Errorf("yamux server failure: %s", err)
 		}

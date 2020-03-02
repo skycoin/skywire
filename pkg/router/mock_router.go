@@ -54,6 +54,11 @@ func (_m *MockRouter) Close() error {
 	return r0
 }
 
+// DelRules provides a mock function with given fields: _a0
+func (_m *MockRouter) DelRules(_a0 []routing.RouteID) {
+	_m.Called(_a0)
+}
+
 // DialRoutes provides a mock function with given fields: ctx, rPK, lPort, rPort, opts
 func (_m *MockRouter) DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort routing.Port, rPort routing.Port, opts *DialOptions) (*RouteGroup, error) {
 	ret := _m.Called(ctx, rPK, lPort, rPort, opts)
@@ -114,6 +119,59 @@ func (_m *MockRouter) ReserveKeys(n int) ([]routing.RouteID, error) {
 	return r0, r1
 }
 
+// RoutesCount provides a mock function with given fields:
+func (_m *MockRouter) RoutesCount() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// Rule provides a mock function with given fields: _a0
+func (_m *MockRouter) Rule(_a0 routing.RouteID) (routing.Rule, error) {
+	ret := _m.Called(_a0)
+
+	var r0 routing.Rule
+	if rf, ok := ret.Get(0).(func(routing.RouteID) routing.Rule); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(routing.Rule)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(routing.RouteID) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Rules provides a mock function with given fields:
+func (_m *MockRouter) Rules() []routing.Rule {
+	ret := _m.Called()
+
+	var r0 []routing.Rule
+	if rf, ok := ret.Get(0).(func() []routing.Rule); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]routing.Rule)
+		}
+	}
+
+	return r0
+}
+
 // SaveRoutingRules provides a mock function with given fields: rules
 func (_m *MockRouter) SaveRoutingRules(rules ...routing.Rule) error {
 	_va := make([]interface{}, len(rules))
@@ -127,6 +185,20 @@ func (_m *MockRouter) SaveRoutingRules(rules ...routing.Rule) error {
 	var r0 error
 	if rf, ok := ret.Get(0).(func(...routing.Rule) error); ok {
 		r0 = rf(rules...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// SaveRule provides a mock function with given fields: _a0
+func (_m *MockRouter) SaveRule(_a0 routing.Rule) error {
+	ret := _m.Called(_a0)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(routing.Rule) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}

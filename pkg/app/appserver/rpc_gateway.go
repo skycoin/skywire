@@ -255,6 +255,8 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 		copy(resp.B, buf[:resp.N])
 	}
 
+	fmt.Printf("ERROR READING FROM APP CONN SERVER SIDE: %v\n", err)
+
 	resp.Err = ioErrToRPCIOErr(err)
 
 	// avoid error in RPC pipeline, error is included in response body

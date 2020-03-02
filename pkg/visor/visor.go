@@ -76,7 +76,6 @@ type Visor struct {
 	router router.Router
 	n      *snet.Network
 	tm     *transport.Manager
-	rt     routing.Table
 	pty    *dmsgpty.Host
 
 	Logger *logging.MasterLogger
@@ -170,17 +169,11 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		return nil, fmt.Errorf("transport manager: %s", err)
 	}
 
-	visor.rt, err = cfg.RoutingTable()
-	if err != nil {
-		return nil, fmt.Errorf("routing table: %s", err)
-	}
-
 	rConfig := &router.Config{
 		Logger:           visor.Logger.PackageLogger("router"),
 		PubKey:           pk,
 		SecKey:           sk,
 		TransportManager: visor.tm,
-		RoutingTable:     visor.rt,
 		RouteFinder:      rfclient.NewHTTP(cfg.Routing.RouteFinder, time.Duration(cfg.Routing.RouteFinderTimeout)),
 		SetupNodes:       cfg.Routing.SetupNodes,
 	}
