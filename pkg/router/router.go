@@ -744,36 +744,32 @@ func (r *router) rulesGCLoop() {
 }
 
 func (r *router) rulesGC() {
-	removedRules := r.rt.CollectGarbage()
+	log := r.logger.WithField("_src", "rulesGC")
 
-	r.logger.Infof("Removed %d rules", len(removedRules))
+	removedRules := r.rt.CollectGarbage()
+	log.WithField("rules_count", len(removedRules)).
+		Debug("Removed rules.")
 
 	for _, rule := range removedRules {
 		// we need to process only consume rules, cause we don't
 		// really care about the other ones, other rules removal
 		// doesn't affect our work here
 		if rule.Type() == routing.RuleConsume {
-			cnsmRuleDesc := rule.RouteDescriptor()
-			r.logger.Infof("Removed consume rule with desc %s", &cnsmRuleDesc)
-
-			rg, ok := r.popRouteGroup(cnsmRuleDesc)
+			rDesc := rule.RouteDescriptor()
+			log := log.
+				WithField("rule_type", rule.Type().String()).
+				WithField("rule_desc", rDesc.String())
+			rg, ok := r.popRouteGroup(rDesc)
 			if !ok {
-				r.logger.Infoln("Couldn't remove route group after consume rule expired: route group not found")
+				log.Debug("No route group associated with expired rule. Continuing...")
 				continue
 			}
-
-			r.logger.Infoln("Removed route group for removed consume rule with desc %s", &cnsmRuleDesc)
-
-			if !rg.isClosed() {
-				r.logger.Infoln("Closing route group")
-				if err := rg.Close(); err != nil {
-					r.logger.Errorf("Error closing route group during rule GC: %v", err)
-				} else {
-					r.logger.Infoln("Successfully closed route group")
-				}
-			} else {
-				r.logger.Infoln("Route group is ALREADY closed")
+			if rg.isClosed() {
+				log.Debug("Route group already closed. Continuing...")
+				continue
 			}
+			log.WithError(rg.Close()).
+				Debug("Route group closed.")
 		}
 	}
 }
