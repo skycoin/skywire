@@ -138,9 +138,7 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.Timeout(httpTimeout))
 
-		r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte(`"PONG!"`)) //nolint:errcheck
-		})
+		r.Get("/ping", m.getPong())
 
 		if m.c.EnableAuth {
 			r.Group(func(r chi.Router) {
@@ -187,6 +185,14 @@ func (m *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	})
 
 	r.ServeHTTP(w, req)
+}
+
+func (m *Hypervisor) getPong() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
+			log.WithError(err).Warn("getPing: Failed to send PONG!")
+		}
+	}
 }
 
 // VisorHealth represents a visor's health report attached to hypervisor to visor request status
