@@ -589,7 +589,7 @@ func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (keepSending 
 }
 
 func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
-	rt := routing.NewTable(routing.DefaultConfig())
+	rt := routing.NewTable()
 
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
