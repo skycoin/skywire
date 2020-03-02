@@ -129,6 +129,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet, done <-chan stru
 			p, err := mt.readPacket()
 			if err != nil {
 				if err == ErrNotServing {
+					mt.log.WithError(err).Debugf("Failed to read packet")
 					return
 				}
 				mt.connMx.Lock()
@@ -217,6 +218,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 	}
 
 	if !mt.isServing() {
+		mt.log.Debugln(ErrNotServing.Error())
 		if err := conn.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close connection")
 		}
@@ -225,9 +227,12 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
+	mt.log.Debugln("Performing handshake...")
 	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.n.LocalSK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %v", err)
 	}
+
+	mt.log.Debugln("Setting TP conn...")
 
 	return mt.setIfConnNil(ctx, conn)
 }
@@ -305,6 +310,7 @@ func (mt *ManagedTransport) getConn() *snet.Conn {
 // TODO: Add logging here.
 func (mt *ManagedTransport) setIfConnNil(ctx context.Context, conn *snet.Conn) error {
 	if mt.conn != nil {
+		mt.log.Debugln("TP conn already exists, closing it")
 		if err := conn.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close connection")
 		}
@@ -324,6 +330,7 @@ func (mt *ManagedTransport) setIfConnNil(ctx context.Context, conn *snet.Conn) e
 	mt.conn = conn
 	select {
 	case mt.connCh <- struct{}{}:
+		mt.log.Debugln("Sent signal to connCh")
 	default:
 	}
 	return nil
@@ -374,6 +381,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	var conn *snet.Conn
 	for {
 		if conn = mt.getConn(); conn != nil {
+			mt.log.Debugf("Got conn in managed TP: %s", conn.RemoteAddr())
 			break
 		}
 		select {
@@ -384,13 +392,18 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	}
 
 	h := make(routing.Packet, routing.PacketHeaderSize)
+	mt.log.Debugln("Trying to read packet header...")
 	if _, err = io.ReadFull(conn, h); err != nil {
+		mt.log.WithError(err).Debugf("Failed to read packet header: %v", err)
 		return nil, err
 	}
+	mt.log.Debugf("Read packet header: %s", string(h))
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(conn, p); err != nil {
+		mt.log.WithError(err).Debugf("Error reading packet payload: %v", err)
 		return nil, err
 	}
+	mt.log.Debugf("Read packet payload: %s", string(p))
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize))
