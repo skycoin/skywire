@@ -22,7 +22,7 @@ var log = logging.MustGetLogger("disc")
 type APIClient interface {
 	Entry(context.Context, cipher.PubKey) (*Entry, error)
 	SetEntry(context.Context, *Entry, string) error
-	UpdateEntry(context.Context, cipher.SecKey, *Entry) error
+	UpdateEntry(context.Context, cipher.SecKey, *Entry, string) error
 	AvailableServers(context.Context) ([]*Entry, error)
 }
 
@@ -131,7 +131,7 @@ func (c *httpClient) SetEntry(ctx context.Context, entry *Entry, method string) 
 }
 
 // UpdateEntry updates Entry in dmsg discovery.
-func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry) error {
+func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry, method string) error {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
@@ -143,7 +143,7 @@ func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry
 		if err != nil {
 			return err
 		}
-		err = c.SetEntry(ctx, e, http.MethodPost)
+		err = c.SetEntry(ctx, e, method)
 		if err == nil {
 			return nil
 		}

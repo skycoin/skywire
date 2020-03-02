@@ -25,18 +25,15 @@ type EntityCommon struct {
 
 	setSessionCallback func(ctx context.Context) error
 	delSessionCallback func(ctx context.Context) error
-
-	maxSessions       int
 }
 
-func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger, maxSessions int) {
+func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger) {
 	c.pk = pk
 	c.sk = sk
 	c.dc = dc
 	c.sessions = make(map[cipher.PubKey]*SessionCommon)
 	c.sessionsMx = new(sync.Mutex)
 	c.log = log
-	c.maxSessions = maxSessions
 }
 
 // LocalPK returns the local public key of the entity.
@@ -122,10 +119,10 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 }
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, availableSessions int) error {
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, availableSessions, maxSessions int) error {
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
-		entry = disc.NewServerEntry(c.pk, 0, addr, c.maxSessions, availableSessions)
+		entry = disc.NewServerEntry(c.pk, 0, addr, maxSessions, availableSessions)
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
@@ -135,14 +132,12 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, avail
 	if availableSessions != 0 {
 		c.log.Info("Updating server sessions...")
 		entry.Server.AvailableSessions += availableSessions
-
-		return c.dc.UpdateEntry(ctx, c.sk, entry)
+		return c.dc.UpdateEntry(ctx, c.sk, entry, http.MethodPut)
 	}
 
 	entry.Server.Address = addr
 	entry.Server.AvailableSessions = availableSessions
-
-	return c.dc.UpdateEntry(ctx, c.sk, entry)
+	return c.dc.UpdateEntry(ctx, c.sk, entry, http.MethodPost)
 }
 
 func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}) error {
@@ -164,7 +159,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	}
 	entry.Client.DelegatedServers = srvPKs
 	c.log.WithField("entry", entry).Info("Updating entry.")
-	return c.dc.UpdateEntry(ctx, c.sk, entry)
+	return c.dc.UpdateEntry(ctx, c.sk, entry, http.MethodPost)
 }
 
 func getServerEntry(ctx context.Context, dc disc.APIClient, srvPK cipher.PubKey) (*disc.Entry, error) {

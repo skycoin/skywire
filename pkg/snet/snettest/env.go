@@ -134,7 +134,7 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 	require.NoError(t, err)
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-	srv = dmsg.NewServer(pk, sk, dc, 0)
+	srv = dmsg.NewServer(pk, sk, dc, 10)
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- srv.Serve(l, "")

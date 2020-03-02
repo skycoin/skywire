@@ -66,7 +66,7 @@ func printAvailableServers(entries []*disc.Entry) {
 	internal.Catch(err)
 	for _, entry := range entries {
 		_, err := fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%d\n",
-			entry.Version, entry.Timestamp, entry.Static, entry.Server.Address, entry.Server.Port, entry.Server.AvailableConnections)
+			entry.Version, entry.Timestamp, entry.Static, entry.Server.Address, entry.Server.Port, entry.Server.MaxSessions)
 		internal.Catch(err)
 	}
 	internal.Catch(w.Flush())

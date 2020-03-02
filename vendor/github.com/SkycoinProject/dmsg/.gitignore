@@ -12,3 +12,6 @@
 .idea/
 /vendor
 bin/
+
+/*-server
+/*-discovery

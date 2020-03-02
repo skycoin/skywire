@@ -83,7 +83,7 @@ func (m *mockClient) SetEntry(ctx context.Context, e *Entry, method string) erro
 }
 
 // UpdateEntry updates a previously set entry
-func (m *mockClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry) error {
+func (m *mockClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry, method string) error {
 	e.Sequence++
 	e.Timestamp = time.Now().UnixNano()
 
@@ -92,7 +92,7 @@ func (m *mockClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry
 		if err != nil {
 			return err
 		}
-		err = m.SetEntry(ctx, e, http.MethodPost)
+		err = m.SetEntry(ctx, e, method)
 		if err == nil {
 			return nil
 		}

@@ -23,14 +23,17 @@ type Server struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
+
+	maxSessions int
 }
 
 // NewServer creates a new dmsg server entity.
 func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, maxSessions int) *Server {
 	s := new(Server)
-	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"), maxSessions)
+	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
 	s.ready = make(chan struct{})
 	s.done = make(chan struct{})
+	s.maxSessions = maxSessions
 	return s
 }
 
@@ -109,7 +112,7 @@ func (s *Server) updateEntryLoop(addr string) error {
 		}
 	}()
 	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, addr, 0)
+		return s.updateServerEntry(ctx, addr, 0, s.maxSessions)
 	})
 }
 
@@ -135,7 +138,7 @@ func (s *Server) handleSession(conn net.Conn) {
 		awaitDone(ctx, s.done)
 		log.WithError(dSes.Close()).Info("Stopped session.")
 
-		if err := s.updateServerEntry(context.Background(), "", -1); err != nil {
+		if err := s.updateServerEntry(context.Background(), "", -1, 0); err != nil {
 			s.log.WithError(err).
 				Warn("Failed to update server sessions")
 		}
@@ -144,11 +147,11 @@ func (s *Server) handleSession(conn net.Conn) {
 	}()
 
 	if s.setSession(ctx, dSes.SessionCommon) {
-		if err := s.updateServerEntry(context.Background(), "", 1); err != nil {
+		if err := s.updateServerEntry(context.Background(), "", 1, 0); err != nil {
 			s.log.WithError(err).
 				Warn("Failed to update server sessions")
 		} else {
-			s.log.Infof("Server sessions updated.\nCurrent number of sessions: %d", s.SessionCount())
+			s.log.Infof("Server sessions updated. Current number of sessions: %d", s.SessionCount())
 		}
 
 		dSes.Serve()
