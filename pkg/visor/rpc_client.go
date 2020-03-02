@@ -31,7 +31,6 @@ var (
 // RPCClient represents a RPC Client implementation.
 type RPCClient interface {
 	Summary() (*Summary, error)
-	Exec(command string) ([]byte, error)
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
@@ -61,6 +60,8 @@ type RPCClient interface {
 	Loops() ([]LoopInfo, error)
 
 	Restart() error
+	Exec(command string) ([]byte, error)
+	Update() error
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -99,13 +100,6 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	var out float64
 	err := rc.Call("Uptime", &struct{}{}, &out)
 	return out, err
-}
-
-// Exec calls Exec.
-func (rc *rpcClient) Exec(command string) ([]byte, error) {
-	output := make([]byte, 0)
-	err := rc.Call("Exec", &command, &output)
-	return output, err
 }
 
 // Apps calls Apps.
@@ -248,6 +242,19 @@ func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
 }
 
+// Exec calls Exec.
+func (rc *rpcClient) Exec(command string) ([]byte, error) {
+	output := make([]byte, 0)
+	err := rc.Call("Exec", &command, &output)
+	return output, err
+}
+
+// Update calls Update.
+func (rc *rpcClient) Update() error {
+	err := rc.Call("Update", &struct{}{}, &struct{}{})
+	return err
+}
+
 // MockRPCClient mocks RPCClient.
 type mockRPCClient struct {
 	startedAt time.Time
@@ -362,8 +369,8 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 	var out Summary
 	err := mc.do(false, func() error {
 		out = *mc.s
-		for _, app := range mc.s.Apps {
-			out.Apps = append(out.Apps, &(*app))
+		for _, a := range mc.s.Apps {
+			out.Apps = append(out.Apps, &(*a))
 		}
 		for _, tp := range mc.s.Transports {
 			out.Transports = append(out.Transports, &(*tp))
@@ -390,17 +397,12 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
-// Exec implements RPCClient.
-func (mc *mockRPCClient) Exec(command string) ([]byte, error) {
-	return []byte("mock"), nil
-}
-
 // Apps implements RPCClient.
 func (mc *mockRPCClient) Apps() ([]*AppState, error) {
 	var apps []*AppState
 	err := mc.do(false, func() error {
-		for _, app := range mc.s.Apps {
-			apps = append(apps, &(*app))
+		for _, a := range mc.s.Apps {
+			apps = append(apps, &(*a))
 		}
 		return nil
 	})
@@ -420,9 +422,9 @@ func (*mockRPCClient) StopApp(string) error {
 // SetAutoStart implements RPCClient.
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
-		for _, app := range mc.s.Apps {
-			if app.Name == appName {
-				app.AutoStart = autostart
+		for _, a := range mc.s.Apps {
+			if a.Name == appName {
+				a.AutoStart = autostart
 				return nil
 			}
 		}
@@ -431,7 +433,7 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 }
 
 // SetSocksPassword implements RPCClient.
-func (mc *mockRPCClient) SetSocksPassword(password string) error {
+func (mc *mockRPCClient) SetSocksPassword(string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -446,7 +448,7 @@ func (mc *mockRPCClient) SetSocksPassword(password string) error {
 }
 
 // SetSocksClientPK implements RPCClient.
-func (mc *mockRPCClient) SetSocksClientPK(pk cipher.PubKey) error {
+func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
 
@@ -522,7 +524,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements RPCClient.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, public bool, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.s.PubKey, remote, tpType),
 		Local:  mc.s.PubKey,
@@ -549,11 +551,11 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -604,5 +606,15 @@ func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
 
 // Restart implements RPCClient.
 func (mc *mockRPCClient) Restart() error {
+	return nil
+}
+
+// Exec implements RPCClient.
+func (mc *mockRPCClient) Exec(string) ([]byte, error) {
+	return []byte("mock"), nil
+}
+
+// Exec implements RPCClient.
+func (mc *mockRPCClient) Update() error {
 	return nil
 }
