@@ -26,8 +26,10 @@ import (
 
 const (
 	// DefaultRouteKeepAlive is the default expiration interval for routes
-	DefaultRouteKeepAlive = 2 * time.Minute
-	acceptSize            = 1024
+	DefaultRouteKeepAlive = 30 * time.Second
+	// DefaultRulesGCInterval is the default duration for garbage collection of routing rules.
+	DefaultRulesGCInterval = 5 * time.Second
+	acceptSize             = 1024
 
 	minHops = 0
 	maxHops = 50
@@ -44,10 +46,10 @@ type Config struct {
 	PubKey           cipher.PubKey
 	SecKey           cipher.SecKey
 	TransportManager *transport.Manager
-	RoutingTable     routing.Table
 	RouteFinder      rfclient.Client
 	RouteGroupDialer setupclient.RouteGroupDialer
 	SetupNodes       []cipher.PubKey
+	RulesGCInterval  time.Duration
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -58,6 +60,10 @@ func (c *Config) SetDefaults() {
 
 	if c.RouteGroupDialer == nil {
 		c.RouteGroupDialer = setupclient.NewSetupNodeDialer()
+	}
+
+	if c.RulesGCInterval <= 0 {
+		c.RulesGCInterval = DefaultRulesGCInterval
 	}
 }
 
@@ -106,6 +112,13 @@ type Router interface {
 	IntroduceRules(rules routing.EdgeRules) error
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
+
+	// routing table related methods
+	RoutesCount() int
+	Rules() []routing.Rule
+	Rule(routing.RouteID) (routing.Rule, error)
+	SaveRule(routing.Rule) error
+	DelRules([]routing.RouteID)
 }
 
 // Router implements visor.PacketRouter. It manages routing table by
@@ -148,7 +161,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		logger:        config.Logger,
 		n:             n,
 		tm:            config.TransportManager,
-		rt:            config.RoutingTable,
+		rt:            routing.NewTable(),
 		sl:            sl,
 		rfc:           config.RouteFinder,
 		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
@@ -157,6 +170,8 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		done:          make(chan struct{}),
 		trustedVisors: trustedVisors,
 	}
+
+	go r.rulesGCLoop()
 
 	if err := r.rpcSrv.Register(NewRPCGateway(r)); err != nil {
 		return nil, fmt.Errorf("failed to register RPC server")
@@ -311,11 +326,20 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 	defer r.mx.Unlock()
 
 	rg, ok := r.rgs[rules.Desc]
-	if !ok || rg == nil {
-		r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
-		rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
-		r.rgs[rules.Desc] = rg
+	if ok && rg != nil {
+		r.logger.Infof("Route group with desc %s already exists, closing the old one and replacing...", &rules.Desc)
+
+		if err := rg.Close(); err != nil {
+			r.logger.Errorf("Error closing already existing route group: %v", err)
+		}
+
+		r.logger.Infoln("Successfully closed old route group")
 	}
+
+	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
+
+	rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
+	r.rgs[rules.Desc] = rg
 
 	rg.fwd = append(rg.fwd, rules.Forward)
 	rg.rvs = append(rg.rvs, rules.Reverse)
@@ -345,6 +369,13 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return err
 	}
 
+	if rule.Type() == routing.RuleConsume {
+		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+	} else {
+		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
+	}
+
 	switch rule.Type() {
 	case routing.RuleForward, routing.RuleIntermediaryForward:
 		r.logger.Infoln("Handling intermediary data packet")
@@ -368,12 +399,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
 	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
 
-	select {
-	case <-rg.closed:
-		return io.ErrClosedPipe
-	case rg.readCh <- packet.Payload():
-		return nil
-	}
+	return rg.handlePacket(packet)
 }
 
 func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) error {
@@ -384,6 +410,13 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	rule, err := r.GetRule(routeID)
 	if err != nil {
 		return err
+	}
+
+	if rule.Type() == routing.RuleConsume {
+		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+	} else {
+		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
 	}
 
 	defer func() {
@@ -421,7 +454,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return io.ErrClosedPipe
 	}
 
-	if err := rg.handleClosePacket(closeCode); err != nil {
+	if err := rg.handlePacket(packet); err != nil {
 		return fmt.Errorf("error handling close packet with code %d by route group with descriptor %s: %v",
 			closeCode, &desc, err)
 	}
@@ -437,6 +470,13 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 	rule, err := r.GetRule(routeID)
 	if err != nil {
 		return err
+	}
+
+	if rule.Type() == routing.RuleConsume {
+		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+	} else {
+		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
 	}
 
 	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
@@ -469,6 +509,16 @@ func (r *router) GetRule(routeID routing.RouteID) (routing.Rule, error) {
 	}
 
 	return rule, nil
+}
+
+// UpdateRuleActivity updates routing rule activity
+func (r *router) UpdateRuleActivity(routeID routing.RouteID) error {
+	err := r.rt.UpdateActivity(routeID)
+	if err != nil {
+		return fmt.Errorf("error updating activity for route ID %d: %v", routeID, err)
+	}
+
+	return nil
 }
 
 // Close safely stops Router.
@@ -516,6 +566,11 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 
 	if err := tp.WritePacket(ctx, p); err != nil {
 		return err
+	}
+
+	// successfully forwarded packet, may update the rule activity now
+	if err := r.UpdateRuleActivity(rule.KeyRouteID()); err != nil {
+		r.logger.Errorf("Failed to update activity for rule with route ID %d: %v", rule.KeyRouteID(), err)
 	}
 
 	r.logger.Infof("Forwarded packet via Transport %s using rule %d", rule.NextTransportID(), rule.KeyRouteID())
@@ -602,6 +657,20 @@ func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
 	return ids, err
 }
 
+func (r *router) popRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+
+	rg, ok := r.rgs[desc]
+	if !ok {
+		return nil, false
+	}
+
+	delete(r.rgs, desc)
+
+	return rg, true
+}
+
 func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
@@ -631,6 +700,80 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 			return nil
 		case <-r.done:
 			return io.ErrClosedPipe
+		}
+	}
+}
+
+// RoutesCount returns count of the routes stored within the routing table.
+func (r *router) RoutesCount() int {
+	return r.rt.Count()
+}
+
+// Rules gets all the rules stored within the routing table.
+func (r *router) Rules() []routing.Rule {
+	return r.rt.AllRules()
+}
+
+// Rule fetches rule by the route `id`.
+func (r *router) Rule(id routing.RouteID) (routing.Rule, error) {
+	return r.rt.Rule(id)
+}
+
+// SaveRule stores the `rule` within the routing table.
+func (r *router) SaveRule(rule routing.Rule) error {
+	return r.rt.SaveRule(rule)
+}
+
+// DelRules removes rules associated with `ids` from the routing table.
+func (r *router) DelRules(ids []routing.RouteID) {
+	r.rt.DelRules(ids)
+}
+
+func (r *router) rulesGCLoop() {
+	ticker := time.NewTicker(r.conf.RulesGCInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.done:
+			return
+		case <-ticker.C:
+			r.rulesGC()
+		}
+	}
+}
+
+func (r *router) rulesGC() {
+	removedRules := r.rt.CollectGarbage()
+
+	r.logger.Infof("Removed %d rules", len(removedRules))
+
+	for _, rule := range removedRules {
+		// we need to process only consume rules, cause we don't
+		// really care about the other ones, other rules removal
+		// doesn't affect our work here
+		if rule.Type() == routing.RuleConsume {
+			cnsmRuleDesc := rule.RouteDescriptor()
+			r.logger.Infof("Removed consume rule with desc %s", &cnsmRuleDesc)
+
+			rg, ok := r.popRouteGroup(cnsmRuleDesc)
+			if !ok {
+				r.logger.Infoln("Couldn't remove route group after consume rule expired: route group not found")
+				continue
+			}
+
+			r.logger.Infoln("Removed route group for removed consume rule with desc %s", &cnsmRuleDesc)
+
+			if !rg.isClosed() {
+				r.logger.Infoln("Closing route group")
+				if err := rg.Close(); err != nil {
+					r.logger.Errorf("Error closing route group during rule GC: %v", err)
+				} else {
+					r.logger.Infoln("Successfully closed route group")
+				}
+			} else {
+				r.logger.Infoln("Route group is ALREADY closed")
+			}
 		}
 	}
 }
