@@ -35,6 +35,15 @@ var (
 	ErrConnAlreadyExists = errors.New("underlying transport connection already exists")
 )
 
+// Constants associated with transport redial loop.
+// @evanlinjin: I see no need to make these configurable.
+const (
+	tpInitBO = time.Millisecond * 500
+	tpMaxBO  = time.Second * 10
+	tpTries  = 0
+	tpFactor = 1.3
+)
+
 // ManagedTransport manages a direct line of communication between two visor nodes.
 // There is a single underlying connection between two edges.
 // Initial dialing can be requested by either edge of the connection.
@@ -312,7 +321,7 @@ func (mt *ManagedTransport) redialLoop(ctx context.Context) error {
 	mt.redialCancel = cancel
 	mt.redialMx.Unlock()
 
-	retry := netutil.NewRetrier(mt.log, time.Millisecond*500, time.Second*10, 0, 1.2).
+	retry := netutil.NewRetrier(mt.log, tpInitBO, tpMaxBO, tpTries, tpFactor).
 		WithErrWhitelist(ErrNotServing, context.Canceled)
 
 	// Only redial when there is no underlying conn.
