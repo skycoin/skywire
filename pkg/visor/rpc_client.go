@@ -208,7 +208,7 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithSt
 
 // RoutingRules calls RoutingRules.
 func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
-	entries :=  make([]routing.Rule, 0)
+	entries := make([]routing.Rule, 0)
 	err := rc.Call("RoutingRules", &struct{}{}, &entries)
 	return entries, err
 }
