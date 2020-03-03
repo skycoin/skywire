@@ -19,8 +19,6 @@ import (
 
 var log = logging.MustGetLogger("transport-discovery")
 
-
-
 // JSONError is the object returned to the client when there's an error.
 type JSONError struct {
 	Error string `json:"error"`
