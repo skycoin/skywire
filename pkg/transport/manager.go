@@ -266,7 +266,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	return mTp, nil
 }
 
-// DeleteTransport de-registers the Transport of Transport ID in transport discovery and deletes it locally.
+// DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
