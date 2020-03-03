@@ -21,6 +21,7 @@ DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 
 GO_VERSION=$(shell go version)
+# TODO: Remove after https://github.com/etcd-io/bbolt/pull/201 is closed.
 DISABLE_CHECKPTR=-gcflags=all=-d=checkptr=0
 OPTIONAL_FLAGS=
 ifneq (,$(findstring go1.14,$(GO_VERSION)))
