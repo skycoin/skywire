@@ -161,7 +161,7 @@ func (rc *rpcClient) TransportTypes() ([]string, error) {
 
 // Transports calls Transports.
 func (rc *rpcClient) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
-	var transports []*TransportSummary
+	transports := make([]*TransportSummary, 0)
 	err := rc.Call("Transports", &TransportsIn{
 		FilterTypes:   types,
 		FilterPubKeys: pks,
@@ -195,7 +195,7 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 }
 
 func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	var entries []*transport.EntryWithStatus
+	entries := make([]*transport.EntryWithStatus, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
@@ -208,7 +208,7 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithSt
 
 // RoutingRules calls RoutingRules.
 func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
-	var entries []routing.Rule
+	entries :=  make([]routing.Rule, 0)
 	err := rc.Call("RoutingRules", &struct{}{}, &entries)
 	return entries, err
 }
