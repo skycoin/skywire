@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20200227084433-7605a550f502
+# github.com/SkycoinProject/dmsg v0.0.0-20200303104641-cfc70993f6b0
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
@@ -130,7 +130,7 @@ github.com/ulikunitz/xz/lzma
 github.com/xi2/xz
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d
+# golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
