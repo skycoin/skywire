@@ -13,6 +13,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/SkycoinProject/dmsg/netutil"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
