@@ -28,4 +28,4 @@ require (
 	golang.org/x/sys v0.0.0-20200301040627-c5d0d7b4ec88 // indirect
 )
 
-replace github.com/SkycoinProject/dmsg => ../dmsg
+//replace github.com/SkycoinProject/dmsg => ../dmsg
