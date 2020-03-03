@@ -33,10 +33,10 @@ func TestContext_RegisterLogger(t *testing.T) {
 }
 
 func TestContext_Start(t *testing.T) {
-	cc := CaptureContext()
-	assert.NotZero(t, len(cc.cmd.Args))
-
 	t.Run("executable started", func(t *testing.T) {
+		cc := CaptureContext()
+		assert.NotZero(t, len(cc.cmd.Args))
+
 		cmd := "touch"
 		path := "/tmp/test_start"
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
@@ -47,6 +47,9 @@ func TestContext_Start(t *testing.T) {
 	})
 
 	t.Run("bad args", func(t *testing.T) {
+		cc := CaptureContext()
+		assert.NotZero(t, len(cc.cmd.Args))
+
 		cmd := "bad_command"
 		cc.cmd = exec.Command(cmd) // nolint:gosec
 
@@ -60,6 +63,9 @@ func TestContext_Start(t *testing.T) {
 	})
 
 	t.Run("already starting", func(t *testing.T) {
+		cc := CaptureContext()
+		assert.NotZero(t, len(cc.cmd.Args))
+
 		cmd := "touch"
 		path := "/tmp/test_start"
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
@@ -74,7 +80,7 @@ func TestContext_Start(t *testing.T) {
 		err2 := <-errCh
 		errors := []error{err1, err2}
 
-		assert.Contains(t, errors, ErrAlreadyStarting)
+		assert.Contains(t, errors, ErrAlreadyStarted)
 		assert.Contains(t, errors, nil)
 
 		assert.NoError(t, os.Remove(path))
