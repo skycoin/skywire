@@ -726,7 +726,22 @@ func (r *router) SaveRule(rule routing.Rule) error {
 
 // DelRules removes rules associated with `ids` from the routing table.
 func (r *router) DelRules(ids []routing.RouteID) {
+	rules := make([]routing.Rule, 0, len(ids))
+	for _, id := range ids {
+		rule, err := r.rt.Rule(id)
+		if err != nil {
+			r.logger.WithError(err).Errorf("Failed to get rule with ID %d on rule removal", id)
+			continue
+		}
+
+		rules = append(rules, rule)
+	}
+
 	r.rt.DelRules(ids)
+
+	for _, rule := range rules {
+		r.removeRule(rule)
+	}
 }
 
 func (r *router) rulesGCLoop() {
@@ -746,34 +761,39 @@ func (r *router) rulesGCLoop() {
 func (r *router) rulesGC() {
 	removedRules := r.rt.CollectGarbage()
 
-	r.logger.Infof("Removed %d rules", len(removedRules))
+	r.logger.Infof("Removing %d rules", len(removedRules))
 
 	for _, rule := range removedRules {
-		// we need to process only consume rules, cause we don't
-		// really care about the other ones, other rules removal
-		// doesn't affect our work here
-		if rule.Type() == routing.RuleConsume {
-			cnsmRuleDesc := rule.RouteDescriptor()
-			r.logger.Infof("Removed consume rule with desc %s", &cnsmRuleDesc)
+		r.removeRule(rule)
+	}
+}
 
-			rg, ok := r.popRouteGroup(cnsmRuleDesc)
-			if !ok {
-				r.logger.Infoln("Couldn't remove route group after consume rule expired: route group not found")
-				continue
-			}
+func (r *router) removeRule(rule routing.Rule) {
+	r.logger.Infof("Removing rule of type %s with ID %d", rule.Type(), rule.KeyRouteID())
+	// we need to process only consume rules, cause we don't
+	// really care about the other ones, other rules removal
+	// doesn't affect our work here
+	if rule.Type() == routing.RuleConsume {
+		cnsmRuleDesc := rule.RouteDescriptor()
+		r.logger.Infof("Removed consume rule with desc %s", &cnsmRuleDesc)
 
-			r.logger.Infoln("Removed route group for removed consume rule with desc %s", &cnsmRuleDesc)
+		rg, ok := r.popRouteGroup(cnsmRuleDesc)
+		if !ok {
+			r.logger.Infoln("Couldn't remove route group after consume rule expired: route group not found")
+			return
+		}
 
-			if !rg.isClosed() {
-				r.logger.Infoln("Closing route group")
-				if err := rg.Close(); err != nil {
-					r.logger.Errorf("Error closing route group during rule GC: %v", err)
-				} else {
-					r.logger.Infoln("Successfully closed route group")
-				}
+		r.logger.Infoln("Removed route group for removed consume rule with desc %s", &cnsmRuleDesc)
+
+		if !rg.isClosed() {
+			r.logger.Infoln("Closing route group")
+			if err := rg.Close(); err != nil {
+				r.logger.Errorf("Error closing route group during rule GC: %v", err)
 			} else {
-				r.logger.Infoln("Route group is ALREADY closed")
+				r.logger.Infoln("Successfully closed route group")
 			}
+		} else {
+			r.logger.Infoln("Route group is ALREADY closed")
 		}
 	}
 }
