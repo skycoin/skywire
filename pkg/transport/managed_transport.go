@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/httputil"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 
@@ -52,6 +54,9 @@ type ManagedTransport struct {
 	isUpErr error // records whether the last status update was successful or not
 	isUpMux sync.Mutex
 
+	redialCancel context.CancelFunc // for canceling redialling logic
+	redialMx     sync.Mutex
+
 	n      *snet.Network
 	conn   *snet.Conn
 	connCh chan struct{}
@@ -89,9 +94,6 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		<-mt.done
 		cancel()
 	}()
-
-	logTicker := time.NewTicker(logWriteInterval)
-	defer logTicker.Stop()
 
 	log := mt.log.
 		WithField("tp_id", mt.Entry.ID).
@@ -141,8 +143,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 				mt.connMx.Lock()
 				mt.clearConn()
 				mt.connMx.Unlock()
-				log.WithError(err).
-					Warn("Failed to read packet.")
+				log.WithError(err).Warn("Failed to read packet.")
 				continue
 			}
 			select {
@@ -154,16 +155,18 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		}
 	}()
 
-	// Redial loop.
+	// Logging & redialing loop.
+	logTicker := time.NewTicker(logWriteInterval)
 	for {
 		select {
 		case <-mt.done:
+			logTicker.Stop()
 			return
 
 		case <-logTicker.C:
 			if mt.logMod() {
 				if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
-					mt.log.Warnf("Failed to record log entry: %s", err)
+					mt.log.WithError(err).Warn("Failed to record log entry.")
 				}
 				continue
 			}
@@ -174,18 +177,9 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 			}
 
 			// If there has not been any activity, ensure underlying 'write' tp is still up.
-			mt.connMx.Lock()
-			if mt.conn == nil {
-				if ok, err := mt.redial(ctx); err != nil {
-					mt.log.Warnf("failed to redial underlying connection (redial loop): %v", err)
-					if !ok {
-						mt.connMx.Unlock()
-						return
-					}
-				}
+			if err := mt.redialLoop(ctx); err != nil {
+				mt.log.WithError(err).Debug("Stopped reconnecting underlying connection.")
 			}
-			mt.connMx.Unlock()
-
 		}
 	}
 }
@@ -240,13 +234,13 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
-	mt.log.Debug("Performing handshake...")
+
+	mt.log.Debug("Performing settlement handshake...")
 	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.n.LocalSK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %v", err)
 	}
 
 	mt.log.Debug("Setting underlying connection...")
-
 	return mt.setConn(conn)
 }
 
@@ -282,17 +276,17 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 
 // redial only actually dials if transport is still registered in transport discovery.
 // The 'retry' output specifies whether we can retry dial on failure.
-func (mt *ManagedTransport) redial(ctx context.Context) (retry bool, err error) {
+func (mt *ManagedTransport) redial(ctx context.Context) error {
 	if !mt.isServing() {
-		return false, ErrNotServing
+		return ErrNotServing
 	}
 
-	if _, err = mt.dc.GetTransportByID(ctx, mt.Entry.ID); err != nil {
+	if _, err := mt.dc.GetTransportByID(ctx, mt.Entry.ID); err != nil {
 
 		// If the error is a temporary network error, we should retry at a later stage.
 		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
 
-			return true, err
+			return err
 		}
 
 		// If the error is not temporary, it most likely means that the transport is no longer registered.
@@ -302,10 +296,33 @@ func (mt *ManagedTransport) redial(ctx context.Context) (retry bool, err error) 
 			WithError(err).
 			Warn("Transport closed due to redial failure. Transport is likely no longer in discovery.")
 
-		return false, ErrNotServing
+		return ErrNotServing
 	}
 
-	return true, mt.dial(ctx)
+	return mt.dial(ctx)
+}
+
+// redialLoop calls redial in a loop with exponential back-off until success or transport closure.
+func (mt *ManagedTransport) redialLoop(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	mt.redialMx.Lock()
+	mt.redialCancel = cancel
+	mt.redialMx.Unlock()
+
+	retry := netutil.NewRetrier(mt.log, time.Millisecond*500, time.Second*10, 0, 1.2).
+		WithErrWhitelist(ErrNotServing, context.Canceled)
+
+	// Only redial when there is no underlying conn.
+	return retry.Do(ctx, func() (err error) {
+		mt.connMx.Lock()
+		if mt.conn == nil {
+			err = mt.redial(ctx)
+		}
+		mt.connMx.Unlock()
+		return err
+	})
 }
 
 func (mt *ManagedTransport) isLeastSignificantEdge() bool {
@@ -351,12 +368,21 @@ func (mt *ManagedTransport) setConn(newConn *snet.Conn) error {
 		return fmt.Errorf("failed to update transport status: %v", err)
 	}
 
+	// Set new underlying connection.
 	mt.conn = newConn
 	select {
 	case mt.connCh <- struct{}{}:
 		mt.log.Debug("Sent signal to 'mt.connCh'.")
 	default:
 	}
+
+	// Cancel reconnection logic.
+	mt.redialMx.Lock()
+	if mt.redialCancel != nil {
+		mt.redialCancel()
+	}
+	mt.redialMx.Unlock()
+
 	return nil
 }
 
@@ -400,11 +426,31 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 	for i := 0; i < tries; i++ {
 		// @evanlinjin: We don't pass context as we always want transport status to be updated.
 		if _, err = mt.dc.UpdateStatuses(context.Background(), &Status{ID: mt.Entry.ID, IsUp: isUp}); err != nil {
-			mt.log.
-				WithError(err).
-				WithField("retry", i < tries).
-				Warn("Failed to update transport status.")
-			continue
+
+			// Only retry if error is temporary.
+			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+				mt.log.
+					WithError(err).
+					WithField("temporary", true).
+					WithField("retry", i+1 < tries).
+					Warn("Failed to update transport status.")
+				continue
+			}
+
+			// Close managed transport if associated entry is not in discovery.
+			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusNotFound {
+				mt.log.
+					WithError(err).
+					WithField("temporary", false).
+					WithField("retry", false).
+					Warn("Failed to update transport status. Closing transport...")
+				mt.isUp = false
+				mt.isUpErr = httpErr
+				mt.once.Do(func() { close(mt.done) }) // Only time when mt.done is closed outside of mt.close()
+				return
+			}
+
+			break
 		}
 		mt.log.
 			WithField("status", statusString(isUp)).
@@ -435,7 +481,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 	defer mt.connMx.Unlock()
 
 	if mt.conn == nil {
-		if _, err := mt.redial(ctx); err != nil {
+		if err := mt.redial(ctx); err != nil {
 
 			// TODO(evanlinjin): Determine whether we need to call 'mt.wg.Wait()' here.
 			if err == ErrNotServing {
@@ -459,10 +505,11 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 
 // WARNING: Not thread safe.
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
+	log := mt.log.WithField("func", "readPacket()")
+
 	var conn *snet.Conn
 	for {
 		if conn = mt.getConn(); conn != nil {
-			mt.log.Debugf("Got conn in managed TP: %s", conn.RemoteAddr())
 			break
 		}
 		select {
@@ -472,24 +519,31 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		}
 	}
 
+	log.Debug("Awaiting packet...")
+
 	h := make(routing.Packet, routing.PacketHeaderSize)
-	mt.log.Debugln("Trying to read packet header...")
 	if _, err = io.ReadFull(conn, h); err != nil {
-		mt.log.WithError(err).Debugf("Failed to read packet header: %v", err)
+		log.WithError(err).Debugf("Failed to read packet header.")
 		return nil, err
 	}
-	mt.log.Debugf("Read packet header: %s", string(h))
+	log.WithField("header_len", len(h)).WithField("header_raw", h).Debug("Read packet header.")
+
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(conn, p); err != nil {
-		mt.log.WithError(err).Debugf("Error reading packet payload: %v", err)
+		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
-	mt.log.Debugf("Read packet payload: %s", string(p))
+	log.WithField("payload_len", len(p)).WithField("payload_raw", p).Debug("Read packet payload.")
+
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize))
 	}
-	mt.log.Infof("recv packet: type (%s) rtID(%d) size(%d)", packet.Type().String(), packet.RouteID(), packet.Size())
+
+	log.WithField("type", packet.Type().String()).
+		WithField("rt_id", packet.RouteID()).
+		WithField("size", packet.Size()).
+		Info("Received packet.")
 	return packet, nil
 }
 
