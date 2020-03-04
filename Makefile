@@ -58,7 +58,7 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
 
-install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `dmsgpty`
+install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor
 
 rerun: stop
