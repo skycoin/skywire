@@ -48,65 +48,70 @@ var rootCmd = &cobra.Command{
 			log.Printf("Failed to output build info: %v", err)
 		}
 
-		// Prepare config.
-		if configPath == "" {
-			configPath = pathutil.FindConfigPath(args, -1, configEnv, pathutil.HypervisorDefaults())
-		}
-		var conf hypervisor.Config
-		conf.FillDefaults(mock)
-		if err := conf.Parse(configPath); err != nil {
-			log.WithError(err).Fatalln("failed to parse config file")
-		}
-		log.WithField("config", conf).
-			Info()
+		conf := prepareConfig(args)
 
 		// Prepare hypervisor.
-		m, err := hypervisor.New(conf)
+		hv, err := hypervisor.New(conf)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
-
 		if mock {
-			// Mock mode.
-			err := m.AddMockData(hypervisor.MockConfig{
-				Visors:            mockVisors,
-				MaxTpsPerVisor:    mockMaxTps,
-				MaxRoutesPerVisor: mockMaxRoutes,
-				EnableAuth:        mockEnableAuth,
-			})
-			if err != nil {
-				log.Fatalln("Failed to add mock data:", err)
-			}
+			prepareMockData(hv)
 		} else {
-			// Prepare dmsg client.
-			dmsgC := dmsg.NewClient(conf.PK, conf.SK, disc.NewHTTP(conf.DmsgDiscovery), dmsg.DefaultConfig())
-			go dmsgC.Serve()
-
-			dmsgL, err := dmsgC.Listen(conf.DmsgPort)
-			if err != nil {
-				log.WithField("addr", fmt.Sprintf("dmsg://%s:%d", conf.PK, conf.DmsgPort)).
-					Fatal("Failed to listen over dmsg.")
-			}
-			go func() {
-				if err := m.ServeRPC(dmsgC, dmsgL); err != nil {
-					log.WithError(err).
-						Fatal("Failed to serve RPC client over dmsg.")
-				}
-			}()
-			log.WithField("addr", fmt.Sprintf("dmsg://%s:%d", conf.PK, conf.DmsgPort)).
-				Info("Serving RPC client over dmsg.")
+			prepareDmsg(hv, conf)
 		}
 
 		// Serve HTTP.
-		log.WithField("http_addr", conf.HTTPAddr).
-			Info("Serving HTTP.")
-
-		if err := http.ListenAndServe(conf.HTTPAddr, m); err != nil {
-			log.WithError(err).
-				Fatal("Hypervisor exited with error.")
+		log.WithField("http_addr", conf.HTTPAddr).Info("Serving HTTP.")
+		if err := http.ListenAndServe(conf.HTTPAddr, hv); err != nil {
+			log.WithError(err).Fatal("Hypervisor exited with error.")
 		}
 		log.Info("Good bye!")
 	},
+}
+
+func prepareConfig(args []string) (conf hypervisor.Config) {
+	if configPath == "" {
+		configPath = pathutil.FindConfigPath(args, -1, configEnv, pathutil.HypervisorDefaults())
+	}
+	conf.FillDefaults(mock)
+	if err := conf.Parse(configPath); err != nil {
+		log.WithError(err).Fatalln("failed to parse config file")
+	}
+	log.WithField("config", conf).Info()
+	return conf
+}
+
+func prepareMockData(hv *hypervisor.Hypervisor) {
+	err := hv.AddMockData(hypervisor.MockConfig{
+		Visors:            mockVisors,
+		MaxTpsPerVisor:    mockMaxTps,
+		MaxRoutesPerVisor: mockMaxRoutes,
+		EnableAuth:        mockEnableAuth,
+	})
+	if err != nil {
+		log.Fatalln("Failed to add mock data:", err)
+	}
+}
+
+func prepareDmsg(hv *hypervisor.Hypervisor, conf hypervisor.Config) {
+	// Prepare dmsg client.
+	dmsgC := dmsg.NewClient(conf.PK, conf.SK, disc.NewHTTP(conf.DmsgDiscovery), dmsg.DefaultConfig())
+	go dmsgC.Serve()
+
+	dmsgL, err := dmsgC.Listen(conf.DmsgPort)
+	if err != nil {
+		log.WithField("addr", fmt.Sprintf("dmsg://%s:%d", conf.PK, conf.DmsgPort)).
+			Fatal("Failed to listen over dmsg.")
+	}
+	go func() {
+		if err := hv.ServeRPC(dmsgC, dmsgL); err != nil {
+			log.WithError(err).
+				Fatal("Failed to serve RPC client over dmsg.")
+		}
+	}()
+	log.WithField("addr", fmt.Sprintf("dmsg://%s:%d", conf.PK, conf.DmsgPort)).
+		Info("Serving RPC client over dmsg.")
 }
 
 // Execute executes root CLI command.
