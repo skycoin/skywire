@@ -21,6 +21,7 @@ func TestSettlementHS(t *testing.T) {
 	defer nEnv.Teardown()
 
 	// Wait until the env is fully set up.
+	// TODO: Implement an elegant solution.
 	time.Sleep(100 * time.Millisecond)
 
 	// TEST: Perform a handshake between two snet.Network instances.
