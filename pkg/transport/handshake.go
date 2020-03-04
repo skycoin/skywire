@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/httputil"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
@@ -130,7 +132,12 @@ func MakeSettlementHS(init bool) SettlementHS {
 
 		// Ensure transport is registered.
 		if err := dc.RegisterTransports(ctx, recvSE); err != nil {
-			log.WithError(err).Error("Failed to register transports")
+			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusConflict {
+				log.WithError(err).Debug("An expected error occurred while trying to register transport.")
+			} else {
+				// TODO(evanlinjin): Once tpDisc is updated, this should return error and result in failed HS.
+				log.WithError(err).Error("Failed to register transport.")
+			}
 		}
 
 		// inform initiating visor.
