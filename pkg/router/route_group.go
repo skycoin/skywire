@@ -273,7 +273,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	errCh := rg.writePacketAsync(ctx, tp, packet)
+	errCh := rg.writePacketAsync(ctx, tp, packet, rule.KeyRouteID())
 	defer cancel()
 
 	select {
@@ -290,11 +290,12 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 	}
 }
 
-func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet) chan error {
+func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet,
+	ruleID routing.RouteID) chan error {
 	errCh := make(chan error)
 	go func() {
 		defer close(errCh)
-		err := tp.WritePacket(ctx, packet)
+		err := rg.writePacket(ctx, tp, packet, ruleID)
 		select {
 		case <-ctx.Done():
 			return
@@ -304,6 +305,19 @@ func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.Manage
 	}()
 
 	return errCh
+}
+
+func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet,
+	ruleID routing.RouteID) error {
+	err := tp.WritePacket(ctx, packet)
+	// note equality here. update activity only if there was NO error
+	if err == nil {
+		if err := rg.rt.UpdateActivity(ruleID); err != nil {
+			rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
+		}
+	}
+
+	return err
 }
 
 // rule fetches first available forward rule.
@@ -374,7 +388,7 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	}
 
 	packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
-	if err := tp.WritePacket(context.Background(), packet); err != nil {
+	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
 		return err
 	}
 
@@ -473,7 +487,7 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	for i := 0; i < len(rg.tps); i++ {
 		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
-		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
+		if err := rg.writePacket(context.Background(), rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
 		}
 	}
