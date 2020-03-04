@@ -42,16 +42,18 @@ type RPC struct {
 	log   logrus.FieldLogger
 }
 
-func newRPCServer(v *Visor, remoteName string) *rpc.Server {
+func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 	rpcS := rpc.NewServer()
 	rpcG := &RPC{
 		visor: v,
 		log:   v.Logger.PackageLogger("visor_rpc:" + remoteName),
 	}
+
 	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
-		panic(fmt.Errorf("failed to create visor RPC server: %v", err))
+		return nil, fmt.Errorf("failed to create visor RPC server: %v", err)
 	}
-	return rpcS
+
+	return rpcS, nil
 }
 
 func (r *RPC) logReq(name string, in interface{}) func(out interface{}, err *error) {
