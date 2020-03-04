@@ -153,20 +153,24 @@ func TestStartStopApp(t *testing.T) {
 		logger:   logging.MustGetLogger("test"),
 		conf:     &visorCfg,
 	}
-	pathutil.EnsureDir(visor.dir())
+
+	require.NoError(t, pathutil.EnsureDir(visor.dir()))
+
 	defer func() {
 		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
-	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:         app,
 		SockFilePath: visorCfg.AppServerSockFile,
 		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", app),
 	}
+
 	appArgs1 := append([]string{filepath.Join(visor.dir(), app)}, apps["foo"].Args...)
 	appPID1 := appcommon.ProcID(10)
+
+	pm := &appserver.MockProcManager{}
 	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", app).Return(testhelpers.NoErr)
