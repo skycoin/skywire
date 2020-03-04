@@ -80,16 +80,19 @@ func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, conn *snet.Co
 
 // MakeSettlementHS creates a settlement handshake.
 // `init` determines whether the local side is initiating or responding.
+// The handshake logic only REGISTERS the transport, and does not update the status of the transport.
 func MakeSettlementHS(init bool) SettlementHS {
 	// initiating logic.
 	initHS := func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) (err error) {
 		entry := makeEntryFromTpConn(conn)
 
-		defer func() {
-			if _, err := dc.UpdateStatuses(ctx, &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
-				log.WithError(err).Error("Failed to update statuses")
-			}
-		}()
+		// TODO(evanlinjin): Probably not needed as this is called in mTp already. Need to double check.
+		//defer func() {
+		//	// @evanlinjin: I used background context to ensure status is always updated.
+		//	if _, err := dc.UpdateStatuses(context.Background(), &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
+		//		log.WithError(err).Error("Failed to update statuses")
+		//	}
+		//}()
 
 		// create signed entry and send it to responding visor.
 		se, ok := NewSignedEntry(&entry, conn.LocalPK(), sk)

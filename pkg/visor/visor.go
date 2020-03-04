@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/rpc"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,13 +21,13 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
@@ -59,6 +58,8 @@ var (
 
 const supportedProtocolVersion = "0.1.0"
 
+const ownerRWX = 0700
+
 var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
 // AppState defines state parameters for a registered App.
@@ -76,7 +77,7 @@ type Visor struct {
 	router router.Router
 	n      *snet.Network
 	tm     *transport.Manager
-	pty    *dmsgpty.Host // TODO(evanlinjin): Complete.
+	pty    *dmsgpty.Host
 
 	Logger *logging.MasterLogger
 	logger *logging.Logger
@@ -92,11 +93,14 @@ type Visor struct {
 
 	pidMu sync.Mutex
 
-	rpcListener net.Listener
-	rpcDialers  []*RPCClientDialer
+	cliLis net.Listener
+	hvErrs map[cipher.PubKey]chan error // errors returned when the associated hypervisor ServeRPCClient returns
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
+
+	// cancel is to be called when visor.Close is triggered.
+	cancel context.CancelFunc
 }
 
 // NewVisor constructs new Visor.
@@ -143,9 +147,9 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 			return nil, fmt.Errorf("failed to setup pty: %v", err)
 		}
 		visor.pty = pty
+	} else {
+		logger.Info("'dmsgpty' is not configured, skipping...")
 	}
-
-	logger.Info("'dmsgpty' is not configured, skipping...")
 
 	trDiscovery, err := cfg.TransportDiscovery()
 	if err != nil {
@@ -206,18 +210,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
 		}
-		visor.rpcListener = l
+		visor.cliLis = l
 	}
 
-	visor.rpcDialers = make([]*RPCClientDialer, len(cfg.Hypervisors))
-
-	for i, entry := range cfg.Hypervisors {
-		_, rpcPort, err := httputil.SplitRPCAddr(entry.Addr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse rpc port from rpc address: %s", err)
-		}
-
-		visor.rpcDialers[i] = NewRPCClientDialer(visor.n, entry.PubKey, rpcPort)
+	visor.hvErrs = make(map[cipher.PubKey]chan error, len(cfg.Hypervisors))
+	for _, hv := range cfg.Hypervisors {
+		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
 	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerSockFile)
@@ -243,15 +241,10 @@ func (visor *Visor) Start() error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	visor.cancel = cancel
 	defer cancel()
 
 	visor.startedAt = time.Now()
-
-	// Start pty.
-	if visor.pty != nil {
-		go visor.pty.ServeRemoteRequests(ctx)
-		go visor.pty.ServeCLIRequests(ctx)
-	}
 
 	if err := pathutil.EnsureDir(visor.dir()); err != nil {
 		return err
@@ -271,23 +264,59 @@ func (visor *Visor) Start() error {
 		}(ac)
 	}
 
-	rpcSvr := rpc.NewServer()
-	if err := rpcSvr.RegisterName(RPCPrefix, &RPC{visor: visor}); err != nil {
-		return fmt.Errorf("rpc server created failed: %s", err)
-	}
-
-	if visor.rpcListener != nil {
-		visor.logger.Info("Starting RPC interface on ", visor.rpcListener.Addr())
-
-		go rpcSvr.Accept(visor.rpcListener)
-	}
-
-	for _, dialer := range visor.rpcDialers {
-		go func(dialer *RPCClientDialer) {
-			if err := dialer.Run(rpcSvr, time.Second); err != nil {
-				visor.logger.Errorf("Hypervisor Dmsg Dial exited with error: %v", err)
+	// Start pty.
+	if visor.pty != nil {
+		log := visor.Logger.PackageLogger("dmsgpty")
+		// dmsgpty cli
+		if visor.conf.DmsgPty.CLINet == "unix" {
+			if err := os.MkdirAll(filepath.Dir(visor.conf.DmsgPty.CLIAddr), ownerRWX); err != nil {
+				log.WithError(err).Debug("Failed to prepare unix file dir.")
 			}
-		}(dialer)
+		}
+		ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
+		if err != nil {
+			return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
+		}
+		go func() {
+			log.WithField("net", visor.conf.DmsgPty.CLINet).
+				WithField("addr", visor.conf.DmsgPty.CLIAddr).
+				Info("Serving dmsgpty CLI.")
+			if err := visor.pty.ServeCLI(ctx, ptyL); err != nil {
+				log.WithError(err).
+					WithField("entity", "dmsgpty-host").
+					WithField("func", ".ServeCLI()").
+					Error()
+				cancel()
+			}
+		}()
+		// dmsgpty serve
+		go func() {
+			log.WithField("dmsg_port", visor.conf.DmsgPty.Port).
+				Info("Serving dmsg.")
+			if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
+				log.WithError(err).
+					WithField("entity", "dmsgpty-host").
+					WithField("func", ".ListenAndServe()").
+					Error()
+				cancel()
+			}
+		}()
+	}
+
+	// prepare visor RPC
+
+	if visor.cliLis != nil {
+		visor.logger.Info("Starting RPC interface on ", visor.cliLis.Addr())
+		go newRPCServer(visor, "CLI").Accept(visor.cliLis)
+	}
+	if visor.hvErrs != nil {
+		for hvPK, hvErrs := range visor.hvErrs {
+			log := visor.Logger.PackageLogger("hypervisor_client").
+				WithField("hypervisor_pk", hvPK)
+			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
+			rpcS := newRPCServer(visor, addr.PK.String()[:6])
+			go ServeRPCClient(ctx, log, visor.n, rpcS, addr, hvErrs)
+		}
 	}
 
 	visor.logger.Info("Starting packet router")
@@ -366,19 +395,23 @@ func (visor *Visor) Close() (err error) {
 		return nil
 	}
 
-	if visor.rpcListener != nil {
-		if err = visor.rpcListener.Close(); err != nil {
-			visor.logger.WithError(err).Error("failed to stop RPC interface")
-		} else {
-			visor.logger.Info("RPC interface stopped successfully")
-		}
+	if visor.cancel != nil {
+		visor.cancel()
 	}
 
-	for i, dialer := range visor.rpcDialers {
-		if err = dialer.Close(); err != nil {
-			visor.logger.WithError(err).Errorf("(%d) failed to stop RPC dialer", i)
+	if visor.cliLis != nil {
+		if err = visor.cliLis.Close(); err != nil {
+			visor.logger.WithError(err).Error("failed to close CLI listener")
 		} else {
-			visor.logger.Infof("(%d) RPC dialer closed successfully", i)
+			visor.logger.Info("CLI listener closed successfully")
+		}
+	}
+	if visor.hvErrs != nil {
+		for hvPK, hvErr := range visor.hvErrs {
+			visor.logger.
+				WithError(<-hvErr).
+				WithField("hypervisor_pk", hvPK).
+				Info("Closed hypervisor connection.")
 		}
 	}
 
@@ -401,6 +434,19 @@ func (visor *Visor) Close() (err error) {
 	}
 
 	return err
+}
+
+// App returns a single app state of given name.
+func (visor *Visor) App(name string) (*AppState, bool) {
+	app, ok := visor.appsConf[name]
+	if !ok {
+		return nil, false
+	}
+	state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
+	if visor.procManager.Exists(app.App) {
+		state.Status = AppStatusRunning
+	}
+	return state, true
 }
 
 // Apps returns list of AppStates for all registered apps.

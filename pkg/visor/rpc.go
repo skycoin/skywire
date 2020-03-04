@@ -3,13 +3,16 @@ package visor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/rpc"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -36,6 +39,47 @@ var (
 // RPC defines RPC methods for Visor.
 type RPC struct {
 	visor *Visor
+	log   logrus.FieldLogger
+}
+
+func newRPCServer(v *Visor, remoteName string) *rpc.Server {
+	rpcS := rpc.NewServer()
+	rpcG := &RPC{
+		visor: v,
+		log:   v.Logger.PackageLogger("visor_rpc:" + remoteName),
+	}
+	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
+		panic(fmt.Errorf("failed to create visor RPC server: %v", err))
+	}
+	return rpcS
+}
+
+func (r *RPC) logReq(name string, in interface{}) func(out interface{}, err *error) {
+
+	// Just in case r.log is not set.
+	// However, this is dangerous in production as it may result in a race condition.
+	if r.log == nil {
+		r.log = r.visor.Logger.PackageLogger("visor_rpc")
+	}
+
+	start := time.Now()
+	log := r.log.
+		WithField("_method", name).
+		WithField("_received", start.Format(time.Kitchen))
+	if in != nil {
+		log = log.WithField("input", in)
+	}
+
+	return func(out interface{}, err *error) {
+		log := log.WithField("_period", time.Since(start).String())
+		if out != nil {
+			log = log.WithField("output", out)
+		}
+		if err != nil && *err != nil {
+			log = log.WithError(*err)
+		}
+		log.Info("Request processed.")
+	}
 }
 
 /*
@@ -50,13 +94,14 @@ type HealthInfo struct {
 }
 
 // Health returns health information about the visor
-func (r *RPC) Health(_ *struct{}, out *HealthInfo) error {
+func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
+	defer r.logReq("Health", nil)(out, &err)
+
 	out.TransportDiscovery = http.StatusOK
 	out.RouteFinder = http.StatusOK
 	out.SetupNode = http.StatusOK
 
-	_, err := r.visor.conf.TransportDiscovery()
-	if err != nil {
+	if _, err = r.visor.conf.TransportDiscovery(); err != nil {
 		out.TransportDiscovery = http.StatusNotFound
 	}
 
@@ -76,7 +121,9 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) error {
 */
 
 // Uptime returns for how long the visor has been running in seconds
-func (r *RPC) Uptime(_ *struct{}, out *float64) error {
+func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
+	defer r.logReq("Uptime", nil)(out, &err)
+
 	*out = time.Since(r.visor.startedAt).Seconds()
 	return nil
 }
@@ -94,7 +141,9 @@ type AppLogsRequest struct {
 }
 
 // LogsSince returns all logs from an specific app since the timestamp
-func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) error {
+func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) (err error) {
+	defer r.logReq("LogsSince", in)(out, &err)
+
 	ls, err := app.NewLogStore(filepath.Join(r.visor.dir(), in.AppName), in.AppName, "bbolt")
 	if err != nil {
 		return err
@@ -123,8 +172,7 @@ type TransportSummary struct {
 	IsSetup bool                `json:"is_setup"`
 }
 
-func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport,
-	includeLogs bool, isSetup bool) *TransportSummary {
+func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
 
 	summary := &TransportSummary{
 		ID:      tp.Entry.ID,
@@ -150,7 +198,9 @@ type Summary struct {
 }
 
 // Summary provides a summary of the AppNode.
-func (r *RPC) Summary(_ *struct{}, out *Summary) error {
+func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
+	defer r.logReq("Summary", nil)(out, &err)
+
 	var summaries []*TransportSummary
 	r.visor.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		summaries = append(summaries,
@@ -173,18 +223,24 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) error {
 */
 
 // Apps returns list of Apps registered on the Visor.
-func (r *RPC) Apps(_ *struct{}, reply *[]*AppState) error {
+func (r *RPC) Apps(_ *struct{}, reply *[]*AppState) (err error) {
+	defer r.logReq("Apps", nil)(reply, &err)
+
 	*reply = r.visor.Apps()
 	return nil
 }
 
 // StartApp start App with provided name.
-func (r *RPC) StartApp(name *string, _ *struct{}) error {
+func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
+	defer r.logReq("StartApp", name)(nil, &err)
+
 	return r.visor.StartApp(*name)
 }
 
 // StopApp stops App with provided name.
-func (r *RPC) StopApp(name *string, _ *struct{}) error {
+func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
+	defer r.logReq("StopApp", name)(nil, &err)
+
 	return r.visor.StopApp(*name)
 }
 
@@ -195,17 +251,23 @@ type SetAutoStartIn struct {
 }
 
 // SetAutoStart sets auto-start settings for an app.
-func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) error {
+func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) (err error) {
+	defer r.logReq("SetAutoStart", in)(nil, &err)
+
 	return r.visor.setAutoStart(in.AppName, in.AutoStart)
 }
 
 // SetSocksPassword sets password for skysocks.
-func (r *RPC) SetSocksPassword(in *string, _ *struct{}) error {
+func (r *RPC) SetSocksPassword(in *string, _ *struct{}) (err error) {
+	defer r.logReq("SetSocksPassword", in)(nil, &err)
+
 	return r.visor.setSocksPassword(*in)
 }
 
 // SetSocksClientPK sets PK for skysocks-client.
-func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) error {
+func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) (err error) {
+	defer r.logReq("SetSocksClientPK", in)(nil, &err)
+
 	return r.visor.setSocksClientPK(*in)
 }
 
@@ -214,7 +276,9 @@ func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) error {
 */
 
 // TransportTypes lists all transport types supported by the Visor.
-func (r *RPC) TransportTypes(_ *struct{}, out *[]string) error {
+func (r *RPC) TransportTypes(_ *struct{}, out *[]string) (err error) {
+	defer r.logReq("TransportTypes", nil)(out, &err)
+
 	*out = r.visor.tm.Networks()
 	return nil
 }
@@ -227,7 +291,9 @@ type TransportsIn struct {
 }
 
 // Transports lists Transports of the Visor and provides a summary of each.
-func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) error {
+func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) (err error) {
+	defer r.logReq("Transports", in)(out, &err)
+
 	typeIncluded := func(tType string) bool {
 		if in.FilterTypes != nil {
 			for _, ft := range in.FilterTypes {
@@ -260,7 +326,9 @@ func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) error {
 }
 
 // Transport obtains a Transport Summary of Transport of given Transport ID.
-func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) error {
+func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
+	defer r.logReq("Transport", in)(out, &err)
+
 	tp := r.visor.tm.Transport(*in)
 	if tp == nil {
 		return ErrNotFound
@@ -278,7 +346,9 @@ type AddTransportIn struct {
 }
 
 // AddTransport creates a transport for the visor.
-func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
+func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error) {
+	defer r.logReq("AddTransport", in)(out, &err)
+
 	ctx := context.Background()
 
 	if in.Timeout > 0 {
@@ -297,7 +367,9 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) error {
 }
 
 // RemoveTransport removes a Transport from the visor.
-func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) error {
+func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
+	defer r.logReq("RemoveTransport", tid)(nil, &err)
+
 	r.visor.tm.DeleteTransport(*tid)
 	return nil
 }
@@ -307,7 +379,9 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) error {
 */
 
 // DiscoverTransportsByPK obtains available transports via the transport discovery via given public key.
-func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) error {
+func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) (err error) {
+	defer r.logReq("DiscoverTransportsByPK", pk)(out, &err)
+
 	tpD, err := r.visor.conf.TransportDiscovery()
 	if err != nil {
 		return err
@@ -323,7 +397,9 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 }
 
 // DiscoverTransportByID obtains available transports via the transport discovery via a given transport ID.
-func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) error {
+func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) (err error) {
+	defer r.logReq("DiscoverTransportByID", id)(out, &err)
+
 	tpD, err := r.visor.conf.TransportDiscovery()
 	if err != nil {
 		return err
@@ -343,25 +419,32 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatu
 */
 
 // RoutingRules obtains all routing rules of the RoutingTable.
-func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) error {
+func (r *RPC) RoutingRules(_ *struct{}, out *[]routing.Rule) (err error) {
+	defer r.logReq("RoutingRules", nil)(out, &err)
+
 	*out = r.visor.router.Rules()
 	return nil
 }
 
 // RoutingRule obtains a routing rule of given RouteID.
-func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) error {
-	var err error
+func (r *RPC) RoutingRule(key *routing.RouteID, rule *routing.Rule) (err error) {
+	defer r.logReq("RoutingRule", key)(rule, &err)
+
 	*rule, err = r.visor.router.Rule(*key)
 	return err
 }
 
 // SaveRoutingRule saves a routing rule.
-func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) error {
+func (r *RPC) SaveRoutingRule(in *routing.Rule, _ *struct{}) (err error) {
+	defer r.logReq("SaveRoutingRule", in)(nil, &err)
+
 	return r.visor.router.SaveRule(*in)
 }
 
 // RemoveRoutingRule removes a RoutingRule based on given RouteID key.
-func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) error {
+func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) (err error) {
+	defer r.logReq("RemoveRoutingRule", key)(nil, &err)
+
 	r.visor.router.DelRules([]routing.RouteID{*key})
 	return nil
 }
@@ -378,7 +461,9 @@ type LoopInfo struct {
 }
 
 // Loops retrieves loops via rules of the routing table.
-func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) error {
+func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) (err error) {
+	defer r.logReq("Loops", nil)(out, &err)
+
 	var loops []LoopInfo
 
 	rules := r.visor.router.Rules()
@@ -411,6 +496,9 @@ const exitDelay = 100 * time.Millisecond
 
 // Restart restarts visor.
 func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
+	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
+	r.logReq("Restart", nil)(nil, nil)
+
 	defer func() {
 		if err == nil {
 			go func() {
@@ -428,13 +516,16 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 }
 
 // Exec executes a given command in cmd and writes its output to out.
-func (r *RPC) Exec(cmd *string, out *[]byte) error {
-	var err error
+func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
+	defer r.logReq("Exec", cmd)(out, &err)
+
 	*out, err = r.visor.Exec(*cmd)
 	return err
 }
 
 // Update updates visor.
 func (r *RPC) Update(_ *struct{}, _ *struct{}) (err error) {
+	defer r.logReq("Update", nil)(nil, &err)
+
 	return r.visor.Update()
 }

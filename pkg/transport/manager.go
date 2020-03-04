@@ -178,17 +178,21 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
-		if err := mTp.Accept(ctx, conn); err != nil {
-			return err
-		}
-		go mTp.Serve(tm.readCh, tm.done)
+		go func() {
+			mTp.Serve(tm.readCh)
+			tm.mx.Lock()
+			delete(tm.tps, mTp.Entry.ID)
+			tm.mx.Unlock()
+		}()
 		tm.tps[tpID] = mTp
 
 	} else {
 		tm.Logger.Debugln("TP found, accepting...")
-		if err := mTp.Accept(ctx, conn); err != nil {
-			return err
-		}
+
+	}
+
+	if err := mTp.Accept(ctx, conn); err != nil {
+		return err
 	}
 
 	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
@@ -199,17 +203,39 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
+
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
-	mTp, err := tm.saveTransport(remote, tpType)
-	if err != nil {
-		return nil, err
+
+	const tries = 2
+
+	var err error
+	for i := 0; i < tries; i++ {
+
+		mTp, err := tm.saveTransport(remote, tpType)
+		if err != nil {
+			return nil, err
+		}
+
+		if err = mTp.Dial(ctx); err != nil {
+			if err == ErrNotServing {
+				mTp.wg.Wait()
+				delete(tm.tps, mTp.Entry.ID)
+				continue
+			}
+			tm.Logger.
+				WithError(err).
+				Warn("Underlying connection is not yet established. Will retry later.")
+		}
+		return mTp, nil
 	}
-	if err := mTp.Dial(ctx); err != nil {
-		tm.Logger.Warnf("underlying 'write' tp failed, will retry: %v", err)
-	}
-	return mTp, nil
+
+	tm.Logger.
+		WithError(err).
+		WithField("tries", tries).
+		Error("Failed to serve managed transport. This is unexpected.")
+	return nil, err
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
@@ -228,7 +254,12 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 
 	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
-	go mTp.Serve(tm.readCh, tm.done)
+	go func() {
+		mTp.Serve(tm.readCh)
+		tm.mx.Lock()
+		delete(tm.tps, mTp.Entry.ID)
+		tm.mx.Unlock()
+	}()
 	tm.tps[tpID] = mTp
 
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
@@ -239,6 +270,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
+
 	if tm.isClosing() {
 		return
 	}
@@ -252,7 +284,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
 			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
 		} else {
-			tm.Logger.Infof("Deregistered transport of ID %s from discovery.", id)
+			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
 		}
 
 		// Close underlying connection.
@@ -323,9 +355,7 @@ func (tm *Manager) close() {
 
 	statuses := make([]*Status, 0, len(tm.tps))
 	for _, tr := range tm.tps {
-		if closed := tr.close(); closed {
-			statuses = append(statuses[0:], &Status{ID: tr.Entry.ID, IsUp: false})
-		}
+		tr.close()
 	}
 	if _, err := tm.Conf.DiscoveryClient.UpdateStatuses(context.Background(), statuses...); err != nil {
 		tm.Logger.Warnf("failed to update transport statuses: %v", err)
