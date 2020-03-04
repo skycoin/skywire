@@ -194,22 +194,25 @@ func TestVisorSpawnApp(t *testing.T) {
 		logger:   logging.MustGetLogger("test"),
 		conf:     &visorCfg,
 	}
-	pathutil.EnsureDir(visor.dir())
+
+	require.NoError(t, pathutil.EnsureDir(visor.dir()))
+
 	defer func() {
 		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
-	pm := &appserver.MockProcManager{}
 	appCfg := appcommon.Config{
 		Name:         app.App,
 		SockFilePath: visorCfg.AppServerSockFile,
 		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", app.App),
 	}
-	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
-	pm.On("Wait", app.App).Return(testhelpers.NoErr)
 
+	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 	appPID := appcommon.ProcID(10)
+
+	pm := &appserver.MockProcManager{}
+	pm.On("Wait", app.App).Return(testhelpers.NoErr)
 	pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
 		Return(appPID, testhelpers.NoErr)
 	pm.On("Exists", app.App).Return(true)
@@ -243,7 +246,9 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		logger: logging.MustGetLogger("test"),
 		conf:   c,
 	}
-	pathutil.EnsureDir(visor.dir())
+
+	require.NoError(t, pathutil.EnsureDir(visor.dir()))
+
 	defer func() {
 		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
@@ -253,18 +258,18 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 			App:  "skychat",
 			Port: 3,
 		}
-		wantErr := "can't bind to reserved port 3"
 
-		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
 			Name:         app.App,
 			SockFilePath: c.AppServerSockFile,
 			VisorPK:      c.Visor.StaticPubKey.Hex(),
 			WorkDir:      filepath.Join("", app.App),
 		}
-		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
+		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 		appPID := appcommon.ProcID(10)
+
+		pm := &appserver.MockProcManager{}
 		pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
 			Return(appPID, testhelpers.NoErr)
 		pm.On("Exists", app.App).Return(false)
@@ -277,8 +282,11 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		}()
 
 		time.Sleep(100 * time.Millisecond)
+
 		err := <-errCh
 		require.Error(t, err)
+
+		wantErr := "can't bind to reserved port 3"
 		assert.Equal(t, wantErr, err.Error())
 	})
 

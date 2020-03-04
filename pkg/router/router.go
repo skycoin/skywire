@@ -726,7 +726,22 @@ func (r *router) SaveRule(rule routing.Rule) error {
 
 // DelRules removes rules associated with `ids` from the routing table.
 func (r *router) DelRules(ids []routing.RouteID) {
+	rules := make([]routing.Rule, 0, len(ids))
+	for _, id := range ids {
+		rule, err := r.rt.Rule(id)
+		if err != nil {
+			r.logger.WithError(err).Errorf("Failed to get rule with ID %d on rule removal", id)
+			continue
+		}
+
+		rules = append(rules, rule)
+	}
+
 	r.rt.DelRules(ids)
+
+	for _, rule := range rules {
+		r.removeRouteGroupOfRule(rule)
+	}
 }
 
 func (r *router) rulesGCLoop() {
@@ -744,32 +759,46 @@ func (r *router) rulesGCLoop() {
 }
 
 func (r *router) rulesGC() {
-	log := r.logger.WithField("_src", "rulesGC")
+	log := r.logger.WithField("func", "router.rulesGC")
 
 	removedRules := r.rt.CollectGarbage()
 	log.WithField("rules_count", len(removedRules)).
 		Debug("Removed rules.")
 
 	for _, rule := range removedRules {
-		// we need to process only consume rules, cause we don't
-		// really care about the other ones, other rules removal
-		// doesn't affect our work here
-		if rule.Type() == routing.RuleConsume {
-			rDesc := rule.RouteDescriptor()
-			log := log.
-				WithField("rule_type", rule.Type().String()).
-				WithField("rule_desc", rDesc.String())
-			rg, ok := r.popRouteGroup(rDesc)
-			if !ok {
-				log.Debug("No route group associated with expired rule. Continuing...")
-				continue
-			}
-			if rg.isClosed() {
-				log.Debug("Route group already closed. Continuing...")
-				continue
-			}
-			log.WithError(rg.Close()).
-				Debug("Route group closed.")
-		}
+		r.removeRouteGroupOfRule(rule)
 	}
+}
+
+func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
+	log := r.logger.
+		WithField("func", "router.removeRouteGroupOfRule").
+		WithField("rule_type", rule.Type().String()).
+		WithField("rule_keyRtID", rule.KeyRouteID())
+
+	// we need to process only consume rules, cause we don't
+	// really care about the other ones, other rules removal
+	// doesn't affect our work here
+	if rule.Type() != routing.RuleConsume {
+		log.Debug("Nothing to be done.")
+	}
+
+	rDesc := rule.RouteDescriptor()
+	log.WithField("rt_desc", rDesc.String()).
+		Debug("Closing route group associated with rule...")
+
+	rg, ok := r.popRouteGroup(rDesc)
+	if !ok {
+		log.Debug("No route group associated with expired rule. Nothing to be done.")
+		return
+	}
+	if rg.isClosed() {
+		log.Debug("Route group already closed. Nothing to be done.")
+		return
+	}
+	if err := rg.Close(); err != nil {
+		log.WithError(err).Error("Failed to close route group.")
+		return
+	}
+	log.Debug("Route group closed.")
 }
