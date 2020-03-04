@@ -27,7 +27,7 @@ func ErrorFromResp(resp *http.Response) error {
 
 // Error returns the error message.
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("(%d)%s: %v", e.Status, http.StatusText(e.Status), e.Body)
+	return fmt.Sprintf("%d %s: %v", e.Status, http.StatusText(e.Status), e.Body)
 }
 
 // Timeout implements net.Error
