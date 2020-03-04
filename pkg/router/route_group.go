@@ -266,7 +266,10 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 }
 
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
-	packet := routing.MakeDataPacket(rule.NextRouteID(), data)
+	packet, err := routing.MakeDataPacket(rule.NextRouteID(), data)
+	if err != nil {
+		return 0, err
+	}
 
 	rg.logger.Debugf("Writing packet of type %s, route ID %d and next ID %d", packet.Type(),
 		rule.KeyRouteID(), rule.NextRouteID())
