@@ -246,7 +246,10 @@ func (visor *Visor) Start() error {
 
 	visor.startedAt = time.Now()
 
-	pathutil.EnsureDir(visor.dir())
+	if err := pathutil.EnsureDir(visor.dir()); err != nil {
+		return err
+	}
+
 	visor.closePreviousApps()
 
 	for _, ac := range visor.appsConf {
@@ -326,7 +329,7 @@ func (visor *Visor) Start() error {
 }
 
 func (visor *Visor) dir() string {
-	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey)
+	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey.String())
 }
 
 func (visor *Visor) pidFile() *os.File {
@@ -364,7 +367,9 @@ func (visor *Visor) closePreviousApps() {
 	}
 
 	// empty file
-	pathutil.AtomicWriteFile(pids.Name(), []byte{})
+	if err := pathutil.AtomicWriteFile(pids.Name(), []byte{}); err != nil {
+		visor.logger.WithError(err).Errorf("Failed to empty file %s", pids.Name())
+	}
 }
 
 func (visor *Visor) stopUnhandledApp(name string, pid int) {
@@ -543,7 +548,10 @@ func (visor *Visor) persistPID(name string, pid appcommon.ProcID) {
 		visor.logger.WithError(err).Warn("Failed to close PID file")
 	}
 
-	pathutil.AtomicAppendToFile(pidFName, []byte(fmt.Sprintf("%s %d\n", name, pid)))
+	data := fmt.Sprintf("%s %d\n", name, pid)
+	if err := pathutil.AtomicAppendToFile(pidFName, []byte(data)); err != nil {
+		visor.logger.WithError(err).Warn("Failed to save PID to file")
+	}
 }
 
 // StopApp stops running App.
