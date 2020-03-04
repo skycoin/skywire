@@ -154,7 +154,7 @@ func defaultConfig() *visor.Config {
 
 func defaultDmsgPtyConfig() visor.DmsgPtyConfig {
 	return visor.DmsgPtyConfig{
-		Port:     skyenv.DefaultDmsgPtyPort,
+		Port:     skyenv.DmsgPtyPort,
 		AuthFile: "./skywire/dmsgpty/whitelist.json",
 		CLINet:   skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
