@@ -30,8 +30,8 @@ ifneq (,$(findstring 64,$(GOARCH)))
 endif
 
 # TODO: Remove after https://github.com/etcd-io/bbolt/pull/201 is closed.
-GO_VERSION:=$(shell go version)
 DISABLE_CHECKPTR_FLAG:=-gcflags=all=-d=checkptr=0
+GO_VERSION:=$(shell go version)
 
 ifneq (,$(findstring go1.14,$(GO_VERSION)))
     TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(DISABLE_CHECKPTR_FLAG)
