@@ -67,6 +67,8 @@ type RouteGroup struct {
 	desc   routing.RouteDescriptor // describes the route group
 	rt     routing.Table
 
+	lastSent int64
+
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
 	// where each element corresponds with the adjacent element in 'fwd'.
@@ -79,15 +81,12 @@ type RouteGroup struct {
 	fwd []routing.Rule // forward rules (for writing)
 	rvs []routing.Rule // reverse rules (for reading)
 
-	lastSent int64
-
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
 	//      and push to the appropriate '(RouteGroup).readCh'.
 	readCh   chan []byte // push reads from Router
 	readChMu sync.Mutex
 	readBuf  bytes.Buffer // for read overflow
-	once     sync.Once
 
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
@@ -99,6 +98,7 @@ type RouteGroup struct {
 	closed           chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
+	once      sync.Once
 }
 
 // NewRouteGroup creates a new RouteGroup.
