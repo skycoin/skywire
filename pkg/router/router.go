@@ -780,7 +780,12 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	// really care about the other ones, other rules removal
 	// doesn't affect our work here
 	if rule.Type() != routing.RuleConsume {
-		log.Debug("Nothing to be done.")
+		log.
+			WithField("func", "removeRouteGroupOfRule").
+			WithField("rule", rule.Type().String()).
+			Debug("Nothing to be done")
+
+		return
 	}
 
 	rDesc := rule.RouteDescriptor()
