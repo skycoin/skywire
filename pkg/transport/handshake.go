@@ -135,7 +135,7 @@ func MakeSettlementHS(init bool) SettlementHS {
 			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusConflict {
 				log.WithError(err).Debug("An expected error occurred while trying to register transport.")
 			} else {
-				// TODO(evanlinjin): Once tpDisc is updated, this should return error and result in failed HS.
+				// TODO(evanlinjin): In the future, this should return error and result in failed HS.
 				log.WithError(err).Error("Failed to register transport.")
 			}
 		}
