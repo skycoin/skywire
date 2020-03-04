@@ -15,7 +15,9 @@ func TestDisassembleAddr(t *testing.T) {
 	addr := dmsg.Addr{
 		PK: pk, Port: port,
 	}
-	gotPK, gotPort := disassembleAddr(addr)
+
+	gotPK, gotPort, err := disassembleAddr(addr)
+	require.NoError(t, err)
 	require.Equal(t, pk, gotPK)
 	require.Equal(t, port, gotPort)
 }
