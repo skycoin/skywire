@@ -20,16 +20,25 @@ DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 
-GO_VERSION=$(shell go version)
-# TODO: Remove after https://github.com/etcd-io/bbolt/pull/201 is closed.
-DISABLE_CHECKPTR=-gcflags=all=-d=checkptr=0
-OPTIONAL_FLAGS=
-ifneq (,$(findstring go1.14,$(GO_VERSION)))
-    OPTIONAL_FLAGS=$(DISABLE_CHECKPTR)
+TEST_OPTS_BASE:=-cover -timeout=1m
+
+RACE_FLAG:=-race
+GOARCH:=$(shell go env GOARCH)
+
+ifneq (,$(findstring 64,$(GOARCH)))
+    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
 endif
 
-TEST_OPTS?=-race $(OPTIONAL_FLAGS) -tags no_ci -cover -timeout=5m
-TEST_OPTS_NOCI?=-race $(OPTIONAL_FLAGS) -cover -timeout=5m -v
+# TODO: Remove after https://github.com/etcd-io/bbolt/pull/201 is closed.
+GO_VERSION:=$(shell go version)
+DISABLE_CHECKPTR_FLAG:=-gcflags=all=-d=checkptr=0
+
+ifneq (,$(findstring go1.14,$(GO_VERSION)))
+    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(DISABLE_CHECKPTR_FLAG)
+endif
+
+TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
+TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
 
 BUILDINFO_PATH := $(PROJECT_BASE)/pkg/util/buildinfo
 
