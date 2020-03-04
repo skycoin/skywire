@@ -19,8 +19,17 @@ DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`go
 DOCKER_NETWORK?=SKYNET 
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
-TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
-TEST_OPTS_NOCI?=-race -cover -timeout=5m -v
+
+GO_VERSION=$(shell go version)
+# TODO: Remove after https://github.com/etcd-io/bbolt/pull/201 is closed.
+DISABLE_CHECKPTR=-gcflags=all=-d=checkptr=0
+OPTIONAL_FLAGS=
+ifneq (,$(findstring go1.14,$(GO_VERSION)))
+    OPTIONAL_FLAGS=$(DISABLE_CHECKPTR)
+endif
+
+TEST_OPTS?=-race $(OPTIONAL_FLAGS) -tags no_ci -cover -timeout=5m
+TEST_OPTS_NOCI?=-race $(OPTIONAL_FLAGS) -cover -timeout=5m -v
 
 BUILDINFO_PATH := $(PROJECT_BASE)/pkg/util/buildinfo
 
