@@ -3,6 +3,7 @@ package transport_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,9 @@ func TestSettlementHS(t *testing.T) {
 	keys := snettest.GenKeyPairs(2)
 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
+
+	// Wait until the env is fully set up.
+	time.Sleep(100 * time.Millisecond)
 
 	// TEST: Perform a handshake between two snet.Network instances.
 	t.Run("Do", func(t *testing.T) {
