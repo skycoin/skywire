@@ -20,7 +20,7 @@ DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 
-TEST_OPTS_BASE:=-cover -timeout=1m
+TEST_OPTS_BASE:=-cover -timeout=5m
 
 RACE_FLAG:=-race
 GOARCH:=$(shell go env GOARCH)
