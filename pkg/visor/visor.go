@@ -252,7 +252,9 @@ func (visor *Visor) Start() error {
 		return err
 	}
 
-	visor.startApps()
+	if err := visor.startApps(); err != nil {
+		return err
+	}
 
 	if err := visor.startDmsgPty(ctx); err != nil {
 		return err
@@ -269,8 +271,10 @@ func (visor *Visor) Start() error {
 	return nil
 }
 
-func (visor *Visor) startApps() {
-	visor.closePreviousApps()
+func (visor *Visor) startApps() error {
+	if err := visor.closePreviousApps(); err != nil {
+		return err
+	}
 
 	for _, ac := range visor.appsConf {
 		if !ac.AutoStart {
@@ -283,6 +287,8 @@ func (visor *Visor) startApps() {
 			}
 		}(ac)
 	}
+
+	return nil
 }
 
 func (visor *Visor) startDmsgPty(ctx context.Context) error {
@@ -350,7 +356,13 @@ func (visor *Visor) startRPC(ctx context.Context) {
 	if visor.cliLis != nil {
 		visor.logger.Info("Starting RPC interface on ", visor.cliLis.Addr())
 
-		go newRPCServer(visor, "CLI").Accept(visor.cliLis)
+		srv, err := newRPCServer(visor, "CLI")
+		if err != nil {
+			visor.logger.WithError(err).Errorf("Failed to start RPC server")
+			return
+		}
+
+		go srv.Accept(visor.cliLis)
 	}
 
 	if visor.hvErrs != nil {
@@ -359,7 +371,11 @@ func (visor *Visor) startRPC(ctx context.Context) {
 				WithField("hypervisor_pk", hvPK)
 
 			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
-			rpcS := newRPCServer(visor, addr.PK.String()[:shortHashLen])
+			rpcS, err := newRPCServer(visor, addr.PK.String()[:shortHashLen])
+			if err != nil {
+				visor.logger.WithError(err).Errorf("Failed to start RPC server")
+				return
+			}
 
 			go ServeRPCClient(ctx, log, visor.n, rpcS, addr, hvErrs)
 		}
@@ -370,19 +386,23 @@ func (visor *Visor) dir() string {
 	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey.String())
 }
 
-func (visor *Visor) pidFile() *os.File {
+func (visor *Visor) pidFile() (*os.File, error) {
 	f, err := os.OpenFile(filepath.Join(visor.dir(), "apps-pid.txt"), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return f
+	return f, nil
 }
 
-func (visor *Visor) closePreviousApps() {
+func (visor *Visor) closePreviousApps() error {
 	visor.logger.Info("killing previously ran apps if any...")
 
-	pids := visor.pidFile()
+	pids, err := visor.pidFile()
+	if err != nil {
+		return err
+	}
+
 	defer func() {
 		if err := pids.Close(); err != nil {
 			visor.logger.Warnf("error closing PID file: %s", err)
@@ -408,6 +428,8 @@ func (visor *Visor) closePreviousApps() {
 	if err := pathutil.AtomicWriteFile(pids.Name(), []byte{}); err != nil {
 		visor.logger.WithError(err).Errorf("Failed to empty file %s", pids.Name())
 	}
+
+	return nil
 }
 
 func (visor *Visor) stopUnhandledApp(name string, pid int) {
@@ -572,15 +594,25 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	visor.pidMu.Lock()
+
 	visor.logger.Infof("storing app %s pid %d", config.App, pid)
-	visor.persistPID(config.App, pid)
+
+	if err := visor.persistPID(config.App, pid); err != nil {
+		visor.pidMu.Unlock()
+		return err
+	}
+
 	visor.pidMu.Unlock()
 
 	return visor.procManager.Wait(config.App)
 }
 
-func (visor *Visor) persistPID(name string, pid appcommon.ProcID) {
-	pidF := visor.pidFile()
+func (visor *Visor) persistPID(name string, pid appcommon.ProcID) error {
+	pidF, err := visor.pidFile()
+	if err != nil {
+		return err
+	}
+
 	pidFName := pidF.Name()
 	if err := pidF.Close(); err != nil {
 		visor.logger.WithError(err).Warn("Failed to close PID file")
@@ -590,6 +622,8 @@ func (visor *Visor) persistPID(name string, pid appcommon.ProcID) {
 	if err := pathutil.AtomicAppendToFile(pidFName, []byte(data)); err != nil {
 		visor.logger.WithError(err).Warn("Failed to save PID to file")
 	}
+
+	return nil
 }
 
 // StopApp stops running App.

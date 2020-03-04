@@ -553,9 +553,15 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	}
 
 	var p routing.Packet
+
 	switch packet.Type() {
 	case routing.DataPacket:
-		p = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
+		var err error
+
+		p, err = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
+		if err != nil {
+			return err
+		}
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:

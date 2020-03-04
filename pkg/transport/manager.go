@@ -161,6 +161,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	if err != nil {
 		return err
 	}
+
 	tm.Logger.Infof("recv transport connection request: type(%s) remote(%s)", lis.Network(), conn.RemotePK())
 
 	tm.mx.Lock()
@@ -177,18 +178,21 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	mTp, ok := tm.tps[tpID]
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
+
 		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
+
 		go func() {
 			mTp.Serve(tm.readCh)
+
 			tm.mx.Lock()
 			delete(tm.tps, mTp.Entry.ID)
 			tm.mx.Unlock()
 		}()
+
 		tm.tps[tpID] = mTp
 
 	} else {
 		tm.Logger.Debugln("TP found, accepting...")
-
 	}
 
 	if err := mTp.Accept(ctx, conn); err != nil {
@@ -196,6 +200,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	}
 
 	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
+
 	return nil
 }
 
