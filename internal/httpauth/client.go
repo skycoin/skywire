@@ -91,12 +91,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		body = auxBody
 	}
 
-	res, err := c.doRequest(req, body)
+	resp, err := c.doRequest(req, body)
 	if err != nil {
 		return nil, err
 	}
 
-	isNonceValid, err := isNonceValid(res)
+	isNonceValid, err := isNonceValid(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -108,20 +108,20 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 		c.SetNonce(nonce)
 
-		if err := res.Body.Close(); err != nil {
+		if err := resp.Body.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close HTTP response body")
 		}
-		res, err = c.doRequest(req, body)
+		resp, err = c.doRequest(req, body)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if res.StatusCode == http.StatusOK {
+	if resp.StatusCode == http.StatusOK {
 		c.incrementNonce()
 	}
 
-	return res, nil
+	return resp, nil
 }
 
 // Nonce calls the remote API to retrieve the next expected nonce
