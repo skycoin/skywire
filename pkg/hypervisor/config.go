@@ -11,7 +11,6 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
@@ -44,34 +43,20 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // Config configures the hypervisor.
 type Config struct {
-	PK            cipher.PubKey   `json:"public_key"`
-	SK            cipher.SecKey   `json:"secret_key"`
-	DBPath        string          `json:"db_path"`        // Path to store database file.
-	EnableAuth    bool            `json:"enable_auth"`    // Whether to enable user management.
-	Cookies       CookieConfig    `json:"cookies"`        // Configures cookies (for session management).
-	Interfaces    InterfaceConfig `json:"interfaces"`     // Configures exposed interfaces.
-	DmsgDiscovery string          `json:"dmsg_discovery"` // DmsgDiscovery address for dmsg usage
+	PK            cipher.PubKey `json:"public_key"`
+	SK            cipher.SecKey `json:"secret_key"`
+	DBPath        string        `json:"db_path"`        // Path to store database file.
+	EnableAuth    bool          `json:"enable_auth"`    // Whether to enable user management.
+	Cookies       CookieConfig  `json:"cookies"`        // Configures cookies (for session management).
+	DmsgDiscovery string        `json:"dmsg_discovery"` // Dmsg discovery address.
+	DmsgPort      uint16        `json:"dmsg_port"`      // Dmsg port to serve on.
+	HTTPAddr      string        `json:"http_addr"`      // HTTP address to serve API/web UI on.
 }
 
 func makeConfig(testenv bool) Config {
 	var c Config
-
-	pk, sk := cipher.GenerateKeyPair()
-	c.PK = pk
-	c.SK = sk
-
-	if testenv {
-		c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
-	} else {
-		c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
-	}
-
 	c.EnableAuth = true
-	c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
-	c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
-
-	c.FillDefaults()
-
+	c.FillDefaults(testenv)
 	return c
 }
 
@@ -83,7 +68,6 @@ func GenerateWorkDirConfig(testenv bool) Config {
 	}
 	c := makeConfig(testenv)
 	c.DBPath = filepath.Join(dir, "users.db")
-
 	return c
 }
 
@@ -91,7 +75,6 @@ func GenerateWorkDirConfig(testenv bool) Config {
 func GenerateHomeConfig(testenv bool) Config {
 	c := makeConfig(testenv)
 	c.DBPath = filepath.Join(pathutil.HomeDir(), ".skycoin/hypervisor/users.db")
-
 	return c
 }
 
@@ -99,14 +82,34 @@ func GenerateHomeConfig(testenv bool) Config {
 func GenerateLocalConfig(testenv bool) Config {
 	c := makeConfig(testenv)
 	c.DBPath = "/usr/local/SkycoinProject/hypervisor/users.db"
-
 	return c
 }
 
 // FillDefaults fills the config with default values.
-func (c *Config) FillDefaults() {
+func (c *Config) FillDefaults(testEnv bool) {
+	if c.PK.Null() || c.SK.Null() {
+		c.PK, c.SK = cipher.GenerateKeyPair()
+	}
+
+	if c.EnableAuth {
+		if len(c.Cookies.HashKey) != hashKeyLen {
+			c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
+		}
+		if len(c.Cookies.BlockKey) != blockKeyLen {
+			c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
+		}
+	}
+	if c.DmsgDiscovery == "" {
+		if testEnv {
+			c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
+		} else {
+			c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
+		}
+	}
+	if c.DmsgPort == 0 {
+		c.DmsgPort = skyenv.DmsgHypervisorPort
+	}
 	c.Cookies.FillDefaults()
-	c.Interfaces.FillDefaults()
 }
 
 // Parse parses the file in path, and decodes to the config.
@@ -151,21 +154,4 @@ func (c *CookieConfig) FillDefaults() {
 	c.Secure = true
 	c.HTTPOnly = true
 	c.SameSite = http.SameSiteDefaultMode
-}
-
-// InterfaceConfig configures the interfaces exposed by hypervisor.
-type InterfaceConfig struct {
-	HTTPAddr string `json:"http_address"`
-	RPCAddr  string `json:"rpc_addr"`
-}
-
-// FillDefaults fills config with default values.
-func (c *InterfaceConfig) FillDefaults() {
-	c.HTTPAddr = ":8080"
-	c.RPCAddr = ":7080"
-}
-
-// SplitRPCAddr returns host and port and whatever error results from parsing the rpc address interface
-func (c *InterfaceConfig) SplitRPCAddr() (host string, port uint16, err error) {
-	return httputil.SplitRPCAddr(c.RPCAddr)
 }

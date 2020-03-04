@@ -1,7 +1,9 @@
-# github.com/SkycoinProject/dmsg v0.0.0-20200303104641-cfc70993f6b0
+# github.com/SkycoinProject/dmsg v0.0.0-20200304081751-cf4d40f5428f
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
+github.com/SkycoinProject/dmsg/dmsgpty
+github.com/SkycoinProject/dmsg/httputil
 github.com/SkycoinProject/dmsg/ioutil
 github.com/SkycoinProject/dmsg/netutil
 github.com/SkycoinProject/dmsg/noise
@@ -154,3 +156,9 @@ golang.org/x/sys/windows/svc/eventlog
 gopkg.in/alecthomas/kingpin.v2
 # gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
+# nhooyr.io/websocket v1.8.2
+nhooyr.io/websocket
+nhooyr.io/websocket/internal/bpool
+nhooyr.io/websocket/internal/errd
+nhooyr.io/websocket/internal/wsjs
+nhooyr.io/websocket/internal/xsync

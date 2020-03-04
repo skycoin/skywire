@@ -15,16 +15,18 @@ const (
 	TestRouteFinderAddr = "http://routefinder.skywire.cc"
 )
 
-// Default dmsg ports.
+// Dmsg port constants.
 const (
 	DmsgSetupPort      = uint16(36)  // Listening port of a setup node.
 	DmsgAwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
 	DmsgTransportPort  = uint16(45)  // Listening port of a visor for incoming transports.
+	DmsgHypervisorPort = uint16(46)  // Listening port of a visor for incoming hypervisor connections.
 )
 
 // Default dmsgpty constants.
 const (
-	DefaultDmsgPtyPort    = uint16(233)
+	DmsgPtyPort = uint16(22)
+
 	DefaultDmsgPtyCLINet  = "unix"
 	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
 )
@@ -41,5 +43,4 @@ const (
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
 	SkysocksClientAddr = ":1080"
-	// TODO(evanlinjin): skysocks-client requires
 )

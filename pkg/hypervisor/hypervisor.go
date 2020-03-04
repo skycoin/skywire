@@ -16,13 +16,15 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/dmsgpty"
+	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -43,8 +45,9 @@ var (
 
 // VisorConn represents a visor connection.
 type VisorConn struct {
-	Addr   dmsg.Addr
-	Client visor.RPCClient
+	Addr  dmsg.Addr
+	RPC   visor.RPCClient
+	PtyUI *dmsgpty.UI
 }
 
 // Hypervisor manages visors.
@@ -73,20 +76,22 @@ func New(config Config) (*Hypervisor, error) {
 }
 
 // ServeRPC serves RPC of a Hypervisor.
-func (hv *Hypervisor) ServeRPC(lis *dmsg.Listener) error {
+func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 	for {
-		conn, err := lis.Accept()
+		conn, err := lis.AcceptStream()
 		if err != nil {
 			return err
 		}
-
-		addr := conn.RemoteAddr().(dmsg.Addr)
-		log.Infoln("accepted: ", addr.PK)
-		hv.mu.Lock()
-		hv.visors[addr.PK] = VisorConn{
-			Addr:   addr,
-			Client: visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
+		addr := conn.RawRemoteAddr()
+		ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: addr.PK, Port: skyenv.DmsgPtyPort})
+		visorConn := VisorConn{
+			Addr:  addr,
+			RPC:   visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
+			PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 		}
+		log.WithField("remote_addr", addr).Info("Accepted.")
+		hv.mu.Lock()
+		hv.visors[addr.PK] = visorConn
 		hv.mu.Unlock()
 	}
 }
@@ -115,7 +120,7 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 				PK:   pk,
 				Port: uint16(i),
 			},
-			Client: client,
+			RPC: client,
 		}
 		hv.mu.Unlock()
 	}
@@ -128,11 +133,13 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 // ServeHTTP implements http.Handler
 func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
-
-	r.Use(middleware.Timeout(httpTimeout))
 	r.Use(middleware.Logger)
 
 	r.Route("/api", func(r chi.Router) {
+		r.Use(middleware.Timeout(httpTimeout))
+
+		r.Get("/ping", hv.getPong())
+
 		if hv.c.EnableAuth {
 			r.Group(func(r chi.Router) {
 				r.Post("/create-account", hv.users.CreateAccount())
@@ -145,7 +152,6 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
-
 			r.Get("/user", hv.users.UserInfo())
 			r.Post("/change-password", hv.users.ChangePassword())
 			r.Get("/visors", hv.getVisors())
@@ -167,67 +173,34 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
 			r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 			r.Get("/visors/{pk}/loops", hv.getLoops())
-			r.Post("/visors/{pk}/restart", hv.restart())
+			r.Get("/visors/{pk}/restart", hv.restart())
 			r.Post("/visors/{pk}/exec", hv.exec())
 			r.Post("/visors/{pk}/update", hv.update())
 		})
 	})
 
+	r.Route("/pty", func(r chi.Router) {
+		if hv.c.EnableAuth {
+			r.Use(hv.users.Authorize)
+		}
+		r.Get("/{pk}", hv.getPty())
+	})
+
 	r.ServeHTTP(w, req)
+}
+
+func (hv *Hypervisor) getPong() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
+			log.WithError(err).Warn("getPong: Failed to send PONG!")
+		}
+	}
 }
 
 // VisorHealth represents a visor's health report attached to hypervisor to visor request status
 type VisorHealth struct {
 	Status int `json:"status"`
 	*visor.HealthInfo
-}
-
-type summaryResp struct {
-	TCPAddr string `json:"tcp_addr"`
-	Online  bool   `json:"online"`
-	*visor.Summary
-}
-
-// provides summary of all visors.
-func (hv *Hypervisor) getVisors() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var summaries []summaryResp
-
-		hv.mu.RLock()
-		for pk, c := range hv.visors {
-			summary, err := c.Client.Summary()
-			if err != nil {
-				log.Errorf("failed to obtain summary from Hypervisor with pk %s. Error: %v", pk, err)
-
-				summary = &visor.Summary{PubKey: pk}
-			}
-
-			summaries = append(summaries, summaryResp{
-				TCPAddr: c.Addr.String(),
-				Online:  err == nil,
-				Summary: summary,
-			})
-		}
-		hv.mu.RUnlock()
-
-		httputil.WriteJSON(w, r, http.StatusOK, summaries)
-	}
-}
-
-// provides summary of single visor.
-func (hv *Hypervisor) getVisor() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		summary, err := ctx.RPC.Summary()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, summaryResp{
-			TCPAddr: ctx.Addr.String(),
-			Summary: summary,
-		})
-	})
 }
 
 // provides summary of health information for every visor
@@ -264,7 +237,7 @@ func (hv *Hypervisor) getHealth() http.HandlerFunc {
 	})
 }
 
-// getUptime gets given node's uptime
+// getUptime gets given visor's uptime
 func (hv *Hypervisor) getUptime() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		u, err := ctx.RPC.Uptime()
@@ -274,6 +247,75 @@ func (hv *Hypervisor) getUptime() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, u)
+	})
+}
+
+type summaryResp struct {
+	TCPAddr string `json:"tcp_addr"`
+	Online  bool   `json:"online"`
+	*visor.Summary
+}
+
+// provides summary of all visors.
+func (hv *Hypervisor) getVisors() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hv.mu.RLock()
+		wg := new(sync.WaitGroup)
+		wg.Add(len(hv.visors))
+		summaries, i := make([]summaryResp, len(hv.visors)), 0
+
+		for pk, c := range hv.visors {
+			go func(pk cipher.PubKey, c VisorConn, i int) {
+				log := log.
+					WithField("visor_addr", c.Addr).
+					WithField("func", "getVisors")
+
+				log.Debug("Requesting summary via RPC.")
+
+				summary, err := c.RPC.Summary()
+				if err != nil {
+					log.WithError(err).
+						Warn("Failed to obtain summary via RPC.")
+					summary = &visor.Summary{PubKey: pk}
+				} else {
+					log.Debug("Obtained summary via RPC.")
+				}
+				summaries[i] = summaryResp{
+					TCPAddr: c.Addr.String(),
+					Online:  err == nil,
+					Summary: summary,
+				}
+				wg.Done()
+			}(pk, c, i)
+			i++
+		}
+
+		wg.Wait()
+		hv.mu.RUnlock()
+
+		httputil.WriteJSON(w, r, http.StatusOK, summaries)
+	}
+}
+
+// provides summary of single visor.
+func (hv *Hypervisor) getVisor() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		summary, err := ctx.RPC.Summary()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, summaryResp{
+			TCPAddr: ctx.Addr.String(),
+			Summary: summary,
+		})
+	})
+}
+
+func (hv *Hypervisor) getPty() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		ctx.PtyUI.Handler()(w, r)
 	})
 }
 
@@ -705,19 +747,17 @@ func (hv *Hypervisor) update() http.HandlerFunc {
 	<<< Helper functions >>>
 */
 
-func (hv *Hypervisor) client(pk cipher.PubKey) (dmsg.Addr, visor.RPCClient, bool) {
+func (hv *Hypervisor) visorConn(pk cipher.PubKey) (VisorConn, bool) {
 	hv.mu.RLock()
 	conn, ok := hv.visors[pk]
 	hv.mu.RUnlock()
 
-	return conn.Addr, conn.Client, ok
+	return conn, ok
 }
 
 type httpCtx struct {
 	// Hypervisor
-	PK   cipher.PubKey
-	Addr dmsg.Addr
-	RPC  visor.RPCClient
+	VisorConn
 
 	// App
 	App *visor.AppState
@@ -749,16 +789,15 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		return nil, false
 	}
 
-	addr, client, ok := hv.client(pk)
+	visor, ok := hv.visorConn(pk)
+
 	if !ok {
 		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
 		return nil, false
 	}
 
 	return &httpCtx{
-		PK:   pk,
-		Addr: addr,
-		RPC:  client,
+		VisorConn: visor,
 	}, true
 }
 
@@ -783,7 +822,7 @@ func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 		}
 	}
 
-	errMsg := fmt.Errorf("can not find app of name %s from visor %s", appName, ctx.PK)
+	errMsg := fmt.Errorf("can not find app of name %s from visor %s", appName, ctx.Addr.PK)
 	httputil.WriteJSON(w, r, http.StatusNotFound, errMsg)
 
 	return nil, false
