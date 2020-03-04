@@ -56,9 +56,11 @@ var (
 	ErrNoConfigPath = errors.New("no config path")
 )
 
-const supportedProtocolVersion = "0.1.0"
-
-const ownerRWX = 0700
+const (
+	supportedProtocolVersion = "0.1.0"
+	ownerRWX                 = 0700
+	shortHashLen             = 6
+)
 
 var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
@@ -250,6 +252,24 @@ func (visor *Visor) Start() error {
 		return err
 	}
 
+	visor.startApps()
+
+	if err := visor.startDmsgPty(ctx); err != nil {
+		return err
+	}
+
+	visor.startRPC(ctx)
+
+	visor.logger.Info("Starting packet router")
+
+	if err := visor.router.Serve(ctx); err != nil {
+		return fmt.Errorf("failed to start Visor: %s", err)
+	}
+
+	return nil
+}
+
+func (visor *Visor) startApps() {
 	visor.closePreviousApps()
 
 	for _, ac := range visor.appsConf {
@@ -263,69 +283,87 @@ func (visor *Visor) Start() error {
 			}
 		}(ac)
 	}
+}
 
-	// Start pty.
-	if visor.pty != nil {
-		log := visor.Logger.PackageLogger("dmsgpty")
-		// dmsgpty cli
-		if visor.conf.DmsgPty.CLINet == "unix" {
-			if err := os.MkdirAll(filepath.Dir(visor.conf.DmsgPty.CLIAddr), ownerRWX); err != nil {
-				log.WithError(err).Debug("Failed to prepare unix file dir.")
-			}
-		}
-		ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
-		if err != nil {
-			return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
-		}
-		go func() {
-			log.WithField("net", visor.conf.DmsgPty.CLINet).
-				WithField("addr", visor.conf.DmsgPty.CLIAddr).
-				Info("Serving dmsgpty CLI.")
-			if err := visor.pty.ServeCLI(ctx, ptyL); err != nil {
-				log.WithError(err).
-					WithField("entity", "dmsgpty-host").
-					WithField("func", ".ServeCLI()").
-					Error()
-				cancel()
-			}
-		}()
-		// dmsgpty serve
-		go func() {
-			log.WithField("dmsg_port", visor.conf.DmsgPty.Port).
-				Info("Serving dmsg.")
-			if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
-				log.WithError(err).
-					WithField("entity", "dmsgpty-host").
-					WithField("func", ".ListenAndServe()").
-					Error()
-				cancel()
-			}
-		}()
+func (visor *Visor) startDmsgPty(ctx context.Context) error {
+	if visor.pty == nil {
+		return nil
 	}
 
-	// prepare visor RPC
+	log := visor.Logger.PackageLogger("dmsgpty")
 
+	err2 := visor.serveDmsgPtyCLI(ctx, log)
+	if err2 != nil {
+		return err2
+	}
+
+	go visor.serveDmsgPty(ctx, log)
+
+	return nil
+}
+
+func (visor *Visor) serveDmsgPtyCLI(ctx context.Context, log *logging.Logger) error {
+	if visor.conf.DmsgPty.CLINet == "unix" {
+		if err := os.MkdirAll(filepath.Dir(visor.conf.DmsgPty.CLIAddr), ownerRWX); err != nil {
+			log.WithError(err).Debug("Failed to prepare unix file dir.")
+		}
+	}
+
+	ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
+	if err != nil {
+		return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
+	}
+
+	go func() {
+		log.WithField("net", visor.conf.DmsgPty.CLINet).
+			WithField("addr", visor.conf.DmsgPty.CLIAddr).
+			Info("Serving dmsgpty CLI.")
+
+		if err := visor.pty.ServeCLI(ctx, ptyL); err != nil {
+			log.WithError(err).
+				WithField("entity", "dmsgpty-host").
+				WithField("func", ".ServeCLI()").
+				Error()
+
+			visor.cancel()
+		}
+	}()
+
+	return nil
+}
+
+func (visor *Visor) serveDmsgPty(ctx context.Context, log *logging.Logger) {
+	log.WithField("dmsg_port", visor.conf.DmsgPty.Port).
+		Info("Serving dmsg.")
+
+	if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
+		log.WithError(err).
+			WithField("entity", "dmsgpty-host").
+			WithField("func", ".ListenAndServe()").
+			Error()
+
+		visor.cancel()
+	}
+}
+
+func (visor *Visor) startRPC(ctx context.Context) {
 	if visor.cliLis != nil {
 		visor.logger.Info("Starting RPC interface on ", visor.cliLis.Addr())
+
 		go newRPCServer(visor, "CLI").Accept(visor.cliLis)
 	}
+
 	if visor.hvErrs != nil {
 		for hvPK, hvErrs := range visor.hvErrs {
 			log := visor.Logger.PackageLogger("hypervisor_client").
 				WithField("hypervisor_pk", hvPK)
+
 			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
-			rpcS := newRPCServer(visor, addr.PK.String()[:6])
+			rpcS := newRPCServer(visor, addr.PK.String()[:shortHashLen])
+
 			go ServeRPCClient(ctx, log, visor.n, rpcS, addr, hvErrs)
 		}
 	}
-
-	visor.logger.Info("Starting packet router")
-
-	if err := visor.router.Serve(ctx); err != nil {
-		return fmt.Errorf("failed to start Visor: %s", err)
-	}
-
-	return nil
 }
 
 func (visor *Visor) dir() string {
