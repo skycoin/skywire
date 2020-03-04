@@ -141,9 +141,6 @@ For `dmsgpty` usage, refer to [#run-dmsgpty](#run-dmsgpty).
 
 #### `hypervisor` setup
 
-
-#### `hypervisor` setup
-
 Every node can be controlled by one or more hypervisors. The hypervisor allows to control and configure multiple visors. In order to allow a hypervisor to access a visor, the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
 
 ```json
