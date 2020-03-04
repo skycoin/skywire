@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
 // Listener listens for remote-initiated streams.
@@ -13,7 +14,7 @@ type Listener struct {
 	accept chan *Stream
 	mx     sync.Mutex // protects 'accept'
 
-	doneFunc func() // callback when done
+	doneFunc atomic.Value // callback when done, type: func()
 	done     chan struct{}
 	once     sync.Once
 }
@@ -28,7 +29,7 @@ func newListener(addr Addr) *Listener {
 
 // addCloseCallback adds a function that triggers when listener is closed.
 // This should be called right after the listener is created and is not thread safe.
-func (l *Listener) addCloseCallback(cb func()) { l.doneFunc = cb }
+func (l *Listener) addCloseCallback(cb func()) { l.doneFunc.Store(cb) }
 
 // introduceStream handles a stream after receiving a REQUEST frame.
 func (l *Listener) introduceStream(tp *Stream) error {
@@ -85,7 +86,11 @@ func (l *Listener) Close() error {
 func (l *Listener) close() (closed bool) {
 	l.once.Do(func() {
 		closed = true
-		l.doneFunc()
+
+		doneFunc, ok := l.doneFunc.Load().(func())
+		if ok {
+			doneFunc()
+		}
 
 		l.mx.Lock()
 		defer l.mx.Unlock()
