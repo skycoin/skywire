@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"strings"
 	"sync"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -81,8 +82,8 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	<-s.stopCh
 
-	if err := conn.Close(); err != nil {
-		s.log.WithError(err).Error("error closing conn")
+	if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		s.log.WithError(err).Error("Unexpected error while closing conn.")
 	}
 
 	s.done.Done()
