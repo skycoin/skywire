@@ -527,7 +527,7 @@ func (r *router) Close() error {
 		return nil
 	}
 
-	r.logger.Info("Closing all App connections and Loops")
+	r.logger.Info("Closing all App connections and RouteGroups")
 
 	r.once.Do(func() {
 		close(r.done)
