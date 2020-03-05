@@ -460,9 +460,9 @@ type LoopInfo struct {
 	FwdRule     routing.Rule
 }
 
-// Loops retrieves loops via rules of the routing table.
+// RouteGroups retrieves loops via rules of the routing table.
 func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) (err error) {
-	defer r.logReq("Loops", nil)(out, &err)
+	defer r.logReq("RouteGroups", nil)(out, &err)
 
 	var loops []LoopInfo
 

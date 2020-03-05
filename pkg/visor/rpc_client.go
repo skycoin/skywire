@@ -57,7 +57,7 @@ type RPCClient interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 
-	Loops() ([]LoopInfo, error)
+	RouteGroups() ([]LoopInfo, error)
 
 	Restart() error
 	Exec(command string) ([]byte, error)
@@ -230,10 +230,10 @@ func (rc *rpcClient) RemoveRoutingRule(key routing.RouteID) error {
 	return rc.Call("RemoveRoutingRule", &key, &struct{}{})
 }
 
-// Loops calls Loops.
-func (rc *rpcClient) Loops() ([]LoopInfo, error) {
+// RouteGroups calls RouteGroups.
+func (rc *rpcClient) RouteGroups() ([]LoopInfo, error) {
 	var loops []LoopInfo
-	err := rc.Call("Loops", &struct{}{}, &loops)
+	err := rc.Call("RouteGroups", &struct{}{}, &loops)
 	return loops, err
 }
 
@@ -580,8 +580,8 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 	return nil
 }
 
-// Loops implements RPCClient.
-func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
+// RouteGroups implements RPCClient.
+func (mc *mockRPCClient) RouteGroups() ([]LoopInfo, error) {
 	var loops []LoopInfo
 
 	rules := mc.rt.AllRules()
