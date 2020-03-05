@@ -515,7 +515,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 
 // WARNING: Not thread safe.
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
-	log := mt.log.WithField("func", "readPacket()")
+	log := mt.log.WithField("func", "readPacket")
 
 	var conn *snet.Conn
 	for {
