@@ -59,7 +59,8 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
    */
   private ruleTypes = new Map<number, string>([
     [0, 'App'],
-    [1, 'Forward']
+    [1, 'Forward'],
+    [2, 'Intermediary forward']
   ]);
 
   /**

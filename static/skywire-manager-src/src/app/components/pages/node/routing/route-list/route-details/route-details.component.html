@@ -1,6 +1,7 @@
 <app-dialog class="info-dialog" [headline]="'routes.details.title' | translate">
   <app-loading-indicator [showWhite]="false" *ngIf="!routeRule"></app-loading-indicator>
   <div *ngIf="routeRule">
+    <!-- Basic info. -->
     <div class="title mt-0">
       {{ 'routes.details.basic.title' | translate }}
     </div>
@@ -11,6 +12,7 @@
       <span>{{ 'routes.details.basic.rule' | translate }}</span> {{ routeRule.rule }}
     </div>
 
+    <!-- Rule summary. -->
     <div *ngIf="routeRule.rule_summary">
       <div class="title">
         {{ 'routes.details.summary.title' | translate }}
@@ -24,35 +26,78 @@
       <div class="item">
         <span>{{ 'routes.details.summary.key-route-id' | translate }}</span> {{ routeRule.rule_summary.key_route_id }}
       </div>
-    </div>
 
-    <div *ngIf="routeRule.rule_summary && routeRule.rule_summary.app_fields">
-      <div class="title">
-        {{ 'routes.details.app.title' | translate }}
+      <!-- Title for the specific rule type. -->
+      <div *ngIf="routeRule.rule_summary.app_fields" class="title">
+        {{ 'routes.details.specific-fields-titles.app' | translate }}
       </div>
-      <div class="item">
-        <span>{{ 'routes.details.app.destination-pk' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.dst_pk }}
+      <div *ngIf="routeRule.rule_summary.forward_fields" class="title">
+        {{ 'routes.details.specific-fields-titles.forward' | translate }}
       </div>
-      <div class="item">
-        <span>{{ 'routes.details.app.source-pk' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.src_pk }}
+      <div *ngIf="routeRule.rule_summary.intermediary_forward_fields" class="title">
+        {{ 'routes.details.specific-fields-titles.intermediary-forward' | translate }}
       </div>
-      <div class="item">
-        <span>{{ 'routes.details.app.destination-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.dst_port }}
-      </div>
-      <div class="item">
-        <span>{{ 'routes.details.app.source-port' | translate }}</span> {{ routeRule.rule_summary.app_fields.route_descriptor.src_port }}
-      </div>
-    </div>
 
-    <div *ngIf="routeRule.rule_summary && routeRule.rule_summary.forward_fields">
-      <div class="title">
-        {{ 'routes.details.forward.title' | translate }}
+      <!-- Fields for the forward and intermediary forward rules. -->
+      <div *ngIf="
+        (routeRule.rule_summary.forward_fields ||
+        routeRule.rule_summary.intermediary_forward_fields)"
+      >
+        <div class="item">
+          <span>{{ 'routes.details.specific-fields.route-id' | translate }}</span>
+          {{
+            routeRule.rule_summary.forward_fields ?
+              routeRule.rule_summary.forward_fields.next_rid :
+              routeRule.rule_summary.intermediary_forward_fields.next_rid
+          }}
+        </div>
+        <div class="item">
+          <span>{{ 'routes.details.specific-fields.transport-id' | translate }}</span>
+          {{
+            routeRule.rule_summary.forward_fields ?
+              routeRule.rule_summary.forward_fields.next_tid :
+              routeRule.rule_summary.intermediary_forward_fields.next_tid
+          }}
+        </div>
       </div>
-      <div class="item">
-        <span>{{ 'routes.details.forward.route-id' | translate }}</span> {{ routeRule.rule_summary.forward_fields.next_rid }}
-      </div>
-      <div class="item">
-        <span>{{ 'routes.details.forward.transport-id' | translate }}</span> {{ routeRule.rule_summary.forward_fields.next_tid }}
+
+      <!-- Fields for the app and forward rules. -->
+      <div *ngIf="
+        ((routeRule.rule_summary.app_fields && routeRule.rule_summary.app_fields.route_descriptor) ||
+        (routeRule.rule_summary.forward_fields && routeRule.rule_summary.forward_fields.route_descriptor))"
+      >
+        <div class="item">
+          <span>{{ 'routes.details.specific-fields.destination-pk' | translate }}</span>
+          {{
+            routeRule.rule_summary.app_fields ?
+              routeRule.rule_summary.app_fields.route_descriptor.dst_pk :
+              routeRule.rule_summary.forward_fields.route_descriptor.dst_pk
+          }}
+        </div>
+        <div class="item">
+          <span>{{ 'routes.details.specific-fields.source-pk' | translate }}</span>
+          {{
+            routeRule.rule_summary.app_fields ?
+              routeRule.rule_summary.app_fields.route_descriptor.src_pk :
+              routeRule.rule_summary.forward_fields.route_descriptor.src_pk
+          }}
+        </div>
+        <div class="item">
+          <span>{{ 'routes.details.specific-fields.destination-port' | translate }}</span>
+          {{
+            routeRule.rule_summary.app_fields ?
+              routeRule.rule_summary.app_fields.route_descriptor.dst_port :
+              routeRule.rule_summary.forward_fields.route_descriptor.dst_port
+          }}
+        </div>
+        <div class="item">
+          <span>{{ 'routes.details.specific-fields.source-port' | translate }}</span>
+          {{
+            routeRule.rule_summary.app_fields ?
+              routeRule.rule_summary.app_fields.route_descriptor.src_port :
+              routeRule.rule_summary.forward_fields.route_descriptor.src_port
+          }}
+        </div>
       </div>
     </div>
   </div>

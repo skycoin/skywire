@@ -332,17 +332,18 @@
         "type": "Rule type:",
         "key-route-id": "Key route ID:"
       },
-      "app": {
-        "title": "App fields",
+      "specific-fields-titles": {
+        "app": "App fields",
+        "forward": "Forward fields",
+        "intermediary-forward": "Intermediary forward fields"
+      },
+      "specific-fields": {
+        "route-id": "Next route ID:",
+        "transport-id": "Next transport ID:",
         "destination-pk": "Destination public key:",
         "source-pk": "Source public key:",
         "destination-port": "Destination port:",
         "source-port": "Source port:"
-      },
-      "forward": {
-        "title": "Forward fields",
-        "route-id": "Next route ID:",
-        "transport-id": "Next transport ID:"
       }
     }
   },
