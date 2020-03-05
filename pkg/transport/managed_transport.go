@@ -412,7 +412,7 @@ func (mt *ManagedTransport) clearConn() {
 
 func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 	if tries < 1 {
-		return fmt.Errorf("invalid input")
+		panic(fmt.Errorf("mt.updateStatus: invalid input: got tries=%d (want tries > 0)", tries))
 	}
 
 	// If not serving, we should update status to 'DOWN' and ensure 'updateStatus' returns error.

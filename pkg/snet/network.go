@@ -169,14 +169,14 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 			return nil, err
 		}
 
-		return makeConn(conn, network)
+		return makeConn(conn, network), nil
 	case STcpType:
 		conn, err := n.stcpC.Dial(ctx, pk, port)
 		if err != nil {
 			return nil, err
 		}
 
-		return makeConn(conn, network)
+		return makeConn(conn, network), nil
 	default:
 		return nil, ErrUnknownNetwork
 	}
@@ -191,14 +191,14 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 			return nil, err
 		}
 
-		return makeListener(lis, network)
+		return makeListener(lis, network), nil
 	case STcpType:
 		lis, err := n.stcpC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
 
-		return makeListener(lis, network)
+		return makeListener(lis, network), nil
 	default:
 		return nil, ErrUnknownNetwork
 	}
@@ -212,13 +212,9 @@ type Listener struct {
 	network string
 }
 
-func makeListener(l net.Listener, network string) (*Listener, error) {
-	lPK, lPort, err := disassembleAddr(l.Addr())
-	if err != nil {
-		return nil, err
-	}
-
-	return &Listener{Listener: l, lPK: lPK, lPort: lPort, network: network}, nil
+func makeListener(l net.Listener, network string) *Listener {
+	lPK, lPort := disassembleAddr(l.Addr())
+	return &Listener{Listener: l, lPK: lPK, lPort: lPort, network: network}
 }
 
 // LocalPK returns a local public key of listener.
@@ -237,7 +233,7 @@ func (l Listener) AcceptConn() (*Conn, error) {
 		return nil, err
 	}
 
-	return makeConn(conn, l.network)
+	return makeConn(conn, l.network), nil
 }
 
 // Conn represent a connection between nodes in Skywire.
@@ -250,18 +246,10 @@ type Conn struct {
 	network string
 }
 
-func makeConn(conn net.Conn, network string) (*Conn, error) {
-	lPK, lPort, err := disassembleAddr(conn.LocalAddr())
-	if err != nil {
-		return nil, err
-	}
-
-	rPK, rPort, err := disassembleAddr(conn.RemoteAddr())
-	if err != nil {
-		return nil, err
-	}
-
-	return &Conn{Conn: conn, lPK: lPK, rPK: rPK, lPort: lPort, rPort: rPort, network: network}, nil
+func makeConn(conn net.Conn, network string) *Conn {
+	lPK, lPort := disassembleAddr(conn.LocalAddr())
+	rPK, rPort := disassembleAddr(conn.RemoteAddr())
+	return &Conn{Conn: conn, lPK: lPK, rPK: rPK, lPort: lPort, rPort: rPort, network: network}
 }
 
 // LocalPK returns local public key of connection.
@@ -279,22 +267,19 @@ func (c Conn) RemotePort() uint16 { return c.rPort }
 // Network returns network of connection.
 func (c Conn) Network() string { return c.network }
 
-func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16, retErr error) {
+func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
 	strs := strings.Split(addr.String(), ":")
 	if len(strs) != 2 {
-		retErr = fmt.Errorf("network.disassembleAddr: %v %s", "invalid addr", addr.String())
-		return
+		panic(fmt.Errorf("network.disassembleAddr: %v %s", "invalid addr", addr.String()))
 	}
 
 	if err := pk.Set(strs[0]); err != nil {
-		retErr = fmt.Errorf("network.disassembleAddr: %v %s", err, addr.String())
-		return
+		panic(fmt.Errorf("network.disassembleAddr: %v %s", err, addr.String()))
 	}
 
 	if strs[1] != "~" {
 		if _, err := fmt.Sscanf(strs[1], "%d", &port); err != nil {
-			retErr = fmt.Errorf("network.disassembleAddr: %v", err)
-			return
+			panic(fmt.Errorf("network.disassembleAddr: %v", err))
 		}
 	}
 
