@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"strings"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -115,8 +116,8 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	if err != nil {
 		conn.freeConnMx.Unlock()
 
-		if err := conn.Close(); err != nil {
-			c.log.WithError(err).Error("error closing conn")
+		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			c.log.WithError(err).Error("Unexpected error while closing conn.")
 		}
 
 		return nil, err
@@ -201,13 +202,13 @@ func (c *Client) Close() {
 
 	for _, lis := range listeners {
 		if err := lis.Close(); err != nil {
-			c.log.WithError(err).Error("error closing listener")
+			c.log.WithError(err).Error("Error closing listener.")
 		}
 	}
 
 	for _, conn := range conns {
-		if err := conn.Close(); err != nil {
-			c.log.WithError(err).Error("error closing conn")
+		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			c.log.WithError(err).Error("Unexpected error while closing conn.")
 		}
 	}
 }
