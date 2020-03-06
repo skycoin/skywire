@@ -20,10 +20,6 @@ func TestSettlementHS(t *testing.T) {
 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
-	// Wait until the env is fully set up.
-	// TODO: Implement an elegant solution.
-	time.Sleep(100 * time.Millisecond)
-
 	// TEST: Perform a handshake between two snet.Network instances.
 	t.Run("Do", func(t *testing.T) {
 		lis1, err := nEnv.Nets[1].Listen(dmsg.Type, skyenv.DmsgTransportPort)
@@ -39,6 +35,21 @@ func TestSettlementHS(t *testing.T) {
 			}
 			errCh1 <- transport.MakeSettlementHS(false).Do(context.TODO(), tpDisc, conn1, keys[1].SK)
 		}()
+
+		const entryTimeout = 5 * time.Second
+		start := time.Now()
+
+		// Wait until entry is set.
+		// TODO: Implement more elegant solution.
+		for {
+			if time.Since(start) > entryTimeout {
+				t.Fatal("Entry in Dmsg Discovery is not set within expected time")
+			}
+
+			if _, err := nEnv.DmsgD.Entry(context.TODO(), keys[1].PK); err == nil {
+				break
+			}
+		}
 
 		conn0, err := nEnv.Nets[0].Dial(context.TODO(), dmsg.Type, keys[1].PK, skyenv.DmsgTransportPort)
 		require.NoError(t, err)
