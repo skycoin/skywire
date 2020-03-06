@@ -23,14 +23,25 @@ type Server struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
+
+	maxSessions int
 }
 
 // NewServer creates a new dmsg server entity.
-func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient) *Server {
+func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, maxSessions int) *Server {
 	s := new(Server)
 	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
 	s.ready = make(chan struct{})
 	s.done = make(chan struct{})
+	s.maxSessions = maxSessions
+	s.setSessionCallback = func(ctx context.Context, sessionCount int) error {
+		available := s.maxSessions - sessionCount
+		return s.updateServerEntry(ctx, "", available)
+	}
+	s.delSessionCallback = func(ctx context.Context, sessionCount int) error {
+		available := s.maxSessions - sessionCount
+		return s.updateServerEntry(ctx, "", available)
+	}
 	return s
 }
 
@@ -48,8 +59,7 @@ func (s *Server) Close() error {
 
 // Serve serves the server.
 func (s *Server) Serve(lis net.Listener, addr string) error {
-	var log logrus.FieldLogger //nolint:gosimple
-	log = s.log.WithField("local_addr", addr).WithField("local_pk", s.pk)
+	log := logrus.FieldLogger(s.log.WithField("local_addr", addr).WithField("local_pk", s.pk))
 
 	log.Info("Serving server.")
 	s.wg.Add(1)
@@ -65,7 +75,6 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 			Info("Stopping server, net.Listener closed.")
 	}()
 
-	log.Info("Updating discovery entry...")
 	if addr == "" {
 		addr = lis.Addr().String()
 	}
@@ -83,6 +92,14 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 				return nil
 			}
 			return err
+		}
+
+		// TODO(evanlinjin): Implement proper load-balancing.
+		if s.SessionCount() >= s.maxSessions {
+			s.log.
+				WithField("max_sessions", s.maxSessions).
+				WithField("remote_tcp", conn.RemoteAddr()).
+				Debug("Max sessions is reached, but still accepting so clients who delegated us can still listen.")
 		}
 
 		s.wg.Add(1)
@@ -109,13 +126,12 @@ func (s *Server) updateEntryLoop(addr string) error {
 		}
 	}()
 	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, addr)
+		return s.updateServerEntry(ctx, addr, s.maxSessions)
 	})
 }
 
 func (s *Server) handleSession(conn net.Conn) {
-	var log logrus.FieldLogger //nolint:gosimple
-	log = s.log.WithField("remote_tcp", conn.RemoteAddr())
+	log := logrus.FieldLogger(s.log.WithField("remote_tcp", conn.RemoteAddr()))
 
 	dSes, err := makeServerSession(&s.EntityCommon, conn)
 	if err != nil {
@@ -139,6 +155,7 @@ func (s *Server) handleSession(conn net.Conn) {
 	if s.setSession(ctx, dSes.SessionCommon) {
 		dSes.Serve()
 	}
+
 	s.delSession(ctx, dSes.RemotePK())
 	cancel()
 }

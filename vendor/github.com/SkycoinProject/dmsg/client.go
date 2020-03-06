@@ -16,6 +16,9 @@ import (
 	"github.com/SkycoinProject/dmsg/netutil"
 )
 
+// TODO(evanlinjin): We should implement exponential backoff at some point.
+const serveWait = time.Second
+
 // Config configures a dmsg client entity.
 type Config struct {
 	MinSessions int
@@ -59,7 +62,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init common fields.
 	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"))
-	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
+	c.EntityCommon.setSessionCallback = func(ctx context.Context, sessionCount int) error {
 		err := c.EntityCommon.updateClientEntry(ctx, c.done)
 		if err == nil {
 			// Client is 'ready' once we have successfully updated the discovery entry
@@ -68,7 +71,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 		}
 		return err
 	}
-	c.EntityCommon.delSessionCallback = func(ctx context.Context) error {
+	c.EntityCommon.delSessionCallback = func(ctx context.Context, sessionCount int) error {
 		return c.EntityCommon.updateClientEntry(ctx, c.done)
 	}
 
@@ -117,9 +120,8 @@ func (ce *Client) Serve() {
 			continue
 		}
 		if len(entries) == 0 {
-			wait := time.Second
-			ce.log.Warnf("No entries found. Retrying after %s...", wait.String())
-			time.Sleep(wait)
+			ce.log.Warnf("No entries found. Retrying after %s...", serveWait.String())
+			time.Sleep(serveWait)
 		}
 
 		for _, entry := range entries {
@@ -142,6 +144,7 @@ func (ce *Client) Serve() {
 
 			if err := ce.ensureSession(ctx, entry); err != nil {
 				ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
+				time.Sleep(serveWait)
 			}
 		}
 	}
@@ -154,7 +157,7 @@ func (ce *Client) Ready() <-chan struct{} {
 }
 
 func (ce *Client) discoverServers(ctx context.Context) (entries []*disc.Entry, err error) {
-	err = netutil.NewDefaultRetrier(ce.log).Do(ctx, func() error {
+	err = netutil.NewDefaultRetrier(ce.log.WithField("func", "discoverServers")).Do(ctx, func() error {
 		entries, err = ce.dc.AvailableServers(ctx)
 		return err
 	})
