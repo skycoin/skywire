@@ -21,8 +21,8 @@ var log = logging.MustGetLogger("disc")
 // APIClient implements dmsg discovery API client.
 type APIClient interface {
 	Entry(context.Context, cipher.PubKey) (*Entry, error)
-	SetEntry(context.Context, *Entry) error
-	UpdateEntry(context.Context, cipher.SecKey, *Entry) error
+	PostEntry(context.Context, *Entry) error
+	PutEntry(context.Context, cipher.SecKey, *Entry) error
 	AvailableServers(context.Context) ([]*Entry, error)
 }
 
@@ -84,8 +84,8 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 	return &entry, nil
 }
 
-// SetEntry creates a new Entry.
-func (c *httpClient) SetEntry(ctx context.Context, e *Entry) error {
+// PostEntry creates a new Entry.
+func (c *httpClient) PostEntry(ctx context.Context, e *Entry) error {
 	endpoint := c.address + "/dmsg-discovery/entry/"
 	marshaledEntry, err := json.Marshal(e)
 	if err != nil {
@@ -130,36 +130,36 @@ func (c *httpClient) SetEntry(ctx context.Context, e *Entry) error {
 	return nil
 }
 
-// UpdateEntry updates Entry in dmsg discovery.
-func (c *httpClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry) error {
+// PutEntry updates Entry in dmsg discovery.
+func (c *httpClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *Entry) error {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
-	e.Sequence++
-	e.Timestamp = time.Now().UnixNano()
+	entry.Sequence++
+	entry.Timestamp = time.Now().UnixNano()
 
 	for {
-		err := e.Sign(sk)
+		err := entry.Sign(sk)
 		if err != nil {
 			return err
 		}
-		err = c.SetEntry(ctx, e)
+		err = c.PostEntry(ctx, entry)
 		if err == nil {
 			return nil
 		}
 		if err != ErrValidationWrongSequence {
-			e.Sequence--
+			entry.Sequence--
 			return err
 		}
-		rE, entryErr := c.Entry(ctx, e.Static)
+		rE, entryErr := c.Entry(ctx, entry.Static)
 		if entryErr != nil {
 			return err
 		}
-		if rE.Timestamp > e.Timestamp { // If there is a more up to date entry drop update
-			e.Sequence = rE.Sequence
+		if rE.Timestamp > entry.Timestamp { // If there is a more up to date entry drop update
+			entry.Sequence = rE.Sequence
 			return nil
 		}
-		e.Sequence = rE.Sequence + 1
+		entry.Sequence = rE.Sequence + 1
 	}
 }
 

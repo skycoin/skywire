@@ -60,8 +60,8 @@ func (m *mockClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 	return res, nil
 }
 
-// SetEntry sets an entry on the APIClient mock
-func (m *mockClient) SetEntry(ctx context.Context, e *Entry) error {
+// PostEntry sets an entry on the APIClient mock
+func (m *mockClient) PostEntry(ctx context.Context, e *Entry) error {
 	previousEntry, ok := m.entry(e.Static.Hex())
 	if ok {
 		err := previousEntry.ValidateIteration(e)
@@ -82,8 +82,8 @@ func (m *mockClient) SetEntry(ctx context.Context, e *Entry) error {
 	return nil
 }
 
-// UpdateEntry updates a previously set entry
-func (m *mockClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry) error {
+// PutEntry updates a previously set entry
+func (m *mockClient) PutEntry(ctx context.Context, sk cipher.SecKey, e *Entry) error {
 	e.Sequence++
 	e.Timestamp = time.Now().UnixNano()
 
@@ -92,7 +92,7 @@ func (m *mockClient) UpdateEntry(ctx context.Context, sk cipher.SecKey, e *Entry
 		if err != nil {
 			return err
 		}
-		err = m.SetEntry(ctx, e)
+		err = m.PostEntry(ctx, e)
 		if err == nil {
 			return nil
 		}
