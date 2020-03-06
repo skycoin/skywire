@@ -172,7 +172,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
 			r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
 			r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
-			r.Get("/visors/{pk}/routegroup", hv.getRouteGroup())
+			r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 			r.Get("/visors/{pk}/restart", hv.restart())
 			r.Post("/visors/{pk}/exec", hv.exec())
 			r.Post("/visors/{pk}/update", hv.update())
@@ -672,7 +672,7 @@ func makeRouteGroupResp(info visor.RouteGroupInfo) routeGroupResp {
 	}
 }
 
-func (hv *Hypervisor) getRouteGroup() http.HandlerFunc {
+func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		routegroups, err := ctx.RPC.RouteGroups()
 		if err != nil {
