@@ -137,4 +137,11 @@ export class NodeService {
   reboot(nodeKey: string): Observable<any> {
     return this.apiService.get(`visors/${nodeKey}/restart`).pipe();
   }
+
+  /**
+   * Updates a node.
+   */
+  update(nodeKey: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/update`).pipe();
+  }
 }

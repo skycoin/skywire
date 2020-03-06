@@ -44,7 +44,7 @@ export class TerminalComponent {
     @Inject(MAT_DIALOG_DATA) public data: TerminalData,
     sanitizer: DomSanitizer,
   ) {
-    var protocol = location.protocol;
+    const protocol = location.protocol;
     const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8080');
 
     // Calculate the URL of the dmsgpty-ui terminal.

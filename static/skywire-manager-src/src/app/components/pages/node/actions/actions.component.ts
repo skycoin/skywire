@@ -70,6 +70,11 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           name: 'actions.menu.reboot',
           actionName: 'reboot',
           icon: 'rotate_right'
+        },
+        {
+          name: 'actions.menu.update',
+          actionName: 'update',
+          icon: 'get_app',
         }
         // Options not implemented yet.
         /*
@@ -77,12 +82,6 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           name: 'actions.menu.config',
           actionName: 'config',
           icon: 'settings',
-          disabled: true
-        },
-        {
-          name: 'actions.menu.update',
-          actionName: 'update',
-          icon: 'get_app',
           disabled: true
         }*/], [
         {
@@ -132,10 +131,17 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   update() {
-    UpdateNodeComponent.openDialog(this.dialog).afterClosed().subscribe((updated) => {
-      if (updated) {
-        this.snackbarService.showDone('actions.update.update-success');
-      }
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.update.confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.showProcessing();
+
+      this.rebootSubscription = this.nodeService.update(this.currentNode.local_pk).subscribe(() => {
+        this.snackbarService.showDone('actions.update.done');
+        confirmationDialog.close();
+      }, () => {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+      });
     });
   }
 
