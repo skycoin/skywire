@@ -13,7 +13,7 @@ const (
 	userRWXGroupRX = 0750
 )
 
-// EnsureDir attempts to create given directory, panics if it fails to do so
+// EnsureDir attempts to create given directory.
 func EnsureDir(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return os.MkdirAll(path, userRWXGroupRX)
@@ -23,7 +23,7 @@ func EnsureDir(path string) error {
 }
 
 // AtomicWriteFile creates a temp file in which to write data, then calls syscall.Rename to swap it and write it on
-// filename for an atomic write. On failure temp file is removed and panics.
+// filename for an atomic write.
 func AtomicWriteFile(filename string, data []byte) error {
 	tempFilePath := filename + tmpSuffix
 
