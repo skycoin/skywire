@@ -228,13 +228,13 @@ communication API over the pipe.
 // Setup setups app using default pair of pipes
 func Setup(config *Config) (*App, error) {}
 
-// Accept awaits for incoming loop confirmation request from a Visor and
-// returns net.Conn for a received loop.
+// Accept awaits for incoming route group confirmation request from a Visor and
+// returns net.Conn for a received route group.
 func (app *App) Accept() (net.Conn, error) {}
 
 // Addr implements net.Addr for App connections.
 &Addr{PubKey: pk, Port: 12}
-// Dial sends create loop request to a Visor and returns net.Conn for created loop.
+// Dial sends create route group request to a Visor and returns net.Conn for created route group.
 func (app *App) Dial(raddr *Addr) (net.Conn, error) {}
 
 // Close implements io.Closer for App.

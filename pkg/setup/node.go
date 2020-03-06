@@ -110,7 +110,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 
 	forwardRoute, reverseRoute := route.ForwardAndReverse()
 
-	// Determine the rules to send to visors using loop descriptor and reserved route IDs.
+	// Determine the rules to send to visors using route group descriptor and reserved route IDs.
 	forwardRules, consumeRules, intermediaryRules, err := idr.GenerateRules(forwardRoute, reverseRoute)
 
 	if err != nil {
@@ -144,7 +144,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	// Confirm routes with responding visor.
 	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
 	if err != nil || !ok {
-		return routing.EdgeRules{}, fmt.Errorf("failed to confirm loop with destination visor: %v", err)
+		return routing.EdgeRules{}, fmt.Errorf("failed to confirm route group with destination visor: %v", err)
 	}
 
 	sn.logger.Infof("Returning route rules to initiating visor: %v", initRouteRules)
