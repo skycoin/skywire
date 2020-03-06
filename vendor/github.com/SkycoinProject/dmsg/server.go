@@ -75,7 +75,6 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 			Info("Stopping server, net.Listener closed.")
 	}()
 
-	log.Info("Updating discovery entry...")
 	if addr == "" {
 		addr = lis.Addr().String()
 	}
@@ -93,6 +92,14 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 				return nil
 			}
 			return err
+		}
+
+		// TODO(evanlinjin): Implement proper load-balancing.
+		if s.SessionCount() >= s.maxSessions {
+			s.log.
+				WithField("max_sessions", s.maxSessions).
+				WithField("remote_tcp", conn.RemoteAddr()).
+				Debug("Max sessions is reached, but still accepting so clients who delegated us can still listen.")
 		}
 
 		s.wg.Add(1)
@@ -125,13 +132,6 @@ func (s *Server) updateEntryLoop(addr string) error {
 
 func (s *Server) handleSession(conn net.Conn) {
 	log := logrus.FieldLogger(s.log.WithField("remote_tcp", conn.RemoteAddr()))
-
-	if s.SessionCount() >= s.maxSessions {
-		s.log.WithError(conn.Close()).
-			WithField("max_sessions", s.maxSessions).
-			Warn("Session rejected: max sessions reached.")
-		return
-	}
 
 	dSes, err := makeServerSession(&s.EntityCommon, conn)
 	if err != nil {

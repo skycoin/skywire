@@ -16,6 +16,8 @@ const currentVersion = "0.0.1"
 var (
 	// ErrKeyNotFound occurs in case when entry of public key is not found
 	ErrKeyNotFound = errors.New("entry of public key is not found")
+	// ErrNoAvailableServers occurs when dmsg client cannot find any delegated servers available for the given remote.
+	ErrNoAvailableServers = errors.New("no delegated dmsg servers available for remote")
 	// ErrUnexpected occurs in case when something unexpected happened
 	ErrUnexpected = errors.New("something unexpected happened")
 	// ErrUnauthorized occurs in case of invalid signature
@@ -45,6 +47,7 @@ var (
 
 	errReverseMap = map[string]error{
 		ErrKeyNotFound.Error():                ErrKeyNotFound,
+		ErrNoAvailableServers.Error():         ErrNoAvailableServers,
 		ErrUnexpected.Error():                 ErrUnexpected,
 		ErrUnauthorized.Error():               ErrUnauthorized,
 		ErrBadInput.Error():                   ErrBadInput,
