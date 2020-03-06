@@ -656,17 +656,17 @@ func (hv *Hypervisor) deleteRoute() http.HandlerFunc {
 	})
 }
 
-type loopResp struct {
+type routeGroupResp struct {
 	routing.RuleConsumeFields
 	FwdRule routing.RuleForwardFields `json:"resp"`
 }
 
-func makeLoopResp(info visor.LoopInfo) loopResp {
+func makeRouteGroupResp(info visor.RouteGroupInfo) routeGroupResp {
 	if len(info.FwdRule) == 0 || len(info.ConsumeRule) == 0 {
-		return loopResp{}
+		return routeGroupResp{}
 	}
 
-	return loopResp{
+	return routeGroupResp{
 		RuleConsumeFields: *info.ConsumeRule.Summary().ConsumeFields,
 		FwdRule:           *info.FwdRule.Summary().ForwardFields,
 	}
@@ -674,15 +674,15 @@ func makeLoopResp(info visor.LoopInfo) loopResp {
 
 func (hv *Hypervisor) getRouteGroup() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		loops, err := ctx.RPC.RouteGroups()
+		rg, err := ctx.RPC.RouteGroups()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		resp := make([]loopResp, len(loops))
-		for i, l := range loops {
-			resp[i] = makeLoopResp(l)
+		resp := make([]routeGroupResp, len(rg))
+		for i, l := range rg {
+			resp[i] = makeRouteGroupResp(l)
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
