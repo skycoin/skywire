@@ -152,7 +152,7 @@ type Server struct {
 	// Port in which the DMSG Server is listening for connections.
 	Port string `json:"port"`
 
-	// Number of connections still available.
+	// Number of connections still available.180
 	AvailableConnections int `json:"available_connections"`
 }
 
