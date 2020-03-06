@@ -2,6 +2,7 @@ package routing
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 )
@@ -22,6 +23,11 @@ const (
 	PacketRouteIDOffset     = 1
 	PacketPayloadSizeOffset = 5
 	PacketPayloadOffset     = PacketHeaderSize
+)
+
+var (
+	// ErrPayloadTooBig is returned when passed payload is too big (more than math.MaxUint16).
+	ErrPayloadTooBig = errors.New("packet size exceeded")
 )
 
 // PacketType represents packet purpose.
@@ -71,10 +77,10 @@ const (
 type RouteID uint32
 
 // MakeDataPacket constructs a new DataPacket.
-// If payload size is more than uint16, MakeDataPacket will panic.
-func MakeDataPacket(id RouteID, payload []byte) Packet {
+// If payload size is more than uint16, MakeDataPacket returns an error.
+func MakeDataPacket(id RouteID, payload []byte) (Packet, error) {
 	if len(payload) > math.MaxUint16 {
-		panic("packet size exceeded")
+		return Packet{}, ErrPayloadTooBig
 	}
 
 	packet := make([]byte, PacketHeaderSize+len(payload))
@@ -84,7 +90,7 @@ func MakeDataPacket(id RouteID, payload []byte) Packet {
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload)))
 	copy(packet[PacketPayloadOffset:], payload)
 
-	return packet
+	return packet, nil
 }
 
 // MakeClosePacket constructs a new ClosePacket.
