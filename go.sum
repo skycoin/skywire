@@ -1,8 +1,8 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
-github.com/SkycoinProject/dmsg v0.0.0-20200306131535-fabb2c8177e9 h1:ce/1vcQhEX+8TkwX4PUUE2BVHA4sHNCPf8af7OVhPVE=
-github.com/SkycoinProject/dmsg v0.0.0-20200306131535-fabb2c8177e9/go.mod h1:DzykXMLlx6Fx0fGjZsCIRas/MIvxW8DZpmDA6f2nCRk=
+github.com/SkycoinProject/dmsg v0.0.0-20200306152741-acee74fa4514 h1:Ysxe5a/uGJq5eeSPhlIkS0Ft29LzoVv4waaN0VE4JXM=
+github.com/SkycoinProject/dmsg v0.0.0-20200306152741-acee74fa4514/go.mod h1:DzykXMLlx6Fx0fGjZsCIRas/MIvxW8DZpmDA6f2nCRk=
 github.com/SkycoinProject/skycoin v0.26.0/go.mod h1:xqPLOKh5B6GBZlGA7B5IJfQmCy7mwimD9NlqxR3gMXo=
 github.com/SkycoinProject/skycoin v0.27.0 h1:N3IHxj8ossHOcsxLYOYugT+OaELLncYHJHxbbYLPPmY=
 github.com/SkycoinProject/skycoin v0.27.0/go.mod h1:xqPLOKh5B6GBZlGA7B5IJfQmCy7mwimD9NlqxR3gMXo=
