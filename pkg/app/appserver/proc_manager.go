@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -140,11 +141,12 @@ func (m *procManager) StopAll() {
 	defer m.mx.Unlock()
 
 	for name, proc := range m.procs {
-		if err := proc.Stop(); err != nil {
-			m.log.WithError(err).Errorf("(%s) failed to stop app", name)
-		} else {
-			m.log.Infof("(%s) app stopped successfully", name)
+		log := m.log.WithField("app_name", name)
+		if err := proc.Stop(); err != nil && strings.Contains(err.Error(), "process already finished") {
+			log.WithError(err).Error("Failed to stop app.")
+			continue
 		}
+		log.Infof("App stopped successfully.")
 	}
 
 	m.procs = make(map[string]*Proc)
