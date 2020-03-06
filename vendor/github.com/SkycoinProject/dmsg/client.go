@@ -157,7 +157,7 @@ func (ce *Client) Ready() <-chan struct{} {
 }
 
 func (ce *Client) discoverServers(ctx context.Context) (entries []*disc.Entry, err error) {
-	err = netutil.NewDefaultRetrier(ce.log).Do(ctx, func() error {
+	err = netutil.NewDefaultRetrier(ce.log.WithField("func", "discoverServers")).Do(ctx, func() error {
 		entries, err = ce.dc.AvailableServers(ctx)
 		return err
 	})
