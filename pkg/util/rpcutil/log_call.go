@@ -10,7 +10,6 @@ import (
 func LogCall(log logrus.FieldLogger, method string, in interface{}) func(out interface{}, err *error) {
 
 	// Just in case log is not set.
-	// However, this is dangerous as it may result in a race condition.
 	if log == nil {
 		log = logrus.New()
 	}
@@ -24,7 +23,7 @@ func LogCall(log logrus.FieldLogger, method string, in interface{}) func(out int
 	}
 
 	return func(out interface{}, err *error) {
-		log := log.WithField("_period", time.Since(start).String())
+		log := log.WithField("_elapsed", time.Since(start).String())
 		if out != nil {
 			log = log.WithField("output", out)
 		}
