@@ -515,7 +515,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 
 // WARNING: Not thread safe.
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
-	log := mt.log.WithField("func", "readPacket()")
+	log := mt.log.WithField("func", "readPacket")
 
 	var conn *snet.Conn
 	for {
@@ -543,7 +543,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
-	log.WithField("payload_len", len(p)).WithField("payload_raw", p).Debug("Read packet payload.")
+	log.WithField("payload_len", len(p)).Debug("Read packet payload.")
 
 	packet = append(h, p...)
 	if n := len(packet); n > routing.PacketHeaderSize {
