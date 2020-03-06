@@ -51,6 +51,9 @@ type Config struct {
 	DmsgDiscovery string        `json:"dmsg_discovery"` // Dmsg discovery address.
 	DmsgPort      uint16        `json:"dmsg_port"`      // Dmsg port to serve on.
 	HTTPAddr      string        `json:"http_addr"`      // HTTP address to serve API/web UI on.
+	EnableTLS     bool          `json:"enable_tls"`     // Whether to enable TLS.
+	TLSCertFile   string        `json:"tls_cert_file"`  // TLS cert file location.
+	TLSKeyFile    string        `json:"tls_key_file"`   // TLS key file location.
 }
 
 func makeConfig(testenv bool) Config {
