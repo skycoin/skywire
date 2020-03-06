@@ -424,7 +424,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		// if this visor initiated closing, we need to wait for close packets
 		// to come back, or to exit with a timeout if anything goes wrong in
 		// the network
-		if err := rg.waitForCloseLoop(closeRoutineTimeout); err != nil {
+		if err := rg.waitForCloseRouteGroup(closeRoutineTimeout); err != nil {
 			rg.logger.Errorf("Error during close loop: %v", err)
 		}
 	}
@@ -496,7 +496,7 @@ func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	}
 }
 
-func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
+func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), waitTimeout)
 	defer closeCancel()
 
@@ -509,7 +509,7 @@ func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
 
 	select {
 	case <-closeCtx.Done():
-		return fmt.Errorf("close loop timed out: %v", closeCtx.Err())
+		return fmt.Errorf("close route group timed out: %v", closeCtx.Err())
 	case <-closeDoneCh:
 	}
 

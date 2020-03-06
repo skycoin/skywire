@@ -594,7 +594,7 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	return nil
 }
 
-// RemoveRouteDescriptor removes loop rule.
+// RemoveRouteDescriptor removes route group rule.
 func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	rules := r.rt.AllRules()
 	for _, rule := range rules {
