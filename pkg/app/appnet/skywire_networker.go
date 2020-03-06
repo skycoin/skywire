@@ -3,6 +3,7 @@ package appnet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -50,7 +51,12 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn
 		return nil, err
 	}
 
-	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
+	rPK := addr.PubKey
+	if rPK.Null() {
+		return nil, fmt.Errorf("Empty public key: %s", rPK)
+	}
+
+	rg, err := r.r.DialRoutes(ctx, rPK, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
 		return nil, err
 	}
