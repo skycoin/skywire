@@ -40,6 +40,7 @@ var (
 	// ErrUnknownPacketType is returned when packet type is unknown.
 	ErrUnknownPacketType = errors.New("unknown packet type")
 
+	// ErrRemoteEmptyPK occurs when the specified remote public key is empty.
 	ErrRemoteEmptyPK = errors.New("empty remote public key")
 )
 
