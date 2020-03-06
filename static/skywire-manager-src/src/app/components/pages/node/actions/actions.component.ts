@@ -12,6 +12,7 @@ import { SidenavService } from 'src/app/services/sidenav.service';
 import { Node } from '../../../../app.datatypes';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { NodeService } from 'src/app/services/node.service';
+import { TerminalComponent } from './terminal/terminal.component';
 
 /**
  * Component for making the options of the left bar of the nodes page to appear. It does not
@@ -143,10 +144,18 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   terminal() {
-    BasicTerminalComponent.openDialog(this.dialog, {
-      pk: this.currentNode.local_pk,
-      label: this.currentNode.label,
-    });
+    if (location.protocol.indexOf('http:') !== -1) {
+      // This terminal does not work on https connections at this time.
+      TerminalComponent.openDialog(this.dialog, {
+        pk: this.currentNode.local_pk,
+        label: this.currentNode.label,
+      });
+    } else {
+      BasicTerminalComponent.openDialog(this.dialog, {
+        pk: this.currentNode.local_pk,
+        label: this.currentNode.label,
+      });
+    }
   }
 
   back() {
