@@ -172,7 +172,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
 			r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
 			r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
-			r.Get("/visors/{pk}/loops", hv.getLoops())
+			r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 			r.Get("/visors/{pk}/restart", hv.restart())
 			r.Post("/visors/{pk}/exec", hv.exec())
 			r.Post("/visors/{pk}/update", hv.update())
@@ -656,33 +656,33 @@ func (hv *Hypervisor) deleteRoute() http.HandlerFunc {
 	})
 }
 
-type loopResp struct {
+type routeGroupResp struct {
 	routing.RuleConsumeFields
 	FwdRule routing.RuleForwardFields `json:"resp"`
 }
 
-func makeLoopResp(info visor.LoopInfo) loopResp {
+func makeRouteGroupResp(info visor.RouteGroupInfo) routeGroupResp {
 	if len(info.FwdRule) == 0 || len(info.ConsumeRule) == 0 {
-		return loopResp{}
+		return routeGroupResp{}
 	}
 
-	return loopResp{
+	return routeGroupResp{
 		RuleConsumeFields: *info.ConsumeRule.Summary().ConsumeFields,
 		FwdRule:           *info.FwdRule.Summary().ForwardFields,
 	}
 }
 
-func (hv *Hypervisor) getLoops() http.HandlerFunc {
+func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		loops, err := ctx.RPC.Loops()
+		routegroups, err := ctx.RPC.RouteGroups()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		resp := make([]loopResp, len(loops))
-		for i, l := range loops {
-			resp[i] = makeLoopResp(l)
+		resp := make([]routeGroupResp, len(routegroups))
+		for i, l := range routegroups {
+			resp[i] = makeRouteGroupResp(l)
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
