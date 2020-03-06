@@ -120,7 +120,7 @@ func testDialRouteGroup(t *testing.T, keys []snettest.KeyPair, nEnv *snettest.En
 }
 
 func prepBidirectionalRoute(clients []clientWithDMSGAddrAndListener) routing.BidirectionalRoute {
-	// prepare loop creation (client_1 will use this to request loop creation with setup node).
+	// prepare route group creation (client_1 will use this to request a route group creation with setup node).
 	desc := routing.NewRouteDescriptor(clients[1].Addr.PK, clients[4].Addr.PK, 1, 1)
 
 	forwardHops := []routing.Hop{
