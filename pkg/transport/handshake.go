@@ -31,33 +31,42 @@ func compareEntries(expected, received *Entry) error {
 	if expected.ID != received.ID {
 		return errors.New("received entry's 'tp_id' is not of expected")
 	}
+
 	if expected.Edges != received.Edges {
 		return errors.New("received entry's 'edges' is not of expected")
 	}
+
 	if expected.Type != received.Type {
 		return errors.New("received entry's 'type' is not of expected")
 	}
+
 	if expected.Public != received.Public {
 		return errors.New("received entry's 'public' is not of expected")
 	}
+
 	return nil
 }
 
 func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey) (*SignedEntry, error) {
 	var recvSE SignedEntry
+
 	if err := json.NewDecoder(r).Decode(&recvSE); err != nil {
 		return nil, fmt.Errorf("failed to read entry: %s", err)
 	}
+
 	if err := compareEntries(expected, recvSE.Entry); err != nil {
 		return nil, err
 	}
-	sig, ok := recvSE.Signature(remotePK)
-	if !ok {
-		return nil, errors.New("invalid remote signature")
+
+	sig, err := recvSE.Signature(remotePK)
+	if err != nil {
+		return nil, fmt.Errorf("invalid remote signature: %w", err)
 	}
+
 	if err := cipher.VerifyPubKeySignedPayload(remotePK, sig, recvSE.Entry.ToBinary()); err != nil {
 		return nil, err
 	}
+
 	return &recvSE, nil
 }
 
@@ -97,9 +106,9 @@ func MakeSettlementHS(init bool) SettlementHS {
 		//}()
 
 		// create signed entry and send it to responding visor.
-		se, ok := NewSignedEntry(&entry, conn.LocalPK(), sk)
-		if !ok {
-			return errors.New("failed to sign entry")
+		se, err := NewSignedEntry(&entry, conn.LocalPK(), sk)
+		if err != nil {
+			return fmt.Errorf("failed to sign entry: %w", err)
 		}
 		if err := json.NewEncoder(conn).Encode(se); err != nil {
 			return fmt.Errorf("failed to write entry: %v", err)
@@ -125,9 +134,11 @@ func MakeSettlementHS(init bool) SettlementHS {
 		if err != nil {
 			return err
 		}
-		if ok := recvSE.Sign(conn.LocalPK(), sk); !ok {
-			return errors.New("failed to sign received entry")
+
+		if err := recvSE.Sign(conn.LocalPK(), sk); err != nil {
+			return fmt.Errorf("failed to sign received entry: %w", err)
 		}
+
 		entry = *recvSE.Entry
 
 		// Ensure transport is registered.

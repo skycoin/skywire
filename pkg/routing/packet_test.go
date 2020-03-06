@@ -4,10 +4,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMakeDataPacket(t *testing.T) {
-	packet := MakeDataPacket(2, []byte("foo"))
+	packet, err := MakeDataPacket(2, []byte("foo"))
+	require.NoError(t, err)
+
 	expected := []byte{0x0, 0x0, 0x0, 0x0, 0x2, 0x0, 0x3, 0x66, 0x6f, 0x6f}
 
 	assert.Equal(t, expected, []byte(packet))

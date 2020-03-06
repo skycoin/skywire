@@ -32,8 +32,10 @@ func GenKeyPairs(n int) []KeyPair {
 		if err != nil {
 			panic(err)
 		}
+
 		pairs[i] = KeyPair{PK: pk, SK: sk}
 	}
+
 	return pairs
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -87,8 +88,8 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
 		go func() {
-			if err := r.serveLoop(ctx); err != nil {
-				r.log.WithError(err).Error("error serving")
+			if err := r.serveLoop(ctx); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+				r.log.WithError(err).Error("serveLoop stopped unexpectedly.")
 			}
 		}()
 	}
@@ -98,16 +99,21 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 // serveLoop accepts and serves routes.
 func (r *SkywireNetworker) serveLoop(ctx context.Context) error {
+	log := r.log.WithField("func", "serveLoop")
+
 	for {
-		r.log.Infoln("Trying to accept routing group...")
+		log.Debug("Awaiting to accept route group...")
 
 		rg, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
-			r.log.Infof("Error accepting routing group: %v", err)
+			log.WithError(err).Info("Stopped accepting routes.")
 			return err
 		}
 
-		r.log.Infoln("Accepted routing group")
+		log.
+			WithField("local", rg.LocalAddr()).
+			WithField("remote", rg.RemoteAddr()).
+			Info("Accepted route group.")
 
 		go r.serve(rg)
 	}

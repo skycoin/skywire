@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -286,7 +287,11 @@ func (r *router) serveTransportManager(ctx context.Context) {
 	for {
 		packet, err := r.tm.ReadPacket()
 		if err != nil {
-			r.logger.WithError(err).Errorf("Failed to read packet")
+			if err == transport.ErrNotServing {
+				r.logger.WithError(err).Info("Stopped reading packets")
+				return
+			}
+			r.logger.WithError(err).Error("Stopped reading packets due to unexpected error.")
 			return
 		}
 
@@ -305,7 +310,12 @@ func (r *router) serveSetup() {
 	for {
 		conn, err := r.sl.AcceptConn()
 		if err != nil {
-			r.logger.WithError(err).Warnf("setup client stopped serving")
+			log := r.logger.WithError(err)
+			if err == dmsg.ErrEntityClosed {
+				log.Info("Setup client stopped serving.")
+			} else {
+				log.Error("Setup client stopped serving due to unexpected error.")
+			}
 			return
 		}
 
@@ -553,9 +563,15 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	}
 
 	var p routing.Packet
+
 	switch packet.Type() {
 	case routing.DataPacket:
-		p = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
+		var err error
+
+		p, err = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
+		if err != nil {
+			return err
+		}
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:
