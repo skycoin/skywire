@@ -126,7 +126,7 @@ type Router interface {
 
 // Router implements visor.PacketRouter. It manages routing table by
 // communicating with setup nodes, forward packets according to local
-// rules and manages loops for apps.
+// rules and manages route groups for apps.
 type router struct {
 	mx            sync.Mutex
 	conf          *Config
@@ -546,7 +546,7 @@ func (r *router) Close() error {
 		return nil
 	}
 
-	r.logger.Info("Closing all App connections and Loops")
+	r.logger.Info("Closing all App connections and RouteGroups")
 
 	r.once.Do(func() {
 		close(r.done)
@@ -603,7 +603,7 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	return nil
 }
 
-// RemoveRouteDescriptor removes loop rule.
+// RemoveRouteDescriptor removes route group rule.
 func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	rules := r.rt.AllRules()
 	for _, rule := range rules {
