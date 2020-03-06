@@ -582,7 +582,7 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 
 // RouteGroups implements RPCClient.
 func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
-	var loops []RouteGroupInfo
+	var routeGroups []RouteGroupInfo
 
 	rules := mc.rt.AllRules()
 	for _, rule := range rules {
@@ -595,13 +595,13 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		loops = append(loops, RouteGroupInfo{
+		routeGroups = append(routeGroups, RouteGroupInfo{
 			ConsumeRule: rule,
 			FwdRule:     fwdRule,
 		})
 	}
 
-	return loops, nil
+	return routeGroups, nil
 }
 
 // Restart implements RPCClient.
