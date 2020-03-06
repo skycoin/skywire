@@ -50,12 +50,7 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn
 		return nil, err
 	}
 
-	rPK := addr.PubKey
-	if rPK.Null() {
-		return nil, errors.New("cannot dial to address with empty public key")
-	}
-
-	rg, err := r.r.DialRoutes(ctx, rPK, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
+	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
 		return nil, err
 	}

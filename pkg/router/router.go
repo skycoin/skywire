@@ -39,6 +39,8 @@ const (
 var (
 	// ErrUnknownPacketType is returned when packet type is unknown.
 	ErrUnknownPacketType = errors.New("unknown packet type")
+
+	ErrRemoteEmptyPK = errors.New("empty remote public key")
 )
 
 // Config configures Router.
@@ -195,6 +197,13 @@ func (r *router) DialRoutes(
 	lPort, rPort routing.Port,
 	opts *DialOptions,
 ) (*RouteGroup, error) {
+
+	if rPK.Null() {
+		err := ErrRemoteEmptyPK
+		r.logger.WithError(err).Error("Failed to dial routes.")
+		return nil, fmt.Errorf("failed to dial routes: %v", err)
+	}
+
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
