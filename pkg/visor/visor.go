@@ -223,8 +223,8 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerSockFile)
 
 	go func() {
-		if err := visor.appRPCServer.ListenAndServe(); err != nil {
-			visor.logger.WithError(err).Error("error serving RPC")
+		if err := visor.appRPCServer.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			visor.logger.WithError(err).Error("Serve app_rpc stopped.")
 		}
 	}()
 
@@ -283,7 +283,10 @@ func (visor *Visor) startApps() error {
 
 		go func(a AppConfig) {
 			if err := visor.SpawnApp(&a, nil); err != nil {
-				visor.logger.Warnf("App %s stopped working: %v", a.App, err)
+				visor.logger.
+					WithError(err).
+					WithField("app_name", a.App).
+					Warn("App stopped.")
 			}
 		}(ac)
 	}
@@ -478,19 +481,21 @@ func (visor *Visor) Close() (err error) {
 	visor.procManager.StopAll()
 
 	if err = visor.router.Close(); err != nil {
-		visor.logger.WithError(err).Error("failed to stop router")
+		visor.logger.WithError(err).Error("Failed to stop router.")
 	} else {
-		visor.logger.Info("router stopped successfully")
+		visor.logger.Info("Router stopped successfully.")
 	}
 
 	if err := visor.appRPCServer.Close(); err != nil {
-		visor.logger.WithError(err).Error("error closing RPC server")
+		visor.logger.WithError(err).Error("RPC server closed with error.")
 	}
 
 	if err := UnlinkSocketFiles(visor.conf.AppServerSockFile); err != nil {
-		visor.logger.WithError(err).Errorf("Failed to unlink socket file %s", visor.conf.AppServerSockFile)
+		visor.logger.WithError(err).WithField("file_name", visor.conf.AppServerSockFile).
+			Error("Failed to unlink socket file.")
 	} else {
-		visor.logger.Infof("Socket file %s removed successfully", visor.conf.AppServerSockFile)
+		visor.logger.WithField("file_name", visor.conf.AppServerSockFile).
+			Debug("Socket file removed successfully.")
 	}
 
 	return err
@@ -535,7 +540,10 @@ func (visor *Visor) StartApp(appName string) error {
 
 			go func(app AppConfig) {
 				if err := visor.SpawnApp(&app, startCh); err != nil {
-					visor.logger.Warnf("App %s stopped working: %v", appName, err)
+					visor.logger.
+						WithError(err).
+						WithField("app_name", appName).
+						Warn("App stopped.")
 				}
 			}(app)
 
@@ -549,7 +557,10 @@ func (visor *Visor) StartApp(appName string) error {
 
 // SpawnApp configures and starts new App.
 func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
-	visor.logger.Infof("Starting %s", config.App)
+	visor.logger.
+		WithField("app_name", config.App).
+		WithField("args", config.Args).
+		Info("Spawning app.")
 
 	if app, ok := reservedPorts[config.Port]; ok && app != config.App {
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
