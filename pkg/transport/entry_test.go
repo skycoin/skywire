@@ -50,16 +50,17 @@ func ExampleSignedEntry_Sign() {
 		fmt.Println("No signatures set")
 	}
 
-	if ok := sEntry.Sign(pkA, skA); !ok {
-		fmt.Println("error signing with skA")
+	if err := sEntry.Sign(pkA, skA); err != nil {
+		fmt.Println("error signing with skA: ", err)
 	}
+
 	if (!sEntry.Signatures[0].Null() && sEntry.Signatures[1].Null()) ||
 		(!sEntry.Signatures[1].Null() && sEntry.Signatures[0].Null()) {
 		fmt.Println("One signature set")
 	}
 
-	if ok := sEntry.Sign(pkB, skB); !ok {
-		fmt.Println("error signing with skB")
+	if err := sEntry.Sign(pkB, skB); err != nil {
+		fmt.Println("error signing with skB: ", err)
 	}
 
 	if !sEntry.Signatures[0].Null() && !sEntry.Signatures[1].Null() {
@@ -79,35 +80,37 @@ func ExampleSignedEntry_Signature() {
 
 	entry := transport.NewEntry(pkA, pkB, "mock", true)
 	sEntry := &transport.SignedEntry{Entry: entry}
-	if ok := sEntry.Sign(pkA, skA); !ok {
+
+	if err := sEntry.Sign(pkA, skA); err != nil {
 		fmt.Println("Error signing sEntry with (pkA,skA)")
 	}
-	if ok := sEntry.Sign(pkB, skB); !ok {
+
+	if err := sEntry.Sign(pkB, skB); err != nil {
 		fmt.Println("Error signing sEntry with (pkB,skB)")
 	}
 
 	idxA := sEntry.Entry.EdgeIndex(pkA)
 	idxB := sEntry.Entry.EdgeIndex(pkB)
 
-	sigA, okA := sEntry.Signature(pkA)
-	sigB, okB := sEntry.Signature(pkB)
+	sigA, errA := sEntry.Signature(pkA)
+	sigB, errB := sEntry.Signature(pkB)
 
-	if okA && sigA == sEntry.Signatures[idxA] {
+	if errA == nil && sigA == sEntry.Signatures[idxA] {
 		fmt.Println("SignatureA got")
 	}
 
-	if okB && (sigB == sEntry.Signatures[idxB]) {
+	if errB == nil && (sigB == sEntry.Signatures[idxB]) {
 		fmt.Println("SignatureB got")
 	}
 
 	// Incorrect case
 	pkC, _ := cipher.GenerateKeyPair()
-	if _, ok := sEntry.Signature(pkC); !ok {
-		fmt.Printf("SignatureC got error: invalid pubkey")
+	if _, err := sEntry.Signature(pkC); err != nil {
+		fmt.Printf("SignatureC got error: %v\n", err)
 	}
 
 	//
 	// Output: SignatureA got
 	// SignatureB got
-	// SignatureC got error: invalid pubkey
+	// SignatureC got error: edge index not found
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"strings"
 	"sync"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -33,7 +34,7 @@ func New(log *logging.Logger, sockFile string) *Server {
 
 // Register registers an app key in RPC server.
 func (s *Server) Register(appKey appcommon.Key) error {
-	logger := logging.MustGetLogger(fmt.Sprintf("rpc_server_%s", appKey))
+	logger := logging.MustGetLogger(fmt.Sprintf("app_gateway:%s", appKey))
 	gateway := NewRPCGateway(logger)
 
 	return s.rpcS.RegisterName(string(appKey), gateway)
@@ -81,8 +82,8 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	<-s.stopCh
 
-	if err := conn.Close(); err != nil {
-		s.log.WithError(err).Error("error closing conn")
+	if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		s.log.WithError(err).Error("Unexpected error while closing conn.")
 	}
 
 	s.done.Done()
