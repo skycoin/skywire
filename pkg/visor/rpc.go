@@ -450,21 +450,21 @@ func (r *RPC) RemoveRoutingRule(key *routing.RouteID, _ *struct{}) (err error) {
 }
 
 /*
-	<<< LOOPS MANAGEMENT >>>
+	<<< ROUTEGROUPS MANAGEMENT >>>
 	>>> TODO(evanlinjin): Implement.
 */
 
-// LoopInfo is a human-understandable representation of a loop.
-type LoopInfo struct {
+// RouteGroupInfo is a human-understandable representation of a RouteGroup.
+type RouteGroupInfo struct {
 	ConsumeRule routing.Rule
 	FwdRule     routing.Rule
 }
 
-// RouteGroups retrieves loops via rules of the routing table.
-func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) (err error) {
+// RouteGroups retrieves routegroups via rules of the routing table.
+func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	defer r.logReq("RouteGroups", nil)(out, &err)
 
-	var loops []LoopInfo
+	var routegroups []RouteGroupInfo
 
 	rules := r.visor.router.Rules()
 	for _, rule := range rules {
@@ -478,13 +478,13 @@ func (r *RPC) Loops(_ *struct{}, out *[]LoopInfo) (err error) {
 			return err
 		}
 
-		loops = append(loops, LoopInfo{
+		routegroups = append(routegroups, RouteGroupInfo{
 			ConsumeRule: rule,
 			FwdRule:     rule,
 		})
 	}
 
-	*out = loops
+	*out = routegroups
 	return nil
 }
 
