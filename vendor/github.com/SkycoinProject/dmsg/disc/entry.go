@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
@@ -44,22 +43,26 @@ var (
 	ErrValidationWrongTime = NewEntryValidationError("previous entry timestamp is not set before current entry timestamp")
 	// ErrValidationServerAddress occurs in case when client want to advertise wrong Server address
 	ErrValidationServerAddress = NewEntryValidationError("advertising localhost listening address is not allowed in production mode")
+	// ErrValidationEmptyServerAddress occurs when a server entry is submitted with an empty address.
+	ErrValidationEmptyServerAddress = NewEntryValidationError("server address cannot be empty")
 
 	errReverseMap = map[string]error{
-		ErrKeyNotFound.Error():                ErrKeyNotFound,
-		ErrNoAvailableServers.Error():         ErrNoAvailableServers,
-		ErrUnexpected.Error():                 ErrUnexpected,
-		ErrUnauthorized.Error():               ErrUnauthorized,
-		ErrBadInput.Error():                   ErrBadInput,
-		ErrValidationNonZeroSequence.Error():  ErrValidationNonZeroSequence,
-		ErrValidationNilEphemerals.Error():    ErrValidationNilEphemerals,
-		ErrValidationNilKeys.Error():          ErrValidationNilKeys,
-		ErrValidationNonNilEphemerals.Error(): ErrValidationNonNilEphemerals,
-		ErrValidationNoSignature.Error():      ErrValidationNoSignature,
-		ErrValidationNoVersion.Error():        ErrValidationNoVersion,
-		ErrValidationNoClientOrServer.Error(): ErrValidationNoClientOrServer,
-		ErrValidationWrongSequence.Error():    ErrValidationWrongSequence,
-		ErrValidationWrongTime.Error():        ErrValidationWrongTime,
+		ErrKeyNotFound.Error():                  ErrKeyNotFound,
+		ErrNoAvailableServers.Error():           ErrNoAvailableServers,
+		ErrUnexpected.Error():                   ErrUnexpected,
+		ErrUnauthorized.Error():                 ErrUnauthorized,
+		ErrBadInput.Error():                     ErrBadInput,
+		ErrValidationNonZeroSequence.Error():    ErrValidationNonZeroSequence,
+		ErrValidationNilEphemerals.Error():      ErrValidationNilEphemerals,
+		ErrValidationNilKeys.Error():            ErrValidationNilKeys,
+		ErrValidationNonNilEphemerals.Error():   ErrValidationNonNilEphemerals,
+		ErrValidationNoSignature.Error():        ErrValidationNoSignature,
+		ErrValidationNoVersion.Error():          ErrValidationNoVersion,
+		ErrValidationNoClientOrServer.Error():   ErrValidationNoClientOrServer,
+		ErrValidationWrongSequence.Error():      ErrValidationWrongSequence,
+		ErrValidationWrongTime.Error():          ErrValidationWrongTime,
+		ErrValidationServerAddress.Error():      ErrValidationServerAddress,
+		ErrValidationEmptyServerAddress.Error(): ErrValidationEmptyServerAddress,
 	}
 )
 
@@ -251,10 +254,8 @@ func (e *Entry) Validate() error {
 		return ErrValidationNoClientOrServer
 	}
 
-	if e.Server != nil {
-		if _, err := url.Parse(e.Server.Address); err != nil {
-			return fmt.Errorf("failed to parse server.address: %v", err)
-		}
+	if e.Server != nil && e.Server.Address == "" {
+		return ErrValidationEmptyServerAddress
 	}
 
 	return nil
