@@ -2,6 +2,7 @@ package dmsg
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -22,8 +23,8 @@ type EntityCommon struct {
 
 	log logrus.FieldLogger
 
-	setSessionCallback func(ctx context.Context) error
-	delSessionCallback func(ctx context.Context) error
+	setSessionCallback func(ctx context.Context, sessionCount int) error
+	delSessionCallback func(ctx context.Context, sessionCount int) error
 }
 
 func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger) {
@@ -87,18 +88,17 @@ func (c *EntityCommon) SessionCount() int {
 
 func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool {
 	c.sessionsMx.Lock()
-
 	if _, ok := c.sessions[dSes.RemotePK()]; ok {
 		c.sessionsMx.Unlock()
 		return false
 	}
-
 	c.sessions[dSes.RemotePK()] = dSes
 	if c.setSessionCallback != nil {
-		if err := c.setSessionCallback(ctx); err != nil {
+		if err := c.setSessionCallback(ctx, len(c.sessions)); err != nil {
 			c.log.
+				WithField("func", "EntityCommon.setSession").
 				WithError(err).
-				Warn("setSession() callback returned non-nil error.")
+				Warn("Callback returned non-nil error.")
 		}
 	}
 	c.sessionsMx.Unlock()
@@ -109,27 +109,52 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 	c.sessionsMx.Lock()
 	delete(c.sessions, pk)
 	if c.delSessionCallback != nil {
-		if err := c.delSessionCallback(ctx); err != nil {
+		if err := c.delSessionCallback(ctx, len(c.sessions)); err != nil {
 			c.log.
+				WithField("func", "EntityCommon.delSession").
 				WithError(err).
-				Warn("delSession() callback returned non-nil error.")
+				Warn("Callback returned non-nil error.")
 		}
 	}
 	c.sessionsMx.Unlock()
 }
 
 // updateServerEntry updates the dmsg server's entry within dmsg discovery.
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string) error {
+// If 'addr' is an empty string, the Entry.addr field will not be updated in discovery.
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, availableSessions int) error {
 	entry, err := c.dc.Entry(ctx, c.pk)
 	if err != nil {
-		entry = disc.NewServerEntry(c.pk, 0, addr, 10)
+		entry = disc.NewServerEntry(c.pk, 0, addr, availableSessions)
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
-		return c.dc.SetEntry(ctx, entry)
+		return c.dc.PostEntry(ctx, entry)
 	}
-	entry.Server.Address = addr
-	return c.dc.UpdateEntry(ctx, c.sk, entry)
+
+	if entry.Server == nil {
+		return errors.New("entry in discovery is not of a dmsg server")
+	}
+
+	updateSessions := entry.Server.AvailableSessions != availableSessions
+	updateAddr := addr != "" && entry.Server.Address != addr
+
+	if !updateSessions && !updateAddr {
+		// Nothing to be done.
+		return nil
+	}
+
+	log := c.log
+	if updateSessions {
+		entry.Server.AvailableSessions = availableSessions
+		log = log.WithField("available_sessions", entry.Server.AvailableSessions)
+	}
+	if updateAddr {
+		entry.Server.Address = addr
+		log = log.WithField("addr", entry.Server.Address)
+	}
+	log.Info("Updating discovery entry...")
+
+	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
 func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}) error {
@@ -147,11 +172,11 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
-		return c.dc.SetEntry(ctx, entry)
+		return c.dc.PostEntry(ctx, entry)
 	}
 	entry.Client.DelegatedServers = srvPKs
 	c.log.WithField("entry", entry).Info("Updating entry.")
-	return c.dc.UpdateEntry(ctx, c.sk, entry)
+	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
 func getServerEntry(ctx context.Context, dc disc.APIClient, srvPK cipher.PubKey) (*disc.Entry, error) {

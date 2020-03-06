@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ const currentVersion = "0.0.1"
 var (
 	// ErrKeyNotFound occurs in case when entry of public key is not found
 	ErrKeyNotFound = errors.New("entry of public key is not found")
+	// ErrNoAvailableServers occurs when dmsg client cannot find any delegated servers available for the given remote.
+	ErrNoAvailableServers = errors.New("no delegated dmsg servers available for remote")
 	// ErrUnexpected occurs in case when something unexpected happened
 	ErrUnexpected = errors.New("something unexpected happened")
 	// ErrUnauthorized occurs in case of invalid signature
@@ -44,6 +47,7 @@ var (
 
 	errReverseMap = map[string]error{
 		ErrKeyNotFound.Error():                ErrKeyNotFound,
+		ErrNoAvailableServers.Error():         ErrNoAvailableServers,
 		ErrUnexpected.Error():                 ErrUnexpected,
 		ErrUnauthorized.Error():               ErrUnauthorized,
 		ErrBadInput.Error():                   ErrBadInput,
@@ -149,18 +153,14 @@ type Server struct {
 	// IPv4 or IPv6 public address of the DMSG Server.
 	Address string `json:"address"`
 
-	// Port in which the DMSG Server is listening for connections.
-	Port string `json:"port"`
-
-	// Number of connections still available.
-	AvailableConnections int `json:"available_connections"`
+	// AvailableSessions is the number of available sessions that the server can currently accept.
+	AvailableSessions int `json:"availableSessions"`
 }
 
 // String implements stringer
 func (s *Server) String() string {
 	res := fmt.Sprintf("\taddress: %s\n", s.Address)
-	res += fmt.Sprintf("\tport: %s\n", s.Port)
-	res += fmt.Sprintf("\tavailable connections: %d\n", s.AvailableConnections)
+	res += fmt.Sprintf("\tavailable sessions: %d\n", s.AvailableSessions)
 
 	return res
 }
@@ -178,12 +178,12 @@ func NewClientEntry(pubkey cipher.PubKey, sequence uint64, delegatedServers []ci
 }
 
 // NewServerEntry constructs a new Server entry.
-func NewServerEntry(pubkey cipher.PubKey, sequence uint64, address string, conns int) *Entry {
+func NewServerEntry(pk cipher.PubKey, seq uint64, addr string, availableSessions int) *Entry {
 	return &Entry{
 		Version:   currentVersion,
-		Sequence:  sequence,
-		Server:    &Server{Address: address, AvailableConnections: conns},
-		Static:    pubkey,
+		Sequence:  seq,
+		Server:    &Server{Address: addr, AvailableSessions: availableSessions},
+		Static:    pk,
 		Timestamp: time.Now().UnixNano(),
 	}
 }
@@ -235,9 +235,15 @@ func (e *Entry) Validate() error {
 	if e.Version == "" {
 		return ErrValidationNoVersion
 	}
+
 	// Must be signed
 	if e.Signature == "" {
 		return ErrValidationNoSignature
+	}
+
+	// The Keys field must exist
+	if e.Static.Null() {
+		return ErrValidationNilKeys
 	}
 
 	// A record must have either client or server record
@@ -245,9 +251,10 @@ func (e *Entry) Validate() error {
 		return ErrValidationNoClientOrServer
 	}
 
-	// The Keys field must exist
-	if e.Static.Null() {
-		return ErrValidationNilKeys
+	if e.Server != nil {
+		if _, err := url.Parse(e.Server.Address); err != nil {
+			return fmt.Errorf("failed to parse server.address: %v", err)
+		}
 	}
 
 	return nil
