@@ -67,7 +67,7 @@ func newBoltDB(path, appName string) (_ LogStore, err error) {
 }
 
 // Write implements io.Writer
-func (l *boltDBappLogs) Write(p []byte) (int, error) {
+func (l *boltDBappLogs) Write(p []byte) (n int, err error) {
 	// ensure there is at least timestamp long bytes
 	if len(p) < 37 {
 		return 0, io.ErrShortBuffer
@@ -79,9 +79,8 @@ func (l *boltDBappLogs) Write(p []byte) (int, error) {
 	}
 
 	defer func() {
-		err := db.Close()
-		if err != nil {
-			panic(err)
+		if closeErr := db.Close(); err == nil {
+			err = closeErr
 		}
 	}()
 
