@@ -433,7 +433,9 @@ func testForwardRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	r0.saveRouteGroupRules(routing.EdgeRules{Desc: fwdRule.RouteDescriptor(), Forward: fwdRule, Reverse: nil})
 
 	// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
-	packet := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	packet, err := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	require.NoError(t, err)
+
 	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 	// r1 should receive the packet handled by r0.
@@ -457,7 +459,9 @@ func testIntermediaryForwardRule(t *testing.T, r0, r1 *router, tp1 *transport.Ma
 	require.NoError(t, err)
 
 	// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
-	packet := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	packet, err := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	require.NoError(t, err)
+
 	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 	// r1 should receive the packet handled by r0.
@@ -501,7 +505,9 @@ func testConsumeRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 		Reverse: cnsmRule,
 	})
 
-	packet := routing.MakeDataPacket(intFwdRtID[0], []byte("test intermediary forward"))
+	packet, err := routing.MakeDataPacket(intFwdRtID[0], []byte("test intermediary forward"))
+	require.NoError(t, err)
+
 	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 	recvPacket, err := r1.tm.ReadPacket()
@@ -511,7 +517,9 @@ func testConsumeRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	assert.Equal(t, dstRtIDs[1], recvPacket.RouteID())
 
 	consumeMsg := []byte("test_consume")
-	packet = routing.MakeDataPacket(dstRtIDs[1], consumeMsg)
+	packet, err = routing.MakeDataPacket(dstRtIDs[1], consumeMsg)
+	require.NoError(t, err)
+
 	require.NoError(t, r1.handleTransportPacket(context.TODO(), packet))
 
 	rg, ok := r1.routeGroup(fwdRtDesc.Invert())
