@@ -674,14 +674,14 @@ func makeRouteGroupResp(info visor.RouteGroupInfo) routeGroupResp {
 
 func (hv *Hypervisor) getRouteGroup() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		rg, err := ctx.RPC.RouteGroups()
+		routegroups, err := ctx.RPC.RouteGroups()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		resp := make([]routeGroupResp, len(rg))
-		for i, l := range rg {
+		resp := make([]routeGroupResp, len(routegroups))
+		for i, l := range routegroups {
 			resp[i] = makeRouteGroupResp(l)
 		}
 
