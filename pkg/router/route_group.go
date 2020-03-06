@@ -425,7 +425,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		// to come back, or to exit with a timeout if anything goes wrong in
 		// the network
 		if err := rg.waitForCloseRouteGroup(closeRoutineTimeout); err != nil {
-			rg.logger.Errorf("Error during close loop: %v", err)
+			rg.logger.Errorf("Error during close route group: %v", err)
 		}
 	}
 
