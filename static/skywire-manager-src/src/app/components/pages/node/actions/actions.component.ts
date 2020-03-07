@@ -15,6 +15,7 @@ import { NodeService } from 'src/app/services/node.service';
 import { TerminalComponent } from './terminal/terminal.component';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 
 /**
  * Component for making the options of the left bar of the nodes page to appear. It does not
@@ -156,18 +157,30 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   terminal() {
-    if (location.protocol.indexOf('http:') !== -1) {
-      // This terminal does not work on https connections at this time.
-      TerminalComponent.openDialog(this.dialog, {
-        pk: this.currentNode.local_pk,
-        label: this.currentNode.label,
-      });
-    } else {
-      BasicTerminalComponent.openDialog(this.dialog, {
-        pk: this.currentNode.local_pk,
-        label: this.currentNode.label,
-      });
-    }
+    const options: SelectableOption[] = [
+      {
+        icon: 'launch',
+        label: 'actions.terminal-options.full',
+      },
+      {
+        icon: 'open_in_browser',
+        label: 'actions.terminal-options.simple',
+      },
+    ];
+
+    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+      if (selectedOption === 1) {
+        // Open the complete terminal in a new tab.
+        const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8080');
+        window.open('https://' + hostname + '/pty/' + this.currentNode.local_pk, '_blank', 'noopener noreferrer');
+      } else if (selectedOption === 2) {
+        // Open the simple terminal in a modal window.
+        BasicTerminalComponent.openDialog(this.dialog, {
+          pk: this.currentNode.local_pk,
+          label: this.currentNode.label,
+        });
+      }
+    });
   }
 
   back() {

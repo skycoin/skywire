@@ -1,3 +1,6 @@
+// NOTE: currently not used due to problems connecting to the web socket from some URL. May be
+// used in the future.
+
 import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 
