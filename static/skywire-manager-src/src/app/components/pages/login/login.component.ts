@@ -3,11 +3,13 @@ import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 
 import { AuthService } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { InitialSetupComponent } from './initial-setup/initial-setup.component';
-import { HttpErrorResponse } from '@angular/common/http';
+import { OperationError } from '../../../utils/operation-error';
+import { processServiceError } from '../../../utils/errors';
 
 /**
  * Login page.
@@ -62,12 +64,14 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.router.navigate(['nodes'], { replaceUrl: true });
   }
 
-  private onLoginError(err: HttpErrorResponse) {
+  private onLoginError(err: OperationError) {
+    err = processServiceError(err);
     this.loading = false;
-    if (err && err.status === 401) {
+
+    if (err.originalError && (err.originalError as HttpErrorResponse).status === 401) {
       this.snackbarService.showError('login.incorrect-password');
     } else {
-      this.snackbarService.showError('common.operation-error');
+      this.snackbarService.showError(err.translatableErrorMsg);
     }
   }
 }

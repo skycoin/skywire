@@ -11,6 +11,7 @@
     "none": "None",
     "loading-error": "There was an error getting the data. Retrying...",
     "operation-error": "There was an error trying to complete the operation.",
+    "no-connection-error": "There is no internet connection or connection to the Hypervisor.",
     "refreshed": "Data refreshed.",
     "options": "Options",
     "logout": "Logout",
@@ -125,7 +126,6 @@
         "bad-old-password": "The provided old password is not correct.",
         "old-password-required": "Old password is required.",
         "new-password-error": "Password must be 6-64 characters long.",
-        "invalid-password-format": "Password must have at least one upper, lower, digit and special character and be 6-64 characters long.",
         "passwords-not-match": "Passwords do not match.",
         "default-password": "Don't use the default password (1234)."
       }
@@ -301,7 +301,6 @@
       "remote-key": "Remote public key",
       "transport-type": "Transport type",
       "success": "Transport created.",
-      "error": "Unable to create transport.",
       "errors": {
         "remote-key-length-error": "The remote public key must be 66 characters long.",
         "remote-key-chars-error": "The remote public key must only contain hexadecimal characters.",

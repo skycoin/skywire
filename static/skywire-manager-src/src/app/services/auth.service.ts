@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { ApiService, ResponseTypes, RequestOptions } from './api.service';
+import { OperationError } from '../utils/operation-error';
+import { processServiceError } from '../utils/errors';
 
 export enum AuthStates {
   AuthDisabled, Logged, NotLogged
@@ -43,14 +45,16 @@ export class AuthService {
     return this.apiService.get('user', new RequestOptions({ responseType: ResponseTypes.Text, ignoreAuth: true }))
       .pipe(
         map(() => AuthStates.Logged),
-        catchError(err => {
+        catchError((err: OperationError) => {
+          err = processServiceError(err);
+
           // The auth options are disabled in the backend.
-          if ((err as HttpErrorResponse).status === 504) {
+          if (err.originalError && (err.originalError as HttpErrorResponse).status === 504) {
             return of(AuthStates.AuthDisabled);
           }
 
           // The user is not logged.
-          if ((err as HttpErrorResponse).status === 401) {
+          if (err.originalError && (err.originalError as HttpErrorResponse).status === 401) {
             return of(AuthStates.NotLogged);
           }
         })
@@ -88,14 +92,14 @@ export class AuthService {
 
           throw new Error(this.translateService.instant('common.operation-error'));
         }
-      }), catchError(err => {
-        if (err && (err as HttpErrorResponse).status === 400) {
-          throw new Error(this.translateService.instant('settings.password.errors.invalid-password-format'));
-        } else if (err && (err as HttpErrorResponse).status === 401) {
-          throw new Error(this.translateService.instant('settings.password.errors.bad-old-password'));
+      }), catchError((err: OperationError) => {
+        err = processServiceError(err);
+
+        if (err.originalError && (err.originalError as HttpErrorResponse).status === 401) {
+          err.translatableErrorMsg = 'settings.password.errors.bad-old-password';
         }
 
-        throw new Error(this.translateService.instant('common.operation-error'));
+        return throwError(err);
       }));
   }
 
@@ -112,14 +116,14 @@ export class AuthService {
         } else {
           throw new Error(result);
         }
-      }), catchError(err => {
-        if (err && (err as HttpErrorResponse).status === 400) {
-          throw new Error(this.translateService.instant('settings.password.errors.invalid-password-format'));
-        } else if (err && (err as HttpErrorResponse).status === 403) {
-          throw new Error(this.translateService.instant('settings.password.initial-config.error'));
+      }), catchError((err: OperationError) => {
+        err = processServiceError(err);
+
+        if (err.originalError && (err.originalError as HttpErrorResponse).status === 500) {
+          err.translatableErrorMsg = 'settings.password.initial-config.error';
         }
 
-        throw new Error(this.translateService.instant('common.operation-error'));
+        return throwError(err);
       }));
   }
 }

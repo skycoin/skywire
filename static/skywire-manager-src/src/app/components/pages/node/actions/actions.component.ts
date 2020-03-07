@@ -13,6 +13,8 @@ import { Node } from '../../../../app.datatypes';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { NodeService } from 'src/app/services/node.service';
 import { TerminalComponent } from './terminal/terminal.component';
+import { OperationError } from 'src/app/utils/operation-error';
+import { processServiceError } from 'src/app/utils/errors';
 
 /**
  * Component for making the options of the left bar of the nodes page to appear. It does not
@@ -124,8 +126,10 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       this.rebootSubscription = this.nodeService.reboot(this.currentNode.local_pk).subscribe(() => {
         this.snackbarService.showDone('actions.reboot.done');
         confirmationDialog.close();
-      }, () => {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       });
     });
   }
@@ -139,8 +143,10 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       this.rebootSubscription = this.nodeService.update(this.currentNode.local_pk).subscribe(() => {
         this.snackbarService.showDone('actions.update.done');
         confirmationDialog.close();
-      }, () => {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       });
     });
   }

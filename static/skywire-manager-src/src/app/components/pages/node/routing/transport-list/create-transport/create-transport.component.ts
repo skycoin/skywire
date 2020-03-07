@@ -9,6 +9,8 @@ import { ButtonComponent } from '../../../../../layout/button/button.component';
 import { NodeComponent } from '../../../node.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
+import { processServiceError } from 'src/app/utils/errors';
+import { OperationError } from 'src/app/utils/operation-error';
 
 /**
  * Modal window used for creating trnasports. It creates the transport and shows a
@@ -96,9 +98,11 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     this.dialogRef.close();
   }
 
-  private onError(error: string) {
+  private onError(err: OperationError) {
     this.button.showError();
-    this.snackbarService.showError('transports.dialog.error');
+    err = processServiceError(err);
+
+    this.snackbarService.showError(err);
   }
 
   /**

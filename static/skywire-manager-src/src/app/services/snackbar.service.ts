@@ -2,6 +2,8 @@ import { Injectable } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { SnackbarComponent, SnackbarIcons, SnackbarColors, SnackbarConfig } from '../components/layout/snack-bar/snack-bar.component';
+import { OperationError } from '../utils/operation-error';
+import { processServiceError } from '../utils/errors';
 
 /**
  * Allows to easily show/hide the snackbar. For consistency, the snakbar should always be displayed
@@ -20,13 +22,15 @@ export class SnackbarService {
 
   /**
    * Opens the snackbar and shows an error.
+   * @param body Text or error to show.
    * @param textTranslationParams Params that must be passed to the "translate" pipe, if any.
    * @param isTemporalError True if the snackbar should be closed when calling "closeCurrentIfTemporaryError"
    * if it was not automatically closed before that.
    */
-  public showError(text: string, textTranslationParams: any = null, isTemporalError = false) {
+  public showError(body: string | OperationError, textTranslationParams: any = null, isTemporalError = false) {
+    body = processServiceError(body);
     this.lastWasTemporaryError = isTemporalError;
-    this.show(text, textTranslationParams, SnackbarIcons.Error, SnackbarColors.Red, 10000);
+    this.show(body.translatableErrorMsg, textTranslationParams, SnackbarIcons.Error, SnackbarColors.Red, 10000);
   }
 
   /**

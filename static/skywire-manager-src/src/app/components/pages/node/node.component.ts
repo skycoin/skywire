@@ -10,6 +10,8 @@ import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
+import { OperationError } from '../../../utils/operation-error';
+import { processServiceError } from '../../../utils/errors';
 
 /**
  * Main page used for showing the details of a node. It is in charge of loading
@@ -243,10 +245,15 @@ export class NodeComponent implements OnInit, OnDestroy {
           // Automatically refresh the data after some time.
           this.refresh(this.storageService.getRefreshTime() * 1000);
         });
-      }, (err: HttpErrorResponse) => {
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+
         this.ngZone.run(() => {
           // If the node was not found, show a msg telling the user and stop the operation.
-          if (err.status && (err.status === 400 || err.status === 404)) {
+          if (
+            err.originalError &&
+            ((err.originalError as HttpErrorResponse).status === 400 || (err.originalError as HttpErrorResponse).status === 404)
+          ) {
             this.notFound = true;
 
             return;

@@ -5,6 +5,8 @@ import { TranslateService } from '@ngx-translate/core';
 
 import { ApiService } from '../../../../../services/api.service';
 import { AppConfig } from 'src/app/app.config';
+import { OperationError } from 'src/app/utils/operation-error';
+import { processServiceError } from 'src/app/utils/errors';
 
 /**
  * Const for accessing the code on src/assets/scripts/terminal.js. It allows to create a terminal
@@ -139,9 +141,11 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
         this.printLines(' ');
         this.waitForInput();
-      }, error => {
-        if (error.error && error.error.error && typeof error.error.error === 'string') {
-          this.printLines(error.error.error);
+      }, (error: OperationError) => {
+        error = processServiceError(error);
+
+        if (error.originalServerErrorMsg && typeof error.originalServerErrorMsg === 'string') {
+          this.printLines(error.originalServerErrorMsg);
         } else {
           this.printLines(this.translate.instant('actions.terminal.error'));
         }

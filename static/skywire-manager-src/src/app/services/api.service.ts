@@ -4,6 +4,8 @@ import { Observable, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { Router } from '@angular/router';
 
+import { processServiceError } from '../utils/errors';
+
 export enum ResponseTypes {
   Json = 'json',
   Text = 'text',
@@ -138,6 +140,6 @@ export class ApiService {
       }
     }
 
-    return throwError(error);
+    return throwError(processServiceError(error));
   }
 }

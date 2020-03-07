@@ -7,6 +7,8 @@ import { Subscription } from 'rxjs';
 import { AuthService } from '../../../../services/auth.service';
 import { SnackbarService } from '../../../../services/snackbar.service';
 import { ButtonComponent } from '../../../layout/button/button.component';
+import { OperationError } from '../../../../utils/operation-error';
+import { processServiceError } from '../../../../utils/errors';
 
 /**
  * Allows both to set the password for the first time and to change the existing password.
@@ -74,13 +76,11 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
             () => {
               this.router.navigate(['nodes']);
               this.snackbarService.showDone('settings.password.password-changed');
-            }, (err) => {
+            }, (err: OperationError) => {
               this.button.showError();
-              if (err.message) {
-                this.snackbarService.showError(err.message);
-              } else {
-                this.snackbarService.showError('common.operation-error');
-              }
+              err = processServiceError(err);
+
+              this.snackbarService.showError(err);
             },
           );
       } else {
@@ -90,12 +90,10 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
             this.snackbarService.showDone('settings.password.initial-config.done');
           }, err => {
             this.button.showError();
+            err = processServiceError(err);
+
             // The errors are marked as temporary to close the snackbar when closing the modal window.
-            if (err.message) {
-              this.snackbarService.showError(err.message, null, true);
-            } else {
-              this.snackbarService.showError('common.operation-error', null, true);
-            }
+            this.snackbarService.showError(err, null, true);
           },
         );
       }
