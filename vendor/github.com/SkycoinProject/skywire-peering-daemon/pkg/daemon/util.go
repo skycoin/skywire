@@ -90,7 +90,7 @@ func Deserialize(data []byte) (Packet, error) {
 	return packet, nil
 }
 
-// verifyPacket checks if packet received is sent from local daemon
+// verifyPacket checks if packet received is sent from local skywire-peering-daemon
 func verifyPacket(pubKey string, data []byte) bool {
 	packet, err := Deserialize(data)
 	if err != nil {

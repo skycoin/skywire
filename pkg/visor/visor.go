@@ -397,13 +397,13 @@ func (visor *Visor) RunDaemon() error {
 // StopDaemon kills the the skywire-peering-daemon started as an external process
 // and all child processes.
 func (visor *Visor) StopDaemon() {
-	visor.Onspd = false
 	visor.logger.Info("Shutting down skywire-peering-daemon")
 	if err := visor.spdCmd.Process.Kill(); err != nil {
 		visor.logger.WithError(err).Warnf("failed to kill skywire-peering-daemon process")
+	} else {
+		visor.Onspd = false
+		visor.logger.Info("skywire-peering-daemon closed successfully")
 	}
-
-	visor.logger.Info("skywire-peering-daemon closed successfully")
 }
 
 func (visor *Visor) serveDmsgPty(ctx context.Context, log *logging.Logger) {
