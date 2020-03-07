@@ -1,12 +1,10 @@
 package visor
 
 import (
-	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/rpc"
 	"sync"
@@ -19,7 +17,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -34,7 +31,6 @@ var (
 // RPCClient represents a RPC Client implementation.
 type RPCClient interface {
 	Summary() (*Summary, error)
-	Exec(command string) ([]byte, error)
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
@@ -61,9 +57,11 @@ type RPCClient interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 
-	Loops() ([]LoopInfo, error)
+	RouteGroups() ([]RouteGroupInfo, error)
 
 	Restart() error
+	Exec(command string) ([]byte, error)
+	Update() error
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -102,13 +100,6 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	var out float64
 	err := rc.Call("Uptime", &struct{}{}, &out)
 	return out, err
-}
-
-// Exec calls Exec.
-func (rc *rpcClient) Exec(command string) ([]byte, error) {
-	output := make([]byte, 0)
-	err := rc.Call("Exec", &command, &output)
-	return output, err
 }
 
 // Apps calls Apps.
@@ -170,7 +161,7 @@ func (rc *rpcClient) TransportTypes() ([]string, error) {
 
 // Transports calls Transports.
 func (rc *rpcClient) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
-	var transports []*TransportSummary
+	transports := make([]*TransportSummary, 0)
 	err := rc.Call("Transports", &TransportsIn{
 		FilterTypes:   types,
 		FilterPubKeys: pks,
@@ -204,7 +195,7 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 }
 
 func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	var entries []*transport.EntryWithStatus
+	entries := make([]*transport.EntryWithStatus, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
@@ -217,7 +208,7 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithSt
 
 // RoutingRules calls RoutingRules.
 func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
-	var entries []routing.Rule
+	entries := make([]routing.Rule, 0)
 	err := rc.Call("RoutingRules", &struct{}{}, &entries)
 	return entries, err
 }
@@ -239,109 +230,29 @@ func (rc *rpcClient) RemoveRoutingRule(key routing.RouteID) error {
 	return rc.Call("RemoveRoutingRule", &key, &struct{}{})
 }
 
-// Loops calls Loops.
-func (rc *rpcClient) Loops() ([]LoopInfo, error) {
-	var loops []LoopInfo
-	err := rc.Call("Loops", &struct{}{}, &loops)
-	return loops, err
-}
-
-// RPCClientDialer keeps track of an rpc connection and retries to connect if it fails at some point
-type RPCClientDialer struct {
-	dialer *snet.Network
-	pk     cipher.PubKey
-	port   uint16
-	conn   net.Conn
-	mu     sync.Mutex
-	done   chan struct{} // nil: loop is not running, non-nil: loop is running.
-}
-
-// NewRPCClientDialer creates a new RPCDialer to the given address
-func NewRPCClientDialer(dialer *snet.Network, pk cipher.PubKey, port uint16) *RPCClientDialer {
-	return &RPCClientDialer{
-		dialer: dialer,
-		pk:     pk,
-		port:   port,
-	}
-}
-
-// Run repeatedly dials to remote until a successful connection is established.
-// It exposes a RPC Server.
-// It will return if Close is called or crypto fails.
-func (d *RPCClientDialer) Run(srv *rpc.Server, retry time.Duration) error {
-	if ok := d.setDone(); !ok {
-		return ErrAlreadyServing
-	}
-	for {
-		if err := d.establishConn(); err != nil {
-			return err
-		}
-		// Only serve when then dial succeeds.
-		srv.ServeConn(d.conn)
-		d.setConn(nil)
-		select {
-		case <-d.done:
-			d.clearDone()
-			return nil
-		case <-time.After(retry):
-		}
-	}
-}
-
-// Close closes the handler.
-func (d *RPCClientDialer) Close() (err error) {
-	if d == nil {
-		return nil
-	}
-	d.mu.Lock()
-	if d.done != nil {
-		close(d.done)
-	}
-	if d.conn != nil {
-		err = d.conn.Close()
-	}
-	d.mu.Unlock()
-	return
-}
-
-// This operation should be atomic, hence protected by mutex.
-func (d *RPCClientDialer) establishConn() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	conn, err := d.dialer.Dial(context.Background(), snet.DmsgType, d.pk, d.port)
-	if err != nil {
-		return err
-	}
-
-	d.conn = conn
-	return nil
-}
-
-func (d *RPCClientDialer) setConn(conn net.Conn) {
-	d.mu.Lock()
-	d.conn = conn
-	d.mu.Unlock()
-}
-
-func (d *RPCClientDialer) setDone() (ok bool) {
-	d.mu.Lock()
-	if ok = d.done == nil; ok {
-		d.done = make(chan struct{})
-	}
-	d.mu.Unlock()
-	return
-}
-
-func (d *RPCClientDialer) clearDone() {
-	d.mu.Lock()
-	d.done = nil
-	d.mu.Unlock()
+// RouteGroups calls RouteGroups.
+func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
+	var routegroups []RouteGroupInfo
+	err := rc.Call("RouteGroups", &struct{}{}, &routegroups)
+	return routegroups, err
 }
 
 // Restart calls Restart.
 func (rc *rpcClient) Restart() error {
 	return rc.Call("Restart", &struct{}{}, &struct{}{})
+}
+
+// Exec calls Exec.
+func (rc *rpcClient) Exec(command string) ([]byte, error) {
+	output := make([]byte, 0)
+	err := rc.Call("Exec", &command, &output)
+	return output, err
+}
+
+// Update calls Update.
+func (rc *rpcClient) Update() error {
+	err := rc.Call("Update", &struct{}{}, &struct{}{})
+	return err
 }
 
 // MockRPCClient mocks RPCClient.
@@ -376,7 +287,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
 
-	rt := routing.NewTable(routing.DefaultConfig())
+	rt := routing.NewTable()
 	ruleKeepAlive := router.DefaultRouteKeepAlive
 
 	for i := 0; i < r.Intn(maxRules+1); i++ {
@@ -458,8 +369,8 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 	var out Summary
 	err := mc.do(false, func() error {
 		out = *mc.s
-		for _, app := range mc.s.Apps {
-			out.Apps = append(out.Apps, &(*app))
+		for _, a := range mc.s.Apps {
+			out.Apps = append(out.Apps, &(*a))
 		}
 		for _, tp := range mc.s.Transports {
 			out.Transports = append(out.Transports, &(*tp))
@@ -486,17 +397,12 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
-// Exec implements RPCClient.
-func (mc *mockRPCClient) Exec(command string) ([]byte, error) {
-	return []byte("mock"), nil
-}
-
 // Apps implements RPCClient.
 func (mc *mockRPCClient) Apps() ([]*AppState, error) {
 	var apps []*AppState
 	err := mc.do(false, func() error {
-		for _, app := range mc.s.Apps {
-			apps = append(apps, &(*app))
+		for _, a := range mc.s.Apps {
+			apps = append(apps, &(*a))
 		}
 		return nil
 	})
@@ -516,9 +422,9 @@ func (*mockRPCClient) StopApp(string) error {
 // SetAutoStart implements RPCClient.
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
-		for _, app := range mc.s.Apps {
-			if app.Name == appName {
-				app.AutoStart = autostart
+		for _, a := range mc.s.Apps {
+			if a.Name == appName {
+				a.AutoStart = autostart
 				return nil
 			}
 		}
@@ -527,7 +433,7 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 }
 
 // SetSocksPassword implements RPCClient.
-func (mc *mockRPCClient) SetSocksPassword(password string) error {
+func (mc *mockRPCClient) SetSocksPassword(string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -542,7 +448,7 @@ func (mc *mockRPCClient) SetSocksPassword(password string) error {
 }
 
 // SetSocksClientPK implements RPCClient.
-func (mc *mockRPCClient) SetSocksClientPK(pk cipher.PubKey) error {
+func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
 
@@ -618,7 +524,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements RPCClient.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, public bool, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.s.PubKey, remote, tpType),
 		Local:  mc.s.PubKey,
@@ -645,11 +551,11 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -674,9 +580,9 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 	return nil
 }
 
-// Loops implements RPCClient.
-func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
-	var loops []LoopInfo
+// RouteGroups implements RPCClient.
+func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
+	var routeGroups []RouteGroupInfo
 
 	rules := mc.rt.AllRules()
 	for _, rule := range rules {
@@ -689,16 +595,26 @@ func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		loops = append(loops, LoopInfo{
+		routeGroups = append(routeGroups, RouteGroupInfo{
 			ConsumeRule: rule,
 			FwdRule:     fwdRule,
 		})
 	}
 
-	return loops, nil
+	return routeGroups, nil
 }
 
 // Restart implements RPCClient.
 func (mc *mockRPCClient) Restart() error {
+	return nil
+}
+
+// Exec implements RPCClient.
+func (mc *mockRPCClient) Exec(string) ([]byte, error) {
+	return []byte("mock"), nil
+}
+
+// Exec implements RPCClient.
+func (mc *mockRPCClient) Update() error {
 	return nil
 }

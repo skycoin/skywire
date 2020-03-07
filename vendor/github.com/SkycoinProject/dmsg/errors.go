@@ -29,7 +29,7 @@ var (
 	ErrReqInvalidDstPK     = registerErr(Error{code: 303, msg: "request has invalid destination public key"})
 	ErrReqInvalidSrcPort   = registerErr(Error{code: 304, msg: "request has invalid source port"})
 	ErrReqInvalidDstPort   = registerErr(Error{code: 305, msg: "request has invalid destination port"})
-	ErrReqNoListener       = registerErr(Error{code: 306, msg: "request has no associated listener"})
+	ErrReqNoListener       = registerErr(Error{code: 306, msg: "request has no associated listener", temp: true})
 	ErrReqNoNextSession    = registerErr(Error{code: 307, msg: "request cannot be forwarded because the next session is non-existent"})
 
 	ErrDialRespInvalidSig  = registerErr(Error{code: 350, msg: "response has invalid signature"})
@@ -42,7 +42,7 @@ var (
 // Listener errors (4xx).
 var (
 	ErrPortOccupied    = registerErr(Error{code: 400, msg: "port already occupied"})
-	ErrAcceptChanMaxed = registerErr(Error{code: 401, msg: "listener accept chan maxed"})
+	ErrAcceptChanMaxed = registerErr(Error{code: 401, msg: "listener accept chan maxed", temp: true})
 )
 
 // ErrorFromCode returns a saved error (if exists) from given error code.
@@ -75,11 +75,11 @@ func registerErr(e Error) Error {
 
 // Error represents a dmsg-related error.
 type Error struct {
-	code      errorCode
-	msg       string
-	timeout   bool
-	temporary bool
-	nxt       error
+	code    errorCode
+	msg     string
+	timeout bool
+	temp    bool
+	nxt     error
 }
 
 // Error implements error
@@ -106,7 +106,7 @@ func (e Error) Timeout() bool {
 
 // Temporary implements net.Error
 func (e Error) Temporary() bool {
-	return e.temporary
+	return e.temp
 }
 
 // Wrap wraps an error and returns the new error.

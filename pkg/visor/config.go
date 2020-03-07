@@ -11,8 +11,8 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/dmsg/dmsgpty"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
@@ -101,16 +101,25 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 		return nil, errors.New("'dmsg_pty' config field not defined")
 	}
 
-	return dmsgpty.NewHostFromDmsgClient(
-		nil,
-		dmsgC,
-		c.Visor.StaticPubKey,
-		c.Visor.StaticSecKey,
-		c.DmsgPty.AuthFile,
-		c.DmsgPty.Port,
-		c.DmsgPty.CLINet,
-		c.DmsgPty.CLIAddr,
-	)
+	var wl dmsgpty.Whitelist
+	if c.DmsgPty.AuthFile == "" {
+		wl = dmsgpty.NewMemoryWhitelist()
+	} else {
+		var err error
+		if wl, err = dmsgpty.NewJSONFileWhiteList(c.DmsgPty.AuthFile); err != nil {
+			return nil, err
+		}
+	}
+
+	// Whitelist hypervisor PKs.
+	hypervisorWL := dmsgpty.NewMemoryWhitelist()
+	for _, hv := range c.Hypervisors {
+		if err := hypervisorWL.Add(hv.PubKey); err != nil {
+			return nil, fmt.Errorf("failed to add hypervisor PK to whitelist: %v", err)
+		}
+	}
+	host := dmsgpty.NewHost(dmsgC, dmsgpty.NewCombinedWhitelist(0, wl, hypervisorWL))
+	return host, nil
 }
 
 // TransportDiscovery returns transport discovery client.
@@ -131,18 +140,10 @@ func (c *Config) TransportLogStore() (transport.LogStore, error) {
 	return transport.InMemoryTransportLogStore(), nil
 }
 
-// RoutingTable returns configure routing.Table.
-func (c *Config) RoutingTable() (routing.Table, error) {
-	return routing.NewTable(routing.DefaultConfig()), nil
-}
-
 // AppsConfig decodes AppsConfig from a local json config file.
 func (c *Config) AppsConfig() (map[string]AppConfig, error) {
 	apps := make(map[string]AppConfig)
 	for _, app := range c.Apps {
-		if app.Version == "" {
-			app.Version = c.Version
-		}
 		apps[app.App] = app
 	}
 
@@ -163,7 +164,7 @@ func (c *Config) AppsDir() (string, error) {
 // will be created if necessary.
 func (c *Config) LocalDir() (string, error) {
 	if c.LocalPath == "" {
-		return "", errors.New("empty AppsPath")
+		return "", errors.New("empty LocalPath")
 	}
 
 	return ensureDir(c.LocalPath)
@@ -211,7 +212,6 @@ type DmsgPtyConfig struct {
 
 // AppConfig defines app startup parameters.
 type AppConfig struct {
-	Version   string       `json:"version"`
 	App       string       `json:"app"`
 	AutoStart bool         `json:"auto_start"`
 	Port      routing.Port `json:"port"`

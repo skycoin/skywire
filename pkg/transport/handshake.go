@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/httputil"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
@@ -29,33 +31,42 @@ func compareEntries(expected, received *Entry) error {
 	if expected.ID != received.ID {
 		return errors.New("received entry's 'tp_id' is not of expected")
 	}
+
 	if expected.Edges != received.Edges {
 		return errors.New("received entry's 'edges' is not of expected")
 	}
+
 	if expected.Type != received.Type {
 		return errors.New("received entry's 'type' is not of expected")
 	}
+
 	if expected.Public != received.Public {
 		return errors.New("received entry's 'public' is not of expected")
 	}
+
 	return nil
 }
 
 func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey) (*SignedEntry, error) {
 	var recvSE SignedEntry
+
 	if err := json.NewDecoder(r).Decode(&recvSE); err != nil {
 		return nil, fmt.Errorf("failed to read entry: %s", err)
 	}
+
 	if err := compareEntries(expected, recvSE.Entry); err != nil {
 		return nil, err
 	}
-	sig, ok := recvSE.Signature(remotePK)
-	if !ok {
-		return nil, errors.New("invalid remote signature")
+
+	sig, err := recvSE.Signature(remotePK)
+	if err != nil {
+		return nil, fmt.Errorf("invalid remote signature: %w", err)
 	}
+
 	if err := cipher.VerifyPubKeySignedPayload(remotePK, sig, recvSE.Entry.ToBinary()); err != nil {
 		return nil, err
 	}
+
 	return &recvSE, nil
 }
 
@@ -80,21 +91,24 @@ func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, conn *snet.Co
 
 // MakeSettlementHS creates a settlement handshake.
 // `init` determines whether the local side is initiating or responding.
+// The handshake logic only REGISTERS the transport, and does not update the status of the transport.
 func MakeSettlementHS(init bool) SettlementHS {
 	// initiating logic.
 	initHS := func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) (err error) {
 		entry := makeEntryFromTpConn(conn)
 
-		defer func() {
-			if _, err := dc.UpdateStatuses(ctx, &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
-				log.WithError(err).Error("Failed to update statuses")
-			}
-		}()
+		// TODO(evanlinjin): Probably not needed as this is called in mTp already. Need to double check.
+		//defer func() {
+		//	// @evanlinjin: I used background context to ensure status is always updated.
+		//	if _, err := dc.UpdateStatuses(context.Background(), &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
+		//		log.WithError(err).Error("Failed to update statuses")
+		//	}
+		//}()
 
 		// create signed entry and send it to responding visor.
-		se, ok := NewSignedEntry(&entry, conn.LocalPK(), sk)
-		if !ok {
-			return errors.New("failed to sign entry")
+		se, err := NewSignedEntry(&entry, conn.LocalPK(), sk)
+		if err != nil {
+			return fmt.Errorf("failed to sign entry: %w", err)
 		}
 		if err := json.NewEncoder(conn).Encode(se); err != nil {
 			return fmt.Errorf("failed to write entry: %v", err)
@@ -120,14 +134,21 @@ func MakeSettlementHS(init bool) SettlementHS {
 		if err != nil {
 			return err
 		}
-		if ok := recvSE.Sign(conn.LocalPK(), sk); !ok {
-			return errors.New("failed to sign received entry")
+
+		if err := recvSE.Sign(conn.LocalPK(), sk); err != nil {
+			return fmt.Errorf("failed to sign received entry: %w", err)
 		}
+
 		entry = *recvSE.Entry
 
 		// Ensure transport is registered.
 		if err := dc.RegisterTransports(ctx, recvSE); err != nil {
-			log.WithError(err).Error("Failed to register transports")
+			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusConflict {
+				log.WithError(err).Debug("An expected error occurred while trying to register transport.")
+			} else {
+				// TODO(evanlinjin): In the future, this should return error and result in failed HS.
+				log.WithError(err).Error("Failed to register transport.")
+			}
 		}
 
 		// inform initiating visor.

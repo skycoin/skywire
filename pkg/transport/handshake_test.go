@@ -3,6 +3,7 @@ package transport_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,21 @@ func TestSettlementHS(t *testing.T) {
 			}
 			errCh1 <- transport.MakeSettlementHS(false).Do(context.TODO(), tpDisc, conn1, keys[1].SK)
 		}()
+
+		const entryTimeout = 5 * time.Second
+		start := time.Now()
+
+		// Wait until entry is set.
+		// TODO: Implement more elegant solution.
+		for {
+			if time.Since(start) > entryTimeout {
+				t.Fatal("Entry in Dmsg Discovery is not set within expected time")
+			}
+
+			if _, err := nEnv.DmsgD.Entry(context.TODO(), keys[1].PK); err == nil {
+				break
+			}
+		}
 
 		conn0, err := nEnv.Nets[0].Dial(context.TODO(), dmsg.Type, keys[1].PK, skyenv.DmsgTransportPort)
 		require.NoError(t, err)

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/rpc"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,14 +21,14 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/rjeczalik/notify"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/httputil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
@@ -37,6 +36,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
 // AppStatus defines running status of an App.
@@ -57,7 +57,11 @@ var (
 	ErrNoConfigPath = errors.New("no config path")
 )
 
-const supportedProtocolVersion = "0.0.1"
+const (
+	supportedProtocolVersion = "0.1.0"
+	ownerRWX                 = 0700
+	shortHashLen             = 6
+)
 
 var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skysocks"}
 
@@ -76,8 +80,7 @@ type Visor struct {
 	router router.Router
 	n      *snet.Network
 	tm     *transport.Manager
-	rt     routing.Table
-	pty    *dmsgpty.Host // TODO(evanlinjin): Complete.
+	pty    *dmsgpty.Host
 
 	Logger *logging.MasterLogger
 	logger *logging.Logger
@@ -89,17 +92,21 @@ type Visor struct {
 
 	startedAt  time.Time
 	restartCtx *restart.Context
+	updater    *updater.Updater
 
 	pidMu sync.Mutex
 
-	rpcListener net.Listener
-	rpcDialers  []*RPCClientDialer
+	cliLis net.Listener
+	hvErrs map[cipher.PubKey]chan error // errors returned when the associated hypervisor ServeRPCClient returns
 
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
 
 	Onspd  bool
 	spdCmd *exec.Cmd
+
+	// cancel is to be called when visor.Close is triggered.
+	cancel context.CancelFunc
 }
 
 // NewVisor constructs new Visor.
@@ -146,9 +153,9 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 			return nil, fmt.Errorf("failed to setup pty: %v", err)
 		}
 		visor.pty = pty
+	} else {
+		logger.Info("'dmsgpty' is not configured, skipping...")
 	}
-
-	logger.Info("'dmsgpty' is not configured, skipping...")
 
 	trDiscovery, err := cfg.TransportDiscovery()
 	if err != nil {
@@ -170,17 +177,11 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		return nil, fmt.Errorf("transport manager: %s", err)
 	}
 
-	visor.rt, err = cfg.RoutingTable()
-	if err != nil {
-		return nil, fmt.Errorf("routing table: %s", err)
-	}
-
 	rConfig := &router.Config{
 		Logger:           visor.Logger.PackageLogger("router"),
 		PubKey:           pk,
 		SecKey:           sk,
 		TransportManager: visor.tm,
-		RoutingTable:     visor.rt,
 		RouteFinder:      rfclient.NewHTTP(cfg.Routing.RouteFinder, time.Duration(cfg.Routing.RouteFinderTimeout)),
 		SetupNodes:       cfg.Routing.SetupNodes,
 	}
@@ -215,29 +216,25 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
 		}
-		visor.rpcListener = l
+		visor.cliLis = l
 	}
 
-	visor.rpcDialers = make([]*RPCClientDialer, len(cfg.Hypervisors))
-
-	for i, entry := range cfg.Hypervisors {
-		_, rpcPort, err := httputil.SplitRPCAddr(entry.Addr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse rpc port from rpc address: %s", err)
-		}
-
-		visor.rpcDialers[i] = NewRPCClientDialer(visor.n, entry.PubKey, rpcPort)
+	visor.hvErrs = make(map[cipher.PubKey]chan error, len(cfg.Hypervisors))
+	for _, hv := range cfg.Hypervisors {
+		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
 	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerSockFile)
 
 	go func() {
-		if err := visor.appRPCServer.ListenAndServe(); err != nil {
-			visor.logger.WithError(err).Error("error serving RPC")
+		if err := visor.appRPCServer.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			visor.logger.WithError(err).Error("Serve app_rpc stopped.")
 		}
 	}()
 
 	visor.procManager = appserver.NewProcManager(logging.MustGetLogger("proc_manager"), visor.appRPCServer)
+
+	visor.updater = updater.New(visor.logger, visor.restartCtx, visor.appsPath)
 
 	return visor, err
 }
@@ -250,49 +247,24 @@ func (visor *Visor) Start() error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	visor.cancel = cancel
 	defer cancel()
 
 	visor.startedAt = time.Now()
 
-	// Start pty.
-	if visor.pty != nil {
-		go visor.pty.ServeRemoteRequests(ctx)
-		go visor.pty.ServeCLIRequests(ctx)
+	if err := pathutil.EnsureDir(visor.dir()); err != nil {
+		return err
 	}
 
-	pathutil.EnsureDir(visor.dir())
-	visor.closePreviousApps()
-
-	for _, ac := range visor.appsConf {
-		if !ac.AutoStart {
-			continue
-		}
-
-		go func(a AppConfig) {
-			if err := visor.SpawnApp(&a, nil); err != nil {
-				visor.logger.Warnf("App %s stopped working: %v", a.App, err)
-			}
-		}(ac)
+	if err := visor.startApps(); err != nil {
+		return err
 	}
 
-	rpcSvr := rpc.NewServer()
-	if err := rpcSvr.RegisterName(RPCPrefix, &RPC{visor: visor}); err != nil {
-		return fmt.Errorf("rpc server created failed: %s", err)
+	if err := visor.startDmsgPty(ctx); err != nil {
+		return err
 	}
 
-	if visor.rpcListener != nil {
-		visor.logger.Info("Starting RPC interface on ", visor.rpcListener.Addr())
-
-		go rpcSvr.Accept(visor.rpcListener)
-	}
-
-	for _, dialer := range visor.rpcDialers {
-		go func(dialer *RPCClientDialer) {
-			if err := dialer.Run(rpcSvr, time.Second); err != nil {
-				visor.logger.Errorf("Hypervisor Dmsg Dial exited with error: %v", err)
-			}
-		}(dialer)
-	}
+	visor.startRPC(ctx)
 
 	visor.logger.Info("Starting packet router")
 
@@ -303,17 +275,87 @@ func (visor *Visor) Start() error {
 	return nil
 }
 
+func (visor *Visor) startApps() error {
+	if err := visor.closePreviousApps(); err != nil {
+		return err
+	}
+
+	for _, ac := range visor.appsConf {
+		if !ac.AutoStart {
+			continue
+		}
+
+		go func(a AppConfig) {
+			if err := visor.SpawnApp(&a, nil); err != nil {
+				visor.logger.
+					WithError(err).
+					WithField("app_name", a.App).
+					Warn("App stopped.")
+			}
+		}(ac)
+	}
+
+	return nil
+}
+
+func (visor *Visor) startDmsgPty(ctx context.Context) error {
+	if visor.pty == nil {
+		return nil
+	}
+
+	log := visor.Logger.PackageLogger("dmsgpty")
+
+	err2 := visor.serveDmsgPtyCLI(ctx, log)
+	if err2 != nil {
+		return err2
+	}
+
+	go visor.serveDmsgPty(ctx, log)
+
+	return nil
+}
+
+func (visor *Visor) serveDmsgPtyCLI(ctx context.Context, log *logging.Logger) error {
+	if visor.conf.DmsgPty.CLINet == "unix" {
+		if err := os.MkdirAll(filepath.Dir(visor.conf.DmsgPty.CLIAddr), ownerRWX); err != nil {
+			log.WithError(err).Debug("Failed to prepare unix file dir.")
+		}
+	}
+
+	ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
+	if err != nil {
+		return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
+	}
+
+	go func() {
+		log.WithField("net", visor.conf.DmsgPty.CLINet).
+			WithField("addr", visor.conf.DmsgPty.CLIAddr).
+			Info("Serving dmsgpty CLI.")
+
+		if err := visor.pty.ServeCLI(ctx, ptyL); err != nil {
+			log.WithError(err).
+				WithField("entity", "dmsgpty-host").
+				WithField("func", ".ServeCLI()").
+				Error()
+
+			visor.cancel()
+		}
+	}()
+
+	return nil
+}
+
 // RunDaemon starts a skywire-peering-daemon as an external process
 func (visor *Visor) RunDaemon() error {
 	visor.Onspd = true
 	bin, err := exec.LookPath("skywire-peering-daemon")
 	if err != nil {
-		return fmt.Errorf("Cannot find `skywire-peering-daemon` binary in $PATH: %s", err)
+		return err
 	}
 
 	dir, err := ioutil.TempDir("", "named_pipes")
 	if err != nil {
-		return fmt.Errorf("Couldn't create named_pipes dir: %s", err)
+		return err
 	}
 
 	namedPipe := filepath.Join(dir, "stdout")
@@ -326,7 +368,7 @@ func (visor *Visor) RunDaemon() error {
 
 	visor.spdCmd = exec.Command(bin)
 	if err := execute(visor.spdCmd, pubKey, lAddr, namedPipe); err != nil {
-		return fmt.Errorf("Failed to start daemon as an external process: %s", err)
+		return err
 	}
 
 	visor.logger.Info("Opening named pipe for reading packets from skywire-peering-daemon")
@@ -338,6 +380,7 @@ func (visor *Visor) RunDaemon() error {
 	if visor.conf.STCP.PubKeyTable == nil {
 		visor.conf.STCP.PubKeyTable = make(map[cipher.PubKey]string)
 	}
+
 	pubKeyTable := visor.conf.STCP.PubKeyTable
 	c := make(chan notify.EventInfo, 5)
 
@@ -357,29 +400,77 @@ func (visor *Visor) StopDaemon() {
 	visor.Onspd = false
 	visor.logger.Info("Shutting down skywire-peering-daemon")
 	if err := visor.spdCmd.Process.Kill(); err != nil {
-		visor.logger.Errorf("Failed to kill skywire-peering-daemon process: %s", err)
+		visor.logger.WithError(err).Warnf("failed to kill skywire-peering-daemon process")
 	}
 
-	visor.logger.Info("Skywire-peering-daemon closed successfully")
+	visor.logger.Info("skywire-peering-daemon closed successfully")
+}
+
+func (visor *Visor) serveDmsgPty(ctx context.Context, log *logging.Logger) {
+	log.WithField("dmsg_port", visor.conf.DmsgPty.Port).
+		Info("Serving dmsg.")
+
+	if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
+		log.WithError(err).
+			WithField("entity", "dmsgpty-host").
+			WithField("func", ".ListenAndServe()").
+			Error()
+
+		visor.cancel()
+	}
+}
+
+func (visor *Visor) startRPC(ctx context.Context) {
+	if visor.cliLis != nil {
+		visor.logger.Info("Starting RPC interface on ", visor.cliLis.Addr())
+
+		srv, err := newRPCServer(visor, "CLI")
+		if err != nil {
+			visor.logger.WithError(err).Errorf("Failed to start RPC server")
+			return
+		}
+
+		go srv.Accept(visor.cliLis)
+	}
+
+	if visor.hvErrs != nil {
+		for hvPK, hvErrs := range visor.hvErrs {
+			log := visor.Logger.PackageLogger("hypervisor_client").
+				WithField("hypervisor_pk", hvPK)
+
+			addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
+			rpcS, err := newRPCServer(visor, addr.PK.String()[:shortHashLen])
+			if err != nil {
+				visor.logger.WithError(err).Errorf("Failed to start RPC server")
+				return
+			}
+
+			go ServeRPCClient(ctx, log, visor.n, rpcS, addr, hvErrs)
+		}
+	}
 }
 
 func (visor *Visor) dir() string {
-	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey)
+	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey.String())
 }
 
-func (visor *Visor) pidFile() *os.File {
+func (visor *Visor) pidFile() (*os.File, error) {
 	f, err := os.OpenFile(filepath.Join(visor.dir(), "apps-pid.txt"), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return f
+	return f, nil
 }
 
-func (visor *Visor) closePreviousApps() {
+func (visor *Visor) closePreviousApps() error {
 	visor.logger.Info("killing previously ran apps if any...")
 
-	pids := visor.pidFile()
+	pids, err := visor.pidFile()
+	if err != nil {
+		return err
+	}
+
 	defer func() {
 		if err := pids.Close(); err != nil {
 			visor.logger.Warnf("error closing PID file: %s", err)
@@ -402,7 +493,11 @@ func (visor *Visor) closePreviousApps() {
 	}
 
 	// empty file
-	pathutil.AtomicWriteFile(pids.Name(), []byte{})
+	if err := pathutil.AtomicWriteFile(pids.Name(), []byte{}); err != nil {
+		visor.logger.WithError(err).Errorf("Failed to empty file %s", pids.Name())
+	}
+
+	return nil
 }
 
 func (visor *Visor) stopUnhandledApp(name string, pid int) {
@@ -428,38 +523,44 @@ func (visor *Visor) Close() (err error) {
 		return nil
 	}
 
-	if visor.rpcListener != nil {
-		if err = visor.rpcListener.Close(); err != nil {
-			visor.logger.WithError(err).Error("failed to stop RPC interface")
-		} else {
-			visor.logger.Info("RPC interface stopped successfully")
-		}
+	if visor.cancel != nil {
+		visor.cancel()
 	}
 
-	for i, dialer := range visor.rpcDialers {
-		if err = dialer.Close(); err != nil {
-			visor.logger.WithError(err).Errorf("(%d) failed to stop RPC dialer", i)
+	if visor.cliLis != nil {
+		if err = visor.cliLis.Close(); err != nil {
+			visor.logger.WithError(err).Error("failed to close CLI listener")
 		} else {
-			visor.logger.Infof("(%d) RPC dialer closed successfully", i)
+			visor.logger.Info("CLI listener closed successfully")
+		}
+	}
+	if visor.hvErrs != nil {
+		for hvPK, hvErr := range visor.hvErrs {
+			visor.logger.
+				WithError(<-hvErr).
+				WithField("hypervisor_pk", hvPK).
+				Info("Closed hypervisor connection.")
 		}
 	}
 
 	visor.procManager.StopAll()
 
 	if err = visor.router.Close(); err != nil {
-		visor.logger.WithError(err).Error("failed to stop router")
+		visor.logger.WithError(err).Error("Failed to stop router.")
 	} else {
-		visor.logger.Info("router stopped successfully")
+		visor.logger.Info("Router stopped successfully.")
 	}
 
 	if err := visor.appRPCServer.Close(); err != nil {
-		visor.logger.WithError(err).Error("error closing RPC server")
+		visor.logger.WithError(err).Error("RPC server closed with error.")
 	}
 
 	if err := UnlinkSocketFiles(visor.conf.AppServerSockFile); err != nil {
-		visor.logger.WithError(err).Errorf("Failed to unlink socket file %s", visor.conf.AppServerSockFile)
+		visor.logger.WithError(err).WithField("file_name", visor.conf.AppServerSockFile).
+			Error("Failed to unlink socket file.")
 	} else {
-		visor.logger.Infof("Socket file %s removed successfully", visor.conf.AppServerSockFile)
+		visor.logger.WithField("file_name", visor.conf.AppServerSockFile).
+			Debug("Socket file removed successfully.")
 	}
 
 	if visor.Onspd {
@@ -469,11 +570,17 @@ func (visor *Visor) Close() (err error) {
 	return err
 }
 
-// Exec executes a shell command. It returns combined stdout and stderr output and an error.
-func (visor *Visor) Exec(command string) ([]byte, error) {
-	args := strings.Split(command, " ")
-	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
-	return cmd.CombinedOutput()
+// App returns a single app state of given name.
+func (visor *Visor) App(name string) (*AppState, bool) {
+	app, ok := visor.appsConf[name]
+	if !ok {
+		return nil, false
+	}
+	state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
+	if visor.procManager.Exists(app.App) {
+		state.Status = AppStatusRunning
+	}
+	return state, true
 }
 
 // Apps returns list of AppStates for all registered apps.
@@ -502,7 +609,10 @@ func (visor *Visor) StartApp(appName string) error {
 
 			go func(app AppConfig) {
 				if err := visor.SpawnApp(&app, startCh); err != nil {
-					visor.logger.Warnf("App %s stopped working: %v", appName, err)
+					visor.logger.
+						WithError(err).
+						WithField("app_name", appName).
+						Warn("App stopped.")
 				}
 			}(app)
 
@@ -516,7 +626,10 @@ func (visor *Visor) StartApp(appName string) error {
 
 // SpawnApp configures and starts new App.
 func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
-	visor.logger.Infof("Starting %s.v%s", config.App, config.Version)
+	visor.logger.
+		WithField("app_name", config.App).
+		WithField("args", config.Args).
+		Info("Spawning app.")
 
 	if app, ok := reservedPorts[config.Port]; ok && app != config.App {
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
@@ -524,11 +637,10 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 	appCfg := appcommon.Config{
 		Name:         config.App,
-		Version:      config.Version,
 		SockFilePath: visor.conf.AppServerSockFile,
 		VisorPK:      visor.conf.Visor.StaticPubKey.Hex(),
 		BinaryDir:    visor.appsPath,
-		WorkDir:      filepath.Join(visor.localPath, config.App, fmt.Sprintf("v%s", config.Version)),
+		WorkDir:      filepath.Join(visor.localPath, config.App),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {
@@ -536,8 +648,8 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
-	logger := visor.logger.WithField("_module", fmt.Sprintf("%s.v%s", config.App, config.Version)).Writer()
-	errLogger := visor.logger.WithField("_module", fmt.Sprintf("%s.v%s[ERROR]", config.App, config.Version)).Writer()
+	logger := visor.logger.WithField("_module", config.App).Writer()
+	errLogger := visor.logger.WithField("_module", config.App+"[ERROR]").Writer()
 
 	defer func() {
 		if logErr := logger.Close(); err == nil && logErr != nil {
@@ -562,21 +674,36 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	visor.pidMu.Lock()
+
 	visor.logger.Infof("storing app %s pid %d", config.App, pid)
-	visor.persistPID(config.App, pid)
+
+	if err := visor.persistPID(config.App, pid); err != nil {
+		visor.pidMu.Unlock()
+		return err
+	}
+
 	visor.pidMu.Unlock()
 
 	return visor.procManager.Wait(config.App)
 }
 
-func (visor *Visor) persistPID(name string, pid appcommon.ProcID) {
-	pidF := visor.pidFile()
+func (visor *Visor) persistPID(name string, pid appcommon.ProcID) error {
+	pidF, err := visor.pidFile()
+	if err != nil {
+		return err
+	}
+
 	pidFName := pidF.Name()
 	if err := pidF.Close(); err != nil {
 		visor.logger.WithError(err).Warn("Failed to close PID file")
 	}
 
-	pathutil.AtomicAppendToFile(pidFName, []byte(fmt.Sprintf("%s %d\n", name, pid)))
+	data := fmt.Sprintf("%s %d\n", name, pid)
+	if err := pathutil.AtomicAppendToFile(pidFName, []byte(data)); err != nil {
+		visor.logger.WithError(err).Warn("Failed to save PID to file")
+	}
+
+	return nil
 }
 
 // StopApp stops running App.
@@ -605,6 +732,24 @@ func (visor *Visor) RestartApp(name string) error {
 
 	if err := visor.StartApp(name); err != nil {
 		return fmt.Errorf("start app %v: %w", name, err)
+	}
+
+	return nil
+}
+
+// Exec executes a shell command. It returns combined stdout and stderr output and an error.
+func (visor *Visor) Exec(command string) ([]byte, error) {
+	args := strings.Split(command, " ")
+	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
+	return cmd.CombinedOutput()
+}
+
+// Update checks if visor update is available.
+// If it is, the method downloads a new visor versions, starts it and kills the current process.
+func (visor *Visor) Update() error {
+	if err := visor.updater.Update(); err != nil {
+		visor.logger.Errorf("Failed to update visor: %v", err)
+		return err
 	}
 
 	return nil
@@ -782,9 +927,7 @@ func (visor *Visor) writeConfig(config *Config) error {
 func UnlinkSocketFiles(socketFiles ...string) error {
 	for _, f := range socketFiles {
 		if err := syscall.Unlink(f); err != nil {
-			if strings.Contains(err.Error(), "no such file or directory") {
-				continue
-			} else {
+			if !strings.Contains(err.Error(), "no such file or directory") {
 				return err
 			}
 		}

@@ -156,7 +156,7 @@ func defaultConfig() *visor.Config {
 
 func defaultDmsgPtyConfig() visor.DmsgPtyConfig {
 	return visor.DmsgPtyConfig{
-		Port:     skyenv.DefaultDmsgPtyPort,
+		Port:     skyenv.DmsgPtyPort,
 		AuthFile: "./skywire/dmsgpty/whitelist.json",
 		CLINet:   skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
@@ -166,7 +166,6 @@ func defaultDmsgPtyConfig() visor.DmsgPtyConfig {
 func defaultSkychatConfig() visor.AppConfig {
 	return visor.AppConfig{
 		App:       skyenv.SkychatName,
-		Version:   skyenv.SkychatVersion,
 		AutoStart: true,
 		Port:      routing.Port(skyenv.SkychatPort),
 		Args:      []string{"-addr", skyenv.SkychatAddr},
@@ -180,7 +179,6 @@ func defaultSkysocksConfig(passcode string) visor.AppConfig {
 	}
 	return visor.AppConfig{
 		App:       skyenv.SkysocksName,
-		Version:   skyenv.SkysocksVersion,
 		AutoStart: true,
 		Port:      routing.Port(skyenv.SkysocksPort),
 		Args:      args,
@@ -190,7 +188,6 @@ func defaultSkysocksConfig(passcode string) visor.AppConfig {
 func defaultSkysocksClientConfig() visor.AppConfig {
 	return visor.AppConfig{
 		App:       skyenv.SkysocksClientName,
-		Version:   skyenv.SkysocksClientVersion,
 		AutoStart: false,
 		Port:      routing.Port(skyenv.SkysocksClientPort),
 	}

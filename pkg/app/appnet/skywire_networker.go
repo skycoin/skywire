@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -43,11 +44,18 @@ func (r *SkywireNetworker) Dial(addr Addr) (net.Conn, error) {
 }
 
 // DialContext dials remote `addr` via `skynet` with context.
-func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (net.Conn, error) {
+func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net.Conn, err error) {
 	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	// ensure ports are freed on error.
+	defer func() {
+		if err != nil {
+			freePort()
+		}
+	}()
 
 	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
@@ -87,8 +95,8 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
 		go func() {
-			if err := r.serveLoop(ctx); err != nil {
-				r.log.WithError(err).Error("error serving")
+			if err := r.serveRouteGroup(ctx); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+				r.log.WithError(err).Error("serveRouteGroup stopped unexpectedly.")
 			}
 		}()
 	}
@@ -96,18 +104,23 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 	return lis, nil
 }
 
-// serveLoop accepts and serves routes.
-func (r *SkywireNetworker) serveLoop(ctx context.Context) error {
+// serveRouteGroup accepts and serves routes.
+func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
+	log := r.log.WithField("func", "serveRouteGroup")
+
 	for {
-		r.log.Infoln("Trying to accept routing group...")
+		log.Debug("Awaiting to accept route group...")
 
 		rg, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
-			r.log.Infof("Error accepting routing group: %v", err)
+			log.WithError(err).Info("Stopped accepting routes.")
 			return err
 		}
 
-		r.log.Infoln("Accepted routing group")
+		log.
+			WithField("local", rg.LocalAddr()).
+			WithField("remote", rg.RemoteAddr()).
+			Info("Accepted route group.")
 
 		go r.serve(rg)
 	}

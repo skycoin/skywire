@@ -19,8 +19,26 @@ DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`go
 DOCKER_NETWORK?=SKYNET 
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
-TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
-TEST_OPTS_NOCI?=-race -cover -timeout=5m -v
+
+TEST_OPTS_BASE:=-cover -timeout=5m
+
+RACE_FLAG:=-race
+GOARCH:=$(shell go env GOARCH)
+
+ifneq (,$(findstring 64,$(GOARCH)))
+    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
+endif
+
+# TODO: Remove after https://github.com/etcd-io/bbolt/pull/201 is closed.
+DISABLE_CHECKPTR_FLAG:=-gcflags=all=-d=checkptr=0
+GO_VERSION:=$(shell go version)
+
+ifneq (,$(findstring go1.14,$(GO_VERSION)))
+    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(DISABLE_CHECKPTR_FLAG)
+endif
+
+TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
+TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
 
 BUILDINFO_PATH := $(PROJECT_BASE)/pkg/util/buildinfo
 
@@ -51,8 +69,8 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor ./skywire-peering-daemon
 
-install: ## Install `skywire-visor`, `skywire-cli`, `hypervisor`, `dmsgpty`
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor ./cmd/dmsgpty
+install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
+	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -102,10 +120,10 @@ dep: ## Sorts dependencies
 
 # Apps 
 host-apps: ## Build app 
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat	
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat	
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 
 # Bin 
 bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
@@ -113,17 +131,19 @@ bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
-	${OPTS} go build ${BUILD_OPTS} -o ./dmsgpty ./cmd/dmsgpty
 
 release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without -race flag
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat.v1.0 ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+
+github-release: ## Create a GitHub release
+	goreleaser --rm-dist
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
@@ -137,10 +157,10 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 	-docker network create ${DOCKER_NETWORK}
 
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat.v1.0 ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld.v1.0 ./cmd/apps/helloworld
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks.v1.0 ./cmd/apps/skysocks
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat ./cmd/apps/skychat
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld ./cmd/apps/helloworld
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks ./cmd/apps/skysocks
+	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client  ./cmd/apps/skysocks-client
 
 docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`. `go build` with  ${DOCKER_OPTS}
 	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
@@ -175,21 +195,6 @@ run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
 	-mkdir -p /tmp/syslog
 	-docker container rm syslog-ng -f
 	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest 
-
-integration-startup: ## Starts up the required transports between `skywire-visor`s of interactive testing environment
-	./integration/startup.sh
-
-integration-teardown: ## Tears down all saved configs and states of integration executables
-	./integration/tear-down.sh
-
-integration-run-generic: ## Runs the generic interactive testing environment
-	./integration/run-generic-env.sh
-
-integration-run-messaging: ## Runs the messaging interactive testing environment
-	./integration/run-messaging-env.sh
-
-integration-run-proxy: ## Runs the proxy interactive testing environment
-	./integration/run-proxy-env.sh
 
 mod-comm: ## Comments the 'replace' rule in go.mod
 	./ci_scripts/go_mod_replace.sh comment go.mod

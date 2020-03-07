@@ -2,6 +2,7 @@ package visor
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
@@ -36,7 +38,7 @@ func TestHealth(t *testing.T) {
 	c.Routing.RouteFinder = "foo"
 
 	t.Run("Report all the services as available", func(t *testing.T) {
-		rpc := &RPC{&Visor{conf: c}}
+		rpc := &RPC{visor: &Visor{conf: c}, log: logrus.New()}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -47,7 +49,7 @@ func TestHealth(t *testing.T) {
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
-		rpc := &RPC{&Visor{conf: &Config{}}}
+		rpc := &RPC{visor: &Visor{conf: &Config{}}, log: logrus.New()}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -58,7 +60,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestUptime(t *testing.T) {
-	rpc := &RPC{&Visor{startedAt: time.Now()}}
+	rpc := &RPC{visor: &Visor{startedAt: time.Now()}, log: logrus.New()}
 	time.Sleep(time.Second)
 	var res float64
 	err := rpc.Uptime(nil, &res)
@@ -95,7 +97,7 @@ func TestListApps(t *testing.T) {
 		procManager: pm,
 	}
 
-	rpc := &RPC{visor: &n}
+	rpc := &RPC{visor: &n, log: logrus.New()}
 
 	var reply []*AppState
 	require.NoError(t, rpc.Apps(nil, &reply))
@@ -121,6 +123,10 @@ func TestListApps(t *testing.T) {
 }
 
 func TestStartStopApp(t *testing.T) {
+	tempDir, err := ioutil.TempDir(os.TempDir(), "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, os.RemoveAll(tempDir)) }()
+
 	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
@@ -133,7 +139,6 @@ func TestStartStopApp(t *testing.T) {
 	appCfg := []AppConfig{
 		{
 			App:       "foo",
-			Version:   "1.0",
 			AutoStart: false,
 			Port:      10,
 		},
@@ -154,21 +159,24 @@ func TestStartStopApp(t *testing.T) {
 		logger:   logging.MustGetLogger("test"),
 		conf:     &visorCfg,
 	}
-	pathutil.EnsureDir(visor.dir())
+
+	require.NoError(t, pathutil.EnsureDir(visor.dir()))
+
 	defer func() {
 		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
-	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:         app,
-		Version:      apps["foo"].Version,
 		SockFilePath: visorCfg.AppServerSockFile,
 		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", app, fmt.Sprintf("v%s", apps["foo"].Version)),
+		WorkDir:      filepath.Join("", app),
 	}
+
 	appArgs1 := append([]string{filepath.Join(visor.dir(), app)}, apps["foo"].Args...)
 	appPID1 := appcommon.ProcID(10)
+
+	pm := &appserver.MockProcManager{}
 	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", app).Return(testhelpers.NoErr)
@@ -178,9 +186,9 @@ func TestStartStopApp(t *testing.T) {
 
 	visor.procManager = pm
 
-	rpc := &RPC{visor: visor}
+	rpc := &RPC{visor: visor, log: logrus.New()}
 
-	err := rpc.StartApp(&unknownApp, nil)
+	err = rpc.StartApp(&unknownApp, nil)
 	require.Error(t, err)
 	assert.Equal(t, ErrUnknownApp, err)
 
@@ -193,6 +201,9 @@ func TestStartStopApp(t *testing.T) {
 
 	require.NoError(t, rpc.StopApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
+
+	// remove files
+	require.NoError(t, os.RemoveAll("foo"))
 }
 
 /*
@@ -223,8 +234,8 @@ These tests have been commented out for the following reasons:
 //	require.NoError(t, err)
 //
 //	apps := []AppConfig{
-//		{App: "foo", Version: "1.0", AutoStart: false, Port: 10},
-//		{App: "bar", Version: "2.0", AutoStart: false, Port: 20},
+//		{App: "foo", AutoStart: false, Port: 10},
+//		{App: "bar", AutoStart: false, Port: 20},
 //	}
 //	conf := &Config{}
 //	conf.Visor.StaticPubKey = pk1

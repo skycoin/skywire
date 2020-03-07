@@ -62,11 +62,11 @@ var availableServersCmd = &cobra.Command{
 
 func printAvailableServers(entries []*disc.Entry) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tport\tconns")
+	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tavailable-sessions")
 	internal.Catch(err)
 	for _, entry := range entries {
-		_, err := fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%d\n",
-			entry.Version, entry.Timestamp, entry.Static, entry.Server.Address, entry.Server.Port, entry.Server.AvailableConnections)
+		_, err := fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%d\n",
+			entry.Version, entry.Timestamp, entry.Static, entry.Server.Address, entry.Server.AvailableSessions)
 		internal.Catch(err)
 	}
 	internal.Catch(w.Flush())

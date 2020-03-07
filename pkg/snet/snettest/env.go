@@ -32,8 +32,10 @@ func GenKeyPairs(n int) []KeyPair {
 		if err != nil {
 			panic(err)
 		}
+
 		pairs[i] = KeyPair{PK: pk, SK: sk}
 	}
+
 	return pairs
 }
 
@@ -134,7 +136,7 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 	require.NoError(t, err)
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-	srv = dmsg.NewServer(pk, sk, dc)
+	srv = dmsg.NewServer(pk, sk, dc, 100)
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- srv.Serve(l, "")

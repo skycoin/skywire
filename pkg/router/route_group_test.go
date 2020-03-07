@@ -28,6 +28,13 @@ func TestNewRouteGroup(t *testing.T) {
 	require.Equal(t, DefaultRouteGroupConfig(), rg.cfg)
 }
 
+// Uncomment for debugging
+/*
+func TestRouteGroupAlignment(t *testing.T) {
+	alignment.PrintStruct(RouteGroup{})
+}
+*/
+
 func TestRouteGroup_Close(t *testing.T) {
 	rg1, rg2, m1, m2, teardown := setupEnv(t)
 
@@ -589,7 +596,7 @@ func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (keepSending 
 }
 
 func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {
-	rt := routing.NewTable(routing.DefaultConfig())
+	rt := routing.NewTable()
 
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()

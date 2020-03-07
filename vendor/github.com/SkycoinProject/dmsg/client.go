@@ -3,6 +3,7 @@ package dmsg
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -14,6 +15,9 @@ import (
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/dmsg/netutil"
 )
+
+// TODO(evanlinjin): We should implement exponential backoff at some point.
+const serveWait = time.Second
 
 // Config configures a dmsg client entity.
 type Config struct {
@@ -31,7 +35,7 @@ func (c Config) PrintWarnings(log logrus.FieldLogger) {
 // DefaultConfig returns the default configuration for a dmsg client entity.
 func DefaultConfig() *Config {
 	return &Config{
-		MinSessions: 1,
+		MinSessions: DefaultMinSessions,
 	}
 }
 
@@ -58,16 +62,16 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init common fields.
 	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"))
-	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
+	c.EntityCommon.setSessionCallback = func(ctx context.Context, sessionCount int) error {
 		err := c.EntityCommon.updateClientEntry(ctx, c.done)
-		if err != nil {
+		if err == nil {
 			// Client is 'ready' once we have successfully updated the discovery entry
 			// with at least one delegated server.
 			c.readyOnce.Do(func() { close(c.ready) })
 		}
 		return err
 	}
-	c.EntityCommon.delSessionCallback = func(ctx context.Context) error {
+	c.EntityCommon.delSessionCallback = func(ctx context.Context, sessionCount int) error {
 		return c.EntityCommon.updateClientEntry(ctx, c.done)
 	}
 
@@ -115,6 +119,10 @@ func (ce *Client) Serve() {
 			time.Sleep(time.Second) // TODO(evanlinjin): Implement exponential back off.
 			continue
 		}
+		if len(entries) == 0 {
+			ce.log.Warnf("No entries found. Retrying after %s...", serveWait.String())
+			time.Sleep(serveWait)
+		}
 
 		for _, entry := range entries {
 			if isClosed(ce.done) {
@@ -128,11 +136,15 @@ func (ce *Client) Serve() {
 					return
 				case err := <-ce.errCh:
 					ce.log.WithError(err).Info("Session stopped.")
+					if isClosed(ce.done) {
+						return
+					}
 				}
 			}
 
 			if err := ce.ensureSession(ctx, entry); err != nil {
 				ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
+				time.Sleep(serveWait)
 			}
 		}
 	}
@@ -145,7 +157,7 @@ func (ce *Client) Ready() <-chan struct{} {
 }
 
 func (ce *Client) discoverServers(ctx context.Context) (entries []*disc.Entry, err error) {
-	err = netutil.NewDefaultRetrier(ce.log).Do(ctx, func() error {
+	err = netutil.NewDefaultRetrier(ce.log.WithField("func", "discoverServers")).Do(ctx, func() error {
 		entries, err = ce.dc.AvailableServers(ctx)
 		return err
 	})
@@ -294,7 +306,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSes
 	go func() {
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
 		if err := dSes.serve(); !isClosed(ce.done) {
-			ce.errCh <- err
+			ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err)
 			ce.delSession(ctx, dSes.RemotePK())
 		}
 	}()

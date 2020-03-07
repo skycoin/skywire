@@ -70,7 +70,7 @@ func Test_router_DialRoutes(t *testing.T) {
 	r0.conf.RouteGroupDialer = setupclient.NewMockDialer()
 	r1.conf.RouteGroupDialer = setupclient.NewMockDialer()
 
-	// prepare loop creation (client_1 will use this to request loop creation with setup node).
+	// prepare route group creation (client_1 will use this to request route group creation with setup node).
 	desc := routing.NewRouteDescriptor(r0.conf.PubKey, r1.conf.PubKey, 1, 1)
 
 	forwardHops := []routing.Hop{
@@ -433,7 +433,9 @@ func testForwardRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	r0.saveRouteGroupRules(routing.EdgeRules{Desc: fwdRule.RouteDescriptor(), Forward: fwdRule, Reverse: nil})
 
 	// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
-	packet := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	packet, err := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	require.NoError(t, err)
+
 	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 	// r1 should receive the packet handled by r0.
@@ -457,7 +459,9 @@ func testIntermediaryForwardRule(t *testing.T, r0, r1 *router, tp1 *transport.Ma
 	require.NoError(t, err)
 
 	// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
-	packet := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	packet, err := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
+	require.NoError(t, err)
+
 	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 	// r1 should receive the packet handled by r0.
@@ -501,7 +505,9 @@ func testConsumeRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 		Reverse: cnsmRule,
 	})
 
-	packet := routing.MakeDataPacket(intFwdRtID[0], []byte("test intermediary forward"))
+	packet, err := routing.MakeDataPacket(intFwdRtID[0], []byte("test intermediary forward"))
+	require.NoError(t, err)
+
 	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 	recvPacket, err := r1.tm.ReadPacket()
@@ -511,7 +517,9 @@ func testConsumeRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	assert.Equal(t, dstRtIDs[1], recvPacket.RouteID())
 
 	consumeMsg := []byte("test_consume")
-	packet = routing.MakeDataPacket(dstRtIDs[1], consumeMsg)
+	packet, err = routing.MakeDataPacket(dstRtIDs[1], consumeMsg)
+	require.NoError(t, err)
+
 	require.NoError(t, r1.handleTransportPacket(context.TODO(), packet))
 
 	rg, ok := r1.routeGroup(fwdRtDesc.Invert())
@@ -534,7 +542,7 @@ func TestRouter_Rules(t *testing.T) {
 	env := snettest.NewEnv(t, []snettest.KeyPair{{PK: pk, SK: sk}}, []string{dmsg.Type})
 	defer env.Teardown()
 
-	rt := routing.NewTable(routing.Config{GCInterval: 100 * time.Millisecond})
+	rt := routing.NewTable()
 
 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
 	keys := snettest.GenKeyPairs(2)
@@ -711,7 +719,6 @@ func (e *TestEnv) GenRouterConfig(i int) *Config {
 		PubKey:           e.TpMngrConfs[i].PubKey,
 		SecKey:           e.TpMngrConfs[i].SecKey,
 		TransportManager: e.TpMngrs[i],
-		RoutingTable:     routing.NewTable(routing.DefaultConfig()),
 		RouteFinder:      rfclient.NewMock(),
 		SetupNodes:       nil, // TODO
 	}

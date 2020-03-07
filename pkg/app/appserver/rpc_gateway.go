@@ -12,6 +12,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rpcutil"
 )
 
 // RPCIOErr is used to return an error coming from network stack.
@@ -77,7 +78,9 @@ type DialResp struct {
 }
 
 // Dial dials to the remote.
-func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
+func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error) {
+	defer rpcutil.LogCall(r.log, "Dial", remote)(resp, &err)
+
 	reservedConnID, free, err := r.cm.ReserveNextID()
 	if err != nil {
 		return err
@@ -96,12 +99,10 @@ func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
 	}
 
 	if err := r.cm.Set(*reservedConnID, wrappedConn); err != nil {
-		if err := wrappedConn.Close(); err != nil {
-			r.log.WithError(err).Error("error closing conn")
+		if cErr := wrappedConn.Close(); cErr != nil {
+			r.log.WithError(cErr).Error("Error closing wrappedConn.")
 		}
-
 		free()
-
 		return err
 	}
 
@@ -114,7 +115,9 @@ func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) error {
 }
 
 // Listen starts listening.
-func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) error {
+func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) (err error) {
+	defer rpcutil.LogCall(r.log, "Listen", local)(lisID, &err)
+
 	nextLisID, free, err := r.lm.ReserveNextID()
 	if err != nil {
 		return err
@@ -127,17 +130,14 @@ func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) error {
 	}
 
 	if err := r.lm.Set(*nextLisID, l); err != nil {
-		if err := l.Close(); err != nil {
-			r.log.WithError(err).Error("error closing listener")
+		if cErr := l.Close(); cErr != nil {
+			r.log.WithError(cErr).Error("Error closing listener.")
 		}
-
 		free()
-
 		return err
 	}
 
 	*lisID = *nextLisID
-
 	return nil
 }
 
@@ -148,35 +148,31 @@ type AcceptResp struct {
 }
 
 // Accept accepts connection from the listener specified by `lisID`.
-func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
-	r.log.Infoln("Inside RPC Accept on server side")
+func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) (err error) {
+	defer rpcutil.LogCall(r.log, "Accept", lisID)(resp, &err)
 
+	log := r.log.WithField("func", "Accept")
+
+	log.Debug("Getting listener...")
 	lis, err := r.getListener(*lisID)
 	if err != nil {
-		r.log.Infoln("Error getting listener on RPC Accept server side")
 		return err
 	}
 
-	r.log.Infoln("Reserving next ID on RPC Accept server side")
-
+	log.Debug("Reserving next ID...")
 	connID, free, err := r.cm.ReserveNextID()
 	if err != nil {
-		r.log.Infoln("Error reserving next ID on RPC Accept server side")
 		return err
 	}
 
-	r.log.Infoln("Accepting conn on RPC Accept server side")
-
+	log.Debug("Accepting conn...")
 	conn, err := lis.Accept()
 	if err != nil {
-		r.log.Warnf("Error accepting conn on RPC Accept server side: %v", err)
 		free()
-
 		return err
 	}
 
-	r.log.Infoln("Wrapping conn on RPC Accept server side")
-
+	log.Debug("Wrapping conn...")
 	wrappedConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		free()
@@ -184,12 +180,10 @@ func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) error {
 	}
 
 	if err := r.cm.Set(*connID, wrappedConn); err != nil {
-		if err := wrappedConn.Close(); err != nil {
-			r.log.WithError(err).Error("error closing DMSG transport")
+		if cErr := wrappedConn.Close(); cErr != nil {
+			r.log.WithError(cErr).Error("Failed to close wrappedConn.")
 		}
-
 		free()
-
 		return err
 	}
 
@@ -255,6 +249,8 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 		copy(resp.B, buf[:resp.N])
 	}
 
+	fmt.Printf("ERROR READING FROM APP CONN SERVER SIDE: %v\n", err)
+
 	resp.Err = ioErrToRPCIOErr(err)
 
 	// avoid error in RPC pipeline, error is included in response body
@@ -262,7 +258,9 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 }
 
 // CloseConn closes connection specified by `connID`.
-func (r *RPCGateway) CloseConn(connID *uint16, _ *struct{}) error {
+func (r *RPCGateway) CloseConn(connID *uint16, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "CloseConn", connID)(nil, &err)
+
 	conn, err := r.popConn(*connID)
 	if err != nil {
 		return err
@@ -272,7 +270,9 @@ func (r *RPCGateway) CloseConn(connID *uint16, _ *struct{}) error {
 }
 
 // CloseListener closes listener specified by `lisID`.
-func (r *RPCGateway) CloseListener(lisID *uint16, _ *struct{}) error {
+func (r *RPCGateway) CloseListener(lisID *uint16, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "CloseConn", lisID)(nil, &err)
+
 	lis, err := r.popListener(*lisID)
 	if err != nil {
 		return err

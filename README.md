@@ -9,6 +9,7 @@
     - [Configure](#configure)
       - [`stcp` setup](#stcp-setup)
       - [`dmsgpty` setup](#dmsgpty-setup)
+      - [`hypervisor` setup](#hypervisor-setup)
     - [Run `skywire-visor`](#run-skywire-visor)
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `dmsgpty`](#run-dmsgpty)
@@ -37,6 +38,8 @@
       - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
       - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
       - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
+  - [Creating a GitHub release](#creating-a-github-release)
+    - [How to create a GitHub release](#how-to-create-a-github-release)
 
 **NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
@@ -136,6 +139,17 @@ Here is an example configuration for enabling the `dmsgpty` server within `skywi
 
 For `dmsgpty` usage, refer to [#run-dmsgpty](#run-dmsgpty).
 
+#### `hypervisor` setup
+
+Every node can be controlled by one or more hypervisors. The hypervisor allows to control and configure multiple visors. In order to allow a hypervisor to access a visor, the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
+
+```json
+  "hypervisors":[{
+		"public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775",
+	       	"address":"127.0.0.1:7080"
+	}],
+```
+
 ### Run `skywire-visor`
 
 `skywire-visor` hosts apps, proxies app's requests to remote visors and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the visor, communication between visor and app is performed via unix pipes provided on app startup.
@@ -210,17 +224,17 @@ communication API over the pipe.
 
 ```golang
 // Config defines configuration parameters for App
-&app.Config{AppName: "helloworld", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+&app.Config{AppName: "helloworld", ProtocolVersion: "0.0.1"}
 // Setup setups app using default pair of pipes
 func Setup(config *Config) (*App, error) {}
 
-// Accept awaits for incoming loop confirmation request from a Visor and
-// returns net.Conn for a received loop.
+// Accept awaits for incoming route group confirmation request from a Visor and
+// returns net.Conn for a received route group.
 func (app *App) Accept() (net.Conn, error) {}
 
 // Addr implements net.Addr for App connections.
 &Addr{PubKey: pk, Port: 12}
-// Dial sends create loop request to a Visor and returns net.Conn for created loop.
+// Dial sends create route group request to a Visor and returns net.Conn for created route group.
 func (app *App) Dial(raddr *Addr) (net.Conn, error) {}
 
 // Close implements io.Closer for App.
@@ -473,3 +487,20 @@ $ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"System is working!"}
 # Teardown
 $ make stop && make docker-stop
 ```
+
+## Creating a GitHub release
+
+To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor` binaries. 
+Binaries for each version are uploaded to [GitHub releases](https://github.com/SkycoinProject/skywire-mainnet/releases/).
+We use [goreleaser](https://goreleaser.com) for creating them.
+
+### How to create a GitHub release
+
+1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
+2. Checkout to a commit you would like to create a release against.
+3. Make sure that `git status` is in clean state.
+4. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`, where `0.1.0` is release version and `First release` is release name.
+5. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
+6. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
+7. Run `GITHUB_TOKEN=your_token make github-release` 
+8. [Check the created GitHub release.](https://github.com/SkycoinProject/skywire-mainnet/releases/)

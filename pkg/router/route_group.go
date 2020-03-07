@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultRouteGroupKeepAliveInterval = 1 * time.Minute
+	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 )
@@ -67,6 +67,8 @@ type RouteGroup struct {
 	desc   routing.RouteDescriptor // describes the route group
 	rt     routing.Table
 
+	lastSent int64
+
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
 	// where each element corresponds with the adjacent element in 'fwd'.
@@ -79,25 +81,24 @@ type RouteGroup struct {
 	fwd []routing.Rule // forward rules (for writing)
 	rvs []routing.Rule // reverse rules (for reading)
 
-	lastSent int64
-
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
 	//      and push to the appropriate '(RouteGroup).readCh'.
 	readCh   chan []byte // push reads from Router
 	readChMu sync.Mutex
 	readBuf  bytes.Buffer // for read overflow
-	once     sync.Once
 
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
 
 	// used as a bool to indicate if this particular route group initiated close loop
-	closeInitiated int32
-	remoteClosed   chan struct{}
-	closed         chan struct{}
+	closeInitiated   int32
+	remoteClosedOnce sync.Once
+	remoteClosed     chan struct{}
+	closed           chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
+	once      sync.Once
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -247,6 +248,8 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 	select {
 	case <-rg.readDeadline.Wait():
 		return 0, timeoutError{}
+	case <-rg.closed:
+		return 0, io.ErrClosedPipe
 	case data, ok := <-rg.readCh:
 		if !ok || len(data) == 0 {
 			// route group got closed or empty data received. Behavior on the empty
@@ -263,11 +266,17 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 }
 
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
-	packet := routing.MakeDataPacket(rule.KeyRouteID(), data)
+	packet, err := routing.MakeDataPacket(rule.NextRouteID(), data)
+	if err != nil {
+		return 0, err
+	}
+
+	rg.logger.Debugf("Writing packet of type %s, route ID %d and next ID %d", packet.Type(),
+		rule.KeyRouteID(), rule.NextRouteID())
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	errCh := rg.writePacketAsync(ctx, tp, packet)
+	errCh := rg.writePacketAsync(ctx, tp, packet, rule.KeyRouteID())
 	defer cancel()
 
 	select {
@@ -284,11 +293,12 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 	}
 }
 
-func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet) chan error {
+func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet,
+	ruleID routing.RouteID) chan error {
 	errCh := make(chan error)
 	go func() {
 		defer close(errCh)
-		err := tp.WritePacket(ctx, packet)
+		err := rg.writePacket(ctx, tp, packet, ruleID)
 		select {
 		case <-ctx.Done():
 			return
@@ -298,6 +308,19 @@ func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.Manage
 	}()
 
 	return errCh
+}
+
+func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet,
+	ruleID routing.RouteID) error {
+	err := tp.WritePacket(ctx, packet)
+	// note equality here. update activity only if there was NO error
+	if err == nil {
+		if err := rg.rt.UpdateActivity(ruleID); err != nil {
+			rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
+		}
+	}
+
+	return err
 }
 
 // rule fetches first available forward rule.
@@ -367,8 +390,8 @@ func (rg *RouteGroup) sendKeepAlive() error {
 		return ErrBadTransport
 	}
 
-	packet := routing.MakeKeepAlivePacket(rule.KeyRouteID())
-	if err := tp.WritePacket(context.Background(), packet); err != nil {
+	packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
+	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
 		return err
 	}
 
@@ -401,8 +424,8 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		// if this visor initiated closing, we need to wait for close packets
 		// to come back, or to exit with a timeout if anything goes wrong in
 		// the network
-		if err := rg.waitForCloseLoop(closeRoutineTimeout); err != nil {
-			rg.logger.Errorf("Error during close loop: %v", err)
+		if err := rg.waitForCloseRouteGroup(closeRoutineTimeout); err != nil {
+			rg.logger.Errorf("Error during close route group: %v", err)
 		}
 	}
 
@@ -418,11 +441,33 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 			close(rg.closed)
 		}
 
-		close(rg.remoteClosed)
+		rg.setRemoteClosed()
+
 		rg.readChMu.Lock()
 		close(rg.readCh)
 		rg.readChMu.Unlock()
 	})
+
+	return nil
+}
+
+func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
+	switch packet.Type() {
+	case routing.ClosePacket:
+		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
+	case routing.DataPacket:
+		return rg.handleDataPacket(packet)
+	}
+
+	return nil
+}
+
+func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
+	select {
+	case <-rg.closed:
+		return io.ErrClosedPipe
+	case rg.readCh <- packet.Payload():
+	}
 
 	return nil
 }
@@ -444,14 +489,14 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	for i := 0; i < len(rg.tps); i++ {
-		packet := routing.MakeClosePacket(rg.fwd[i].KeyRouteID(), code)
-		if err := rg.tps[i].WritePacket(context.Background(), packet); err != nil {
+		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
+		if err := rg.writePacket(context.Background(), rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
 		}
 	}
 }
 
-func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
+func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
 	closeCtx, closeCancel := context.WithTimeout(context.Background(), waitTimeout)
 	defer closeCancel()
 
@@ -464,7 +509,7 @@ func (rg *RouteGroup) waitForCloseLoop(waitTimeout time.Duration) error {
 
 	select {
 	case <-closeCtx.Done():
-		return fmt.Errorf("close loop timed out: %v", closeCtx.Err())
+		return fmt.Errorf("close route group timed out: %v", closeCtx.Err())
 	case <-closeDoneCh:
 	}
 
@@ -475,19 +520,23 @@ func (rg *RouteGroup) isCloseInitiator() bool {
 	return atomic.LoadInt32(&rg.closeInitiated) == 1
 }
 
-func (rg *RouteGroup) isRemoteClosed() bool {
-	select {
-	case <-rg.remoteClosed:
-		return true
-	default:
-	}
+func (rg *RouteGroup) setRemoteClosed() {
+	rg.remoteClosedOnce.Do(func() {
+		close(rg.remoteClosed)
+	})
+}
 
-	return false
+func (rg *RouteGroup) isRemoteClosed() bool {
+	return chanClosed(rg.remoteClosed)
 }
 
 func (rg *RouteGroup) isClosed() bool {
+	return chanClosed(rg.closed)
+}
+
+func chanClosed(ch chan struct{}) bool {
 	select {
-	case <-rg.closed:
+	case <-ch:
 		return true
 	default:
 	}
