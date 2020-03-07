@@ -124,7 +124,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.rebootSubscription = this.nodeService.reboot(this.currentNode.local_pk).subscribe(() => {
+      this.rebootSubscription = this.nodeService.reboot(NodeComponent.getCurrentNodeKey()).subscribe(() => {
         this.snackbarService.showDone('actions.reboot.done');
         confirmationDialog.close();
       }, (err: OperationError) => {
@@ -141,7 +141,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.rebootSubscription = this.nodeService.update(this.currentNode.local_pk).subscribe(() => {
+      this.rebootSubscription = this.nodeService.update(NodeComponent.getCurrentNodeKey()).subscribe(() => {
         this.snackbarService.showDone('actions.update.done');
         confirmationDialog.close();
       }, (err: OperationError) => {
@@ -172,12 +172,12 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       if (selectedOption === 1) {
         // Open the complete terminal in a new tab.
         const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8080');
-        window.open('https://' + hostname + '/pty/' + this.currentNode.local_pk, '_blank', 'noopener noreferrer');
+        window.open('https://' + hostname + '/pty/' + NodeComponent.getCurrentNodeKey(), '_blank', 'noopener noreferrer');
       } else if (selectedOption === 2) {
         // Open the simple terminal in a modal window.
         BasicTerminalComponent.openDialog(this.dialog, {
-          pk: this.currentNode.local_pk,
-          label: this.currentNode.label,
+          pk: NodeComponent.getCurrentNodeKey(),
+          label: this.currentNode ? this.currentNode.label : '',
         });
       }
     });
@@ -187,7 +187,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     if (!this.showingFullListInternal) {
       this.router.navigate(['nodes']);
     } else {
-      this.router.navigate(['nodes', this.currentNode.local_pk]);
+      this.router.navigate(['nodes', NodeComponent.getCurrentNodeKey()]);
     }
   }
 }

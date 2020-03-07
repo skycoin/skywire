@@ -79,7 +79,7 @@ export function processServiceError(error: any): OperationError {
   // Check if the provided error is a known API error.
   const convertedError = error as HttpErrorResponse;
   if (convertedError.status !== null && convertedError.status !== undefined) {
-    if (convertedError.status === 0) {
+    if ((convertedError.status === 0) || (convertedError.status === 504)) {
       response.type = OperationErrorTypes.NoConnection;
       response.translatableErrorMsg = 'common.no-connection-error';
     }
