@@ -11,6 +11,7 @@
     "none": "None",
     "loading-error": "There was an error getting the data. Retrying...",
     "operation-error": "There was an error trying to complete the operation.",
+    "no-connection-error": "There is no internet connection or connection to the Hypervisor.",
     "refreshed": "Data refreshed.",
     "options": "Options",
     "logout": "Logout",
@@ -49,7 +50,6 @@
         "title": "Visor Info",
         "label": "Label:",
         "public-key": "Public key:",
-        "ip": "IP address:",
         "port": "Port:",
         "node-version": "Node version:",
         "app-protocol-version": "App protocol version:",
@@ -126,7 +126,6 @@
         "bad-old-password": "The provided old password is not correct.",
         "old-password-required": "Old password is required.",
         "new-password-error": "Password must be 6-64 characters long.",
-        "invalid-password-format": "The new password is not valid.",
         "passwords-not-match": "Passwords do not match.",
         "default-password": "Don't use the default password (1234)."
       }
@@ -151,6 +150,10 @@
       "update": "Update",
       "reboot": "Reboot"
     },
+    "reboot": {
+      "confirmation": "Are you sure you want to reboot the visor?",
+      "done": "The visor is restarting."
+    },
     "config": {
       "title": "Discovery configuration",
       "header": "Discovery address",
@@ -158,6 +161,10 @@
       "add": "Add address",
       "cant-store": "Unable to store node configuration.",
       "success": "Applying discovery configuration by restarting node process."
+    },
+    "terminal-options": {
+      "full": "Full terminal",
+      "simple": "Simple terminal"
     },
     "terminal": {
       "title": "Terminal",
@@ -170,7 +177,9 @@
       "update-available": "There is an update available for the node. Click the 'Install update' button to continue.",
       "update-error": "Could not install node update. Please, try again later.",
       "install": "Install update",
-      "update-success": "Node updated successfully, reboot the node and refresh this site to apply changes."
+      "update-success": "Node updated successfully, reboot the node and refresh this site to apply changes.",
+      "confirmation": "Are you sure you want to update the visor?",
+      "done": "The visor is being updated."
     }
   },
 
@@ -296,7 +305,6 @@
       "remote-key": "Remote public key",
       "transport-type": "Transport type",
       "success": "Transport created.",
-      "error": "Unable to create transport.",
       "errors": {
         "remote-key-length-error": "The remote public key must be 66 characters long.",
         "remote-key-chars-error": "The remote public key must only contain hexadecimal characters.",
@@ -327,19 +335,20 @@
         "title": "Rule summary",
         "keep-alive": "Keep alive:",
         "type": "Rule type:",
-        "request-route-id": "Request route ID:"
+        "key-route-id": "Key route ID:"
       },
-      "app": {
-        "title": "App fields",
-        "route-id": "Route ID:",
-        "remote-pk": "Remote public key:",
-        "remote-port": "Remote port:",
-        "local-port": "Local port:"
+      "specific-fields-titles": {
+        "app": "App fields",
+        "forward": "Forward fields",
+        "intermediary-forward": "Intermediary forward fields"
       },
-      "forward": {
-        "title": "Forward fields",
+      "specific-fields": {
         "route-id": "Next route ID:",
-        "transport-id": "Next transport ID:"
+        "transport-id": "Next transport ID:",
+        "destination-pk": "Destination public key:",
+        "source-pk": "Source public key:",
+        "destination-port": "Destination port:",
+        "source-port": "Source port:"
       }
     }
   },

@@ -11,6 +11,7 @@
     "none": "Ninguro",
     "loading-error": "Hubo un error obteniendo los datos. Reintentando...",
     "operation-error": "Hubo un error al intentar completar la operación.",
+    "no-connection-error": "No hay conexión a Internet o conexión con el hipervisor.",
     "refreshed": "Datos refrescados.",
     "options": "Opciones",
     "logout": "Cerrar sesión",
@@ -49,7 +50,6 @@
         "title": "Información del visor",
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
-        "ip": "Dirección IP:",
         "port": "Puerto:",
         "node-version": "Versión del nodo:",
         "app-protocol-version": "Versión del protocolo de app:",
@@ -126,7 +126,6 @@
         "bad-old-password": "La contraseña actual introducida no es correcta.",
         "old-password-required": "La contraseña actual es requerida.",
         "new-password-error": "La contraseña debe tener entre 6 y 64 caracteres.",
-        "invalid-password-format": "La nueva contraseña no es válida.",
         "passwords-not-match": "Las contraseñas no coinciden.",
         "default-password": "No utilice la contraseña por defecto (1234)."
       }
@@ -151,6 +150,10 @@
       "update": "Actualizar",
       "reboot": "Reiniciar"
     },
+    "reboot": {
+      "confirmation": "¿Seguro que desea reiniciar el visor?",
+      "done": "El visor se está reiniciando."
+    },
     "config": {
       "title": "Configuración de discovery",
       "header": "Dirección de discovery",
@@ -158,6 +161,10 @@
       "add": "Agregar dirección",
       "cant-store": "No se pudo guardar la configuración del nodo.",
       "success": "Aplicando la configuración de discovery mediante el reinicio del proceso de nodo."
+    },
+    "terminal-options": {
+      "full": "Terminal completa",
+      "simple": "Terminal simple"
     },
     "terminal": {
       "title": "Terminal",
@@ -170,7 +177,9 @@
       "update-available": "Hay una actualización disponible para el nodo. Presione el botón 'Instalar actualización' para continuar.",
       "update-error": "No se pudo instalar la actualización del nodo. Por favor inténtelo nuevamente luego.",
       "install": "Instalar actualización",
-      "update-success": "Nodo actualizado exitosamente, reinicie el nodo y refresque este sitio para aplicar los cambios."
+      "update-success": "Nodo actualizado exitosamente, reinicie el nodo y refresque este sitio para aplicar los cambios.",
+      "confirmation": "¿Seguro que desea actualizar el visor?",
+      "done": "El visor está siendo actualizado."
     }
   },
 
@@ -296,7 +305,6 @@
       "remote-key": "Llave pública remota",
       "transport-type": "Tipo de transporte",
       "success": "Transporte creado.",
-      "error": "No fue posible crear el transporte.",
       "errors": {
         "remote-key-length-error": "La llave pública remota debe tener 66 caracteres.",
         "remote-key-chars-error": "La llave pública remota sólo debe contener caracteres hexadecimales.",
@@ -327,19 +335,20 @@
         "title": "Resumen de regla",
         "keep-alive": "Keep alive:",
         "type": "Tipo de regla:",
-        "request-route-id": "ID de la solicitud de ruta:"
+        "key-route-id": "ID de la llave de la ruta:"
       },
-      "app": {
-        "title": "Campos de applicación",
-        "route-id": "ID de la ruta:",
-        "remote-pk": "Llave pública remota:",
-        "remote-port": "Puerto remoto:",
-        "local-port": "Puerto local:"
+      "specific-fields-titles": {
+        "app": "Campos de applicación",
+        "forward": "Campos de reenvío",
+        "intermediary-forward": "Campos de reenvío intermedio"
       },
-      "forward": {
-        "title": "Campos de reenvío",
+      "specific-fields": {
         "route-id": "ID de la siguiente ruta:",
-        "transport-id": "ID del siguiente transporte:"
+        "transport-id": "ID del siguiente transporte:",
+        "destination-pk": "Llave pública de destino:",
+        "source-pk": "Llave pública de origen:",
+        "destination-port": "Puerto de destino:",
+        "source-port": "Puerto de origen:"
       }
     }
   },
