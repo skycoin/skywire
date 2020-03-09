@@ -17,9 +17,9 @@ type Config struct {
 	PubKey cipher.PubKey `json:"public_key"`
 	SecKey cipher.SecKey `json:"secret_key"`
 
-	Messaging struct {
-		Discovery   string `json:"discovery"`
-		ServerCount int    `json:"server_count"`
+	Dmsg struct {
+		Discovery     string `json:"discovery"`
+		SessionsCount int    `json:"sessions_count"`
 	}
 
 	TransportDiscovery string `json:"transport_discovery"`

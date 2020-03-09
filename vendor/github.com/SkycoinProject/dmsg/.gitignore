@@ -5,7 +5,10 @@
 *.dylib
 *.test
 *.out
+*.rdb
+*.json
 .DS_Store
 
 .idea/
 /vendor
+bin/

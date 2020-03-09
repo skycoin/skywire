@@ -2,6 +2,7 @@
 package testhelpers
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -9,6 +10,12 @@ import (
 )
 
 const timeout = 5 * time.Second
+
+// NoErr is used with the mock interface to return from its methods.
+var NoErr error
+
+// Err is used with the mock interface to return some error from its methods.
+var Err = errors.New("error")
 
 // WithinTimeout tries to read an error from error channel within timeout and returns it.
 // If timeout exceeds, nil value is returned.

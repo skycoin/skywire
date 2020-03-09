@@ -9,309 +9,307 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/SkycoinProject/dmsg/netutil"
 )
 
-var log = logging.MustGetLogger("dmsg")
+// TODO(evanlinjin): We should implement exponential backoff at some point.
+const serveWait = time.Second
 
-const (
-	clientReconnectInterval = 3 * time.Second
-)
+// Config configures a dmsg client entity.
+type Config struct {
+	MinSessions int
+}
 
-var (
-	// ErrNoSrv indicate that remote client does not have DelegatedServers in entry.
-	ErrNoSrv = errors.New("remote has no DelegatedServers")
-	// ErrClientClosed indicates that client is closed and not accepting new connections.
-	ErrClientClosed = errors.New("client closed")
-	// ErrClientAcceptMaxed indicates that the client cannot take in more accepts.
-	ErrClientAcceptMaxed = errors.New("client accepts buffer maxed")
-)
-
-// ClientOption represents an optional argument for Client.
-type ClientOption func(c *Client) error
-
-// SetLogger sets the internal logger for Client.
-func SetLogger(log *logging.Logger) ClientOption {
-	return func(c *Client) error {
-		if log == nil {
-			return errors.New("nil logger set")
-		}
-		c.log = log
-		return nil
+// PrintWarnings prints warnings with config.
+func (c Config) PrintWarnings(log logrus.FieldLogger) {
+	log = log.WithField("location", "dmsg.Config")
+	if c.MinSessions < 1 {
+		log.Warn("Field 'MinSessions' has value < 1 : This will disallow establishment of dmsg streams.")
 	}
 }
 
-// Client implements transport.Factory
+// DefaultConfig returns the default configuration for a dmsg client entity.
+func DefaultConfig() *Config {
+	return &Config{
+		MinSessions: DefaultMinSessions,
+	}
+}
+
+// Client represents a dmsg client entity.
 type Client struct {
-	log *logging.Logger
+	ready     chan struct{}
+	readyOnce sync.Once
 
-	pk cipher.PubKey
-	sk cipher.SecKey
-	dc disc.APIClient
+	EntityCommon
+	conf   *Config
+	porter *netutil.Porter
 
-	conns map[cipher.PubKey]*ClientConn // conns with messaging servers. Key: pk of server
-	mx    sync.RWMutex
+	errCh chan error
+	done  chan struct{}
+	once  sync.Once
 
-	pm *PortManager
-
-	// accept map[uint16]chan *transport
-	done chan struct{}
-	once sync.Once
+	sesMx sync.Mutex
 }
 
-// NewClient creates a new Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, opts ...ClientOption) *Client {
-	c := &Client{
-		log:   logging.MustGetLogger("dmsg_client"),
-		pk:    pk,
-		sk:    sk,
-		dc:    dc,
-		conns: make(map[cipher.PubKey]*ClientConn),
-		pm:    newPortManager(),
-		// accept: make(chan *transport, AcceptBufferSize),
-		// accept: make(map[uint16]chan *transport),
-		done: make(chan struct{}),
-	}
-	for _, opt := range opts {
-		if err := opt(c); err != nil {
-			panic(err)
+// NewClient creates a dmsg client entity.
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Config) *Client {
+	c := new(Client)
+	c.ready = make(chan struct{})
+
+	// Init common fields.
+	c.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_client"))
+	c.EntityCommon.setSessionCallback = func(ctx context.Context, sessionCount int) error {
+		err := c.EntityCommon.updateClientEntry(ctx, c.done)
+		if err == nil {
+			// Client is 'ready' once we have successfully updated the discovery entry
+			// with at least one delegated server.
+			c.readyOnce.Do(func() { close(c.ready) })
 		}
+		return err
 	}
+	c.EntityCommon.delSessionCallback = func(ctx context.Context, sessionCount int) error {
+		return c.EntityCommon.updateClientEntry(ctx, c.done)
+	}
+
+	// Init config.
+	if conf == nil {
+		conf = DefaultConfig()
+	}
+	c.conf = conf
+	c.conf.PrintWarnings(c.log)
+
+	c.porter = netutil.NewPorter(netutil.PorterMinEphemeral)
+	c.errCh = make(chan error, 10)
+	c.done = make(chan struct{})
+
 	return c
 }
 
-func (c *Client) updateDiscEntry(ctx context.Context) error {
-	srvPKs := make([]cipher.PubKey, 0, len(c.conns))
-	for pk := range c.conns {
-		srvPKs = append(srvPKs, pk)
-	}
-	entry, err := c.dc.Entry(ctx, c.pk)
-	if err != nil {
-		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
-		if err := entry.Sign(c.sk); err != nil {
-			return err
+// Serve serves the client.
+// It blocks until the client is closed.
+func (ce *Client) Serve() {
+	defer func() {
+		ce.log.Info("Stopped serving client!")
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+		case <-ce.done:
+			cancel()
 		}
-		return c.dc.SetEntry(ctx, entry)
+	}(ctx)
+
+	for {
+		if isClosed(ce.done) {
+			return
+		}
+
+		ce.log.Info("Discovering dmsg servers...")
+		entries, err := ce.discoverServers(ctx)
+		if err != nil {
+			ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
+			time.Sleep(time.Second) // TODO(evanlinjin): Implement exponential back off.
+			continue
+		}
+		if len(entries) == 0 {
+			ce.log.Warnf("No entries found. Retrying after %s...", serveWait.String())
+			time.Sleep(serveWait)
+		}
+
+		for _, entry := range entries {
+			if isClosed(ce.done) {
+				return
+			}
+
+			// If we have enough sessions, we wait for error or done signal.
+			if ce.SessionCount() >= ce.conf.MinSessions {
+				select {
+				case <-ce.done:
+					return
+				case err := <-ce.errCh:
+					ce.log.WithError(err).Info("Session stopped.")
+					if isClosed(ce.done) {
+						return
+					}
+				}
+			}
+
+			if err := ce.ensureSession(ctx, entry); err != nil {
+				ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
+				time.Sleep(serveWait)
+			}
+		}
 	}
-	entry.Client.DelegatedServers = srvPKs
-	c.log.Infoln("updatingEntry:", entry)
-	return c.dc.UpdateEntry(ctx, c.sk, entry)
 }
 
-func (c *Client) setConn(ctx context.Context, conn *ClientConn) {
-	c.mx.Lock()
-	c.conns[conn.remoteSrv] = conn
-	if err := c.updateDiscEntry(ctx); err != nil {
-		c.log.WithError(err).Warn("updateEntry: failed")
-	}
-	c.mx.Unlock()
+// Ready returns a chan which blocks until the client has at least one delegated server and has an entry in the
+// dmsg discovery.
+func (ce *Client) Ready() <-chan struct{} {
+	return ce.ready
 }
 
-func (c *Client) delConn(ctx context.Context, pk cipher.PubKey) {
-	c.mx.Lock()
-	delete(c.conns, pk)
-	if err := c.updateDiscEntry(ctx); err != nil {
-		c.log.WithError(err).Warn("updateEntry: failed")
-	}
-	c.mx.Unlock()
+func (ce *Client) discoverServers(ctx context.Context) (entries []*disc.Entry, err error) {
+	err = netutil.NewDefaultRetrier(ce.log.WithField("func", "discoverServers")).Do(ctx, func() error {
+		entries, err = ce.dc.AvailableServers(ctx)
+		return err
+	})
+	return entries, err
 }
 
-func (c *Client) getConn(pk cipher.PubKey) (*ClientConn, bool) {
-	c.mx.RLock()
-	l, ok := c.conns[pk]
-	c.mx.RUnlock()
-	return l, ok
-}
-
-func (c *Client) connCount() int {
-	c.mx.RLock()
-	n := len(c.conns)
-	c.mx.RUnlock()
-	return n
-}
-
-// InitiateServerConnections initiates connections with dms_servers.
-func (c *Client) InitiateServerConnections(ctx context.Context, min int) error {
-	if min == 0 {
+// Close closes the dmsg client entity.
+// TODO(evanlinjin): Have waitgroup.
+func (ce *Client) Close() error {
+	if ce == nil {
 		return nil
 	}
-	entries, err := c.findServerEntries(ctx)
-	if err != nil {
-		return err
-	}
-	c.log.Info("found dms_server entries:", entries)
-	if err := c.findOrConnectToServers(ctx, entries, min); err != nil {
-		return err
-	}
+
+	ce.once.Do(func() {
+		close(ce.done)
+
+		ce.sesMx.Lock()
+		close(ce.errCh)
+		ce.sesMx.Unlock()
+
+		ce.sessionsMx.Lock()
+		for _, dSes := range ce.sessions {
+			ce.log.
+				WithError(dSes.Close()).
+				Info("Session closed.")
+		}
+		ce.sessions = make(map[cipher.PubKey]*SessionCommon)
+		ce.log.Info("All sessions closed.")
+		ce.sessionsMx.Unlock()
+
+		ce.porter.CloseAll(ce.log)
+	})
+
 	return nil
 }
 
-func (c *Client) findServerEntries(ctx context.Context) ([]*disc.Entry, error) {
-	for {
-		entries, err := c.dc.AvailableServers(ctx)
-		if err != nil || len(entries) == 0 {
-			select {
-			case <-ctx.Done():
-				return nil, fmt.Errorf("dms_servers are not available: %s", err)
-			default:
-				retry := time.Second
-				c.log.WithError(err).Warnf("no dms_servers found: trying again in %v...", retry)
-				time.Sleep(retry)
-				continue
-			}
-		}
-		return entries, nil
+// Listen listens on a given dmsg port.
+func (ce *Client) Listen(port uint16) (*Listener, error) {
+	lis := newListener(Addr{PK: ce.pk, Port: port})
+	ok, doneFn := ce.porter.Reserve(port, lis)
+	if !ok {
+		lis.close()
+		return nil, ErrPortOccupied
 	}
+	lis.addCloseCallback(doneFn)
+	return lis, nil
 }
 
-func (c *Client) findOrConnectToServers(ctx context.Context, entries []*disc.Entry, min int) error {
-	for _, entry := range entries {
-		_, err := c.findOrConnectToServer(ctx, entry.Static)
+// Dial wraps DialStream to output net.Conn instead of *Stream.
+func (ce *Client) Dial(ctx context.Context, addr Addr) (net.Conn, error) {
+	return ce.DialStream(ctx, addr)
+}
+
+// DialStream dials to a remote client entity with the given address.
+func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
+	entry, err := getClientEntry(ctx, ce.dc, addr.PK)
+	if err != nil {
+		return nil, err
+	}
+
+	// Range client's delegated servers.
+	// See if we are already connected to a delegated server.
+	for _, srvPK := range entry.Client.DelegatedServers {
+		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+			return dSes.DialStream(addr)
+		}
+	}
+
+	// Range client's delegated servers.
+	// Attempt to connect to a delegated server.
+	for _, srvPK := range entry.Client.DelegatedServers {
+		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
 		if err != nil {
-			c.log.Warnf("findOrConnectToServers: failed to find/connect to server %s: %s", entry.Static, err)
 			continue
 		}
-		c.log.Infof("findOrConnectToServers: found/connected to server %s", entry.Static)
-		if c.connCount() >= min {
-			return nil
-		}
+		return dSes.DialStream(addr)
 	}
-	return fmt.Errorf("findOrConnectToServers: all servers failed")
+
+	return nil, ErrCannotConnectToDelegated
 }
 
-func (c *Client) findOrConnectToServer(ctx context.Context, srvPK cipher.PubKey) (*ClientConn, error) {
-	if conn, ok := c.getConn(srvPK); ok {
-		return conn, nil
+// Session obtains an established session.
+func (ce *Client) Session(pk cipher.PubKey) (ClientSession, bool) {
+	return ce.clientSession(ce.porter, pk)
+}
+
+// AllSessions obtains all established sessions.
+func (ce *Client) AllSessions() []ClientSession {
+	return ce.allClientSessions(ce.porter)
+}
+
+// EnsureAndObtainSession attempts to obtain a session.
+// If the session does not exist, we will attempt to establish one.
+// It returns an error if the session does not exist AND cannot be established.
+func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKey) (ClientSession, error) {
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+
+	if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+		return dSes, nil
 	}
 
-	entry, err := c.dc.Entry(ctx, srvPK)
+	srvEntry, err := getServerEntry(ctx, ce.dc, srvPK)
 	if err != nil {
-		return nil, err
-	}
-	if entry.Server == nil {
-		return nil, errors.New("entry is of client instead of server")
+		return ClientSession{}, err
 	}
 
-	tcpConn, err := net.Dial("tcp", entry.Server.Address)
+	return ce.dialSession(ctx, srvEntry)
+}
+
+// ensureSession ensures the existence of a session.
+// It returns an error if the session does not exist AND cannot be established.
+func (ce *Client) ensureSession(ctx context.Context, entry *disc.Entry) error {
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+
+	// If session with server of pk already exists, skip.
+	if _, ok := ce.clientSession(ce.porter, entry.Static); ok {
+		return nil
+	}
+
+	// Dial session.
+	_, err := ce.dialSession(ctx, entry)
+	return err
+}
+
+// It is expected that the session is created and served before the context cancels, otherwise an error will be returned.
+// NOTE: This should not be called directly as it may lead to session duplicates.
+// Only `ensureSession` or `EnsureAndObtainSession` should call this function.
+func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+	ce.log.WithField("remote_pk", entry.Static).Info("Dialing session...")
+
+	conn, err := net.Dial("tcp", entry.Server.Address)
 	if err != nil {
-		return nil, err
+		return ClientSession{}, err
 	}
-	ns, err := noise.New(noise.HandshakeXK, noise.Config{
-		LocalPK:   c.pk,
-		LocalSK:   c.sk,
-		RemotePK:  srvPK,
-		Initiator: true,
-	})
+	dSes, err := makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static)
 	if err != nil {
-		return nil, err
-	}
-	nc, err := noise.WrapConn(tcpConn, ns, TransportHandshakeTimeout)
-	if err != nil {
-		return nil, err
+		return ClientSession{}, err
 	}
 
-	conn := NewClientConn(c.log, nc, c.pk, srvPK, c.pm)
-	if err := conn.readOK(); err != nil {
-		return nil, err
+	if !ce.setSession(ctx, dSes.SessionCommon) {
+		_ = dSes.Close() //nolint:errcheck
+		return ClientSession{}, errors.New("session already exists")
 	}
-
-	c.setConn(ctx, conn)
-
 	go func() {
-		err := conn.Serve(ctx)
-		conn.log.WithError(err).WithField("remoteServer", srvPK).Warn("connected with server closed")
-		c.delConn(ctx, srvPK)
-
-		// reconnect logic.
-	retryServerConnect:
-		select {
-		case <-c.done:
-		case <-ctx.Done():
-		case <-time.After(clientReconnectInterval):
-			conn.log.WithField("remoteServer", srvPK).Warn("Reconnecting")
-			if _, err := c.findOrConnectToServer(ctx, srvPK); err != nil {
-				conn.log.WithError(err).WithField("remoteServer", srvPK).Warn("ReconnectionFailed")
-				goto retryServerConnect
-			}
-			conn.log.WithField("remoteServer", srvPK).Warn("ReconnectionSucceeded")
+		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
+		if err := dSes.serve(); !isClosed(ce.done) {
+			ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err)
+			ce.delSession(ctx, dSes.RemotePK())
 		}
 	}()
-	return conn, nil
-}
 
-// Listen creates a listener on a given port, adds it to port manager and returns the listener.
-func (c *Client) Listen(port uint16) (*Listener, error) {
-	l, ok := c.pm.NewListener(c.pk, port)
-	if !ok {
-		return nil, errors.New("port is busy")
-	}
-	return l, nil
-}
-
-// Dial dials a transport to remote dms_client.
-func (c *Client) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Transport, error) {
-	entry, err := c.dc.Entry(ctx, remote)
-	if err != nil {
-		return nil, fmt.Errorf("get entry failure: %s", err)
-	}
-	if entry.Client == nil {
-		return nil, errors.New("entry is of server instead of client")
-	}
-	if len(entry.Client.DelegatedServers) == 0 {
-		return nil, ErrNoSrv
-	}
-	for _, srvPK := range entry.Client.DelegatedServers {
-		conn, err := c.findOrConnectToServer(ctx, srvPK)
-		if err != nil {
-			c.log.WithError(err).Warn("failed to connect to server")
-			continue
-		}
-		return conn.DialTransport(ctx, remote, port)
-	}
-	return nil, errors.New("failed to find dms_servers for given client pk")
-}
-
-// Addr returns the local dms_client's public key.
-func (c *Client) Addr() net.Addr {
-	return Addr{
-		PK: c.pk,
-	}
-}
-
-// Type returns the transport type.
-func (c *Client) Type() string {
-	return Type
-}
-
-// Close closes the dms_client and associated connections.
-// TODO(evaninjin): proper error handling.
-func (c *Client) Close() error {
-	if c == nil {
-		return nil
-	}
-
-	c.once.Do(func() {
-		close(c.done)
-
-		c.mx.Lock()
-		for _, conn := range c.conns {
-			if err := conn.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close connection")
-			}
-		}
-		c.conns = make(map[cipher.PubKey]*ClientConn)
-		c.mx.Unlock()
-
-		c.pm.mu.Lock()
-		defer c.pm.mu.Unlock()
-
-		for _, lis := range c.pm.listeners {
-			lis.close()
-		}
-	})
-
-	return nil
+	return dSes, nil
 }

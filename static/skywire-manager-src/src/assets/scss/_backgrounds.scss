@@ -1,0 +1,25 @@
+@import "variables";
+@import "~bootstrap/scss/functions";
+@import '~@angular/material/theming';
+
+// Main app background.
+.mat-app-background {
+  background: linear-gradient($blue, $blue-light) no-repeat fixed !important;
+}
+
+// Backgrounds for the rounded boxes used as containers in the app.
+$elevated-containers-colors: (
+  translucid: map_get($theme-colors, translucid),
+  white:      map_get($theme-colors, white),
+  translucid-dark: map_get($theme-colors, translucid-dark)
+);
+
+// Create styles for the rounded boxes used as containers in the app. One per background color.
+@each $color-name, $color-value in $elevated-containers-colors {
+  .container-elevated-#{$color-name} {
+    border-radius: $mat-dialog-radius;
+    padding: $containers-padding;
+    background-color: $color-value !important;
+    overflow: hidden;
+  }
+}

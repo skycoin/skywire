@@ -1,0 +1,29 @@
+<app-dialog class="info-dialog" [headline]="'transports.details.title' | translate">
+  <div>
+    <div class="title mt-0">
+      {{ 'transports.details.basic.title' | translate }}
+    </div>
+    <div class="item">
+      <span>{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}
+    </div>
+    <div class="item">
+      <span>{{ 'transports.details.basic.local-pk' | translate }}</span> {{ data.local_pk }}
+    </div>
+    <div class="item">
+      <span>{{ 'transports.details.basic.remote-pk' | translate }}</span> {{ data.remote_pk }}
+    </div>
+    <div class="item">
+      <span>{{ 'transports.details.basic.type' | translate }}</span> {{ data.type }}
+    </div>
+
+    <div class="title">
+      {{ 'transports.details.data.title' | translate }}
+    </div>
+    <div class="item">
+      <span>{{ 'transports.details.data.uploaded' | translate }}</span> {{ data.log.sent | autoScale }}
+    </div>
+    <div class="item">
+      <span>{{ 'transports.details.data.downloaded' | translate }}</span> {{ data.log.recv | autoScale }}
+    </div>
+  </div>
+</app-dialog>
