@@ -3,6 +3,7 @@ package transport_test
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"testing"
@@ -20,28 +21,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var masterLogger *logging.MasterLogger
+
 func TestMain(m *testing.M) {
+	masterLogger = logging.NewMasterLogger()
 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
 	if ok {
 		lvl, err := logging.LevelFromString(loggingLevel)
 		if err != nil {
 			log.Fatal(err)
 		}
-		logger := logging.MustGetLogger("transport-test")
-		dmsg.SetLogger(logger)
-		logging.SetLevel(lvl)
+		masterLogger.SetLevel(lvl)
 	} else {
-		logging.Disable()
+		masterLogger.Out = ioutil.Discard
 	}
 
 	os.Exit(m.Run())
 }
 
+// TODO: test hangs if Manager is closed to early, needs to receive an error though
 func TestNewManager(t *testing.T) {
 	tpDisc := transport.NewDiscoveryMock()
 
 	keys := snettest.GenKeyPairs(2)
-	nEnv := snettest.NewEnv(t, keys)
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
 	// Prepare tp manager 0.
@@ -88,7 +91,11 @@ func TestNewManager(t *testing.T) {
 			totalSent2 += i
 			rID := routing.RouteID(i)
 			payload := cipher.RandByte(i)
-			require.NoError(t, tp2.WritePacket(context.TODO(), rID, payload))
+
+			packet, err := routing.MakeDataPacket(rID, payload)
+			require.NoError(t, err)
+
+			require.NoError(t, tp2.WritePacket(context.TODO(), packet))
 
 			recv, err := m0.ReadPacket()
 			require.NoError(t, err)
@@ -101,7 +108,11 @@ func TestNewManager(t *testing.T) {
 			totalSent1 += i
 			rID := routing.RouteID(i)
 			payload := cipher.RandByte(i)
-			require.NoError(t, tp1.WritePacket(context.TODO(), rID, payload))
+
+			packet, err := routing.MakeDataPacket(rID, payload)
+			require.NoError(t, err)
+
+			require.NoError(t, tp1.WritePacket(context.TODO(), packet))
 
 			recv, err := m2.ReadPacket()
 			require.NoError(t, err)
@@ -141,7 +152,9 @@ func TestNewManager(t *testing.T) {
 		assert.True(t, entry.IsUp)
 
 		m2.DeleteTransport(tp2.Entry.ID)
+
 		_, err = tpDisc.GetTransportByID(context.TODO(), tpID)
+		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "not found")
 	})
 }

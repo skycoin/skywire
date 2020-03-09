@@ -1,0 +1,7 @@
+<app-dialog [headline]="('actions.terminal.title' | translate) + ' - ' + this.data.label + ' (' + this.data.pk + ')'" [includeScrollableArea]="false">
+  <mat-dialog-content #dialogContent (click)="focusTerminal()">
+    <div class="wrapper">
+      <div #terminal></div>
+    </div>
+  </mat-dialog-content>
+</app-dialog>

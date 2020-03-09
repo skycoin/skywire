@@ -6,12 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
+	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
+
+// ErrNoKey is returned when key is not found.
+var ErrNoKey = errors.New("id reservoir has no key")
 
 type idReservoir struct {
 	rec map[cipher.PubKey]uint8
@@ -19,19 +23,23 @@ type idReservoir struct {
 	mx  sync.Mutex
 }
 
-func newIDReservoir(routes ...routing.Route) (*idReservoir, int) {
+func newIDReservoir(paths ...routing.Path) (*idReservoir, int) {
 	rec := make(map[cipher.PubKey]uint8)
+
 	var total int
 
-	for _, rt := range routes {
-		if len(rt) == 0 {
+	for _, path := range paths {
+		if len(path) == 0 {
 			continue
 		}
-		rec[rt[0].From]++
-		for _, hop := range rt {
+
+		rec[path[0].From]++
+
+		for _, hop := range path {
 			rec[hop.To]++
 		}
-		total += len(rt) + 1
+
+		total += len(path) + 1
 	}
 
 	return &idReservoir{
@@ -40,7 +48,20 @@ func newIDReservoir(routes ...routing.Route) (*idReservoir, int) {
 	}, total
 }
 
-func (idr *idReservoir) ReserveIDs(ctx context.Context, reserve func(ctx context.Context, pk cipher.PubKey, n uint8) ([]routing.RouteID, error)) error {
+type reserveFunc func(
+	ctx context.Context,
+	log *logging.Logger,
+	dmsgC *dmsg.Client,
+	pk cipher.PubKey,
+	n uint8,
+) ([]routing.RouteID, error)
+
+func (idr *idReservoir) ReserveIDs(
+	ctx context.Context,
+	log *logging.Logger,
+	dmsgC *dmsg.Client,
+	reserve reserveFunc,
+) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -48,9 +69,8 @@ func (idr *idReservoir) ReserveIDs(ctx context.Context, reserve func(ctx context
 	defer close(errCh)
 
 	for pk, n := range idr.rec {
-		pk, n := pk, n
-		go func() {
-			ids, err := reserve(ctx, pk, n)
+		go func(pk cipher.PubKey, n uint8) {
+			ids, err := reserve(ctx, log, dmsgC, pk, n)
 			if err != nil {
 				errCh <- fmt.Errorf("reserve routeID from %s failed: %v", pk, err)
 				return
@@ -59,7 +79,7 @@ func (idr *idReservoir) ReserveIDs(ctx context.Context, reserve func(ctx context
 			idr.ids[pk] = ids
 			idr.mx.Unlock()
 			errCh <- nil
-		}()
+		}(pk, n)
 	}
 
 	return finalError(len(idr.rec), errCh)
@@ -75,97 +95,106 @@ func (idr *idReservoir) PopID(pk cipher.PubKey) (routing.RouteID, bool) {
 	}
 
 	idr.ids[pk] = ids[1:]
+
 	return ids[0], true
 }
 
 func (idr *idReservoir) String() string {
 	idr.mx.Lock()
 	defer idr.mx.Unlock()
+
 	b, _ := json.MarshalIndent(idr.ids, "", "\t") //nolint:errcheck
+
 	return string(b)
 }
+
+// RuleMap associates a rule to a visor's public key.
+type RuleMap map[cipher.PubKey]routing.Rule
 
 // RulesMap associates a slice of rules to a visor's public key.
 type RulesMap map[cipher.PubKey][]routing.Rule
 
 func (rm RulesMap) String() string {
 	out := make(map[cipher.PubKey][]string, len(rm))
+
 	for pk, rules := range rm {
 		str := make([]string, len(rules))
 		for i, rule := range rules {
 			str[i] = rule.String()
 		}
+
 		out[pk] = str
 	}
+
 	jb, err := json.MarshalIndent(out, "", "\t")
 	if err != nil {
 		panic(err)
 	}
+
 	return string(jb)
 }
 
-// GenerateRules generates rules for a given LoopDescriptor.
+// GenerateRules generates rules for given forward and reverse routes.
 // The outputs are as follows:
-// - rules: a map that relates a slice of routing rules to a given visor's public key.
-// - srcAppRID: the initiating node's route ID that references the FWD rule.
-// - dstAppRID: the responding node's route ID that references the FWD rule.
-// - err: an error (if any).
-func GenerateRules(idc *idReservoir, ld routing.LoopDescriptor) (rules RulesMap, srcFwdRID, dstFwdRID routing.RouteID, err error) {
-	rules = make(RulesMap)
-	src, dst := ld.Loop.Local, ld.Loop.Remote
+// - maps that relate slices of forward, consume and intermediary routing rules to a given visor's public key.
+// - an error (if any).
+func (idr *idReservoir) GenerateRules(fwd, rev routing.Route) (
+	forwardRules, consumeRules RuleMap,
+	intermediaryRules RulesMap,
+	err error,
+) {
+	forwardRules = make(RuleMap)
+	consumeRules = make(RuleMap)
+	intermediaryRules = make(RulesMap)
 
-	firstFwdRID, lastFwdRID, err := SaveForwardRules(rules, idc, ld.KeepAlive, ld.Forward)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	firstRevRID, lastRevRID, err := SaveForwardRules(rules, idc, ld.KeepAlive, ld.Reverse)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-
-	rules[src.PubKey] = append(rules[src.PubKey],
-		routing.AppRule(ld.KeepAlive, lastRevRID, firstFwdRID, dst.PubKey, src.Port, dst.Port))
-	rules[dst.PubKey] = append(rules[dst.PubKey],
-		routing.AppRule(ld.KeepAlive, lastFwdRID, firstRevRID, src.PubKey, dst.Port, src.Port))
-
-	return rules, firstFwdRID, firstRevRID, nil
-}
-
-// SaveForwardRules creates the rules of the given route, and saves them in the 'rules' input.
-// Note that the last rule for the route is always an APP rule, and so is not created here.
-// The outputs are as follows:
-// - firstRID: the first visor's route ID.
-// - lastRID: the last visor's route ID (note that there is no rule set for this ID yet).
-// - err: an error (if any).
-func SaveForwardRules(rules RulesMap, idc *idReservoir, keepAlive time.Duration, route routing.Route) (firstRID, lastRID routing.RouteID, err error) {
-
-	// 'firstRID' is the first visor's key routeID - this is to be returned.
-	var ok bool
-	if firstRID, ok = idc.PopID(route[0].From); !ok {
-		return 0, 0, errors.New("fucked up")
-	}
-
-	var rID = firstRID
-	for _, hop := range route {
-		nxtRID, ok := idc.PopID(hop.To)
+	for _, route := range []routing.Route{fwd, rev} {
+		// 'firstRID' is the first visor's key routeID
+		firstRID, ok := idr.PopID(route.Path[0].From)
 		if !ok {
-			return 0, 0, errors.New("fucked up")
+			return nil, nil, nil, ErrNoKey
 		}
-		rule := routing.ForwardRule(keepAlive, nxtRID, hop.Transport, rID)
-		rules[hop.From] = append(rules[hop.From], rule)
 
-		rID = nxtRID
+		desc := route.Desc
+		srcPK := desc.SrcPK()
+		dstPK := desc.DstPK()
+		srcPort := desc.SrcPort()
+		dstPort := desc.DstPort()
+
+		var rID = firstRID
+
+		for i, hop := range route.Path {
+			nxtRID, ok := idr.PopID(hop.To)
+			if !ok {
+				return nil, nil, nil, ErrNoKey
+			}
+
+			if i == 0 {
+				rule := routing.ForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID, srcPK, dstPK, srcPort, dstPort)
+				forwardRules[hop.From] = rule
+			} else {
+				rule := routing.IntermediaryForwardRule(route.KeepAlive, rID, nxtRID, hop.TpID)
+				intermediaryRules[hop.From] = append(intermediaryRules[hop.From], rule)
+			}
+
+			rID = nxtRID
+		}
+
+		fmt.Printf("GENERATING CONSUME RULE WITH SRC %s\n", srcPK)
+		rule := routing.ConsumeRule(route.KeepAlive, rID, srcPK, dstPK, srcPort, dstPort)
+		consumeRules[dstPK] = rule
 	}
 
-	return firstRID, rID, nil
+	return forwardRules, consumeRules, intermediaryRules, nil
 }
 
 func finalError(n int, errCh <-chan error) error {
 	var finalErr error
+
 	for i := 0; i < n; i++ {
 		if err := <-errCh; err != nil {
 			finalErr = err
 		}
 	}
+
 	return finalErr
 }

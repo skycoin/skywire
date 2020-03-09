@@ -33,6 +33,7 @@ func TestHandshake(t *testing.T) {
 		deadline := time.Now().Add(HandshakeTimeout)
 
 		respCh := make(chan hsResult, 1)
+
 		go func() {
 			defer close(respCh)
 			respHS := ResponderHandshake(func(f2 Frame2) error {

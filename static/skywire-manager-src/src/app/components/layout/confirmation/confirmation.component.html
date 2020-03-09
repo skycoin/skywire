@@ -1,0 +1,23 @@
+<app-dialog [headline]="(state !== confirmationStates.Done ? data.headerText : doneTitle) | translate" [disableDismiss]="disableDismiss">
+  <div class="text-container">
+    {{ (state !== confirmationStates.Done ? data.text : doneText) | translate }}
+  </div>
+
+  <div class="buttons">
+    <app-button
+      #cancelButton
+      type="mat-raised-button"
+      color="accent"
+      (action)="closeModal()"
+      *ngIf="data.cancelButtonText && state !== confirmationStates.Done">
+      {{ data.cancelButtonText | translate }}
+    </app-button>
+    <app-button
+      #confirmButton
+      type="mat-raised-button"
+      color="primary"
+      (action)="state === confirmationStates.Asking ? sendOperationAcceptedEvent() : closeModal()">
+      {{ (state !== confirmationStates.Done ? data.confirmButtonText : 'confirmation.close') | translate }}
+    </app-button>
+  </div>
+</app-dialog>
