@@ -1,0 +1,79 @@
+<div *ngIf="node" class="font-smaller d-flex flex-column mt-4.5">
+  <!-- Basic info section. -->
+  <div class="d-flex flex-column">
+    <span class="section-title">{{ 'node.details.node-info.title' | translate }}</span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.label' | translate }}</span>
+      <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
+        {{ node.label }}
+        <mat-icon [inline]="true">edit</mat-icon>
+      </span>
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.public-key' | translate }}&nbsp;</span>
+      <app-copy-to-clipboard-text text="{{ node.local_pk }}"></app-copy-to-clipboard-text>
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.port' | translate }}&nbsp;</span>
+      <app-copy-to-clipboard-text text="{{ node.port }}"></app-copy-to-clipboard-text>
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>
+      {{ node.node_version }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.app-protocol-version' | translate }}</span>
+      {{ node.app_protocol_version }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
+      {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
+      
+      <mat-icon
+        *ngIf="timeOnline.totalMinutes > 60"
+        [inline]="true"
+        [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"
+        >
+        info
+      </mat-icon>
+    </span>
+  </div>
+  <div class="separator"></div>
+  <!-- Health info section. -->
+  <div class="d-flex flex-column">
+    <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-health.status' | translate }}</span>
+      <i *ngIf="node.health.status && node.health.status === 200" class="dot-green"></i>
+      <i *ngIf="!node.health.status || node.health.status !== 200" class="dot-red"></i>
+      {{ node.health.status ? node.health.status : ('node.details.node-health.element-offline' | translate) }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-health.transport-discovery' | translate }}</span>
+      <i *ngIf="node.health.transport_discovery && node.health.transport_discovery === 200" class="dot-green"></i>
+      <i *ngIf="!node.health.transport_discovery || node.health.transport_discovery !== 200" class="dot-red"></i>
+      {{ node.health.transport_discovery ? node.health.transport_discovery : ('node.details.node-health.element-offline' | translate) }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-health.route-finder' | translate }}</span>
+      <i *ngIf="node.health.route_finder && node.health.route_finder === 200" class="dot-green"></i>
+      <i *ngIf="!node.health.route_finder || node.health.route_finder !== 200" class="dot-red"></i>
+      {{ node.health.route_finder ? node.health.route_finder : ('node.details.node-health.element-offline' | translate) }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-health.setup-node' | translate }}</span>
+      <i *ngIf="node.health.setup_node && node.health.setup_node === 200" class="dot-green"></i>
+      <i *ngIf="!node.health.setup_node || node.health.setup_node !== 200" class="dot-red"></i>
+      {{ node.health.setup_node ? node.health.setup_node : ('node.details.node-health.element-offline' | translate) }}
+    </span>
+  </div>
+  <div class="separator"></div>
+  <!-- Traffic info section. -->
+  <div class="d-flex flex-column">
+    <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
+    <app-charts
+      class="d-flex flex-column justify-content-end"
+      [transports]="node.transports"
+    ></app-charts>
+  </div>
+</div>
