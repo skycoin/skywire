@@ -1,0 +1,151 @@
+<!-- Content when loading. -->
+<div *ngIf="loading" class="flex-column h-100 w-100">
+  <div>
+    <app-tab-bar
+      [titleParts]="['start.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="0"
+      [showUpdateButton]="false"
+    ></app-tab-bar>
+  </div>
+  <app-loading-indicator class="h-100"></app-loading-indicator>
+</div>
+
+<!-- Content when loaded. -->
+<div *ngIf="!loading" class="row">
+  <div class="col-12">
+    <app-tab-bar
+      [titleParts]="['start.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="0"
+      [secondsSinceLastUpdate]="secondsSinceLastUpdate" 
+      [showLoading]="updating"
+      [showAlert]="errorsUpdating"
+      [refeshRate]="storageService.getRefreshTime()"
+      (refreshRequested)="refresh(0, true)"
+    ></app-tab-bar>
+  </div>
+  <div class="col-12">
+    <div class="node-list-container mt-4.5">
+      <!-- Table for large screens. -->
+      <table
+        class="responsive-table-white container-elevated-white d-none d-md-table"
+        *ngIf="dataSource.length > 0"
+        cellspacing="0" cellpadding="0"
+      >
+        <!-- Column names. -->
+        <tr>
+          <th></th>
+          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
+            {{ 'nodes.label' | translate }}
+            <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
+          </th>
+          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
+            {{ 'nodes.key' | translate }}
+            <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
+          </th>
+          <th class="actions"></th>
+        </tr>
+
+        <!-- Values. -->
+        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable">
+          <td>
+            <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+          </td>
+          <td>
+            {{ node.label }}
+          </td>
+          <td>
+            {{ node.local_pk }}
+          </td>
+          <td (click)="$event.stopPropagation()" class="actions">
+            <button
+              (click)="showEditLabelDialog(node)"
+              mat-icon-button
+              [matTooltip]="'edit-label.title' | translate"
+              class="grey-button-background"
+            >
+              <mat-icon>short_text</mat-icon>
+            </button>
+            <button
+              *ngIf="node.online"
+              (click)="open(node)"
+              mat-icon-button
+              [matTooltip]="'nodes.view-node' | translate"
+              class="grey-button-background"
+            >
+              <mat-icon>chevron_right</mat-icon>
+            </button>
+            <button
+              *ngIf="!node.online"
+              (click)="deleteNode(node)"
+              mat-icon-button
+              [matTooltip]="'nodes.delete-node' | translate"
+              class="grey-button-background"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          </td>
+        </tr>
+      </table>
+
+      <!-- List for small screens. -->
+      <table
+        class="responsive-table-white container-elevated-white d-md-none nowrap"
+        *ngIf="dataSource.length > 0"
+        cellspacing="0" cellpadding="0"
+      >
+        <!-- Sorting button. -->
+        <tr class="selectable" (click)="openSortingOrderModal()"><td>
+          <div class="list-item-container">
+            <div class="left-part">
+              <div class="title">{{ 'tables.sorting-title' | translate }}</div>
+              <div>{{ sortBy | translate }}
+                {{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
+              </div>
+            </div>
+            <div class="right-part">
+              <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+            </div>
+          </div>
+        </td></tr>
+        <!-- Values. -->
+        <tr *ngFor="let node of dataSource" (click)="open(node)" class="selectable"><td>
+          <div class="list-item-container">
+            <div class="left-part">
+              <div class="list-row">
+                <span class="title">{{ 'nodes.state' | translate }}</span>:
+                <span [class]="nodeStatusClass(node, false) + ' title'">{{ nodeStatusText(node, false) | translate }}</span>
+              </div>
+              <div class="list-row">
+                <span class="title">{{ 'nodes.label' | translate }}</span>:
+                {{ node.label }}
+              </div>
+              <div class="list-row long-content">
+                <span class="title">{{ 'nodes.key' | translate }}</span>:
+                {{ node.local_pk }}
+              </div>
+            </div>
+            <div class="margin-part"></div>
+            <div class="right-part">
+              <button
+                (click)="$event.stopPropagation(); node.online ? showEditLabelDialog(node) : showOptionsDialog(node)"
+                mat-icon-button
+                [matTooltip]="(node.online ? 'edit-label.title' : 'common.options') | translate"
+                class="grey-button-background"
+              >
+                <mat-icon>{{ node.online ? 'short_text' : 'add' }}</mat-icon>
+              </button>
+            </div>
+          </div>
+        </td></tr>
+      </table>
+
+      <!-- Msg shown if the list is empty. -->
+      <div class="nodes-empty container-elevated-white" *ngIf="dataSource.length === 0">
+        <i class="material-icons">warning</i>
+        <span>{{ 'nodes.empty' | translate }}</span>
+      </div>
+    </div>
+  </div>
+</div>

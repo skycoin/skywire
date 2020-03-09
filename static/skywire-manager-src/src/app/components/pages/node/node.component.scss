@@ -1,0 +1,15 @@
+@import "variables";
+
+.not-found-label {
+  align-items: center;
+  justify-content: center;
+  font-size: $font-size-base;
+
+  mat-icon {
+    position: relative;
+    top: 5px;
+    font-size: 22px;
+    opacity: 0.5;
+    margin-right: 3px;
+  }
+}
