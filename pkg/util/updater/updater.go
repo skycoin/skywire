@@ -57,7 +57,7 @@ type Updater struct {
 	log        *logging.Logger
 	restartCtx *restart.Context
 	appsPath   string
-	updating   uint32
+	updating   int32
 }
 
 // New returns a new Updater.
@@ -72,9 +72,10 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 // Update performs an update operation.
 // NOTE: Update may call os.Exit.
 func (u *Updater) Update() (err error) {
-	if !atomic.CompareAndSwapUint32(&u.updating, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&u.updating, 0, 1) {
 		return ErrAlreadyStarted
 	}
+	defer atomic.StoreInt32(&u.updating, 0)
 
 	u.log.Infof("Looking for updates")
 
