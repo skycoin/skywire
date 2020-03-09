@@ -1,0 +1,58 @@
+@import "variables";
+@import "utilities/utilities";
+
+app-lang-button {
+  position: fixed;
+  right: 10px;
+  top: 10px;
+}
+
+.logo {
+  width: 170px;
+}
+
+.login-input {
+  height: 35px;
+  width: 300px;
+  overflow: hidden;
+  border-radius: $mat-dialog-radius;
+  box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.10), 0 6px 20px 0 rgba(0, 0, 0, 0.10);
+  display: flex;
+
+  input[type='password'] {
+    background: #fff;
+    width: calc(100% - 35px);
+    height: 100%;
+    font-size: $font-size-sm;
+    border: none;
+    padding-left: 10px;
+    padding-right: 10px;
+
+    &:focus {
+      outline: none;
+    }
+  }
+
+  button {
+    background: #fff;
+    color: $black;
+    width: 35px;
+    height: 35px;
+    line-height: 35px;
+    border: none;
+    display: flex;
+    cursor: pointer;
+    align-items: center;
+
+    &:disabled {
+      color: $light-gray;
+    }
+  }
+}
+
+.config-link {
+  color: $white;
+  font-size: $font-size-mini;
+  margin-top: 20px;
+  @extend .cursor-pointer;
+}

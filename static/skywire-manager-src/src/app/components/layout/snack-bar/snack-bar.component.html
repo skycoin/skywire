@@ -1,0 +1,7 @@
+<div [class]="'main-container ' + config.color">
+  <div class="icon-container" *ngIf="config.icon"><mat-icon>{{ config.icon }}</mat-icon></div>
+  <div class="text-container">
+    {{ config.text | translate:config.textTranslationParams }}
+  </div>
+  <mat-icon class="close-button" (click)="close()">close</mat-icon>
+</div>
