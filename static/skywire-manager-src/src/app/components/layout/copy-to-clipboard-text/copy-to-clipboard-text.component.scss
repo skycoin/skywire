@@ -1,0 +1,13 @@
+@import 'variables';
+@import 'utilities/utilities';
+
+.wrapper {
+  display: inline;
+  /* Needed because the tooltip blocks the ability to select the text. */
+  @extend .reactivate-mouse;
+
+  mat-icon {
+    font-size: $font-size-mini-plus;
+    user-select: none;
+  }
+}

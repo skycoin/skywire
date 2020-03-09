@@ -1,0 +1,58 @@
+@import 'variables';
+@import "bootstrap_overrides";
+@import "~bootstrap/scss/functions";
+
+.main-container {
+  text-align: right;
+
+  $elements-padding: 10px;
+
+  .responsive-height {
+    padding: $elements-padding 0;
+    width: 0px;
+  }
+
+  a {
+    padding: $elements-padding;
+    border-right: $separator solid 1px;
+    border-left: $separator solid 1px;
+    min-width: 40px;
+    text-align: center;
+    color: $white;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background: theme-color(translucid-hover);
+    }
+
+    mat-icon {
+      position: relative;
+      top: 2px;
+    }
+
+    .label {
+      font-size: $font-size-mini;
+    }
+  }
+
+  .selected {
+    color: $black;
+    background: theme-color(translucid-hover);
+    font-weight: bold;
+    padding: $elements-padding ($elements-padding * 2);
+    cursor: pointer;
+
+    &:hover {
+      background: adjust-color(theme-color(translucid-hover), $alpha: 0.2);
+    }
+  }
+
+  .total-pages {
+    font-size: $font-size-mini-plus;
+    margin-top: -3px;
+    margin-right: 4px;
+  }
+}
