@@ -1,0 +1,11 @@
+@import "variables";
+
+.lang-button {
+  height: $header-buttons-height;
+  border-radius: $mat-dialog-radius;
+
+  .flag {
+    width: 20px;
+    height: 20px;
+  }
+}

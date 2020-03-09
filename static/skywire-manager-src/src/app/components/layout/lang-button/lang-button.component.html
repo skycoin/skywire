@@ -1,0 +1,8 @@
+<button
+  mat-button
+  class="lang-button grey-button-background"
+  (click)="openLanguageWindow()"
+  [matTooltip]="'language.title' | translate"
+>
+  <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag">
+</button>

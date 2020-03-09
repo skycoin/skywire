@@ -1,0 +1,21 @@
+<div class="chart">
+  <app-line-chart [data]="sendingHistory"></app-line-chart>
+  <div class="info">
+    <span class="text">{{ 'common.uploaded' | translate }}</span>
+    <span class="rate">
+      <span class="value">{{ sendingTotal | autoScale:{ showValue: true } }}</span>
+      <span class="unit">{{ sendingTotal | autoScale:{ showUnit: true } }}</span>
+    </span>
+  </div>
+</div>
+
+<div class="chart">
+  <app-line-chart [data]="receivingHistory"></app-line-chart>
+  <div class="info">
+    <span class="text">{{ 'common.downloaded' | translate }}</span>
+    <span class="rate">
+      <span class="value">{{ receivingTotal | autoScale:{ showValue: true } }}</span>
+      <span class="unit">{{ receivingTotal | autoScale:{ showUnit: true } }}</span>
+    </span>
+  </div>
+</div>
