@@ -1,0 +1,28 @@
+@import 'variables';
+@import "bootstrap_overrides";
+
+.main-container {
+  padding-top: 10px;
+  margin-bottom: -6px;
+  border-top: $separator solid 1px;
+  text-align: right;
+  font-size: $font-size-sm;
+
+  // This is due to how the tables work.
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) , (min-width: map-get($grid-breakpoints, lg)) and (max-width: (map-get($grid-breakpoints, xl) - 1)) {
+    & {
+      margin: 0;
+      padding: 16px;
+    }
+  }
+
+  a {
+    color: $white;
+    text-decoration: none;
+
+    mat-icon {
+      position: relative;
+      top: 3px;
+    }
+  }
+}
