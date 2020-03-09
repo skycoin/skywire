@@ -416,8 +416,8 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return errors.New("RouteGroup is nil")
 	}
 
-	r.logger.Infof("Got new remote packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
-	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
+	r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		len(packet.Payload()), packet.RouteID(), rule)
 
 	return rg.handlePacket(packet)
 }
@@ -465,8 +465,8 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return errors.New("RouteGroup is nil")
 	}
 
-	r.logger.Infof("Got new remote close packet with route ID %d. Using rule: %s", packet.RouteID(), rule)
-	r.logger.Infof("Packet contents (len = %d): %v", len(packet.Payload()), packet.Payload())
+	r.logger.Infof("Got new remote close packet with size %d and route ID %d. Using rule: %s",
+		len(packet.Payload()), packet.RouteID(), rule)
 
 	closeCode := routing.CloseCode(packet.Payload()[0])
 
