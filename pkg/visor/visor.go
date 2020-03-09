@@ -675,15 +675,28 @@ func (visor *Visor) Exec(command string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-// Update checks if visor update is available.
+// Update updates visor.
+// It checks if visor update is available.
 // If it is, the method downloads a new visor versions, starts it and kills the current process.
-func (visor *Visor) Update() error {
-	if err := visor.updater.Update(); err != nil {
+func (visor *Visor) Update() (bool, error) {
+	updated, err := visor.updater.Update()
+	if err != nil {
 		visor.logger.Errorf("Failed to update visor: %v", err)
-		return err
+		return false, err
 	}
 
-	return nil
+	return updated, nil
+}
+
+// UpdateAvailable checks if visor update is available.
+func (visor *Visor) UpdateAvailable() (*updater.Version, error) {
+	version, err := visor.updater.UpdateAvailable()
+	if err != nil {
+		visor.logger.Errorf("Failed to check if visor update is available: %v", err)
+		return nil, err
+	}
+
+	return version, nil
 }
 
 func (visor *Visor) setAutoStart(appName string, autoStart bool) error {

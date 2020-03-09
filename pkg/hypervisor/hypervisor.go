@@ -26,6 +26,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -176,6 +177,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/visors/{pk}/restart", hv.restart())
 			r.Post("/visors/{pk}/exec", hv.exec())
 			r.Post("/visors/{pk}/update", hv.update())
+			r.Get("/visors/{pk}/update/available", hv.updateAvailable())
 		})
 	})
 
@@ -734,12 +736,42 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 func (hv *Hypervisor) update() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if err := ctx.RPC.Update(); err != nil {
+		updated, err := ctx.RPC.Update()
+		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, true)
+		output := struct {
+			Updated bool `json:"updated"`
+		}{updated}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
+	})
+}
+
+func (hv *Hypervisor) updateAvailable() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		version, err := ctx.RPC.UpdateAvailable()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		output := struct {
+			Available        bool   `json:"available"`
+			CurrentVersion   string `json:"current_version"`
+			AvailableVersion string `json:"available_version,omitempty"`
+		}{
+			Available:      version != nil,
+			CurrentVersion: buildinfo.Version(),
+		}
+
+		if version != nil {
+			output.AvailableVersion = version.String()
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rpcutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
 const (
@@ -499,8 +500,26 @@ func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 }
 
 // Update updates visor.
-func (r *RPC) Update(_ *struct{}, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "Update", nil)(nil, &err)
+func (r *RPC) Update(_ *struct{}, updated *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "Update", nil)(updated, &err)
 
-	return r.visor.Update()
+	*updated, err = r.visor.Update()
+	return
+}
+
+// UpdateAvailable checks if visor update is available.
+func (r *RPC) UpdateAvailable(_ *struct{}, version *updater.Version) (err error) {
+	defer rpcutil.LogCall(r.log, "UpdateAvailable", nil)(version, &err)
+
+	v, err := r.visor.UpdateAvailable()
+	if err != nil {
+		return err
+	}
+
+	if v == nil {
+		return nil
+	}
+
+	*version = *v
+	return nil
 }
