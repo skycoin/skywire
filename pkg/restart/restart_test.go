@@ -66,9 +66,9 @@ func TestContext_Start(t *testing.T) {
 		cc := CaptureContext()
 		assert.NotZero(t, len(cc.cmd.Args))
 
-		cmd := "touch"
-		path := "/tmp/test_start"
-		cc.cmd = exec.Command(cmd, path) // nolint:gosec
+		cmd := "sleep"
+		duration := "5"
+		cc.cmd = exec.Command(cmd, duration) // nolint:gosec
 		cc.appendDelay = false
 
 		errCh := make(chan error, 1)
@@ -82,8 +82,6 @@ func TestContext_Start(t *testing.T) {
 
 		assert.Contains(t, errors, ErrAlreadyStarted)
 		assert.Contains(t, errors, nil)
-
-		assert.NoError(t, os.Remove(path))
 	})
 }
 
