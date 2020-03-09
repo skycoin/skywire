@@ -2,8 +2,10 @@ package snettest
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/SkycoinProject/dmsg"
@@ -13,6 +15,7 @@ import (
 	"golang.org/x/net/nettest"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 )
 
 // KeyPair holds a public/private key pair.
@@ -29,8 +32,10 @@ func GenKeyPairs(n int) []KeyPair {
 		if err != nil {
 			panic(err)
 		}
+
 		pairs[i] = KeyPair{PK: pk, SK: sk}
 	}
+
 	return pairs
 }
 
@@ -45,24 +50,59 @@ type Env struct {
 
 // NewEnv creates a `network.Network` test environment.
 // `nPairs` is the public/private key pairs of all the `network.Network`s to be created.
-func NewEnv(t *testing.T, keys []KeyPair) *Env {
+func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	// Prepare `dmsg`.
 	dmsgD := disc.NewMock()
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
 
+	const baseSTCPPort = 7033
+
+	tableEntries := make(map[cipher.PubKey]string)
+	for i, pair := range keys {
+		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
+	}
+
+	table := stcp.NewTable(tableEntries)
+
+	var hasDmsg, hasStcp bool
+
+	for _, network := range networks {
+		switch network {
+		case dmsg.Type:
+			hasDmsg = true
+		case stcp.Type:
+			hasStcp = true
+		}
+	}
+
 	// Prepare `snets`.
 	ns := make([]*snet.Network, len(keys))
+
 	for i, pairs := range keys {
+		var dmsgClient *dmsg.Client
+		var stcpClient *stcp.Client
+
+		if hasDmsg {
+			dmsgClient = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go dmsgClient.Serve()
+		}
+
+		if hasStcp {
+			stcpClient = stcp.NewClient(logging.MustGetLogger("stcp"), pairs.PK, pairs.SK, table)
+		}
+
+		port := 7033
 		n := snet.NewRaw(
 			snet.Config{
-				PubKey:      pairs.PK,
-				SecKey:      pairs.SK,
-				TpNetworks:  []string{dmsg.Type},
-				DmsgMinSrvs: 1,
+				PubKey:          pairs.PK,
+				SecKey:          pairs.SK,
+				TpNetworks:      networks,
+				DmsgMinSessions: 1,
+				STCPLocalAddr:   "127.0.0.1:" + strconv.Itoa(port+i),
 			},
-			dmsg.NewClient(pairs.PK, pairs.SK, dmsgD),
-			nil,
+			dmsgClient,
+			stcpClient,
 		)
 		require.NoError(t, n.Init(context.TODO()))
 		ns[i] = n
@@ -96,12 +136,12 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 	require.NoError(t, err)
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-	srv, err = dmsg.NewServer(pk, sk, "", l, dc)
-	require.NoError(t, err)
+	srv = dmsg.NewServer(pk, sk, dc, 100)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Serve()
+		errCh <- srv.Serve(l, "")
 		close(errCh)
 	}()
+	<-srv.Ready()
 	return srv, errCh
 }

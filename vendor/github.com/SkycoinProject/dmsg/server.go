@@ -2,440 +2,160 @@ package dmsg
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/SkycoinProject/dmsg/netutil"
 )
 
-// ErrListenerAlreadyWrappedToNoise occurs when the provided net.Listener is already wrapped with noise.Listener
-var ErrListenerAlreadyWrappedToNoise = errors.New("listener is already wrapped to *noise.Listener")
-
-// NextConn provides information on the next connection.
-type NextConn struct {
-	conn *ServerConn
-	id   uint16
-}
-
-func (r *NextConn) writeFrame(ft FrameType, p []byte) error {
-	if err := writeFrame(r.conn.Conn, MakeFrame(ft, r.id, p)); err != nil {
-		go func() {
-			if err := r.conn.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close connection")
-			}
-		}()
-		return err
-	}
-	return nil
-}
-
-// ServerConn is a connection between a dmsg.Server and a dmsg.Client from a server's perspective.
-type ServerConn struct {
-	log *logging.Logger
-
-	net.Conn
-	remoteClient cipher.PubKey
-
-	nextRespID uint16
-	nextConns  map[uint16]*NextConn
-	mx         sync.RWMutex
-}
-
-// NewServerConn creates a new connection from the perspective of a dms_server.
-func NewServerConn(log *logging.Logger, conn net.Conn, remoteClient cipher.PubKey) *ServerConn {
-	return &ServerConn{
-		log:          log,
-		Conn:         conn,
-		remoteClient: remoteClient,
-		nextRespID:   randID(false),
-		nextConns:    make(map[uint16]*NextConn),
-	}
-}
-
-func (c *ServerConn) delNext(id uint16) {
-	c.mx.Lock()
-	delete(c.nextConns, id)
-	c.mx.Unlock()
-}
-
-func (c *ServerConn) setNext(id uint16, r *NextConn) {
-	c.mx.Lock()
-	c.nextConns[id] = r
-	c.mx.Unlock()
-}
-
-func (c *ServerConn) getNext(id uint16) (*NextConn, bool) {
-	c.mx.RLock()
-	r := c.nextConns[id]
-	c.mx.RUnlock()
-	return r, r != nil
-}
-
-func (c *ServerConn) addNext(ctx context.Context, r *NextConn) (uint16, error) {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-
-	for {
-		if r := c.nextConns[c.nextRespID]; r == nil {
-			break
-		}
-		c.nextRespID += 2
-
-		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		default:
-		}
-	}
-
-	id := c.nextRespID
-	c.nextRespID = id + 2
-	c.nextConns[id] = r
-	return id, nil
-}
-
-// PK returns the remote dms_client's public key.
-func (c *ServerConn) PK() cipher.PubKey {
-	return c.remoteClient
-}
-
-type getConnFunc func(pk cipher.PubKey) (*ServerConn, bool)
-
-// Serve handles (and forwards when necessary) incoming frames.
-func (c *ServerConn) Serve(ctx context.Context, getConn getConnFunc) (err error) {
-	log := c.log.WithField("srcClient", c.remoteClient)
-
-	// Only manually close the underlying net.Conn when the done signal is context-initiated.
-	done := make(chan struct{})
-	defer close(done)
-	go func() {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			if err := c.Conn.Close(); err != nil {
-				log.WithError(err).Warn("failed to close underlying connection")
-			}
-		}
-	}()
-
-	defer func() {
-		// Send CLOSE frames to all transports which are established with this dmsg.Client
-		// This ensures that all parties are informed about the transport closing.
-		c.mx.Lock()
-		for _, conn := range c.nextConns {
-			why := byte(0)
-			if err := conn.writeFrame(CloseType, []byte{why}); err != nil {
-				log.WithError(err).Warnf("failed to write frame: %s", err)
-			}
-		}
-		c.mx.Unlock()
-
-		log.WithError(err).WithField("connCount", decrementServeCount()).Infoln("ClosingConn")
-		if err := c.Conn.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close connection")
-		}
-	}()
-
-	log.WithField("connCount", incrementServeCount()).Infoln("ServingConn")
-
-	err = c.writeOK()
-	if err != nil {
-		return fmt.Errorf("sending OK failed: %s", err)
-	}
-
-	for {
-		f, err := readFrame(c.Conn)
-		if err != nil {
-			return fmt.Errorf("read failed: %s", err)
-		}
-		log := log.WithField("received", f)
-
-		ft, id, p := f.Disassemble()
-
-		switch ft {
-		case RequestType:
-			ctx, cancel := context.WithTimeout(ctx, TransportHandshakeTimeout)
-			_, why, ok := c.handleRequest(ctx, getConn, id, p)
-			cancel()
-			if !ok {
-				log.Debugln("FrameRejected: Erroneous request or unresponsive dstClient.")
-				if err := c.delChan(id, why); err != nil {
-					return err
-				}
-			}
-			log.Debugln("FrameForwarded")
-
-		case AcceptType, FwdType, AckType, CloseType:
-			next, why, ok := c.forwardFrame(ft, id, p)
-			if !ok {
-				log.Debugln("FrameRejected: Failed to forward to dstClient.")
-				// Delete channel (and associations) on failure.
-				if err := c.delChan(id, why); err != nil {
-					return err
-				}
-				continue
-			}
-			log.Debugln("FrameForwarded")
-
-			// On success, if Close frame, delete the associations.
-			if ft == CloseType {
-				c.delNext(id)
-				next.conn.delNext(next.id)
-			}
-
-		default:
-			log.Debugln("FrameRejected: Unknown frame type.")
-			// Unknown frame type.
-			return errors.New("unknown frame of type received")
-		}
-	}
-}
-
-func (c *ServerConn) delChan(id uint16, why byte) error {
-	c.delNext(id)
-	if err := writeCloseFrame(c.Conn, id, why); err != nil {
-		return fmt.Errorf("failed to write frame: %s", err)
-	}
-	return nil
-}
-
-func (c *ServerConn) writeOK() error {
-	if err := writeFrame(c.Conn, MakeFrame(OkType, 0, nil)); err != nil {
-		return err
-	}
-	return nil
-}
-
-// nolint:unparam
-func (c *ServerConn) forwardFrame(ft FrameType, id uint16, p []byte) (*NextConn, byte, bool) {
-	next, ok := c.getNext(id)
-	if !ok {
-		return next, 0, false
-	}
-	if err := next.writeFrame(ft, p); err != nil {
-		return next, 0, false
-	}
-	return next, 0, true
-}
-
-// nolint:unparam
-func (c *ServerConn) handleRequest(ctx context.Context, getLink getConnFunc, id uint16, p []byte) (*NextConn, byte, bool) {
-	payload, err := unmarshalHandshakePayload(p)
-	if err != nil || payload.InitPK != c.PK() {
-		return nil, 0, false
-	}
-	respL, ok := getLink(payload.RespPK)
-	if !ok {
-		return nil, 0, false
-	}
-
-	// set next relations.
-	respID, err := respL.addNext(ctx, &NextConn{conn: c, id: id})
-	if err != nil {
-		return nil, 0, false
-	}
-	next := &NextConn{conn: respL, id: respID}
-	c.setNext(id, next)
-
-	// forward to responding client.
-	if err := next.writeFrame(RequestType, p); err != nil {
-		return next, 0, false
-	}
-	return next, 0, true
-}
-
-// Server represents a dms_server.
+// Server represents a dsmg server entity.
 type Server struct {
-	log *logging.Logger
+	EntityCommon
 
-	pk cipher.PubKey
-	sk cipher.SecKey
-	dc disc.APIClient
+	ready     chan struct{} // Closed once dmsg.Server is serving.
+	readyOnce sync.Once
 
-	addr  string
-	lis   net.Listener
-	conns map[cipher.PubKey]*ServerConn
-	mx    sync.RWMutex
+	done chan struct{}
+	once sync.Once
+	wg   sync.WaitGroup
 
-	wg sync.WaitGroup
-
-	lisDone  int32
-	doneOnce sync.Once
+	maxSessions int
 }
 
-// NewServer creates a new dms_server.
-func NewServer(pk cipher.PubKey, sk cipher.SecKey, addr string, l net.Listener, dc disc.APIClient) (*Server, error) {
-	if addr == "" {
-		addr = l.Addr().String()
+// NewServer creates a new dmsg server entity.
+func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, maxSessions int) *Server {
+	s := new(Server)
+	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
+	s.ready = make(chan struct{})
+	s.done = make(chan struct{})
+	s.maxSessions = maxSessions
+	s.setSessionCallback = func(ctx context.Context, sessionCount int) error {
+		available := s.maxSessions - sessionCount
+		return s.updateServerEntry(ctx, "", available)
 	}
-
-	if _, ok := l.(*noise.Listener); ok {
-		return nil, ErrListenerAlreadyWrappedToNoise
+	s.delSessionCallback = func(ctx context.Context, sessionCount int) error {
+		available := s.maxSessions - sessionCount
+		return s.updateServerEntry(ctx, "", available)
 	}
-
-	return &Server{
-		log:   logging.MustGetLogger("dms_server"),
-		pk:    pk,
-		sk:    sk,
-		addr:  addr,
-		lis:   noise.WrapListener(l, pk, sk, false, noise.HandshakeXK),
-		dc:    dc,
-		conns: make(map[cipher.PubKey]*ServerConn),
-	}, nil
+	return s
 }
 
-// SetLogger set's the logger.
-func (s *Server) SetLogger(log *logging.Logger) {
-	s.log = log
-}
-
-// Addr returns the server's listening address.
-func (s *Server) Addr() string {
-	return s.addr
-}
-
-func (s *Server) setConn(l *ServerConn) {
-	s.mx.Lock()
-	s.conns[l.remoteClient] = l
-	s.mx.Unlock()
-}
-
-func (s *Server) delConn(pk cipher.PubKey) {
-	s.mx.Lock()
-	delete(s.conns, pk)
-	s.mx.Unlock()
-}
-
-func (s *Server) getConn(pk cipher.PubKey) (*ServerConn, bool) {
-	s.mx.RLock()
-	l, ok := s.conns[pk]
-	s.mx.RUnlock()
-	return l, ok
-}
-
-func (s *Server) connCount() int {
-	s.mx.RLock()
-	n := len(s.conns)
-	s.mx.RUnlock()
-	return n
-}
-
-func (s *Server) close() (closed bool, err error) {
-	s.doneOnce.Do(func() {
-		closed = true
-		atomic.StoreInt32(&s.lisDone, 1)
-
-		if err = s.lis.Close(); err != nil {
-			return
-		}
-
-		s.mx.Lock()
-		s.conns = make(map[cipher.PubKey]*ServerConn)
-		s.mx.Unlock()
-	})
-
-	return closed, err
-}
-
-// Close closes the dms_server.
+// Close implements io.Closer
 func (s *Server) Close() error {
-	closed, err := s.close()
-	if !closed {
-		return errors.New("server is already closed")
-	}
-	if err != nil {
-		return err
-	}
-
-	s.wg.Wait()
-	return nil
-}
-
-func (s *Server) isLisClosed() bool {
-	return atomic.LoadInt32(&s.lisDone) == 1
-}
-
-// Serve serves the dmsg_server.
-func (s *Server) Serve() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if err := s.retryUpdateEntry(ctx, TransportHandshakeTimeout); err != nil {
-		return fmt.Errorf("updating server's client entry failed with: %s", err)
-	}
-
-	s.log.Infof("serving: pk(%s) addr(%s)", s.pk, s.addr)
-
-	for {
-		rawConn, err := s.lis.Accept()
-		if err != nil {
-			// if the listener is closed, it means that this error is not interesting
-			// for the outer client
-			if s.isLisClosed() {
-				return nil
-			}
-			// Continue if error is temporary.
-			if err, ok := err.(net.Error); ok {
-				if err.Temporary() {
-					continue
-				}
-			}
-			return err
-		}
-		s.log.Infof("newConn: %v", rawConn.RemoteAddr())
-		conn := NewServerConn(s.log, rawConn, rawConn.RemoteAddr().(*noise.Addr).PK)
-		s.setConn(conn)
-
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			err := conn.Serve(ctx, s.getConn)
-			s.log.Infof("connection with client %s closed: error(%v)", conn.PK(), err)
-			s.delConn(conn.PK())
-		}()
-	}
-}
-
-func (s *Server) updateDiscEntry(ctx context.Context) error {
-	entry, err := s.dc.Entry(ctx, s.pk)
-	if err != nil {
-		entry = disc.NewServerEntry(s.pk, 0, s.addr, 10)
-		if err := entry.Sign(s.sk); err != nil {
-			return err
-		}
-		return s.dc.SetEntry(ctx, entry)
-	}
-
-	entry.Server.Address = s.Addr()
-	s.log.Infoln("updatingEntry:", entry)
-
-	return s.dc.UpdateEntry(ctx, s.sk, entry)
-}
-
-func (s *Server) retryUpdateEntry(ctx context.Context, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	for {
-		if err := s.updateDiscEntry(ctx); err != nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				retry := time.Second
-				s.log.WithError(err).Warnf("updateEntry failed: trying again in %d second...", retry)
-				time.Sleep(retry)
-				continue
-			}
-		}
+	if s == nil {
 		return nil
 	}
+	s.once.Do(func() {
+		close(s.done)
+		s.wg.Wait()
+	})
+	return nil
+}
+
+// Serve serves the server.
+func (s *Server) Serve(lis net.Listener, addr string) error {
+	log := logrus.FieldLogger(s.log.WithField("local_addr", addr).WithField("local_pk", s.pk))
+
+	log.Info("Serving server.")
+	s.wg.Add(1)
+
+	defer func() {
+		log.Info("Stopped server.")
+		s.wg.Done()
+	}()
+
+	go func() {
+		<-s.done
+		log.WithError(lis.Close()).
+			Info("Stopping server, net.Listener closed.")
+	}()
+
+	if addr == "" {
+		addr = lis.Addr().String()
+	}
+	if err := s.updateEntryLoop(addr); err != nil {
+		return err
+	}
+
+	log.Info("Accepting sessions...")
+	s.readyOnce.Do(func() { close(s.ready) })
+	for {
+		conn, err := lis.Accept()
+		if err != nil {
+			// If server is closed, there is no error to report.
+			if isClosed(s.done) {
+				return nil
+			}
+			return err
+		}
+
+		// TODO(evanlinjin): Implement proper load-balancing.
+		if s.SessionCount() >= s.maxSessions {
+			s.log.
+				WithField("max_sessions", s.maxSessions).
+				WithField("remote_tcp", conn.RemoteAddr()).
+				Debug("Max sessions is reached, but still accepting so clients who delegated us can still listen.")
+		}
+
+		s.wg.Add(1)
+		go func(conn net.Conn) {
+			s.handleSession(conn)
+			s.wg.Done()
+		}(conn)
+	}
+}
+
+// Ready returns a chan which blocks until the server begins serving.
+func (s *Server) Ready() <-chan struct{} {
+	return s.ready
+}
+
+func (s *Server) updateEntryLoop(addr string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-s.done:
+			cancel()
+		}
+	}()
+	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
+		return s.updateServerEntry(ctx, addr, s.maxSessions)
+	})
+}
+
+func (s *Server) handleSession(conn net.Conn) {
+	log := logrus.FieldLogger(s.log.WithField("remote_tcp", conn.RemoteAddr()))
+
+	dSes, err := makeServerSession(&s.EntityCommon, conn)
+	if err != nil {
+		log = log.WithError(err)
+		if err := conn.Close(); err != nil {
+			s.log.WithError(err).
+				Debug("On handleSession() failure, close connection resulted in error.")
+		}
+		return
+	}
+
+	log = log.WithField("remote_pk", dSes.RemotePK())
+	log.Info("Started session.")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		awaitDone(ctx, s.done)
+		log.WithError(dSes.Close()).Info("Stopped session.")
+	}()
+
+	if s.setSession(ctx, dSes.SessionCommon) {
+		dSes.Serve()
+	}
+
+	s.delSession(ctx, dSes.RemotePK())
+	cancel()
 }
