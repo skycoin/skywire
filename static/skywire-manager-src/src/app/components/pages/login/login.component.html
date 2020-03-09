@@ -1,0 +1,23 @@
+<div class="w-100 h-100 d-flex justify-content-center">
+  <app-lang-button></app-lang-button>
+  <div
+    class="row flex-column align-items-center h-100 justify-content-center"
+  >
+    <img src="/assets/img/logo-v.png" class="logo" />
+    <form class="mt-5" [formGroup]="form">
+      <div class="login-input">
+        <input
+          type="password"
+          formControlName="password"
+          autocomplete="off"
+          [placeholder]="'login.password' | translate"
+          (keydown.enter)="login()"
+        >
+        <button [disabled]="!form.valid || loading" (click)="login()">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    </form>
+    <div class="config-link" (click)="configure()">{{ 'login.initial-config' | translate }}</div>
+  </div>
+</div>
