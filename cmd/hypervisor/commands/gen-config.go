@@ -10,19 +10,29 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
+// nolint:gochecknoglobals
 var (
 	output        string
 	replace       bool
 	configLocType = pathutil.WorkingDirLoc
+	testEnv       bool
 )
 
+// nolint:gochecknoinits
 func init() {
+	outputUsage := "path of output config file. Uses default of 'type' flag if unspecified."
+	replaceUsage := "whether to allow rewrite of a file that already exists."
+	configLocTypeUsage := fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes())
+	testEnvUsage := "whether to use production or test deployment service."
+
 	rootCmd.AddCommand(genConfigCmd)
-	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
-	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
-	genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
+	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", outputUsage)
+	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, replaceUsage)
+	genConfigCmd.Flags().VarP(&configLocType, "type", "m", configLocTypeUsage)
+	genConfigCmd.Flags().BoolVarP(&testEnv, "testing-environment", "t", false, testEnvUsage)
 }
 
+// nolint:gochecknoglobals
 var genConfigCmd = &cobra.Command{
 	Use:   "gen-config",
 	Short: "generates a configuration file",
@@ -40,11 +50,11 @@ var genConfigCmd = &cobra.Command{
 		var conf hypervisor.Config
 		switch configLocType {
 		case pathutil.WorkingDirLoc:
-			conf = hypervisor.GenerateWorkDirConfig()
+			conf = hypervisor.GenerateWorkDirConfig(testEnv)
 		case pathutil.HomeLoc:
-			conf = hypervisor.GenerateHomeConfig()
+			conf = hypervisor.GenerateHomeConfig(testEnv)
 		case pathutil.LocalLoc:
-			conf = hypervisor.GenerateLocalConfig()
+			conf = hypervisor.GenerateLocalConfig(testEnv)
 		default:
 			log.Fatalln("invalid config type:", configLocType)
 		}

@@ -2,6 +2,7 @@ package visor
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -9,21 +10,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
+)
+
+var (
+	// ErrAlreadyServing is returned when an operation fails due to an operation
+	// that is currently running.
+	ErrAlreadyServing = errors.New("already serving")
 )
 
 // RPCClient represents a RPC Client implementation.
 type RPCClient interface {
 	Summary() (*Summary, error)
-	Exec(command string) ([]byte, error)
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
@@ -32,6 +39,8 @@ type RPCClient interface {
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
+	SetSocksPassword(password string) error
+	SetSocksClientPK(pk cipher.PubKey) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -43,13 +52,16 @@ type RPCClient interface {
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
 
-	RoutingRules() ([]*RoutingEntry, error)
+	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
-	AddRoutingRule(rule routing.Rule) (routing.RouteID, error)
-	SetRoutingRule(key routing.RouteID, rule routing.Rule) error
+	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 
-	Loops() ([]LoopInfo, error)
+	RouteGroups() ([]RouteGroupInfo, error)
+
+	Restart() error
+	Exec(command string) ([]byte, error)
+	Update() error
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -90,13 +102,6 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	return out, err
 }
 
-// Exec calls Exec.
-func (rc *rpcClient) Exec(command string) ([]byte, error) {
-	output := make([]byte, 0)
-	err := rc.Call("Exec", &command, &output)
-	return output, err
-}
-
 // Apps calls Apps.
 func (rc *rpcClient) Apps() ([]*AppState, error) {
 	states := make([]*AppState, 0)
@@ -120,6 +125,16 @@ func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 		AppName:   appName,
 		AutoStart: autostart,
 	}, &struct{}{})
+}
+
+// SetSocksPassword calls SetSocksPassword.
+func (rc *rpcClient) SetSocksPassword(password string) error {
+	return rc.Call("SetSocksPassword", &password, &struct{}{})
+}
+
+// SetSocksClientPK calls SetSocksClientPK.
+func (rc *rpcClient) SetSocksClientPK(pk cipher.PubKey) error {
+	return rc.Call("SetSocksClientPK", &pk, &struct{}{})
 }
 
 // LogsSince calls LogsSince
@@ -146,7 +161,7 @@ func (rc *rpcClient) TransportTypes() ([]string, error) {
 
 // Transports calls Transports.
 func (rc *rpcClient) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
-	var transports []*TransportSummary
+	transports := make([]*TransportSummary, 0)
 	err := rc.Call("Transports", &TransportsIn{
 		FilterTypes:   types,
 		FilterPubKeys: pks,
@@ -180,7 +195,7 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 }
 
 func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	var entries []*transport.EntryWithStatus
+	entries := make([]*transport.EntryWithStatus, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
@@ -192,8 +207,8 @@ func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithSt
 }
 
 // RoutingRules calls RoutingRules.
-func (rc *rpcClient) RoutingRules() ([]*RoutingEntry, error) {
-	var entries []*RoutingEntry
+func (rc *rpcClient) RoutingRules() ([]routing.Rule, error) {
+	entries := make([]routing.Rule, 0)
 	err := rc.Call("RoutingRules", &struct{}{}, &entries)
 	return entries, err
 }
@@ -205,16 +220,9 @@ func (rc *rpcClient) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	return rule, err
 }
 
-// AddRoutingRule calls AddRoutingRule.
-func (rc *rpcClient) AddRoutingRule(rule routing.Rule) (routing.RouteID, error) {
-	var tid routing.RouteID
-	err := rc.Call("AddRoutingRule", &rule, &tid)
-	return tid, err
-}
-
-// SetRoutingRule calls SetRoutingRule.
-func (rc *rpcClient) SetRoutingRule(key routing.RouteID, rule routing.Rule) error {
-	return rc.Call("SetRoutingRule", &RoutingEntry{Key: key, Value: rule}, &struct{}{})
+// SaveRoutingRule calls SaveRoutingRule.
+func (rc *rpcClient) SaveRoutingRule(rule routing.Rule) error {
+	return rc.Call("SaveRoutingRule", &rule, &struct{}{})
 }
 
 // RemoveRoutingRule calls RemoveRoutingRule.
@@ -222,11 +230,29 @@ func (rc *rpcClient) RemoveRoutingRule(key routing.RouteID) error {
 	return rc.Call("RemoveRoutingRule", &key, &struct{}{})
 }
 
-// Loops calls Loops.
-func (rc *rpcClient) Loops() ([]LoopInfo, error) {
-	var loops []LoopInfo
-	err := rc.Call("Loops", &struct{}{}, &loops)
-	return loops, err
+// RouteGroups calls RouteGroups.
+func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
+	var routegroups []RouteGroupInfo
+	err := rc.Call("RouteGroups", &struct{}{}, &routegroups)
+	return routegroups, err
+}
+
+// Restart calls Restart.
+func (rc *rpcClient) Restart() error {
+	return rc.Call("Restart", &struct{}{}, &struct{}{})
+}
+
+// Exec calls Exec.
+func (rc *rpcClient) Exec(command string) ([]byte, error) {
+	output := make([]byte, 0)
+	err := rc.Call("Exec", &command, &output)
+	return output, err
+}
+
+// Update calls Update.
+func (rc *rpcClient) Update() error {
+	err := rc.Call("Update", &struct{}{}, &struct{}{})
+	return err
 }
 
 // MockRPCClient mocks RPCClient.
@@ -260,43 +286,57 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 		}
 		log.Infof("tp[%2d]: %v", i, tps[i])
 	}
-	rt := routing.InMemoryRoutingTable()
+
+	rt := routing.NewTable()
 	ruleKeepAlive := router.DefaultRouteKeepAlive
+
 	for i := 0; i < r.Intn(maxRules+1); i++ {
 		remotePK, _ := cipher.GenerateKeyPair()
 		var lpRaw, rpRaw [2]byte
+
 		if _, err := r.Read(lpRaw[:]); err != nil {
 			return cipher.PubKey{}, nil, err
 		}
+
 		if _, err := r.Read(rpRaw[:]); err != nil {
 			return cipher.PubKey{}, nil, err
 		}
+
 		lp := routing.Port(binary.BigEndian.Uint16(lpRaw[:]))
 		rp := routing.Port(binary.BigEndian.Uint16(rpRaw[:]))
-		fwdRID, err := rt.AddRule(nil)
+
+		fwdRID, err := rt.ReserveKeys(1)
 		if err != nil {
 			panic(err)
 		}
-		fwdRule := routing.ForwardRule(ruleKeepAlive, routing.RouteID(r.Uint32()), uuid.New(), fwdRID)
-		if err := rt.SetRule(fwdRID, fwdRule); err != nil {
+
+		keys := snettest.GenKeyPairs(2)
+
+		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
+		if err := rt.SaveRule(fwdRule); err != nil {
 			panic(err)
 		}
-		appRID, err := rt.AddRule(nil)
+
+		appRID, err := rt.ReserveKeys(1)
 		if err != nil {
 			panic(err)
 		}
-		appRule := routing.AppRule(ruleKeepAlive, appRID, fwdRID, remotePK, lp, rp)
-		if err := rt.SetRule(appRID, appRule); err != nil {
+
+		consumeRule := routing.ConsumeRule(ruleKeepAlive, appRID[0], localPK, remotePK, lp, rp)
+		if err := rt.SaveRule(consumeRule); err != nil {
 			panic(err)
 		}
+
 		log.Infof("rt[%2da]: %v %v", i, fwdRID, fwdRule.Summary().ForwardFields)
-		log.Infof("rt[%2db]: %v %v", i, appRID, appRule.Summary().AppFields)
+		log.Infof("rt[%2db]: %v %v", i, appRID[0], consumeRule.Summary().ConsumeFields)
 	}
+
 	log.Printf("rtCount: %d", rt.Count())
+
 	client := &mockRPCClient{
 		s: &Summary{
 			PubKey:          localPK,
-			NodeVersion:     Version,
+			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
 			Apps: []*AppState{
 				{Name: "foo.v1.0", AutoStart: false, Port: 10},
@@ -309,6 +349,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 		rt:        rt,
 		startedAt: time.Now(),
 	}
+
 	return localPK, client, nil
 }
 
@@ -328,8 +369,8 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 	var out Summary
 	err := mc.do(false, func() error {
 		out = *mc.s
-		for _, app := range mc.s.Apps {
-			out.Apps = append(out.Apps, &(*app))
+		for _, a := range mc.s.Apps {
+			out.Apps = append(out.Apps, &(*a))
 		}
 		for _, tp := range mc.s.Transports {
 			out.Transports = append(out.Transports, &(*tp))
@@ -356,17 +397,12 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
-// Exec implements RPCClient.
-func (mc *mockRPCClient) Exec(command string) ([]byte, error) {
-	return []byte("mock"), nil
-}
-
 // Apps implements RPCClient.
 func (mc *mockRPCClient) Apps() ([]*AppState, error) {
 	var apps []*AppState
 	err := mc.do(false, func() error {
-		for _, app := range mc.s.Apps {
-			apps = append(apps, &(*app))
+		for _, a := range mc.s.Apps {
+			apps = append(apps, &(*a))
 		}
 		return nil
 	})
@@ -386,13 +422,43 @@ func (*mockRPCClient) StopApp(string) error {
 // SetAutoStart implements RPCClient.
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
-		for _, app := range mc.s.Apps {
-			if app.Name == appName {
-				app.AutoStart = autostart
+		for _, a := range mc.s.Apps {
+			if a.Name == appName {
+				a.AutoStart = autostart
 				return nil
 			}
 		}
 		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
+}
+
+// SetSocksPassword implements RPCClient.
+func (mc *mockRPCClient) SetSocksPassword(string) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetSocksClientPK implements RPCClient.
+func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks-client"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
 	})
 }
 
@@ -458,7 +524,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 }
 
 // AddTransport implements RPCClient.
-func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, public bool, _ time.Duration) (*TransportSummary, error) {
+func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.s.PubKey, remote, tpType),
 		Local:  mc.s.PubKey,
@@ -485,22 +551,17 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
 	return nil, ErrNotImplemented
 }
 
 // RoutingRules implements RPCClient.
-func (mc *mockRPCClient) RoutingRules() ([]*RoutingEntry, error) {
-	var entries []*RoutingEntry
-	err := mc.rt.RangeRules(func(routeID routing.RouteID, rule routing.Rule) (next bool) {
-		entries = append(entries, &RoutingEntry{Key: routeID, Value: rule})
-		return true
-	})
-	return entries, err
+func (mc *mockRPCClient) RoutingRules() ([]routing.Rule, error) {
+	return mc.rt.AllRules(), nil
 }
 
 // RoutingRule implements RPCClient.
@@ -508,40 +569,52 @@ func (mc *mockRPCClient) RoutingRule(key routing.RouteID) (routing.Rule, error) 
 	return mc.rt.Rule(key)
 }
 
-// AddRoutingRule implements RPCClient.
-func (mc *mockRPCClient) AddRoutingRule(rule routing.Rule) (routing.RouteID, error) {
-	return mc.rt.AddRule(rule)
-}
-
-// SetRoutingRule implements RPCClient.
-func (mc *mockRPCClient) SetRoutingRule(key routing.RouteID, rule routing.Rule) error {
-	return mc.rt.SetRule(key, rule)
+// SaveRoutingRule implements RPCClient.
+func (mc *mockRPCClient) SaveRoutingRule(rule routing.Rule) error {
+	return mc.rt.SaveRule(rule)
 }
 
 // RemoveRoutingRule implements RPCClient.
 func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
-	return mc.rt.DeleteRules(key)
+	mc.rt.DelRules([]routing.RouteID{key})
+	return nil
 }
 
-// Loops implements RPCClient.
-func (mc *mockRPCClient) Loops() ([]LoopInfo, error) {
-	var loops []LoopInfo
-	err := mc.rt.RangeRules(func(_ routing.RouteID, rule routing.Rule) (next bool) {
-		if rule.Type() == routing.RuleApp {
-			loops = append(loops, LoopInfo{AppRule: rule})
+// RouteGroups implements RPCClient.
+func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
+	var routeGroups []RouteGroupInfo
+
+	rules := mc.rt.AllRules()
+	for _, rule := range rules {
+		if rule.Type() != routing.RuleConsume {
+			continue
 		}
-		return true
-	})
-	if err != nil {
-		return nil, err
-	}
-	for i, l := range loops {
-		fwdRID := l.AppRule.RouteID()
-		rule, err := mc.rt.Rule(fwdRID)
+
+		fwdRID := rule.NextRouteID()
+		fwdRule, err := mc.rt.Rule(fwdRID)
 		if err != nil {
 			return nil, err
 		}
-		loops[i].FwdRule = rule
+		routeGroups = append(routeGroups, RouteGroupInfo{
+			ConsumeRule: rule,
+			FwdRule:     fwdRule,
+		})
 	}
-	return loops, nil
+
+	return routeGroups, nil
+}
+
+// Restart implements RPCClient.
+func (mc *mockRPCClient) Restart() error {
+	return nil
+}
+
+// Exec implements RPCClient.
+func (mc *mockRPCClient) Exec(string) ([]byte, error) {
+	return []byte("mock"), nil
+}
+
+// Exec implements RPCClient.
+func (mc *mockRPCClient) Update() error {
+	return nil
 }
