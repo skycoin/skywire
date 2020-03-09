@@ -1,0 +1,50 @@
+@import 'variables';
+@import "bootstrap_overrides";
+@import 'utilities/utilities';
+@import 'text';
+
+.header {
+  margin-top: -$mat-dialog-padding;
+  margin-left: -$mat-dialog-padding;
+  margin-right: -$mat-dialog-padding;
+  margin-bottom: 0;
+  color: $blue-dark;
+  padding: 0px ($mat-dialog-padding - 10) 0px $mat-dialog-padding;
+  font-size: $font-size-base;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  span {
+    @extend .single-line;
+  }
+
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    & {
+      padding: 0px 2px 0px $mat-dialog-padding;
+    }
+  }
+
+  span {
+    @extend .reactivate-mouse;
+    line-height: $font-size-base;
+    margin: 17px 0;
+  }
+
+  .mat-icon-button {
+    @extend .cursor-pointer;
+    color: darken($white, 30%);
+    width: 32px;
+    height: 32px;
+    line-height: 20px;
+    margin-left: 10px;
+
+    @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+      & {
+        width: 46px;
+        height: 46px;
+      }
+    }
+  }
+}

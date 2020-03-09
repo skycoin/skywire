@@ -1,0 +1,14 @@
+<div class="header" mat-dialog-title>
+  <span>{{ headline }}</span>
+  <button mat-dialog-close mat-icon-button class="grey-button-background" *ngIf="!disableDismiss">
+    <mat-icon>close</mat-icon>
+  </button>
+</div>
+
+<mat-dialog-content *ngIf="includeScrollableArea">
+  <ng-container *ngTemplateOutlet="contentTemplate"></ng-container>
+</mat-dialog-content>
+<ng-container *ngIf="!includeScrollableArea">
+  <ng-container *ngTemplateOutlet="contentTemplate"></ng-container>
+</ng-container>
+<ng-template #contentTemplate><ng-content></ng-content></ng-template>
