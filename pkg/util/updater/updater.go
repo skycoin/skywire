@@ -75,10 +75,7 @@ func (u *Updater) Update() (err error) {
 	if !atomic.CompareAndSwapInt32(&u.updating, 0, 1) {
 		return ErrAlreadyStarted
 	}
-	defer func() {
-		// TODO(evanlinjin): Need to reset restartCtx or something.
-		atomic.StoreInt32(&u.updating, 0)
-	}()
+	defer atomic.StoreInt32(&u.updating, 0)
 
 	u.log.Infof("Looking for updates")
 
