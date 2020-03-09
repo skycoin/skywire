@@ -36,18 +36,20 @@ type Context struct {
 // Data used by CaptureContext must not be modified before,
 // therefore calling CaptureContext immediately after starting executable is recommended.
 func CaptureContext() *Context {
-	cmd := exec.Command(os.Args[0], os.Args[1:]...) // nolint:gosec
+	return &Context{
+		cmd:         captureCmd(),
+		checkDelay:  DefaultCheckDelay,
+		appendDelay: true,
+	}
+}
 
+func captureCmd() *exec.Cmd {
+	cmd := exec.Command(os.Args[0], os.Args[1:]...) // nolint:gosec
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
-
-	return &Context{
-		cmd:         cmd,
-		checkDelay:  DefaultCheckDelay,
-		appendDelay: true,
-	}
+	return cmd
 }
 
 // RegisterLogger registers a logger instead of standard one.
@@ -70,24 +72,28 @@ func (c *Context) CmdPath() string {
 }
 
 // Start starts a new executable using Context.
-func (c *Context) Start() error {
+func (c *Context) Start() (err error) {
 	if !atomic.CompareAndSwapInt32(&c.isStarted, 0, 1) {
 		return ErrAlreadyStarted
 	}
 
 	errCh := c.startExec()
-
 	ticker := time.NewTicker(c.checkDelay)
-	defer ticker.Stop()
 
 	select {
-	case err := <-errCh:
+	case err = <-errCh:
 		c.errorLogger()("Failed to start new instance: %v", err)
-		return err
+
+		// Reset c.cmd on failure so it can be reused.
+		c.cmd = captureCmd()
+		atomic.StoreInt32(&c.isStarted, 0)
+
 	case <-ticker.C:
 		c.infoLogger()("New instance started successfully, exiting from the old one")
-		return nil
 	}
+
+	ticker.Stop()
+	return err
 }
 
 func (c *Context) startExec() chan error {
