@@ -36,20 +36,17 @@ type Context struct {
 // Data used by CaptureContext must not be modified before,
 // therefore calling CaptureContext immediately after starting executable is recommended.
 func CaptureContext() *Context {
-	return &Context{
-		cmd:         captureCmd(),
-		checkDelay:  DefaultCheckDelay,
-		appendDelay: true,
-	}
-}
-
-func captureCmd() *exec.Cmd {
 	cmd := exec.Command(os.Args[0], os.Args[1:]...) // nolint:gosec
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
-	return cmd
+
+	return &Context{
+		cmd:         cmd,
+		checkDelay:  DefaultCheckDelay,
+		appendDelay: true,
+	}
 }
 
 // RegisterLogger registers a logger instead of standard one.
@@ -85,7 +82,7 @@ func (c *Context) Start() (err error) {
 		c.errorLogger()("Failed to start new instance: %v", err)
 
 		// Reset c.cmd on failure so it can be reused.
-		c.cmd = captureCmd()
+		c.cmd = copyCmd(c.cmd)
 		atomic.StoreInt32(&c.isStarted, 0)
 
 	case <-ticker.C:
@@ -94,6 +91,16 @@ func (c *Context) Start() (err error) {
 
 	ticker.Stop()
 	return err
+}
+
+func copyCmd(oldCmd *exec.Cmd) *exec.Cmd {
+	newCmd := exec.Command(oldCmd.Path, oldCmd.Args...) // nolint:gosec
+	newCmd.Stdout = oldCmd.Stdout
+	newCmd.Stdin = oldCmd.Stdin
+	newCmd.Stderr = oldCmd.Stderr
+	newCmd.Env = oldCmd.Env
+
+	return newCmd
 }
 
 func (c *Context) startExec() chan error {
