@@ -37,7 +37,6 @@ type Context struct {
 // therefore calling CaptureContext immediately after starting executable is recommended.
 func CaptureContext() *Context {
 	cmd := exec.Command(os.Args[0], os.Args[1:]...) // nolint:gosec
-
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
@@ -70,24 +69,38 @@ func (c *Context) CmdPath() string {
 }
 
 // Start starts a new executable using Context.
-func (c *Context) Start() error {
+func (c *Context) Start() (err error) {
 	if !atomic.CompareAndSwapInt32(&c.isStarted, 0, 1) {
 		return ErrAlreadyStarted
 	}
 
 	errCh := c.startExec()
-
 	ticker := time.NewTicker(c.checkDelay)
-	defer ticker.Stop()
 
 	select {
-	case err := <-errCh:
+	case err = <-errCh:
 		c.errorLogger()("Failed to start new instance: %v", err)
-		return err
+
+		// Reset c.cmd on failure so it can be reused.
+		c.cmd = copyCmd(c.cmd)
+		atomic.StoreInt32(&c.isStarted, 0)
+
 	case <-ticker.C:
 		c.infoLogger()("New instance started successfully, exiting from the old one")
-		return nil
 	}
+
+	ticker.Stop()
+	return err
+}
+
+func copyCmd(oldCmd *exec.Cmd) *exec.Cmd {
+	newCmd := exec.Command(oldCmd.Path, oldCmd.Args...) // nolint:gosec
+	newCmd.Stdout = oldCmd.Stdout
+	newCmd.Stdin = oldCmd.Stdin
+	newCmd.Stderr = oldCmd.Stderr
+	newCmd.Env = oldCmd.Env
+
+	return newCmd
 }
 
 func (c *Context) startExec() chan error {
