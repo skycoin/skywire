@@ -2,65 +2,69 @@ package setup
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
+	"net/rpc"
+	"sync"
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/router/routerclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 // Node performs routes setup operations over messaging channel.
 type Node struct {
-	Logger   *logging.Logger
-	dmsgC    *dmsg.Client
-	dmsgL    *dmsg.Listener
-	srvCount int
-	metrics  metrics.Recorder
+	logger        *logging.Logger
+	dmsgC         *dmsg.Client
+	dmsgL         *dmsg.Listener
+	sessionsCount int
+	metrics       metrics.Recorder
 }
 
 // NewNode constructs a new SetupNode.
 func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
-	ctx := context.Background()
-
 	logger := logging.NewMasterLogger()
+
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
 		logger.SetLevel(lvl)
 	}
+
 	log := logger.PackageLogger("setup_node")
 
 	// Prepare dmsg.
 	dmsgC := dmsg.NewClient(
 		conf.PubKey,
 		conf.SecKey,
-		disc.NewHTTP(conf.Messaging.Discovery),
-		dmsg.SetLogger(logger.PackageLogger(dmsg.Type)),
+		disc.NewHTTP(conf.Dmsg.Discovery),
+		&dmsg.Config{MinSessions: conf.Dmsg.SessionsCount},
 	)
-	if err := dmsgC.InitiateServerConnections(ctx, conf.Messaging.ServerCount); err != nil {
-		return nil, fmt.Errorf("failed to init dmsg: %s", err)
-	}
+	dmsgC.SetLogger(logger.PackageLogger(dmsg.Type))
+
+	go dmsgC.Serve()
+
 	log.Info("connected to dmsg servers")
 
 	dmsgL, err := dmsgC.Listen(skyenv.DmsgSetupPort)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on dmsg port %d: %v", skyenv.DmsgSetupPort, dmsgL)
 	}
+
 	log.Info("started listening for dmsg connections")
 
-	return &Node{
-		Logger:   log,
-		dmsgC:    dmsgC,
-		dmsgL:    dmsgL,
-		srvCount: conf.Messaging.ServerCount,
-		metrics:  metrics,
-	}, nil
+	node := &Node{
+		logger:        log,
+		dmsgC:         dmsgC,
+		dmsgL:         dmsgL,
+		sessionsCount: conf.Dmsg.SessionsCount,
+		metrics:       metrics,
+	}
+
+	return node, nil
 }
 
 // Close closes underlying dmsg client.
@@ -68,206 +72,125 @@ func (sn *Node) Close() error {
 	if sn == nil {
 		return nil
 	}
+
 	return sn.dmsgC.Close()
 }
 
 // Serve starts transport listening loop.
-func (sn *Node) Serve(ctx context.Context) error {
-	sn.Logger.Info("serving setup node")
+func (sn *Node) Serve() error {
+	sn.logger.Info("Serving setup node")
 
 	for {
-		conn, err := sn.dmsgL.AcceptTransport()
+		conn, err := sn.dmsgL.AcceptStream()
 		if err != nil {
 			return err
 		}
-		go func(conn *dmsg.Transport) {
-			if err := sn.handleRequest(ctx, conn); err != nil {
-				sn.Logger.Warnf("Failed to serve Transport: %s", err)
-			}
-		}(conn)
+
+		remote := conn.RemoteAddr().(dmsg.Addr)
+		sn.logger.WithField("requester", remote.PK).Infof("Received request.")
+
+		const timeout = 30 * time.Second
+
+		rpcS := rpc.NewServer()
+		if err := rpcS.Register(NewRPCGateway(remote.PK, sn, timeout)); err != nil {
+			return err
+		}
+
+		go rpcS.ServeConn(conn)
 	}
 }
 
-func (sn *Node) handleRequest(ctx context.Context, tr *dmsg.Transport) error {
-	ctx, cancel := context.WithTimeout(ctx, RequestTimeout)
-	defer cancel()
+func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.BidirectionalRoute) (routing.EdgeRules, error) {
+	sn.logger.Infof("Setup route from %s to %s", route.Desc.SrcPK(), route.Desc.DstPK())
 
-	proto := NewSetupProtocol(tr)
-	sp, data, err := proto.ReadPacket()
+	idr, err := sn.reserveRouteIDs(ctx, route)
 	if err != nil {
-		return err
+		return routing.EdgeRules{}, err
 	}
 
-	log := sn.Logger.WithField("requester", tr.RemotePK()).WithField("reqType", sp)
-	log.Infof("Received request.")
+	forwardRoute, reverseRoute := route.ForwardAndReverse()
 
-	startTime := time.Now()
-
-	switch sp {
-	case PacketCreateLoop:
-		var ld routing.LoopDescriptor
-		if err = json.Unmarshal(data, &ld); err != nil {
-			break
-		}
-		ldJSON, jErr := json.MarshalIndent(ld, "", "\t")
-		if jErr != nil {
-			panic(jErr)
-		}
-		log.Infof("CreateLoop loop descriptor: %s", string(ldJSON))
-		err = sn.handleCreateLoop(ctx, ld)
-
-	case PacketCloseLoop:
-		var ld routing.LoopData
-		if err = json.Unmarshal(data, &ld); err != nil {
-			break
-		}
-		err = sn.handleCloseLoop(ctx, ld.Loop.Remote.PubKey, routing.LoopData{
-			Loop: routing.Loop{
-				Remote: ld.Loop.Local,
-				Local:  ld.Loop.Remote,
-			},
-		})
-
-	default:
-		err = errors.New("unknown foundation packet")
-	}
-	sn.metrics.Record(time.Since(startTime), err != nil)
+	// Determine the rules to send to visors using route group descriptor and reserved route IDs.
+	forwardRules, consumeRules, intermediaryRules, err := idr.GenerateRules(forwardRoute, reverseRoute)
 
 	if err != nil {
-		log.WithError(err).Warnf("Request completed with error.")
-		return proto.WritePacket(RespFailure, err)
+		sn.logger.WithError(err).Error("ERROR GENERATING RULES")
+		return routing.EdgeRules{}, err
 	}
 
-	log.Infof("Request completed successfully.")
-	return proto.WritePacket(RespSuccess, nil)
+	sn.logger.Infof("generated forward rules: %v", forwardRules)
+	sn.logger.Infof("generated consume rules: %v", consumeRules)
+	sn.logger.Infof("generated intermediary rules: %v", intermediaryRules)
+
+	if err := sn.addIntermediaryRules(ctx, intermediaryRules); err != nil {
+		return routing.EdgeRules{}, err
+	}
+
+	initRouteRules := routing.EdgeRules{
+		Desc:    reverseRoute.Desc,
+		Forward: forwardRules[route.Desc.SrcPK()],
+		Reverse: consumeRules[route.Desc.SrcPK()],
+	}
+
+	respRouteRules := routing.EdgeRules{
+		Desc:    forwardRoute.Desc,
+		Forward: forwardRules[route.Desc.DstPK()],
+		Reverse: consumeRules[route.Desc.DstPK()],
+	}
+
+	sn.logger.Infof("initRouteRules: Desc(%s), %s", &initRouteRules.Desc, initRouteRules)
+	sn.logger.Infof("respRouteRules: Desc(%s), %s", &respRouteRules.Desc, respRouteRules)
+
+	// Confirm routes with responding visor.
+	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
+	if err != nil || !ok {
+		return routing.EdgeRules{}, fmt.Errorf("failed to confirm route group with destination visor: %v", err)
+	}
+
+	sn.logger.Infof("Returning route rules to initiating visor: %v", initRouteRules)
+
+	return initRouteRules, nil
 }
 
-func (sn *Node) handleCreateLoop(ctx context.Context, ld routing.LoopDescriptor) error {
-	src := ld.Loop.Local
-	dst := ld.Loop.Remote
+func (sn *Node) addIntermediaryRules(ctx context.Context, intermediaryRules RulesMap) error {
+	errCh := make(chan error, len(intermediaryRules))
 
-	// Reserve route IDs from visors.
-	idr, err := sn.reserveRouteIDs(ctx, ld.Forward, ld.Reverse)
-	if err != nil {
-		return err
-	}
+	var wg sync.WaitGroup
 
-	// Determine the rules to send to visors using loop descriptor and reserved route IDs.
-	rulesMap, srcFwdRID, dstFwdRID, err := GenerateRules(idr, ld)
-	if err != nil {
-		return err
-	}
-	sn.Logger.Infof("generated rules: %v", rulesMap)
-
-	// Add rules to visors.
-	errCh := make(chan error, len(rulesMap))
-	defer close(errCh)
-	for pk, rules := range rulesMap {
+	for pk, rules := range intermediaryRules {
 		pk, rules := pk, rules
+
+		sn.logger.WithField("remote", pk).Info("Adding rules to intermediary visor")
+
+		wg.Add(1)
+
 		go func() {
-			log := sn.Logger.WithField("remote", pk)
-
-			proto, err := sn.dialAndCreateProto(ctx, pk)
-			if err != nil {
-				log.WithError(err).Warn("failed to create proto")
+			defer wg.Done()
+			if _, err := routerclient.AddIntermediaryRules(ctx, sn.logger, sn.dmsgC, pk, rules); err != nil {
+				sn.logger.WithField("remote", pk).WithError(err).Warn("failed to add rules")
 				errCh <- err
-				return
 			}
-			defer sn.closeProto(proto)
-			log.Debug("proto created successfully")
-
-			if err := AddRules(ctx, proto, rules); err != nil {
-				log.WithError(err).Warn("failed to add rules")
-				errCh <- err
-				return
-			}
-			log.Debug("rules added")
-			errCh <- nil
 		}()
 	}
-	if err := finalError(len(rulesMap), errCh); err != nil {
-		return err
-	}
 
-	// Confirm loop with responding visor.
-	err = func() error {
-		proto, err := sn.dialAndCreateProto(ctx, dst.PubKey)
-		if err != nil {
-			return err
-		}
-		defer sn.closeProto(proto)
+	wg.Wait()
+	close(errCh)
 
-		data := routing.LoopData{Loop: routing.Loop{Local: dst, Remote: src}, RouteID: dstFwdRID}
-		return ConfirmLoop(ctx, proto, data)
-	}()
-	if err != nil {
-		return fmt.Errorf("failed to confirm loop with destination visor: %v", err)
-	}
-
-	// Confirm loop with initiating visor.
-	err = func() error {
-		proto, err := sn.dialAndCreateProto(ctx, src.PubKey)
-		if err != nil {
-			return err
-		}
-		defer sn.closeProto(proto)
-
-		data := routing.LoopData{Loop: routing.Loop{Local: src, Remote: dst}, RouteID: srcFwdRID}
-		return ConfirmLoop(ctx, proto, data)
-	}()
-	if err != nil {
-		return fmt.Errorf("failed to confirm loop with destination visor: %v", err)
-	}
-
-	return nil
+	return finalError(len(intermediaryRules), errCh)
 }
 
-func (sn *Node) reserveRouteIDs(ctx context.Context, fwd, rev routing.Route) (*idReservoir, error) {
-	idc, total := newIDReservoir(fwd, rev)
-	sn.Logger.Infof("There are %d route IDs to reserve.", total)
+func (sn *Node) reserveRouteIDs(ctx context.Context, route routing.BidirectionalRoute) (*idReservoir, error) {
+	reservoir, total := newIDReservoir(route.Forward, route.Reverse)
+	sn.logger.Infof("There are %d route IDs to reserve.", total)
 
-	err := idc.ReserveIDs(ctx, func(ctx context.Context, pk cipher.PubKey, n uint8) ([]routing.RouteID, error) {
-		proto, err := sn.dialAndCreateProto(ctx, pk)
-		if err != nil {
-			return nil, err
-		}
-		defer sn.closeProto(proto)
-		return RequestRouteIDs(ctx, proto, n)
-	})
+	err := reservoir.ReserveIDs(ctx, sn.logger, sn.dmsgC, routerclient.ReserveIDs)
+
 	if err != nil {
-		sn.Logger.WithError(err).Warnf("Failed to reserve route IDs.")
+		sn.logger.WithError(err).Warnf("Failed to reserve route IDs.")
 		return nil, err
 	}
-	sn.Logger.Infof("Successfully reserved route IDs: %s", idc.String())
-	return idc, err
-}
 
-func (sn *Node) handleCloseLoop(ctx context.Context, on cipher.PubKey, ld routing.LoopData) error {
-	proto, err := sn.dialAndCreateProto(ctx, on)
-	if err != nil {
-		return err
-	}
-	defer sn.closeProto(proto)
+	sn.logger.Infof("Successfully reserved route IDs.")
 
-	if err := LoopClosed(ctx, proto, ld); err != nil {
-		return err
-	}
-
-	sn.Logger.Infof("Closed loop on %s. LocalPort: %d", on, ld.Loop.Local.Port)
-	return nil
-}
-
-func (sn *Node) dialAndCreateProto(ctx context.Context, pk cipher.PubKey) (*Protocol, error) {
-	tr, err := sn.dmsgC.Dial(ctx, pk, skyenv.DmsgAwaitSetupPort)
-	if err != nil {
-		return nil, fmt.Errorf("transport: %s", err)
-	}
-
-	return NewSetupProtocol(tr), nil
-}
-
-func (sn *Node) closeProto(proto *Protocol) {
-	if err := proto.Close(); err != nil {
-		sn.Logger.Warn(err)
-	}
+	return reservoir, err
 }

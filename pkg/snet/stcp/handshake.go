@@ -141,6 +141,7 @@ func (f2 *Frame2) Sign(srcSK cipher.SecKey) error {
 		return err
 	}
 	f2.Sig = sig
+
 	fmt.Println("SIGN! len(b.Bytes)", len(b.Bytes()), cipher2.SumSHA256(b.Bytes()).Hex())
 	return nil
 }

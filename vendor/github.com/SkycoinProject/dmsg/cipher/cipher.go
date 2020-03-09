@@ -5,6 +5,7 @@ package cipher
 import (
 	"bytes"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/SkycoinProject/skycoin/src/cipher"
@@ -49,6 +50,11 @@ func (pk PubKey) Null() bool {
 // String implements fmt.Stringer for PubKey. Returns Hex representation.
 func (pk PubKey) String() string {
 	return pk.Hex()
+}
+
+// Big returns the big.Int representation of the public key.
+func (pk PubKey) Big() *big.Int {
+	return new(big.Int).SetBytes(pk[:])
 }
 
 // Set implements pflag.Value for PubKey.

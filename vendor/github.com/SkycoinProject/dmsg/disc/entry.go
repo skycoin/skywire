@@ -15,6 +15,8 @@ const currentVersion = "0.0.1"
 var (
 	// ErrKeyNotFound occurs in case when entry of public key is not found
 	ErrKeyNotFound = errors.New("entry of public key is not found")
+	// ErrNoAvailableServers occurs when dmsg client cannot find any delegated servers available for the given remote.
+	ErrNoAvailableServers = errors.New("no delegated dmsg servers available for remote")
 	// ErrUnexpected occurs in case when something unexpected happened
 	ErrUnexpected = errors.New("something unexpected happened")
 	// ErrUnauthorized occurs in case of invalid signature
@@ -39,21 +41,28 @@ var (
 	ErrValidationWrongSequence = NewEntryValidationError("sequence field of new entry is not sequence of old entry + 1")
 	// ErrValidationWrongTime occurs in case when previous entry timestamp is not set before current entry timestamp
 	ErrValidationWrongTime = NewEntryValidationError("previous entry timestamp is not set before current entry timestamp")
+	// ErrValidationServerAddress occurs in case when client want to advertise wrong Server address
+	ErrValidationServerAddress = NewEntryValidationError("advertising localhost listening address is not allowed in production mode")
+	// ErrValidationEmptyServerAddress occurs when a server entry is submitted with an empty address.
+	ErrValidationEmptyServerAddress = NewEntryValidationError("server address cannot be empty")
 
 	errReverseMap = map[string]error{
-		ErrKeyNotFound.Error():                ErrKeyNotFound,
-		ErrUnexpected.Error():                 ErrUnexpected,
-		ErrUnauthorized.Error():               ErrUnauthorized,
-		ErrBadInput.Error():                   ErrBadInput,
-		ErrValidationNonZeroSequence.Error():  ErrValidationNonZeroSequence,
-		ErrValidationNilEphemerals.Error():    ErrValidationNilEphemerals,
-		ErrValidationNilKeys.Error():          ErrValidationNilKeys,
-		ErrValidationNonNilEphemerals.Error(): ErrValidationNonNilEphemerals,
-		ErrValidationNoSignature.Error():      ErrValidationNoSignature,
-		ErrValidationNoVersion.Error():        ErrValidationNoVersion,
-		ErrValidationNoClientOrServer.Error(): ErrValidationNoClientOrServer,
-		ErrValidationWrongSequence.Error():    ErrValidationWrongSequence,
-		ErrValidationWrongTime.Error():        ErrValidationWrongTime,
+		ErrKeyNotFound.Error():                  ErrKeyNotFound,
+		ErrNoAvailableServers.Error():           ErrNoAvailableServers,
+		ErrUnexpected.Error():                   ErrUnexpected,
+		ErrUnauthorized.Error():                 ErrUnauthorized,
+		ErrBadInput.Error():                     ErrBadInput,
+		ErrValidationNonZeroSequence.Error():    ErrValidationNonZeroSequence,
+		ErrValidationNilEphemerals.Error():      ErrValidationNilEphemerals,
+		ErrValidationNilKeys.Error():            ErrValidationNilKeys,
+		ErrValidationNonNilEphemerals.Error():   ErrValidationNonNilEphemerals,
+		ErrValidationNoSignature.Error():        ErrValidationNoSignature,
+		ErrValidationNoVersion.Error():          ErrValidationNoVersion,
+		ErrValidationNoClientOrServer.Error():   ErrValidationNoClientOrServer,
+		ErrValidationWrongSequence.Error():      ErrValidationWrongSequence,
+		ErrValidationWrongTime.Error():          ErrValidationWrongTime,
+		ErrValidationServerAddress.Error():      ErrValidationServerAddress,
+		ErrValidationEmptyServerAddress.Error(): ErrValidationEmptyServerAddress,
 	}
 )
 
@@ -80,7 +89,7 @@ func (e EntryValidationError) Error() string {
 	return fmt.Sprintf("entry validation error: %s", e.Cause)
 }
 
-// Entry represents a Messaging Node's entry in the Discovery database.
+// Entry represents a Dmsg Node's entry in the Discovery database.
 type Entry struct {
 	// The data structure's version.
 	Version string `json:"version"`
@@ -94,10 +103,10 @@ type Entry struct {
 	// Static public key of an instance.
 	Static cipher.PubKey `json:"static"`
 
-	// Contains the instance's client meta if it's to be advertised as a Messaging Client.
+	// Contains the instance's client meta if it's to be advertised as a DMSG Client.
 	Client *Client `json:"client,omitempty"`
 
-	// Contains the instance's server meta if it's to be advertised as a Messaging Server.
+	// Contains the instance's server meta if it's to be advertised as a DMSG Server.
 	Server *Server `json:"server,omitempty"`
 
 	// Signature for proving authenticity of an Entry.
@@ -144,21 +153,17 @@ func (c *Client) String() string {
 
 // Server contains parameters for Server instances.
 type Server struct {
-	// IPv4 or IPv6 public address of the Messaging Server.
+	// IPv4 or IPv6 public address of the DMSG Server.
 	Address string `json:"address"`
 
-	// Port in which the Messaging Server is listening for connections.
-	Port string `json:"port"`
-
-	// Number of connections still available.
-	AvailableConnections int `json:"available_connections"`
+	// AvailableSessions is the number of available sessions that the server can currently accept.
+	AvailableSessions int `json:"availableSessions"`
 }
 
 // String implements stringer
 func (s *Server) String() string {
 	res := fmt.Sprintf("\taddress: %s\n", s.Address)
-	res += fmt.Sprintf("\tport: %s\n", s.Port)
-	res += fmt.Sprintf("\tavailable connections: %d\n", s.AvailableConnections)
+	res += fmt.Sprintf("\tavailable sessions: %d\n", s.AvailableSessions)
 
 	return res
 }
@@ -176,12 +181,12 @@ func NewClientEntry(pubkey cipher.PubKey, sequence uint64, delegatedServers []ci
 }
 
 // NewServerEntry constructs a new Server entry.
-func NewServerEntry(pubkey cipher.PubKey, sequence uint64, address string, conns int) *Entry {
+func NewServerEntry(pk cipher.PubKey, seq uint64, addr string, availableSessions int) *Entry {
 	return &Entry{
 		Version:   currentVersion,
-		Sequence:  sequence,
-		Server:    &Server{Address: address, AvailableConnections: conns},
-		Static:    pubkey,
+		Sequence:  seq,
+		Server:    &Server{Address: addr, AvailableSessions: availableSessions},
+		Static:    pk,
 		Timestamp: time.Now().UnixNano(),
 	}
 }
@@ -233,9 +238,15 @@ func (e *Entry) Validate() error {
 	if e.Version == "" {
 		return ErrValidationNoVersion
 	}
+
 	// Must be signed
 	if e.Signature == "" {
 		return ErrValidationNoSignature
+	}
+
+	// The Keys field must exist
+	if e.Static.Null() {
+		return ErrValidationNilKeys
 	}
 
 	// A record must have either client or server record
@@ -243,9 +254,8 @@ func (e *Entry) Validate() error {
 		return ErrValidationNoClientOrServer
 	}
 
-	// The Keys field must exist
-	if e.Static.Null() {
-		return ErrValidationNilKeys
+	if e.Server != nil && e.Server.Address == "" {
+		return ErrValidationEmptyServerAddress
 	}
 
 	return nil

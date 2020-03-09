@@ -1,0 +1,13 @@
+<div class="wrapper"
+  [matTooltip]="short && showTooltip ? text : ''"
+  [matTooltipClass]="{ 'tooltip-word-break': true }">
+
+  <ng-container *ngIf="short">
+    <span class="nowrap">{{ shortText }}</span>
+  </ng-container>
+  <ng-container *ngIf="!short">
+    <span>{{ text }}</span>
+  </ng-container>
+
+</div>
+

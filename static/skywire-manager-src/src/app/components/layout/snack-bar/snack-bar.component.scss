@@ -1,0 +1,41 @@
+@import "variables";
+@import "utilities/utilities";
+
+.main-container {
+  width: 100%;
+  display: flex;
+  color: white;
+  padding: 15px;
+}
+
+.red-background {
+  background-color: #ea0606;
+}
+
+.green-background {
+  background-color: #1fb11f;
+}
+
+.yellow-background {
+  background-color: #ff9900;
+}
+
+.icon-container {
+  margin-right: 15px;
+}
+
+.text-container {
+  flex-grow: 1;
+  margin-right: 10px;
+  font-size: $font-size-base;
+  margin-top: 2px;
+}
+
+.close-button {
+  @extend .cursor-pointer;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+  }
+}

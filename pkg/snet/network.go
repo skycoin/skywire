@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 
@@ -17,10 +18,18 @@ import (
 	"github.com/SkycoinProject/dmsg/disc"
 )
 
+// Default ports.
+// TODO(evanlinjin): Define these properly. These are currently random.
+const (
+	SetupPort      = uint16(36)  // Listening port of a setup node.
+	AwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
+	TransportPort  = uint16(45)  // Listening port of a visor for incoming transports.
+)
+
 // Network types.
 const (
-	DmsgType = "dmsg"
-	STcpType = "stcp"
+	DmsgType = dmsg.Type
+	STcpType = stcp.Type
 )
 
 var (
@@ -34,8 +43,8 @@ type Config struct {
 	SecKey     cipher.SecKey
 	TpNetworks []string // networks to be used with transports
 
-	DmsgDiscAddr string
-	DmsgMinSrvs  int
+	DmsgDiscAddr    string
+	DmsgMinSessions int
 
 	STCPLocalAddr string // if empty, don't listen.
 	STCPTable     map[cipher.PubKey]string
@@ -53,8 +62,10 @@ func New(conf Config) *Network {
 	dmsgC := dmsg.NewClient(
 		conf.PubKey,
 		conf.SecKey,
-		disc.NewHTTP(conf.DmsgDiscAddr),
-		dmsg.SetLogger(logging.MustGetLogger("snet.dmsgC")))
+		disc.NewHTTP(conf.DmsgDiscAddr), &dmsg.Config{
+			MinSessions: conf.DmsgMinSessions,
+		})
+	dmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 
 	stcpC := stcp.NewClient(
 		logging.MustGetLogger("snet.stcpC"),
@@ -75,17 +86,23 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
 }
 
 // Init initiates server connections.
-func (n *Network) Init(ctx context.Context) error {
-	if err := n.dmsgC.InitiateServerConnections(ctx, n.conf.DmsgMinSrvs); err != nil {
-		return fmt.Errorf("failed to initiate 'dmsg': %v", err)
+func (n *Network) Init(_ context.Context) error {
+	if n.dmsgC != nil {
+		time.Sleep(200 * time.Millisecond)
+		go n.dmsgC.Serve()
+		time.Sleep(200 * time.Millisecond)
 	}
-	if n.conf.STCPLocalAddr != "" {
-		if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
-			return fmt.Errorf("failed to initiate 'stcp': %v", err)
+
+	if n.stcpC != nil {
+		if n.conf.STCPLocalAddr != "" {
+			if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
+				return fmt.Errorf("failed to initiate 'stcp': %v", err)
+			}
+		} else {
+			fmt.Println("No config found for stcp")
 		}
-	} else {
-		fmt.Println("No config found for stcp")
 	}
+
 	return nil
 }
 
@@ -132,21 +149,33 @@ func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
 // STcp returns the underlying stcp.Client.
 func (n *Network) STcp() *stcp.Client { return n.stcpC }
 
-// Dial dials a node by its public key and returns a connection.
-func (n *Network) Dial(network string, pk cipher.PubKey, port uint16) (*Conn, error) {
-	ctx := context.Background()
+// Dialer is an entity that can be dialed and asked for its type.
+type Dialer interface {
+	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
+	Type() string
+}
+
+// Dial dials a visor by its public key and returns a connection.
+func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
 	switch network {
 	case DmsgType:
-		conn, err := n.dmsgC.Dial(ctx, pk, port)
+		addr := dmsg.Addr{
+			PK:   pk,
+			Port: port,
+		}
+
+		conn, err := n.dmsgC.Dial(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
+
 		return makeConn(conn, network), nil
 	case STcpType:
 		conn, err := n.stcpC.Dial(ctx, pk, port)
 		if err != nil {
 			return nil, err
 		}
+
 		return makeConn(conn, network), nil
 	default:
 		return nil, ErrUnknownNetwork
@@ -161,12 +190,14 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		return makeListener(lis, network), nil
 	case STcpType:
 		lis, err := n.stcpC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
+
 		return makeListener(lis, network), nil
 	default:
 		return nil, ErrUnknownNetwork
@@ -201,6 +232,7 @@ func (l Listener) AcceptConn() (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return makeConn(conn, l.network), nil
 }
 
@@ -240,13 +272,16 @@ func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
 	if len(strs) != 2 {
 		panic(fmt.Errorf("network.disassembleAddr: %v %s", "invalid addr", addr.String()))
 	}
+
 	if err := pk.Set(strs[0]); err != nil {
 		panic(fmt.Errorf("network.disassembleAddr: %v %s", err, addr.String()))
 	}
+
 	if strs[1] != "~" {
 		if _, err := fmt.Sscanf(strs[1], "%d", &port); err != nil {
 			panic(fmt.Errorf("network.disassembleAddr: %v", err))
 		}
 	}
+
 	return
 }
