@@ -173,7 +173,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
 			r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 			r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
-			r.Get("/visors/{pk}/restart", hv.restart())
+			r.Post("/visors/{pk}/restart", hv.restart())
 			r.Post("/visors/{pk}/exec", hv.exec())
 			r.Post("/visors/{pk}/update", hv.update())
 		})
