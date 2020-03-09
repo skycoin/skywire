@@ -75,6 +75,7 @@ func (u *Updater) Update() (err error) {
 	if !atomic.CompareAndSwapUint32(&u.updating, 0, 1) {
 		return ErrAlreadyStarted
 	}
+	defer atomic.StoreUint32(&u.updating, 0)
 
 	u.log.Infof("Looking for updates")
 
