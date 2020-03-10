@@ -39,9 +39,9 @@ export interface ConfirmationData {
  * is shown.
  */
 enum ConfirmationStates {
-  Asking,
-  Processing,
-  Done,
+  Asking = 'Asking',
+  Processing = 'Processing',
+  Done = 'Done',
 }
 
 /**
@@ -97,6 +97,25 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
     this.operationAccepted.emit();
   }
 
+  /**
+   * Puts the modal window in the state in which it is waiting for confirmation.
+   * @param newData New configuration for the modal window.
+   */
+  showAsking(newData: ConfirmationData | null) {
+    if (newData) {
+      this.data = newData;
+    }
+
+    this.state = ConfirmationStates.Asking;
+    this.confirmButton.reset();
+    this.disableDismiss = false;
+    this.dialogRef.disableClose = this.disableDismiss;
+
+    if (this.cancelButton) {
+      this.cancelButton.showEnabled();
+    }
+  }
+
   showProcessing() {
     this.state = ConfirmationStates.Processing;
     this.disableDismiss = true;
@@ -112,8 +131,12 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
    * @param newTitle New title for the modal window.
    * @param newText New main text for the modal window.
    */
-  showDone(newTitle: string, newText: string) {
-    this.doneTitle = newTitle;
+  showDone(newTitle: string | null, newText: string) {
+    if (newTitle) {
+      this.doneTitle = newTitle;
+    } else {
+      this.doneTitle = this.data.headerText;
+    }
     this.doneText = newText;
 
     this.confirmButton.reset();

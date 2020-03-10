@@ -2,6 +2,7 @@
   "common": {
     "save": "Save",
     "edit": "Edit",
+    "cancel": "Cancel",
     "node-key": "Node Key",
     "app-key": "App Key",
     "discovery": "Discovery",
@@ -172,14 +173,14 @@
       "error": "Unexpected error while trying to execute the command."
     },
     "update": {
-      "title": "Check node update",
-      "no-update": "Currently, there is no update for the node.",
-      "update-available": "There is an update available for the node. Click the 'Install update' button to continue.",
-      "update-error": "Could not install node update. Please, try again later.",
-      "install": "Install update",
-      "update-success": "Node updated successfully, reboot the node and refresh this site to apply changes.",
-      "confirmation": "Are you sure you want to update the visor?",
-      "done": "The visor is being updated."
+      "title": "Update",
+      "processing": "Looking for updates...",
+      "processing-button": "Please wait",
+      "no-update": "Currently, there is no update for the visor. The currently installed version is {{ version }}.",
+      "update-available": "There is an update available for the visor. Click the 'Install update' button to continue. The currently installed version is {{ currentVersion }} and the new version is {{ newVersion }}.",
+      "done": "The visor is being updated.",
+      "update-error": "Could not install the update. Please, try again later.",
+      "install": "Install update"
     }
   },
 
