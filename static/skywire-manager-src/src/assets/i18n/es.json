@@ -2,6 +2,7 @@
   "common": {
     "save": "Guardar",
     "edit": "Editar",
+    "cancel": "Cancelar",
     "node-key": "Llave del Nodo",
     "app-key": "Llave de la App",
     "discovery": "Discovery",
@@ -172,14 +173,14 @@
       "error": "Error inesperado mientras se intentaba ejecutar el comando."
     },
     "update": {
-      "title": "Revisar actualización del nodo",
-      "no-update": "Actualmente no hay actualizaciones para el nodo.",
-      "update-available": "Hay una actualización disponible para el nodo. Presione el botón 'Instalar actualización' para continuar.",
-      "update-error": "No se pudo instalar la actualización del nodo. Por favor inténtelo nuevamente luego.",
-      "install": "Instalar actualización",
-      "update-success": "Nodo actualizado exitosamente, reinicie el nodo y refresque este sitio para aplicar los cambios.",
-      "confirmation": "¿Seguro que desea actualizar el visor?",
-      "done": "El visor está siendo actualizado."
+      "title": "Actualizar",
+      "processing": "Buscando actualizaciones...",
+      "processing-button": "Por favor espere",
+      "no-update": "Actualmente no hay actualizaciones para el visor. Actualmente está instalada la versión {{ version }}.",
+      "update-available": "Hay una actualización disponible para el visor. Presione el botón 'Instalar actualización' para continuar. Actualmente está instalada la versión {{ currentVersion }} y la nueva versión es la {{ newVersion }}.",
+      "done": "El visor está siendo actualizado.",
+      "update-error": "No se pudo instalar la actualización. Por favor inténtelo nuevamente luego.",
+      "install": "Instalar actualización"
     }
   },
 
