@@ -107,7 +107,7 @@ var addTpCmd = &cobra.Command{
 			tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
 			if err != nil {
 				logger.WithError(err).
-					Warnf("Failed to establish stcp transport. Trying to establish dmsg transport", pk)
+					Warnf("Failed to establish stcp transport. Trying to establish dmsg transport")
 
 				transportType = dmsg.Type
 
