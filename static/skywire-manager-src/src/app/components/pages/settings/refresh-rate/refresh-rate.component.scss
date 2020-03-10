@@ -1,0 +1,21 @@
+@import "variables";
+
+mat-form-field {
+  margin-right: 32px;
+}
+
+mat-form-field ::ng-deep {
+  .mat-form-field-wrapper {
+    padding-bottom: 0 !important;
+  }
+
+  .mat-form-field-underline {
+    bottom: 0 !important;
+  }
+}
+
+.help-container {
+  color: $light-gray;
+  height: 0px;
+  text-align: right;
+}

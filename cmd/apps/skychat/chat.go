@@ -14,21 +14,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
-var addr = flag.String("addr", skyenv.SkychatAddr, "address to bind")
+const (
+	appName = "skychat"
+	netType = appnet.TypeSkynet
+	port    = routing.Port(1)
+)
+
+var addr = flag.String("addr", ":8000", "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
-	chatApp   *app.App
+	chatApp   *app.Client
 	clientCh  chan string
 	chatConns map[cipher.PubKey]net.Conn
 	connsMu   sync.Mutex
@@ -36,18 +42,25 @@ var (
 )
 
 func main() {
-	log = app.NewLogger(skyenv.SkychatName)
+	log = app.NewLogger(appName)
 	flag.Parse()
 
-	a, err := app.Setup(&app.Config{AppName: skyenv.SkychatName, AppVersion: skyenv.SkychatVersion, ProtocolVersion: skyenv.AppProtocolVersion})
+	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+		log.Printf("Failed to output build info: %v", err)
+	}
+
+	clientConfig, err := app.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
+	}
+
+	// TODO: pass `log`?
+	a, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), clientConfig)
 	if err != nil {
 		log.Fatal("Setup failure: ", err)
 	}
-	defer func() {
-		if err := a.Close(); err != nil {
-			log.Println("Failed to close app:", err)
-		}
-	}()
+	defer a.Close()
+	log.Println("Successfully created skychat app")
 
 	chatApp = a
 
@@ -66,29 +79,42 @@ func main() {
 }
 
 func listenLoop() {
+	l, err := chatApp.Listen(netType, port)
+	if err != nil {
+		log.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
+		return
+	}
+
 	for {
-		conn, err := chatApp.Accept()
+		log.Println("Accepting skychat conn...")
+		conn, err := l.Accept()
 		if err != nil {
-			log.Println("failed to accept conn:", err)
+			log.Println("Failed to accept conn:", err)
 			return
 		}
+		log.Println("Accepted skychat conn")
 
-		raddr := conn.RemoteAddr().(routing.Addr)
+		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
 		chatConns[raddr.PubKey] = conn
 		connsMu.Unlock()
+		log.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
 		go handleConn(conn)
 	}
 }
 
 func handleConn(conn net.Conn) {
-	raddr := conn.RemoteAddr().(routing.Addr)
+	raddr := conn.RemoteAddr().(appnet.Addr)
 	for {
 		buf := make([]byte, 32*1024)
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Println("failed to read packet:", err)
+			log.Println("Failed to read packet:", err)
+			raddr := conn.RemoteAddr().(appnet.Addr)
+			connsMu.Lock()
+			delete(chatConns, raddr.PubKey)
+			connsMu.Unlock()
 			return
 		}
 
@@ -98,9 +124,9 @@ func handleConn(conn net.Conn) {
 		}
 		select {
 		case clientCh <- string(clientMsg):
-			log.Printf("received and sent to ui: %s\n", clientMsg)
+			log.Printf("Received and sent to ui: %s\n", clientMsg)
 		default:
-			log.Printf("received and trashed: %s\n", clientMsg)
+			log.Printf("Received and trashed: %s\n", clientMsg)
 		}
 	}
 }
@@ -118,7 +144,11 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	addr := routing.Addr{PubKey: pk, Port: 1}
+	addr := appnet.Addr{
+		Net:    netType,
+		PubKey: pk,
+		Port:   1,
+	}
 	connsMu.Lock()
 	conn, ok := chatConns[pk]
 	connsMu.Unlock()

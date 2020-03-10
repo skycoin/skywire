@@ -16,16 +16,12 @@ func TestNewLogger(t *testing.T) {
 
 	defer os.Remove(p.Name()) // nolint
 
-	a := &App{
-		config: Config{
-			AppName: "foo",
-		},
-	}
+	appName := "foo"
 
-	l, _, err := a.newPersistentLogger(p.Name())
+	l, _, err := newPersistentLogger(p.Name(), appName)
 	require.NoError(t, err)
 
-	dbl, err := newBoltDB(p.Name(), a.config.AppName)
+	dbl, err := newBoltDB(p.Name(), appName)
 	require.NoError(t, err)
 
 	l.Info("bar")
