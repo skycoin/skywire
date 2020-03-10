@@ -1,0 +1,72 @@
+@import "variables";
+@import "fonts";
+@import "backgrounds";
+@import "~bootstrap/scss/functions";
+@import 'text';
+
+// Modal windows.
+mat-dialog-container.mat-dialog-container {
+  border-radius: $mat-dialog-radius !important;
+  padding: $mat-dialog-padding !important;
+
+  .mat-dialog-actions {
+    padding-bottom: $mat-dialog-padding;
+  }
+}
+
+.mat-dialog-content {
+  margin-bottom: -$mat-dialog-padding !important;
+  padding-bottom: $mat-dialog-padding !important;
+}
+
+app-dialog {
+  app-loading-indicator {
+    margin-top: 32px;
+    margin-bottom: 24px;
+  }
+}
+
+// Global styles for the modal windows that display a list of options from which the user
+// can select one.
+.options-list-button-container {
+  margin: 0 (-$mat-dialog-padding);
+
+  button {
+    width: 100%;
+
+    .internal-container {
+      text-align: left;
+      padding: 5px 7px;
+      @extend .single-line;
+    }
+
+    mat-icon {
+      margin-right: 10px;
+      position: relative;
+      top: 2px;
+      opacity: 0.5;
+    }
+  }
+}
+
+// Global styles for the modal windows that display the details of something.
+.info-dialog {
+  word-break: break-all;
+  font-size: $font-size-sm;
+  color: $black;
+
+  .title {
+    border-bottom: $separator 1px solid;
+    margin-bottom: 10px;
+    font-size: $font-size-base;
+    margin-top: 30px;
+  }
+  
+  .item {
+    margin-top: 5px;
+  
+    span {
+      color: $lighter-gray;
+    }
+  }
+}

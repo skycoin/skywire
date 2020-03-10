@@ -19,6 +19,7 @@ func NewLogger(appName string) *logging.MasterLogger {
 
 	l := newAppLogger()
 	l.SetOutput(io.MultiWriter(l.Out, db))
+
 	os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 
 	return l
@@ -30,8 +31,8 @@ func TimestampFromLog(log string) string {
 	return log[1:36]
 }
 
-func (a *App) newPersistentLogger(path string) (*logging.MasterLogger, LogStore, error) {
-	db, err := newBoltDB(path, a.config.AppName)
+func newPersistentLogger(path, appName string) (*logging.MasterLogger, LogStore, error) {
+	db, err := newBoltDB(path, appName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -45,5 +46,6 @@ func (a *App) newPersistentLogger(path string) (*logging.MasterLogger, LogStore,
 func newAppLogger() *logging.MasterLogger {
 	l := logging.NewMasterLogger()
 	l.Logger.Formatter.(*logging.TextFormatter).TimestampFormat = time.RFC3339Nano
+
 	return l
 }

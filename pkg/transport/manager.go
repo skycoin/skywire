@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -22,7 +22,7 @@ import (
 type ManagerConfig struct {
 	PubKey          cipher.PubKey
 	SecKey          cipher.SecKey
-	DefaultNodes    []cipher.PubKey // Nodes to automatically connect to
+	DefaultVisors   []cipher.PubKey // Visors to automatically connect to
 	DiscoveryClient DiscoveryClient
 	LogStore        LogStore
 }
@@ -30,13 +30,14 @@ type ManagerConfig struct {
 // Manager manages Transports.
 type Manager struct {
 	Logger *logging.Logger
-	conf   *ManagerConfig
+	Conf   *ManagerConfig
 	nets   map[string]struct{}
 	tps    map[uuid.UUID]*ManagedTransport
 	n      *snet.Network
 
 	readCh    chan routing.Packet
 	mx        sync.RWMutex
+	wgMu      sync.Mutex
 	wg        sync.WaitGroup
 	serveOnce sync.Once // ensure we only serve once.
 	closeOnce sync.Once // ensure we only close once.
@@ -52,7 +53,7 @@ func NewManager(n *snet.Network, config *ManagerConfig) (*Manager, error) {
 	}
 	tm := &Manager{
 		Logger: logging.MustGetLogger("tp_manager"),
-		conf:   config,
+		Conf:   config,
 		nets:   nets,
 		tps:    make(map[uuid.UUID]*ManagedTransport),
 		n:      n,
@@ -73,6 +74,10 @@ func (tm *Manager) serve(ctx context.Context) {
 	var listeners []*snet.Listener
 
 	for _, netType := range tm.n.TransportNetworks() {
+		if tm.isClosing() {
+			return
+		}
+
 		lis, err := tm.n.Listen(netType, skyenv.DmsgTransportPort)
 		if err != nil {
 			tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
@@ -82,7 +87,14 @@ func (tm *Manager) serve(ctx context.Context) {
 		tm.Logger.Infof("listening on network: %s", netType)
 		listeners = append(listeners, lis)
 
+		if tm.isClosing() {
+			return
+		}
+
+		tm.wgMu.Lock()
 		tm.wg.Add(1)
+		tm.wgMu.Unlock()
+
 		go func() {
 			defer tm.wg.Done()
 			for {
@@ -93,10 +105,10 @@ func (tm *Manager) serve(ctx context.Context) {
 					return
 				default:
 					if err := tm.acceptTransport(ctx, lis); err != nil {
+						tm.Logger.Warnf("Failed to accept connection: %s", err)
 						if strings.Contains(err.Error(), "closed") {
 							return
 						}
-						tm.Logger.Warnf("Failed to accept connection: %s", err)
 					}
 				}
 			}
@@ -124,19 +136,22 @@ func (tm *Manager) initTransports(ctx context.Context) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
-	entries, err := tm.conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.conf.PubKey)
+	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
 	if err != nil {
-		log.Warnf("No transports found for local node: %v", err)
+		log.Warnf("No transports found for local visor: %v", err)
 	}
+	tm.Logger.Debugf("Initializing %d transports", len(entries))
 	for _, entry := range entries {
+		tm.Logger.Debugf("Initializing TP %v", *entry.Entry)
 		var (
 			tpType = entry.Entry.Type
-			remote = entry.Entry.RemoteEdge(tm.conf.PubKey)
+			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
 			tpID   = entry.Entry.ID
 		)
 		if _, err := tm.saveTransport(remote, tpType); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		}
+		tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
 	}
 }
 
@@ -145,6 +160,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	if err != nil {
 		return err
 	}
+
 	tm.Logger.Infof("recv transport connection request: type(%s) remote(%s)", lis.Network(), conn.RemotePK())
 
 	tm.mx.Lock()
@@ -160,38 +176,70 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 
 	mTp, ok := tm.tps[tpID]
 	if !ok {
-		mTp = NewManagedTransport(tm.n, tm.conf.DiscoveryClient, tm.conf.LogStore, conn.RemotePK(), lis.Network())
-		if err := mTp.Accept(ctx, conn); err != nil {
-			return err
-		}
-		go mTp.Serve(tm.readCh, tm.done)
+		tm.Logger.Debugln("No TP found, creating new one")
+
+		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
+
+		go func() {
+			mTp.Serve(tm.readCh)
+
+			tm.mx.Lock()
+			delete(tm.tps, mTp.Entry.ID)
+			tm.mx.Unlock()
+		}()
+
 		tm.tps[tpID] = mTp
 
 	} else {
-		if err := mTp.Accept(ctx, conn); err != nil {
-			return err
-		}
+		tm.Logger.Debugln("TP found, accepting...")
+	}
+
+	if err := mTp.Accept(ctx, conn); err != nil {
+		return err
 	}
 
 	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
+
 	return nil
 }
 
-// SaveTransport begins to attempt to establish data transports to the given 'remote' node.
+// SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
+
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
-	mTp, err := tm.saveTransport(remote, tpType)
-	if err != nil {
-		return nil, err
+
+	const tries = 2
+
+	var err error
+	for i := 0; i < tries; i++ {
+
+		mTp, err := tm.saveTransport(remote, tpType)
+		if err != nil {
+			return nil, err
+		}
+
+		if err = mTp.Dial(ctx); err != nil {
+			if err == ErrNotServing {
+				mTp.wg.Wait()
+				delete(tm.tps, mTp.Entry.ID)
+				continue
+			}
+			tm.Logger.
+				WithError(err).
+				Warn("Underlying connection is not yet established. Will retry later.")
+		}
+		return mTp, nil
 	}
-	if err := mTp.Dial(ctx); err != nil {
-		tm.Logger.Warnf("underlying 'write' tp failed, will retry: %v", err)
-	}
-	return mTp, nil
+
+	tm.Logger.
+		WithError(err).
+		WithField("tries", tries).
+		Error("Failed to serve managed transport. This is unexpected.")
+	return nil, err
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
@@ -201,13 +249,21 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 
 	tpID := tm.tpIDFromPK(remote, netName)
 
+	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
+
 	tp, ok := tm.tps[tpID]
 	if ok {
+		tm.Logger.Debugln("Got TP from map")
 		return tp, nil
 	}
 
-	mTp := NewManagedTransport(tm.n, tm.conf.DiscoveryClient, tm.conf.LogStore, remote, netName)
-	go mTp.Serve(tm.readCh, tm.done)
+	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
+	go func() {
+		mTp.Serve(tm.readCh)
+		tm.mx.Lock()
+		delete(tm.tps, mTp.Entry.ID)
+		tm.mx.Unlock()
+	}()
 	tm.tps[tpID] = mTp
 
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
@@ -218,22 +274,25 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
+
 	if tm.isClosing() {
 		return
 	}
 
+	// Deregister transport before closing the underlying connection.
 	if tp, ok := tm.tps[id]; ok {
-		tp.Close()
-		tm.Logger.Infof("Deregister transport %s from manager", id)
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		err := tm.conf.DiscoveryClient.DeleteTransport(ctx, id)
-		if err != nil {
-			tm.Logger.Errorf("Deregister transport %s from discovery failed with error: %s", id, err)
-		}
-		tm.Logger.Infof("Deregister transport %s from discovery", id)
 
+		// Deregister transport.
+		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
+			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
+		} else {
+			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
+		}
+
+		// Close underlying connection.
+		tp.close()
 		delete(tm.tps, id)
 	}
 }
@@ -277,7 +336,7 @@ func (tm *Manager) WalkTransports(walk func(tp *ManagedTransport) bool) {
 
 // Local returns Manager.config.PubKey
 func (tm *Manager) Local() cipher.PubKey {
-	return tm.conf.PubKey
+	return tm.Conf.PubKey
 }
 
 // Close closes opened transports and registered factories.
@@ -300,15 +359,16 @@ func (tm *Manager) close() {
 
 	statuses := make([]*Status, 0, len(tm.tps))
 	for _, tr := range tm.tps {
-		if closed := tr.close(); closed {
-			statuses = append(statuses[0:], &Status{ID: tr.Entry.ID, IsUp: false})
-		}
+		tr.close()
 	}
-	if _, err := tm.conf.DiscoveryClient.UpdateStatuses(context.Background(), statuses...); err != nil {
+	if _, err := tm.Conf.DiscoveryClient.UpdateStatuses(context.Background(), statuses...); err != nil {
 		tm.Logger.Warnf("failed to update transport statuses: %v", err)
 	}
 
+	tm.wgMu.Lock()
 	tm.wg.Wait()
+	tm.wgMu.Unlock()
+
 	close(tm.readCh)
 }
 
@@ -322,5 +382,53 @@ func (tm *Manager) isClosing() bool {
 }
 
 func (tm *Manager) tpIDFromPK(pk cipher.PubKey, tpType string) uuid.UUID {
-	return MakeTransportID(tm.conf.PubKey, pk, tpType)
+	return MakeTransportID(tm.Conf.PubKey, pk, tpType)
+}
+
+// CreateTransportPair create a new transport pair for tests.
+func CreateTransportPair(
+	tpDisc DiscoveryClient,
+	keys []snettest.KeyPair,
+	nEnv *snettest.Env,
+	network string,
+) (m0 *Manager, m1 *Manager, tp0 *ManagedTransport, tp1 *ManagedTransport, err error) {
+	// Prepare tp manager 0.
+	pk0, sk0 := keys[0].PK, keys[0].SK
+	ls0 := InMemoryTransportLogStore()
+	m0, err = NewManager(nEnv.Nets[0], &ManagerConfig{
+		PubKey:          pk0,
+		SecKey:          sk0,
+		DiscoveryClient: tpDisc,
+		LogStore:        ls0,
+	})
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	go m0.Serve(context.TODO())
+
+	// Prepare tp manager 1.
+	pk1, sk1 := keys[1].PK, keys[1].SK
+	ls1 := InMemoryTransportLogStore()
+	m1, err = NewManager(nEnv.Nets[1], &ManagerConfig{
+		PubKey:          pk1,
+		SecKey:          sk1,
+		DiscoveryClient: tpDisc,
+		LogStore:        ls1,
+	})
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	go m1.Serve(context.TODO())
+
+	// Create data transport between manager 1 & manager 2.
+	tp1, err = m1.SaveTransport(context.TODO(), pk0, network)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	tp0 = m0.Transport(MakeTransportID(pk0, pk1, network))
+
+	return m0, m1, tp0, tp1, nil
 }

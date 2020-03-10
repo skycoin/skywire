@@ -100,6 +100,7 @@ func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID
 
 func (td *mockDiscoveryClient) UpdateStatuses(ctx context.Context, statuses ...*Status) ([]*EntryWithStatus, error) {
 	res := make([]*EntryWithStatus, 0)
+
 	for _, status := range statuses {
 		entry, err := td.GetTransportByID(ctx, status.ID)
 		if err != nil {

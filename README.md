@@ -12,7 +12,6 @@
       - [`hypervisor` setup](#hypervisor-setup)
     - [Run `skywire-visor`](#run-skywire-visor)
     - [Run `skywire-cli`](#run-skywire-cli)
-    - [Run `dmsgpty`](#run-dmsgpty)
     - [Run `hypervisor`](#run-hypervisor)
     - [Apps](#apps)
     - [Transports](#transports)
@@ -20,25 +19,27 @@
   - [Testing](#testing)
     - [Testing with default settings](#testing-with-default-settings)
     - [Customization with environment variables](#customization-with-environment-variables)
-      - [$TEST_OPTS](#testopts)
-      - [$TEST_LOGGING_LEVEL](#testlogginglevel)
-      - [$SYSLOG_OPTS](#syslogopts)
+      - [$TEST_OPTS](#test_opts)
+      - [$TEST_LOGGING_LEVEL](#test_logging_level)
+      - [$SYSLOG_OPTS](#syslog_opts)
   - [Running skywire in docker containers](#running-skywire-in-docker-containers)
     - [Run dockerized `skywire-visor`](#run-dockerized-skywire-visor)
       - [Structure of `./node`](#structure-of-node)
     - [Refresh and restart `SKY01`](#refresh-and-restart-sky01)
     - [Customization of dockers](#customization-of-dockers)
-      - [1. DOCKER_IMAGE](#1-dockerimage)
-      - [2. DOCKER_NETWORK](#2-dockernetwork)
-      - [3. DOCKER_NODE](#3-dockernode)
-      - [4. DOCKER_OPTS](#4-dockeropts)
+      - [1. DOCKER_IMAGE](#1-docker_image)
+      - [2. DOCKER_NETWORK](#2-docker_network)
+      - [3. DOCKER_NODE](#3-docker_node)
+      - [4. DOCKER_OPTS](#4-docker_opts)
     - [Dockerized `skywire-visor` recipes](#dockerized-skywire-visor-recipes)
       - [1. Get Public Key of docker-node](#1-get-public-key-of-docker-node)
       - [2. Get an IP of node](#2-get-an-ip-of-node)
       - [3. Open in browser containerized `skychat` application](#3-open-in-browser-containerized-skychat-application)
       - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
       - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
-      - [6. "Hello-Mike-Hello-Joe" test](#6-%22hello-mike-hello-joe%22-test)
+      - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
+  - [Creating a GitHub release](#creating-a-github-release)
+    - [How to create a GitHub release](#how-to-create-a-github-release)
 
 **NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
@@ -58,7 +59,7 @@ $ cd skywire-mainnet
 # Build.
 $ make build # installs all dependencies, build binaries and skywire apps
 
-# Install skywire-visor, skywire-cli, dmsgpty, hypervisor and app CLI execs.
+# Install skywire-visor, skywire-cli, hypervisor and app CLI execs.
 $ make install
 ```
 
@@ -82,10 +83,10 @@ The configuration file provides the configuration for `skywire-visor`. It is a t
 You can generate a default configuration file by running:
 
 ```bash
-$ skywire-cli node gen-config
+$ skywire-cli visor gen-config
 ```
 
-Additional options are displayed when `skywire-cli node gen-config -h` is run.
+Additional options are displayed when `skywire-cli visor gen-config -h` is run.
 
 We will cover certain fields of the configuration file below.
 
@@ -111,33 +112,6 @@ In the above example, we have two other visors running on localhost (that we wis
 - The field `stcp.pk_table` holds the associations of `<public_key>` to `<ip_address>:<port>`.
 - The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming `stcp` connection.
 
-#### `dmsgpty` setup
-
-With `dmsgpty`, you can access a remote `pty` on a remote `skywire-visor`. Note that `dmsgpty` can only access remote visors that have a dmsg transport directly established with the client visor. Having a route connecting two visors together does not allow `dmsgpty` to function between the two visors.
-
-Here is an example configuration for enabling the `dmsgpty` server within `skywire-visor`:
-
-```json5
-{
-  "dmsg_pty": {
-  
-    // "port" provides the dmsg port to listen for remote pty requests.
-    "port": 233, 
-    
-    // "authorization_file" is the path to a JSON file containing an array of whitelisted public keys.
-    "authorization_file": "./dmsgpty/whitelist.json",
-    
-    // "cli_network" is the network to host the dmsgpty CLI.
-    "cli_network": "unix",
-    
-    // "cli_address" is the address to host the dmsgpty CLI.
-    "cli_address": "/tmp/dmsgpty.sock"
-  }
-}
-```
-
-For `dmsgpty` usage, refer to [#run-dmsgpty](#run-dmsgpty).
-
 #### `hypervisor` setup
 
 Every node can be controlled by one or more hypervisors. The hypervisor allows to control and configure multiple visors. In order to allow a hypervisor to access a visor, the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
@@ -151,7 +125,7 @@ Every node can be controlled by one or more hypervisors. The hypervisor allows t
 
 ### Run `skywire-visor`
 
-`skywire-visor` hosts apps, proxies app's requests to remote nodes and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the node, communication between node and app is performed via unix pipes provided on app startup.
+`skywire-visor` hosts apps, proxies app's requests to remote visors and exposes communication API that apps can use to implement communication protocols. App binaries are spawned by the visor, communication between visor and app is performed via unix pipes provided on app startup.
 
 Note that `skywire-visor` requires a valid configuration file in order to execute.
 
@@ -166,30 +140,6 @@ The `skywire-cli` tool is used to control the `skywire-visor`. Refer to the help
 
 ```bash
 $ skywire-cli -h
-```
-
-### Run `dmsgpty`
-
-`dmsgpty` allows the user to access local and remote pty sessions via the `skywire-visor`. To use `dmsgpty`, one needs to have a `skywire-visor` up and running with the `dmsgpty-server` properly configured (as specified here: [#dmsgpty-setup](#dmsgpty-setup)).
-
-To access a remote pty, the local `skywire-visor` needs to have a direct dmsg transport with the remote visor, and the remote visor needs to have the local visor's public key included in it's dmsgpty whitelist.
-
-One can add public key entries to the `"authorization_file"` via the following command:
-
-```bash
-$ dmsgpty whitelist-add --pk 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08
-```
-
-To open an interactive pty shell on a remote visor, who's public key is `0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08`, run the following command:
-
-```bash
-$ dmsgpty -a 0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08 
-```
-
-To open a non-interactive shell and run a command:
-
-```bash
-$ dmsgpty --addr='0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08' --cmd='echo' --arg='hello world'
 ```
 
 ### Run `hypervisor`
@@ -212,7 +162,7 @@ After `skywire-visor` is up and running with default environment, default apps a
 
 - [Chat](/cmd/apps/skychat)
 - [Hello World](/cmd/apps/helloworld)
-- [The Real Proxy](/cmd/apps/therealproxy) ([Client](/cmd/apps/therealproxy-client))
+- [Sky Socks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
 
 ### Transports
 
@@ -222,32 +172,32 @@ Transports can be established via the `skywire-cli`.
 
 ```bash
 # Establish transport to `0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881`.
-$ skywire-cli node add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881
+$ skywire-cli visor add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881
 
 # List established transports.
-$ skywire-cli node ls-tp
+$ skywire-cli visor ls-tp
 ```
 
 ## App programming API
 
-App is a generic binary that can be executed by the node. On app
-startup node will open pair of unix pipes that will be used for
-communication between app and node. `app` packages exposes
+App is a generic binary that can be executed by the visor. On app
+startup visor will open pair of unix pipes that will be used for
+communication between app and visor. `app` packages exposes
 communication API over the pipe.
 
 ```golang
 // Config defines configuration parameters for App
-&app.Config{AppName: "helloworld", AppVersion: "1.0", ProtocolVersion: "0.0.1"}
+&app.Config{AppName: "helloworld", ProtocolVersion: "0.0.1"}
 // Setup setups app using default pair of pipes
 func Setup(config *Config) (*App, error) {}
 
-// Accept awaits for incoming loop confirmation request from a Node and
-// returns net.Conn for a received loop.
+// Accept awaits for incoming route group confirmation request from a Visor and
+// returns net.Conn for a received route group.
 func (app *App) Accept() (net.Conn, error) {}
 
 // Addr implements net.Addr for App connections.
 &Addr{PubKey: pk, Port: 12}
-// Dial sends create loop request to a Node and returns net.Conn for created loop.
+// Dial sends create route group request to a Visor and returns net.Conn for created route group.
 func (app *App) Dial(raddr *Addr) (net.Conn, error) {}
 
 // Close implements io.Closer for App.
@@ -304,7 +254,7 @@ E.g.
 $ make run_syslog ## run syslog-ng in docker container with logs mounted to /tmp/syslog
 $ export SYSLOG_OPTS='--syslog localhost:514'
 $ make integration-run-messaging ## or other integration-run-* goal
-$ sudo cat /tmp/syslog/messages ## collected logs from NodeA, NodeB, NodeC instances
+$ sudo cat /tmp/syslog/messages ## collected logs from VisorA, VisorB, VisorC instances
 ```
 
 ## Running skywire in docker containers
@@ -331,11 +281,11 @@ This will:
 ├── apps                            # node `apps` compiled with DOCKER_OPTS
 │   ├── skychat.v1.0                #
 │   ├── helloworld.v1.0             #
-│   ├── socksproxy-client.v1.0      #
-│   ├── socksproxy.v1.0             #
+│   ├── skysocks-client.v1.0      #
+│   └── skysocks.v1.0             #
 ├── local                           # **Created inside docker**
 │   ├── skychat                     #  according to "local_path" in skywire-config.json
-│   ├── socksproxy                  #
+│   └── skysocks                  #
 ├── PK                              # contains public key of node
 ├── skywire                         # db & logs. **Created inside docker**
 │   ├── routing.db                  #
@@ -435,7 +385,7 @@ $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/skywire-visor ./cmd/skywire
 # 3. compile apps
 $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/skychat.v1.0 ./cmd/apps/skychat
 $ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/helloworld.v1.0 ./cmd/apps/helloworld
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/socksproxy.v1.0 ./cmd/apps/therealproxy
+$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/skysocks.v1.0 ./cmd/apps/skysocks
 # 4. Create skywire-config.json for node
 $ skywire-cli node gen-config -o /tmp/SKYNODE/skywire-config.json
 # 2019/03/15 16:43:49 Done!
@@ -444,7 +394,7 @@ $ tree /tmp/SKYNODE
 # ├── apps
 # │   ├── skychat.v1.0
 # │   ├── helloworld.v1.0
-# │   ├── socksproxy.v1.0
+# │   └── skysocks.v1.0
 # ├── skywire-config.json
 # └── skywire-visor
 # So far so good. We prepared docker volume. Now we can:
@@ -454,15 +404,15 @@ $ docker run -it -v /tmp/SKYNODE:/sky --network=SKYNET --name=SKYNODE skywire-ru
 # [2019-03-15T13:55:10Z] INFO [skywire]: Connected to messaging servers
 # [2019-03-15T13:55:10Z] INFO [skywire]: Starting skychat.v1.0
 # [2019-03-15T13:55:10Z] INFO [skywire]: Starting RPC interface on 127.0.0.1:3435
-# [2019-03-15T13:55:10Z] INFO [skywire]: Starting socksproxy.v1.0
+# [2019-03-15T13:55:10Z] INFO [skywire]: Starting skysocks.v1.0
 # [2019-03-15T13:55:10Z] INFO [skywire]: Starting packet router
 # [2019-03-15T13:55:10Z] INFO [router]: Starting router
 # [2019-03-15T13:55:10Z] INFO [trmanager]: Starting transport manager
 # [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skychat",# "app-version":"1.0","protocol-version":"0.0.1"}
 # [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skychat.v1.0
 # [2019-03-15T13:55:10Z] INFO [skychat.v1.0]: 2019/03/15 13:55:10 Serving HTTP on :8000
-# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"socksproxy",# "app-version":"1.0","protocol-version":"0.0.1"}
-# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app socksproxy.v1.0
+# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skysocks",# "app-version":"1.0","protocol-version":"0.0.1"}
+# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skysocks.v1.0
 ```
 
 Note that in this example docker is running in non-detached mode - it could be useful in some scenarios.
@@ -475,10 +425,10 @@ Instead of skywire-runner you can use:
 #### 5. Env-vars for development-/testing- purposes
 
 ```bash
-export SW_NODE_A=127.0.0.1
-export SW_NODE_A_PK=$(cat ./skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
-export SW_NODE_B=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01)
-export SW_NODE_B_PK=$(cat ./node/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
+export SW_VISOR_A=127.0.0.1
+export SW_VISOR_A_PK=$(cat ./skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
+export SW_VISOR_B=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01)
+export SW_VISOR_B_PK=$(cat ./visor/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
 ```
 
 #### 6. "Hello-Mike-Hello-Joe" test
@@ -490,13 +440,30 @@ Idea of test from Erlang classics: <https://youtu.be/uKfKtXYLG78?t=120>
 $ make run
 $ make docker-run
 # Open in browser skychat application
-$ firefox http://$SW_NODE_B:8000  &
+$ firefox http://$SW_VISOR_B:8000  &
 # add transport
-$ ./skywire-cli add-transport $SW_NODE_B_PK
+$ ./skywire-cli add-transport $SW_VISOR_B_PK
 # "Hello Mike!" - "Hello Joe!" - "System is working!"
-$ curl --data  {'"recipient":"'$SW_NODE_A_PK'", "message":"Hello Mike!"}' -X POST  http://$SW_NODE_B:8000/message
-$ curl --data  {'"recipient":"'$SW_NODE_B_PK'", "message":"Hello Joe!"}' -X POST  http://$SW_NODE_A:8000/message
-$ curl --data  {'"recipient":"'$SW_NODE_A_PK'", "message":"System is working!"}' -X POST  http://$SW_NODE_B:8000/message
+$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"Hello Mike!"}' -X POST  http://$SW_VISOR_B:8000/message
+$ curl --data  {'"recipient":"'$SW_VISOR_B_PK'", "message":"Hello Joe!"}' -X POST  http://$SW_VISOR_A:8000/message
+$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"System is working!"}' -X POST  http://$SW_VISOR_B:8000/message
 # Teardown
 $ make stop && make docker-stop
 ```
+
+## Creating a GitHub release
+
+To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor` binaries. 
+Binaries for each version are uploaded to [GitHub releases](https://github.com/SkycoinProject/skywire-mainnet/releases/).
+We use [goreleaser](https://goreleaser.com) for creating them.
+
+### How to create a GitHub release
+
+1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
+2. Checkout to a commit you would like to create a release against.
+3. Make sure that `git status` is in clean state.
+4. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`, where `0.1.0` is release version and `First release` is release name.
+5. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
+6. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
+7. Run `GITHUB_TOKEN=your_token make github-release` 
+8. [Check the created GitHub release.](https://github.com/SkycoinProject/skywire-mainnet/releases/)
