@@ -1,11 +1,17 @@
 package transport
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
+)
+
+var (
+	// ErrEdgeIndexNotFound is returned when no edge index was found.
+	ErrEdgeIndexNotFound = errors.New("edge index not found")
 )
 
 // Entry is the unsigned representation of a Transport.
@@ -59,6 +65,7 @@ func (e *Entry) EdgeIndex(pk cipher.PubKey) int {
 			return i
 		}
 	}
+
 	return -1
 }
 
@@ -99,12 +106,13 @@ func (e *Entry) ToBinary() []byte {
 
 // Signature returns signature for Entry calculated from binary
 // representation.
-func (e *Entry) Signature(secKey cipher.SecKey) cipher.Sig {
+func (e *Entry) Signature(secKey cipher.SecKey) (cipher.Sig, error) {
 	sig, err := cipher.SignPayload(e.ToBinary(), secKey)
 	if err != nil {
-		panic(err)
+		return cipher.Sig{}, err
 	}
-	return sig
+
+	return sig, nil
 }
 
 // SignedEntry holds an Entry and it's associated signatures.
@@ -116,30 +124,36 @@ type SignedEntry struct {
 }
 
 // Sign sets Signature for a given PubKey in correct position
-func (se *SignedEntry) Sign(pk cipher.PubKey, secKey cipher.SecKey) bool {
+func (se *SignedEntry) Sign(pk cipher.PubKey, secKey cipher.SecKey) error {
 	idx := se.Entry.EdgeIndex(pk)
 	if idx == -1 {
-		return false
+		return ErrEdgeIndexNotFound
 	}
-	se.Signatures[idx] = se.Entry.Signature(secKey)
 
-	return true
+	sig, err := se.Entry.Signature(secKey)
+	if err != nil {
+		return err
+	}
+
+	se.Signatures[idx] = sig
+
+	return nil
 }
 
 // Signature gets Signature for a given PubKey from correct position
-func (se *SignedEntry) Signature(pk cipher.PubKey) (cipher.Sig, bool) {
+func (se *SignedEntry) Signature(pk cipher.PubKey) (cipher.Sig, error) {
 	idx := se.Entry.EdgeIndex(pk)
 	if idx == -1 {
-		return cipher.Sig{}, false
+		return cipher.Sig{}, ErrEdgeIndexNotFound
 	}
-	return se.Signatures[idx], true
+
+	return se.Signatures[idx], nil
 }
 
 // NewSignedEntry creates a SignedEntry with first signature
-func NewSignedEntry(entry *Entry, pk cipher.PubKey, secKey cipher.SecKey) (*SignedEntry, bool) {
+func NewSignedEntry(entry *Entry, pk cipher.PubKey, secKey cipher.SecKey) (*SignedEntry, error) {
 	se := &SignedEntry{Entry: entry}
 	return se, se.Sign(pk, secKey)
-
 }
 
 // Status represents the current state of a Transport from a Transport's single edge.

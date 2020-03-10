@@ -56,6 +56,7 @@ func NewTableFromFile(path string) (PKTable, error) {
 		entries = make(map[cipher.PubKey]string)
 		s       = bufio.NewScanner(f)
 	)
+
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
 		if len(fields) != 2 {

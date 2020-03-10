@@ -1,34 +1,78 @@
 package dmsg
 
 import (
+	"fmt"
 	"net"
 	"sync"
-
-	"github.com/SkycoinProject/dmsg/cipher"
+	"sync/atomic"
 )
 
-// Listener listens for remote-initiated transports.
+// Listener listens for remote-initiated streams.
 type Listener struct {
-	pk     cipher.PubKey
-	port   uint16
+	addr Addr // local listening address
+
+	accept chan *Stream
 	mx     sync.Mutex // protects 'accept'
-	accept chan *Transport
-	done   chan struct{}
-	once   sync.Once
+
+	doneFunc atomic.Value // callback when done, type: func()
+	done     chan struct{}
+	once     sync.Once
 }
 
-func newListener(pk cipher.PubKey, port uint16) *Listener {
+func newListener(addr Addr) *Listener {
 	return &Listener{
-		pk:     pk,
-		port:   port,
-		accept: make(chan *Transport, AcceptBufferSize),
+		addr:   addr,
+		accept: make(chan *Stream, AcceptBufferSize),
 		done:   make(chan struct{}),
+	}
+}
+
+// addCloseCallback adds a function that triggers when listener is closed.
+// This should be called right after the listener is created and is not thread safe.
+func (l *Listener) addCloseCallback(cb func()) { l.doneFunc.Store(cb) }
+
+// introduceStream handles a stream after receiving a REQUEST frame.
+func (l *Listener) introduceStream(tp *Stream) error {
+	if tp.LocalAddr() != l.addr {
+		return fmt.Errorf("local addresses do not match: expected %s but got %s", l.addr, tp.LocalAddr())
+	}
+
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	if l.isClosed() {
+		_ = tp.Close() //nolint:errcheck
+		return ErrEntityClosed
+	}
+
+	select {
+	case l.accept <- tp:
+		return nil
+	case <-l.done:
+		_ = tp.Close() //nolint:errcheck
+		return ErrEntityClosed
+	default:
+		_ = tp.Close() //nolint:errcheck
+		return ErrAcceptChanMaxed
 	}
 }
 
 // Accept accepts a connection.
 func (l *Listener) Accept() (net.Conn, error) {
-	return l.AcceptTransport()
+	return l.AcceptStream()
+}
+
+// AcceptStream accepts a stream connection.
+func (l *Listener) AcceptStream() (*Stream, error) {
+	select {
+	case <-l.done:
+		return nil, ErrEntityClosed
+	case tp, ok := <-l.accept:
+		if !ok {
+			return nil, ErrEntityClosed
+		}
+		return tp, nil
+	}
 }
 
 // Close closes the listener.
@@ -36,12 +80,17 @@ func (l *Listener) Close() error {
 	if l.close() {
 		return nil
 	}
-	return ErrClientClosed
+	return ErrEntityClosed
 }
 
 func (l *Listener) close() (closed bool) {
 	l.once.Do(func() {
 		closed = true
+
+		doneFunc, ok := l.doneFunc.Load().(func())
+		if ok {
+			doneFunc()
+		}
 
 		l.mx.Lock()
 		defer l.mx.Unlock()
@@ -69,55 +118,10 @@ func (l *Listener) isClosed() bool {
 }
 
 // Addr returns the listener's address.
-func (l *Listener) Addr() net.Addr {
-	return Addr{
-		PK:   l.pk,
-		Port: l.port,
-	}
-}
+func (l *Listener) Addr() net.Addr { return l.addr }
 
-// AcceptTransport accepts a transport connection.
-func (l *Listener) AcceptTransport() (*Transport, error) {
-	select {
-	case <-l.done:
-		return nil, ErrClientClosed
-	case tp, ok := <-l.accept:
-		if !ok {
-			return nil, ErrClientClosed
-		}
-		return tp, nil
-	}
-}
+// DmsgAddr returns the listener's address in as `dmsg.Addr`.
+func (l *Listener) DmsgAddr() Addr { return l.addr }
 
-// Type returns the transport type.
-func (l *Listener) Type() string {
-	return Type
-}
-
-// IntroduceTransport handles a transport after receiving a REQUEST frame.
-func (l *Listener) IntroduceTransport(tp *Transport) error {
-	l.mx.Lock()
-	defer l.mx.Unlock()
-
-	if l.isClosed() {
-		return ErrClientClosed
-	}
-
-	select {
-	case <-l.done:
-		return ErrClientClosed
-
-	case l.accept <- tp:
-		if err := tp.WriteAccept(); err != nil {
-			return err
-		}
-		go tp.Serve()
-		return nil
-
-	default:
-		if err := tp.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close transport")
-		}
-		return ErrClientAcceptMaxed
-	}
-}
+// Type returns the stream type.
+func (l *Listener) Type() string { return Type }
