@@ -139,6 +139,13 @@ export class NodeService {
   }
 
   /**
+   * Checks if there are updates available for a node.
+   */
+  checkUpdate(nodeKey: string): Observable<any> {
+    return this.apiService.get(`visors/${nodeKey}/update/available`).pipe();
+  }
+
+  /**
    * Updates a node.
    */
   update(nodeKey: string): Observable<any> {
