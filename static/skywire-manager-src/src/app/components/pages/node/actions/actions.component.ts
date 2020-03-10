@@ -1,10 +1,9 @@
 import { Component, AfterViewInit, OnDestroy, Input } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { ConfigurationComponent } from './configuration/configuration.component';
-import { UpdateNodeComponent } from './update-node/update-node.component';
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
 import { SnackbarService } from '../../../../services/snackbar.service';
 import { NodeComponent } from '../node.component';
@@ -12,10 +11,12 @@ import { SidenavService } from 'src/app/services/sidenav.service';
 import { Node } from '../../../../app.datatypes';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { NodeService } from 'src/app/services/node.service';
-import { TerminalComponent } from './terminal/terminal.component';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
+import { ConfirmationData, ConfirmationComponent } from 'src/app/components/layout/confirmation/confirmation.component';
+import { AppConfig } from 'src/app/app.config';
+import { TranslateService } from '@ngx-translate/core';
 
 /**
  * Component for making the options of the left bar of the nodes page to appear. It does not
@@ -42,6 +43,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   private menuSubscription: Subscription;
   private nodeSubscription: Subscription;
   private rebootSubscription: Subscription;
+  private updateSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
@@ -49,6 +51,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     private snackbarService: SnackbarService,
     private sidenavService: SidenavService,
     private nodeService: NodeService,
+    private translateService: TranslateService,
   ) { }
 
   ngAfterViewInit() {
@@ -116,6 +119,12 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     if (this.menuSubscription) {
       this.menuSubscription.unsubscribe();
     }
+    if (this.rebootSubscription) {
+      this.rebootSubscription.unsubscribe();
+    }
+    if (this.updateSubscription) {
+      this.updateSubscription.unsubscribe();
+    }
   }
 
   reboot() {
@@ -136,14 +145,65 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   update() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'actions.update.confirmation');
+    // Configuration for the confirmation modal window used as the main UI element for the
+    // updating process.
+    const confirmationData: ConfirmationData = {
+      text: 'actions.update.processing',
+      headerText: 'actions.update.title',
+      confirmButtonText: 'actions.update.processing-button',
+      disableDismiss: true,
+    };
 
+    // Show the confirmation window in a "loading" state while checking if there are updates.
+    const config = new MatDialogConfig();
+    config.data = confirmationData;
+    config.autoFocus = false;
+    config.width = AppConfig.smallModalWidth;
+    const confirmationDialog = this.dialog.open(ConfirmationComponent, config);
+    setTimeout(() => confirmationDialog.componentInstance.showProcessing());
+
+    // Check if there is an update available.
+    this.updateSubscription = this.nodeService.checkUpdate(NodeComponent.getCurrentNodeKey()).subscribe(response => {
+      if (response && response.available) {
+        // New configuration for asking for confirmation.
+        const newText = this.translateService.instant('actions.update.update-available',
+          { currentVersion: response.current_version, newVersion: response.available_version }
+        );
+        const newConfirmationData: ConfirmationData = {
+          text: newText,
+          headerText: 'actions.update.title',
+          confirmButtonText: 'actions.update.install',
+          cancelButtonText: 'common.cancel',
+        };
+
+        // Ask for confirmation.
+        confirmationDialog.componentInstance.showAsking(newConfirmationData);
+      } else if (response) {
+        // Inform that there are no updates available.
+        const newText = this.translateService.instant('actions.update.no-update', { version: response.current_version });
+        confirmationDialog.componentInstance.showDone(null, newText);
+      } else {
+        // Inform that there was an error.
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+      }
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+
+      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+    });
+
+    // React if the user confirm the update.
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.rebootSubscription = this.nodeService.update(NodeComponent.getCurrentNodeKey()).subscribe(() => {
-        this.snackbarService.showDone('actions.update.done');
-        confirmationDialog.close();
+      // Update the visor.
+      this.updateSubscription = this.nodeService.update(NodeComponent.getCurrentNodeKey()).subscribe(response => {
+        if (response && response.updated) {
+          this.snackbarService.showDone('actions.update.done');
+          confirmationDialog.close();
+        } else {
+          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'actions.update.update-error');
+        }
       }, (err: OperationError) => {
         err = processServiceError(err);
 

@@ -1,3 +1,6 @@
+// NOTE: The updater has been implemented without using this component, so it could be
+// removed soon.
+
 import { Component, OnInit } from '@angular/core';
 import {NodeService} from '../../../../../services/node.service';
 import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
