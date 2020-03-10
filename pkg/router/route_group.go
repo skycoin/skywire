@@ -367,9 +367,11 @@ func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
 				continue
 			}
 
-			if err := rg.sendKeepAlive(); err != nil {
-				rg.logger.Warnf("Failed to send keepalive: %v", err)
-			}
+			go func() {
+				if err := rg.sendKeepAlive(); err != nil {
+					rg.logger.Warnf("Failed to send keepalive: %v", err)
+				}
+			}()
 		}
 	}
 }
@@ -418,7 +420,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		rg.closeDone.Add(len(rg.tps))
 	}
 
-	rg.broadcastClosePackets(code)
+	go rg.broadcastClosePackets(code)
 
 	if closeInitiator {
 		// if this visor initiated closing, we need to wait for close packets
