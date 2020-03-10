@@ -44,6 +44,7 @@ func newBoltDB(path, appName string) (_ LogStore, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		cErr := db.Close()
 		err = cErr
@@ -57,6 +58,7 @@ func newBoltDB(path, appName string) (_ LogStore, err error) {
 
 		return nil
 	})
+
 	if err != nil && !strings.Contains(err.Error(), bbolt.ErrBucketExists.Error()) {
 		return nil, err
 	}
@@ -65,7 +67,7 @@ func newBoltDB(path, appName string) (_ LogStore, err error) {
 }
 
 // Write implements io.Writer
-func (l *boltDBappLogs) Write(p []byte) (int, error) {
+func (l *boltDBappLogs) Write(p []byte) (n int, err error) {
 	// ensure there is at least timestamp long bytes
 	if len(p) < 37 {
 		return 0, io.ErrShortBuffer
@@ -75,10 +77,10 @@ func (l *boltDBappLogs) Write(p []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	defer func() {
-		err := db.Close()
-		if err != nil {
-			panic(err)
+		if closeErr := db.Close(); err == nil {
+			err = closeErr
 		}
 	}()
 
@@ -103,12 +105,14 @@ func (l *boltDBappLogs) Store(t time.Time, s string) (err error) {
 	if err != nil {
 		return err
 	}
+
 	defer func() {
 		cErr := db.Close()
 		err = cErr
 	}()
 
 	parsedTime := []byte(t.Format(time.RFC3339Nano))
+
 	return db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(l.bucket)
 		return b.Put(parsedTime, []byte(s))
@@ -121,6 +125,7 @@ func (l *boltDBappLogs) LogsSince(t time.Time) (logs []string, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		cErr := db.Close()
 		err = cErr
@@ -148,18 +153,22 @@ func (l *boltDBappLogs) LogsSince(t time.Time) (logs []string, err error) {
 
 func iterateFromKey(c *bbolt.Cursor) []string {
 	logs := make([]string, 0)
+
 	for k, v := c.Next(); k != nil; k, v = c.Next() {
 		logs = append(logs, string(v))
 	}
+
 	return logs
 }
 
 func iterateFromBeginning(c *bbolt.Cursor, parsedTime []byte) []string {
 	logs := make([]string, 0)
+
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		if bytes.Compare(k, parsedTime) < 0 {
 			continue
 		}
+
 		logs = append(logs, string(v))
 	}
 

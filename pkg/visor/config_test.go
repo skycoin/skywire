@@ -2,7 +2,6 @@ package visor
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,15 +17,15 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-func TestMessagingDiscovery(t *testing.T) {
+func TestDmsgDiscovery(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 	conf := Config{}
-	conf.Node.StaticPubKey = pk
-	conf.Node.StaticSecKey = sk
-	conf.Messaging.Discovery = "skywire.skycoin.net:8001"
-	conf.Messaging.ServerCount = 10
+	conf.Visor.StaticPubKey = pk
+	conf.Visor.StaticSecKey = sk
+	conf.Dmsg.Discovery = "skywire.skycoin.net:8001"
+	conf.Dmsg.SessionsCount = 10
 
-	c, err := conf.MessagingConfig()
+	c, err := conf.DmsgConfig()
 	require.NoError(t, err)
 
 	assert.NotNil(t, c.Discovery)
@@ -41,6 +40,7 @@ func TestTransportDiscovery(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: pk, NextNonce: 1}))
 	}))
+
 	defer srv.Close()
 
 	conf := Config{}
@@ -54,6 +54,7 @@ func TestTransportDiscovery(t *testing.T) {
 
 func TestTransportLogStore(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "foo")
+
 	defer func() {
 		require.NoError(t, os.RemoveAll(dir))
 	}()
@@ -72,29 +73,10 @@ func TestTransportLogStore(t *testing.T) {
 	require.NotNil(t, ls)
 }
 
-func TestRoutingTable(t *testing.T) {
-	tmpfile, err := ioutil.TempFile("", "routing")
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.Remove(tmpfile.Name()))
-	}()
-
-	conf := Config{}
-	conf.Routing.Table.Type = "boltdb"
-	conf.Routing.Table.Location = tmpfile.Name()
-	_, err = conf.RoutingTable()
-	require.NoError(t, err)
-
-	conf.Routing.Table.Type = "memory"
-	conf.Routing.Table.Location = ""
-	_, err = conf.RoutingTable()
-	require.NoError(t, err)
-}
-
 func TestAppsConfig(t *testing.T) {
 	conf := Config{Version: "1.0"}
 	conf.Apps = []AppConfig{
-		{App: "foo", Version: "1.1", Port: 1},
+		{App: "foo", Port: 1},
 		{App: "bar", AutoStart: true, Port: 2},
 	}
 
@@ -103,13 +85,11 @@ func TestAppsConfig(t *testing.T) {
 
 	app1 := appsConf["foo"]
 	assert.Equal(t, "foo", app1.App)
-	assert.Equal(t, "1.1", app1.Version)
 	assert.Equal(t, routing.Port(1), app1.Port)
 	assert.False(t, app1.AutoStart)
 
 	app2 := appsConf["bar"]
 	assert.Equal(t, "bar", app2.App)
-	assert.Equal(t, "1.0", app2.Version)
 	assert.Equal(t, routing.Port(2), app2.Port)
 	assert.True(t, app2.AutoStart)
 }

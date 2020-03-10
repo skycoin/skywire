@@ -11,33 +11,33 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/dmsg/dmsgpty"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/dmsgpty"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
-// Config defines configuration parameters for Node.
+// Config defines configuration parameters for Visor.
 // TODO(evanlinjin): Instead of having nested structs, make separate types for each field.
 // TODO(evanlinjin): Use pointers to allow nil-configs for non-crucial fields.
 type Config struct {
 	Version string `json:"version"`
 
-	Node struct {
+	Visor struct {
 		StaticPubKey cipher.PubKey `json:"static_public_key"`
 		StaticSecKey cipher.SecKey `json:"static_secret_key"`
-	} `json:"node"`
+	} `json:"visor"`
 
 	STCP struct {
 		PubKeyTable map[cipher.PubKey]string `json:"pk_table"`
 		LocalAddr   string                   `json:"local_address"`
 	} `json:"stcp"`
 
-	Messaging struct {
-		Discovery   string `json:"discovery"`
-		ServerCount int    `json:"server_count"`
-	} `json:"messaging"`
+	Dmsg struct {
+		Discovery     string `json:"discovery"`
+		SessionsCount int    `json:"sessions_count"`
+	} `json:"dmsg"`
 
 	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
 
@@ -52,11 +52,7 @@ type Config struct {
 	Routing struct {
 		SetupNodes         []cipher.PubKey `json:"setup_nodes"`
 		RouteFinder        string          `json:"route_finder"`
-		RouteFinderTimeout Duration        `json:"route_finder_timeout"`
-		Table              struct {
-			Type     string `json:"type"`
-			Location string `json:"location"`
-		} `json:"table"`
+		RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 	} `json:"routing"`
 
 	Uptime struct {
@@ -65,30 +61,34 @@ type Config struct {
 
 	Apps []AppConfig `json:"apps"`
 
-	TrustedNodes []cipher.PubKey    `json:"trusted_nodes"`
-	Hypervisors  []HypervisorConfig `json:"hypervisors"`
+	TrustedVisors []cipher.PubKey    `json:"trusted_visors"`
+	Hypervisors   []HypervisorConfig `json:"hypervisors"`
 
 	AppsPath  string `json:"apps_path"`
 	LocalPath string `json:"local_path"`
 
 	LogLevel        string   `json:"log_level"`
-	ShutdownTimeout Duration `json:"shutdown_timeout"` // time value, examples: 10s, 1m, etc
+	ShutdownTimeout Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 
 	Interfaces InterfaceConfig `json:"interfaces"`
+
+	AppServerSockFile string `json:"app_server_sock_file"`
+
+	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
 }
 
-// MessagingConfig returns config for dmsg client.
-func (c *Config) MessagingConfig() (*DmsgConfig, error) {
-	msgConfig := c.Messaging
+// DmsgConfig returns config for dmsg client.
+func (c *Config) DmsgConfig() (*DmsgConfig, error) {
+	dmsgConfig := c.Dmsg
 
-	if msgConfig.Discovery == "" {
+	if dmsgConfig.Discovery == "" {
 		return nil, errors.New("empty discovery")
 	}
 
 	return &DmsgConfig{
-		PubKey:     c.Node.StaticPubKey,
-		SecKey:     c.Node.StaticSecKey,
-		Discovery:  disc.NewHTTP(msgConfig.Discovery),
+		PubKey:     c.Visor.StaticPubKey,
+		SecKey:     c.Visor.StaticSecKey,
+		Discovery:  disc.NewHTTP(dmsgConfig.Discovery),
 		Retries:    5,
 		RetryDelay: time.Second,
 	}, nil
@@ -99,15 +99,26 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	if c.DmsgPty == nil {
 		return nil, errors.New("'dmsg_pty' config field not defined")
 	}
-	return dmsgpty.NewHostFromDmsgClient(
-		nil,
-		dmsgC,
-		c.Node.StaticPubKey,
-		c.Node.StaticSecKey,
-		c.DmsgPty.AuthFile,
-		c.DmsgPty.Port,
-		c.DmsgPty.CLINet,
-		c.DmsgPty.CLIAddr)
+
+	var wl dmsgpty.Whitelist
+	if c.DmsgPty.AuthFile == "" {
+		wl = dmsgpty.NewMemoryWhitelist()
+	} else {
+		var err error
+		if wl, err = dmsgpty.NewJSONFileWhiteList(c.DmsgPty.AuthFile); err != nil {
+			return nil, err
+		}
+	}
+
+	// Whitelist hypervisor PKs.
+	hypervisorWL := dmsgpty.NewMemoryWhitelist()
+	for _, hv := range c.Hypervisors {
+		if err := hypervisorWL.Add(hv.PubKey); err != nil {
+			return nil, fmt.Errorf("failed to add hypervisor PK to whitelist: %v", err)
+		}
+	}
+	host := dmsgpty.NewHost(dmsgC, dmsgpty.NewCombinedWhitelist(0, wl, hypervisorWL))
+	return host, nil
 }
 
 // TransportDiscovery returns transport discovery client.
@@ -116,7 +127,7 @@ func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
 		return nil, errors.New("empty transport_discovery")
 	}
 
-	return trClient.NewHTTP(c.Transport.Discovery, c.Node.StaticPubKey, c.Node.StaticSecKey)
+	return trClient.NewHTTP(c.Transport.Discovery, c.Visor.StaticPubKey, c.Visor.StaticSecKey)
 }
 
 // TransportLogStore returns configure transport.LogStore.
@@ -128,21 +139,10 @@ func (c *Config) TransportLogStore() (transport.LogStore, error) {
 	return transport.InMemoryTransportLogStore(), nil
 }
 
-// RoutingTable returns configure routing.Table.
-func (c *Config) RoutingTable() (routing.Table, error) {
-	if c.Routing.Table.Type == "boltdb" {
-		return routing.BoltDBRoutingTable(c.Routing.Table.Location)
-	}
-	return routing.InMemoryRoutingTable(), nil
-}
-
 // AppsConfig decodes AppsConfig from a local json config file.
 func (c *Config) AppsConfig() (map[string]AppConfig, error) {
 	apps := make(map[string]AppConfig)
 	for _, app := range c.Apps {
-		if app.Version == "" {
-			app.Version = c.Version
-		}
 		apps[app.App] = app
 	}
 
@@ -163,7 +163,7 @@ func (c *Config) AppsDir() (string, error) {
 // will be created if necessary.
 func (c *Config) LocalDir() (string, error) {
 	if c.LocalPath == "" {
-		return "", errors.New("empty AppsPath")
+		return "", errors.New("empty LocalPath")
 	}
 
 	return ensureDir(c.LocalPath)
@@ -211,7 +211,6 @@ type DmsgPtyConfig struct {
 
 // AppConfig defines app startup parameters.
 type AppConfig struct {
-	Version   string       `json:"version"`
 	App       string       `json:"app"`
 	AutoStart bool         `json:"auto_start"`
 	Port      routing.Port `json:"port"`

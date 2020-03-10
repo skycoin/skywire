@@ -1,130 +1,85 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net"
-	"os"
+	"sync"
 	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 )
 
-// PipeAddr implements net.Addr for PipeConn.
-type PipeAddr struct {
-	pipePath string
+// Conn is a connection from app client to the server.
+// Implements `net.Conn`.
+type Conn struct {
+	id         uint16
+	rpc        RPCClient
+	local      appnet.Addr
+	remote     appnet.Addr
+	freeConn   func() bool
+	freeConnMx sync.RWMutex
 }
 
-// Network returns custom pipe Network type.
-func (pa *PipeAddr) Network() string {
-	return "pipe"
+// Read reads from connection.
+func (c *Conn) Read(b []byte) (int, error) {
+	n, err := c.rpc.Read(c.id, b)
+
+	return n, err
 }
 
-func (pa *PipeAddr) String() string {
-	return pa.pipePath
-}
-
-// PipeConn implements net.Conn interface over a pair of unix pipes.
-type PipeConn struct {
-	inFile  *os.File
-	outFile *os.File
-}
-
-// OpenPipeConn creates a pair of unix pipe and setups PipeConn over
-// that pair.
-func OpenPipeConn() (srvConn *PipeConn, clientConn *PipeConn, err error) {
-	srvIn, clientOut, err := os.Pipe()
+// Write writes to connection.
+func (c *Conn) Write(b []byte) (int, error) {
+	n, err := c.rpc.Write(c.id, b)
 	if err != nil {
-		err = fmt.Errorf("failed to open server pipe: %s", err)
-		return
+		if err == io.EOF {
+			fmt.Println("EOF WRITING TO APP CONN")
+		}
+		//return n, &net.OpError{Op: "write", Net: c.local.Network(), Source: c.local, Addr: c.remote, Err: err}
+		return n, err
 	}
 
-	clientIn, srvOut, err := os.Pipe()
-	if err != nil {
-		err = fmt.Errorf("failed to open client pipe: %s", err)
-		return
-	}
-
-	clientConn = &PipeConn{clientIn, clientOut}
-	srvConn = &PipeConn{srvIn, srvOut}
-	return srvConn, clientConn, err
+	return n, nil
 }
 
-// NewPipeConn constructs new PipeConn from already opened pipe fds.
-func NewPipeConn(inFd, outFd uintptr) (*PipeConn, error) {
-	inFile := os.NewFile(inFd, "|0")
-	if _, err := inFile.Stat(); os.IsNotExist(err) {
-		return nil, fmt.Errorf("inFile does not exist")
-	}
+// Close closes connection.
+func (c *Conn) Close() error {
+	c.freeConnMx.RLock()
+	defer c.freeConnMx.RUnlock()
 
-	outFile := os.NewFile(outFd, "|1")
-	if _, err := outFile.Stat(); os.IsNotExist(err) {
-		return nil, fmt.Errorf("outFile does not exist")
-	}
+	if c.freeConn != nil {
+		if freed := c.freeConn(); !freed {
+			return errors.New("conn is already closed")
+		}
 
-	return &PipeConn{inFile, outFile}, nil
-}
-
-func (conn *PipeConn) Read(b []byte) (n int, err error) {
-	return conn.inFile.Read(b)
-}
-
-func (conn *PipeConn) Write(b []byte) (n int, err error) {
-	return conn.outFile.Write(b)
-}
-
-// Close closes the connection.
-func (conn *PipeConn) Close() error {
-	if conn == nil {
-		return nil
-	}
-
-	inErr := conn.inFile.Close()
-	outErr := conn.outFile.Close()
-	if inErr != nil {
-		return fmt.Errorf("failed to close input pipe: %s", inErr)
-	}
-
-	if outErr != nil {
-		return fmt.Errorf("failed to close output pipe: %s", outErr)
+		return c.rpc.CloseConn(c.id)
 	}
 
 	return nil
 }
 
-// LocalAddr returns the local network address.
-func (conn *PipeConn) LocalAddr() net.Addr {
-	return &PipeAddr{conn.inFile.Name()}
+// LocalAddr returns local address of connection.
+func (c *Conn) LocalAddr() net.Addr {
+	return c.local
 }
 
-// RemoteAddr returns the remote network address.
-func (conn *PipeConn) RemoteAddr() net.Addr {
-	return &PipeAddr{conn.outFile.Name()}
+// RemoteAddr returns remote address of connection.
+func (c *Conn) RemoteAddr() net.Addr {
+	return c.remote
 }
 
-// SetDeadline implements the Conn SetDeadline method.
-func (conn *PipeConn) SetDeadline(t time.Time) error {
-	if err := conn.inFile.SetDeadline(t); err != nil {
-		return fmt.Errorf("failed to set input pipe deadline: %s", err)
-	}
-
-	if err := conn.outFile.SetDeadline(t); err != nil {
-		return fmt.Errorf("failed to set out pipe deadline: %s", err)
-	}
-
-	return nil
+// SetDeadline sets read and write deadlines for connection.
+func (c *Conn) SetDeadline(t time.Time) error {
+	return c.rpc.SetDeadline(c.id, t)
 }
 
-// SetReadDeadline implements the Conn SetReadDeadline method.
-func (conn *PipeConn) SetReadDeadline(t time.Time) error {
-	return conn.inFile.SetDeadline(t)
+// SetReadDeadline sets read deadline for connection.
+func (c *Conn) SetReadDeadline(t time.Time) error {
+	return c.rpc.SetReadDeadline(c.id, t)
 }
 
-// SetWriteDeadline implements the Conn SetWriteDeadline method.
-func (conn *PipeConn) SetWriteDeadline(t time.Time) error {
-	return conn.outFile.SetDeadline(t)
-}
-
-// Fd returns file descriptors for a pipe pair
-func (conn *PipeConn) Fd() (inFd uintptr, outFd uintptr) {
-	inFd = conn.inFile.Fd()
-	outFd = conn.outFile.Fd()
-	return
+// SetWriteDeadline sets write deadline for connection.
+func (c *Conn) SetWriteDeadline(t time.Time) error {
+	return c.rpc.SetWriteDeadline(c.id, t)
 }

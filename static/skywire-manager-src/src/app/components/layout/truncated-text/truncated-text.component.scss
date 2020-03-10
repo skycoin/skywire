@@ -1,0 +1,11 @@
+@import 'utilities/utilities';
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.wrapper {
+  display: inline;
+  /* Needed because the tooltip blocks the ability to select the text. */
+  @extend .reactivate-mouse;
+}

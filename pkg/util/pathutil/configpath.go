@@ -59,26 +59,30 @@ func (dp ConfigPaths) String() string {
 	if err != nil {
 		log.Fatalf("cannot marshal default paths: %s", err.Error())
 	}
+
 	return string(raw)
 }
 
 // Get obtains a path stored under given configuration location type.
 func (dp ConfigPaths) Get(cpType ConfigLocationType) string {
-	if path, ok := dp[cpType]; ok {
-		return path
+	path, ok := dp[cpType]
+	if !ok {
+		log.Fatalf("invalid config type '%s' provided. Valid types: %v", cpType, AllConfigLocationTypes())
 	}
-	log.Fatalf("invalid config type '%s' provided. Valid types: %v", cpType, AllConfigLocationTypes())
-	return ""
+
+	return path
 }
 
-// NodeDefaults returns the default config paths for skywire-visor.
-func NodeDefaults() ConfigPaths {
+// VisorDefaults returns the default config paths for skywire-visor.
+func VisorDefaults() ConfigPaths {
 	paths := make(ConfigPaths)
 	if wd, err := os.Getwd(); err == nil {
 		paths[WorkingDirLoc] = filepath.Join(wd, "skywire-config.json")
 	}
+
 	paths[HomeLoc] = filepath.Join(HomeDir(), ".skycoin/skywire/skywire-config.json")
 	paths[LocalLoc] = "/usr/local/SkycoinProject/skywire-mainnet/skywire-config.json"
+
 	return paths
 }
 
@@ -88,8 +92,10 @@ func HypervisorDefaults() ConfigPaths {
 	if wd, err := os.Getwd(); err == nil {
 		paths[WorkingDirLoc] = filepath.Join(wd, "hypervisor-config.json")
 	}
+
 	paths[HomeLoc] = filepath.Join(HomeDir(), ".skycoin/hypervisor/hypervisor-config.json")
 	paths[LocalLoc] = "/usr/local/SkycoinProject/hypervisor/hypervisor-config.json"
+
 	return paths
 }
 
@@ -102,29 +108,37 @@ func FindConfigPath(args []string, argsIndex int, env string, defaults ConfigPat
 	if argsIndex >= 0 && len(args) > argsIndex {
 		path := args[argsIndex]
 		log.Infof("using args[%d] as config path: %s", argsIndex, path)
+
 		return path
 	}
+
 	if env != "" {
 		if path, ok := os.LookupEnv(env); ok {
 			log.Infof("using $%s as config path: %s", env, path)
 			return path
 		}
 	}
+
 	log.Debugf("config path is not explicitly specified, trying default paths...")
+
 	for i, cpType := range []ConfigLocationType{WorkingDirLoc, HomeLoc, LocalLoc} {
 		path, ok := defaults[cpType]
 		if !ok {
 			continue
 		}
+
 		if _, err := os.Stat(path); err != nil {
 			log.Debugf("- [%d/%d] '%s' cannot be accessed: %s", i+1, len(defaults), path, err.Error())
 		} else {
 			log.Debugf("- [%d/%d] '%s' is found", i+1, len(defaults), path)
 			log.Printf("using fallback config path: %s", path)
+
 			return path
 		}
 	}
+
 	log.Fatalf("config not found in any of the following paths: %s", defaults.String())
+
 	return ""
 }
 
@@ -136,14 +150,18 @@ func WriteJSONConfig(conf interface{}, output string, replace bool) {
 	if err != nil {
 		log.WithError(err).Fatal("unexpected error, report to dev")
 	}
+
 	if _, err := os.Stat(output); !replace && err == nil {
 		log.Fatalf("file %s already exists, stopping as 'replace,r' flag is not set", output)
 	}
+
 	if err := os.MkdirAll(filepath.Dir(output), 0750); err != nil {
 		log.WithError(err).Fatalln("failed to create output directory")
 	}
+
 	if err := ioutil.WriteFile(output, raw, 0744); err != nil {
 		log.WithError(err).Fatalln("failed to write file")
 	}
+
 	log.Infof("Wrote %d bytes to %s\n%s", len(raw), output, string(raw))
 }
