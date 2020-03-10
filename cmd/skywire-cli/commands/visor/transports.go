@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -78,7 +79,7 @@ var (
 )
 
 func init() {
-	addTpCmd.Flags().StringVar(&transportType, "type", dmsg.Type, "type of transport to add")
+	addTpCmd.Flags().StringVar(&transportType, "type", "", "type of transport to add")
 	addTpCmd.Flags().BoolVar(&public, "public", true, "whether to make the transport public")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, "if specified, sets an operation timeout")
 }
@@ -89,8 +90,36 @@ var addTpCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		pk := internal.ParsePK("remote-public-key", args[0])
-		tp, err := rpcClient().AddTransport(pk, transportType, public, timeout)
-		internal.Catch(err)
+
+		var tp *visor.TransportSummary
+		var err error
+
+		if transportType != "" {
+			tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
+			if err != nil {
+				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
+			}
+
+			logger.Infof("Established %v transport to %v", transportType, pk)
+		} else {
+			transportType = stcp.Type
+
+			tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
+			if err != nil {
+				logger.WithError(err).
+					Warnf("Failed to establish stcp transport. Trying to establish dmsg transport", pk)
+
+				transportType = dmsg.Type
+
+				tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
+				if err != nil {
+					logger.WithError(err).Fatalf("Failed to establish dmsg transport")
+				}
+			}
+
+			logger.Infof("Established %v transport to %v", transportType, pk)
+		}
+
 		printTransports(tp)
 	},
 }
