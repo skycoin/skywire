@@ -135,7 +135,7 @@ export class NodeService {
    * Restarts a node.
    */
   reboot(nodeKey: string): Observable<any> {
-    return this.apiService.get(`visors/${nodeKey}/restart`).pipe();
+    return this.apiService.post(`visors/${nodeKey}/restart`).pipe();
   }
 
   /**
