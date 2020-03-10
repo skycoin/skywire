@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_extractLastVersion(t *testing.T) {
+func Test_extractLatestVersion(t *testing.T) {
 	tests := []struct {
 		name   string
 		buffer string
@@ -32,7 +32,7 @@ func Test_extractLastVersion(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			got := extractLastVersion(tc.buffer)
+			got := extractLatestVersion(tc.buffer)
 			assert.Equal(t, tc.want, got)
 		})
 	}
