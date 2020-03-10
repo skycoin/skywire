@@ -71,36 +71,31 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 
 // Update performs an update operation.
 // NOTE: Update may call os.Exit.
-func (u *Updater) Update() (err error) {
+func (u *Updater) Update() (updated bool, err error) {
 	if !atomic.CompareAndSwapInt32(&u.updating, 0, 1) {
-		return ErrAlreadyStarted
+		return false, ErrAlreadyStarted
 	}
 	defer atomic.StoreInt32(&u.updating, 0)
 
-	u.log.Infof("Looking for updates")
-
-	lastVersion, err := lastVersion()
+	latestVersion, err := u.UpdateAvailable()
 	if err != nil {
-		return fmt.Errorf("failed to get last Skywire version: %w", err)
+		return false, fmt.Errorf("failed to get last Skywire version: %w", err)
 	}
 
-	u.log.Infof("Last Skywire version: %q", lastVersion.String())
-
-	if !updateAvailable(lastVersion) {
-		u.log.Infof("You are using the latest version of Skywire")
-		return nil
+	if latestVersion == nil {
+		return false, nil
 	}
 
-	u.log.Infof("Update found, version: %q", lastVersion.String())
+	u.log.Infof("Update found, version: %q", latestVersion.String())
 
-	downloadedBinariesPath, err := u.download(lastVersion.String())
+	downloadedBinariesPath, err := u.download(latestVersion.String())
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
 	if err := u.updateBinaries(downloadedBinariesPath, currentBasePath); err != nil {
-		return err
+		return false, err
 	}
 
 	if err := u.restartCurrentProcess(); err != nil {
@@ -109,7 +104,7 @@ func (u *Updater) Update() (err error) {
 
 		u.restore(currentVisorPath, oldVisorPath)
 
-		return err
+		return false, err
 	}
 
 	u.removeFiles(downloadedBinariesPath)
@@ -121,7 +116,28 @@ func (u *Updater) Update() (err error) {
 		}
 	}()
 
-	return nil
+	return true, nil
+}
+
+// UpdateAvailable checks if an update is available.
+// If it is, the method returns the last available version.
+// Otherwise, it returns nil.
+func (u *Updater) UpdateAvailable() (*Version, error) {
+	u.log.Infof("Looking for updates")
+
+	latestVersion, err := latestVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	u.log.Infof("Last Skywire version: %q", latestVersion.String())
+
+	if !needUpdate(latestVersion) {
+		u.log.Infof("You are using the latest version of Skywire")
+		return nil, nil
+	}
+
+	return latestVersion, nil
 }
 
 func (u *Updater) exitAfterDelay(delay time.Duration) {
@@ -392,7 +408,7 @@ func archiveFilename(file, version, os, arch string) string {
 	return file + "-" + version + "-" + os + "-" + arch + archiveFormat
 }
 
-func updateAvailable(last *Version) bool {
+func needUpdate(last *Version) bool {
 	current, err := currentVersion()
 	if err != nil {
 		// Unknown versions should be updated.
@@ -402,20 +418,20 @@ func updateAvailable(last *Version) bool {
 	return last.Cmp(current) > 0
 }
 
-func lastVersion() (*Version, error) {
-	html, err := lastVersionHTML()
+func latestVersion() (*Version, error) {
+	html, err := latestVersionHTML()
 	if err != nil {
 		return nil, err
 	}
 
-	return VersionFromString(extractLastVersion(string(html)))
+	return VersionFromString(extractLatestVersion(string(html)))
 }
 
 func currentVersion() (*Version, error) {
 	return VersionFromString(buildinfo.Version())
 }
 
-func lastVersionHTML() (data []byte, err error) {
+func latestVersionHTML() (data []byte, err error) {
 	resp, err := http.Get(releaseURL)
 	if err != nil {
 		return nil, err
@@ -430,7 +446,7 @@ func lastVersionHTML() (data []byte, err error) {
 	return ioutil.ReadAll(resp.Body)
 }
 
-func extractLastVersion(buffer string) string {
+func extractLatestVersion(buffer string) string {
 	// First occurrence is the latest version.
 	idx := strings.Index(buffer, urlText)
 	if idx == -1 {
