@@ -11,9 +11,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/hashicorp/yamux v0.0.0-20190923154419-df201c70410d // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
-	github.com/kr/pretty v0.2.0 // indirect
-	github.com/mattn/go-colorable v0.1.6 // indirect
+	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
@@ -23,9 +21,7 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.3
-	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073 // indirect
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
-	golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527 // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
