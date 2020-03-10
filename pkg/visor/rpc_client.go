@@ -20,6 +20,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
 var (
@@ -61,7 +62,8 @@ type RPCClient interface {
 
 	Restart() error
 	Exec(command string) ([]byte, error)
-	Update() error
+	Update() (bool, error)
+	UpdateAvailable() (*updater.Version, error)
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -250,9 +252,25 @@ func (rc *rpcClient) Exec(command string) ([]byte, error) {
 }
 
 // Update calls Update.
-func (rc *rpcClient) Update() error {
-	err := rc.Call("Update", &struct{}{}, &struct{}{})
-	return err
+func (rc *rpcClient) Update() (bool, error) {
+	var updated bool
+	err := rc.Call("Update", &struct{}{}, &updated)
+	return updated, err
+}
+
+// UpdateAvailable calls UpdateAvailable.
+func (rc *rpcClient) UpdateAvailable() (*updater.Version, error) {
+	var version, empty updater.Version
+	err := rc.Call("UpdateAvailable", &struct{}{}, &version)
+	if err != nil {
+		return nil, err
+	}
+
+	if version == empty {
+		return nil, nil
+	}
+
+	return &version, err
 }
 
 // MockRPCClient mocks RPCClient.
@@ -614,7 +632,12 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
 }
 
-// Exec implements RPCClient.
-func (mc *mockRPCClient) Update() error {
-	return nil
+// Update implements RPCClient.
+func (mc *mockRPCClient) Update() (bool, error) {
+	return false, nil
+}
+
+// UpdateAvailable implements RPCClient.
+func (mc *mockRPCClient) UpdateAvailable() (*updater.Version, error) {
+	return nil, nil
 }
