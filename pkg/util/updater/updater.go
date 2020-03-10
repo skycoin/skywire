@@ -77,18 +77,18 @@ func (u *Updater) Update() (updated bool, err error) {
 	}
 	defer atomic.StoreInt32(&u.updating, 0)
 
-	lastVersion, err := u.UpdateAvailable()
+	latestVersion, err := u.UpdateAvailable()
 	if err != nil {
 		return false, fmt.Errorf("failed to get last Skywire version: %w", err)
 	}
 
-	if lastVersion == nil {
+	if latestVersion == nil {
 		return false, nil
 	}
 
-	u.log.Infof("Update found, version: %q", lastVersion.String())
+	u.log.Infof("Update found, version: %q", latestVersion.String())
 
-	downloadedBinariesPath, err := u.download(lastVersion.String())
+	downloadedBinariesPath, err := u.download(latestVersion.String())
 	if err != nil {
 		return false, err
 	}
@@ -125,19 +125,19 @@ func (u *Updater) Update() (updated bool, err error) {
 func (u *Updater) UpdateAvailable() (*Version, error) {
 	u.log.Infof("Looking for updates")
 
-	lastVersion, err := lastVersion()
+	latestVersion, err := latestVersion()
 	if err != nil {
 		return nil, err
 	}
 
-	u.log.Infof("Last Skywire version: %q", lastVersion.String())
+	u.log.Infof("Last Skywire version: %q", latestVersion.String())
 
-	if !needUpdate(lastVersion) {
+	if !needUpdate(latestVersion) {
 		u.log.Infof("You are using the latest version of Skywire")
 		return nil, nil
 	}
 
-	return lastVersion, nil
+	return latestVersion, nil
 }
 
 func (u *Updater) exitAfterDelay(delay time.Duration) {
@@ -418,20 +418,20 @@ func needUpdate(last *Version) bool {
 	return last.Cmp(current) > 0
 }
 
-func lastVersion() (*Version, error) {
-	html, err := lastVersionHTML()
+func latestVersion() (*Version, error) {
+	html, err := latestVersionHTML()
 	if err != nil {
 		return nil, err
 	}
 
-	return VersionFromString(extractLastVersion(string(html)))
+	return VersionFromString(extractLatestVersion(string(html)))
 }
 
 func currentVersion() (*Version, error) {
 	return VersionFromString(buildinfo.Version())
 }
 
-func lastVersionHTML() (data []byte, err error) {
+func latestVersionHTML() (data []byte, err error) {
 	resp, err := http.Get(releaseURL)
 	if err != nil {
 		return nil, err
@@ -446,7 +446,7 @@ func lastVersionHTML() (data []byte, err error) {
 	return ioutil.ReadAll(resp.Body)
 }
 
-func extractLastVersion(buffer string) string {
+func extractLatestVersion(buffer string) string {
 	// First occurrence is the latest version.
 	idx := strings.Index(buffer, urlText)
 	if idx == -1 {
