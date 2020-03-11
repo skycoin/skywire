@@ -79,9 +79,15 @@ var (
 )
 
 func init() {
-	addTpCmd.Flags().StringVar(&transportType, "type", "", "type of transport to add")
-	addTpCmd.Flags().BoolVar(&public, "public", true, "whether to make the transport public")
-	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, "if specified, sets an operation timeout")
+	const (
+		typeFlagUsage    = "type of transport to add; if unspecified, cli will attempt to establish a transport in the following order: stcp, dmsg"
+		publicFlagUsage  = "whether to make the transport public"
+		timeoutFlagUsage = "if specified, sets an operation timeout"
+	)
+
+	addTpCmd.Flags().StringVar(&transportType, "type", "", typeFlagUsage)
+	addTpCmd.Flags().BoolVar(&public, "public", true, publicFlagUsage)
+	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, timeoutFlagUsage)
 }
 
 var addTpCmd = &cobra.Command{
