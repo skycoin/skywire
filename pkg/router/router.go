@@ -294,7 +294,8 @@ func (r *router) Serve(ctx context.Context) error {
 }
 
 func (r *router) serveTransportManager(ctx context.Context) {
-	done := make(chan struct{}, 1)
+	var once sync.Once
+	done := make(chan struct{})
 
 	for {
 		select {
@@ -315,7 +316,11 @@ func (r *router) serveTransportManager(ctx context.Context) {
 				if err := r.handleTransportPacket(ctx, packet); err != nil {
 					if err == transport.ErrNotServing {
 						r.logger.WithError(err).Warnf("Stopped serving Transport.")
-						done <- struct{}{}
+
+						once.Do(func() {
+							close(done)
+						})
+
 						return
 					}
 
