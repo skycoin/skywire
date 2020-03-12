@@ -294,24 +294,38 @@ func (r *router) Serve(ctx context.Context) error {
 }
 
 func (r *router) serveTransportManager(ctx context.Context) {
+	var once sync.Once
+	done := make(chan struct{})
+
 	for {
-		packet, err := r.tm.ReadPacket()
-		if err != nil {
-			if err == transport.ErrNotServing {
-				r.logger.WithError(err).Info("Stopped reading packets")
-				return
-			}
-			r.logger.WithError(err).Error("Stopped reading packets due to unexpected error.")
+		select {
+		case <-done:
 			return
-		}
-
-		if err := r.handleTransportPacket(ctx, packet); err != nil {
-			if err == transport.ErrNotServing {
-				r.logger.WithError(err).Warnf("Stopped serving Transport.")
+		default:
+			packet, err := r.tm.ReadPacket()
+			if err != nil {
+				if err == transport.ErrNotServing {
+					r.logger.WithError(err).Info("Stopped reading packets")
+					return
+				}
+				r.logger.WithError(err).Error("Stopped reading packets due to unexpected error.")
 				return
 			}
 
-			r.logger.Warnf("Failed to handle transport frame: %v", err)
+			go func(packet routing.Packet) {
+				if err := r.handleTransportPacket(ctx, packet); err != nil {
+					if err == transport.ErrNotServing {
+						once.Do(func() {
+							r.logger.WithError(err).Warnf("Stopped serving Transport.")
+							close(done)
+						})
+
+						return
+					}
+
+					r.logger.Warnf("Failed to handle transport frame: %v", err)
+				}
+			}(packet)
 		}
 	}
 }
