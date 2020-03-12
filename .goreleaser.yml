@@ -37,7 +37,7 @@ builds:
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
   - id: skychat
-    binary: skychat
+    binary: apps/skychat
     goos:
       - linux
       - darwin
@@ -53,7 +53,7 @@ builds:
     main: ./cmd/apps/skychat/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
   - id: skysocks
-    binary: skysocks
+    binary: apps/skysocks
     goos:
       - linux
       - darwin
@@ -69,7 +69,7 @@ builds:
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
   - id: skysocks-client
-    binary: skysocks-client
+    binary: apps/skysocks-client
     goos:
       - linux
       - darwin
