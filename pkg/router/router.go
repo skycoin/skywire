@@ -315,9 +315,8 @@ func (r *router) serveTransportManager(ctx context.Context) {
 			go func(packet routing.Packet) {
 				if err := r.handleTransportPacket(ctx, packet); err != nil {
 					if err == transport.ErrNotServing {
-						r.logger.WithError(err).Warnf("Stopped serving Transport.")
-
 						once.Do(func() {
+							r.logger.WithError(err).Warnf("Stopped serving Transport.")
 							close(done)
 						})
 
