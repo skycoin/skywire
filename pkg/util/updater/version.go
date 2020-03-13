@@ -53,7 +53,7 @@ func (v *Version) Cmp(v2 *Version) int {
 
 // String converts Version to string.
 func (v *Version) String() string {
-	version := strconv.Itoa(v.Major) + "." + strconv.Itoa(v.Minor) + "." + strconv.Itoa(v.Patch)
+	version := "v" + strconv.Itoa(v.Major) + "." + strconv.Itoa(v.Minor) + "." + strconv.Itoa(v.Patch)
 	if v.Additional != "" {
 		version += "-" + v.Additional
 	}
