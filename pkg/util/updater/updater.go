@@ -37,6 +37,7 @@ const (
 	permRWX           = 0755
 	exitDelay         = 100 * time.Millisecond
 	oldSuffix         = ".old"
+	appsSubfolder     = "apps"
 	archiveFormat     = ".tar.gz"
 	visorBinary       = "skywire-visor"
 	cliBinary         = "skywire-cli"
@@ -166,6 +167,10 @@ func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath 
 
 func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) error {
 	downloadedBinaryPath := filepath.Join(downloadedBinariesPath, binary)
+	if _, err := os.Stat(downloadedBinaryPath); os.IsNotExist(err) {
+		downloadedBinaryPath = filepath.Join(downloadedBinariesPath, appsSubfolder, binary)
+	}
+
 	currentBinaryPath := filepath.Join(basePath, binary)
 	oldBinaryPath := downloadedBinaryPath + oldSuffix
 
