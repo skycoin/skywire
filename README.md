@@ -13,31 +13,7 @@
     - [Run `skywire-visor`](#run-skywire-visor)
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `hypervisor`](#run-hypervisor)
-    - [Apps](#apps)
-    - [Transports](#transports)
   - [App programming API](#app-programming-api)
-  - [Testing](#testing)
-    - [Testing with default settings](#testing-with-default-settings)
-    - [Customization with environment variables](#customization-with-environment-variables)
-      - [$TEST_OPTS](#test_opts)
-      - [$TEST_LOGGING_LEVEL](#test_logging_level)
-      - [$SYSLOG_OPTS](#syslog_opts)
-  - [Running skywire in docker containers](#running-skywire-in-docker-containers)
-    - [Run dockerized `skywire-visor`](#run-dockerized-skywire-visor)
-      - [Structure of `./node`](#structure-of-node)
-    - [Refresh and restart `SKY01`](#refresh-and-restart-sky01)
-    - [Customization of dockers](#customization-of-dockers)
-      - [1. DOCKER_IMAGE](#1-docker_image)
-      - [2. DOCKER_NETWORK](#2-docker_network)
-      - [3. DOCKER_NODE](#3-docker_node)
-      - [4. DOCKER_OPTS](#4-docker_opts)
-    - [Dockerized `skywire-visor` recipes](#dockerized-skywire-visor-recipes)
-      - [1. Get Public Key of docker-node](#1-get-public-key-of-docker-node)
-      - [2. Get an IP of node](#2-get-an-ip-of-node)
-      - [3. Open in browser containerized `skychat` application](#3-open-in-browser-containerized-skychat-application)
-      - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
-      - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
-      - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
   - [Creating a GitHub release](#creating-a-github-release)
     - [How to create a GitHub release](#how-to-create-a-github-release)
 
@@ -154,54 +130,6 @@ Then you can start a hypervisor with:
 
 ```bash
 $ hypervisor 
-```
-
-### Apps
-
-After `skywire-visor` is up and running with default environment, default apps are run with the configuration specified in `skywire-config.json`. Refer to the following for usage of the default apps:
-
-- [Chat](/cmd/apps/skychat)
-- [Hello World](/cmd/apps/helloworld)
-- [Sky Socks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
-
-### Transports
-
-In order for a local Skywire App to communicate with an App running on a remote Skywire visor, a transport to that remote Skywire visor needs to be established.
-
-Transports can be established via the `skywire-cli`.
-
-```bash
-# Establish transport to `0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881`.
-$ skywire-cli visor add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881
-
-# List established transports.
-$ skywire-cli visor ls-tp
-```
-
-## App programming API
-
-App is a generic binary that can be executed by the visor. On app
-startup visor will open pair of unix pipes that will be used for
-communication between app and visor. `app` packages exposes
-communication API over the pipe.
-
-```golang
-// Config defines configuration parameters for App
-&app.Config{AppName: "helloworld", ProtocolVersion: "0.0.1"}
-// Setup setups app using default pair of pipes
-func Setup(config *Config) (*App, error) {}
-
-// Accept awaits for incoming route group confirmation request from a Visor and
-// returns net.Conn for a received route group.
-func (app *App) Accept() (net.Conn, error) {}
-
-// Addr implements net.Addr for App connections.
-&Addr{PubKey: pk, Port: 12}
-// Dial sends create route group request to a Visor and returns net.Conn for created route group.
-func (app *App) Dial(raddr *Addr) (net.Conn, error) {}
-
-// Close implements io.Closer for App.
-func (app *App) Close() error {}
 ```
 
 ## Creating a GitHub release
