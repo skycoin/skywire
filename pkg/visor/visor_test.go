@@ -104,9 +104,12 @@ func TestVisorStartClose(t *testing.T) {
 	}()
 
 	var (
-		visorCfg = Config{}
-		logger   = logging.MustGetLogger("test")
-		server   = appserver.New(logger, visorCfg.AppServerSockFile)
+		visorCfg = Config{
+			AppServerHost: "",
+			AppServerPort: 5505,
+		}
+		logger = logging.MustGetLogger("test")
+		server = appserver.New(logger, visorCfg.AppServerHost, visorCfg.AppServerPort)
 	)
 
 	visor := &Visor{
@@ -119,10 +122,11 @@ func TestVisorStartClose(t *testing.T) {
 
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
-		Name:         apps["skychat"].App,
-		SockFilePath: visorCfg.AppServerSockFile,
-		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", apps["skychat"].App),
+		Name:       apps["skychat"].App,
+		ServerHost: visorCfg.AppServerHost,
+		ServerPort: visorCfg.AppServerPort,
+		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
+		WorkDir:    filepath.Join("", apps["skychat"].App),
 	}
 	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
@@ -185,7 +189,10 @@ func TestVisorSpawnApp(t *testing.T) {
 	apps := make(map[string]AppConfig)
 	apps["skychat"] = app
 
-	visorCfg := Config{}
+	visorCfg := Config{
+		AppServerHost: "",
+		AppServerPort: 5505,
+	}
 	visorCfg.Visor.StaticPubKey = pk
 
 	visor := &Visor{
@@ -202,10 +209,11 @@ func TestVisorSpawnApp(t *testing.T) {
 	}()
 
 	appCfg := appcommon.Config{
-		Name:         app.App,
-		SockFilePath: visorCfg.AppServerSockFile,
-		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", app.App),
+		Name:       app.App,
+		ServerHost: visorCfg.AppServerHost,
+		ServerPort: visorCfg.AppServerPort,
+		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
+		WorkDir:    filepath.Join("", app.App),
 	}
 
 	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
@@ -238,7 +246,10 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	c := &Config{}
+	c := &Config{
+		AppServerHost: "",
+		AppServerPort: 5505,
+	}
 	c.Visor.StaticPubKey = pk
 
 	visor := &Visor{
@@ -260,10 +271,11 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		}
 
 		appCfg := appcommon.Config{
-			Name:         app.App,
-			SockFilePath: c.AppServerSockFile,
-			VisorPK:      c.Visor.StaticPubKey.Hex(),
-			WorkDir:      filepath.Join("", app.App),
+			Name:       app.App,
+			ServerHost: c.AppServerHost,
+			ServerPort: c.AppServerPort,
+			VisorPK:    c.Visor.StaticPubKey.Hex(),
+			WorkDir:    filepath.Join("", app.App),
 		}
 
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
@@ -299,10 +311,11 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
-			Name:         app.App,
-			SockFilePath: c.AppServerSockFile,
-			VisorPK:      c.Visor.StaticPubKey.Hex(),
-			WorkDir:      filepath.Join("", app.App),
+			Name:       app.App,
+			ServerHost: c.AppServerHost,
+			ServerPort: c.AppServerPort,
+			VisorPK:    c.Visor.StaticPubKey.Hex(),
+			WorkDir:    filepath.Join("", app.App),
 		}
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 

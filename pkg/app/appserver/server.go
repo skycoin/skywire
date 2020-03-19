@@ -14,21 +14,23 @@ import (
 
 // Server is a server for app/visor communication.
 type Server struct {
-	log      *logging.Logger
-	lis      net.Listener
-	sockFile string
-	rpcS     *rpc.Server
-	done     sync.WaitGroup
-	stopCh   chan struct{}
+	log    *logging.Logger
+	lis    net.Listener
+	host   string
+	port   uint
+	rpcS   *rpc.Server
+	done   sync.WaitGroup
+	stopCh chan struct{}
 }
 
 // New constructs server.
-func New(log *logging.Logger, sockFile string) *Server {
+func New(log *logging.Logger, host string, port uint) *Server {
 	return &Server{
-		log:      log,
-		sockFile: sockFile,
-		rpcS:     rpc.NewServer(),
-		stopCh:   make(chan struct{}),
+		log:    log,
+		host:   host,
+		port:   port,
+		rpcS:   rpc.NewServer(),
+		stopCh: make(chan struct{}),
 	}
 }
 
@@ -42,7 +44,7 @@ func (s *Server) Register(appKey appcommon.Key) error {
 
 // ListenAndServe starts listening for incoming app connections via unix socket.
 func (s *Server) ListenAndServe() error {
-	l, err := net.Listen("unix", s.sockFile)
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.host, s.port))
 	if err != nil {
 		return err
 	}
