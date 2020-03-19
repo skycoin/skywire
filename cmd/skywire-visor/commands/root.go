@@ -196,9 +196,7 @@ func (cfg *runCfg) runVisor() *runCfg {
 	time.Sleep(startDelay)
 
 	if cfg.conf.DmsgPty != nil {
-		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile, cfg.conf.DmsgPty.CLIAddr)
-	} else {
-		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile)
+		err = visor.UnlinkSocketFiles(cfg.conf.DmsgPty.CLIAddr)
 	}
 
 	if err != nil {
