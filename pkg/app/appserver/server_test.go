@@ -20,14 +20,15 @@ import (
 )
 
 const (
-	sockFile   = "/tmp/app.sock"
+	testHost   = ""
+	testPort   = uint(5505)
 	sleepDelay = 500 * time.Millisecond
 )
 
 func TestServer_ListenAndServe(t *testing.T) {
 	l := logging.MustGetLogger("app_server")
 
-	s := appserver.New(l, sockFile)
+	s := appserver.New(l, testHost, testPort)
 
 	appKey := appcommon.GenerateAppKey()
 
@@ -35,9 +36,10 @@ func TestServer_ListenAndServe(t *testing.T) {
 
 	visorPK, _ := cipher.GenerateKeyPair()
 	clientConfig := app.ClientConfig{
-		VisorPK:  visorPK,
-		SockFile: sockFile,
-		AppKey:   appKey,
+		VisorPK:    visorPK,
+		ServerHost: testHost,
+		ServerPort: testPort,
+		AppKey:     appKey,
 	}
 
 	errCh := make(chan error, 1)
