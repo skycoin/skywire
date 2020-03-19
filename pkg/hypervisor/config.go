@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	defaultHTTPAddr         = ":8080"
 	defaultCookieExpiration = 12 * time.Hour
 	hashKeyLen              = 64
 	blockKeyLen             = 32
@@ -58,7 +59,6 @@ type Config struct {
 
 func makeConfig(testenv bool) Config {
 	var c Config
-	c.EnableAuth = true
 	c.FillDefaults(testenv)
 	return c
 }
@@ -112,6 +112,7 @@ func (c *Config) FillDefaults(testEnv bool) {
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
+	c.HTTPAddr = defaultHTTPAddr
 	c.Cookies.FillDefaults()
 }
 
