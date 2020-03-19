@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -22,17 +23,20 @@ var (
 	ErrVisorPKNotProvided = errors.New("visor PK is not provided")
 	// ErrVisorPKInvalid is returned when the visor PK is invalid.
 	ErrVisorPKInvalid = errors.New("visor PK is invalid")
-	// ErrSockFileNotProvided is returned when the sock file is not provided.
-	ErrSockFileNotProvided = errors.New("sock file is not provided")
+	// ErrServerPortNotProvided is returned when the app server port is not provided.
+	ErrServerPortNotProvided = errors.New("server port is not provided")
+	// ErrServerPortInvalid is returned when the the app server port is invalid.
+	ErrServerPortInvalid = errors.New("server port is invalid")
 	// ErrAppKeyNotProvided is returned when the app key is not provided.
 	ErrAppKeyNotProvided = errors.New("app key is not provided")
 )
 
 // ClientConfig is a configuration for `Client`.
 type ClientConfig struct {
-	VisorPK  cipher.PubKey
-	SockFile string
-	AppKey   appcommon.Key
+	VisorPK    cipher.PubKey
+	ServerHost string
+	ServerPort uint
+	AppKey     appcommon.Key
 }
 
 // ClientConfigFromEnv creates client config from the ENV args.
@@ -42,9 +46,16 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 		return ClientConfig{}, ErrAppKeyNotProvided
 	}
 
-	sockFile := os.Getenv(appcommon.EnvSockFile)
-	if sockFile == "" {
-		return ClientConfig{}, ErrSockFileNotProvided
+	serverHost := os.Getenv(appcommon.EnvServerHost)
+
+	serverPortStr := os.Getenv(appcommon.EnvServerPort)
+	if serverPortStr == "" {
+		return ClientConfig{}, ErrServerPortNotProvided
+	}
+
+	serverPort, err := strconv.ParseUint(serverPortStr, 10, 64)
+	if err != nil {
+		return ClientConfig{}, ErrServerPortInvalid
 	}
 
 	visorPKStr := os.Getenv(appcommon.EnvVisorPK)
@@ -58,9 +69,10 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 	}
 
 	return ClientConfig{
-		VisorPK:  visorPK,
-		SockFile: sockFile,
-		AppKey:   appcommon.Key(appKey),
+		VisorPK:    visorPK,
+		ServerHost: serverHost,
+		ServerPort: uint(serverPort),
+		AppKey:     appcommon.Key(appKey),
 	}, nil
 }
 
@@ -77,7 +89,7 @@ type Client struct {
 // - log: logger instance.
 // - config: client configuration.
 func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
-	rpcCl, err := rpc.Dial("unix", config.SockFile)
+	rpcCl, err := rpc.Dial("tcp", fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort))
 	if err != nil {
 		return nil, fmt.Errorf("error connecting to the app server: %v", err)
 	}

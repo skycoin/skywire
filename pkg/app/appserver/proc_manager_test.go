@@ -8,8 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testHost = ""
+	testPort = uint(5505)
+)
+
 func TestProcManager_Exists(t *testing.T) {
-	srv := New(nil, "")
+	srv := New(nil, testHost, testPort)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
@@ -27,7 +32,7 @@ func TestProcManager_Exists(t *testing.T) {
 }
 
 func TestProcManager_Range(t *testing.T) {
-	srv := New(nil, "")
+	srv := New(nil, testHost, testPort)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
@@ -57,7 +62,7 @@ func TestProcManager_Range(t *testing.T) {
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	srv := New(nil, "")
+	srv := New(nil, testHost, testPort)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
