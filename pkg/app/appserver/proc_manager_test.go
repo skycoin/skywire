@@ -9,12 +9,11 @@ import (
 )
 
 const (
-	testHost = ""
-	testPort = uint(5505)
+	testAddr = ":5505"
 )
 
 func TestProcManager_Exists(t *testing.T) {
-	srv := New(nil, testHost, testPort)
+	srv := New(nil, testAddr)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
@@ -32,7 +31,7 @@ func TestProcManager_Exists(t *testing.T) {
 }
 
 func TestProcManager_Range(t *testing.T) {
-	srv := New(nil, testHost, testPort)
+	srv := New(nil, testAddr)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
@@ -62,7 +61,7 @@ func TestProcManager_Range(t *testing.T) {
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	srv := New(nil, testHost, testPort)
+	srv := New(nil, testAddr)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
 	m, ok := mIfc.(*procManager)
