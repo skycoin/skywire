@@ -105,11 +105,10 @@ func TestVisorStartClose(t *testing.T) {
 
 	var (
 		visorCfg = Config{
-			AppServerHost: "",
-			AppServerPort: 5505,
+			AppServerAddr: ":5505",
 		}
 		logger = logging.MustGetLogger("test")
-		server = appserver.New(logger, visorCfg.AppServerHost, visorCfg.AppServerPort)
+		server = appserver.New(logger, visorCfg.AppServerAddr)
 	)
 
 	visor := &Visor{
@@ -123,8 +122,7 @@ func TestVisorStartClose(t *testing.T) {
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:       apps["skychat"].App,
-		ServerHost: visorCfg.AppServerHost,
-		ServerPort: visorCfg.AppServerPort,
+		ServerAddr: ":5505",
 		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", apps["skychat"].App),
 	}
@@ -190,8 +188,7 @@ func TestVisorSpawnApp(t *testing.T) {
 	apps["skychat"] = app
 
 	visorCfg := Config{
-		AppServerHost: "",
-		AppServerPort: 5505,
+		AppServerAddr: ":5505",
 	}
 	visorCfg.Visor.StaticPubKey = pk
 
@@ -210,8 +207,7 @@ func TestVisorSpawnApp(t *testing.T) {
 
 	appCfg := appcommon.Config{
 		Name:       app.App,
-		ServerHost: visorCfg.AppServerHost,
-		ServerPort: visorCfg.AppServerPort,
+		ServerAddr: ":5505",
 		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", app.App),
 	}
@@ -247,8 +243,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 	}()
 
 	c := &Config{
-		AppServerHost: "",
-		AppServerPort: 5505,
+		AppServerAddr: ":5505",
 	}
 	c.Visor.StaticPubKey = pk
 
@@ -272,8 +267,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 
 		appCfg := appcommon.Config{
 			Name:       app.App,
-			ServerHost: c.AppServerHost,
-			ServerPort: c.AppServerPort,
+			ServerAddr: ":5505",
 			VisorPK:    c.Visor.StaticPubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}
@@ -312,8 +306,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
 			Name:       app.App,
-			ServerHost: c.AppServerHost,
-			ServerPort: c.AppServerPort,
+			ServerAddr: ":5505",
 			VisorPK:    c.Visor.StaticPubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}

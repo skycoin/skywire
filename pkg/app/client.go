@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/rpc"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -23,10 +22,8 @@ var (
 	ErrVisorPKNotProvided = errors.New("visor PK is not provided")
 	// ErrVisorPKInvalid is returned when the visor PK is invalid.
 	ErrVisorPKInvalid = errors.New("visor PK is invalid")
-	// ErrServerPortNotProvided is returned when the app server port is not provided.
-	ErrServerPortNotProvided = errors.New("server port is not provided")
-	// ErrServerPortInvalid is returned when the the app server port is invalid.
-	ErrServerPortInvalid = errors.New("server port is invalid")
+	// ErrServerAddrNotProvided is returned when app server address is not provided.
+	ErrServerAddrNotProvided = errors.New("server address is not provided")
 	// ErrAppKeyNotProvided is returned when the app key is not provided.
 	ErrAppKeyNotProvided = errors.New("app key is not provided")
 )
@@ -34,8 +31,7 @@ var (
 // ClientConfig is a configuration for `Client`.
 type ClientConfig struct {
 	VisorPK    cipher.PubKey
-	ServerHost string
-	ServerPort uint
+	ServerAddr string
 	AppKey     appcommon.Key
 }
 
@@ -46,16 +42,9 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 		return ClientConfig{}, ErrAppKeyNotProvided
 	}
 
-	serverHost := os.Getenv(appcommon.EnvServerHost)
-
-	serverPortStr := os.Getenv(appcommon.EnvServerPort)
-	if serverPortStr == "" {
-		return ClientConfig{}, ErrServerPortNotProvided
-	}
-
-	serverPort, err := strconv.ParseUint(serverPortStr, 10, 64)
-	if err != nil {
-		return ClientConfig{}, ErrServerPortInvalid
+	serverAddr := os.Getenv(appcommon.EnvServerAddr)
+	if serverAddr == "" {
+		return ClientConfig{}, ErrServerAddrNotProvided
 	}
 
 	visorPKStr := os.Getenv(appcommon.EnvVisorPK)
@@ -70,8 +59,7 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 
 	return ClientConfig{
 		VisorPK:    visorPK,
-		ServerHost: serverHost,
-		ServerPort: uint(serverPort),
+		ServerAddr: serverAddr,
 		AppKey:     appcommon.Key(appKey),
 	}, nil
 }
@@ -89,7 +77,7 @@ type Client struct {
 // - log: logger instance.
 // - config: client configuration.
 func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
-	rpcCl, err := rpc.Dial("tcp", fmt.Sprintf("%s:%d", config.ServerHost, config.ServerPort))
+	rpcCl, err := rpc.Dial("tcp", config.ServerAddr)
 	if err != nil {
 		return nil, fmt.Errorf("error connecting to the app server: %v", err)
 	}
