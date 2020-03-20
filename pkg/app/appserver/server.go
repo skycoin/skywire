@@ -16,19 +16,17 @@ import (
 type Server struct {
 	log    *logging.Logger
 	lis    net.Listener
-	host   string
-	port   uint
+	addr   string
 	rpcS   *rpc.Server
 	done   sync.WaitGroup
 	stopCh chan struct{}
 }
 
 // New constructs server.
-func New(log *logging.Logger, host string, port uint) *Server {
+func New(log *logging.Logger, addr string) *Server {
 	return &Server{
 		log:    log,
-		host:   host,
-		port:   port,
+		addr:   addr,
 		rpcS:   rpc.NewServer(),
 		stopCh: make(chan struct{}),
 	}
@@ -44,7 +42,7 @@ func (s *Server) Register(appKey appcommon.Key) error {
 
 // ListenAndServe starts listening for incoming app connections via unix socket.
 func (s *Server) ListenAndServe() error {
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.host, s.port))
+	l, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return err
 	}

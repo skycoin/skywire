@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -21,10 +20,7 @@ func TestClientConfigFromEnv(t *testing.T) {
 		err := os.Setenv(appcommon.EnvAppKey, "")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerHost, "")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerPort, "")
+		err = os.Setenv(appcommon.EnvServerAddr, "")
 		require.NoError(t, err)
 
 		err = os.Setenv(appcommon.EnvVisorPK, "")
@@ -38,18 +34,14 @@ func TestClientConfigFromEnv(t *testing.T) {
 
 		wantCfg := ClientConfig{
 			VisorPK:    visorPK,
-			ServerHost: "localhost",
-			ServerPort: 5505,
+			ServerAddr: "localhost:5505",
 			AppKey:     "key",
 		}
 
 		err := os.Setenv(appcommon.EnvAppKey, string(wantCfg.AppKey))
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerHost, wantCfg.ServerHost)
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerPort, strconv.FormatUint(uint64(wantCfg.ServerPort), 10))
+		err = os.Setenv(appcommon.EnvServerAddr, wantCfg.ServerAddr)
 		require.NoError(t, err)
 
 		err = os.Setenv(appcommon.EnvVisorPK, wantCfg.VisorPK.Hex())
@@ -67,33 +59,14 @@ func TestClientConfigFromEnv(t *testing.T) {
 		require.Equal(t, err, ErrAppKeyNotProvided)
 	})
 
-	t.Run("no app server port", func(t *testing.T) {
+	t.Run("no app server address", func(t *testing.T) {
 		resetEnv(t)
 
 		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerHost, "localhost")
-		require.NoError(t, err)
-
 		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrServerPortNotProvided)
-	})
-
-	t.Run("invalid app server port", func(t *testing.T) {
-		resetEnv(t)
-
-		err := os.Setenv(appcommon.EnvAppKey, "val")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerHost, "localhost")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerPort, "invalid")
-		require.NoError(t, err)
-
-		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrServerPortInvalid)
+		require.Equal(t, err, ErrServerAddrNotProvided)
 	})
 
 	t.Run("no visor PK", func(t *testing.T) {
@@ -102,10 +75,7 @@ func TestClientConfigFromEnv(t *testing.T) {
 		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerHost, "localhost")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerPort, "5505")
+		err = os.Setenv(appcommon.EnvServerAddr, "localhost:5505")
 		require.NoError(t, err)
 
 		_, err = ClientConfigFromEnv()
@@ -118,10 +88,7 @@ func TestClientConfigFromEnv(t *testing.T) {
 		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerHost, "localhost")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerPort, "5505")
+		err = os.Setenv(appcommon.EnvServerAddr, "localhost:5505")
 		require.NoError(t, err)
 
 		err = os.Setenv(appcommon.EnvVisorPK, "val")
