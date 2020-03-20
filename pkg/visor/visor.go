@@ -220,8 +220,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
-	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerHost,
-		visor.conf.AppServerPort)
+	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerAddr)
 
 	go func() {
 		if err := visor.appRPCServer.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
@@ -561,8 +560,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 	appCfg := appcommon.Config{
 		Name:       config.App,
-		ServerHost: visor.conf.AppServerHost,
-		ServerPort: visor.conf.AppServerPort,
+		ServerAddr: visor.conf.AppServerAddr,
 		VisorPK:    visor.conf.Visor.StaticPubKey.Hex(),
 		BinaryDir:  visor.appsPath,
 		WorkDir:    filepath.Join(visor.localPath, config.App),

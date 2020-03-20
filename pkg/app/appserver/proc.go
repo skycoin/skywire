@@ -41,15 +41,13 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, std
 
 	const (
 		appKeyEnvFormat     = appcommon.EnvAppKey + "=%s"
-		serverHostEnvFormat = appcommon.EnvServerHost + "=%s"
-		serverPortEnvFormat = appcommon.EnvServerPort + "=%d"
+		serverAddrEnvFormat = appcommon.EnvServerAddr + "=%s"
 		visorPKEnvFormat    = appcommon.EnvVisorPK + "=%s"
 	)
 
 	env := make([]string, 0, 4)
 	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
-	env = append(env, fmt.Sprintf(serverHostEnvFormat, c.ServerHost))
-	env = append(env, fmt.Sprintf(serverPortEnvFormat, c.ServerPort))
+	env = append(env, fmt.Sprintf(serverAddrEnvFormat, c.ServerAddr))
 	env = append(env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
 
 	cmd := exec.Command(binaryPath, args...) // nolint:gosec
