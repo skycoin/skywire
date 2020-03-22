@@ -10,7 +10,5 @@
 .DS_Store
 
 .idea/
+/vendor
 bin/
-
-dmsg-discovery
-dmsg-server
