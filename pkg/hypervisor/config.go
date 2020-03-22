@@ -55,6 +55,7 @@ type Config struct {
 	EnableTLS     bool          `json:"enable_tls"`     // Whether to enable TLS.
 	TLSCertFile   string        `json:"tls_cert_file"`  // TLS cert file location.
 	TLSKeyFile    string        `json:"tls_key_file"`   // TLS key file location.
+	WebDir        string        `json:"web_dir"`
 }
 
 func makeConfig(testenv bool) Config {
