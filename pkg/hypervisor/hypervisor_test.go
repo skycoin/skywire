@@ -44,6 +44,7 @@ const (
 
 func TestNewNode(t *testing.T) {
 	config := makeConfig(false)
+	config.EnableAuth = true
 
 	confDir, err := ioutil.TempDir(os.TempDir(), "SWHV")
 	require.NoError(t, err)
