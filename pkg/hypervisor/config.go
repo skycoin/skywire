@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	defaultWebDir           = "./static/skywire-manager-src/dist"
 	defaultHTTPAddr         = ":8080"
 	defaultCookieExpiration = 12 * time.Hour
 	hashKeyLen              = 64
@@ -114,6 +115,7 @@ func (c *Config) FillDefaults(testEnv bool) {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
 	c.HTTPAddr = defaultHTTPAddr
+	c.WebDir = defaultWebDir
 	c.Cookies.FillDefaults()
 }
 
