@@ -92,7 +92,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
   }
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) private data: BasicTerminalData,
+    @Inject(MAT_DIALOG_DATA) public data: BasicTerminalData,
     private renderer: Renderer2,
     private apiService: ApiService,
     private translate: TranslateService,
