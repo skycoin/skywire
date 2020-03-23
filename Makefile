@@ -29,14 +29,6 @@ ifneq (,$(findstring 64,$(GOARCH)))
     TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
 endif
 
-# TODO: Remove after https://github.com/etcd-io/bbolt/pull/201 is closed.
-DISABLE_CHECKPTR_FLAG:=-gcflags=all=-d=checkptr=0
-GO_VERSION:=$(shell go version)
-
-ifneq (,$(findstring go1.14,$(GO_VERSION)))
-    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(DISABLE_CHECKPTR_FLAG)
-endif
-
 TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
 TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
 
