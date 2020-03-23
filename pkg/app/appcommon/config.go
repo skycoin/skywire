@@ -1,5 +1,7 @@
 package appcommon
 
+const DefaultServerAddr = "localhost:5505"
+
 // Config defines configuration parameters for `Proc`.
 type Config struct {
 	Name       string `json:"name"`
