@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
@@ -147,7 +149,7 @@ func defaultConfig() *visor.Config {
 
 	conf.Interfaces.RPCAddress = "localhost:3435"
 
-	conf.AppServerAddr = ":5505"
+	conf.AppServerAddr = appcommon.DefaultServerAddr
 
 	return conf
 }
