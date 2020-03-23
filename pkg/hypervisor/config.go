@@ -15,6 +15,8 @@ import (
 )
 
 const (
+	defaultWebDir           = "./static/skywire-manager-src/dist"
+	defaultHTTPAddr         = ":8080"
 	defaultCookieExpiration = 12 * time.Hour
 	hashKeyLen              = 64
 	blockKeyLen             = 32
@@ -54,11 +56,11 @@ type Config struct {
 	EnableTLS     bool          `json:"enable_tls"`     // Whether to enable TLS.
 	TLSCertFile   string        `json:"tls_cert_file"`  // TLS cert file location.
 	TLSKeyFile    string        `json:"tls_key_file"`   // TLS key file location.
+	WebDir        string        `json:"web_dir"`
 }
 
 func makeConfig(testenv bool) Config {
 	var c Config
-	c.EnableAuth = true
 	c.FillDefaults(testenv)
 	return c
 }
@@ -94,14 +96,13 @@ func (c *Config) FillDefaults(testEnv bool) {
 		c.PK, c.SK = cipher.GenerateKeyPair()
 	}
 
-	if c.EnableAuth {
-		if len(c.Cookies.HashKey) != hashKeyLen {
-			c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
-		}
-		if len(c.Cookies.BlockKey) != blockKeyLen {
-			c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
-		}
+	if len(c.Cookies.HashKey) != hashKeyLen {
+		c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
 	}
+	if len(c.Cookies.BlockKey) != blockKeyLen {
+		c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
+	}
+
 	if c.DmsgDiscovery == "" {
 		if testEnv {
 			c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
@@ -112,6 +113,8 @@ func (c *Config) FillDefaults(testEnv bool) {
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
+	c.HTTPAddr = defaultHTTPAddr
+	c.WebDir = defaultWebDir
 	c.Cookies.FillDefaults()
 }
 
