@@ -34,7 +34,7 @@ func TestClientConfigFromEnv(t *testing.T) {
 
 		wantCfg := ClientConfig{
 			VisorPK:    visorPK,
-			ServerAddr: "localhost:5505",
+			ServerAddr: appcommon.DefaultServerAddr,
 			AppKey:     "key",
 		}
 
@@ -75,7 +75,7 @@ func TestClientConfigFromEnv(t *testing.T) {
 		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerAddr, "localhost:5505")
+		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
 		require.NoError(t, err)
 
 		_, err = ClientConfigFromEnv()
@@ -88,7 +88,7 @@ func TestClientConfigFromEnv(t *testing.T) {
 		err := os.Setenv(appcommon.EnvAppKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerAddr, "localhost:5505")
+		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
 		require.NoError(t, err)
 
 		err = os.Setenv(appcommon.EnvVisorPK, "val")

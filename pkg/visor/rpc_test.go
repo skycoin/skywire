@@ -148,7 +148,7 @@ func TestStartStopApp(t *testing.T) {
 	app := apps["foo"].App
 
 	visorCfg := Config{
-		AppServerAddr: ":5505",
+		AppServerAddr: appcommon.DefaultServerAddr,
 	}
 	visorCfg.Visor.StaticPubKey = pk
 
@@ -167,7 +167,7 @@ func TestStartStopApp(t *testing.T) {
 
 	appCfg1 := appcommon.Config{
 		Name:       app,
-		ServerAddr: ":5505",
+		ServerAddr: appcommon.DefaultServerAddr,
 		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", app),
 	}

@@ -20,14 +20,13 @@ import (
 )
 
 const (
-	testAddr   = ":5505"
 	sleepDelay = 500 * time.Millisecond
 )
 
 func TestServer_ListenAndServe(t *testing.T) {
 	l := logging.MustGetLogger("app_server")
 
-	s := appserver.New(l, testAddr)
+	s := appserver.New(l, appcommon.DefaultServerAddr)
 
 	appKey := appcommon.GenerateAppKey()
 
@@ -36,7 +35,7 @@ func TestServer_ListenAndServe(t *testing.T) {
 	visorPK, _ := cipher.GenerateKeyPair()
 	clientConfig := app.ClientConfig{
 		VisorPK:    visorPK,
-		ServerAddr: testAddr,
+		ServerAddr: appcommon.DefaultServerAddr,
 		AppKey:     appKey,
 	}
 

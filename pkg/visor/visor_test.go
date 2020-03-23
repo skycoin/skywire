@@ -105,7 +105,7 @@ func TestVisorStartClose(t *testing.T) {
 
 	var (
 		visorCfg = Config{
-			AppServerAddr: ":5505",
+			AppServerAddr: appcommon.DefaultServerAddr,
 		}
 		logger = logging.MustGetLogger("test")
 		server = appserver.New(logger, visorCfg.AppServerAddr)
@@ -122,7 +122,7 @@ func TestVisorStartClose(t *testing.T) {
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:       apps["skychat"].App,
-		ServerAddr: ":5505",
+		ServerAddr: appcommon.DefaultServerAddr,
 		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", apps["skychat"].App),
 	}
@@ -188,7 +188,7 @@ func TestVisorSpawnApp(t *testing.T) {
 	apps["skychat"] = app
 
 	visorCfg := Config{
-		AppServerAddr: ":5505",
+		AppServerAddr: appcommon.DefaultServerAddr,
 	}
 	visorCfg.Visor.StaticPubKey = pk
 
@@ -207,7 +207,7 @@ func TestVisorSpawnApp(t *testing.T) {
 
 	appCfg := appcommon.Config{
 		Name:       app.App,
-		ServerAddr: ":5505",
+		ServerAddr: appcommon.DefaultServerAddr,
 		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", app.App),
 	}
@@ -243,7 +243,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 	}()
 
 	c := &Config{
-		AppServerAddr: ":5505",
+		AppServerAddr: appcommon.DefaultServerAddr,
 	}
 	c.Visor.StaticPubKey = pk
 
@@ -267,7 +267,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 
 		appCfg := appcommon.Config{
 			Name:       app.App,
-			ServerAddr: ":5505",
+			ServerAddr: appcommon.DefaultServerAddr,
 			VisorPK:    c.Visor.StaticPubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}
@@ -306,7 +306,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
 			Name:       app.App,
-			ServerAddr: ":5505",
+			ServerAddr: appcommon.DefaultServerAddr,
 			VisorPK:    c.Visor.StaticPubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}
