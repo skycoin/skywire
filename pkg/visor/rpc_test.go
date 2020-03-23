@@ -147,7 +147,9 @@ func TestStartStopApp(t *testing.T) {
 	unknownApp := "bar"
 	app := apps["foo"].App
 
-	visorCfg := Config{}
+	visorCfg := Config{
+		AppServerAddr: appcommon.DefaultServerAddr,
+	}
 	visorCfg.Visor.StaticPubKey = pk
 
 	visor := &Visor{
@@ -164,10 +166,10 @@ func TestStartStopApp(t *testing.T) {
 	}()
 
 	appCfg1 := appcommon.Config{
-		Name:         app,
-		SockFilePath: visorCfg.AppServerSockFile,
-		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
-		WorkDir:      filepath.Join("", app),
+		Name:       app,
+		ServerAddr: appcommon.DefaultServerAddr,
+		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
+		WorkDir:    filepath.Join("", app),
 	}
 
 	appArgs1 := append([]string{filepath.Join(visor.dir(), app)}, apps["foo"].Args...)

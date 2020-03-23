@@ -72,7 +72,7 @@ type Config struct {
 
 	Interfaces InterfaceConfig `json:"interfaces"`
 
-	AppServerSockFile string `json:"app_server_sock_file"`
+	AppServerAddr string `json:"app_server_addr"`
 
 	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
 }
