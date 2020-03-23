@@ -136,56 +136,60 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
-	r.Route("/api", func(r chi.Router) {
-		r.Use(middleware.Timeout(httpTimeout))
+	r.Route("/", func(r chi.Router) {
+		r.Route("/api", func(r chi.Router) {
+			r.Use(middleware.Timeout(httpTimeout))
 
-		r.Get("/ping", hv.getPong())
+			r.Get("/ping", hv.getPong())
 
-		if hv.c.EnableAuth {
+			if hv.c.EnableAuth {
+				r.Group(func(r chi.Router) {
+					r.Post("/create-account", hv.users.CreateAccount())
+					r.Post("/login", hv.users.Login())
+					r.Post("/logout", hv.users.Logout())
+				})
+			}
+
 			r.Group(func(r chi.Router) {
-				r.Post("/create-account", hv.users.CreateAccount())
-				r.Post("/login", hv.users.Login())
-				r.Post("/logout", hv.users.Logout())
+				if hv.c.EnableAuth {
+					r.Use(hv.users.Authorize)
+				}
+				r.Get("/user", hv.users.UserInfo())
+				r.Post("/change-password", hv.users.ChangePassword())
+				r.Get("/visors", hv.getVisors())
+				r.Get("/visors/{pk}", hv.getVisor())
+				r.Get("/visors/{pk}/health", hv.getHealth())
+				r.Get("/visors/{pk}/uptime", hv.getUptime())
+				r.Get("/visors/{pk}/apps", hv.getApps())
+				r.Get("/visors/{pk}/apps/{app}", hv.getApp())
+				r.Put("/visors/{pk}/apps/{app}", hv.putApp())
+				r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
+				r.Get("/visors/{pk}/transport-types", hv.getTransportTypes())
+				r.Get("/visors/{pk}/transports", hv.getTransports())
+				r.Post("/visors/{pk}/transports", hv.postTransport())
+				r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
+				r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
+				r.Get("/visors/{pk}/routes", hv.getRoutes())
+				r.Post("/visors/{pk}/routes", hv.postRoute())
+				r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
+				r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
+				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
+				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
+				r.Post("/visors/{pk}/restart", hv.restart())
+				r.Post("/visors/{pk}/exec", hv.exec())
+				r.Post("/visors/{pk}/update", hv.update())
+				r.Get("/visors/{pk}/update/available", hv.updateAvailable())
 			})
-		}
+		})
 
-		r.Group(func(r chi.Router) {
+		r.Route("/pty", func(r chi.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
-			r.Get("/user", hv.users.UserInfo())
-			r.Post("/change-password", hv.users.ChangePassword())
-			r.Get("/visors", hv.getVisors())
-			r.Get("/visors/{pk}", hv.getVisor())
-			r.Get("/visors/{pk}/health", hv.getHealth())
-			r.Get("/visors/{pk}/uptime", hv.getUptime())
-			r.Get("/visors/{pk}/apps", hv.getApps())
-			r.Get("/visors/{pk}/apps/{app}", hv.getApp())
-			r.Put("/visors/{pk}/apps/{app}", hv.putApp())
-			r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
-			r.Get("/visors/{pk}/transport-types", hv.getTransportTypes())
-			r.Get("/visors/{pk}/transports", hv.getTransports())
-			r.Post("/visors/{pk}/transports", hv.postTransport())
-			r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
-			r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
-			r.Get("/visors/{pk}/routes", hv.getRoutes())
-			r.Post("/visors/{pk}/routes", hv.postRoute())
-			r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
-			r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
-			r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
-			r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
-			r.Post("/visors/{pk}/restart", hv.restart())
-			r.Post("/visors/{pk}/exec", hv.exec())
-			r.Post("/visors/{pk}/update", hv.update())
-			r.Get("/visors/{pk}/update/available", hv.updateAvailable())
+			r.Get("/{pk}", hv.getPty())
 		})
-	})
 
-	r.Route("/pty", func(r chi.Router) {
-		if hv.c.EnableAuth {
-			r.Use(hv.users.Authorize)
-		}
-		r.Get("/{pk}", hv.getPty())
+		r.Handle("/*", http.FileServer(http.Dir(hv.c.WebDir)))
 	})
 
 	r.ServeHTTP(w, req)
