@@ -96,14 +96,13 @@ func (c *Config) FillDefaults(testEnv bool) {
 		c.PK, c.SK = cipher.GenerateKeyPair()
 	}
 
-	if c.EnableAuth {
-		if len(c.Cookies.HashKey) != hashKeyLen {
-			c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
-		}
-		if len(c.Cookies.BlockKey) != blockKeyLen {
-			c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
-		}
+	if len(c.Cookies.HashKey) != hashKeyLen {
+		c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
 	}
+	if len(c.Cookies.BlockKey) != blockKeyLen {
+		c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
+	}
+
 	if c.DmsgDiscovery == "" {
 		if testEnv {
 			c.DmsgDiscovery = skyenv.TestDmsgDiscAddr
