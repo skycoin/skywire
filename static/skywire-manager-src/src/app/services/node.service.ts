@@ -135,20 +135,20 @@ export class NodeService {
    * Restarts a node.
    */
   reboot(nodeKey: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/restart`).pipe();
+    return this.apiService.post(`visors/${nodeKey}/restart`);
   }
 
   /**
    * Checks if there are updates available for a node.
    */
   checkUpdate(nodeKey: string): Observable<any> {
-    return this.apiService.get(`visors/${nodeKey}/update/available`).pipe();
+    return this.apiService.get(`visors/${nodeKey}/update/available`);
   }
 
   /**
    * Updates a node.
    */
   update(nodeKey: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/update`).pipe();
+    return this.apiService.post(`visors/${nodeKey}/update`);
   }
 }
