@@ -97,10 +97,10 @@ func (rc *rpcClient) Health() (*HealthInfo, error) {
 	return hi, err
 }
 
-// Uptime calls Uptime
+// UptimeTracker calls UptimeTracker
 func (rc *rpcClient) Uptime() (float64, error) {
 	var out float64
-	err := rc.Call("Uptime", &struct{}{}, &out)
+	err := rc.Call("UptimeTracker", &struct{}{}, &out)
 	return out, err
 }
 
@@ -410,7 +410,7 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	return hi, nil
 }
 
-// Uptime implements RPCClient
+// UptimeTracker implements RPCClient
 func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
