@@ -157,7 +157,7 @@ type CookieConfig struct {
 func (c *CookieConfig) FillDefaults() {
 	c.ExpiresDuration = defaultCookieExpiration
 	c.Path = "/"
-	c.Secure = true
+	c.Secure = false
 	c.HTTPOnly = true
 	c.SameSite = http.SameSiteDefaultMode
 }
