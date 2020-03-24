@@ -10,7 +10,6 @@ require (
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
-	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
@@ -19,7 +18,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
-	go.etcd.io/bbolt v1.3.3
+	go.etcd.io/bbolt v1.3.4
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
 )
 

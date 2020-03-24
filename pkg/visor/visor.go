@@ -220,7 +220,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
-	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.SockFile())
+	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerAddr)
 
 	go func() {
 		if err := visor.appRPCServer.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
@@ -490,14 +490,6 @@ func (visor *Visor) Close() (err error) {
 		visor.logger.WithError(err).Error("RPC server closed with error.")
 	}
 
-	if err := UnlinkSocketFiles(visor.conf.SockFile()); err != nil {
-		visor.logger.WithError(err).WithField("file_name", visor.conf.SockFile()).
-			Error("Failed to unlink socket file.")
-	} else {
-		visor.logger.WithField("file_name", visor.conf.SockFile()).
-			Debug("Socket file removed successfully.")
-	}
-
 	return err
 }
 
@@ -567,11 +559,11 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	appCfg := appcommon.Config{
-		Name:         config.App,
-		SockFilePath: visor.conf.SockFile(),
-		VisorPK:      visor.conf.Keys().StaticPubKey.Hex(),
-		BinaryDir:    visor.appsPath,
-		WorkDir:      filepath.Join(visor.localPath, config.App),
+		Name:       config.App,
+		ServerAddr: visor.conf.AppServerAddr,
+		VisorPK:    visor.conf.Keys().StaticPubKey.Hex(),
+		BinaryDir:  visor.appsPath,
+		WorkDir:    filepath.Join(visor.localPath, config.App),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {
