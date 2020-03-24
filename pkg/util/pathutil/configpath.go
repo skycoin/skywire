@@ -142,6 +142,12 @@ func FindConfigPath(args []string, argsIndex int, env string, defaults ConfigPat
 	return ""
 }
 
+// Exists checks if file or directory specified with `path` exists.
+func Exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // WriteJSONConfig is used by config file generators.
 // 'output' specifies the path to save generated config files.
 // 'replace' is true if replacing files is allowed.
@@ -151,7 +157,7 @@ func WriteJSONConfig(conf interface{}, output string, replace bool) {
 		log.WithError(err).Fatal("unexpected error, report to dev")
 	}
 
-	if _, err := os.Stat(output); !replace && err == nil {
+	if !replace && Exists(output) {
 		log.Fatalf("file %s already exists, stopping as 'replace,r' flag is not set", output)
 	}
 
