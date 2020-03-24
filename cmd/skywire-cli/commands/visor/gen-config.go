@@ -1,10 +1,17 @@
 package visor
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
@@ -22,6 +29,7 @@ func init() {
 var (
 	output        string
 	replace       bool
+	retainKeys    bool
 	configLocType = pathutil.WorkingDirLoc
 	testenv       bool
 )
@@ -29,6 +37,7 @@ var (
 func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
+	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
 	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
 }
@@ -58,8 +67,30 @@ var genConfigCmd = &cobra.Command{
 		default:
 			logger.Fatalln("invalid config type:", configLocType)
 		}
+		if replace && retainKeys && pathutil.Exists(output) {
+			if err := fillInOldKeys(output, conf); err != nil {
+				logger.WithError(err).Fatalln("Error retaining old keys")
+			}
+		}
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
+}
+
+func fillInOldKeys(confPath string, conf *visor.Config) error {
+	oldConfBytes, err := ioutil.ReadFile(path.Clean(confPath))
+	if err != nil {
+		return fmt.Errorf("error reading old config file: %w", err)
+	}
+
+	var oldConf visor.Config
+	if err := json.Unmarshal(oldConfBytes, &oldConf); err != nil {
+		return fmt.Errorf("invalid old configuration file: %w", err)
+	}
+
+	conf.Visor.StaticPubKey = oldConf.Visor.StaticPubKey
+	conf.Visor.StaticSecKey = oldConf.Visor.StaticSecKey
+
+	return nil
 }
 
 func homeConfig() *visor.Config {
@@ -126,7 +157,7 @@ func defaultConfig() *visor.Config {
 		RPCAddress: "localhost:3435",
 	}
 
-	conf.AppServerSockFile = visor.DefaultAppSockFile(conf.Keys().StaticPubKey)
+	conf.AppServerAddr = appcommon.DefaultServerAddr
 	conf.RestartCheckDelay = restart.DefaultCheckDelay.String()
 
 	return conf

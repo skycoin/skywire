@@ -22,17 +22,17 @@ var (
 	ErrVisorPKNotProvided = errors.New("visor PK is not provided")
 	// ErrVisorPKInvalid is returned when the visor PK is invalid.
 	ErrVisorPKInvalid = errors.New("visor PK is invalid")
-	// ErrSockFileNotProvided is returned when the sock file is not provided.
-	ErrSockFileNotProvided = errors.New("sock file is not provided")
+	// ErrServerAddrNotProvided is returned when app server address is not provided.
+	ErrServerAddrNotProvided = errors.New("server address is not provided")
 	// ErrAppKeyNotProvided is returned when the app key is not provided.
 	ErrAppKeyNotProvided = errors.New("app key is not provided")
 )
 
 // ClientConfig is a configuration for `Client`.
 type ClientConfig struct {
-	VisorPK  cipher.PubKey
-	SockFile string
-	AppKey   appcommon.Key
+	VisorPK    cipher.PubKey
+	ServerAddr string
+	AppKey     appcommon.Key
 }
 
 // ClientConfigFromEnv creates client config from the ENV args.
@@ -42,9 +42,9 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 		return ClientConfig{}, ErrAppKeyNotProvided
 	}
 
-	sockFile := os.Getenv(appcommon.EnvSockFile)
-	if sockFile == "" {
-		return ClientConfig{}, ErrSockFileNotProvided
+	serverAddr := os.Getenv(appcommon.EnvServerAddr)
+	if serverAddr == "" {
+		return ClientConfig{}, ErrServerAddrNotProvided
 	}
 
 	visorPKStr := os.Getenv(appcommon.EnvVisorPK)
@@ -58,9 +58,9 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 	}
 
 	return ClientConfig{
-		VisorPK:  visorPK,
-		SockFile: sockFile,
-		AppKey:   appcommon.Key(appKey),
+		VisorPK:    visorPK,
+		ServerAddr: serverAddr,
+		AppKey:     appcommon.Key(appKey),
 	}, nil
 }
 
@@ -77,7 +77,7 @@ type Client struct {
 // - log: logger instance.
 // - config: client configuration.
 func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
-	rpcCl, err := rpc.Dial("unix", config.SockFile)
+	rpcCl, err := rpc.Dial("tcp", config.ServerAddr)
 	if err != nil {
 		return nil, fmt.Errorf("error connecting to the app server: %v", err)
 	}
