@@ -13,6 +13,7 @@ import (
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
@@ -72,7 +73,7 @@ func (c *Config) Keys() *KeyPair {
 }
 
 // DmsgPtyHost extracts DmsgPtyConfig and returns *dmsgpty.Host based on the config.
-// If DmsgPtyConfig is not found, DefaultDmsgPtyConfig is used.
+// If DmsgPtyConfig is not found, DefaultDmsgPtyConfig() is used.
 func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	if c.DmsgPty == nil {
 		c.DmsgPty = DefaultDmsgPtyConfig()
@@ -101,7 +102,7 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 }
 
 // TransportDiscovery extracts TransportConfig and returns transport.DiscoveryClient based on the config.
-// If TransportConfig is not found, DefaultTransportConfig is used.
+// If TransportConfig is not found, DefaultTransportConfig() is used.
 func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
 	if c.Transport == nil {
 		c.Transport = DefaultTransportConfig()
@@ -111,7 +112,7 @@ func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
 }
 
 // TransportLogStore extracts LogStoreConfig and returns transport.LogStore based on the config.
-// If LogStoreConfig is not found, DefaultLogStoreConfig is used.
+// If LogStoreConfig is not found, DefaultLogStoreConfig() is used.
 func (c *Config) TransportLogStore() (transport.LogStore, error) {
 	if c.Transport == nil {
 		c.Transport = DefaultTransportConfig()
@@ -127,7 +128,7 @@ func (c *Config) TransportLogStore() (transport.LogStore, error) {
 }
 
 // RoutingConfig extracts and returns RoutingConfig from Visor Config.
-// If it is not found, it sets DefaultRoutingConfig as RoutingConfig and returns it.
+// If it is not found, it sets DefaultRoutingConfig() as RoutingConfig and returns it.
 func (c *Config) RoutingConfig() *RoutingConfig {
 	if c.Routing == nil {
 		c.Routing = DefaultRoutingConfig()
@@ -168,14 +169,14 @@ func (c *Config) LocalDir() (string, error) {
 	return ensureDir(c.LocalPath)
 }
 
-// SockFile extracts and returns AppServerSockFile from Visor Config.
-// If it is not found, it sets default value as AppServerSockFile and returns it.
-func (c *Config) SockFile() string {
-	if c.AppServerSockFile == "" {
-		c.AppServerSockFile = DefaultAppSockFile(c.Keys().StaticPubKey)
+// AppServerAddress extracts and returns AppServerAddr from Visor Config.
+// If it is not found, it sets appcommon.DefaultServerAddr as AppServerAddr and returns it.
+func (c *Config) AppServerAddress() string {
+	if c.AppServerAddr == "" {
+		c.AppServerAddr = appcommon.DefaultServerAddr
 	}
 
-	return c.AppServerSockFile
+	return c.AppServerAddr
 }
 
 func ensureDir(path string) (string, error) {
@@ -341,11 +342,6 @@ func DefaultInterfaceConfig() *InterfaceConfig {
 	return &InterfaceConfig{
 		RPCAddress: "localhost:3435",
 	}
-}
-
-// DefaultAppSockFile returns default app sock file.
-func DefaultAppSockFile(pk cipher.PubKey) string {
-	return "/tmp/visor_" + pk.Hex() + ".sock"
 }
 
 func getLocalIPAddress() (string, error) {
