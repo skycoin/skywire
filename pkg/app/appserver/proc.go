@@ -40,14 +40,14 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, std
 	binaryPath := getBinaryPath(c.BinaryDir, c.Name)
 
 	const (
-		appKeyEnvFormat   = appcommon.EnvAppKey + "=%s"
-		sockFileEnvFormat = appcommon.EnvSockFile + "=%s"
-		visorPKEnvFormat  = appcommon.EnvVisorPK + "=%s"
+		appKeyEnvFormat     = appcommon.EnvAppKey + "=%s"
+		serverAddrEnvFormat = appcommon.EnvServerAddr + "=%s"
+		visorPKEnvFormat    = appcommon.EnvVisorPK + "=%s"
 	)
 
-	env := make([]string, 0, 3)
+	env := make([]string, 0, 4)
 	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
-	env = append(env, fmt.Sprintf(sockFileEnvFormat, c.SockFilePath))
+	env = append(env, fmt.Sprintf(serverAddrEnvFormat, c.ServerAddr))
 	env = append(env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
 
 	cmd := exec.Command(binaryPath, args...) // nolint:gosec
