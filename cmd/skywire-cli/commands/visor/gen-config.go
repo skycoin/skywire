@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -123,7 +124,8 @@ func defaultConfig() *visor.Config {
 
 	conf.Interfaces.RPCAddress = "localhost:3435"
 
-	conf.AppServerSockFile = "/tmp/visor_" + conf.Keys().StaticPubKey.Hex() + ".sock"
+	conf.AppServerSockFile = visor.DefaultAppSockFile(conf.Keys().StaticPubKey)
+	conf.RestartCheckDelay = restart.DefaultCheckDelay.String()
 
 	return conf
 }
