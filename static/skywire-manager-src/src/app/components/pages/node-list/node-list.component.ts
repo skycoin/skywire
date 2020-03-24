@@ -15,6 +15,7 @@ import { SidenavService } from 'src/app/services/sidenav.service';
 import { SelectColumnComponent, SelectedColumn } from '../../layout/select-column/select-column.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
+import { processServiceError } from 'src/app/utils/errors';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -234,14 +235,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
             // Automatically refresh the data after some time.
             this.refresh(this.storageService.getRefreshTime() * 1000);
           });
-        }, error => {
+        }, err => {
           this.ngZone.run(() => {
+            err = processServiceError(err);
+
             // Show an error msg if it has not be done before during the current attempt to obtain the data.
             if (!this.errorsUpdating) {
               if (this.loading) {
-                this.snackbarService.showError('common.loading-error', null, true);
+                this.snackbarService.showError('common.loading-error', null, true, err);
               } else {
-                this.snackbarService.showError('nodes.error-load', null, true);
+                this.snackbarService.showError('nodes.error-load', null, true, err);
               }
             }
 
