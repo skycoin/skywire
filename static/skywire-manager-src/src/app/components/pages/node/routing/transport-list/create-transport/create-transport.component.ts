@@ -125,10 +125,12 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
         this.types = types;
         this.form.get('type').setValue(types[0]);
       },
-      () => {
+      err => {
+        err = processServiceError(err);
+
         // Show an error msg if it has not be done before during the current attempt to obtain the data.
         if (this.shouldShowError) {
-          this.snackbarService.showError('common.loading-error', null, true);
+          this.snackbarService.showError('common.loading-error', null, true, err);
           this.shouldShowError = false;
         }
 
