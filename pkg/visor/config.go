@@ -28,7 +28,7 @@ const (
 	DefaultAppsPath = "./apps"
 	// DefaultLogLevel is used for default config generation and if it is not set in config.
 	DefaultLogLevel = "info"
-	// DefaultSTCPPort ...
+	// DefaultSTCPPort ???
 	// TODO: Define above or remove below.
 	DefaultSTCPPort = 7777
 )
@@ -165,6 +165,16 @@ func (c *Config) LocalDir() (string, error) {
 	}
 
 	return ensureDir(c.LocalPath)
+}
+
+// SockFile extracts and returns AppServerSockFile from Visor Config.
+// If it is not found, it sets default value as AppServerSockFile and returns it.
+func (c *Config) SockFile() string {
+	if c.AppServerSockFile == "" {
+		c.AppServerSockFile = DefaultAppSockFile(c.Keys().StaticPubKey)
+	}
+
+	return c.AppServerSockFile
 }
 
 func ensureDir(path string) (string, error) {
@@ -330,6 +340,11 @@ func DefaultInterfaceConfig() *InterfaceConfig {
 	return &InterfaceConfig{
 		RPCAddress: "localhost:3435",
 	}
+}
+
+// DefaultAppSockFile returns default app sock file.
+func DefaultAppSockFile(pk cipher.PubKey) string {
+	return "/tmp/visor_" + pk.Hex() + ".sock"
 }
 
 func getLocalIPAddress() (string, error) {
