@@ -193,13 +193,12 @@ func (cfg *runCfg) runVisor() *runCfg {
 
 	time.Sleep(startDelay)
 
+	sockFiles := []string{cfg.conf.SockFile()}
 	if cfg.conf.DmsgPty != nil {
-		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile, cfg.conf.DmsgPty.CLIAddr)
-	} else {
-		err = visor.UnlinkSocketFiles(cfg.conf.AppServerSockFile)
+		sockFiles = append(sockFiles, cfg.conf.DmsgPty.CLIAddr)
 	}
 
-	if err != nil {
+	if err = visor.UnlinkSocketFiles(sockFiles...); err != nil {
 		cfg.logger.Fatal("failed to unlink socket files: ", err)
 	}
 
