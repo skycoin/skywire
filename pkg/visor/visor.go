@@ -117,6 +117,11 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	visor.Logger = logger
 	visor.logger = visor.Logger.PackageLogger("skywire")
 
+	pk := cfg.Keys().StaticPubKey
+	sk := cfg.Keys().StaticSecKey
+
+	logger.WithField("PK", pk).Infof("Starting visor")
+
 	restartCheckDelay, err := time.ParseDuration(cfg.RestartCheckDelay)
 	if err == nil {
 		restartCtx.SetCheckDelay(restartCheckDelay)
@@ -125,9 +130,6 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	restartCtx.RegisterLogger(visor.logger)
 
 	visor.restartCtx = restartCtx
-
-	pk := cfg.Keys().StaticPubKey
-	sk := cfg.Keys().StaticSecKey
 
 	visor.n = snet.New(snet.Config{
 		PubKey: pk,
