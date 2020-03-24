@@ -1,5 +1,6 @@
 package appcommon
 
+// DefaultServerAddr is a default address to run the app server at.
 const DefaultServerAddr = "localhost:5505"
 
 // Config defines configuration parameters for `Proc`.
