@@ -2,13 +2,10 @@ package visor
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"path"
 	"path/filepath"
-	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
