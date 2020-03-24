@@ -104,9 +104,11 @@ func TestVisorStartClose(t *testing.T) {
 	}()
 
 	var (
-		visorCfg = Config{}
-		logger   = logging.MustGetLogger("test")
-		server   = appserver.New(logger, visorCfg.AppServerSockFile)
+		visorCfg = Config{
+			Visor: NewKeyPair(),
+		}
+		logger = logging.MustGetLogger("test")
+		server = appserver.New(logger, visorCfg.AppServerSockFile)
 	)
 
 	visor := &Visor{
@@ -137,13 +139,7 @@ func TestVisorStartClose(t *testing.T) {
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock(), nil)
 	go dmsgC.Serve()
 
-	netConf := snet.Config{
-		PubKey:          cipher.PubKey{},
-		SecKey:          cipher.SecKey{},
-		TpNetworks:      nil,
-		DmsgDiscAddr:    "",
-		DmsgMinSessions: 0,
-	}
+	var netConf snet.Config
 
 	network := snet.NewRaw(netConf, dmsgC, nil)
 	tmConf := &transport.ManagerConfig{
@@ -166,7 +162,6 @@ func TestVisorStartClose(t *testing.T) {
 }
 
 func TestVisorSpawnApp(t *testing.T) {
-	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -185,8 +180,12 @@ func TestVisorSpawnApp(t *testing.T) {
 	apps := make(map[string]AppConfig)
 	apps["skychat"] = app
 
-	visorCfg := Config{}
-	visorCfg.Visor.StaticPubKey = pk
+	pk, _ := cipher.GenerateKeyPair()
+	visorCfg := Config{
+		Visor: &KeyPair{
+			StaticPubKey: pk,
+		},
+	}
 
 	visor := &Visor{
 		router:   r,
@@ -204,7 +203,7 @@ func TestVisorSpawnApp(t *testing.T) {
 	appCfg := appcommon.Config{
 		Name:         app.App,
 		SockFilePath: visorCfg.AppServerSockFile,
-		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
+		VisorPK:      visorCfg.Keys().StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", app.App),
 	}
 
@@ -229,7 +228,6 @@ func TestVisorSpawnApp(t *testing.T) {
 }
 
 func TestVisorSpawnAppValidations(t *testing.T) {
-	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -238,8 +236,12 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	c := &Config{}
-	c.Visor.StaticPubKey = pk
+	pk, _ := cipher.GenerateKeyPair()
+	c := &Config{
+		Visor: &KeyPair{
+			StaticPubKey: pk,
+		},
+	}
 
 	visor := &Visor{
 		router: r,
@@ -262,7 +264,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appCfg := appcommon.Config{
 			Name:         app.App,
 			SockFilePath: c.AppServerSockFile,
-			VisorPK:      c.Visor.StaticPubKey.Hex(),
+			VisorPK:      c.Keys().StaticPubKey.Hex(),
 			WorkDir:      filepath.Join("", app.App),
 		}
 

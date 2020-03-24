@@ -126,18 +126,14 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	visor.restartCtx = restartCtx
 
-	pk := cfg.Visor.StaticPubKey
-	sk := cfg.Visor.StaticSecKey
+	pk := cfg.Keys().StaticPubKey
+	sk := cfg.Keys().StaticSecKey
 
-	fmt.Println("min sessions:", cfg.Dmsg.SessionsCount)
 	visor.n = snet.New(snet.Config{
-		PubKey:          pk,
-		SecKey:          sk,
-		TpNetworks:      []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
-		DmsgDiscAddr:    cfg.Dmsg.Discovery,
-		DmsgMinSessions: cfg.Dmsg.SessionsCount,
-		STCPLocalAddr:   cfg.STCP.LocalAddr,
-		STCPTable:       cfg.STCP.PubKeyTable,
+		PubKey: pk,
+		SecKey: sk,
+		Dmsg:   cfg.Dmsg,
+		STCP:   cfg.STCP,
 	})
 	if err := visor.n.Init(ctx); err != nil {
 		return nil, fmt.Errorf("failed to init network: %v", err)
@@ -157,10 +153,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	if err != nil {
 		return nil, fmt.Errorf("invalid transport discovery config: %s", err)
 	}
+
 	logStore, err := cfg.TransportLogStore()
 	if err != nil {
 		return nil, fmt.Errorf("invalid TransportLogStore: %s", err)
 	}
+
 	tmConfig := &transport.ManagerConfig{
 		PubKey:          pk,
 		SecKey:          sk,
@@ -168,6 +166,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
+
 	visor.tm, err = transport.NewManager(visor.n, tmConfig)
 	if err != nil {
 		return nil, fmt.Errorf("transport manager: %s", err)
@@ -178,8 +177,8 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		PubKey:           pk,
 		SecKey:           sk,
 		TransportManager: visor.tm,
-		RouteFinder:      rfclient.NewHTTP(cfg.Routing.RouteFinder, time.Duration(cfg.Routing.RouteFinderTimeout)),
-		SetupNodes:       cfg.Routing.SetupNodes,
+		RouteFinder:      rfclient.NewHTTP(cfg.RoutingConfig().RouteFinder, time.Duration(cfg.RoutingConfig().RouteFinderTimeout)),
+		SetupNodes:       cfg.RoutingConfig().SetupNodes,
 	}
 
 	r, err := router.New(visor.n, rConfig)
@@ -207,11 +206,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		visor.Logger.SetLevel(lvl)
 	}
 
-	if cfg.Interfaces.RPCAddress != "" {
+	if cfg.Interfaces != nil {
 		l, err := net.Listen("tcp", cfg.Interfaces.RPCAddress)
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
 		}
+
 		visor.cliLis = l
 	}
 
@@ -386,7 +386,7 @@ func (visor *Visor) startRPC(ctx context.Context) {
 }
 
 func (visor *Visor) dir() string {
-	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey.String())
+	return pathutil.VisorDir(visor.conf.Keys().StaticPubKey.String())
 }
 
 func (visor *Visor) pidFile() (*os.File, error) {
@@ -569,7 +569,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appCfg := appcommon.Config{
 		Name:         config.App,
 		SockFilePath: visor.conf.AppServerSockFile,
-		VisorPK:      visor.conf.Visor.StaticPubKey.Hex(),
+		VisorPK:      visor.conf.Keys().StaticPubKey.Hex(),
 		BinaryDir:    visor.appsPath,
 		WorkDir:      filepath.Join(visor.localPath, config.App),
 	}
