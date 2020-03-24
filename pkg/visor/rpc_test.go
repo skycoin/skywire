@@ -132,7 +132,6 @@ func TestStartStopApp(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, os.RemoveAll(tempDir)) }()
 
-	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -155,10 +154,11 @@ func TestStartStopApp(t *testing.T) {
 	unknownApp := "bar"
 	app := apps["foo"].App
 
+	keyPair := NewKeyPair()
+
 	visorCfg := Config{
-		Visor: &KeyPair{
-			StaticPubKey: pk,
-		},
+		Visor:             keyPair,
+		AppServerSockFile: DefaultAppSockFile(keyPair.StaticPubKey),
 	}
 
 	visor := &Visor{
@@ -176,8 +176,8 @@ func TestStartStopApp(t *testing.T) {
 
 	appCfg1 := appcommon.Config{
 		Name:         app,
-		SockFilePath: visorCfg.AppServerSockFile,
-		VisorPK:      visorCfg.Visor.StaticPubKey.Hex(),
+		SockFilePath: visorCfg.SockFile(),
+		VisorPK:      visorCfg.Keys().StaticPubKey.Hex(),
 		WorkDir:      filepath.Join("", app),
 	}
 
