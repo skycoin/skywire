@@ -5,12 +5,10 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
@@ -89,17 +87,20 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		}
 
 		if hasStcp {
-			stcpClient = stcp.NewClient(logging.MustGetLogger("stcp"), pairs.PK, pairs.SK, table)
+			stcpClient = stcp.NewClient(pairs.PK, pairs.SK, table)
 		}
 
 		port := 7033
 		n := snet.NewRaw(
 			snet.Config{
-				PubKey:          pairs.PK,
-				SecKey:          pairs.SK,
-				TpNetworks:      networks,
-				DmsgMinSessions: 1,
-				STCPLocalAddr:   "127.0.0.1:" + strconv.Itoa(port+i),
+				PubKey: pairs.PK,
+				SecKey: pairs.SK,
+				Dmsg: &snet.DmsgConfig{
+					SessionsCount: 1,
+				},
+				STCP: &snet.STCPConfig{
+					LocalAddr: "127.0.0.1:" + strconv.Itoa(port+i),
+				},
 			},
 			dmsgClient,
 			stcpClient,
