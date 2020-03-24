@@ -241,8 +241,20 @@ func (s *UserManager) CreateAccount() http.HandlerFunc {
 // UserInfo returns a HandlerFunc for obtaining user info.
 func (s *UserManager) UserInfo() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := r.Context().Value(userKey).(User)
-		session := r.Context().Value(sessionKey).(Session)
+		var (
+			user    User
+			session Session
+		)
+
+		userIfc := r.Context().Value(userKey)
+		if userIfc != nil {
+			user = userIfc.(User)
+		}
+
+		sessionIfc := r.Context().Value(sessionKey)
+		if sessionIfc != nil {
+			session = sessionIfc.(Session)
+		}
 
 		var otherSessions []Session
 
