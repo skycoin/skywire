@@ -1,11 +1,8 @@
 package visor
 
 import (
-	"errors"
 	"fmt"
-	"net"
 	"path/filepath"
-	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -80,25 +77,17 @@ func localConfig() *visor.Config {
 
 func defaultConfig() *visor.Config {
 	conf := &visor.Config{}
-	conf.Version = "1.0"
 
-	pk, sk := cipher.GenerateKeyPair()
-	conf.Visor.StaticPubKey = pk
-	conf.Visor.StaticSecKey = sk
+	conf.Visor = visor.NewKeyPair()
 
-	lIPaddr, err := getLocalIPAddress()
+	stcp, err := visor.DefaultSTCPConfig()
 	if err != nil {
 		logger.Warn(err)
-	}
-
-	conf.STCP.LocalAddr = lIPaddr
-
-	if testenv {
-		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	} else {
-		conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+		conf.STCP = stcp
 	}
-	conf.Dmsg.SessionsCount = 1
+
+	conf.Dmsg = visor.DefaultDmsgConfig()
 
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf
@@ -110,44 +99,31 @@ func defaultConfig() *visor.Config {
 		defaultSkysocksConfig(""),
 		defaultSkysocksClientConfig(),
 	}
+
 	conf.TrustedVisors = []cipher.PubKey{}
 
+	conf.Transport = visor.DefaultTransportConfig()
+	conf.Routing = visor.DefaultRoutingConfig()
+
 	if testenv {
+		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 		conf.Transport.Discovery = skyenv.TestTpDiscAddr
-	} else {
-		conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
-	}
-
-	conf.Transport.LogStore.Type = "file"
-	conf.Transport.LogStore.Location = "./skywire/transport_logs"
-
-	if testenv {
 		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-	} else {
-		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
 	}
-
-	var sPK cipher.PubKey
-	if err := sPK.UnmarshalText([]byte(skyenv.DefaultSetupPK)); err != nil {
-		logger.WithError(err).Warnf("Failed to unmarshal default setup-node public key %s", skyenv.DefaultSetupPK)
-	}
-	conf.Routing.SetupNodes = []cipher.PubKey{sPK}
-	conf.Routing.RouteFinderTimeout = visor.Duration(10 * time.Second)
 
 	conf.Hypervisors = []visor.HypervisorConfig{}
 
-	conf.Uptime.Tracker = "uptime-tracker.skywire.skycoin.com"
+	conf.UptimeTracker = visor.DefaultUptimeTrackerConfig()
 
-	conf.AppsPath = "./apps"
-	conf.LocalPath = "./local"
+	conf.AppsPath = visor.DefaultAppsPath
+	conf.LocalPath = visor.DefaultLocalPath
 
-	conf.LogLevel = "info"
-
-	conf.ShutdownTimeout = visor.Duration(10 * time.Second)
+	conf.LogLevel = visor.DefaultLogLevel
+	conf.ShutdownTimeout = visor.DefaultTimeout
 
 	conf.Interfaces.RPCAddress = "localhost:3435"
 
-	conf.AppServerSockFile = "/tmp/visor_" + pk.Hex() + ".sock"
+	conf.AppServerSockFile = "/tmp/visor_" + conf.Keys().StaticPubKey.Hex() + ".sock"
 
 	return conf
 }
@@ -189,20 +165,4 @@ func defaultSkysocksClientConfig() visor.AppConfig {
 		AutoStart: false,
 		Port:      routing.Port(skyenv.SkysocksClientPort),
 	}
-}
-
-func getLocalIPAddress() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-
-	for _, a := range addrs {
-		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String() + ":7777", nil
-			}
-		}
-	}
-	return "", errors.New("could not find local IP address")
 }

@@ -1,12 +1,27 @@
 package skyenv
 
+import (
+	"github.com/SkycoinProject/dmsg/cipher"
+)
+
 // Constants for default services.
 const (
-	DefaultTpDiscAddr      = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr    = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultRouteFinderAddr = "http://routefinder.skywire.skycoin.com"
-	DefaultSetupPK         = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
+	DefaultTpDiscAddr        = "http://transport.discovery.skywire.skycoin.com"
+	DefaultDmsgDiscAddr      = "http://dmsg.discovery.skywire.skycoin.com"
+	DefaultRouteFinderAddr   = "http://routefinder.skywire.skycoin.com"
+	DefaultUptimeTrackerAddr = "http://uptime-tracker.skywire.skycoin.com"
+	DefaultSetupPK           = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
 )
+
+// MustDefaultSetupPK returns DefaultSetupPK as cipher.PubKey. It panics if unmarshaling fails.
+func MustDefaultSetupPK() cipher.PubKey {
+	var sPK cipher.PubKey
+	if err := sPK.UnmarshalText([]byte(DefaultSetupPK)); err != nil {
+		panic(err)
+	}
+
+	return sPK
+}
 
 // Constants for testing deployment.
 const (
