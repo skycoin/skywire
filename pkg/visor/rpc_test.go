@@ -25,14 +25,17 @@ import (
 )
 
 func TestHealth(t *testing.T) {
-	sPK, sSK := cipher.GenerateKeyPair()
+	c := &Config{
+		Visor: NewKeyPair(),
+		Transport: &TransportConfig{
+			Discovery: "foo",
+		},
+		Routing: &RoutingConfig{
+			RouteFinder: "foo",
+		},
+	}
 
-	c := &Config{}
-	c.Visor.StaticPubKey = sPK
-	c.Visor.StaticSecKey = sSK
-	c.Transport.Discovery = "foo"
-	c.Routing.SetupNodes = []cipher.PubKey{sPK}
-	c.Routing.RouteFinder = "foo"
+	c.Routing.SetupNodes = []cipher.PubKey{c.Visor.StaticPubKey}
 
 	t.Run("Report all the services as available", func(t *testing.T) {
 		rpc := &RPC{visor: &Visor{conf: c}, log: logrus.New()}
@@ -46,7 +49,11 @@ func TestHealth(t *testing.T) {
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
-		rpc := &RPC{visor: &Visor{conf: &Config{}}, log: logrus.New()}
+		conf := &Config{
+			Routing: &RoutingConfig{},
+		}
+
+		rpc := &RPC{visor: &Visor{conf: conf}, log: logrus.New()}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -59,6 +66,7 @@ func TestHealth(t *testing.T) {
 func TestUptime(t *testing.T) {
 	rpc := &RPC{visor: &Visor{startedAt: time.Now()}, log: logrus.New()}
 	time.Sleep(time.Second)
+
 	var res float64
 	err := rpc.Uptime(nil, &res)
 	require.NoError(t, err)
@@ -147,8 +155,11 @@ func TestStartStopApp(t *testing.T) {
 	unknownApp := "bar"
 	app := apps["foo"].App
 
-	visorCfg := Config{}
-	visorCfg.Visor.StaticPubKey = pk
+	visorCfg := Config{
+		Visor: &KeyPair{
+			StaticPubKey: pk,
+		},
+	}
 
 	visor := &Visor{
 		router:   r,
