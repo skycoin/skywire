@@ -13,11 +13,10 @@
     - [Run `skywire-visor`](#run-skywire-visor)
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `hypervisor`](#run-hypervisor)
-  - [App programming API](#app-programming-api)
+  - [Apps](#Apps)
+  - [Transports](#Transports)
   - [Creating a GitHub release](#creating-a-github-release)
     - [How to create a GitHub release](#how-to-create-a-github-release)
-
-**NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
 ## Build and run
 
@@ -39,20 +38,7 @@ $ make build # installs all dependencies, build binaries and skywire apps
 $ make install
 ```
 
-**Note: Environment variable OPTS**
-
-Build can be customized with environment variable `OPTS` with default value `GO111MODULE=on`
-
-E.g.
-
-```bash
-$ export OPTS="GO111MODULE=on GOOS=darwin"
-$ make
-# or
-$ OPTS="GSO111MODULE=on GOOS=linux GOARCH=arm" make
-```
-
-### Configure
+### Configure Skywire Visor
 
 The configuration file provides the configuration for `skywire-visor`. It is a text file in JSON format.
 
@@ -63,6 +49,8 @@ $ skywire-cli visor gen-config
 ```
 
 Additional options are displayed when `skywire-cli visor gen-config -h` is run.
+
+If you are trying to test features from the develop branch, you should use the `-t ` flag when generating config files for either `skywire-visor` or `hypervisor`. 
 
 We will cover certain fields of the configuration file below.
 
@@ -130,6 +118,29 @@ Then you can start a hypervisor with:
 
 ```bash
 $ hypervisor 
+```
+
+You can open up the hypervisor UI on `localhost:8080`. 
+
+### Apps
+
+After `skywire-visor` is up and running with default environment, default apps are run with the configuration specified in `skywire-config.json`. Refer to the following for usage of the apps:
+
+- [Skychat](/cmd/apps/skychat)
+- [Skysocks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
+
+### Transports
+
+In order for a local Skywire App to communicate with an App running on a remote Skywire visor, a transport to that remote Skywire visor needs to be established.
+
+Transports can be established via the `skywire-cli`.
+
+```bash
+# Establish transport to `0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881`.
+$ skywire-cli visor add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebeaa3a21d89e881
+
+# List established transports.
+$ skywire-cli visor ls-tp
 ```
 
 ## Creating a GitHub release
