@@ -122,7 +122,9 @@ func defaultConfig() *visor.Config {
 	conf.LogLevel = visor.DefaultLogLevel
 	conf.ShutdownTimeout = visor.DefaultTimeout
 
-	conf.Interfaces.RPCAddress = "localhost:3435"
+	conf.Interfaces = &visor.InterfaceConfig{
+		RPCAddress: "localhost:3435",
+	}
 
 	conf.AppServerSockFile = visor.DefaultAppSockFile(conf.Keys().StaticPubKey)
 	conf.RestartCheckDelay = restart.DefaultCheckDelay.String()
