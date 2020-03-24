@@ -177,19 +177,28 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
         };
 
         // Ask for confirmation.
-        confirmationDialog.componentInstance.showAsking(newConfirmationData);
+        setTimeout(() => {
+          confirmationDialog.componentInstance.showAsking(newConfirmationData);
+        });
       } else if (response) {
         // Inform that there are no updates available.
         const newText = this.translateService.instant('actions.update.no-update', { version: response.current_version });
-        confirmationDialog.componentInstance.showDone(null, newText);
+        setTimeout(() => {
+          confirmationDialog.componentInstance.showDone(null, newText);
+        });
       } else {
         // Inform that there was an error.
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+        setTimeout(() => {
+          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+        });
       }
     }, (err: OperationError) => {
       err = processServiceError(err);
 
-      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      // Must wait because the loading state is activated after a frame.
+      setTimeout(() => {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      });
     });
 
     // React if the user confirm the update.

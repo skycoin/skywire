@@ -7,6 +7,7 @@ import { RouteService } from '../../../../../../services/route.service';
 import { NodeComponent } from '../../../node.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
+import { processServiceError } from 'src/app/utils/errors';
 
 // Objects representing the structure of the response returned by the hypervisor.
 
@@ -117,10 +118,12 @@ export class RouteDetailsComponent implements OnInit, OnDestroy {
         this.snackbarService.closeCurrentIfTemporaryError();
         this.routeRule = rule;
       },
-      () => {
+      err => {
+        err = processServiceError(err);
+
         // Show an error msg if it has not be done before during the current attempt to obtain the data.
         if (this.shouldShowError) {
-          this.snackbarService.showError('common.loading-error', null, true);
+          this.snackbarService.showError('common.loading-error', null, true, err);
           this.shouldShowError = false;
         }
 
