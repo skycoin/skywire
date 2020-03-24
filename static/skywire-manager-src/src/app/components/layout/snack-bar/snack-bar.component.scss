@@ -29,6 +29,10 @@
   margin-right: 10px;
   font-size: $font-size-base;
   margin-top: 2px;
+
+  .second-line {
+    font-size: $font-size-smaller;
+  }
 }
 
 .close-button {
@@ -38,4 +42,9 @@
   &:hover {
     opacity: 1;
   }
+}
+
+mat-icon {
+  position: relative;
+  top: 3px;
 }

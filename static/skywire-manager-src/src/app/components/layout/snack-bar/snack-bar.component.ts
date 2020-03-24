@@ -28,9 +28,17 @@ export interface SnackbarConfig {
    */
   text: string;
   /**
-   * Object to be passed to the "translate pipe", to fill the params of the text.
+   * Object to be passed to the "translate" pipe, to fill the params of the text.
    */
   textTranslationParams: any;
+  /**
+   * Text to show on the small lower line. Can be a variable for the "translate" pipe.
+   */
+  smallText: string;
+  /**
+   * Object to be passed to the "translate" pipe for smallText, to fill the params of the text.
+   */
+  smallTextTranslationParams: any;
   /**
    * Icon to show.
    */
