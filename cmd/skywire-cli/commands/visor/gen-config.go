@@ -84,8 +84,8 @@ func fillInOldKeys(confPath string, conf *visor.Config) error {
 		return fmt.Errorf("invalid old configuration file: %w", err)
 	}
 
-	conf.Visor.StaticPubKey = oldConf.Visor.StaticPubKey
-	conf.Visor.StaticSecKey = oldConf.Visor.StaticSecKey
+	conf.KeyPair.StaticPubKey = oldConf.KeyPair.StaticPubKey
+	conf.KeyPair.StaticSecKey = oldConf.KeyPair.StaticSecKey
 
 	return nil
 }
@@ -107,7 +107,7 @@ func localConfig() *visor.Config {
 func defaultConfig() *visor.Config {
 	conf := &visor.Config{}
 
-	conf.Visor = visor.NewKeyPair()
+	conf.KeyPair = visor.NewKeyPair()
 
 	stcp, err := visor.DefaultSTCPConfig()
 	if err != nil {

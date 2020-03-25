@@ -37,7 +37,7 @@ const (
 // Config defines configuration parameters for Visor.
 type Config struct {
 	Version       string               `json:"version"`
-	Visor         *KeyPair             `json:"visor"`
+	KeyPair       *KeyPair             `json:"visor"`
 	STCP          *snet.STCPConfig     `json:"stcp"`
 	Dmsg          *snet.DmsgConfig     `json:"dmsg"`
 	DmsgPty       *DmsgPtyConfig       `json:"dmsg_pty,omitempty"`
@@ -66,11 +66,11 @@ type Config struct {
 // Keys returns visor public and secret keys extracted from config.
 // If they are not found, new keys are generated.
 func (c *Config) Keys() *KeyPair {
-	if c.Visor == nil || c.Visor.StaticPubKey.Null() || c.Visor.StaticSecKey.Null() {
-		c.Visor = NewKeyPair()
+	if c.KeyPair == nil || c.KeyPair.StaticPubKey.Null() || c.KeyPair.StaticSecKey.Null() {
+		c.KeyPair = NewKeyPair()
 	}
 
-	return c.Visor
+	return c.KeyPair
 }
 
 // DmsgPtyHost extracts DmsgPtyConfig and returns *dmsgpty.Host based on the config.
