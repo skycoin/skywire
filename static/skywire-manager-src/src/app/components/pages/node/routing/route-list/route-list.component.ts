@@ -13,6 +13,8 @@ import { ConfirmationComponent } from '../../../../layout/confirmation/confirmat
 import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectOptionComponent, SelectableOption } from 'src/app/components/layout/select-option/select-option.component';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
+import { OperationError } from 'src/app/utils/operation-error';
+import { processServiceError } from 'src/app/utils/errors';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -208,8 +210,9 @@ export class RouteListComponent implements OnDestroy {
         // Make the parent page reload the data.
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('routes.deleted');
-      }, () => {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'routes.error-deleting');
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       }));
     });
   }
@@ -344,9 +347,11 @@ export class RouteListComponent implements OnDestroy {
       } else {
         this.deleteRecursively(ids, confirmationDialog);
       }
-    }, () => {
+    }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
-      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'routes.error-deleting');
+
+      err = processServiceError(err);
+      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
     }));
   }
 }
