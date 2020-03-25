@@ -14,10 +14,6 @@ export enum OperationErrorTypes {
    */
   NoConnection = 'NoConnection',
   /**
-   * The user is not authorized. Normally means that the session is not valid.
-   */
-  Unauthorized = 'Unauthorized',
-  /**
    * The error is not in the list of known errors that require special treatment. This does not
    * mean the error is rare or specially bad. Just showing the error msg should be enough.
    */
