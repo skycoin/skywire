@@ -101,6 +101,15 @@
       </td>
       <td class="actions">
         <button
+          (click)="config(app)"
+          mat-icon-button
+          [matTooltip]="'apps.settings' | translate"
+          class="big-action-button hard-grey-button-background"
+          *ngIf="app.name === 'skysocks'"
+        >
+          <mat-icon [inline]="true">settings</mat-icon>
+        </button>
+        <button
           (click)="viewLogs(app)"
           mat-icon-button
           [matTooltip]="'apps.view-logs' | translate"
