@@ -140,12 +140,9 @@ type Client struct {
 }
 
 // NewClient creates a net Client.
-func NewClient(log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, t PKTable) *Client {
-	if log == nil {
-		log = logging.MustGetLogger(Type)
-	}
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, t PKTable) *Client {
 	return &Client{
-		log:  log,
+		log:  logging.MustGetLogger(Type),
 		lPK:  pk,
 		lSK:  sk,
 		t:    t,
@@ -153,6 +150,11 @@ func NewClient(log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, t PKTabl
 		lMap: make(map[uint16]*Listener),
 		done: make(chan struct{}),
 	}
+}
+
+// SetLogger sets a logger for Client.
+func (c *Client) SetLogger(log *logging.Logger) {
+	c.log = log
 }
 
 // Serve serves the listening portion of the client.
