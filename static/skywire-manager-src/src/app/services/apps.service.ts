@@ -28,9 +28,14 @@ export class AppsService {
    * Changes the autostart setting of an app.
    */
   changeAppAutostart(nodeKey: string, appName: string, autostart: boolean) {
-    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`,
-      { autostart: autostart }
-    );
+    return this.changeAppSettings(nodeKey, appName, { autostart: autostart });
+  }
+
+  /**
+   * Changes the autostart setting of an app.
+   */
+  changeAppSettings(nodeKey: string, appName: string, settings: object) {
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`, settings);
   }
 
   /**
