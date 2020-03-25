@@ -255,9 +255,18 @@
       "autostart-disabled": "Autostart disabled",
       "autostart-enabled": "Autostart enabled"
     },
+    "skysocks-settings": {
+      "title": "Skysocks Settings",
+      "new-password": "New password (Leave empty to remove the password)",
+      "save": "Save",
+      "remove-passowrd-confirmation": "You left the password field empty. Are you sure you want to remove the password?",
+      "change-passowrd-confirmation": "Are you sure you want to change the password?",
+      "changes-made": "The changes have been made."
+    },
     "stop-app": "Stop",
     "start-app": "Start",
     "view-logs": "View logs",
+    "settings": "Settings",
     "error": "An error has occured and it was not possible to perform the operation.",
     "stop-confirmation": "Are you sure you want to stop the app?",
     "stop-selected-confirmation": "Are you sure you want to stop the selected apps?",
