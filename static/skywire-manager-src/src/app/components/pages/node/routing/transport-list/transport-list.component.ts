@@ -14,6 +14,8 @@ import { TransportDetailsComponent } from './transport-details/transport-details
 import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
+import { processServiceError } from 'src/app/utils/errors';
+import { OperationError } from 'src/app/utils/operation-error';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -219,8 +221,9 @@ export class TransportListComponent implements OnDestroy {
         // Make the parent page reload the data.
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.deleted');
-      }, () => {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'transports.error-deleting');
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       }));
     });
   }
@@ -362,9 +365,11 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.deleteRecursively(ids, confirmationDialog);
       }
-    }, () => {
+    }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
-      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'transports.error-deleting');
+
+      err = processServiceError(err);
+      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
     }));
   }
 }
