@@ -103,27 +103,26 @@ func TestVisorStartClose(t *testing.T) {
 		require.NoError(t, os.RemoveAll("skychat"))
 	}()
 
-	var (
-		visorCfg = Config{
-			AppServerAddr: appcommon.DefaultServerAddr,
-		}
-		logger = logging.MustGetLogger("test")
-		server = appserver.New(logger, visorCfg.AppServerAddr)
-	)
+	visorCfg := Config{
+		KeyPair:       NewKeyPair(),
+		AppServerAddr: appcommon.DefaultServerAddr,
+	}
+
+	logger := logging.MustGetLogger("test")
 
 	visor := &Visor{
 		conf:         &visorCfg,
 		router:       r,
 		appsConf:     apps,
 		logger:       logger,
-		appRPCServer: server,
+		appRPCServer: appserver.New(logger, visorCfg.AppServerAddr),
 	}
 
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
 		Name:       apps["skychat"].App,
 		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
+		VisorPK:    visorCfg.Keys().StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", apps["skychat"].App),
 	}
 	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
@@ -139,13 +138,7 @@ func TestVisorStartClose(t *testing.T) {
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock(), nil)
 	go dmsgC.Serve()
 
-	netConf := snet.Config{
-		PubKey:          cipher.PubKey{},
-		SecKey:          cipher.SecKey{},
-		TpNetworks:      nil,
-		DmsgDiscAddr:    "",
-		DmsgMinSessions: 0,
-	}
+	var netConf snet.Config
 
 	network := snet.NewRaw(netConf, dmsgC, nil)
 	tmConf := &transport.ManagerConfig{
@@ -168,7 +161,6 @@ func TestVisorStartClose(t *testing.T) {
 }
 
 func TestVisorSpawnApp(t *testing.T) {
-	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -188,9 +180,9 @@ func TestVisorSpawnApp(t *testing.T) {
 	apps["skychat"] = app
 
 	visorCfg := Config{
+		KeyPair:       NewKeyPair(),
 		AppServerAddr: appcommon.DefaultServerAddr,
 	}
-	visorCfg.Visor.StaticPubKey = pk
 
 	visor := &Visor{
 		router:   r,
@@ -208,7 +200,7 @@ func TestVisorSpawnApp(t *testing.T) {
 	appCfg := appcommon.Config{
 		Name:       app.App,
 		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
+		VisorPK:    visorCfg.Keys().StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", app.App),
 	}
 
@@ -233,7 +225,6 @@ func TestVisorSpawnApp(t *testing.T) {
 }
 
 func TestVisorSpawnAppValidations(t *testing.T) {
-	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -243,9 +234,9 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 	}()
 
 	c := &Config{
+		KeyPair:       NewKeyPair(),
 		AppServerAddr: appcommon.DefaultServerAddr,
 	}
-	c.Visor.StaticPubKey = pk
 
 	visor := &Visor{
 		router: r,
@@ -268,7 +259,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appCfg := appcommon.Config{
 			Name:       app.App,
 			ServerAddr: appcommon.DefaultServerAddr,
-			VisorPK:    c.Visor.StaticPubKey.Hex(),
+			VisorPK:    c.Keys().StaticPubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}
 
@@ -307,7 +298,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appCfg := appcommon.Config{
 			Name:       app.App,
 			ServerAddr: appcommon.DefaultServerAddr,
-			VisorPK:    c.Visor.StaticPubKey.Hex(),
+			VisorPK:    c.Keys().StaticPubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)

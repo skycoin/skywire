@@ -143,7 +143,7 @@ func (_m *MockRPCClient) Read(connID uint16, b []byte) (int, error) {
 	return r0, r1
 }
 
-// SetDeadline provides a mock function with given fields: id, t
+// SetDeadline provides a mock function with given fields: connID, d
 func (_m *MockRPCClient) SetDeadline(connID uint16, d time.Time) error {
 	ret := _m.Called(connID, d)
 
@@ -157,7 +157,7 @@ func (_m *MockRPCClient) SetDeadline(connID uint16, d time.Time) error {
 	return r0
 }
 
-// SetReadDeadline provides a mock function with given fields: id, t
+// SetReadDeadline provides a mock function with given fields: connID, d
 func (_m *MockRPCClient) SetReadDeadline(connID uint16, d time.Time) error {
 	ret := _m.Called(connID, d)
 
@@ -171,7 +171,7 @@ func (_m *MockRPCClient) SetReadDeadline(connID uint16, d time.Time) error {
 	return r0
 }
 
-// SetWriteDeadline provides a mock function with given fields: id, t
+// SetWriteDeadline provides a mock function with given fields: connID, d
 func (_m *MockRPCClient) SetWriteDeadline(connID uint16, d time.Time) error {
 	ret := _m.Called(connID, d)
 
