@@ -37,13 +37,13 @@ const (
 // Config defines configuration parameters for Visor.
 type Config struct {
 	Version       string               `json:"version"`
-	KeyPair       *KeyPair             `json:"visor"` // TODO: Rename it in JSON at some point.
+	KeyPair       *KeyPair             `json:"key_pair"`
 	STCP          *snet.STCPConfig     `json:"stcp"`
 	Dmsg          *snet.DmsgConfig     `json:"dmsg"`
 	DmsgPty       *DmsgPtyConfig       `json:"dmsg_pty,omitempty"`
 	Transport     *TransportConfig     `json:"transport"`
 	Routing       *RoutingConfig       `json:"routing"`
-	UptimeTracker *UptimeTrackerConfig `json:"uptime"` // TODO: Rename it in JSON at some point.
+	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker"`
 
 	Apps []AppConfig `json:"apps"`
 
@@ -309,7 +309,7 @@ func DefaultRoutingConfig() *RoutingConfig {
 
 // UptimeTrackerConfig configures uptime tracker.
 type UptimeTrackerConfig struct {
-	Addr string `json:"tracker"` // TODO: Rename it in JSON at some point.
+	Addr string `json:"addr"`
 }
 
 // DefaultUptimeTrackerConfig returns default uptime tracker config.
