@@ -26,7 +26,7 @@ import (
 
 func TestHealth(t *testing.T) {
 	c := &Config{
-		Visor: NewKeyPair(),
+		KeyPair: NewKeyPair(),
 		Transport: &TransportConfig{
 			Discovery: "foo",
 		},
@@ -35,7 +35,7 @@ func TestHealth(t *testing.T) {
 		},
 	}
 
-	c.Routing.SetupNodes = []cipher.PubKey{c.Visor.StaticPubKey}
+	c.Routing.SetupNodes = []cipher.PubKey{c.KeyPair.StaticPubKey}
 
 	t.Run("Report all the services as available", func(t *testing.T) {
 		rpc := &RPC{visor: &Visor{conf: c}, log: logrus.New()}
@@ -157,7 +157,7 @@ func TestStartStopApp(t *testing.T) {
 	keyPair := NewKeyPair()
 
 	visorCfg := Config{
-		Visor:         keyPair,
+		KeyPair:       keyPair,
 		AppServerAddr: appcommon.DefaultServerAddr,
 	}
 
