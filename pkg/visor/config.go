@@ -37,7 +37,7 @@ const (
 // Config defines configuration parameters for Visor.
 type Config struct {
 	Version       string               `json:"version"`
-	KeyPair       *KeyPair             `json:"visor"`
+	KeyPair       *KeyPair             `json:"visor"` // TODO: Rename it in JSON at some point.
 	STCP          *snet.STCPConfig     `json:"stcp"`
 	Dmsg          *snet.DmsgConfig     `json:"dmsg"`
 	DmsgPty       *DmsgPtyConfig       `json:"dmsg_pty,omitempty"`
