@@ -104,7 +104,7 @@ func TestVisorStartClose(t *testing.T) {
 	}()
 
 	visorCfg := Config{
-		Visor:         NewKeyPair(),
+		KeyPair:       NewKeyPair(),
 		AppServerAddr: appcommon.DefaultServerAddr,
 	}
 
@@ -180,7 +180,7 @@ func TestVisorSpawnApp(t *testing.T) {
 	apps["skychat"] = app
 
 	visorCfg := Config{
-		Visor:         NewKeyPair(),
+		KeyPair:       NewKeyPair(),
 		AppServerAddr: appcommon.DefaultServerAddr,
 	}
 
@@ -234,7 +234,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 	}()
 
 	c := &Config{
-		Visor:         NewKeyPair(),
+		KeyPair:       NewKeyPair(),
 		AppServerAddr: appcommon.DefaultServerAddr,
 	}
 
