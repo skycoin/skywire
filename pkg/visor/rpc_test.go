@@ -25,14 +25,17 @@ import (
 )
 
 func TestHealth(t *testing.T) {
-	sPK, sSK := cipher.GenerateKeyPair()
+	c := &Config{
+		KeyPair: NewKeyPair(),
+		Transport: &TransportConfig{
+			Discovery: "foo",
+		},
+		Routing: &RoutingConfig{
+			RouteFinder: "foo",
+		},
+	}
 
-	c := &Config{}
-	c.Visor.StaticPubKey = sPK
-	c.Visor.StaticSecKey = sSK
-	c.Transport.Discovery = "foo"
-	c.Routing.SetupNodes = []cipher.PubKey{sPK}
-	c.Routing.RouteFinder = "foo"
+	c.Routing.SetupNodes = []cipher.PubKey{c.KeyPair.StaticPubKey}
 
 	t.Run("Report all the services as available", func(t *testing.T) {
 		rpc := &RPC{visor: &Visor{conf: c}, log: logrus.New()}
@@ -46,7 +49,11 @@ func TestHealth(t *testing.T) {
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
-		rpc := &RPC{visor: &Visor{conf: &Config{}}, log: logrus.New()}
+		conf := &Config{
+			Routing: &RoutingConfig{},
+		}
+
+		rpc := &RPC{visor: &Visor{conf: conf}, log: logrus.New()}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -59,6 +66,7 @@ func TestHealth(t *testing.T) {
 func TestUptime(t *testing.T) {
 	rpc := &RPC{visor: &Visor{startedAt: time.Now()}, log: logrus.New()}
 	time.Sleep(time.Second)
+
 	var res float64
 	err := rpc.Uptime(nil, &res)
 	require.NoError(t, err)
@@ -124,7 +132,6 @@ func TestStartStopApp(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, os.RemoveAll(tempDir)) }()
 
-	pk, _ := cipher.GenerateKeyPair()
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -147,10 +154,12 @@ func TestStartStopApp(t *testing.T) {
 	unknownApp := "bar"
 	app := apps["foo"].App
 
+	keyPair := NewKeyPair()
+
 	visorCfg := Config{
+		KeyPair:       keyPair,
 		AppServerAddr: appcommon.DefaultServerAddr,
 	}
-	visorCfg.Visor.StaticPubKey = pk
 
 	visor := &Visor{
 		router:   r,
@@ -168,7 +177,7 @@ func TestStartStopApp(t *testing.T) {
 	appCfg1 := appcommon.Config{
 		Name:       app,
 		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Visor.StaticPubKey.Hex(),
+		VisorPK:    visorCfg.Keys().StaticPubKey.Hex(),
 		WorkDir:    filepath.Join("", app),
 	}
 
