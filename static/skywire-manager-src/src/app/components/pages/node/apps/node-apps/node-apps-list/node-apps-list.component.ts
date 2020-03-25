@@ -13,6 +13,7 @@ import { ConfirmationComponent } from '../../../../../layout/confirmation/confir
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
+import { SkysocksSettingsComponent } from '../skysocks-settings/skysocks-settings.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -307,6 +308,15 @@ export class NodeAppsListComponent implements OnDestroy {
    */
   viewLogs(app: Application): void {
     LogComponent.openDialog(this.dialog, app);
+  }
+
+  /**
+   * Shows the appropriate modal window for configuring the app.
+   */
+  config(app: Application): void {
+    if (app.name === 'skysocks') {
+      SkysocksSettingsComponent.openDialog(this.dialog, app.name);
+    }
   }
 
   /**
