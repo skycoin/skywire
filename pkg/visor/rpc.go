@@ -81,11 +81,11 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 		out.TransportDiscovery = http.StatusNotFound
 	}
 
-	if r.visor.conf.Routing.RouteFinder == "" {
+	if r.visor.conf.RoutingConfig().RouteFinder == "" {
 		out.RouteFinder = http.StatusNotFound
 	}
 
-	if len(r.visor.conf.Routing.SetupNodes) == 0 {
+	if len(r.visor.conf.RoutingConfig().SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
 	}
 
@@ -98,7 +98,7 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 
 // Uptime returns for how long the visor has been running in seconds
 func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
-	defer rpcutil.LogCall(r.log, "Uptime", nil)(out, &err)
+	defer rpcutil.LogCall(r.log, "UptimeTracker", nil)(out, &err)
 
 	*out = time.Since(r.visor.startedAt).Seconds()
 	return nil
@@ -184,7 +184,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.visor.conf.Visor.StaticPubKey,
+		PubKey:          r.visor.conf.Keys().StaticPubKey,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.Apps(),
