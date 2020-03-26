@@ -4,10 +4,8 @@ package visor
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -52,8 +50,6 @@ const (
 var (
 	// ErrUnknownApp represents lookup error for App related calls.
 	ErrUnknownApp = errors.New("unknown app")
-	// ErrNoConfigPath is returned on attempt to read/write config when visor contains no config path.
-	ErrNoConfigPath = errors.New("no config path")
 )
 
 const (
@@ -84,7 +80,6 @@ type Visor struct {
 	Logger *logging.MasterLogger
 	logger *logging.Logger
 
-	confPath  *string
 	appsPath  string
 	localPath string
 	appsConf  map[string]AppConfig
@@ -106,19 +101,19 @@ type Visor struct {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Context, cfgPath *string) (*Visor, error) {
+func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Context) (*Visor, error) {
 	ctx := context.Background()
 
 	visor := &Visor{
-		conf:     cfg,
-		confPath: cfgPath,
+		conf: cfg,
 	}
 
 	visor.Logger = logger
 	visor.logger = visor.Logger.PackageLogger("skywire")
+	visor.conf.log = visor.logger
 
-	pk := cfg.Keys().StaticPubKey
-	sk := cfg.Keys().StaticSecKey
+	pk := cfg.Keys().PubKey
+	sk := cfg.Keys().SecKey
 
 	logger.WithField("PK", pk).Infof("Starting visor")
 
@@ -134,7 +129,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	visor.n = snet.New(snet.Config{
 		PubKey: pk,
 		SecKey: sk,
-		Dmsg:   cfg.Dmsg,
+		Dmsg:   cfg.DmsgConfig(),
 		STCP:   cfg.STCP,
 	})
 	if err := visor.n.Init(ctx); err != nil {
@@ -388,7 +383,7 @@ func (visor *Visor) startRPC(ctx context.Context) {
 }
 
 func (visor *Visor) dir() string {
-	return pathutil.VisorDir(visor.conf.Keys().StaticPubKey.String())
+	return pathutil.VisorDir(visor.conf.Keys().PubKey.String())
 }
 
 func (visor *Visor) pidFile() (*os.File, error) {
@@ -563,7 +558,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appCfg := appcommon.Config{
 		Name:       config.App,
 		ServerAddr: visor.conf.AppServerAddr,
-		VisorPK:    visor.conf.Keys().StaticPubKey.Hex(),
+		VisorPK:    visor.conf.Keys().PubKey.Hex(),
 		BinaryDir:  visor.appsPath,
 		WorkDir:    filepath.Join(visor.localPath, config.App),
 	}
@@ -702,36 +697,9 @@ func (visor *Visor) setAutoStart(appName string, autoStart bool) error {
 	appConf.AutoStart = autoStart
 	visor.appsConf[appName] = appConf
 
-	return visor.updateConfigAppAutoStart(appName, autoStart)
-}
-
-func (visor *Visor) updateConfigAppAutoStart(appName string, autoStart bool) error {
-	if visor.confPath == nil {
-		return nil
-	}
-
-	config, err := visor.readConfig()
-	if err != nil {
-		return err
-	}
-
 	visor.logger.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
 
-	changed := false
-
-	for i := range config.Apps {
-		if config.Apps[i].App == appName {
-			config.Apps[i].AutoStart = autoStart
-			changed = true
-			break
-		}
-	}
-
-	if !changed {
-		return nil
-	}
-
-	return visor.writeConfig(config)
+	return visor.conf.updateAppAutoStart(appName, autoStart)
 }
 
 func (visor *Visor) setSocksPassword(password string) error {
@@ -742,11 +710,7 @@ func (visor *Visor) setSocksPassword(password string) error {
 		passcodeArgName = "-passcode"
 	)
 
-	updateFunc := func(config *Config) {
-		visor.updateArg(config, socksName, passcodeArgName, password)
-	}
-
-	if err := visor.updateConfig(updateFunc); err != nil {
+	if err := visor.conf.updateAppArg(socksName, passcodeArgName, password); err != nil {
 		return err
 	}
 
@@ -768,11 +732,7 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 		pkArgName       = "-srv"
 	)
 
-	updateFunc := func(config *Config) {
-		visor.updateArg(config, socksClientName, pkArgName, pk.String())
-	}
-
-	if err := visor.updateConfig(updateFunc); err != nil {
+	if err := visor.conf.updateAppArg(socksClientName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
@@ -784,81 +744,6 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 	visor.logger.Infof("Updated %v PK", socksClientName)
 
 	return nil
-}
-
-func (visor *Visor) updateArg(config *Config, appName, argName, value string) {
-	changed := false
-
-	for i := range config.Apps {
-		if config.Apps[i].App == appName {
-			for j := range config.Apps[i].Args {
-				if config.Apps[i].Args[j] == argName && j+1 < len(config.Apps[i].Args) {
-					config.Apps[i].Args[j+1] = value
-					changed = true
-					break
-				}
-			}
-
-			if !changed {
-				config.Apps[i].Args = append(config.Apps[i].Args, argName, value)
-			}
-
-			return
-		}
-	}
-}
-
-func (visor *Visor) updateConfig(f func(*Config)) error {
-	if visor.confPath == nil {
-		return nil
-	}
-
-	config, err := visor.readConfig()
-	if err != nil {
-		return err
-	}
-
-	f(config)
-
-	return visor.writeConfig(config)
-}
-
-func (visor *Visor) readConfig() (*Config, error) {
-	if visor.confPath == nil {
-		return nil, ErrNoConfigPath
-	}
-
-	configPath := *visor.confPath
-
-	bytes, err := ioutil.ReadFile(filepath.Clean(configPath))
-	if err != nil {
-		return nil, err
-	}
-
-	var config Config
-	if err := json.Unmarshal(bytes, &config); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
-
-func (visor *Visor) writeConfig(config *Config) error {
-	if visor.confPath == nil {
-		return ErrNoConfigPath
-	}
-
-	configPath := *visor.confPath
-
-	visor.logger.Infof("Updating visor config to %+v", config)
-
-	bytes, err := json.MarshalIndent(config, "", "\t")
-	if err != nil {
-		return err
-	}
-
-	const filePerm = 0644
-	return ioutil.WriteFile(configPath, bytes, filePerm)
 }
 
 // UnlinkSocketFiles removes unix socketFiles from file system
