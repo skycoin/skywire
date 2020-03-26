@@ -1,63 +1,49 @@
 package visor
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
+const (
+	// DefaultTimeout is used for default config generation and if it is not set in config.
+	DefaultTimeout = Duration(10 * time.Second)
+	// DefaultLocalPath is used for default config generation and if it is not set in config.
+	DefaultLocalPath = "./local"
+	// DefaultAppsPath is used for default config generation and if it is not set in config.
+	DefaultAppsPath = "./apps"
+	// DefaultLogLevel is used for default config generation and if it is not set in config.
+	DefaultLogLevel = "info"
+	// DefaultSTCPPort ???
+	// TODO: Define above or remove below.
+	DefaultSTCPPort = 7777
+)
+
 // Config defines configuration parameters for Visor.
-// TODO(evanlinjin): Instead of having nested structs, make separate types for each field.
-// TODO(evanlinjin): Use pointers to allow nil-configs for non-crucial fields.
 type Config struct {
-	Version string `json:"version"`
-
-	Visor struct {
-		StaticPubKey cipher.PubKey `json:"static_public_key"`
-		StaticSecKey cipher.SecKey `json:"static_secret_key"`
-	} `json:"visor"`
-
-	STCP struct {
-		PubKeyTable map[cipher.PubKey]string `json:"pk_table"`
-		LocalAddr   string                   `json:"local_address"`
-	} `json:"stcp"`
-
-	Dmsg struct {
-		Discovery     string `json:"discovery"`
-		SessionsCount int    `json:"sessions_count"`
-	} `json:"dmsg"`
-
-	DmsgPty *DmsgPtyConfig `json:"dmsg_pty,omitempty"`
-
-	Transport struct {
-		Discovery string `json:"discovery"`
-		LogStore  struct {
-			Type     string `json:"type"`
-			Location string `json:"location"`
-		} `json:"log_store"`
-	} `json:"transport"`
-
-	Routing struct {
-		SetupNodes         []cipher.PubKey `json:"setup_nodes"`
-		RouteFinder        string          `json:"route_finder"`
-		RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
-	} `json:"routing"`
-
-	Uptime struct {
-		Tracker string `json:"tracker"`
-	} `json:"uptime"`
+	Version       string               `json:"version"`
+	KeyPair       *KeyPair             `json:"key_pair"`
+	STCP          *snet.STCPConfig     `json:"stcp"`
+	Dmsg          *snet.DmsgConfig     `json:"dmsg"`
+	DmsgPty       *DmsgPtyConfig       `json:"dmsg_pty,omitempty"`
+	Transport     *TransportConfig     `json:"transport"`
+	Routing       *RoutingConfig       `json:"routing"`
+	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker"`
 
 	Apps []AppConfig `json:"apps"`
 
@@ -70,34 +56,28 @@ type Config struct {
 	LogLevel        string   `json:"log_level"`
 	ShutdownTimeout Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 
-	Interfaces InterfaceConfig `json:"interfaces"`
+	Interfaces *InterfaceConfig `json:"interfaces"`
 
 	AppServerAddr string `json:"app_server_addr"`
 
 	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
 }
 
-// DmsgConfig returns config for dmsg client.
-func (c *Config) DmsgConfig() (*DmsgConfig, error) {
-	dmsgConfig := c.Dmsg
-
-	if dmsgConfig.Discovery == "" {
-		return nil, errors.New("empty discovery")
+// Keys returns visor public and secret keys extracted from config.
+// If they are not found, new keys are generated.
+func (c *Config) Keys() *KeyPair {
+	if c.KeyPair == nil || c.KeyPair.StaticPubKey.Null() || c.KeyPair.StaticSecKey.Null() {
+		c.KeyPair = NewKeyPair()
 	}
 
-	return &DmsgConfig{
-		PubKey:     c.Visor.StaticPubKey,
-		SecKey:     c.Visor.StaticSecKey,
-		Discovery:  disc.NewHTTP(dmsgConfig.Discovery),
-		Retries:    5,
-		RetryDelay: time.Second,
-	}, nil
+	return c.KeyPair
 }
 
-// DmsgPtyHost instantiates a host from the dmsgpty config.
+// DmsgPtyHost extracts DmsgPtyConfig and returns *dmsgpty.Host based on the config.
+// If DmsgPtyConfig is not found, DefaultDmsgPtyConfig() is used.
 func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	if c.DmsgPty == nil {
-		return nil, errors.New("'dmsg_pty' config field not defined")
+		c.DmsgPty = DefaultDmsgPtyConfig()
 	}
 
 	var wl dmsgpty.Whitelist
@@ -117,26 +97,45 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 			return nil, fmt.Errorf("failed to add hypervisor PK to whitelist: %v", err)
 		}
 	}
+
 	host := dmsgpty.NewHost(dmsgC, dmsgpty.NewCombinedWhitelist(0, wl, hypervisorWL))
 	return host, nil
 }
 
-// TransportDiscovery returns transport discovery client.
+// TransportDiscovery extracts TransportConfig and returns transport.DiscoveryClient based on the config.
+// If TransportConfig is not found, DefaultTransportConfig() is used.
 func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
-	if c.Transport.Discovery == "" {
-		return nil, errors.New("empty transport_discovery")
+	if c.Transport == nil {
+		c.Transport = DefaultTransportConfig()
 	}
 
-	return trClient.NewHTTP(c.Transport.Discovery, c.Visor.StaticPubKey, c.Visor.StaticSecKey)
+	return trClient.NewHTTP(c.Transport.Discovery, c.Keys().StaticPubKey, c.Keys().StaticSecKey)
 }
 
-// TransportLogStore returns configure transport.LogStore.
+// TransportLogStore extracts LogStoreConfig and returns transport.LogStore based on the config.
+// If LogStoreConfig is not found, DefaultLogStoreConfig() is used.
 func (c *Config) TransportLogStore() (transport.LogStore, error) {
-	if c.Transport.LogStore.Type == "file" {
+	if c.Transport == nil {
+		c.Transport = DefaultTransportConfig()
+	} else if c.Transport.LogStore == nil {
+		c.Transport.LogStore = DefaultLogStoreConfig()
+	}
+
+	if c.Transport.LogStore.Type == LogStoreFile {
 		return transport.FileTransportLogStore(c.Transport.LogStore.Location)
 	}
 
 	return transport.InMemoryTransportLogStore(), nil
+}
+
+// RoutingConfig extracts and returns RoutingConfig from Visor Config.
+// If it is not found, it sets DefaultRoutingConfig() as RoutingConfig and returns it.
+func (c *Config) RoutingConfig() *RoutingConfig {
+	if c.Routing == nil {
+		c.Routing = DefaultRoutingConfig()
+	}
+
+	return c.Routing
 }
 
 // AppsConfig decodes AppsConfig from a local json config file.
@@ -149,24 +148,36 @@ func (c *Config) AppsConfig() (map[string]AppConfig, error) {
 	return apps, nil
 }
 
-// AppsDir returns absolute path for directory with application
-// binaries. Directory will be created if necessary.
+// AppsDir returns absolute path for directory with application binaries.
+// Directory will be created if necessary.
+// If it is not set in config, DefaultAppsPath is used.
 func (c *Config) AppsDir() (string, error) {
 	if c.AppsPath == "" {
-		return "", errors.New("empty AppsPath")
+		c.AppsPath = DefaultAppsPath
 	}
 
 	return ensureDir(c.AppsPath)
 }
 
-// LocalDir returns absolute path for app work directory. Directory
-// will be created if necessary.
+// LocalDir returns absolute path for app work directory.
+// Directory will be created if necessary.
+// If it is not set in config, DefaultLocalPath is used.
 func (c *Config) LocalDir() (string, error) {
 	if c.LocalPath == "" {
-		return "", errors.New("empty LocalPath")
+		c.LocalPath = DefaultLocalPath
 	}
 
 	return ensureDir(c.LocalPath)
+}
+
+// AppServerAddress extracts and returns AppServerAddr from Visor Config.
+// If it is not found, it sets appcommon.DefaultServerAddr as AppServerAddr and returns it.
+func (c *Config) AppServerAddress() string {
+	if c.AppServerAddr == "" {
+		c.AppServerAddr = appcommon.DefaultServerAddr
+	}
+
+	return c.AppServerAddr
 }
 
 func ensureDir(path string) (string, error) {
@@ -186,19 +197,42 @@ func ensureDir(path string) (string, error) {
 	return absPath, nil
 }
 
-// HypervisorConfig represents hypervisor configuration.
-type HypervisorConfig struct {
-	PubKey cipher.PubKey `json:"public_key"`
-	Addr   string        `json:"address"`
+// KeyPair defines Visor public and secret key pair.
+type KeyPair struct {
+	StaticPubKey cipher.PubKey `json:"static_public_key"`
+	StaticSecKey cipher.SecKey `json:"static_secret_key"`
 }
 
-// DmsgConfig represents dmsg configuration.
-type DmsgConfig struct {
-	PubKey     cipher.PubKey
-	SecKey     cipher.SecKey
-	Discovery  disc.APIClient
-	Retries    int
-	RetryDelay time.Duration
+// NewKeyPair returns a new public and secret key pair.
+func NewKeyPair() *KeyPair {
+	pk, sk := cipher.GenerateKeyPair()
+
+	return &KeyPair{
+		StaticPubKey: pk,
+		StaticSecKey: sk,
+	}
+}
+
+// DefaultSTCPConfig returns default STCP config.
+func DefaultSTCPConfig() (*snet.STCPConfig, error) {
+	lIPaddr, err := getLocalIPAddress()
+	if err != nil {
+		return nil, err
+	}
+
+	c := &snet.STCPConfig{
+		LocalAddr: lIPaddr,
+	}
+
+	return c, nil
+}
+
+// DefaultDmsgConfig returns default Dmsg config.
+func DefaultDmsgConfig() *snet.DmsgConfig {
+	return &snet.DmsgConfig{
+		Discovery:     skyenv.DefaultDmsgDiscAddr,
+		SessionsCount: 1,
+	}
 }
 
 // DmsgPtyConfig configures the dmsgpty-host.
@@ -207,6 +241,88 @@ type DmsgPtyConfig struct {
 	AuthFile string `json:"authorization_file"`
 	CLINet   string `json:"cli_network"`
 	CLIAddr  string `json:"cli_address"`
+}
+
+// DefaultDmsgPtyConfig returns default DmsgPty config.
+func DefaultDmsgPtyConfig() *DmsgPtyConfig {
+	return &DmsgPtyConfig{
+		Port:     skyenv.DmsgPtyPort,
+		AuthFile: "./skywire/dmsgpty/whitelist.json",
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	}
+}
+
+// TransportConfig defines a transport config.
+type TransportConfig struct {
+	Discovery string          `json:"discovery"`
+	LogStore  *LogStoreConfig `json:"log_store"`
+}
+
+// DefaultTransportConfig returns default transport config.
+func DefaultTransportConfig() *TransportConfig {
+	return &TransportConfig{
+		Discovery: skyenv.DefaultTpDiscAddr,
+		LogStore:  DefaultLogStoreConfig(),
+	}
+}
+
+// LogStoreType defines a type for LogStore. It may be either file or memory.
+type LogStoreType string
+
+const (
+	// LogStoreFile tells LogStore to use a file for storage.
+	LogStoreFile = "file"
+	// LogStoreMemory tells LogStore to use memory for storage.
+	LogStoreMemory = "memory"
+)
+
+// LogStoreConfig configures a LogStore.
+type LogStoreConfig struct {
+	Type     LogStoreType `json:"type"`
+	Location string       `json:"location"`
+}
+
+// DefaultLogStoreConfig returns default LogStore config.
+func DefaultLogStoreConfig() *LogStoreConfig {
+	return &LogStoreConfig{
+		Type:     LogStoreFile,
+		Location: "./skywire/transport_logs",
+	}
+}
+
+// RoutingConfig configures routing.
+type RoutingConfig struct {
+	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
+	RouteFinder        string          `json:"route_finder"`
+	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
+}
+
+// DefaultRoutingConfig returns default routing config.
+func DefaultRoutingConfig() *RoutingConfig {
+	return &RoutingConfig{
+		SetupNodes:         []cipher.PubKey{skyenv.MustDefaultSetupPK()},
+		RouteFinder:        skyenv.DefaultRouteFinderAddr,
+		RouteFinderTimeout: DefaultTimeout,
+	}
+}
+
+// UptimeTrackerConfig configures uptime tracker.
+type UptimeTrackerConfig struct {
+	Addr string `json:"addr"`
+}
+
+// DefaultUptimeTrackerConfig returns default uptime tracker config.
+func DefaultUptimeTrackerConfig() *UptimeTrackerConfig {
+	return &UptimeTrackerConfig{
+		Addr: skyenv.DefaultUptimeTrackerAddr,
+	}
+}
+
+// HypervisorConfig represents hypervisor configuration.
+type HypervisorConfig struct {
+	PubKey cipher.PubKey `json:"public_key"`
+	Addr   string        `json:"address"`
 }
 
 // AppConfig defines app startup parameters.
@@ -222,32 +338,25 @@ type InterfaceConfig struct {
 	RPCAddress string `json:"rpc"` // RPC address and port for command-line interface (leave blank to disable RPC interface).
 }
 
-// Duration wraps around time.Duration to allow parsing from and to JSON
-type Duration time.Duration
-
-// MarshalJSON implements json marshaling
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
+// DefaultInterfaceConfig returns default server interface config.
+func DefaultInterfaceConfig() *InterfaceConfig {
+	return &InterfaceConfig{
+		RPCAddress: "localhost:3435",
+	}
 }
 
-// UnmarshalJSON implements unmarshal from json
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
+func getLocalIPAddress() (string, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "", err
 	}
-	switch value := v.(type) {
-	case float64:
-		*d = Duration(time.Duration(value))
-		return nil
-	case string:
-		tmp, err := time.ParseDuration(value)
-		if err != nil {
-			return err
+
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return fmt.Sprintf("%s:%d", ipnet.IP.String(), DefaultSTCPPort), nil
+			}
 		}
-		*d = Duration(tmp)
-		return nil
-	default:
-		return errors.New("invalid duration")
 	}
+	return "", errors.New("could not find local IP address")
 }
