@@ -35,7 +35,7 @@ func TestHealth(t *testing.T) {
 		},
 	}
 
-	c.Routing.SetupNodes = []cipher.PubKey{c.KeyPair.StaticPubKey}
+	c.Routing.SetupNodes = []cipher.PubKey{c.KeyPair.PubKey}
 
 	t.Run("Report all the services as available", func(t *testing.T) {
 		rpc := &RPC{visor: &Visor{conf: c}, log: logrus.New()}
@@ -177,7 +177,7 @@ func TestStartStopApp(t *testing.T) {
 	appCfg1 := appcommon.Config{
 		Name:       app,
 		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Keys().StaticPubKey.Hex(),
+		VisorPK:    visorCfg.Keys().PubKey.Hex(),
 		WorkDir:    filepath.Join("", app),
 	}
 
@@ -246,7 +246,7 @@ These tests have been commented out for the following reasons:
 //		{App: "bar", AutoStart: false, Port: 20},
 //	}
 //	conf := &Config{}
-//	conf.Visor.StaticPubKey = pk1
+//	conf.Visor.PubKey = pk1
 //	visor := &Visor{
 //		config:      conf,
 //		router:      r,
