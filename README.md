@@ -355,7 +355,7 @@ Default value: "GO111MODULE=on GOOS=linux"
 #### 1. Get Public Key of docker-node
 
 ```bash
-$ cat ./node/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' '
+$ cat ./visor/skywire-config.json|grep public_key |cut -d ':' -f2 |tr -d '"'','' '
 # 029be6fa68c13e9222553035cc1636d98fb36a888aa569d9ce8aa58caa2c651b45
 ```
 
@@ -426,9 +426,9 @@ Instead of skywire-runner you can use:
 
 ```bash
 export SW_VISOR_A=127.0.0.1
-export SW_VISOR_A_PK=$(cat ./skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
+export SW_VISOR_A_PK=$(cat ./skywire-config.json|grep public_key |cut -d ':' -f2 |tr -d '"'','' ')
 export SW_VISOR_B=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01)
-export SW_VISOR_B_PK=$(cat ./visor/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
+export SW_VISOR_B_PK=$(cat ./visor/skywire-config.json|grep public_key |cut -d ':' -f2 |tr -d '"'','' ')
 ```
 
 #### 6. "Hello-Mike-Hello-Joe" test
