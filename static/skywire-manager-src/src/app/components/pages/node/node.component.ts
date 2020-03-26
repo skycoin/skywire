@@ -250,10 +250,7 @@ export class NodeComponent implements OnInit, OnDestroy {
 
         this.ngZone.run(() => {
           // If the node was not found, show a msg telling the user and stop the operation.
-          if (
-            err.originalError &&
-            ((err.originalError as HttpErrorResponse).status === 400 || (err.originalError as HttpErrorResponse).status === 404)
-          ) {
+          if (err.originalError && ((err.originalError as HttpErrorResponse).status === 400)) {
             this.notFound = true;
 
             return;
@@ -262,9 +259,9 @@ export class NodeComponent implements OnInit, OnDestroy {
           // Show an error msg if it has not be done before during the current attempt to obtain the data.
           if (!this.errorsUpdating) {
             if (!this.node) {
-              this.snackbarService.showError('common.loading-error', null, true);
+              this.snackbarService.showError('common.loading-error', null, true, err);
             } else {
-              this.snackbarService.showError('node.error-load', null, true);
+              this.snackbarService.showError('node.error-load', null, true, err);
             }
           }
 

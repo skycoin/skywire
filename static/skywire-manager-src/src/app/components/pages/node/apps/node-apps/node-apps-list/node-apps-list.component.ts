@@ -14,6 +14,8 @@ import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 import { SkysocksSettingsComponent } from '../skysocks-settings/skysocks-settings.component';
+import { processServiceError } from 'src/app/utils/errors';
+import { OperationError } from 'src/app/utils/operation-error';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -304,14 +306,16 @@ export class NodeAppsListComponent implements OnDestroy {
         // Make the parent page reload the data.
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.snackbarService.showDone('apps.operation-completed');
-      }, () => {
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+
         // Make the parent page reload the data.
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
 
         if (confirmationDialog) {
-          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
+          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
         } else {
-          this.snackbarService.showError('apps.error');
+          this.snackbarService.showError(err);
         }
       }
     ));
@@ -479,7 +483,7 @@ export class NodeAppsListComponent implements OnDestroy {
     // The list may be empty because apps which already have the settings are ignored.
     if (!names || names.length === 0) {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-      this.snackbarService.showDone('apps.operation-completed');
+      this.snackbarService.showWarning('apps.operation-unnecessary');
 
       if (confirmationDialog) {
         confirmationDialog.close();
@@ -507,12 +511,14 @@ export class NodeAppsListComponent implements OnDestroy {
       } else {
         this.changeAppsValRecursively(names, changingAutostart, newVal, confirmationDialog);
       }
-    }, () => {
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
       if (confirmationDialog) {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       } else {
-        this.snackbarService.showError('apps.error');
+        this.snackbarService.showError(err);
       }
     }));
   }
