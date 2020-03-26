@@ -45,7 +45,6 @@ type runCfg struct {
 	port         string
 	startDelay   string
 	args         []string
-	configPath   *string
 
 	profileStop  func()
 	logger       *logging.Logger
@@ -147,11 +146,12 @@ func (cfg *runCfg) startLogger() *runCfg {
 
 func (cfg *runCfg) readConfig() *runCfg {
 	var rdr io.Reader
+	var configPath *string
 
 	if !cfg.cfgFromStdin {
-		configPath := pathutil.FindConfigPath(cfg.args, 0, configEnv, pathutil.VisorDefaults())
+		cp := pathutil.FindConfigPath(cfg.args, 0, configEnv, pathutil.VisorDefaults())
 
-		file, err := os.Open(filepath.Clean(configPath))
+		file, err := os.Open(filepath.Clean(cp))
 		if err != nil {
 			cfg.logger.Fatalf("Failed to open config: %s", err)
 		}
@@ -162,19 +162,20 @@ func (cfg *runCfg) readConfig() *runCfg {
 			}
 		}()
 
-		cfg.logger.Infof("Reading config from %v", configPath)
+		cfg.logger.Infof("Reading config from %v", cp)
 
 		rdr = file
-		cfg.configPath = &configPath
+		configPath = &cp
 	} else {
 		cfg.logger.Info("Reading config from STDIN")
 		rdr = bufio.NewReader(os.Stdin)
 	}
 
-	cfg.conf = visor.Config{}
 	if err := json.NewDecoder(rdr).Decode(&cfg.conf); err != nil {
 		cfg.logger.Fatalf("Failed to decode %s: %s", rdr, err)
 	}
+
+	cfg.conf.Path = configPath
 
 	return cfg
 }
@@ -199,7 +200,7 @@ func (cfg *runCfg) runVisor() *runCfg {
 		}
 	}
 
-	vis, err := visor.NewVisor(&cfg.conf, cfg.masterLogger, cfg.restartCtx, cfg.configPath)
+	vis, err := visor.NewVisor(&cfg.conf, cfg.masterLogger, cfg.restartCtx)
 	if err != nil {
 		cfg.logger.Fatal("Failed to initialize visor: ", err)
 	}
