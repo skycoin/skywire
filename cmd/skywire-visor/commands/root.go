@@ -176,8 +176,6 @@ func (cfg *runCfg) readConfig() *runCfg {
 		cfg.logger.Fatalf("Failed to decode %s: %s", rdr, err)
 	}
 
-	fmt.Println("TCP Factory conf:", cfg.conf.STCP)
-
 	return cfg
 }
 
@@ -206,8 +204,8 @@ func (cfg *runCfg) runVisor() *runCfg {
 		cfg.logger.Fatal("Failed to initialize visor: ", err)
 	}
 
-	if cfg.conf.Uptime.Tracker != "" {
-		uptimeTracker, err := utclient.NewHTTP(cfg.conf.Uptime.Tracker, cfg.conf.Visor.StaticPubKey, cfg.conf.Visor.StaticSecKey)
+	if cfg.conf.UptimeTracker != nil {
+		uptimeTracker, err := utclient.NewHTTP(cfg.conf.UptimeTracker.Addr, cfg.conf.Keys().StaticPubKey, cfg.conf.Keys().StaticSecKey)
 		if err != nil {
 			cfg.logger.Error("Failed to connect to uptime tracker: ", err)
 		} else {
