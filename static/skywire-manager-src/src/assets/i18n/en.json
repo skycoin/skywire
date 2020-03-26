@@ -258,6 +258,8 @@
     "skysocks-settings": {
       "title": "Skysocks Settings",
       "new-password": "New password (Leave empty to remove the password)",
+      "repeat-password": "Repeat password",
+      "passwords-not-match": "Passwords do not match.",
       "save": "Save",
       "remove-passowrd-confirmation": "You left the password field empty. Are you sure you want to remove the password?",
       "change-passowrd-confirmation": "Are you sure you want to change the password?",
