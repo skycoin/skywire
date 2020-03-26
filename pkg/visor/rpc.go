@@ -184,7 +184,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.visor.conf.Keys().StaticPubKey,
+		PubKey:          r.visor.conf.Keys().PubKey,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.Apps(),
