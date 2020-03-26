@@ -105,7 +105,7 @@
           mat-icon-button
           [matTooltip]="'apps.settings' | translate"
           class="big-action-button hard-grey-button-background"
-          *ngIf="app.name === 'skysocks'"
+          *ngIf="appsWithConfig.has(app.name)"
         >
           <mat-icon [inline]="true">settings</mat-icon>
         </button>
