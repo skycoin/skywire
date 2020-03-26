@@ -117,8 +117,8 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	visor.Logger = logger
 	visor.logger = visor.Logger.PackageLogger("skywire")
 
-	pk := cfg.Keys().StaticPubKey
-	sk := cfg.Keys().StaticSecKey
+	pk := cfg.Keys().PubKey
+	sk := cfg.Keys().SecKey
 
 	logger.WithField("PK", pk).Infof("Starting visor")
 
@@ -388,7 +388,7 @@ func (visor *Visor) startRPC(ctx context.Context) {
 }
 
 func (visor *Visor) dir() string {
-	return pathutil.VisorDir(visor.conf.Keys().StaticPubKey.String())
+	return pathutil.VisorDir(visor.conf.Keys().PubKey.String())
 }
 
 func (visor *Visor) pidFile() (*os.File, error) {
@@ -563,7 +563,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appCfg := appcommon.Config{
 		Name:       config.App,
 		ServerAddr: visor.conf.AppServerAddr,
-		VisorPK:    visor.conf.Keys().StaticPubKey.Hex(),
+		VisorPK:    visor.conf.Keys().PubKey.Hex(),
 		BinaryDir:  visor.appsPath,
 		WorkDir:    filepath.Join(visor.localPath, config.App),
 	}
