@@ -205,7 +205,7 @@ func (cfg *runCfg) runVisor() *runCfg {
 	}
 
 	if cfg.conf.UptimeTracker != nil {
-		uptimeTracker, err := utclient.NewHTTP(cfg.conf.UptimeTracker.Addr, cfg.conf.Keys().StaticPubKey, cfg.conf.Keys().StaticSecKey)
+		uptimeTracker, err := utclient.NewHTTP(cfg.conf.UptimeTracker.Addr, cfg.conf.Keys().PubKey, cfg.conf.Keys().SecKey)
 		if err != nil {
 			cfg.logger.Error("Failed to connect to uptime tracker: ", err)
 		} else {

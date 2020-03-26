@@ -67,18 +67,18 @@ type Config struct {
 // If they are not found, new keys are generated.
 func (c *Config) Keys() *KeyPair {
 	// If either no keys are set or SecKey is not set, a new key pair is generated.
-	if c.KeyPair == nil || c.KeyPair.StaticSecKey.Null() {
+	if c.KeyPair == nil || c.KeyPair.SecKey.Null() {
 		c.KeyPair = NewKeyPair()
 	}
 
 	// If SecKey is set and PubKey is not set, PubKey can be generated from SecKey.
-	if !c.KeyPair.StaticSecKey.Null() && c.KeyPair.StaticPubKey.Null() {
-		pk, err := c.KeyPair.StaticSecKey.PubKey()
+	if !c.KeyPair.SecKey.Null() && c.KeyPair.PubKey.Null() {
+		pk, err := c.KeyPair.SecKey.PubKey()
 		if err != nil {
 			// If generation of PubKey from SecKey fails, a new key pair is generated.
 			c.KeyPair = NewKeyPair()
 		} else {
-			c.KeyPair.StaticPubKey = pk
+			c.KeyPair.PubKey = pk
 		}
 	}
 
@@ -122,7 +122,7 @@ func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
 		c.Transport = DefaultTransportConfig()
 	}
 
-	return trClient.NewHTTP(c.Transport.Discovery, c.Keys().StaticPubKey, c.Keys().StaticSecKey)
+	return trClient.NewHTTP(c.Transport.Discovery, c.Keys().PubKey, c.Keys().SecKey)
 }
 
 // TransportLogStore extracts LogStoreConfig and returns transport.LogStore based on the config.
@@ -212,8 +212,8 @@ func ensureDir(path string) (string, error) {
 
 // KeyPair defines Visor public and secret key pair.
 type KeyPair struct {
-	StaticPubKey cipher.PubKey `json:"static_public_key"`
-	StaticSecKey cipher.SecKey `json:"static_secret_key"`
+	PubKey cipher.PubKey `json:"public_key"`
+	SecKey cipher.SecKey `json:"secret_key"`
 }
 
 // NewKeyPair returns a new public and secret key pair.
@@ -221,8 +221,8 @@ func NewKeyPair() *KeyPair {
 	pk, sk := cipher.GenerateKeyPair()
 
 	return &KeyPair{
-		StaticPubKey: pk,
-		StaticSecKey: sk,
+		PubKey: pk,
+		SecKey: sk,
 	}
 }
 
