@@ -81,7 +81,7 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodGet, c.addr+"/routes", bytes.NewBuffer(marshaledBody))
+	req, err := http.NewRequest(http.MethodPost, c.addr+"/routes", bytes.NewBuffer(marshaledBody))
 	if err != nil {
 		return nil, err
 	}
