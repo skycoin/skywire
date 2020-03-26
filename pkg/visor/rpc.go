@@ -98,7 +98,7 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 
 // Uptime returns for how long the visor has been running in seconds
 func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
-	defer rpcutil.LogCall(r.log, "UptimeTracker", nil)(out, &err)
+	defer rpcutil.LogCall(r.log, "Uptime", nil)(out, &err)
 
 	*out = time.Since(r.visor.startedAt).Seconds()
 	return nil
