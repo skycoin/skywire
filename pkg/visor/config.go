@@ -1,16 +1,20 @@
 package visor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
@@ -34,16 +38,25 @@ const (
 	DefaultSTCPPort = 7777
 )
 
+var (
+	// ErrNoConfigPath is returned on attempt to read/write config when visor contains no config path.
+	ErrNoConfigPath = errors.New("no config path")
+)
+
 // Config defines configuration parameters for Visor.
 type Config struct {
+	Path    *string `json:"-"`
+	log     *logging.Logger
+	flushMu sync.Mutex
+
 	Version       string               `json:"version"`
 	KeyPair       *KeyPair             `json:"key_pair"`
-	STCP          *snet.STCPConfig     `json:"stcp"`
 	Dmsg          *snet.DmsgConfig     `json:"dmsg"`
 	DmsgPty       *DmsgPtyConfig       `json:"dmsg_pty,omitempty"`
+	STCP          *snet.STCPConfig     `json:"stcp,omitempty"`
 	Transport     *TransportConfig     `json:"transport"`
 	Routing       *RoutingConfig       `json:"routing"`
-	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker"`
+	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker,omitempty"`
 
 	Apps []AppConfig `json:"apps"`
 
@@ -63,9 +76,81 @@ type Config struct {
 	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
 }
 
+// Flush flushes config to file.
+func (c *Config) flush() error {
+	c.flushMu.Lock()
+	defer c.flushMu.Unlock()
+
+	if c.Path == nil {
+		return ErrNoConfigPath
+	}
+
+	c.log.Infof("Updating visor config to %+v", c)
+
+	bytes, err := json.MarshalIndent(c, "", "\t")
+	if err != nil {
+		return err
+	}
+
+	const filePerm = 0644
+	return ioutil.WriteFile(*c.Path, bytes, filePerm)
+}
+
+func (c *Config) updateAppAutoStart(appName string, autoStart bool) error {
+	changed := false
+
+	for i := range c.Apps {
+		if c.Apps[i].App == appName {
+			c.Apps[i].AutoStart = autoStart
+			changed = true
+			break
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	return c.flush()
+}
+
+func (c *Config) updateAppArg(appName, argName, value string) error {
+	configChanged := true
+
+	for i := range c.Apps {
+		argChanged := false
+		if c.Apps[i].App == appName {
+			configChanged = true
+
+			for j := range c.Apps[i].Args {
+				if c.Apps[i].Args[j] == argName && j+1 < len(c.Apps[i].Args) {
+					c.Apps[i].Args[j+1] = value
+					argChanged = true
+					break
+				}
+			}
+
+			if !argChanged {
+				c.Apps[i].Args = append(c.Apps[i].Args, argName, value)
+			}
+		}
+	}
+
+	if configChanged {
+		return c.flush()
+	}
+
+	return nil
+}
+
 // Keys returns visor public and secret keys extracted from config.
 // If they are not found, new keys are generated.
 func (c *Config) Keys() *KeyPair {
+	// If both keys are set, no additional action is needed.
+	if c.KeyPair != nil && !c.KeyPair.SecKey.Null() && !c.KeyPair.PubKey.Null() {
+		return c.KeyPair
+	}
+
 	// If either no keys are set or SecKey is not set, a new key pair is generated.
 	if c.KeyPair == nil || c.KeyPair.SecKey.Null() {
 		c.KeyPair = NewKeyPair()
@@ -82,8 +167,24 @@ func (c *Config) Keys() *KeyPair {
 		}
 	}
 
-	// If both keys are set, no additional action is needed.
+	if err := c.flush(); err != nil && c.log != nil {
+		c.log.WithError(err).Errorf("Failed to flush config to disk")
+	}
+
 	return c.KeyPair
+}
+
+// DmsgConfig extracts and returns DmsgConfig from Visor Config.
+// If it is not found, it sets DefaultDmsgConfig() as RoutingConfig and returns it.
+func (c *Config) DmsgConfig() *snet.DmsgConfig {
+	if c.Dmsg == nil {
+		c.Dmsg = DefaultDmsgConfig()
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
+	}
+
+	return c.Dmsg
 }
 
 // DmsgPtyHost extracts DmsgPtyConfig and returns *dmsgpty.Host based on the config.
@@ -91,6 +192,9 @@ func (c *Config) Keys() *KeyPair {
 func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	if c.DmsgPty == nil {
 		c.DmsgPty = DefaultDmsgPtyConfig()
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	}
 
 	var wl dmsgpty.Whitelist
@@ -120,6 +224,9 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
 	if c.Transport == nil {
 		c.Transport = DefaultTransportConfig()
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	}
 
 	return trClient.NewHTTP(c.Transport.Discovery, c.Keys().PubKey, c.Keys().SecKey)
@@ -130,8 +237,14 @@ func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
 func (c *Config) TransportLogStore() (transport.LogStore, error) {
 	if c.Transport == nil {
 		c.Transport = DefaultTransportConfig()
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	} else if c.Transport.LogStore == nil {
 		c.Transport.LogStore = DefaultLogStoreConfig()
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	}
 
 	if c.Transport.LogStore.Type == LogStoreFile {
@@ -146,6 +259,9 @@ func (c *Config) TransportLogStore() (transport.LogStore, error) {
 func (c *Config) RoutingConfig() *RoutingConfig {
 	if c.Routing == nil {
 		c.Routing = DefaultRoutingConfig()
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	}
 
 	return c.Routing
