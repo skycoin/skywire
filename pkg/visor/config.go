@@ -283,6 +283,9 @@ func (c *Config) AppsConfig() (map[string]AppConfig, error) {
 func (c *Config) AppsDir() (string, error) {
 	if c.AppsPath == "" {
 		c.AppsPath = DefaultAppsPath
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	}
 
 	return ensureDir(c.AppsPath)
@@ -294,6 +297,9 @@ func (c *Config) AppsDir() (string, error) {
 func (c *Config) LocalDir() (string, error) {
 	if c.LocalPath == "" {
 		c.LocalPath = DefaultLocalPath
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	}
 
 	return ensureDir(c.LocalPath)
@@ -304,6 +310,9 @@ func (c *Config) LocalDir() (string, error) {
 func (c *Config) AppServerAddress() string {
 	if c.AppServerAddr == "" {
 		c.AppServerAddr = appcommon.DefaultServerAddr
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
 	}
 
 	return c.AppServerAddr
