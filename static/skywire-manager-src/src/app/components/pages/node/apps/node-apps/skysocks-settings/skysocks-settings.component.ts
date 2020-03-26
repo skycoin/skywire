@@ -26,6 +26,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   form: FormGroup;
 
   private operationSubscription: Subscription;
+  private formSubscription: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -51,12 +52,18 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.form = this.formBuilder.group({
       'password': [''],
+      'passwordConfirmation': ['', this.validatePasswords.bind(this)],
+    });
+
+    this.formSubscription = this.form.get('password').valueChanges.subscribe(() => {
+      this.form.get('passwordConfirmation').updateValueAndValidity();
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 
   ngOnDestroy() {
+    this.formSubscription.unsubscribe();
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
@@ -107,5 +114,14 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     err = processServiceError(err);
 
     this.snackbarService.showError(err);
+  }
+
+  private validatePasswords() {
+    if (this.form) {
+      return this.form.get('password').value !== this.form.get('passwordConfirmation').value
+        ? { invalid: true } : null;
+    } else {
+      return null;
+    }
   }
 }

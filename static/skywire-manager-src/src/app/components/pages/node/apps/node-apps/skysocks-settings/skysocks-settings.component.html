@@ -11,6 +11,20 @@
         matInput
       >
     </mat-form-field>
+    <mat-form-field>
+      <input
+        id="passwordConfirmation"
+        type="password"
+        formControlName="passwordConfirmation"
+        maxlength="100"
+        [placeholder]="'apps.skysocks-settings.repeat-password' | translate"
+        #firstInput
+        matInput
+      >
+      <mat-error>
+        {{ 'apps.skysocks-settings.passwords-not-match' | translate }}
+      </mat-error>
+    </mat-form-field>
 
     <app-button
       #button

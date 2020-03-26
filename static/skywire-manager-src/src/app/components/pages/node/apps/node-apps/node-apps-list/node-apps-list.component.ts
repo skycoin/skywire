@@ -67,6 +67,11 @@ export class NodeAppsListComponent implements OnDestroy {
     this.recalculateElementsToShow();
   }
 
+  // List with the names of all the apps which can be configured directly on the manager.
+  appsWithConfig = new Map<string, boolean>([
+    ['skysocks', true],
+  ]);
+
   allApps: Application[];
   appsToShow: Application[];
   appsMap: Map<string, Application>;
@@ -218,6 +223,13 @@ export class NodeAppsListComponent implements OnDestroy {
       }
     ];
 
+    if (this.appsWithConfig.has(app.name)) {
+      options.push({
+        icon: 'settings',
+        label: 'apps.settings',
+      });
+    }
+
     SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.viewLogs(app);
@@ -225,6 +237,8 @@ export class NodeAppsListComponent implements OnDestroy {
         this.changeAppState(app);
       } else if (selectedOption === 3) {
         this.changeAppAutostart(app);
+      } else if (selectedOption === 4) {
+        this.config(app);
       }
     });
   }
@@ -316,6 +330,8 @@ export class NodeAppsListComponent implements OnDestroy {
   config(app: Application): void {
     if (app.name === 'skysocks') {
       SkysocksSettingsComponent.openDialog(this.dialog, app.name);
+    } else {
+      this.snackbarService.showError('apps.error');
     }
   }
 
