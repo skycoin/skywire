@@ -66,10 +66,23 @@ type Config struct {
 // Keys returns visor public and secret keys extracted from config.
 // If they are not found, new keys are generated.
 func (c *Config) Keys() *KeyPair {
-	if c.KeyPair == nil || c.KeyPair.StaticPubKey.Null() || c.KeyPair.StaticSecKey.Null() {
+	// If either no keys are set or SecKey is not set, a new key pair is generated.
+	if c.KeyPair == nil || c.KeyPair.StaticSecKey.Null() {
 		c.KeyPair = NewKeyPair()
 	}
 
+	// If SecKey is set and PubKey is not set, PubKey can be generated from SecKey.
+	if !c.KeyPair.StaticSecKey.Null() && c.KeyPair.StaticPubKey.Null() {
+		pk, err := c.KeyPair.StaticSecKey.PubKey()
+		if err != nil {
+			// If generation of PubKey from SecKey fails, a new key pair is generated.
+			c.KeyPair = NewKeyPair()
+		} else {
+			c.KeyPair.StaticPubKey = pk
+		}
+	}
+
+	// If both keys are set, no additional action is needed.
 	return c.KeyPair
 }
 
