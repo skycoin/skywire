@@ -351,6 +351,15 @@ func NewKeyPair() *KeyPair {
 	}
 }
 
+// RestoreKeyPair generates a key pair using just the secret key.
+func RestoreKeyPair(sk cipher.SecKey) *KeyPair {
+	pk, err := sk.PubKey()
+	if err != nil {
+		panic(fmt.Errorf("failed to restore key pair: %v", err))
+	}
+	return &KeyPair{PubKey: pk, SecKey: sk}
+}
+
 // DefaultSTCPConfig returns default STCP config.
 func DefaultSTCPConfig() (*snet.STCPConfig, error) {
 	lIPaddr, err := getLocalIPAddress()
