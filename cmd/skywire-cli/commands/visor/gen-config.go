@@ -24,6 +24,7 @@ func init() {
 }
 
 var (
+	sk            cipher.SecKey
 	output        string
 	replace       bool
 	retainKeys    bool
@@ -32,6 +33,7 @@ var (
 )
 
 func init() {
+	genConfigCmd.Flags().VarP(&sk, "secret-key", "s", "if unspecified, a random key pair will be generated.")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
 	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
@@ -107,7 +109,11 @@ func localConfig() *visor.Config {
 func defaultConfig() *visor.Config {
 	conf := &visor.Config{}
 
-	conf.KeyPair = visor.NewKeyPair()
+	if sk.Null() {
+		conf.KeyPair = visor.NewKeyPair()
+	} else {
+		conf.KeyPair = visor.RestoreKeyPair(sk)
+	}
 
 	stcp, err := visor.DefaultSTCPConfig()
 	if err != nil {
