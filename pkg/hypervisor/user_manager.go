@@ -300,9 +300,9 @@ func (s *UserManager) newSession(w http.ResponseWriter, session Session) error {
 		Path:     s.c.Path,
 		Domain:   s.c.Domain,
 		Expires:  time.Now().Add(s.c.ExpiresDuration),
-		Secure:   s.c.Secure,
-		HttpOnly: s.c.HTTPOnly,
-		SameSite: s.c.SameSite,
+		Secure:   s.c.Secure(),
+		HttpOnly: s.c.HTTPOnly(),
+		SameSite: s.c.SameSite(),
 	})
 
 	return nil
@@ -328,9 +328,9 @@ func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 		Path:     s.c.Path,
 		Domain:   s.c.Domain,
 		MaxAge:   -1,
-		Secure:   s.c.Secure,
-		HttpOnly: s.c.HTTPOnly,
-		SameSite: s.c.SameSite,
+		Secure:   s.c.Secure(),
+		HttpOnly: s.c.HTTPOnly(),
+		SameSite: s.c.SameSite(),
 	})
 
 	return nil
