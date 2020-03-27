@@ -13,35 +13,10 @@
     - [Run `skywire-visor`](#run-skywire-visor)
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `hypervisor`](#run-hypervisor)
-    - [Apps](#apps)
-    - [Transports](#transports)
-  - [App programming API](#app-programming-api)
-  - [Testing](#testing)
-    - [Testing with default settings](#testing-with-default-settings)
-    - [Customization with environment variables](#customization-with-environment-variables)
-      - [$TEST_OPTS](#test_opts)
-      - [$TEST_LOGGING_LEVEL](#test_logging_level)
-      - [$SYSLOG_OPTS](#syslog_opts)
-  - [Running skywire in docker containers](#running-skywire-in-docker-containers)
-    - [Run dockerized `skywire-visor`](#run-dockerized-skywire-visor)
-      - [Structure of `./node`](#structure-of-node)
-    - [Refresh and restart `SKY01`](#refresh-and-restart-sky01)
-    - [Customization of dockers](#customization-of-dockers)
-      - [1. DOCKER_IMAGE](#1-docker_image)
-      - [2. DOCKER_NETWORK](#2-docker_network)
-      - [3. DOCKER_NODE](#3-docker_node)
-      - [4. DOCKER_OPTS](#4-docker_opts)
-    - [Dockerized `skywire-visor` recipes](#dockerized-skywire-visor-recipes)
-      - [1. Get Public Key of docker-node](#1-get-public-key-of-docker-node)
-      - [2. Get an IP of node](#2-get-an-ip-of-node)
-      - [3. Open in browser containerized `skychat` application](#3-open-in-browser-containerized-skychat-application)
-      - [4. Create new dockerized `skywire-visor`s](#4-create-new-dockerized-skywire-visors)
-      - [5. Env-vars for development-/testing- purposes](#5-env-vars-for-development-testing--purposes)
-      - [6. "Hello-Mike-Hello-Joe" test](#6-hello-mike-hello-joe-test)
+  - [Apps](#Apps)
+  - [Transports](#Transports)
   - [Creating a GitHub release](#creating-a-github-release)
     - [How to create a GitHub release](#how-to-create-a-github-release)
-
-**NOTE:** The project is still under heavy development and should only be used for testing purposes right now. Miners should not switch over to this project if they want to receive testnet rewards. 
 
 ## Build and run
 
@@ -63,20 +38,7 @@ $ make build # installs all dependencies, build binaries and skywire apps
 $ make install
 ```
 
-**Note: Environment variable OPTS**
-
-Build can be customized with environment variable `OPTS` with default value `GO111MODULE=on`
-
-E.g.
-
-```bash
-$ export OPTS="GO111MODULE=on GOOS=darwin"
-$ make
-# or
-$ OPTS="GSO111MODULE=on GOOS=linux GOARCH=arm" make
-```
-
-### Configure
+### Configure Skywire Visor
 
 The configuration file provides the configuration for `skywire-visor`. It is a text file in JSON format.
 
@@ -87,6 +49,8 @@ $ skywire-cli visor gen-config
 ```
 
 Additional options are displayed when `skywire-cli visor gen-config -h` is run.
+
+If you are trying to test features from the develop branch, you should use the `-t ` flag when generating config files for either `skywire-visor` or `hypervisor`. 
 
 We will cover certain fields of the configuration file below.
 
@@ -156,13 +120,14 @@ Then you can start a hypervisor with:
 $ hypervisor 
 ```
 
+You can open up the hypervisor UI on `localhost:8080`. 
+
 ### Apps
 
-After `skywire-visor` is up and running with default environment, default apps are run with the configuration specified in `skywire-config.json`. Refer to the following for usage of the default apps:
+After `skywire-visor` is up and running with default environment, default apps are run with the configuration specified in `skywire-config.json`. Refer to the following for usage of the apps:
 
-- [Chat](/cmd/apps/skychat)
-- [Hello World](/cmd/apps/helloworld)
-- [Sky Socks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
+- [Skychat](/cmd/apps/skychat)
+- [Skysocks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
 
 ### Transports
 
@@ -176,279 +141,6 @@ $ skywire-cli visor add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebe
 
 # List established transports.
 $ skywire-cli visor ls-tp
-```
-
-## App programming API
-
-App is a generic binary that can be executed by the visor. On app
-startup visor will open pair of unix pipes that will be used for
-communication between app and visor. `app` packages exposes
-communication API over the pipe.
-
-```golang
-// Config defines configuration parameters for App
-&app.Config{AppName: "helloworld", ProtocolVersion: "0.0.1"}
-// Setup setups app using default pair of pipes
-func Setup(config *Config) (*App, error) {}
-
-// Accept awaits for incoming route group confirmation request from a Visor and
-// returns net.Conn for a received route group.
-func (app *App) Accept() (net.Conn, error) {}
-
-// Addr implements net.Addr for App connections.
-&Addr{PubKey: pk, Port: 12}
-// Dial sends create route group request to a Visor and returns net.Conn for created route group.
-func (app *App) Dial(raddr *Addr) (net.Conn, error) {}
-
-// Close implements io.Closer for App.
-func (app *App) Close() error {}
-```
-
-## Testing
-
-### Testing with default settings
-
-```bash
-$ make test
-```
-
-### Customization with environment variables
-
-#### $TEST_OPTS
-
-Options for `go test` could be customized with $TEST_OPTS variable
-
-E.g.
-```bash
-$ export TEST_OPTS="-race -tags no_ci -timeout 90s -v"
-$ make test
-```
-
-#### $TEST_LOGGING_LEVEL
-
-By default all log messages during tests are disabled.
-In case of need to turn on log messages it could be achieved by setting $TEST_LOGGING_LEVEL variable
-
-Possible values:
-- "debug"
-- "info", "notice"
-- "warn", "warning"
-- "error"
-- "fatal", "critical"
-- "panic"
-
-E.g.
-```bash 
-$ export TEST_LOGGING_LEVEL="info"
-$ go clean -testcache || go test ./pkg/transport -v -run ExampleManager_CreateTransport
-$ unset TEST_LOGGING_LEVEL
-$ go clean -testcache || go test ./pkg/transport -v
-```
-
-#### $SYSLOG_OPTS
-
-In case of need to collect logs in syslog during integration tests $SYSLOG_OPTS variable can be used.
-
-E.g.
-```bash
-$ make run_syslog ## run syslog-ng in docker container with logs mounted to /tmp/syslog
-$ export SYSLOG_OPTS='--syslog localhost:514'
-$ make integration-run-messaging ## or other integration-run-* goal
-$ sudo cat /tmp/syslog/messages ## collected logs from VisorA, VisorB, VisorC instances
-```
-
-## Running skywire in docker containers
-
-There are two make goals for running in development environment dockerized `skywire-visor`.
-
-### Run dockerized `skywire-visor`
-
-```bash
-$ make docker-run
-```
-
-This will:
-
-- create docker image `skywire-runner` for running `skywire-visor`
-- create docker network `SKYNET` (can be customized)
-- create docker volume ./node with linux binaries and apps
-- create container  `SKY01` and starts it (can be customized)
-
-#### Structure of `./node`
-
-```
-./node
-├── apps                            # node `apps` compiled with DOCKER_OPTS
-│   ├── skychat.v1.0                #
-│   ├── helloworld.v1.0             #
-│   ├── skysocks-client.v1.0      #
-│   └── skysocks.v1.0             #
-├── local                           # **Created inside docker**
-│   ├── skychat                     #  according to "local_path" in skywire-config.json
-│   └── skysocks                  #
-├── PK                              # contains public key of node
-├── skywire                         # db & logs. **Created inside docker**
-│   ├── routing.db                  #
-│   └── transport_logs              #
-├── skywire-config.json             # config of node
-└── skywire-visor                   # `skywire-visor` binary compiled with DOCKER_OPTS
-```
-
-Directory `./node` is mounted as docker volume for `skywire-visor` container.
-
-Inside docker container it is mounted on `/sky`
-
-Structure of `./skywire-visor` partially replicates structure of project root directory.
-
-Note that files created inside docker container has ownership `root:root`, 
-so in case you want to `rm -rf ./node` (or other file operations) - you will need `sudo` it.
-
-Look at "Recipes: Creating new dockerized node" for further details.
-
-### Refresh and restart `SKY01`
-
-```bash
-$ make refresh-node
-```
-
-This will:
-
- - stops running node
- - recompiles `skywire-visor` for container
- - start node again
-
-### Customization of dockers
-
-#### 1. DOCKER_IMAGE
-
-Docker image for running `skywire-visor`.
-
-Default value: `skywire-runner` (built with `make docker-image`)
-
-Other images can be used.
-E.g.
-
-```bash
-DOCKER_IMAGE=golang make docker-run #buildpack-deps:stretch-scm is OK too
-```
-
-#### 2. DOCKER_NETWORK
-
-Name of virtual network for `skywire-visor`
-
-Default value: SKYNET
-
-#### 3. DOCKER_NODE
-
-Name of container for `skywire-visor`
-
-Default value: SKY01
-
-#### 4. DOCKER_OPTS
-
-`go build` options for binaries and apps in container.
-
-Default value: "GO111MODULE=on GOOS=linux"
-
-### Dockerized `skywire-visor` recipes
-
-#### 1. Get Public Key of docker-node
-
-```bash
-$ cat ./node/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' '
-# 029be6fa68c13e9222553035cc1636d98fb36a888aa569d9ce8aa58caa2c651b45
-```
-
-#### 2. Get an IP of node
-
-```bash
-$ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01
-# 192.168.112
-```
-
-#### 3. Open in browser containerized `skychat` application
-
-```bash
-$ firefox http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01):8000  
-```
-
-#### 4. Create new dockerized `skywire-visor`s
-
-In case you need more dockerized nodes or maybe it's needed to customize node
-let's look how to create new node.
-
-```bash
-# 1. We need a folder for docker volume
-$ mkdir /tmp/SKYNODE
-# 2. compile  `skywire-visor`
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/skywire-visor ./cmd/skywire-visor
-# 3. compile apps
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/skychat.v1.0 ./cmd/apps/skychat
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/helloworld.v1.0 ./cmd/apps/helloworld
-$ GO111MODULE=on GOOS=linux go build -o /tmp/SKYNODE/apps/skysocks.v1.0 ./cmd/apps/skysocks
-# 4. Create skywire-config.json for node
-$ skywire-cli node gen-config -o /tmp/SKYNODE/skywire-config.json
-# 2019/03/15 16:43:49 Done!
-$ tree /tmp/SKYNODE
-# /tmp/SKYNODE
-# ├── apps
-# │   ├── skychat.v1.0
-# │   ├── helloworld.v1.0
-# │   └── skysocks.v1.0
-# ├── skywire-config.json
-# └── skywire-visor
-# So far so good. We prepared docker volume. Now we can:
-$ docker run -it -v /tmp/SKYNODE:/sky --network=SKYNET --name=SKYNODE skywire-runner bash -c "cd /sky && ./skywire-visor"
-# [2019-03-15T13:55:08Z] INFO [messenger]: Opened new link with the server # 02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0
-# [2019-03-15T13:55:08Z] INFO [messenger]: Updating discovery entry
-# [2019-03-15T13:55:10Z] INFO [skywire]: Connected to messaging servers
-# [2019-03-15T13:55:10Z] INFO [skywire]: Starting skychat.v1.0
-# [2019-03-15T13:55:10Z] INFO [skywire]: Starting RPC interface on 127.0.0.1:3435
-# [2019-03-15T13:55:10Z] INFO [skywire]: Starting skysocks.v1.0
-# [2019-03-15T13:55:10Z] INFO [skywire]: Starting packet router
-# [2019-03-15T13:55:10Z] INFO [router]: Starting router
-# [2019-03-15T13:55:10Z] INFO [trmanager]: Starting transport manager
-# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skychat",# "app-version":"1.0","protocol-version":"0.0.1"}
-# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skychat.v1.0
-# [2019-03-15T13:55:10Z] INFO [skychat.v1.0]: 2019/03/15 13:55:10 Serving HTTP on :8000
-# [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skysocks",# "app-version":"1.0","protocol-version":"0.0.1"}
-# [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skysocks.v1.0
-```
-
-Note that in this example docker is running in non-detached mode - it could be useful in some scenarios.
-
-Instead of skywire-runner you can use:
-
-- `golang`, `buildpack-deps:stretch-scm` "as is"
-- and `debian`, `ubuntu` - after `apt-get install ca-certificates` in them. Look in `skywire-runner.Dockerfile` for example
-
-#### 5. Env-vars for development-/testing- purposes
-
-```bash
-export SW_VISOR_A=127.0.0.1
-export SW_VISOR_A_PK=$(cat ./skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
-export SW_VISOR_B=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01)
-export SW_VISOR_B_PK=$(cat ./visor/skywire-config.json|grep static_public_key |cut -d ':' -f2 |tr -d '"'','' ')
-```
-
-#### 6. "Hello-Mike-Hello-Joe" test
-
-Idea of test from Erlang classics: <https://youtu.be/uKfKtXYLG78?t=120>
-
-```bash
-# Setup: run skywire-visors on host and in docker
-$ make run
-$ make docker-run
-# Open in browser skychat application
-$ firefox http://$SW_VISOR_B:8000  &
-# add transport
-$ ./skywire-cli add-transport $SW_VISOR_B_PK
-# "Hello Mike!" - "Hello Joe!" - "System is working!"
-$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"Hello Mike!"}' -X POST  http://$SW_VISOR_B:8000/message
-$ curl --data  {'"recipient":"'$SW_VISOR_B_PK'", "message":"Hello Joe!"}' -X POST  http://$SW_VISOR_A:8000/message
-$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"System is working!"}' -X POST  http://$SW_VISOR_B:8000/message
-# Teardown
-$ make stop && make docker-stop
 ```
 
 ## Creating a GitHub release
