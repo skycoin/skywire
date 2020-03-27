@@ -86,8 +86,7 @@ func fillInOldKeys(confPath string, conf *visor.Config) error {
 		return fmt.Errorf("invalid old configuration file: %w", err)
 	}
 
-	conf.KeyPair.PubKey = oldConf.KeyPair.PubKey
-	conf.KeyPair.SecKey = oldConf.KeyPair.SecKey
+	conf.KeyPair = oldConf.KeyPair
 
 	return nil
 }
