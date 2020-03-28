@@ -101,6 +101,9 @@ import { SelectOptionComponent } from './components/layout/select-option/select-
 import { SelectPageComponent } from './components/layout/paginator/select-page/select-page.component';
 import { TerminalComponent } from './components/pages/node/actions/terminal/terminal.component';
 import { SkysocksSettingsComponent } from './components/pages/node/apps/node-apps/skysocks-settings/skysocks-settings.component';
+import {
+  SkysocksClientSettingsComponent
+} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -181,6 +184,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SelectPageComponent,
     TerminalComponent,
     SkysocksSettingsComponent,
+    SkysocksClientSettingsComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -210,6 +214,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SelectPageComponent,
     TerminalComponent,
     SkysocksSettingsComponent,
+    SkysocksClientSettingsComponent,
   ],
   imports: [
     BrowserModule,
