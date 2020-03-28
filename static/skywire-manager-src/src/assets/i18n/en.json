@@ -53,7 +53,7 @@
         "label": "Label:",
         "public-key": "Public key:",
         "port": "Port:",
-        "node-version": "Node version:",
+        "node-version": "Visor version:",
         "app-protocol-version": "App protocol version:",
         "time": {
           "title": "Time online:",
