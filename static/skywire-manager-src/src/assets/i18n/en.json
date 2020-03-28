@@ -266,6 +266,18 @@
       "change-passowrd-confirmation": "Are you sure you want to change the password?",
       "changes-made": "The changes have been made."
     },
+    "skysocks-client-settings": {
+      "title": "Skysocks-Client Settings",
+      "remote-visor-tab": "Remote Visor",
+      "history-tab": "History",
+      "public-key": "Remote visor public key",
+      "remote-key-length-error": "The public key must be 66 characters long.",
+      "remote-key-chars-error": "The public key must only contain hexadecimal characters.",
+      "save": "Save",
+      "change-key-confirmation": "Are you sure you want to change the remote visor public key?",
+      "changes-made": "The changes have been made.",
+      "no-history": "This tab will show the last {{ number }} public keys used."
+    },
     "stop-app": "Stop",
     "start-app": "Start",
     "view-logs": "View logs",
