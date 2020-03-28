@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot, CanActivateChild } from '@angular/router';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 
 import { AuthService, AuthStates } from './auth.service';
@@ -28,7 +28,9 @@ export class AuthGuardService implements CanActivate, CanActivateChild {
   }
 
   private checkIfCanActivate(route: ActivatedRouteSnapshot): Observable<boolean> {
-    return this.authService.checkLogin().pipe(map((authState: AuthStates) => {
+    return this.authService.checkLogin().pipe(catchError(() => {
+      return of(AuthStates.AuthDisabled);
+    }), map((authState: AuthStates) => {
       // If the user is trying to access "Login" page while he is already logged in or the
       // auth is disabled, redirect him to "Nodes" page
       if (route.routeConfig.path === 'login' && (authState === AuthStates.Logged || authState === AuthStates.AuthDisabled)) {
