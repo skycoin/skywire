@@ -13,6 +13,9 @@ matrix:
       if: type != pull_request
       osx_image: xcode8
 
+before_install:
+  - nvm install 10.16
+
 install:
   - go get -u github.com/FiloSottile/vendorcheck
   - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.22.2
@@ -24,3 +27,6 @@ script:
 #  - make lint TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
   - make test
   - make test-no-ci
+  - make install-deps-ui
+  - make lint-ui
+  - make build-ui
