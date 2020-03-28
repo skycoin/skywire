@@ -16,6 +16,7 @@ import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout
 import { SkysocksSettingsComponent } from '../skysocks-settings/skysocks-settings.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
+import { SkysocksClientSettingsComponent } from '../skysocks-client-settings/skysocks-client-settings.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -72,6 +73,7 @@ export class NodeAppsListComponent implements OnDestroy {
   // List with the names of all the apps which can be configured directly on the manager.
   appsWithConfig = new Map<string, boolean>([
     ['skysocks', true],
+    ['skysocks-client', true],
   ]);
 
   allApps: Application[];
@@ -334,6 +336,8 @@ export class NodeAppsListComponent implements OnDestroy {
   config(app: Application): void {
     if (app.name === 'skysocks') {
       SkysocksSettingsComponent.openDialog(this.dialog, app.name);
+    } else if (app.name === 'skysocks-client') {
+      SkysocksClientSettingsComponent.openDialog(this.dialog, app.name);
     } else {
       this.snackbarService.showError('apps.error');
     }
