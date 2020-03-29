@@ -20,23 +20,15 @@
 - `restart_check_delay` (string)
 
 
-# KeyPair
-
-- `public_key` ([PubKey](#PubKey))
-- `secret_key` ([SecKey](#SecKey))
-
-
-# RoutingConfig
-
-- `setup_nodes` ([][PubKey](#PubKey))
-- `route_finder` (string)
-- `route_finder_timeout` ([Duration](#Duration))
-
-
 # TransportConfig
 
 - `discovery` (string)
 - `log_store` (*[LogStoreConfig](#LogStoreConfig))
+
+
+# UptimeTrackerConfig
+
+- `addr` (string)
 
 
 # AppConfig
@@ -47,12 +39,16 @@
 - `args` ([]string)
 
 
-# DmsgPtyConfig
+# KeyPair
 
-- `port` (uint16)
-- `authorization_file` (string)
-- `cli_network` (string)
-- `cli_address` (string)
+- `public_key` ([PubKey](#PubKey))
+- `secret_key` ([SecKey](#SecKey))
+
+
+# LogStoreConfig
+
+- `type` ([LogStoreType](#LogStoreType))
+- `location` (string)
 
 
 # HypervisorConfig
@@ -66,24 +62,28 @@
 - `rpc` (string)
 
 
-# UptimeTrackerConfig
+# DmsgPtyConfig
 
-- `addr` (string)
-
-
-# LogStoreConfig
-
-- `type` ([LogStoreType](#LogStoreType))
-- `location` (string)
+- `port` (uint16)
+- `authorization_file` (string)
+- `cli_network` (string)
+- `cli_address` (string)
 
 
-# DmsgConfig
+# RoutingConfig
 
-- `discovery` (string)
-- `sessions_count` (int)
+- `setup_nodes` ([][PubKey](#PubKey))
+- `route_finder` (string)
+- `route_finder_timeout` ([Duration](#Duration))
 
 
 # STCPConfig
 
 - `pk_table` (map[[PubKey](#PubKey)]string)
 - `local_address` (string)
+
+
+# DmsgConfig
+
+- `discovery` (string)
+- `sessions_count` (int)
