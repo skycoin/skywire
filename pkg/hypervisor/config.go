@@ -14,6 +14,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
+//go:generate readmegen -n Config -o ./README.md ./config.go
+
 const (
 	defaultWebDir           = "./static/skywire-manager-src/dist"
 	defaultHTTPAddr         = ":8080"
