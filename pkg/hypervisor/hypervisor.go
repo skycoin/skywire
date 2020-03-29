@@ -61,6 +61,8 @@ type Hypervisor struct {
 
 // New creates a new Hypervisor.
 func New(config Config) (*Hypervisor, error) {
+	config.Cookies.TLS = config.EnableTLS
+
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
 	if err != nil {
 		return nil, err
