@@ -24,6 +24,8 @@ import (
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
+//go:generate readmegen -n Config -o ./README.md ./config.go
+
 const (
 	// DefaultTimeout is used for default config generation and if it is not set in config.
 	DefaultTimeout = Duration(10 * time.Second)
