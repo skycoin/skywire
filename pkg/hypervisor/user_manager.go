@@ -297,11 +297,12 @@ func (s *UserManager) newSession(w http.ResponseWriter, session Session) error {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    value,
+		Path:     s.c.Path,
 		Domain:   s.c.Domain,
 		Expires:  time.Now().Add(s.c.ExpiresDuration),
-		Secure:   s.c.Secure,
-		HttpOnly: s.c.HTTPOnly,
-		SameSite: s.c.SameSite,
+		Secure:   s.c.Secure(),
+		HttpOnly: s.c.HTTPOnly(),
+		SameSite: s.c.SameSite(),
 	})
 
 	return nil
@@ -324,11 +325,12 @@ func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
+		Path:     s.c.Path,
 		Domain:   s.c.Domain,
 		MaxAge:   -1,
-		Secure:   s.c.Secure,
-		HttpOnly: s.c.HTTPOnly,
-		SameSite: s.c.SameSite,
+		Secure:   s.c.Secure(),
+		HttpOnly: s.c.HTTPOnly(),
+		SameSite: s.c.SameSite(),
 	})
 
 	return nil
