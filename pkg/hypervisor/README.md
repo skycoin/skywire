@@ -21,6 +21,3 @@
 - `expires_duration` ([Duration](#Duration))
 - `path` (string)
 - `domain` (string)
-- `secure` (bool)
-- `http_only` (bool)
-- `same_site` ([SameSite](#SameSite))
