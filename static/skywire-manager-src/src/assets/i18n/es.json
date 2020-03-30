@@ -13,6 +13,7 @@
     "loading-error": "Hubo un error obteniendo los datos. Reintentando...",
     "operation-error": "Hubo un error al intentar completar la operación.",
     "no-connection-error": "No hay conexión a Internet o conexión con el hipervisor.",
+    "error": "Error:",
     "refreshed": "Datos refrescados.",
     "options": "Opciones",
     "logout": "Cerrar sesión",
@@ -82,7 +83,7 @@
       "apps": "Apps",
       "routing": "Enrutamiento"
     },
-    "error-load": "Hubo un error al intentar refrescar los datos del visor."
+    "error-load": "Hubo un error al intentar refrescar los datos. Reintentando..."
   },
 
   "nodes": {
@@ -92,7 +93,7 @@
     "key": "Llave",
     "view-node": "Ver visor",
     "delete-node": "Remover visor",
-    "error-load": "Hubo un error al intentar refrescar los visores.",
+    "error-load": "Hubo un error al intentar refrescar la lista. Reintentando...",
     "empty": "No hay ningún visor conectado a este hypervisor.",
     "delete-node-confirmation": "¿Seguro que desea remover el visor de la lista?",
     "deleted": "Visor removido."
@@ -258,7 +259,6 @@
     "stop-app": "Detener",
     "start-app": "Iniciar",
     "view-logs": "Ver logs",
-    "error": "Ha ocurrido un error y no ha sido posible realizar la operación.",
     "stop-confirmation": "¿Seguro que desea detener la aplicación?",
     "stop-selected-confirmation": "¿Seguro que desea detener las aplicaciones seleccionadas?",
     "disable-autostart-confirmation": "¿Seguro que desea deshabilitar el autoinicio de la aplicación?",
@@ -266,6 +266,7 @@
     "disable-autostart-selected-confirmation": "¿Seguro que desea deshabilitar el autoinicio de las aplicaciones seleccionadas?",
     "enable-autostart-selected-confirmation": "¿Seguro que desea habilitar el autoinicio de las aplicaciones seleccionadas?",
     "operation-completed": "Operación completada.",
+    "operation-unnecessary": "La selección ya tiene la configuración solicitada.",
     "status-running": "Corriendo",
     "status-stopped": "Detenida",
     "status-failed": "Fallida",
@@ -285,7 +286,6 @@
     "delete-selected-confirmation": "¿Seguro que desea borrar los transportes seleccionados?",
     "delete": "Borrar transporte",
     "deleted": "Operación de borrado completada.",
-    "error-deleting": "No fue posible completar la operación de borrado.",
     "empty": "El visor no tiene ningún transporte.",
     "details": {
       "title": "Detalles",
@@ -323,7 +323,6 @@
     "delete-selected-confirmation": "¿Seguro que desea borrar las rutas seleccionadas?",
     "delete": "Borrar ruta",
     "deleted": "Operación de borrado completada.",
-    "error-deleting": "No fue posible completar la operación de borrado.",
     "empty": "El visor no tiene ninguna ruta.",
     "details": {
       "title": "Detalles",
