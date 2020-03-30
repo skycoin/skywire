@@ -13,7 +13,7 @@ The Skywire Manager requires Node 10.9.0 or higher, together with NPM 6.0.0 or h
 Dependencies needed for this app are managed with NPM and are not included in the repository, so you must run the `npm install`
 command on this folder before being able to tun the app.
 
-Also, as the app needs a HTTPS connection to work, you may want to create a SSL certificate for the dev server. This step is
+Also, if you are going to use an HTTPS connection, you may want to create a SSL certificate for the dev server. This step is
 optional, as the dev server can create its own certificate, but there are 2 reasons for manually creating one: to avoid a bug
 in the dev server that sometimes makes it to reload the app when it shouild not
 (https://github.com/angular/angular-cli/issues/5826) and to have more freedom managing the trusted certificates. For creating
@@ -21,24 +21,20 @@ a custom certificate, follow the steps in the [ssl folder](./ssl/README.md)
 
 ## Hypervisor configuration
 
-For the app to work, the Hypervisor instance must be running with authentication disabled or with a password set for the
-"admin" account. For running the hypervisor instance without authentication, start it with the `enable_auth` configuration
-value set to `false` in the Hypervisor configuration file or using the `-m` flag. For setting a password for the "admin"
-account, use the `/create-account` API endpoint.
-
-Also, the Hypervisor instance must be running in `http://localhost:8080`. If it is running in another URL, you can change it in
+The Hypervisor instance must be running in `http://127.0.0.1:8080`. If it is running in another URL, you can change it in
 [proxy.config.json](proxy.config.json) before running the app.
 
 ## Running the app
 
-Run `npm run start` to start a dev server. If you followed the steps indicated in the [ssl folder](./ssl/README.md), the server
-will use your custom SSL certificate. If not, the server will use an automatically created one. Alternatively, if you don't
-want to use a https connection you can start the dev server by running `npm run start-no-ssl`, but the manager will not work
-unless the hypervisor instance has the autentication options deactivated.
+If the hypervisor instance is running with TLS active (check the hypervisor configuration file) Run `npm run start` to start a
+dev server. If you followed the steps indicated in the [ssl folder](./ssl/README.md), the server will use your custom SSL
+certificate. If not, the server will use an automatically created one. Alternatively, If the hypervisor instance is running
+without TLS, you can start the dev server by running `npm run start-no-ssl`.
 
-After the server is started, you can access the app by navigating to `http://localhost:4200` with a web browser (note
-that you could get a security warning if the SSL certificate is not in the trusted certificates list). The app will
-automatically reload if you change any of the source files.
+After starting the server with `npm run start`, you can access the app by navigating to `https://localhost:4200` with a web
+browser (note that you could get a security warning if the SSL certificate is not in the trusted certificates list). Yo can use
+`https://localhost:4200` if you started the dev server with `npm run start-no-ssl`. The app will be automatically reloaded if you
+change any of the source files.
 
 ## Build
 
