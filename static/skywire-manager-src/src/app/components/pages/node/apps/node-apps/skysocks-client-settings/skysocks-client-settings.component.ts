@@ -89,7 +89,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   /**
    * Saves the settings.
    */
-  saveChanges(publicKey: string) {
+  saveChanges(publicKey: string = null) {
     if ((!this.form.valid && !publicKey) || this.working) {
       return;
     }
