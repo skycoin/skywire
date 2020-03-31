@@ -5,7 +5,7 @@ const (
 	DefaultTpDiscAddr      = "http://transport.discovery.skywire.skycoin.com"
 	DefaultDmsgDiscAddr    = "http://dmsg.discovery.skywire.skycoin.com"
 	DefaultRouteFinderAddr = "http://routefinder.skywire.skycoin.com"
-	DefaultSetupPK         = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
+	DefaultSetupPK         = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
 // Constants for testing deployment.
