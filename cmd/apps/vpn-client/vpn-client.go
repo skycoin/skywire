@@ -3,8 +3,9 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
-	"log"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -12,6 +13,11 @@ import (
 	"strconv"
 	"syscall"
 
+	"golang.org/x/net/ipv4"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -48,6 +54,11 @@ const (
 const (
 	appName = "vpn-client"
 	netType = appnet.TypeSkynet
+	vpnPort = routing.Port(44)
+)
+
+const (
+	bufSize = 1800
 )
 
 type RouteArg struct {
@@ -114,42 +125,58 @@ func getDefaultGatewayIP() (net.IP, error) {
 	return nil, errors.New("couldn't find default gateway IP")
 }
 
+var (
+	log = app.NewLogger(appName)
+)
+
 func main() {
+	var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
+	if *serverPKStr == "" {
+		log.Fatalln("VPN server pub key is missing")
+	}
+
+	// TODO: ignore routing localhost addresses
+
+	serverPK := cipher.PubKey{}
+	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
+		log.Fatalf("Invalid VPN server pub key: %v", err)
+	}
+
 	defaultGatewayIP, err := getDefaultGatewayIP()
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error getting default network gateway: %v", err)
 	}
 
 	dmsgDiscIP, ok, err := ipFromEnv(dmsgDiscAddrEnvKey)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error getting Dmsg discovery IP: %v", err)
 	}
 	if !ok {
-		panic(fmt.Errorf("%s value is not provided", dmsgDiscAddrEnvKey))
+		log.Fatalf("Env arg %s is not provided", dmsgDiscAddrEnvKey)
 	}
 
 	dmsgIP, ok, err := ipFromEnv(dmsgAddrEnvKey)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error getting Dmsg IP: %v", err)
 	}
 	if !ok {
-		panic(fmt.Errorf("%s value is not provided", dmsgAddrEnvKey))
+		log.Fatalf("Env arg %s is not provided", dmsgAddrEnvKey)
 	}
 
 	tpDiscIP, ok, err := ipFromEnv(tpDiscAddrEnvKey)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error getting transport discovery IP: %v", err)
 	}
 	if !ok {
-		panic(fmt.Errorf("%s value is not provided", tpDiscAddrEnvKey))
+		log.Fatalf("Env arg %s is not provided", tpDiscAddrEnvKey)
 	}
 
 	rfIP, ok, err := ipFromEnv(rfAddrEnvKey)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error getting route finder IP: %v", err)
 	}
 	if !ok {
-		panic(fmt.Errorf("%s value is not provided", rfAddrEnvKey))
+		log.Fatalf("Env arg %s is not provided", rfAddrEnvKey)
 	}
 
 	var stcpEntities []string
@@ -157,19 +184,19 @@ func main() {
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
 		if err != nil {
-			panic(fmt.Errorf("error getting STCP table len: %w", err))
+			log.Fatalf("Invalid STCP table len: %v", err)
 		}
 
 		stcpEntities = make([]string, 0, stcpTableLen)
 		for i := 0; i < stcpTableLen; i++ {
 			stcpKey := os.Getenv(stcpKeyEnvPrefix + strconv.Itoa(i))
 			if stcpKey == "" {
-				panic(fmt.Errorf("STCP table key %d is missing", i))
+				log.Fatalf("Env arg %s is not provided", stcpKeyEnvPrefix+strconv.Itoa(i))
 			}
 
 			stcpAddr := os.Getenv(stcpValueEnvPrefix + stcpKey)
 			if stcpAddr == "" {
-				panic(fmt.Errorf("STCP table is missing address for key %s", stcpKey))
+				log.Fatalf("Env arg %s is not provided", stcpValueEnvPrefix+stcpKey)
 			}
 
 			stcpEntities = append(stcpEntities, stcpAddr)
@@ -181,29 +208,56 @@ func main() {
 	if hypervisorsCountStr != "" {
 		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
 		if err != nil {
-			panic(fmt.Errorf("error getting hypervisors count: %w", err))
+			log.Fatalf("Invalid hypervisors count: %v", err)
 		}
 
 		hypervisorAddrs = make([]string, 0, hypervisorsCount)
 		for i := 0; i < hypervisorsCount; i++ {
 			hypervisorAddr := os.Getenv(hypervisorAddrEnvPrefix + strconv.Itoa(i))
 			if hypervisorAddr == "" {
-				panic(fmt.Errorf("hypervisor %d addr is missing", i))
+				log.Fatalf("Env arg %s is missing", hypervisorAddrEnvPrefix+strconv.Itoa(i))
 			}
 
 			hypervisorAddrs = append(hypervisorAddrs, hypervisorAddr)
 		}
 	}
 
-	ifc, err := water.New(water.Config{
-		DeviceType:             water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{},
-	})
-	if nil != err {
-		log.Fatalln("Error allocating TUN interface:", err)
+	appCfg, err := app.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting app client config: %v", err)
 	}
 
-	fmt.Printf("Allocated TUN %s\n", ifc.Name())
+	vpnClient, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
+	if err != nil {
+		log.Fatalf("Error setting up VPN client: v", err)
+	}
+	defer func() {
+		vpnClient.Close()
+	}()
+
+	appConn, err := vpnClient.Dial(appnet.Addr{
+		Net:    netType,
+		PubKey: serverPK,
+		Port:   vpnPort,
+	})
+	if err != nil {
+		log.Fatalf("Error connecting to VPN server: %v", err)
+	}
+
+	ifc, err := water.New(water.Config{
+		DeviceType: water.TUN,
+	})
+	if nil != err {
+		log.Fatalf("Error allocating TUN interface: %v", err)
+	}
+	defer func() {
+		tunName := ifc.Name()
+		if err := ifc.Close(); err != nil {
+			log.Errorf("Error closing TUN %s: %v", tunName, err)
+		}
+	}()
+
+	log.Infof("Allocated TUN %s", ifc.Name())
 
 	osSigs := make(chan os.Signal)
 
@@ -259,30 +313,50 @@ func main() {
 	addRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask)
 	addRoute(ipv4SecondHalfAddr, tunGateway, ipv4HalfRangeMask)
 
-	appCfg, err := app.ClientConfigFromEnv()
-	if err != nil {
-		log.Fatalf("Error getting client config: %v\n", err)
-	}
-
-	vpnClient, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
-	if err != nil {
-		log.Fatal("VPN client setup failure: ", err)
-	}
-	defer func() {
-		vpnClient.Close()
+	// read all system traffic and pass it to the remote VPN server
+	go func() {
+		if err := copyTraffic(ifc, appConn); err != nil {
+			log.Fatalf("Error resending traffic from TUN %s to VPN server: %v", ifc.Name(), err)
+		}
 	}()
-
-	// setup listener to get incoming routing changes from the visor
-	serviceL, err := vpnClient.Listen(netType, servicePort)
-	if err != nil {
-		panic(err)
-	}
-
-	vpnClient.Dial()
+	go func() {
+		if err := copyTraffic(appConn, ifc); err != nil {
+			log.Fatalf("Error resending traffic from VPN server to TUN %s: %v", ifc.Name(), err)
+		}
+	}()
 
 	<-shutdownC
 
 	log.Fatalln("DONE")
+}
+
+func copyTraffic(from, to io.ReadWriteCloser) error {
+	buf := make([]byte, bufSize)
+	for {
+		rn, rerr := from.Read(buf)
+		if rerr != nil {
+			return fmt.Errorf("error reading from RWC: %v", rerr)
+		}
+
+		header, err := ipv4.ParseHeader(buf[:rn])
+		if err != nil {
+			log.Errorf("Error parsing IP header, skipping...")
+			continue
+		}
+
+		// TODO: match IPs?
+		log.Infof("Sending IP packet %v->%v", header.Src, header.Dst)
+
+		totalWritten := 0
+		for totalWritten != rn {
+			wn, werr := to.Write(buf[:rn])
+			if werr != nil {
+				return fmt.Errorf("error writing to RWC: %v", err)
+			}
+
+			totalWritten += wn
+		}
+	}
 }
 
 func ipFromEnv(key string) (net.IP, bool, error) {
