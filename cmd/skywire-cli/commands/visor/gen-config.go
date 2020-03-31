@@ -143,6 +143,7 @@ func defaultConfig() *visor.Config {
 		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 		conf.Transport.Discovery = skyenv.TestTpDiscAddr
 		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+		conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	}
 
 	conf.Hypervisors = []visor.HypervisorConfig{}
