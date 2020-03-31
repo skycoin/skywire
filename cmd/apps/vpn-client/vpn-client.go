@@ -135,8 +135,6 @@ func main() {
 		log.Fatalln("VPN server pub key is missing")
 	}
 
-	// TODO: ignore routing localhost addresses
-
 	serverPK := cipher.PubKey{}
 	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
 		log.Fatalf("Invalid VPN server pub key: %v", err)
@@ -179,7 +177,7 @@ func main() {
 		log.Fatalf("Env arg %s is not provided", rfAddrEnvKey)
 	}
 
-	var stcpEntities []string
+	var stcpEntities []net.IP
 	stcpTableLenStr := os.Getenv(stcpTableLenEnvKey)
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
@@ -187,23 +185,28 @@ func main() {
 			log.Fatalf("Invalid STCP table len: %v", err)
 		}
 
-		stcpEntities = make([]string, 0, stcpTableLen)
+		stcpEntities = make([]net.IP, 0, stcpTableLen)
 		for i := 0; i < stcpTableLen; i++ {
 			stcpKey := os.Getenv(stcpKeyEnvPrefix + strconv.Itoa(i))
 			if stcpKey == "" {
 				log.Fatalf("Env arg %s is not provided", stcpKeyEnvPrefix+strconv.Itoa(i))
 			}
 
-			stcpAddr := os.Getenv(stcpValueEnvPrefix + stcpKey)
-			if stcpAddr == "" {
+			stcpAddrStr := os.Getenv(stcpValueEnvPrefix + stcpKey)
+			if stcpAddrStr == "" {
 				log.Fatalf("Env arg %s is not provided", stcpValueEnvPrefix+stcpKey)
+			}
+
+			stcpAddr := net.ParseIP(stcpAddrStr)
+			if stcpAddr == nil {
+				log.Fatalf("Invalid STCP address in key %s: %v", stcpValueEnvPrefix+stcpKey, err)
 			}
 
 			stcpEntities = append(stcpEntities, stcpAddr)
 		}
 	}
 
-	var hypervisorAddrs []string
+	var hypervisorAddrs []net.IP
 	hypervisorsCountStr := os.Getenv(hypervisorsCountEnvKey)
 	if hypervisorsCountStr != "" {
 		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
@@ -211,11 +214,16 @@ func main() {
 			log.Fatalf("Invalid hypervisors count: %v", err)
 		}
 
-		hypervisorAddrs = make([]string, 0, hypervisorsCount)
+		hypervisorAddrs = make([]net.IP, 0, hypervisorsCount)
 		for i := 0; i < hypervisorsCount; i++ {
-			hypervisorAddr := os.Getenv(hypervisorAddrEnvPrefix + strconv.Itoa(i))
-			if hypervisorAddr == "" {
+			hypervisorAddrStr := os.Getenv(hypervisorAddrEnvPrefix + strconv.Itoa(i))
+			if hypervisorAddrStr == "" {
 				log.Fatalf("Env arg %s is missing", hypervisorAddrEnvPrefix+strconv.Itoa(i))
+			}
+
+			hypervisorAddr := net.ParseIP(hypervisorAddrStr)
+			if hypervisorAddr == nil {
+				log.Fatalf("Invalid hypervisor address in key %s: %v", hypervisorAddrEnvPrefix+strconv.Itoa(i), err)
 			}
 
 			hypervisorAddrs = append(hypervisorAddrs, hypervisorAddr)
@@ -277,31 +285,55 @@ func main() {
 	setupTUN(ifc.Name(), tunIP, tunNetmask, tunGateway, tunMTU)
 
 	// route Skywire service traffic through the default gateway
-	addRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
-	addRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
-	addRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
-	addRoute(rfIP.String(), defaultGatewayIP.String(), "")
+	if !dmsgDiscIP.IsLoopback() {
+		addRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
+	}
+	if !dmsgIP.IsLoopback() {
+		addRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
+	}
+	if !tpDiscIP.IsLoopback() {
+		addRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
+	}
+	if !rfIP.IsLoopback() {
+		addRoute(rfIP.String(), defaultGatewayIP.String(), "")
+	}
 
 	for _, stcpEntity := range stcpEntities {
-		addRoute(stcpEntity, defaultGatewayIP.String(), "")
+		if !stcpEntity.IsLoopback() {
+			addRoute(stcpEntity.String(), defaultGatewayIP.String(), "")
+		}
 	}
 
 	for _, hypervisorAddr := range hypervisorAddrs {
-		addRoute(hypervisorAddr, defaultGatewayIP.String(), "")
+		if !hypervisorAddr.IsLoopback() {
+			addRoute(hypervisorAddr.String(), defaultGatewayIP.String(), "")
+		}
 	}
 
 	defer func() {
-		deleteRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
-		deleteRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
-		deleteRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
-		deleteRoute(rfIP.String(), defaultGatewayIP.String(), "")
+		if !dmsgDiscIP.IsLoopback() {
+			deleteRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
+		}
+		if !dmsgIP.IsLoopback() {
+			deleteRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
+		}
+		if !tpDiscIP.IsLoopback() {
+			deleteRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
+		}
+		if !rfIP.IsLoopback() {
+			deleteRoute(rfIP.String(), defaultGatewayIP.String(), "")
+		}
 
 		for _, stcpEntity := range stcpEntities {
-			deleteRoute(stcpEntity, defaultGatewayIP.String(), "")
+			if !stcpEntity.IsLoopback() {
+				deleteRoute(stcpEntity.String(), defaultGatewayIP.String(), "")
+			}
 		}
 
 		for _, hypervisorAddr := range hypervisorAddrs {
-			deleteRoute(hypervisorAddr, defaultGatewayIP.String(), "")
+			if !hypervisorAddr.IsLoopback() {
+				deleteRoute(hypervisorAddr.String(), defaultGatewayIP.String(), "")
+			}
 		}
 
 		// remove main route
