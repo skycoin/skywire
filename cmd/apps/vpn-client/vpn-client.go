@@ -10,9 +10,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/songgao/water"
 )
 
@@ -21,6 +23,13 @@ const (
 	dmsgAddrEnvKey     = "ADDR_DMSG_SRV"
 	tpDiscAddrEnvKey   = "ADDR_TP_DISC"
 	rfAddrEnvKey       = "ADDR_RF"
+
+	stcpTableLenEnvKey = "STCP_TABLE_LEN"
+	stcpKeyEnvPrefix   = "STCP_TABLE_KEY_"
+	stcpValueEnvPrefix = "STCP_TABLE_"
+
+	hypervisorsCountEnvKey  = "HYPERVISOR_COUNT"
+	hypervisorAddrEnvPrefix = "ADDR_HYPERVISOR_"
 )
 
 const (
@@ -36,14 +45,16 @@ const (
 	ipv4HalfRangeMask  = "128.0.0.0"
 )
 
+const (
+	appName = "vpn-client"
+	netType = appnet.TypeSkynet
+)
+
 type RouteArg struct {
 	IP      string
 	Gateway string
 	Netmask string
 }
-
-var nonRoutedTrafficMx sync.Mutex
-var nonRoutedTraffic []RouteArg
 
 func run(bin string, args ...string) {
 	//cmd := exec.Command("sh -c \"ip " + strings.Join(args, " ") + "\"")
@@ -109,24 +120,79 @@ func main() {
 		panic(err)
 	}
 
-	dmsgDiscIP, err := ipFromEnv(dmsgDiscAddrEnvKey)
+	dmsgDiscIP, ok, err := ipFromEnv(dmsgDiscAddrEnvKey)
 	if err != nil {
 		panic(err)
 	}
+	if !ok {
+		panic(fmt.Errorf("%s value is not provided", dmsgDiscAddrEnvKey))
+	}
 
-	dmsgIP, err := ipFromEnv(dmsgAddrEnvKey)
+	dmsgIP, ok, err := ipFromEnv(dmsgAddrEnvKey)
 	if err != nil {
 		panic(err)
 	}
+	if !ok {
+		panic(fmt.Errorf("%s value is not provided", dmsgAddrEnvKey))
+	}
 
-	tpDiscIP, err := ipFromEnv(tpDiscAddrEnvKey)
+	tpDiscIP, ok, err := ipFromEnv(tpDiscAddrEnvKey)
 	if err != nil {
 		panic(err)
 	}
+	if !ok {
+		panic(fmt.Errorf("%s value is not provided", tpDiscAddrEnvKey))
+	}
 
-	rfIP, err := ipFromEnv(rfAddrEnvKey)
+	rfIP, ok, err := ipFromEnv(rfAddrEnvKey)
 	if err != nil {
 		panic(err)
+	}
+	if !ok {
+		panic(fmt.Errorf("%s value is not provided", rfAddrEnvKey))
+	}
+
+	var stcpEntities []string
+	stcpTableLenStr := os.Getenv(stcpTableLenEnvKey)
+	if stcpTableLenStr != "" {
+		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
+		if err != nil {
+			panic(fmt.Errorf("error getting STCP table len: %w", err))
+		}
+
+		stcpEntities = make([]string, 0, stcpTableLen)
+		for i := 0; i < stcpTableLen; i++ {
+			stcpKey := os.Getenv(stcpKeyEnvPrefix + strconv.Itoa(i))
+			if stcpKey == "" {
+				panic(fmt.Errorf("STCP table key %d is missing", i))
+			}
+
+			stcpAddr := os.Getenv(stcpValueEnvPrefix + stcpKey)
+			if stcpAddr == "" {
+				panic(fmt.Errorf("STCP table is missing address for key %s", stcpKey))
+			}
+
+			stcpEntities = append(stcpEntities, stcpAddr)
+		}
+	}
+
+	var hypervisorAddrs []string
+	hypervisorsCountStr := os.Getenv(hypervisorsCountEnvKey)
+	if hypervisorsCountStr != "" {
+		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
+		if err != nil {
+			panic(fmt.Errorf("error getting hypervisors count: %w", err))
+		}
+
+		hypervisorAddrs = make([]string, 0, hypervisorsCount)
+		for i := 0; i < hypervisorsCount; i++ {
+			hypervisorAddr := os.Getenv(hypervisorAddrEnvPrefix + strconv.Itoa(i))
+			if hypervisorAddr == "" {
+				panic(fmt.Errorf("hypervisor %d addr is missing", i))
+			}
+
+			hypervisorAddrs = append(hypervisorAddrs, hypervisorAddr)
+		}
 	}
 
 	ifc, err := water.New(water.Config{
@@ -151,96 +217,95 @@ func main() {
 	go func() {
 		<-osSigs
 
-		if err := shutdown(); err != nil {
-			log.Printf("Shutdown error: %v\n", err)
-		}
-
 		shutdownC <- struct{}{}
 	}()
-
-	//time.Sleep(10 * time.Minute)
 
 	setupTUN(ifc.Name(), tunIP, tunNetmask, tunGateway, tunMTU)
 
 	// route Skywire service traffic through the default gateway
-	nonRoutedTrafficMx.Lock()
 	addRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
 	addRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
 	addRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
 	addRoute(rfIP.String(), defaultGatewayIP.String(), "")
-	nonRoutedTraffic = append(nonRoutedTraffic, RouteArg{
-		IP:      dmsgDiscIP.String(),
-		Gateway: defaultGatewayIP.String(),
-		Netmask: "",
-	})
-	nonRoutedTraffic = append(nonRoutedTraffic, RouteArg{
-		IP:      dmsgIP.String(),
-		Gateway: defaultGatewayIP.String(),
-		Netmask: "",
-	})
-	nonRoutedTraffic = append(nonRoutedTraffic, RouteArg{
-		IP:      tpDiscIP.String(),
-		Gateway: defaultGatewayIP.String(),
-		Netmask: "",
-	})
-	nonRoutedTraffic = append(nonRoutedTraffic, RouteArg{
-		IP:      rfIP.String(),
-		Gateway: defaultGatewayIP.String(),
-		Netmask: "",
-	})
-	nonRoutedTrafficMx.Unlock()
+
+	for _, stcpEntity := range stcpEntities {
+		addRoute(stcpEntity, defaultGatewayIP.String(), "")
+	}
+
+	for _, hypervisorAddr := range hypervisorAddrs {
+		addRoute(hypervisorAddr, defaultGatewayIP.String(), "")
+	}
+
+	defer func() {
+		deleteRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
+		deleteRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
+		deleteRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
+		deleteRoute(rfIP.String(), defaultGatewayIP.String(), "")
+
+		for _, stcpEntity := range stcpEntities {
+			deleteRoute(stcpEntity, defaultGatewayIP.String(), "")
+		}
+
+		for _, hypervisorAddr := range hypervisorAddrs {
+			deleteRoute(hypervisorAddr, defaultGatewayIP.String(), "")
+		}
+
+		// remove main route
+		deleteRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask)
+		deleteRoute(ipv4SecondHalfAddr, tunGateway, ipv4HalfRangeMask)
+	}()
 
 	// route all traffic through TUN gateway
 	addRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask)
 	addRoute(ipv4SecondHalfAddr, tunGateway, ipv4HalfRangeMask)
 
-	//run("addr", "add", localSubnet, "dev", ifc.Name())
-	//run("link", "set", "dev", ifc.Name(), "up")
+	appCfg, err := app.ClientConfigFromEnv()
+	if err != nil {
+		log.Fatalf("Error getting client config: %v\n", err)
+	}
 
-	//time.Sleep(10 * time.Minute)
+	vpnClient, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
+	if err != nil {
+		log.Fatal("VPN client setup failure: ", err)
+	}
+	defer func() {
+		vpnClient.Close()
+	}()
+
+	// setup listener to get incoming routing changes from the visor
+	serviceL, err := vpnClient.Listen(netType, servicePort)
+	if err != nil {
+		panic(err)
+	}
+
+	vpnClient.Dial()
 
 	<-shutdownC
 
 	log.Fatalln("DONE")
 }
 
-func shutdown() error {
-	// remove all routes for direct traffic
-	nonRoutedTrafficMx.Lock()
-	for _, arg := range nonRoutedTraffic {
-		deleteRoute(arg.IP, arg.Gateway, arg.Netmask)
-	}
-	nonRoutedTraffic = nil
-	nonRoutedTrafficMx.Unlock()
-
-	// remove main route
-	deleteRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask)
-	deleteRoute(ipv4SecondHalfAddr, tunGateway, ipv4HalfRangeMask)
-
-	return nil
-}
-
-func ipFromEnv(key string) (net.IP, error) {
+func ipFromEnv(key string) (net.IP, bool, error) {
 	addr := os.Getenv(key)
 	if addr == "" {
-		return nil, fmt.Errorf("value for key %s is not provided in env", key)
+		return nil, false, nil
 	}
 
 	ip := net.ParseIP(addr)
 	if ip != nil {
-		return ip, nil
+		return ip, true, nil
 	}
 
 	ips, err := net.LookupIP(addr)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if len(ips) == 0 {
-		return nil, fmt.Errorf("couldn't resolve IPs of %s", addr)
+		return nil, false, fmt.Errorf("couldn't resolve IPs of %s", addr)
 	}
 
 	// initially take just the first one
 	ip = ips[0]
 
-	return ip, nil
+	return ip, true, nil
 }
