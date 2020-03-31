@@ -440,7 +440,7 @@ func DefaultLogStoreConfig() *LogStoreConfig {
 
 // RoutingConfig configures routing.
 type RoutingConfig struct {
-	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
+	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 }
@@ -448,7 +448,7 @@ type RoutingConfig struct {
 // DefaultRoutingConfig returns default routing config.
 func DefaultRoutingConfig() *RoutingConfig {
 	return &RoutingConfig{
-		SetupNodes:         []cipher.PubKey{skyenv.MustDefaultSetupPK()},
+		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
 		RouteFinder:        skyenv.DefaultRouteFinderAddr,
 		RouteFinderTimeout: DefaultTimeout,
 	}
@@ -477,7 +477,7 @@ type AppConfig struct {
 	App       string       `json:"app"`
 	AutoStart bool         `json:"auto_start"`
 	Port      routing.Port `json:"port"`
-	Args      []string     `json:"args"`
+	Args      []string     `json:"args,omitempty"`
 }
 
 // InterfaceConfig defines listening interfaces for skywire visor.
