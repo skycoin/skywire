@@ -406,14 +406,10 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 					return
 				}
 			case statusStart:
-				// if we changed either PK or passcode for proxy apps, these have been already restarted,
-				// no need for further actions
-				if reqBody.PK == nil && reqBody.Passcode == nil {
-					if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
-						log.Errorf("ERROR STARTING APP")
-						httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-						return
-					}
+				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
+					log.Errorf("ERROR STARTING APP")
+					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+					return
 				}
 			default:
 				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
