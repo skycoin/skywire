@@ -75,7 +75,8 @@ func main() {
 	}()
 
 	if *serverPK == "" {
-		log.Fatal("Invalid server PubKey")
+		log.Warn("Empty server PubKey. Exiting")
+		return
 	}
 
 	pk := cipher.PubKey{}
