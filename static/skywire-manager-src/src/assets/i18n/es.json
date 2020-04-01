@@ -53,7 +53,7 @@
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
         "port": "Puerto:",
-        "node-version": "Versión del nodo:",
+        "node-version": "Versión del visor:",
         "app-protocol-version": "Versión del protocolo de app:",
         "time": {
           "title": "Tiempo online:",
@@ -256,9 +256,33 @@
       "autostart-disabled": "Autoinicio deshabilitado",
       "autostart-enabled": "Autoinicio habilitado"
     },
+    "skysocks-settings": {
+      "title": "Configuración de Skysocks",
+      "new-password": "Nueva contraseña (dejar en blanco para eliminar la contraseña)",
+      "repeat-password": "Repita la contraseña",
+      "passwords-not-match": "Las contraseñas no coinciden.",
+      "save": "Guardar",
+      "remove-passowrd-confirmation": "Ha dejado el campo de contraseña vacío. ¿Seguro que desea eliminar la contraseña?",
+      "change-passowrd-confirmation": "¿Seguro que desea cambiar la contraseña?",
+      "changes-made": "Los cambios han sido realizados."
+    },
+    "skysocks-client-settings": {
+      "title": "Configuración de Skysocks-Client",
+      "remote-visor-tab": "Visor Remoto",
+      "history-tab": "Historial",
+      "public-key": "Llave pública del visor remoto",
+      "remote-key-length-error": "La llave pública debe tener 66 caracteres.",
+      "remote-key-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
+      "save": "Guardar",
+      "change-key-confirmation": "¿Seguro que desea cambiar la llave pública del visor remoto?",
+      "changes-made": "Los cambios han sido realizados.",
+      "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas."
+    },
     "stop-app": "Detener",
     "start-app": "Iniciar",
     "view-logs": "Ver logs",
+    "settings": "Configuración",
+    "error": "Se produjo un error y no fue posible realizar la operación.",
     "stop-confirmation": "¿Seguro que desea detener la aplicación?",
     "stop-selected-confirmation": "¿Seguro que desea detener las aplicaciones seleccionadas?",
     "disable-autostart-confirmation": "¿Seguro que desea deshabilitar el autoinicio de la aplicación?",
