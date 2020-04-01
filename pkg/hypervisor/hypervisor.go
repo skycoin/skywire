@@ -377,25 +377,6 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		if reqBody.Status != nil {
-			switch *reqBody.Status {
-			case statusStop:
-				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			case statusStart:
-				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			default:
-				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
-				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
-				return
-			}
-		}
-
 		const (
 			skysocksName       = "skysocks"
 			skysocksClientName = "skysocks-client"
@@ -409,8 +390,34 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		}
 
 		if reqBody.PK != nil && ctx.App.Name == skysocksClientName {
+			log.Errorf("SETTING PK: %s", *reqBody.PK)
 			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
+				log.Errorf("ERROR SETTING PK")
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Status != nil {
+			switch *reqBody.Status {
+			case statusStop:
+				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
+					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+					return
+				}
+			case statusStart:
+				// if we changed either PK or passcode for proxy apps, these have been already restarted,
+				// no need for further actions
+				if reqBody.PK == nil && reqBody.Passcode == nil {
+					if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
+						log.Errorf("ERROR STARTING APP")
+						httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+						return
+					}
+				}
+			default:
+				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
+				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
 				return
 			}
 		}
