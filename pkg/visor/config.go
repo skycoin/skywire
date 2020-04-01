@@ -96,53 +96,6 @@ func (c *Config) flush() error {
 	return ioutil.WriteFile(*c.Path, bytes, filePerm)
 }
 
-func (c *Config) updateAppAutoStart(appName string, autoStart bool) error {
-	changed := false
-
-	for i := range c.Apps {
-		if c.Apps[i].App == appName {
-			c.Apps[i].AutoStart = autoStart
-			changed = true
-			break
-		}
-	}
-
-	if !changed {
-		return nil
-	}
-
-	return c.flush()
-}
-
-func (c *Config) updateAppArg(appName, argName, value string) error {
-	configChanged := true
-
-	for i := range c.Apps {
-		argChanged := false
-		if c.Apps[i].App == appName {
-			configChanged = true
-
-			for j := range c.Apps[i].Args {
-				if c.Apps[i].Args[j] == argName && j+1 < len(c.Apps[i].Args) {
-					c.Apps[i].Args[j+1] = value
-					argChanged = true
-					break
-				}
-			}
-
-			if !argChanged {
-				c.Apps[i].Args = append(c.Apps[i].Args, argName, value)
-			}
-		}
-	}
-
-	if configChanged {
-		return c.flush()
-	}
-
-	return nil
-}
-
 // Keys returns visor public and secret keys extracted from config.
 // If they are not found, new keys are generated.
 func (c *Config) Keys() *KeyPair {
