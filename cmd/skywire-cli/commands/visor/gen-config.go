@@ -7,10 +7,10 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
