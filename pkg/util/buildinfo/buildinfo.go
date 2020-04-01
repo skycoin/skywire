@@ -46,7 +46,7 @@ type Info struct {
 
 // WriteTo writes build info summary to io.Writer.
 func (info *Info) WriteTo(w io.Writer) (int64, error) {
-	msg := fmt.Sprintf("Version %q built on %q agaist commit %q\n", info.Version, info.Date, info.Commit)
+	msg := fmt.Sprintf("Version %q built on %q against commit %q\n", info.Version, info.Date, info.Commit)
 	n, err := w.Write([]byte(msg))
 	return int64(n), err
 }
