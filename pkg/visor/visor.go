@@ -699,7 +699,7 @@ func (visor *Visor) setAutoStart(appName string, autoStart bool) error {
 
 	visor.logger.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
 
-	return visor.conf.updateAppAutoStart(appName, autoStart)
+	return visor.updateAppAutoStart(appName, autoStart)
 }
 
 func (visor *Visor) setSocksPassword(password string) error {
@@ -710,7 +710,7 @@ func (visor *Visor) setSocksPassword(password string) error {
 		passcodeArgName = "-passcode"
 	)
 
-	if err := visor.conf.updateAppArg(socksName, passcodeArgName, password); err != nil {
+	if err := visor.updateAppArg(socksName, passcodeArgName, password); err != nil {
 		return err
 	}
 
@@ -732,7 +732,7 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 		pkArgName       = "-srv"
 	)
 
-	if err := visor.conf.updateAppArg(socksClientName, pkArgName, pk.String()); err != nil {
+	if err := visor.updateAppArg(socksClientName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
@@ -742,6 +742,63 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 	}
 
 	visor.logger.Infof("Updated %v PK", socksClientName)
+
+	return nil
+}
+
+func (visor *Visor) updateAppAutoStart(appName string, autoStart bool) error {
+	changed := false
+
+	for i := range visor.conf.Apps {
+		if visor.conf.Apps[i].App == appName {
+			visor.conf.Apps[i].AutoStart = autoStart
+			if v, ok := visor.appsConf[appName]; ok {
+				v.AutoStart = autoStart
+				visor.appsConf[appName] = v
+			}
+
+			changed = true
+			break
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	return visor.conf.flush()
+}
+
+func (visor *Visor) updateAppArg(appName, argName, value string) error {
+	configChanged := true
+
+	for i := range visor.conf.Apps {
+		argChanged := false
+		if visor.conf.Apps[i].App == appName {
+			configChanged = true
+
+			for j := range visor.conf.Apps[i].Args {
+				if visor.conf.Apps[i].Args[j] == argName && j+1 < len(visor.conf.Apps[i].Args) {
+					visor.conf.Apps[i].Args[j+1] = value
+					argChanged = true
+					break
+				}
+			}
+
+			if !argChanged {
+				visor.conf.Apps[i].Args = append(visor.conf.Apps[i].Args, argName, value)
+			}
+
+			if v, ok := visor.appsConf[appName]; ok {
+				v.Args = visor.conf.Apps[i].Args
+				visor.appsConf[appName] = v
+			}
+		}
+	}
+
+	if configChanged {
+		return visor.conf.flush()
+	}
 
 	return nil
 }
