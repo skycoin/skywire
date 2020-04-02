@@ -8,8 +8,10 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/rakyll/statik/fs"
 	"github.com/spf13/cobra"
 
+	_ "github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/statik" // embedded static files
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
@@ -47,11 +49,15 @@ var rootCmd = &cobra.Command{
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
-
 		conf := prepareConfig(args)
 
+		assets, err := fs.New()
+		if err != nil {
+			log.Fatalf("Failed to obtain embedded static files: %v", err)
+		}
+
 		// Prepare hypervisor.
-		hv, err := hypervisor.New(conf)
+		hv, err := hypervisor.New(assets, conf)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
