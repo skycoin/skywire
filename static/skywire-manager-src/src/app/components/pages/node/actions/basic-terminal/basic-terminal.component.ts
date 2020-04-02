@@ -5,7 +5,7 @@ import { TranslateService } from '@ngx-translate/core';
 
 import { ApiService } from '../../../../../services/api.service';
 import { AppConfig } from 'src/app/app.config';
-import { OperationError } from 'src/app/utils/operation-error';
+import { OperationError, OperationErrorTypes } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 
 /**
@@ -145,7 +145,11 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
         error = processServiceError(error);
 
         if (error.originalServerErrorMsg && typeof error.originalServerErrorMsg === 'string') {
-          this.printLines(error.originalServerErrorMsg);
+          if (error.type === OperationErrorTypes.Unknown) {
+            this.printLines(error.originalServerErrorMsg);
+          } else {
+            this.printLines(this.translate.instant(error.translatableErrorMsg));
+          }
         } else {
           this.printLines(this.translate.instant('actions.terminal.error'));
         }

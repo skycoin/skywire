@@ -177,19 +177,28 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
         };
 
         // Ask for confirmation.
-        confirmationDialog.componentInstance.showAsking(newConfirmationData);
+        setTimeout(() => {
+          confirmationDialog.componentInstance.showAsking(newConfirmationData);
+        });
       } else if (response) {
         // Inform that there are no updates available.
         const newText = this.translateService.instant('actions.update.no-update', { version: response.current_version });
-        confirmationDialog.componentInstance.showDone(null, newText);
+        setTimeout(() => {
+          confirmationDialog.componentInstance.showDone(null, newText);
+        });
       } else {
         // Inform that there was an error.
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+        setTimeout(() => {
+          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
+        });
       }
     }, (err: OperationError) => {
       err = processServiceError(err);
 
-      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      // Must wait because the loading state is activated after a frame.
+      setTimeout(() => {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      });
     });
 
     // React if the user confirm the update.
@@ -231,8 +240,9 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         // Open the complete terminal in a new tab.
-        const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8080');
-        window.open('https://' + hostname + '/pty/' + NodeComponent.getCurrentNodeKey(), '_blank', 'noopener noreferrer');
+        const protocol = window.location.protocol;
+        const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
+        window.open(protocol + '//' + hostname + '/pty/' + NodeComponent.getCurrentNodeKey(), '_blank', 'noopener noreferrer');
       } else if (selectedOption === 2) {
         // Open the simple terminal in a modal window.
         BasicTerminalComponent.openDialog(this.dialog, {

@@ -120,7 +120,7 @@ Then you can start a hypervisor with:
 $ hypervisor 
 ```
 
-You can open up the hypervisor UI on `localhost:8080`. 
+You can open up the hypervisor UI on `localhost:8000`. 
 
 ### Apps
 

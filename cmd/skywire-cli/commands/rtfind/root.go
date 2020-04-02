@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"

@@ -23,9 +23,9 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -54,13 +54,16 @@ type VisorConn struct {
 // Hypervisor manages visors.
 type Hypervisor struct {
 	c      Config
+	assets http.FileSystem             // Web UI.
 	visors map[cipher.PubKey]VisorConn // connected remote visors.
 	users  *UserManager
 	mu     *sync.RWMutex
 }
 
 // New creates a new Hypervisor.
-func New(config Config) (*Hypervisor, error) {
+func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
+	config.Cookies.TLS = config.EnableTLS
+
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
 	if err != nil {
 		return nil, err
@@ -70,6 +73,7 @@ func New(config Config) (*Hypervisor, error) {
 
 	return &Hypervisor{
 		c:      config,
+		assets: assets,
 		visors: make(map[cipher.PubKey]VisorConn),
 		users:  NewUserManager(singleUserDB, config.Cookies),
 		mu:     new(sync.RWMutex),
@@ -136,56 +140,61 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
-	r.Route("/api", func(r chi.Router) {
-		r.Use(middleware.Timeout(httpTimeout))
+	r.Route("/", func(r chi.Router) {
+		r.Route("/api", func(r chi.Router) {
+			r.Use(middleware.Timeout(httpTimeout))
 
-		r.Get("/ping", hv.getPong())
+			r.Get("/ping", hv.getPong())
 
-		if hv.c.EnableAuth {
+			if hv.c.EnableAuth {
+				r.Group(func(r chi.Router) {
+					r.Post("/create-account", hv.users.CreateAccount())
+					r.Post("/login", hv.users.Login())
+					r.Post("/logout", hv.users.Logout())
+				})
+			}
+
 			r.Group(func(r chi.Router) {
-				r.Post("/create-account", hv.users.CreateAccount())
-				r.Post("/login", hv.users.Login())
-				r.Post("/logout", hv.users.Logout())
+				if hv.c.EnableAuth {
+					r.Use(hv.users.Authorize)
+				}
+				r.Get("/user", hv.users.UserInfo())
+				r.Post("/change-password", hv.users.ChangePassword())
+				r.Get("/about", hv.getAbout())
+				r.Get("/visors", hv.getVisors())
+				r.Get("/visors/{pk}", hv.getVisor())
+				r.Get("/visors/{pk}/health", hv.getHealth())
+				r.Get("/visors/{pk}/uptime", hv.getUptime())
+				r.Get("/visors/{pk}/apps", hv.getApps())
+				r.Get("/visors/{pk}/apps/{app}", hv.getApp())
+				r.Put("/visors/{pk}/apps/{app}", hv.putApp())
+				r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
+				r.Get("/visors/{pk}/transport-types", hv.getTransportTypes())
+				r.Get("/visors/{pk}/transports", hv.getTransports())
+				r.Post("/visors/{pk}/transports", hv.postTransport())
+				r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
+				r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
+				r.Get("/visors/{pk}/routes", hv.getRoutes())
+				r.Post("/visors/{pk}/routes", hv.postRoute())
+				r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
+				r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
+				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
+				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
+				r.Post("/visors/{pk}/restart", hv.restart())
+				r.Post("/visors/{pk}/exec", hv.exec())
+				r.Post("/visors/{pk}/update", hv.update())
+				r.Get("/visors/{pk}/update/available", hv.updateAvailable())
 			})
-		}
+		})
 
-		r.Group(func(r chi.Router) {
+		r.Route("/pty", func(r chi.Router) {
 			if hv.c.EnableAuth {
 				r.Use(hv.users.Authorize)
 			}
-			r.Get("/user", hv.users.UserInfo())
-			r.Post("/change-password", hv.users.ChangePassword())
-			r.Get("/visors", hv.getVisors())
-			r.Get("/visors/{pk}", hv.getVisor())
-			r.Get("/visors/{pk}/health", hv.getHealth())
-			r.Get("/visors/{pk}/uptime", hv.getUptime())
-			r.Get("/visors/{pk}/apps", hv.getApps())
-			r.Get("/visors/{pk}/apps/{app}", hv.getApp())
-			r.Put("/visors/{pk}/apps/{app}", hv.putApp())
-			r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
-			r.Get("/visors/{pk}/transport-types", hv.getTransportTypes())
-			r.Get("/visors/{pk}/transports", hv.getTransports())
-			r.Post("/visors/{pk}/transports", hv.postTransport())
-			r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
-			r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
-			r.Get("/visors/{pk}/routes", hv.getRoutes())
-			r.Post("/visors/{pk}/routes", hv.postRoute())
-			r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
-			r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
-			r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
-			r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
-			r.Post("/visors/{pk}/restart", hv.restart())
-			r.Post("/visors/{pk}/exec", hv.exec())
-			r.Post("/visors/{pk}/update", hv.update())
-			r.Get("/visors/{pk}/update/available", hv.updateAvailable())
+			r.Get("/{pk}", hv.getPty())
 		})
-	})
 
-	r.Route("/pty", func(r chi.Router) {
-		if hv.c.EnableAuth {
-			r.Use(hv.users.Authorize)
-		}
-		r.Get("/{pk}", hv.getPty())
+		r.Handle("/*", http.FileServer(hv.assets))
 	})
 
 	r.ServeHTTP(w, req)
@@ -196,6 +205,21 @@ func (hv *Hypervisor) getPong() http.HandlerFunc {
 		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
 			log.WithError(err).Warn("getPong: Failed to send PONG!")
 		}
+	}
+}
+
+// About provides info about the hypervisor.
+type About struct {
+	PubKey cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
+	Build  *buildinfo.Info `json:"build"`
+}
+
+func (hv *Hypervisor) getAbout() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		httputil.WriteJSON(w, r, http.StatusOK, About{
+			PubKey: hv.c.PK,
+			Build:  buildinfo.Get(),
+		})
 	}
 }
 
@@ -371,25 +395,6 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		if reqBody.Status != nil {
-			switch *reqBody.Status {
-			case statusStop:
-				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			case statusStart:
-				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			default:
-				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
-				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
-				return
-			}
-		}
-
 		const (
 			skysocksName       = "skysocks"
 			skysocksClientName = "skysocks-client"
@@ -403,8 +408,30 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		}
 
 		if reqBody.PK != nil && ctx.App.Name == skysocksClientName {
+			log.Errorf("SETTING PK: %s", *reqBody.PK)
 			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
+				log.Errorf("ERROR SETTING PK")
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Status != nil {
+			switch *reqBody.Status {
+			case statusStop:
+				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
+					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+					return
+				}
+			case statusStart:
+				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
+					log.Errorf("ERROR STARTING APP")
+					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+					return
+				}
+			default:
+				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
+				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
 				return
 			}
 		}

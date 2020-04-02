@@ -44,6 +44,8 @@ const (
 
 func TestNewNode(t *testing.T) {
 	config := makeConfig(false)
+	config.EnableAuth = true
+	config.FillDefaults(false)
 
 	confDir, err := ioutil.TempDir(os.TempDir(), "SWHV")
 	require.NoError(t, err)
@@ -84,7 +86,7 @@ func makeStartNode(t *testing.T, config Config) (string, *http.Client, func()) {
 		EnableAuth:        true,
 	}
 
-	visor, err := New(config)
+	visor, err := New(nil, config)
 	require.NoError(t, err)
 	require.NoError(t, visor.AddMockData(defaultMockConfig))
 
