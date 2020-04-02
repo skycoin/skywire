@@ -1,10 +1,34 @@
 .DEFAULT_GOAL := help
-.PHONY : check lint install-linters dep test bin build
+.PHONY : check lint install-linters dep test build
+
+VERSION := $(shell git describe --always)
+
+RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
+DATE := $(shell date -u $(RFC_3339))
+COMMIT := $(shell git rev-list -1 HEAD)
 
 OPTS?=GO111MODULE=on GOBIN=${PWD}/bin
-TEST_OPTS?=-race -tags no_ci -cover -timeout=5m
 BIN_DIR?=./bin
-BUILD_OPTS?=
+
+TEST_OPTS:=-tags no_ci -cover -timeout=5m
+
+RACE_FLAG:=-race
+GOARCH:=$(shell go env GOARCH)
+
+ifneq (,$(findstring 64,$(GOARCH)))
+    TEST_OPTS:=$(TEST_OPTS) $(RACE_FLAG)
+endif
+
+SKYWIRE_MAINNET := github.com/SkycoinProject/skywire-mainnet
+BUILDINFO_PATH := $(SKYWIRE_MAINNET)/pkg/util/buildinfo
+
+BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
+BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
+BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
+
+BUILDINFO?=-ldflags="$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)"
+
+BUILD_OPTS?=$(BUILDINFO)
 
 check: lint test ## Run linters and tests
 
@@ -36,7 +60,7 @@ dep: ## Sorts dependencies
 	${OPTS} go mod tidy -v
 
 build: ## Build binaries into ./bin
-	${OPTS} go install ./cmd/*
+	${OPTS} go install ${BUILD_OPTS} ./cmd/*
 
 start-db: ## Init local database env.
 	source ./integration/env.sh && init_redis
@@ -66,11 +90,6 @@ attach-pty: ## Attach local dmsgpty tmux session.
 	source ./integration/env.sh && attach_dmsgpty
 
 stop-all: stop-pty stop-dmsg stop-db ## Stop all local tmux sessions.
-
-# TODO(evanlinjin): We should get rid of this at some point.
-bin: ## Build `dmsg-discovery`, `dmsg-server`
-	${OPTS} go build ${BUILD_OPTS} -o ./dmsg-discovery ./cmd/dmsg-discovery
-	${OPTS} go build ${BUILD_OPTS} -o ./dmsg-server  ./cmd/dmsg-server
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
