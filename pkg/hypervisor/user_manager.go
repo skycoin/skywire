@@ -33,6 +33,7 @@ var (
 // for use with context.Context
 type ctxKey string
 
+// cookie constants
 const (
 	userKey    = ctxKey("user")
 	sessionKey = ctxKey("session")
