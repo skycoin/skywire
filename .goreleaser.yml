@@ -36,8 +36,24 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
+  - id: hypervisor
+    binary: hypervisor
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 7
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/hypervisor/
+    ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
   - id: skychat
-    binary: skychat
+    binary: apps/skychat
     goos:
       - linux
       - darwin
@@ -53,7 +69,7 @@ builds:
     main: ./cmd/apps/skychat/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
   - id: skysocks
-    binary: skysocks
+    binary: apps/skysocks
     goos:
       - linux
       - darwin
@@ -69,7 +85,7 @@ builds:
     main: ./cmd/apps/skysocks/
     ldflags: -s -w -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.version={{.Version}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo.date={{.Date}}
   - id: skysocks-client
-    binary: skysocks-client
+    binary: apps/skysocks-client
     goos:
       - linux
       - darwin
@@ -87,7 +103,7 @@ builds:
 archives:
   - format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:

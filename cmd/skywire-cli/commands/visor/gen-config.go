@@ -1,14 +1,16 @@
 package visor
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
-	"net"
+	"io/ioutil"
+	"path"
 	"path/filepath"
-	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
@@ -22,15 +24,19 @@ func init() {
 }
 
 var (
+	sk            cipher.SecKey
 	output        string
 	replace       bool
+	retainKeys    bool
 	configLocType = pathutil.WorkingDirLoc
 	testenv       bool
 )
 
 func init() {
+	genConfigCmd.Flags().VarP(&sk, "secret-key", "s", "if unspecified, a random key pair will be generated.")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
+	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
 	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
 }
@@ -60,8 +66,29 @@ var genConfigCmd = &cobra.Command{
 		default:
 			logger.Fatalln("invalid config type:", configLocType)
 		}
+		if replace && retainKeys && pathutil.Exists(output) {
+			if err := fillInOldKeys(output, conf); err != nil {
+				logger.WithError(err).Fatalln("Error retaining old keys")
+			}
+		}
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
+}
+
+func fillInOldKeys(confPath string, conf *visor.Config) error {
+	oldConfBytes, err := ioutil.ReadFile(path.Clean(confPath))
+	if err != nil {
+		return fmt.Errorf("error reading old config file: %w", err)
+	}
+
+	var oldConf visor.Config
+	if err := json.Unmarshal(oldConfBytes, &oldConf); err != nil {
+		return fmt.Errorf("invalid old configuration file: %w", err)
+	}
+
+	conf.KeyPair = oldConf.KeyPair
+
+	return nil
 }
 
 func homeConfig() *visor.Config {
@@ -80,25 +107,21 @@ func localConfig() *visor.Config {
 
 func defaultConfig() *visor.Config {
 	conf := &visor.Config{}
-	conf.Version = "1.0"
 
-	pk, sk := cipher.GenerateKeyPair()
-	conf.Visor.StaticPubKey = pk
-	conf.Visor.StaticSecKey = sk
+	if sk.Null() {
+		conf.KeyPair = visor.NewKeyPair()
+	} else {
+		conf.KeyPair = visor.RestoreKeyPair(sk)
+	}
 
-	lIPaddr, err := getLocalIPAddress()
+	stcp, err := visor.DefaultSTCPConfig()
 	if err != nil {
 		logger.Warn(err)
-	}
-
-	conf.STCP.LocalAddr = lIPaddr
-
-	if testenv {
-		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	} else {
-		conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+		conf.STCP = stcp
 	}
-	conf.Dmsg.SessionsCount = 1
+
+	conf.Dmsg = visor.DefaultDmsgConfig()
 
 	ptyConf := defaultDmsgPtyConfig()
 	conf.DmsgPty = &ptyConf
@@ -110,44 +133,35 @@ func defaultConfig() *visor.Config {
 		defaultSkysocksConfig(""),
 		defaultSkysocksClientConfig(),
 	}
+
 	conf.TrustedVisors = []cipher.PubKey{}
 
+	conf.Transport = visor.DefaultTransportConfig()
+	conf.Routing = visor.DefaultRoutingConfig()
+
 	if testenv {
+		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 		conf.Transport.Discovery = skyenv.TestTpDiscAddr
-	} else {
-		conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
-	}
-
-	conf.Transport.LogStore.Type = "file"
-	conf.Transport.LogStore.Location = "./skywire/transport_logs"
-
-	if testenv {
 		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-	} else {
-		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+		conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	}
-
-	var sPK cipher.PubKey
-	if err := sPK.UnmarshalText([]byte(skyenv.DefaultSetupPK)); err != nil {
-		logger.WithError(err).Warnf("Failed to unmarshal default setup-node public key %s", skyenv.DefaultSetupPK)
-	}
-	conf.Routing.SetupNodes = []cipher.PubKey{sPK}
-	conf.Routing.RouteFinderTimeout = visor.Duration(10 * time.Second)
 
 	conf.Hypervisors = []visor.HypervisorConfig{}
 
-	conf.Uptime.Tracker = "uptime-tracker.skywire.skycoin.com"
+	conf.UptimeTracker = visor.DefaultUptimeTrackerConfig()
 
-	conf.AppsPath = "./apps"
-	conf.LocalPath = "./local"
+	conf.AppsPath = visor.DefaultAppsPath
+	conf.LocalPath = visor.DefaultLocalPath
 
-	conf.LogLevel = "info"
+	conf.LogLevel = visor.DefaultLogLevel
+	conf.ShutdownTimeout = visor.DefaultTimeout
 
-	conf.ShutdownTimeout = visor.Duration(10 * time.Second)
+	conf.Interfaces = &visor.InterfaceConfig{
+		RPCAddress: "localhost:3435",
+	}
 
-	conf.Interfaces.RPCAddress = "localhost:3435"
-
-	conf.AppServerSockFile = "/tmp/visor_" + pk.Hex() + ".sock"
+	conf.AppServerAddr = appcommon.DefaultServerAddr
+	conf.RestartCheckDelay = restart.DefaultCheckDelay.String()
 
 	return conf
 }
@@ -189,20 +203,4 @@ func defaultSkysocksClientConfig() visor.AppConfig {
 		AutoStart: false,
 		Port:      routing.Port(skyenv.SkysocksClientPort),
 	}
-}
-
-func getLocalIPAddress() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-
-	for _, a := range addrs {
-		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String() + ":7777", nil
-			}
-		}
-	}
-	return "", errors.New("could not find local IP address")
 }

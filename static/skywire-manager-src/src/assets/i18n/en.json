@@ -13,6 +13,7 @@
     "loading-error": "There was an error getting the data. Retrying...",
     "operation-error": "There was an error trying to complete the operation.",
     "no-connection-error": "There is no internet connection or connection to the Hypervisor.",
+    "error": "Error:",
     "refreshed": "Data refreshed.",
     "options": "Options",
     "logout": "Logout",
@@ -52,7 +53,7 @@
         "label": "Label:",
         "public-key": "Public key:",
         "port": "Port:",
-        "node-version": "Node version:",
+        "node-version": "Visor version:",
         "app-protocol-version": "App protocol version:",
         "time": {
           "title": "Time online:",
@@ -82,7 +83,7 @@
       "apps": "Apps",
       "routing": "Routing"
     },
-    "error-load": "An error occurred while refreshing visor data."
+    "error-load": "An error occurred while refreshing the data. Retrying..."
   },
 
   "nodes": {
@@ -92,7 +93,7 @@
     "key": "Key",
     "view-node": "View visor",
     "delete-node": "Remove visor",
-    "error-load": "An error occurred while refreshing visors.",
+    "error-load": "An error occurred while refreshing the list. Retrying...",
     "empty": "There aren't any visors connected to this hypervisor.",
     "delete-node-confirmation": "Are you sure you want to remove the visor from the list?",
     "deleted": "Visor removed."
@@ -255,9 +256,32 @@
       "autostart-disabled": "Autostart disabled",
       "autostart-enabled": "Autostart enabled"
     },
+    "skysocks-settings": {
+      "title": "Skysocks Settings",
+      "new-password": "New password (Leave empty to remove the password)",
+      "repeat-password": "Repeat password",
+      "passwords-not-match": "Passwords do not match.",
+      "save": "Save",
+      "remove-passowrd-confirmation": "You left the password field empty. Are you sure you want to remove the password?",
+      "change-passowrd-confirmation": "Are you sure you want to change the password?",
+      "changes-made": "The changes have been made."
+    },
+    "skysocks-client-settings": {
+      "title": "Skysocks-Client Settings",
+      "remote-visor-tab": "Remote Visor",
+      "history-tab": "History",
+      "public-key": "Remote visor public key",
+      "remote-key-length-error": "The public key must be 66 characters long.",
+      "remote-key-chars-error": "The public key must only contain hexadecimal characters.",
+      "save": "Save",
+      "change-key-confirmation": "Are you sure you want to change the remote visor public key?",
+      "changes-made": "The changes have been made.",
+      "no-history": "This tab will show the last {{ number }} public keys used."
+    },
     "stop-app": "Stop",
     "start-app": "Start",
     "view-logs": "View logs",
+    "settings": "Settings",
     "error": "An error has occured and it was not possible to perform the operation.",
     "stop-confirmation": "Are you sure you want to stop the app?",
     "stop-selected-confirmation": "Are you sure you want to stop the selected apps?",
@@ -266,6 +290,7 @@
     "disable-autostart-selected-confirmation": "Are you sure you want to disable autostart for the selected apps?",
     "enable-autostart-selected-confirmation": "Are you sure you want to enable autostart for the selected apps?",
     "operation-completed": "Operation completed.",
+    "operation-unnecessary": "The selection already has the requested setting.",
     "status-running": "Running",
     "status-stopped": "Stopped",
     "status-failed": "Failed",
@@ -285,7 +310,6 @@
     "delete-selected-confirmation": "Are you sure you want to delete the selected transports?",
     "delete": "Delete transport",
     "deleted": "Delete operation completed.",
-    "error-deleting": "It was not possible to complete the delete operation.",
     "empty": "Visor doesn't have any transports.",
     "details": {
       "title": "Details",
@@ -323,7 +347,6 @@
     "delete-selected-confirmation": "Are you sure you want to delete the selected routes?",
     "delete": "Delete route",
     "deleted": "Delete operation completed.",
-    "error-deleting": "It was not possible to complete the delete operation.",
     "empty": "Visor doesn't have any routes.",
     "details": {
       "title": "Details",
