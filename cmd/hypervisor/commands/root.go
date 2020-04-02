@@ -49,6 +49,7 @@ var rootCmd = &cobra.Command{
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
+
 		conf := prepareConfig(args)
 
 		assets, err := fs.New()
