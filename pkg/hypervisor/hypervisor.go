@@ -22,10 +22,8 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
-	"github.com/rakyll/statik/fs"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	_ "github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor/statik"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -63,13 +61,8 @@ type Hypervisor struct {
 }
 
 // New creates a new Hypervisor.
-func New(config Config) (*Hypervisor, error) {
+func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
-
-	assets, err := fs.New()
-	if err != nil {
-		return nil, err
-	}
 
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
 	if err != nil {
@@ -215,16 +208,17 @@ func (hv *Hypervisor) getPong() http.HandlerFunc {
 	}
 }
 
+// About provides info about the hypervisor.
 type About struct {
-	PubKey  cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
-	Build   *buildinfo.Info `json:"build"`
+	PubKey cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
+	Build  *buildinfo.Info `json:"build"`
 }
 
 func (hv *Hypervisor) getAbout() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSON(w, r, http.StatusOK, About{
 			PubKey: hv.c.PK,
-			Build: buildinfo.Get(),
+			Build:  buildinfo.Get(),
 		})
 	}
 }
