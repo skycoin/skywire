@@ -9,6 +9,8 @@ import { NodeComponent } from '../../../node.component';
 import { LogFilterComponent, LogsFilter } from './log-filter/log-filter.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
+import { OperationError } from 'src/app/utils/operation-error';
+import { processServiceError } from 'src/app/utils/errors';
 
 /**
  * Represents a log entry.
@@ -100,7 +102,7 @@ export class LogComponent implements OnInit, OnDestroy {
       flatMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name, this.currentFilter.days))
     ).subscribe(
       (log) => this.onLogsReceived(log),
-      this.onLogsError.bind(this)
+      (err: OperationError) => this.onLogsError(err)
     );
   }
 
@@ -140,10 +142,12 @@ export class LogComponent implements OnInit, OnDestroy {
     });
   }
 
-  private onLogsError() {
+  private onLogsError(err: OperationError) {
+    err = processServiceError(err);
+
     // Show an error msg if it has not be done before during the current attempt to obtain the data.
     if (this.shouldShowError) {
-      this.snackbarService.showError('common.loading-error', null, true);
+      this.snackbarService.showError('common.loading-error', null, true, err);
       this.shouldShowError = false;
     }
 

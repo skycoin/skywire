@@ -383,16 +383,19 @@ func (rg *RouteGroup) sendKeepAlive() error {
 		return nil
 	}
 
-	tp := rg.tps[0]
-	rule := rg.fwd[0]
+	for i := 0; i < len(rg.tps); i++ {
+		tp := rg.tps[i]
+		rule := rg.fwd[i]
 
-	if tp == nil {
-		return ErrBadTransport
-	}
+		if tp == nil {
+			continue
+		}
 
-	packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
-	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-		return err
+		packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
+
+		if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+			return err
+		}
 	}
 
 	return nil

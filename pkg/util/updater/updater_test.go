@@ -20,8 +20,8 @@ func Test_extractLatestVersion(t *testing.T) {
 	}{
 		{
 			name:   "Simple HTML",
-			buffer: `<a href="/SkycoinProject/skywire-mainnet/releases/tag/0.1.0">`,
-			want:   "0.1.0",
+			buffer: `<a href="/SkycoinProject/skywire-mainnet/releases/tag/v0.1.0">`,
+			want:   "v0.1.0",
 		},
 		{
 			name:   "Empty buffer",
@@ -49,54 +49,54 @@ func Test_getChecksum(t *testing.T) {
 		{
 			name: "No Error 1",
 			checksums: `
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470 skywire-visor-0.1.0-linux-amd64
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92471 skywire-visor-0.1.0-linux-386
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472 skywire-visor-0.1.0-darwin-amd64
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92473 skywire-visor-0.1.0-windows-amd64
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92474 skywire-visor-0.1.0-linux-arm64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470 skywire-visor-v0.1.0-linux-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92471 skywire-visor-v0.1.0-linux-386
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472 skywire-visor-v0.1.0-darwin-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92473 skywire-visor-v0.1.0-windows-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92474 skywire-visor-v0.1.0-linux-arm64
 `,
-			filename: "skywire-visor-0.1.0-darwin-amd64",
+			filename: "skywire-visor-v0.1.0-darwin-amd64",
 			want:     "2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472",
 			wantErr:  nil,
 		},
 		{
 			name: "No Error 2",
 			checksums: `
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470     	   skywire-visor-0.1.0-linux-amd64
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92471     	   skywire-visor-0.1.0-linux-386
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472     	   skywire-visor-0.1.0-darwin-amd64
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92473     	   skywire-visor-0.1.0-windows-amd64
-2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92474     	   skywire-visor-0.1.0-linux-arm64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470     	   skywire-visor-v0.1.0-linux-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92471     	   skywire-visor-v0.1.0-linux-386
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472     	   skywire-visor-v0.1.0-darwin-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92473     	   skywire-visor-v0.1.0-windows-amd64
+2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92474     	   skywire-visor-v0.1.0-linux-arm64
 `,
-			filename: "skywire-visor-0.1.0-darwin-amd64",
+			filename: "skywire-visor-v0.1.0-darwin-amd64",
 			want:     "2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92472",
 			wantErr:  nil,
 		},
 		{
 			name:      "ErrMalformedChecksumFile 1",
-			checksums: "skywire-visor-0.1.0-darwin-amd64",
-			filename:  "skywire-visor-0.1.0-darwin-amd64",
+			checksums: "skywire-visor-v0.1.0-darwin-amd64",
+			filename:  "skywire-visor-v0.1.0-darwin-amd64",
 			want:      "",
 			wantErr:   ErrMalformedChecksumFile,
 		},
 		{
 			name:      "ErrMalformedChecksumFile 2",
-			checksums: " skywire-visor-0.1.0-darwin-amd64",
-			filename:  " skywire-visor-0.1.0-darwin-amd64",
+			checksums: " skywire-visor-v0.1.0-darwin-amd64",
+			filename:  " skywire-visor-v0.1.0-darwin-amd64",
 			want:      "",
 			wantErr:   ErrMalformedChecksumFile,
 		},
 		{
 			name:      "ErrMalformedChecksumFile 3",
-			checksums: "  \t skywire-visor-0.1.0-darwin-amd64",
-			filename:  "  \t skywire-visor-0.1.0-darwin-amd64",
+			checksums: "  \t skywire-visor-v0.1.0-darwin-amd64",
+			filename:  "  \t skywire-visor-v0.1.0-darwin-amd64",
 			want:      "",
 			wantErr:   ErrMalformedChecksumFile,
 		},
 		{
 			name:      "ErrNoChecksumFound",
-			checksums: `2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470 skywire-visor-0.1.0-linux-amd64`,
-			filename:  "skywire-visor-0.1.0-darwin-amd64",
+			checksums: `2f505da2a905889aa978597814f91dbe32ee46fffe44657bd7af56a942d92470 skywire-visor-v0.1.0-linux-amd64`,
+			filename:  "skywire-visor-v0.1.0-darwin-amd64",
 			want:      "",
 			wantErr:   ErrNoChecksumFound,
 		},
@@ -150,10 +150,10 @@ func Test_fileURL(t *testing.T) {
 	}{
 		{
 			name:     "Case 1",
-			version:  "1.2.3",
-			filename: "skywire-visor-1.2.3-linux-amd64",
-			want: "https://github.com/SkycoinProject/skywire-mainnet/releases/download/1.2.3/" +
-				"skywire-visor-1.2.3-linux-amd64",
+			version:  "v1.2.3",
+			filename: "skywire-visor-v1.2.3-linux-amd64",
+			want: "https://github.com/SkycoinProject/skywire-mainnet/releases/download/v1.2.3/" +
+				"skywire-visor-v1.2.3-linux-amd64",
 		},
 	}
 
@@ -177,10 +177,10 @@ func Test_binaryFilename(t *testing.T) {
 		{
 			name:    "Case 1",
 			file:    "skywire-visor",
-			version: "1.2.3",
+			version: "v1.2.3",
 			os:      "linux",
 			arch:    "amd64",
-			want:    "skywire-visor-1.2.3-linux-amd64.tar.gz",
+			want:    "skywire-visor-v1.2.3-linux-amd64.tar.gz",
 		},
 	}
 

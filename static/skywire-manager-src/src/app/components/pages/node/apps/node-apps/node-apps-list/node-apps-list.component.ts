@@ -13,6 +13,10 @@ import { ConfirmationComponent } from '../../../../../layout/confirmation/confir
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
+import { SkysocksSettingsComponent } from '../skysocks-settings/skysocks-settings.component';
+import { processServiceError } from 'src/app/utils/errors';
+import { OperationError } from 'src/app/utils/operation-error';
+import { SkysocksClientSettingsComponent } from '../skysocks-client-settings/skysocks-client-settings.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -65,6 +69,12 @@ export class NodeAppsListComponent implements OnDestroy {
     this.showShortList_ = val;
     this.recalculateElementsToShow();
   }
+
+  // List with the names of all the apps which can be configured directly on the manager.
+  appsWithConfig = new Map<string, boolean>([
+    ['skysocks', true],
+    ['skysocks-client', true],
+  ]);
 
   allApps: Application[];
   appsToShow: Application[];
@@ -217,6 +227,13 @@ export class NodeAppsListComponent implements OnDestroy {
       }
     ];
 
+    if (this.appsWithConfig.has(app.name)) {
+      options.push({
+        icon: 'settings',
+        label: 'apps.settings',
+      });
+    }
+
     SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.viewLogs(app);
@@ -224,6 +241,8 @@ export class NodeAppsListComponent implements OnDestroy {
         this.changeAppState(app);
       } else if (selectedOption === 3) {
         this.changeAppAutostart(app);
+      } else if (selectedOption === 4) {
+        this.config(app);
       }
     });
   }
@@ -289,14 +308,16 @@ export class NodeAppsListComponent implements OnDestroy {
         // Make the parent page reload the data.
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
         this.snackbarService.showDone('apps.operation-completed');
-      }, () => {
+      }, (err: OperationError) => {
+        err = processServiceError(err);
+
         // Make the parent page reload the data.
         setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
 
         if (confirmationDialog) {
-          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
+          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
         } else {
-          this.snackbarService.showError('apps.error');
+          this.snackbarService.showError(err);
         }
       }
     ));
@@ -307,6 +328,19 @@ export class NodeAppsListComponent implements OnDestroy {
    */
   viewLogs(app: Application): void {
     LogComponent.openDialog(this.dialog, app);
+  }
+
+  /**
+   * Shows the appropriate modal window for configuring the app.
+   */
+  config(app: Application): void {
+    if (app.name === 'skysocks') {
+      SkysocksSettingsComponent.openDialog(this.dialog, app.name);
+    } else if (app.name === 'skysocks-client') {
+      SkysocksClientSettingsComponent.openDialog(this.dialog, app.name);
+    } else {
+      this.snackbarService.showError('apps.error');
+    }
   }
 
   /**
@@ -453,7 +487,7 @@ export class NodeAppsListComponent implements OnDestroy {
     // The list may be empty because apps which already have the settings are ignored.
     if (!names || names.length === 0) {
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
-      this.snackbarService.showDone('apps.operation-completed');
+      this.snackbarService.showWarning('apps.operation-unnecessary');
 
       if (confirmationDialog) {
         confirmationDialog.close();
@@ -481,12 +515,14 @@ export class NodeAppsListComponent implements OnDestroy {
       } else {
         this.changeAppsValRecursively(names, changingAutostart, newVal, confirmationDialog);
       }
-    }, () => {
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+
       setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
       if (confirmationDialog) {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'apps.error');
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       } else {
-        this.snackbarService.showError('apps.error');
+        this.snackbarService.showError(err);
       }
     }));
   }

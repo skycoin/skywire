@@ -48,7 +48,7 @@ export class TerminalComponent {
     sanitizer: DomSanitizer,
   ) {
     const protocol = location.protocol;
-    const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8080');
+    const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
 
     // Calculate the URL of the dmsgpty-ui terminal.
     this.consoleUrl = sanitizer.bypassSecurityTrustResourceUrl(protocol + '//' + hostname + '/pty/' + data.pk);
