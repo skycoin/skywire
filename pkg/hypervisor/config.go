@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultWebDir           = "./static/skywire-manager-src/dist"
-	defaultHTTPAddr         = ":8080"
+	defaultHTTPAddr         = ":8000"
 	defaultCookieExpiration = 12 * time.Hour
 	hashKeyLen              = 64
 	blockKeyLen             = 32
