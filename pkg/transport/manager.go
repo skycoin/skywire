@@ -3,13 +3,14 @@ package transport
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 
@@ -216,18 +217,29 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 
 	var err error
 	for i := 0; i < tries; i++ {
-
 		mTp, err := tm.saveTransport(remote, tpType)
 		if err != nil {
 			return nil, err
 		}
 
 		if err = mTp.Dial(ctx); err != nil {
+			// TODO(nkryuchkov): Check for an error that underlying connection is not established
+			// and try again in this case. Otherwise, return the error.
+			pkTableErr := fmt.Sprintf("pk table: entry of %s does not exist", remote.String())
+
+			if err.Error() == pkTableErr {
+				mTp.wg.Wait()
+				delete(tm.tps, mTp.Entry.ID)
+
+				return nil, err
+			}
+
 			if err == ErrNotServing {
 				mTp.wg.Wait()
 				delete(tm.tps, mTp.Entry.ID)
 				continue
 			}
+
 			tm.Logger.
 				WithError(err).
 				Warn("Underlying connection is not yet established. Will retry later.")

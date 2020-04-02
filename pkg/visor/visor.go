@@ -4,10 +4,8 @@ package visor
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -24,7 +22,6 @@ import (
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
@@ -32,6 +29,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
@@ -52,8 +50,6 @@ const (
 var (
 	// ErrUnknownApp represents lookup error for App related calls.
 	ErrUnknownApp = errors.New("unknown app")
-	// ErrNoConfigPath is returned on attempt to read/write config when visor contains no config path.
-	ErrNoConfigPath = errors.New("no config path")
 )
 
 const (
@@ -84,7 +80,6 @@ type Visor struct {
 	Logger *logging.MasterLogger
 	logger *logging.Logger
 
-	confPath  *string
 	appsPath  string
 	localPath string
 	appsConf  map[string]AppConfig
@@ -106,16 +101,21 @@ type Visor struct {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Context, cfgPath *string) (*Visor, error) {
+func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Context) (*Visor, error) {
 	ctx := context.Background()
 
 	visor := &Visor{
-		conf:     cfg,
-		confPath: cfgPath,
+		conf: cfg,
 	}
 
 	visor.Logger = logger
 	visor.logger = visor.Logger.PackageLogger("skywire")
+	visor.conf.log = visor.logger
+
+	pk := cfg.Keys().PubKey
+	sk := cfg.Keys().SecKey
+
+	logger.WithField("PK", pk).Infof("Starting visor")
 
 	restartCheckDelay, err := time.ParseDuration(cfg.RestartCheckDelay)
 	if err == nil {
@@ -126,18 +126,11 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	visor.restartCtx = restartCtx
 
-	pk := cfg.Visor.StaticPubKey
-	sk := cfg.Visor.StaticSecKey
-
-	fmt.Println("min sessions:", cfg.Dmsg.SessionsCount)
 	visor.n = snet.New(snet.Config{
-		PubKey:          pk,
-		SecKey:          sk,
-		TpNetworks:      []string{dmsg.Type, snet.STcpType}, // TODO: Have some way to configure this.
-		DmsgDiscAddr:    cfg.Dmsg.Discovery,
-		DmsgMinSessions: cfg.Dmsg.SessionsCount,
-		STCPLocalAddr:   cfg.STCP.LocalAddr,
-		STCPTable:       cfg.STCP.PubKeyTable,
+		PubKey: pk,
+		SecKey: sk,
+		Dmsg:   cfg.DmsgConfig(),
+		STCP:   cfg.STCP,
 	})
 	if err := visor.n.Init(ctx); err != nil {
 		return nil, fmt.Errorf("failed to init network: %v", err)
@@ -157,10 +150,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	if err != nil {
 		return nil, fmt.Errorf("invalid transport discovery config: %s", err)
 	}
+
 	logStore, err := cfg.TransportLogStore()
 	if err != nil {
 		return nil, fmt.Errorf("invalid TransportLogStore: %s", err)
 	}
+
 	tmConfig := &transport.ManagerConfig{
 		PubKey:          pk,
 		SecKey:          sk,
@@ -168,6 +163,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		DiscoveryClient: trDiscovery,
 		LogStore:        logStore,
 	}
+
 	visor.tm, err = transport.NewManager(visor.n, tmConfig)
 	if err != nil {
 		return nil, fmt.Errorf("transport manager: %s", err)
@@ -178,8 +174,8 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		PubKey:           pk,
 		SecKey:           sk,
 		TransportManager: visor.tm,
-		RouteFinder:      rfclient.NewHTTP(cfg.Routing.RouteFinder, time.Duration(cfg.Routing.RouteFinderTimeout)),
-		SetupNodes:       cfg.Routing.SetupNodes,
+		RouteFinder:      rfclient.NewHTTP(cfg.RoutingConfig().RouteFinder, time.Duration(cfg.RoutingConfig().RouteFinderTimeout)),
+		SetupNodes:       cfg.RoutingConfig().SetupNodes,
 	}
 
 	r, err := router.New(visor.n, rConfig)
@@ -207,11 +203,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		visor.Logger.SetLevel(lvl)
 	}
 
-	if cfg.Interfaces.RPCAddress != "" {
+	if cfg.Interfaces != nil {
 		l, err := net.Listen("tcp", cfg.Interfaces.RPCAddress)
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
 		}
+
 		visor.cliLis = l
 	}
 
@@ -220,7 +217,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
-	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerSockFile)
+	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerAddr)
 
 	go func() {
 		if err := visor.appRPCServer.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
@@ -386,7 +383,7 @@ func (visor *Visor) startRPC(ctx context.Context) {
 }
 
 func (visor *Visor) dir() string {
-	return pathutil.VisorDir(visor.conf.Visor.StaticPubKey.String())
+	return pathutil.VisorDir(visor.conf.Keys().PubKey.String())
 }
 
 func (visor *Visor) pidFile() (*os.File, error) {
@@ -490,14 +487,6 @@ func (visor *Visor) Close() (err error) {
 		visor.logger.WithError(err).Error("RPC server closed with error.")
 	}
 
-	if err := UnlinkSocketFiles(visor.conf.AppServerSockFile); err != nil {
-		visor.logger.WithError(err).WithField("file_name", visor.conf.AppServerSockFile).
-			Error("Failed to unlink socket file.")
-	} else {
-		visor.logger.WithField("file_name", visor.conf.AppServerSockFile).
-			Debug("Socket file removed successfully.")
-	}
-
 	return err
 }
 
@@ -567,11 +556,11 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	appCfg := appcommon.Config{
-		Name:         config.App,
-		SockFilePath: visor.conf.AppServerSockFile,
-		VisorPK:      visor.conf.Visor.StaticPubKey.Hex(),
-		BinaryDir:    visor.appsPath,
-		WorkDir:      filepath.Join(visor.localPath, config.App),
+		Name:       config.App,
+		ServerAddr: visor.conf.AppServerAddr,
+		VisorPK:    visor.conf.Keys().PubKey.Hex(),
+		BinaryDir:  visor.appsPath,
+		WorkDir:    filepath.Join(visor.localPath, config.App),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {
@@ -708,36 +697,9 @@ func (visor *Visor) setAutoStart(appName string, autoStart bool) error {
 	appConf.AutoStart = autoStart
 	visor.appsConf[appName] = appConf
 
-	return visor.updateConfigAppAutoStart(appName, autoStart)
-}
-
-func (visor *Visor) updateConfigAppAutoStart(appName string, autoStart bool) error {
-	if visor.confPath == nil {
-		return nil
-	}
-
-	config, err := visor.readConfig()
-	if err != nil {
-		return err
-	}
-
 	visor.logger.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
 
-	changed := false
-
-	for i := range config.Apps {
-		if config.Apps[i].App == appName {
-			config.Apps[i].AutoStart = autoStart
-			changed = true
-			break
-		}
-	}
-
-	if !changed {
-		return nil
-	}
-
-	return visor.writeConfig(config)
+	return visor.updateAppAutoStart(appName, autoStart)
 }
 
 func (visor *Visor) setSocksPassword(password string) error {
@@ -748,11 +710,7 @@ func (visor *Visor) setSocksPassword(password string) error {
 		passcodeArgName = "-passcode"
 	)
 
-	updateFunc := func(config *Config) {
-		visor.updateArg(config, socksName, passcodeArgName, password)
-	}
-
-	if err := visor.updateConfig(updateFunc); err != nil {
+	if err := visor.updateAppArg(socksName, passcodeArgName, password); err != nil {
 		return err
 	}
 
@@ -774,11 +732,7 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 		pkArgName       = "-srv"
 	)
 
-	updateFunc := func(config *Config) {
-		visor.updateArg(config, socksClientName, pkArgName, pk.String())
-	}
-
-	if err := visor.updateConfig(updateFunc); err != nil {
+	if err := visor.updateAppArg(socksClientName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
@@ -792,79 +746,61 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 	return nil
 }
 
-func (visor *Visor) updateArg(config *Config, appName, argName, value string) {
+func (visor *Visor) updateAppAutoStart(appName string, autoStart bool) error {
 	changed := false
 
-	for i := range config.Apps {
-		if config.Apps[i].App == appName {
-			for j := range config.Apps[i].Args {
-				if config.Apps[i].Args[j] == argName && j+1 < len(config.Apps[i].Args) {
-					config.Apps[i].Args[j+1] = value
-					changed = true
+	for i := range visor.conf.Apps {
+		if visor.conf.Apps[i].App == appName {
+			visor.conf.Apps[i].AutoStart = autoStart
+			if v, ok := visor.appsConf[appName]; ok {
+				v.AutoStart = autoStart
+				visor.appsConf[appName] = v
+			}
+
+			changed = true
+			break
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	return visor.conf.flush()
+}
+
+func (visor *Visor) updateAppArg(appName, argName, value string) error {
+	configChanged := true
+
+	for i := range visor.conf.Apps {
+		argChanged := false
+		if visor.conf.Apps[i].App == appName {
+			configChanged = true
+
+			for j := range visor.conf.Apps[i].Args {
+				if visor.conf.Apps[i].Args[j] == argName && j+1 < len(visor.conf.Apps[i].Args) {
+					visor.conf.Apps[i].Args[j+1] = value
+					argChanged = true
 					break
 				}
 			}
 
-			if !changed {
-				config.Apps[i].Args = append(config.Apps[i].Args, argName, value)
+			if !argChanged {
+				visor.conf.Apps[i].Args = append(visor.conf.Apps[i].Args, argName, value)
 			}
 
-			return
+			if v, ok := visor.appsConf[appName]; ok {
+				v.Args = visor.conf.Apps[i].Args
+				visor.appsConf[appName] = v
+			}
 		}
 	}
-}
 
-func (visor *Visor) updateConfig(f func(*Config)) error {
-	if visor.confPath == nil {
-		return nil
+	if configChanged {
+		return visor.conf.flush()
 	}
 
-	config, err := visor.readConfig()
-	if err != nil {
-		return err
-	}
-
-	f(config)
-
-	return visor.writeConfig(config)
-}
-
-func (visor *Visor) readConfig() (*Config, error) {
-	if visor.confPath == nil {
-		return nil, ErrNoConfigPath
-	}
-
-	configPath := *visor.confPath
-
-	bytes, err := ioutil.ReadFile(filepath.Clean(configPath))
-	if err != nil {
-		return nil, err
-	}
-
-	var config Config
-	if err := json.Unmarshal(bytes, &config); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
-
-func (visor *Visor) writeConfig(config *Config) error {
-	if visor.confPath == nil {
-		return ErrNoConfigPath
-	}
-
-	configPath := *visor.confPath
-
-	visor.logger.Infof("Updating visor config to %+v", config)
-
-	bytes, err := json.MarshalIndent(config, "", "\t")
-	if err != nil {
-		return err
-	}
-
-	const filePerm = 0644
-	return ioutil.WriteFile(configPath, bytes, filePerm)
+	return nil
 }
 
 // UnlinkSocketFiles removes unix socketFiles from file system

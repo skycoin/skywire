@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
@@ -17,24 +16,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-func TestDmsgDiscovery(t *testing.T) {
-	pk, sk := cipher.GenerateKeyPair()
-	conf := Config{}
-	conf.Visor.StaticPubKey = pk
-	conf.Visor.StaticSecKey = sk
-	conf.Dmsg.Discovery = "skywire.skycoin.net:8001"
-	conf.Dmsg.SessionsCount = 10
-
-	c, err := conf.DmsgConfig()
-	require.NoError(t, err)
-
-	assert.NotNil(t, c.Discovery)
-	assert.False(t, c.PubKey.Null())
-	assert.False(t, c.SecKey.Null())
-	assert.Equal(t, 5, c.Retries)
-	assert.Equal(t, time.Second, c.RetryDelay)
-}
-
 func TestTransportDiscovery(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -43,8 +24,11 @@ func TestTransportDiscovery(t *testing.T) {
 
 	defer srv.Close()
 
-	conf := Config{}
-	conf.Transport.Discovery = srv.URL
+	conf := Config{
+		Transport: &TransportConfig{
+			Discovery: srv.URL,
+		},
+	}
 
 	discovery, err := conf.TransportDiscovery()
 	require.NoError(t, err)
@@ -59,25 +43,33 @@ func TestTransportLogStore(t *testing.T) {
 		require.NoError(t, os.RemoveAll(dir))
 	}()
 
-	conf := Config{}
-	conf.Transport.LogStore.Type = "file"
-	conf.Transport.LogStore.Location = dir
+	conf := Config{
+		Transport: &TransportConfig{
+			LogStore: &LogStoreConfig{
+				Type:     LogStoreFile,
+				Location: dir,
+			},
+		},
+	}
+
 	ls, err := conf.TransportLogStore()
 	require.NoError(t, err)
 	require.NotNil(t, ls)
 
-	conf.Transport.LogStore.Type = "memory"
+	conf.Transport.LogStore.Type = LogStoreMemory
 	conf.Transport.LogStore.Location = ""
+
 	ls, err = conf.TransportLogStore()
 	require.NoError(t, err)
 	require.NotNil(t, ls)
 }
 
 func TestAppsConfig(t *testing.T) {
-	conf := Config{Version: "1.0"}
-	conf.Apps = []AppConfig{
-		{App: "foo", Port: 1},
-		{App: "bar", AutoStart: true, Port: 2},
+	conf := Config{
+		Apps: []AppConfig{
+			{App: "foo", Port: 1},
+			{App: "bar", AutoStart: true, Port: 2},
+		},
 	}
 
 	appsConf, err := conf.AppsConfig()
@@ -96,6 +88,7 @@ func TestAppsConfig(t *testing.T) {
 
 func TestAppsDir(t *testing.T) {
 	conf := Config{AppsPath: "apps"}
+
 	dir, err := conf.AppsDir()
 	require.NoError(t, err)
 

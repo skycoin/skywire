@@ -29,7 +29,7 @@ const (
 // Network types.
 const (
 	DmsgType = dmsg.Type
-	STcpType = stcp.Type
+	STCPType = stcp.Type
 )
 
 var (
@@ -37,51 +37,88 @@ var (
 	ErrUnknownNetwork = errors.New("unknown network type")
 )
 
+// NetworkConfig is a common interface for network configs.
+type NetworkConfig interface {
+	Type() string
+}
+
+// DmsgConfig defines config for Dmsg network.
+type DmsgConfig struct {
+	Discovery     string `json:"discovery"`
+	SessionsCount int    `json:"sessions_count"`
+}
+
+// Type returns DmsgType.
+func (c *DmsgConfig) Type() string {
+	return DmsgType
+}
+
+// STCPConfig defines config for STCP network.
+type STCPConfig struct {
+	PubKeyTable map[cipher.PubKey]string `json:"pk_table"`
+	LocalAddr   string                   `json:"local_address"`
+}
+
+// Type returns STCPType.
+func (c *STCPConfig) Type() string {
+	return STCPType
+}
+
 // Config represents a network configuration.
 type Config struct {
-	PubKey     cipher.PubKey
-	SecKey     cipher.SecKey
-	TpNetworks []string // networks to be used with transports
-
-	DmsgDiscAddr    string
-	DmsgMinSessions int
-
-	STCPLocalAddr string // if empty, don't listen.
-	STCPTable     map[cipher.PubKey]string
+	PubKey cipher.PubKey
+	SecKey cipher.SecKey
+	Dmsg   *DmsgConfig
+	STCP   *STCPConfig
 }
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf  Config
-	dmsgC *dmsg.Client
-	stcpC *stcp.Client
+	conf     Config
+	networks []string // networks to be used with transports
+	dmsgC    *dmsg.Client
+	stcpC    *stcp.Client
 }
 
 // New creates a network from a config.
 func New(conf Config) *Network {
-	dmsgC := dmsg.NewClient(
-		conf.PubKey,
-		conf.SecKey,
-		disc.NewHTTP(conf.DmsgDiscAddr), &dmsg.Config{
-			MinSessions: conf.DmsgMinSessions,
-		})
-	dmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
+	var dmsgC *dmsg.Client
+	var stcpC *stcp.Client
 
-	stcpC := stcp.NewClient(
-		logging.MustGetLogger("snet.stcpC"),
-		conf.PubKey,
-		conf.SecKey,
-		stcp.NewTable(conf.STCPTable))
+	if conf.Dmsg != nil {
+		c := &dmsg.Config{
+			MinSessions: conf.Dmsg.SessionsCount,
+		}
+
+		dmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Dmsg.Discovery), c)
+		dmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
+	}
+
+	if conf.STCP != nil {
+		stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.STCP.PubKeyTable))
+		stcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
+	}
 
 	return NewRaw(conf, dmsgC, stcpC)
 }
 
 // NewRaw creates a network from a config and a dmsg client.
 func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
+	networks := make([]string, 0)
+
+	if dmsgC != nil {
+		networks = append(networks, DmsgType)
+	}
+
+	if stcpC != nil {
+		networks = append(networks, STCPType)
+	}
+
 	return &Network{
-		conf:  conf,
-		dmsgC: dmsgC,
-		stcpC: stcpC,
+		conf:     conf,
+		networks: networks,
+		dmsgC:    dmsgC,
+		stcpC:    stcpC,
 	}
 }
 
@@ -93,9 +130,9 @@ func (n *Network) Init(_ context.Context) error {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	if n.stcpC != nil {
-		if n.conf.STCPLocalAddr != "" {
-			if err := n.stcpC.Serve(n.conf.STCPLocalAddr); err != nil {
+	if n.conf.STCP != nil {
+		if n.stcpC != nil && n.conf.STCP.LocalAddr != "" {
+			if err := n.stcpC.Serve(n.conf.STCP.LocalAddr); err != nil {
 				return fmt.Errorf("failed to initiate 'stcp': %v", err)
 			}
 		} else {
@@ -141,7 +178,7 @@ func (n *Network) LocalPK() cipher.PubKey { return n.conf.PubKey }
 func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 
 // TransportNetworks returns network types that are used for transports.
-func (n *Network) TransportNetworks() []string { return n.conf.TpNetworks }
+func (n *Network) TransportNetworks() []string { return n.networks }
 
 // Dmsg returns underlying dmsg client.
 func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
@@ -170,7 +207,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 		}
 
 		return makeConn(conn, network), nil
-	case STcpType:
+	case STCPType:
 		conn, err := n.stcpC.Dial(ctx, pk, port)
 		if err != nil {
 			return nil, err
@@ -192,7 +229,7 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		}
 
 		return makeListener(lis, network), nil
-	case STcpType:
+	case STCPType:
 		lis, err := n.stcpC.Listen(port)
 		if err != nil {
 			return nil, err
