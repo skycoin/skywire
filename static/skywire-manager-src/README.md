@@ -21,7 +21,7 @@ a custom certificate, follow the steps in the [ssl folder](./ssl/README.md)
 
 ## Hypervisor configuration
 
-The Hypervisor instance must be running in `http://127.0.0.1:8080`. If it is running in another URL, you can change it in
+The Hypervisor instance must be running in `http://127.0.0.1:8000`. If it is running in another URL, you can change it in
 [proxy.config.json](proxy.config.json) before running the app.
 
 ## Running the app

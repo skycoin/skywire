@@ -369,7 +369,7 @@ $ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' S
 #### 3. Open in browser containerized `skychat` application
 
 ```bash
-$ firefox http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01):8000  
+$ firefox http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' SKY01):8001  
 ```
 
 #### 4. Create new dockerized `skywire-visor`s
@@ -410,7 +410,7 @@ $ docker run -it -v /tmp/SKYNODE:/sky --network=SKYNET --name=SKYNODE skywire-ru
 # [2019-03-15T13:55:10Z] INFO [trmanager]: Starting transport manager
 # [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skychat",# "app-version":"1.0","protocol-version":"0.0.1"}
 # [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skychat.v1.0
-# [2019-03-15T13:55:10Z] INFO [skychat.v1.0]: 2019/03/15 13:55:10 Serving HTTP on :8000
+# [2019-03-15T13:55:10Z] INFO [skychat.v1.0]: 2019/03/15 13:55:10 Serving HTTP on :8001
 # [2019-03-15T13:55:10Z] INFO [router]: Got new App request with type Init: {"app-name":"skysocks",# "app-version":"1.0","protocol-version":"0.0.1"}
 # [2019-03-15T13:55:10Z] INFO [router]: Handshaked new connection with the app skysocks.v1.0
 ```
@@ -440,13 +440,13 @@ Idea of test from Erlang classics: <https://youtu.be/uKfKtXYLG78?t=120>
 $ make run
 $ make docker-run
 # Open in browser skychat application
-$ firefox http://$SW_VISOR_B:8000  &
+$ firefox http://$SW_VISOR_B:8001 &
 # add transport
 $ ./skywire-cli add-transport $SW_VISOR_B_PK
 # "Hello Mike!" - "Hello Joe!" - "System is working!"
-$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"Hello Mike!"}' -X POST  http://$SW_VISOR_B:8000/message
-$ curl --data  {'"recipient":"'$SW_VISOR_B_PK'", "message":"Hello Joe!"}' -X POST  http://$SW_VISOR_A:8000/message
-$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"System is working!"}' -X POST  http://$SW_VISOR_B:8000/message
+$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"Hello Mike!"}' -X POST  http://$SW_VISOR_B:8001/message
+$ curl --data  {'"recipient":"'$SW_VISOR_B_PK'", "message":"Hello Joe!"}' -X POST  http://$SW_VISOR_A:8001/message
+$ curl --data  {'"recipient":"'$SW_VISOR_A_PK'", "message":"System is working!"}' -X POST  http://$SW_VISOR_B:8001/message
 # Teardown
 $ make stop && make docker-stop
 ```

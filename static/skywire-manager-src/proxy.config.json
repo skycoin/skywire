@@ -1,11 +1,11 @@
 {
   "/api": {
-    "target": "https://127.0.0.1:8080",
+    "target": "https://127.0.0.1:8000",
     "secure": false,
     "changeOrigin": true
   },
   "/http-api": {
-    "target": "http://127.0.0.1:8080",
+    "target": "http://127.0.0.1:8000",
     "secure": false,
     "changeOrigin": true,
     "pathRewrite": {
