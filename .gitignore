@@ -18,6 +18,7 @@ pkg/visor/apps/
 pkg/visor/bar/
 pkg/visor/foo/
 
+/bin
 /node
 /users.db
 /hypervisor
