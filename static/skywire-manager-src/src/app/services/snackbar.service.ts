@@ -26,11 +26,28 @@ export class SnackbarService {
    * @param textTranslationParams Params that must be passed to the "translate" pipe, if any.
    * @param isTemporalError True if the snackbar should be closed when calling "closeCurrentIfTemporaryError"
    * if it was not automatically closed before that.
+   * @param smallBody Optional text or error to show on the small lower line.
+   * @param smallTextTranslationParams Params that must be passed to the "translate" pipe for smallBody, if any.
    */
-  public showError(body: string | OperationError, textTranslationParams: any = null, isTemporalError = false) {
+  public showError(
+    body: string | OperationError,
+    textTranslationParams: any = null,
+    isTemporalError = false,
+    smallBody: string | OperationError = null,
+    smallTextTranslationParams: any = null,
+  ) {
     body = processServiceError(body);
+    smallBody = smallBody ? processServiceError(smallBody) : null;
     this.lastWasTemporaryError = isTemporalError;
-    this.show(body.translatableErrorMsg, textTranslationParams, SnackbarIcons.Error, SnackbarColors.Red, 10000);
+    this.show(
+      body.translatableErrorMsg,
+      textTranslationParams,
+      smallBody ? smallBody.translatableErrorMsg : null,
+      smallTextTranslationParams,
+      SnackbarIcons.Error,
+      SnackbarColors.Red,
+      15000,
+    );
   }
 
   /**
@@ -39,7 +56,7 @@ export class SnackbarService {
    */
   public showWarning(text: string, textTranslationParams: any = null) {
     this.lastWasTemporaryError = false;
-    this.show(text, textTranslationParams, SnackbarIcons.Warning, SnackbarColors.Yellow, 10000);
+    this.show(text, textTranslationParams, null, null, SnackbarIcons.Warning, SnackbarColors.Yellow, 15000);
   }
 
   /**
@@ -48,7 +65,7 @@ export class SnackbarService {
    */
   public showDone(text: string, textTranslationParams: any = null) {
     this.lastWasTemporaryError = false;
-    this.show(text, textTranslationParams, SnackbarIcons.Done, SnackbarColors.Green, 5000);
+    this.show(text, textTranslationParams, null, null, SnackbarIcons.Done, SnackbarColors.Green, 5000);
   }
 
   /**
@@ -73,8 +90,16 @@ export class SnackbarService {
     }
   }
 
-  private show(text: string, textTranslationParams: any, icon: SnackbarIcons, color: SnackbarColors, duration: number) {
-    const config: SnackbarConfig = { text, textTranslationParams, icon, color };
+  private show(
+    text: string,
+    textTranslationParams: any,
+    smallText: string | null,
+    smallTextTranslationParams: any | null,
+    icon: SnackbarIcons,
+    color: SnackbarColors,
+    duration: number
+  ) {
+    const config: SnackbarConfig = { text, textTranslationParams, smallText, smallTextTranslationParams, icon, color };
 
     this.snackBar.openFromComponent(SnackbarComponent, {
       duration: duration,

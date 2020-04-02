@@ -33,6 +33,7 @@ var (
 // for use with context.Context
 type ctxKey string
 
+// cookie constants
 const (
 	userKey    = ctxKey("user")
 	sessionKey = ctxKey("session")
@@ -241,8 +242,20 @@ func (s *UserManager) CreateAccount() http.HandlerFunc {
 // UserInfo returns a HandlerFunc for obtaining user info.
 func (s *UserManager) UserInfo() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := r.Context().Value(userKey).(User)
-		session := r.Context().Value(sessionKey).(Session)
+		var (
+			user    User
+			session Session
+		)
+
+		userIfc := r.Context().Value(userKey)
+		if userIfc != nil {
+			user = userIfc.(User)
+		}
+
+		sessionIfc := r.Context().Value(sessionKey)
+		if sessionIfc != nil {
+			session = sessionIfc.(Session)
+		}
 
 		var otherSessions []Session
 
@@ -285,11 +298,12 @@ func (s *UserManager) newSession(w http.ResponseWriter, session Session) error {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    value,
+		Path:     s.c.Path,
 		Domain:   s.c.Domain,
 		Expires:  time.Now().Add(s.c.ExpiresDuration),
-		Secure:   s.c.Secure,
-		HttpOnly: s.c.HTTPOnly,
-		SameSite: s.c.SameSite,
+		Secure:   s.c.Secure(),
+		HttpOnly: s.c.HTTPOnly(),
+		SameSite: s.c.SameSite(),
 	})
 
 	return nil
@@ -312,11 +326,12 @@ func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
+		Path:     s.c.Path,
 		Domain:   s.c.Domain,
 		MaxAge:   -1,
-		Secure:   s.c.Secure,
-		HttpOnly: s.c.HTTPOnly,
-		SameSite: s.c.SameSite,
+		Secure:   s.c.Secure(),
+		HttpOnly: s.c.HTTPOnly(),
+		SameSite: s.c.SameSite(),
 	})
 
 	return nil

@@ -81,11 +81,11 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 		out.TransportDiscovery = http.StatusNotFound
 	}
 
-	if r.visor.conf.Routing.RouteFinder == "" {
+	if r.visor.conf.RoutingConfig().RouteFinder == "" {
 		out.RouteFinder = http.StatusNotFound
 	}
 
-	if len(r.visor.conf.Routing.SetupNodes) == 0 {
+	if len(r.visor.conf.RoutingConfig().SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
 	}
 
@@ -184,7 +184,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.visor.conf.Visor.StaticPubKey,
+		PubKey:          r.visor.conf.Keys().PubKey,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.Apps(),
