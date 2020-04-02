@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -16,10 +15,8 @@ import (
 	"golang.org/x/net/ipv4"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/prometheus/common/log"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/songgao/water"
 )
@@ -126,11 +123,11 @@ func getDefaultGatewayIP() (net.IP, error) {
 }
 
 var (
-	log = app.NewLogger(appName)
+//log = app.NewLogger(appName)
 )
 
 func main() {
-	var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
+	/*var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
 	if *serverPKStr == "" {
 		log.Fatalln("VPN server pub key is missing")
 	}
@@ -250,7 +247,7 @@ func main() {
 	})
 	if err != nil {
 		log.Fatalf("Error connecting to VPN server: %v", err)
-	}
+	}*/
 
 	ifc, err := water.New(water.Config{
 		DeviceType: water.TUN,
@@ -285,7 +282,7 @@ func main() {
 	setupTUN(ifc.Name(), tunIP, tunNetmask, tunGateway, tunMTU)
 
 	// route Skywire service traffic through the default gateway
-	if !dmsgDiscIP.IsLoopback() {
+	/*if !dmsgDiscIP.IsLoopback() {
 		addRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
 	}
 	if !dmsgIP.IsLoopback() {
@@ -354,6 +351,73 @@ func main() {
 	go func() {
 		if err := copyTraffic(appConn, ifc); err != nil {
 			log.Fatalf("Error resending traffic from VPN server to TUN %s: %v", ifc.Name(), err)
+		}
+	}()*/
+
+	ifcOut, err := water.New(water.Config{
+		DeviceType: water.TUN,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	setupTUN(ifcOut.Name(), "192.168.255.10", "255.255.255.255", "192.168.255.9", tunMTU)
+
+	go func() {
+		buf := make([]byte, bufSize)
+		for {
+			rn, rerr := ifc.Read(buf)
+			if rerr != nil {
+				panic(fmt.Errorf("error reading from RWC: %v", rerr))
+			}
+
+			header, err := ipv4.ParseHeader(buf[:rn])
+			if err != nil {
+				log.Errorf("Error parsing IP header, skipping...")
+				continue
+			}
+
+			// TODO: match IPs?
+			log.Infof("Sending  OUTgoing IP packet %v->%v", header.Src, header.Dst)
+
+			totalWritten := 0
+			for totalWritten != rn {
+				wn, werr := ifcOut.Write(buf[:rn])
+				if werr != nil {
+					panic(fmt.Errorf("error writing to RWC: %v", err))
+				}
+
+				totalWritten += wn
+			}
+		}
+	}()
+
+	go func() {
+		buf := make([]byte, bufSize)
+		for {
+			rn, rerr := ifcOut.Read(buf)
+			if rerr != nil {
+				panic(fmt.Errorf("error reading from RWC: %v", rerr))
+			}
+
+			header, err := ipv4.ParseHeader(buf[:rn])
+			if err != nil {
+				log.Errorf("Error parsing IP header, skipping...")
+				continue
+			}
+
+			// TODO: match IPs?
+			log.Infof("Sending INcoming IP packet %v->%v", header.Src, header.Dst)
+
+			totalWritten := 0
+			for totalWritten != rn {
+				wn, werr := ifc.Write(buf[:rn])
+				if werr != nil {
+					panic(fmt.Errorf("error writing to RWC: %v", err))
+				}
+
+				totalWritten += wn
+			}
 		}
 	}()
 
