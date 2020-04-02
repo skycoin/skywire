@@ -30,7 +30,7 @@ const (
 	port    = routing.Port(1)
 )
 
-var addr = flag.String("addr", ":8000", "address to bind")
+var addr = flag.String("addr", ":8001", "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
