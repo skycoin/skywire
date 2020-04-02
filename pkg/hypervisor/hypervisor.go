@@ -22,8 +22,10 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
+	"github.com/rakyll/statik/fs"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	_ "github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor/statik"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -54,6 +56,7 @@ type VisorConn struct {
 // Hypervisor manages visors.
 type Hypervisor struct {
 	c      Config
+	assets http.FileSystem             // Web UI.
 	visors map[cipher.PubKey]VisorConn // connected remote visors.
 	users  *UserManager
 	mu     *sync.RWMutex
@@ -62,6 +65,11 @@ type Hypervisor struct {
 // New creates a new Hypervisor.
 func New(config Config) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
+
+	assets, err := fs.New()
+	if err != nil {
+		return nil, err
+	}
 
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
 	if err != nil {
@@ -72,6 +80,7 @@ func New(config Config) (*Hypervisor, error) {
 
 	return &Hypervisor{
 		c:      config,
+		assets: assets,
 		visors: make(map[cipher.PubKey]VisorConn),
 		users:  NewUserManager(singleUserDB, config.Cookies),
 		mu:     new(sync.RWMutex),
@@ -158,6 +167,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
+				r.Get("/about", hv.getAbout())
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -191,7 +201,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/{pk}", hv.getPty())
 		})
 
-		r.Handle("/*", http.FileServer(http.Dir(hv.c.WebDir)))
+		r.Handle("/*", http.FileServer(hv.assets))
 	})
 
 	r.ServeHTTP(w, req)
@@ -202,6 +212,20 @@ func (hv *Hypervisor) getPong() http.HandlerFunc {
 		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
 			log.WithError(err).Warn("getPong: Failed to send PONG!")
 		}
+	}
+}
+
+type About struct {
+	PubKey  cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
+	Build   *buildinfo.Info `json:"build"`
+}
+
+func (hv *Hypervisor) getAbout() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		httputil.WriteJSON(w, r, http.StatusOK, About{
+			PubKey: hv.c.PK,
+			Build: buildinfo.Get(),
+		})
 	}
 }
 
