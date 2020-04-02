@@ -41,14 +41,14 @@ const (
 const (
 	SkychatName = "skychat"
 	SkychatPort = uint16(1)
-	SkychatAddr = ":8000"
+	SkychatAddr = ":8001"
 
 	SkysocksName = "skysocks"
 	SkysocksPort = uint16(3)
 
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
-	SkysocksClientAddr = ":1080"
+	SkysocksClientAddr = ":9443"
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.

@@ -241,7 +241,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       if (selectedOption === 1) {
         // Open the complete terminal in a new tab.
         const protocol = window.location.protocol;
-        const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8080');
+        const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
         window.open(protocol + '//' + hostname + '/pty/' + NodeComponent.getCurrentNodeKey(), '_blank', 'noopener noreferrer');
       } else if (selectedOption === 2) {
         // Open the simple terminal in a modal window.
