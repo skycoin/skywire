@@ -354,14 +354,21 @@ func main() {
 		}
 	}()*/
 
-	ifcOut, err := water.New(water.Config{
-		DeviceType: water.TUN,
-	})
+	remoteAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("192.168.1.18:2000"))
 	if err != nil {
-		panic(err)
+		log.Fatalf("Unable to resolve remote UDP address: %v", err)
 	}
 
-	setupTUN(ifcOut.Name(), "192.168.255.10", "255.255.255.255", "192.168.255.9", tunMTU)
+	lstnAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%v", 2000))
+	if nil != err {
+		log.Fatalln("Unable to get UDP socket:", err)
+	}
+
+	lstnConn, err := net.ListenUDP("udp", lstnAddr)
+	if nil != err {
+		log.Fatalln("Unable to listen on UDP socket:", err)
+	}
+	defer lstnConn.Close()
 
 	go func() {
 		buf := make([]byte, bufSize)
@@ -382,7 +389,7 @@ func main() {
 
 			totalWritten := 0
 			for totalWritten != rn {
-				wn, werr := ifcOut.Write(buf[:rn])
+				wn, werr := lstnConn.WriteToUDP(buf[:rn], remoteAddr)
 				if werr != nil {
 					panic(fmt.Errorf("error writing to RWC: %v", err))
 				}
@@ -395,10 +402,12 @@ func main() {
 	go func() {
 		buf := make([]byte, bufSize)
 		for {
-			rn, rerr := ifcOut.Read(buf)
+			rn, raddr, rerr := lstnConn.ReadFromUDP(buf)
 			if rerr != nil {
 				panic(fmt.Errorf("error reading from RWC: %v", rerr))
 			}
+
+			log.Infof("Received %v bytes from %v\n", rn, *raddr)
 
 			header, err := ipv4.ParseHeader(buf[:rn])
 			if err != nil {
