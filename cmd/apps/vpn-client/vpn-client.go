@@ -354,12 +354,12 @@ func main() {
 		}
 	}()*/
 
-	conn, err := net.Dial("tcp", "192.168.1.18:2000")
+	/*conn, err := net.Dial("tcp", "192.168.1.18:2000")
 	if err != nil {
 		panic(err)
-	}
+	}*/
 
-	/*lis, err := net.Listen("tcp", ":2000")
+	lis, err := net.Listen("tcp", ":2000")
 	if err != nil {
 		panic(err)
 	}
@@ -367,7 +367,7 @@ func main() {
 	conn, err := lis.Accept()
 	if err != nil {
 		panic(err)
-	}*/
+	}
 
 	go func() {
 		buf := make([]byte, bufSize)
