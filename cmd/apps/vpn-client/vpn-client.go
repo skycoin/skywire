@@ -354,21 +354,20 @@ func main() {
 		}
 	}()*/
 
-	remoteAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("192.168.1.18:2000"))
+	conn, err := net.Dial("tcp", "192.168.1.18:2000")
 	if err != nil {
-		log.Fatalf("Unable to resolve remote UDP address: %v", err)
+		panic(err)
 	}
 
-	lstnAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%v", 2000))
-	if nil != err {
-		log.Fatalln("Unable to get UDP socket:", err)
+	/*lis, err := net.Listen("tcp", ":2000")
+	if err != nil {
+		panic(err)
 	}
 
-	lstnConn, err := net.ListenUDP("udp", lstnAddr)
-	if nil != err {
-		log.Fatalln("Unable to listen on UDP socket:", err)
-	}
-	defer lstnConn.Close()
+	conn, err := lis.Accept()
+	if err != nil {
+		panic(err)
+	}*/
 
 	go func() {
 		buf := make([]byte, bufSize)
@@ -389,7 +388,7 @@ func main() {
 
 			totalWritten := 0
 			for totalWritten != rn {
-				wn, werr := lstnConn.WriteToUDP(buf[:rn], remoteAddr)
+				wn, werr := conn.Write(buf[:rn])
 				if werr != nil {
 					panic(fmt.Errorf("error writing to RWC: %v", err))
 				}
@@ -402,12 +401,10 @@ func main() {
 	go func() {
 		buf := make([]byte, bufSize)
 		for {
-			rn, raddr, rerr := lstnConn.ReadFromUDP(buf)
+			rn, rerr := conn.Read(buf)
 			if rerr != nil {
 				panic(fmt.Errorf("error reading from RWC: %v", rerr))
 			}
-
-			log.Infof("Received %v bytes from %v\n", rn, *raddr)
 
 			header, err := ipv4.ParseHeader(buf[:rn])
 			if err != nil {
