@@ -61,6 +61,10 @@ Different locations are required due to the fact that we want to spread out the 
 * The rewards are **paid every subsequent month around the 5th** or with a short delay, depending if other things delay the process.
 * The deadline to submit complaints is being published in the monthly Skywire status update emails and in the [Skywire PSA channel on Telegram](https://t.me/SkywirePSA).
 
+<div align="center">
+<em>During Skywire’s testnet phase, owners of official Skyminers were required to have all eight nodes online in order to qualify for full uptime rewards. With the launch of Mainnet, official Skyminers now only require seven nodes to be online at least 75% of the time in order to earn full rewards.
+</em>
+</div>
 <br> 
 
 ### Official Skyminers 
