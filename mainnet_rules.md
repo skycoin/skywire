@@ -75,11 +75,11 @@ There are two different reward categories for official miners:
 <div align="center"><em><u>We are currently revising the reward strucure for our early supporters. Details of the rewards going forward will be announced very soon. </u></em></div><br/>
 
 Rewards are being paid on a node by node basis. The total amount of rewards is limited by a pool size that is subject to change:
-* You can receive a maximum of 12 Skycoin per node
+* You can receive a maximum of 13.714 Skycoin per node
     - official Skyminer consist of seven nodes (visors) and one manager (hypervisor)
 * Rewards are being calculated on a node by node basis
     - you'll receive up to 7 Skycoin per-node rewards
-* The total pool size is being divided evenly between all nodes eligible for receiving rewards. This implies that you will receive less than 12 Skycoin per-node rewards in case the pool size would be surpassed. 
+* The total pool size is being divided evenly between all nodes eligible for receiving rewards. This implies that you will receive less than 13.714 Skycoin per-node rewards in case the pool size would be surpassed. 
 
 ***
 
