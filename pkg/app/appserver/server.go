@@ -40,7 +40,7 @@ func (s *Server) Register(appKey appcommon.Key) error {
 	return s.rpcS.RegisterName(string(appKey), gateway)
 }
 
-// ListenAndServe starts listening for incoming app connections via unix socket.
+// ListenAndServe starts listening for incoming app connections via tcp socket.
 func (s *Server) ListenAndServe() error {
 	l, err := net.Listen("tcp", s.addr)
 	if err != nil {
