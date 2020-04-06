@@ -127,8 +127,7 @@ As of now, you are provided with two tools to check whether or not you're online
 * The [Skywire whitelisting system](https://whitelist.skycoin.com)
    - along with the [Skywire whitelisting system user guide](https://github.com/skycoinproject/skywire-mainnet/wiki/Skywire-Whitelisting-System)
 
-You are advised to use this guide to **verify that your nodes are online & connected to the discovery server**:[https://github.com/skycoinproject/skywire-mainnet/wiki/How-to-verify-that-your-nodes-are-online](https://github.com/skycoinproject/skywire-mainnet/wiki/How-to-verify-that-your-nodes-are-online)
-
+You are advised to use [this guide](https://github.com/SkycoinProject/skywire-mainnet/wiki/Troubleshooting#online-status-verification) to **verify that your nodes are online & connected to the discovery server**.
 <div align="center"><em><b>Make sure to verify the online status of your nodes on a regular basis!</em></b></div>
 
 ***
@@ -317,7 +316,7 @@ All necessary steps to get up and running are described in  <a href="https://git
 
 * Keep your account data up to date using the [Skywire Whitelisting System](https://whitelist.skycoin.com)
      - Update Skycoin Wallet Address
-     - Update public keys if it's necessary (you're still advised to [backup your public keys](https://github.com/skycoinproject/skywire-mainnet/wiki/Backup-.skywire-folders-(public-keys)))
+     - Update public keys if it's necessary
      - Add more boards and include new pictures to receive the verification of an admin
      - Transfer your whitelisted miner to another email address
 * The whitelist is a queue based on a first come first serve basis, the benchmark for applications is the hardware list above + the official miner specifications.
