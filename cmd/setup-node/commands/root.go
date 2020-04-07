@@ -73,7 +73,7 @@ var rootCmd = &cobra.Command{
 			logger.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
 		}
 
-		logger.Infof("Config: %+v", conf)
+		logger.Infof("Config: %#v", conf)
 
 		sn, err := setup.NewNode(conf, metrics.NewPrometheus("setupnode"))
 		if err != nil {
