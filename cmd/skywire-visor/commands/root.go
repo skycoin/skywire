@@ -180,7 +180,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 		cfg.logger.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
 	}
 
-	cfg.logger.Infof("Config: %+v", &cfg.conf)
+	cfg.logger.Infof("Config: %#v", &cfg.conf)
 
 	cfg.conf.Path = configPath
 
