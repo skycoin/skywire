@@ -174,9 +174,11 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 	_, err := conn.Write([]byte(data["message"]))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+
 		connsMu.Lock()
 		delete(chatConns, pk)
 		connsMu.Unlock()
+
 		return
 	}
 
