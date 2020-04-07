@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"sync"
@@ -132,8 +133,14 @@ func handleConn(conn net.Conn) {
 }
 
 func messageHandler(w http.ResponseWriter, req *http.Request) {
+	raw, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	data := map[string]string{}
-	if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
+	if err := json.Unmarshal(raw, &data); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -171,12 +178,13 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 		go handleConn(conn)
 	}
 
-	_, err := conn.Write([]byte(data["message"]))
-	if err != nil {
+	if _, err := conn.Write([]byte(data["message"])); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+
 		connsMu.Lock()
 		delete(chatConns, pk)
 		connsMu.Unlock()
+
 		return
 	}
 

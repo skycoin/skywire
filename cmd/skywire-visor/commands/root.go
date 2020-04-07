@@ -171,9 +171,16 @@ func (cfg *runCfg) readConfig() *runCfg {
 		rdr = bufio.NewReader(os.Stdin)
 	}
 
-	if err := json.NewDecoder(rdr).Decode(&cfg.conf); err != nil {
-		cfg.logger.Fatalf("Failed to decode %s: %s", rdr, err)
+	raw, err := ioutil.ReadAll(rdr)
+	if err != nil {
+		cfg.logger.Fatalf("Failed to read config: %v", err)
 	}
+
+	if err := json.Unmarshal(raw, &cfg.conf); err != nil {
+		cfg.logger.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
+	}
+
+	cfg.logger.Infof("Config: %+v", &cfg.conf)
 
 	cfg.conf.Path = configPath
 
