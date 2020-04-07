@@ -85,7 +85,7 @@ func (c *Config) flush() error {
 		return ErrNoConfigPath
 	}
 
-	c.log.Infof("Updating visor config to %+v", c)
+	c.log.Infof("Updating visor config to %#v", c)
 
 	bytes, err := json.MarshalIndent(c, "", "\t")
 	if err != nil {
