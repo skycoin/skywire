@@ -48,7 +48,7 @@ const (
 
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
-	SkysocksClientAddr = ":9443"
+	SkysocksClientAddr = ":1080"
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
