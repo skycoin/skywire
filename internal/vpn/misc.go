@@ -105,8 +105,8 @@ func DeleteRoute(ip, gateway, netmask string) {
 	}
 }
 
-func GetDefaultGatewayIP() (net.IP, error) {
-	cmd := "netstat -rn | grep default | grep en | awk '{print $2}'"
+func GatewayIP(ifcName string) (net.IP, error) {
+	cmd := fmt.Sprintf(GatewayForIfcCMDFmt, ifcName)
 	outBytes, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return nil, fmt.Errorf("error running command: %w", err)
@@ -129,4 +129,54 @@ func GetDefaultGatewayIP() (net.IP, error) {
 	}
 
 	return nil, errors.New("couldn't find default gateway IP")
+}
+
+func DefaultGatewayIP() (net.IP, error) {
+	defaultNetworkIfcName, err := DefaultNetworkIfc()
+	if err != nil {
+		return nil, fmt.Errorf("error getting default network interface name: %w", err)
+	}
+
+	return GatewayIP(defaultNetworkIfcName)
+}
+
+func DefaultNetworkIfc() (string, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "", err
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // interface down
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // loopback interface
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return "", err
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue // not an ipv4 address
+			}
+
+			if ip.Equal(net.IPv4(0, 0, 0, 0)) {
+				// found default interface
+				return iface.Name, nil
+			}
+		}
+	}
+	return "", errors.New("no internet connection")
 }

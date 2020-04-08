@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
+	"github.com/prometheus/common/log"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -58,10 +59,16 @@ const (
 )
 
 var (
-	log = app.NewLogger(appName)
+//log = app.NewLogger(appName)
 )
 
 func main() {
+	/*ifcs, err := net.Interfaces()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("ifcs: %v\n", ifcs)*/
+
 	var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
 	if *serverPKStr == "" {
 		log.Fatalln("VPN server pub key is missing")
@@ -72,7 +79,7 @@ func main() {
 		log.Fatalf("Invalid VPN server pub key: %v", err)
 	}
 
-	defaultGatewayIP, err := vpn.GetDefaultGatewayIP()
+	defaultGatewayIP, err := vpn.DefaultGatewayIP()
 	if err != nil {
 		log.Fatalf("Error getting default network gateway: %v", err)
 	}
