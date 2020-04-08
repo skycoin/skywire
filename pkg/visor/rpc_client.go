@@ -357,8 +357,8 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
 			Apps: []*AppState{
-				{Name: "foo.v1.0", AutoStart: false, Port: 10},
-				{Name: "bar.v2.0", AutoStart: false, Port: 20},
+				{AppConfig: AppConfig{App: "foo.v1.0", AutoStart: false, Port: 10}},
+				{AppConfig: AppConfig{App: "bar.v2.0", AutoStart: false, Port: 20}},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),
@@ -441,7 +441,7 @@ func (*mockRPCClient) StopApp(string) error {
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
 		for _, a := range mc.s.Apps {
-			if a.Name == appName {
+			if a.App == appName {
 				a.AutoStart = autostart
 				return nil
 			}
@@ -456,7 +456,7 @@ func (mc *mockRPCClient) SetSocksPassword(string) error {
 		const socksName = "skysocks"
 
 		for i := range mc.s.Apps {
-			if mc.s.Apps[i].Name == socksName {
+			if mc.s.Apps[i].App == socksName {
 				return nil
 			}
 		}
@@ -471,7 +471,7 @@ func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
 		const socksName = "skysocks-client"
 
 		for i := range mc.s.Apps {
-			if mc.s.Apps[i].Name == socksName {
+			if mc.s.Apps[i].App == socksName {
 				return nil
 			}
 		}
