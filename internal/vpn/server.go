@@ -17,6 +17,8 @@ const (
 )
 
 type Server struct {
+	lisMx     sync.Mutex
+	lis       net.Listener
 	log       *logging.MasterLogger
 	serveOnce sync.Once
 	ipGen     *TUNIPGenerator
@@ -32,8 +34,12 @@ func NewServer(l *logging.MasterLogger) *Server {
 func (s *Server) Serve(l net.Listener) error {
 	serveErr := errors.New("already serving")
 	s.serveOnce.Do(func() {
+		s.lisMx.Lock()
+		s.lis = l
+		s.lisMx.Unlock()
+
 		for {
-			conn, err := l.Accept()
+			conn, err := s.lis.Accept()
 			if err != nil {
 				serveErr = fmt.Errorf("failed to accept client connection: %w", err)
 				return
@@ -44,6 +50,17 @@ func (s *Server) Serve(l net.Listener) error {
 	})
 
 	return serveErr
+}
+
+func (s *Server) Close() error {
+	s.lisMx.Lock()
+	defer s.lisMx.Unlock()
+
+	if s.lis == nil {
+		return nil
+	}
+
+	return s.lis.Close()
 }
 
 func (s *Server) closeConn(conn net.Conn) {
