@@ -22,20 +22,6 @@ import (
 )
 
 const (
-	dmsgDiscAddrEnvKey = "ADDR_DMSG_DISC"
-	dmsgAddrEnvKey     = "ADDR_DMSG_SRV"
-	tpDiscAddrEnvKey   = "ADDR_TP_DISC"
-	rfAddrEnvKey       = "ADDR_RF"
-
-	stcpTableLenEnvKey = "STCP_TABLE_LEN"
-	stcpKeyEnvPrefix   = "STCP_TABLE_KEY_"
-	stcpValueEnvPrefix = "STCP_TABLE_"
-
-	hypervisorsCountEnvKey  = "HYPERVISOR_COUNT"
-	hypervisorAddrEnvPrefix = "ADDR_HYPERVISOR_"
-)
-
-const (
 	tunIP      = "192.168.255.6"
 	tunNetmask = "255.255.255.255"
 	tunGateway = "192.168.255.5"
@@ -84,40 +70,40 @@ func main() {
 		log.Fatalf("Error getting default network gateway: %v", err)
 	}
 
-	dmsgDiscIP, ok, err := vpn.IPFromEnv(dmsgDiscAddrEnvKey)
+	dmsgDiscIP, ok, err := vpn.IPFromEnv(vpn.DmsgDiscAddrEnvKey)
 	if err != nil {
 		log.Fatalf("Error getting Dmsg discovery IP: %v", err)
 	}
 	if !ok {
-		log.Fatalf("Env arg %s is not provided", dmsgDiscAddrEnvKey)
+		log.Fatalf("Env arg %s is not provided", vpn.DmsgDiscAddrEnvKey)
 	}
 
-	dmsgIP, ok, err := vpn.IPFromEnv(dmsgAddrEnvKey)
+	dmsgIP, ok, err := vpn.IPFromEnv(vpn.DmsgAddrEnvKey)
 	if err != nil {
 		log.Fatalf("Error getting Dmsg IP: %v", err)
 	}
 	if !ok {
-		log.Fatalf("Env arg %s is not provided", dmsgAddrEnvKey)
+		log.Fatalf("Env arg %s is not provided", vpn.DmsgAddrEnvKey)
 	}
 
-	tpDiscIP, ok, err := vpn.IPFromEnv(tpDiscAddrEnvKey)
+	tpDiscIP, ok, err := vpn.IPFromEnv(vpn.TPDiscAddrEnvKey)
 	if err != nil {
 		log.Fatalf("Error getting transport discovery IP: %v", err)
 	}
 	if !ok {
-		log.Fatalf("Env arg %s is not provided", tpDiscAddrEnvKey)
+		log.Fatalf("Env arg %s is not provided", vpn.TPDiscAddrEnvKey)
 	}
 
-	rfIP, ok, err := vpn.IPFromEnv(rfAddrEnvKey)
+	rfIP, ok, err := vpn.IPFromEnv(vpn.RFAddrEnvKey)
 	if err != nil {
 		log.Fatalf("Error getting route finder IP: %v", err)
 	}
 	if !ok {
-		log.Fatalf("Env arg %s is not provided", rfAddrEnvKey)
+		log.Fatalf("Env arg %s is not provided", vpn.RFAddrEnvKey)
 	}
 
 	var stcpEntities []net.IP
-	stcpTableLenStr := os.Getenv(stcpTableLenEnvKey)
+	stcpTableLenStr := os.Getenv(vpn.STCPTableLenEnvKey)
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
 		if err != nil {
@@ -126,19 +112,19 @@ func main() {
 
 		stcpEntities = make([]net.IP, 0, stcpTableLen)
 		for i := 0; i < stcpTableLen; i++ {
-			stcpKey := os.Getenv(stcpKeyEnvPrefix + strconv.Itoa(i))
+			stcpKey := os.Getenv(vpn.STCPKeyEnvPrefix + strconv.Itoa(i))
 			if stcpKey == "" {
-				log.Fatalf("Env arg %s is not provided", stcpKeyEnvPrefix+strconv.Itoa(i))
+				log.Fatalf("Env arg %s is not provided", vpn.STCPKeyEnvPrefix+strconv.Itoa(i))
 			}
 
-			stcpAddrStr := os.Getenv(stcpValueEnvPrefix + stcpKey)
+			stcpAddrStr := os.Getenv(vpn.STCPValueEnvPrefix + stcpKey)
 			if stcpAddrStr == "" {
-				log.Fatalf("Env arg %s is not provided", stcpValueEnvPrefix+stcpKey)
+				log.Fatalf("Env arg %s is not provided", vpn.STCPValueEnvPrefix+stcpKey)
 			}
 
 			stcpAddr := net.ParseIP(stcpAddrStr)
 			if stcpAddr == nil {
-				log.Fatalf("Invalid STCP address in key %s: %v", stcpValueEnvPrefix+stcpKey, err)
+				log.Fatalf("Invalid STCP address in key %s: %v", vpn.STCPValueEnvPrefix+stcpKey, err)
 			}
 
 			stcpEntities = append(stcpEntities, stcpAddr)
@@ -146,7 +132,7 @@ func main() {
 	}
 
 	var hypervisorAddrs []net.IP
-	hypervisorsCountStr := os.Getenv(hypervisorsCountEnvKey)
+	hypervisorsCountStr := os.Getenv(vpn.HypervisorsCountEnvKey)
 	if hypervisorsCountStr != "" {
 		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
 		if err != nil {
@@ -155,14 +141,14 @@ func main() {
 
 		hypervisorAddrs = make([]net.IP, 0, hypervisorsCount)
 		for i := 0; i < hypervisorsCount; i++ {
-			hypervisorAddrStr := os.Getenv(hypervisorAddrEnvPrefix + strconv.Itoa(i))
+			hypervisorAddrStr := os.Getenv(vpn.HypervisorAddrEnvPrefix + strconv.Itoa(i))
 			if hypervisorAddrStr == "" {
-				log.Fatalf("Env arg %s is missing", hypervisorAddrEnvPrefix+strconv.Itoa(i))
+				log.Fatalf("Env arg %s is missing", vpn.HypervisorAddrEnvPrefix+strconv.Itoa(i))
 			}
 
 			hypervisorAddr := net.ParseIP(hypervisorAddrStr)
 			if hypervisorAddr == nil {
-				log.Fatalf("Invalid hypervisor address in key %s: %v", hypervisorAddrEnvPrefix+strconv.Itoa(i), err)
+				log.Fatalf("Invalid hypervisor address in key %s: %v", vpn.HypervisorAddrEnvPrefix+strconv.Itoa(i), err)
 			}
 
 			hypervisorAddrs = append(hypervisorAddrs, hypervisorAddr)
