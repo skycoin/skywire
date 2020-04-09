@@ -11,6 +11,7 @@ import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { AppsService } from 'src/app/services/apps.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { Application } from 'src/app/app.datatypes';
 
 /**
  * Modal window used for configuring the Skysocks-client app.
@@ -41,9 +42,9 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, appName: string): MatDialogRef<SkysocksClientSettingsComponent, any> {
+  public static openDialog(dialog: MatDialog, app: Application): MatDialogRef<SkysocksClientSettingsComponent, any> {
     const config = new MatDialogConfig();
-    config.data = appName;
+    config.data = app;
     config.autoFocus = false;
     config.width = AppConfig.mediumModalWidth;
 
@@ -51,7 +52,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   }
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) private data: string,
+    @Inject(MAT_DIALOG_DATA) private data: Application,
     private dialogRef: MatDialogRef<SkysocksClientSettingsComponent>,
     private appsService: AppsService,
     private formBuilder: FormBuilder,
@@ -68,8 +69,18 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       this.history = [];
     }
 
+    // Get the current value saved on the visor, if it was returned by the API.
+    let currentVal = '';
+    if (this.data.args && this.data.args.length > 0) {
+      for (let i = 0; i < this.data.args.length; i++) {
+        if (this.data.args[i] === '-srv' && i + 1 < this.data.args.length) {
+          currentVal = this.data.args[i + 1];
+        }
+      }
+    }
+
     this.form = this.formBuilder.group({
-      'pk': ['', Validators.compose([
+      'pk': [currentVal, Validators.compose([
         Validators.required,
         Validators.minLength(66),
         Validators.maxLength(66),
@@ -112,7 +123,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     this.operationSubscription = this.appsService.changeAppSettings(
       // The node pk is obtained from the currently openned node page.
       NodeComponent.getCurrentNodeKey(),
-      this.data,
+      this.data.name,
       { pk: this.lastPublicKey },
     ).subscribe({
       next: this.onSuccess.bind(this),
