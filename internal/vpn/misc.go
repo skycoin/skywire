@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -73,16 +72,17 @@ func IPFromEnv(key string) (net.IP, bool, error) {
 	return ip, true, nil
 }
 
-func run(bin string, args ...string) {
-	//cmd := exec.Command("sh -c \"ip " + strings.Join(args, " ") + "\"")
+func run(bin string, args ...string) error {
 	cmd := exec.Command(bin, args...)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	err := cmd.Run()
 	if nil != err {
-		log.Fatalf("Error running %s: %v\n", bin, err)
+		return fmt.Errorf("error running command %s: %w", bin, err)
 	}
+
+	return nil
 }
 
 func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) {
@@ -106,10 +106,10 @@ func DeleteRoute(ip, gateway, netmask string) {
 }
 
 func GatewayIP(ifcName string) (net.IP, error) {
-	cmd := fmt.Sprintf(GatewayForIfcCMDFmt, ifcName)
+	cmd := fmt.Sprintf(gatewayForIfcCMDFmt, ifcName)
 	outBytes, err := exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
-		return nil, fmt.Errorf("error running command: %w", err)
+		return nil, fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
 	outBytes = bytes.TrimRight(outBytes, "\n")
@@ -179,4 +179,52 @@ func DefaultNetworkIfc() (string, error) {
 		}
 	}
 	return "", errors.New("no internet connection")
+}
+
+func GetIPv4ForwardingValue() (string, error) {
+	return getIPForwardingValue(getIPv4ForwardingCMD)
+}
+
+func GetIPv6ForwardingValue() (string, error) {
+	return getIPForwardingValue(getIPv6ForwardingCMD)
+}
+
+func getIPForwardingValue(cmd string) (string, error) {
+	outBytes, err := exec.Command("bash", "-c", cmd).Output()
+	if err != nil {
+		return "", fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	val, err := parseIPForwardingOutput(outBytes)
+	if err != nil {
+		return "", fmt.Errorf("error parsing output of command %s: %w", cmd, err)
+	}
+
+	return val, nil
+}
+
+func SetIPv4ForwardingValue(val string) error {
+	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
+	if err := exec.Command("bash", "-c", cmd).Wait(); err != nil {
+		return fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	return nil
+}
+
+func SetIPv6ForwardingValue(val string) error {
+	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
+	if err := exec.Command("bash", "-c", cmd).Wait(); err != nil {
+		return fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	return nil
+}
+
+func EnableIPv4Forwarding() error {
+	return SetIPv4ForwardingValue("1")
+}
+
+func EnableIPv6Forwarding() error {
+	return SetIpv6
 }
