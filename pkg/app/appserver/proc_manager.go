@@ -23,7 +23,8 @@ var (
 
 // ProcManager allows to manage skywire applications.
 type ProcManager interface {
-	Start(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (appcommon.ProcID, error)
+	Start(log *logging.Logger, c appcommon.Config, args []string, envs map[string]string,
+		stdout, stderr io.Writer) (appcommon.ProcID, error)
 	Exists(name string) bool
 	Stop(name string) error
 	Wait(name string) error
@@ -50,13 +51,13 @@ func NewProcManager(log *logging.Logger, rpcServer *Server) ProcManager {
 }
 
 // Start start the application according to its config and additional args.
-func (m *procManager) Start(log *logging.Logger, c appcommon.Config, args []string,
+func (m *procManager) Start(log *logging.Logger, c appcommon.Config, args []string, envs map[string]string,
 	stdout, stderr io.Writer) (appcommon.ProcID, error) {
 	if m.Exists(c.Name) {
 		return 0, ErrAppAlreadyStarted
 	}
 
-	p, err := NewProc(log, c, args, stdout, stderr)
+	p, err := NewProc(log, c, args, envs, stdout, stderr)
 	if err != nil {
 		return 0, err
 	}
