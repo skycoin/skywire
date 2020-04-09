@@ -12,20 +12,20 @@ import (
 )
 
 const (
-	tunIP      = "192.168.255.1"
 	tunNetmask = "255.255.0.0"
-	tunGateway = "192.168.255.0"
 	tunMTU     = 1500
 )
 
 type Server struct {
 	log       *logging.MasterLogger
 	serveOnce sync.Once
+	ipGen     *TUNIPGenerator
 }
 
 func NewServer(l *logging.MasterLogger) *Server {
 	return &Server{
-		log: l,
+		log:   l,
+		ipGen: NewTUNIPGenerator(),
 	}
 }
 
@@ -36,6 +36,7 @@ func (s *Server) Serve(l net.Listener) error {
 			conn, err := l.Accept()
 			if err != nil {
 				serveErr = fmt.Errorf("failed to accept client connection: %w", err)
+				return
 			}
 
 			go s.serveConn(conn)
@@ -45,7 +46,21 @@ func (s *Server) Serve(l net.Listener) error {
 	return serveErr
 }
 
+func (s *Server) closeConn(conn net.Conn) {
+	if err := conn.Close(); err != nil {
+		s.log.WithError(err).Errorf("Error closing client %s connection", conn.RemoteAddr())
+	}
+}
+
 func (s *Server) serveConn(conn net.Conn) {
+	defer s.closeConn(conn)
+
+	tunIP, tunGateway, err := s.ipGen.Next()
+	if err != nil {
+		s.log.WithError(err).Errorf("failed to get free IP for TUN for client %s", conn.RemoteAddr())
+		return
+	}
+
 	ifc, err := water.New(water.Config{
 		DeviceType: water.TUN,
 	})
@@ -61,8 +76,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	s.log.Infof("Allocated TUN %s", ifc.Name())
 
-	// TODO: generate IPs, each client should have a separate TUN with separate IP and gateway
-	SetupTUN(ifc.Name(), tunIP, tunNetmask, tunGateway, tunMTU)
+	SetupTUN(ifc.Name(), tunIP.String(), tunNetmask, tunGateway.String(), tunMTU)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
