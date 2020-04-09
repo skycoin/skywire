@@ -62,10 +62,8 @@ var reservedPorts = map[routing.Port]string{0: "router", 1: "skychat", 3: "skyso
 
 // AppState defines state parameters for a registered App.
 type AppState struct {
-	Name      string       `json:"name"`
-	AutoStart bool         `json:"autostart"`
-	Port      routing.Port `json:"port"`
-	Status    AppStatus    `json:"status"`
+	AppConfig
+	Status AppStatus `json:"status"`
 }
 
 // Visor provides messaging runtime for Apps by setting up all
@@ -496,7 +494,7 @@ func (visor *Visor) App(name string) (*AppState, bool) {
 	if !ok {
 		return nil, false
 	}
-	state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
+	state := &AppState{AppConfig: app, Status: AppStatusStopped}
 	if visor.procManager.Exists(app.App) {
 		state.Status = AppStatusRunning
 	}
@@ -509,7 +507,7 @@ func (visor *Visor) Apps() []*AppState {
 	res := make([]*AppState, 0)
 
 	for _, app := range visor.appsConf {
-		state := &AppState{app.App, app.AutoStart, app.Port, AppStatusStopped}
+		state := &AppState{AppConfig: app, Status: AppStatusStopped}
 
 		if visor.procManager.Exists(app.App) {
 			state.Status = AppStatusRunning
