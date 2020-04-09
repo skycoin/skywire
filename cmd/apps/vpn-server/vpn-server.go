@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 
@@ -12,7 +15,7 @@ import (
 )
 
 const (
-	appName = "vpn-client"
+	appName = "vpn-server"
 	netType = appnet.TypeSkynet
 	vpnPort = routing.Port(44)
 )
@@ -76,8 +79,37 @@ func main() {
 		appClientt.Close()
 	}()
 
+	osSigs := make(chan os.Signal)
+
+	sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
+	for _, sig := range sigs {
+		signal.Notify(osSigs, sig)
+	}
+
+	shutdownC := make(chan struct{})
+
+	go func() {
+		<-osSigs
+
+		shutdownC <- struct{}{}
+	}()
+
 	l, err := appClientt.Listen(netType, vpnPort)
 	if err != nil {
 		log.Fatalf("Error listening network %v on port %d: %v\n", netType, vpnPort, err)
 	}
+
+	srv := vpn.NewServer(log)
+	defer func() {
+		if err := srv.Close(); err != nil {
+			log.WithError(err).Fatalln("Error closing server")
+		}
+	}()
+	go func() {
+		if err := srv.Serve(l); err != nil {
+			log.WithError(err).Fatalln("Error serving")
+		}
+	}()
+
+	<-shutdownC
 }
