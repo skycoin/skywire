@@ -11,11 +11,9 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn/vpnenv"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
-	"github.com/prometheus/common/log"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
@@ -47,16 +45,10 @@ const (
 )
 
 var (
-//log = app.NewLogger(appName)
+	log = app.NewLogger(appName)
 )
 
 func main() {
-	/*ifcs, err := net.Interfaces()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("ifcs: %v\n", ifcs)*/
-
 	var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
 	if *serverPKStr == "" {
 		log.Fatalln("VPN server pub key is missing")
@@ -64,17 +56,21 @@ func main() {
 
 	serverPK := cipher.PubKey{}
 	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
-		log.Fatalf("Invalid VPN server pub key: %v", err)
+		log.WithError(err).Fatalln("Invalid VPN server pub key")
 	}
+
+	log.Infof("Connecting to VPN server %s", serverPK.String())
 
 	defaultGatewayIP, err := vpn.DefaultGatewayIP()
 	if err != nil {
-		log.Fatalf("Error getting default network gateway: %v", err)
+		log.WithError(err).Fatalln("Error getting default network gateway")
 	}
+
+	log.Infof("Got default network gateway IP: %s", defaultGatewayIP)
 
 	dmsgDiscIP, ok, err := vpn.IPFromEnv(vpnenv.DmsgDiscAddrEnvKey)
 	if err != nil {
-		log.Fatalf("Error getting Dmsg discovery IP: %v", err)
+		log.WithError(err).Fatalln("Error getting Dmsg discovery IP")
 	}
 	if !ok {
 		log.Fatalf("Env arg %s is not provided", vpnenv.DmsgDiscAddrEnvKey)
@@ -82,11 +78,11 @@ func main() {
 
 	dmsgSrvCountStr := os.Getenv(vpnenv.DmsgAddrsCountEnvKey)
 	if dmsgSrvCountStr == "" {
-		log.Fatalf("Dmsg servers count is not provided")
+		log.Fatalln("Dmsg servers count is not provided")
 	}
 	dmsgSrvCount, err := strconv.Atoi(dmsgSrvCountStr)
 	if err != nil {
-		log.Fatalf("Invalid Dmsg servers count: %v", err)
+		log.WithError(err).Fatalln("Invalid Dmsg servers count")
 	}
 
 	dmsgSrvAddrs := make([]net.IP, 0, dmsgSrvCount)
@@ -98,7 +94,7 @@ func main() {
 
 		dmsgSrvAddr := net.ParseIP(dmsgSrvAddrStr)
 		if dmsgSrvAddr == nil {
-			log.Fatalf("Invalid Dmsg address in key %s: %v", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i), err)
+			log.Fatalf("Invalid Dmsg address in key %s", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i))
 		}
 
 		dmsgSrvAddrs = append(dmsgSrvAddrs, dmsgSrvAddr)
@@ -106,7 +102,7 @@ func main() {
 
 	tpDiscIP, ok, err := vpn.IPFromEnv(vpnenv.TPDiscAddrEnvKey)
 	if err != nil {
-		log.Fatalf("Error getting transport discovery IP: %v", err)
+		log.WithError(err).Fatalln("Error getting transport discovery IP")
 	}
 	if !ok {
 		log.Fatalf("Env arg %s is not provided", vpnenv.TPDiscAddrEnvKey)
@@ -114,7 +110,7 @@ func main() {
 
 	rfIP, ok, err := vpn.IPFromEnv(vpnenv.RFAddrEnvKey)
 	if err != nil {
-		log.Fatalf("Error getting route finder IP: %v", err)
+		log.WithError(err).Fatalln("Error getting route finder IP")
 	}
 	if !ok {
 		log.Fatalf("Env arg %s is not provided", vpnenv.RFAddrEnvKey)
@@ -125,7 +121,7 @@ func main() {
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
 		if err != nil {
-			log.Fatalf("Invalid STCP table len: %v", err)
+			log.WithError(err).Fatalln("Invalid STCP table len")
 		}
 
 		stcpEntities = make([]net.IP, 0, stcpTableLen)
@@ -135,14 +131,13 @@ func main() {
 				log.Fatalf("Env arg %s is not provided", vpnenv.STCPKeyEnvPrefix+strconv.Itoa(i))
 			}
 
-			stcpAddrStr := os.Getenv(vpnenv.STCPValueEnvPrefix + stcpKey)
-			if stcpAddrStr == "" {
-				log.Fatalf("Env arg %s is not provided", vpnenv.STCPValueEnvPrefix+stcpKey)
+			stcpAddr, ok, err := vpn.IPFromEnv(vpnenv.STCPValueEnvPrefix + stcpKey)
+			if err != nil {
+				log.WithError(err).
+					Fatalf("Error getting IP of STCP item for env key %s", vpnenv.STCPValueEnvPrefix+stcpKey)
 			}
-
-			stcpAddr := net.ParseIP(stcpAddrStr)
-			if stcpAddr == nil {
-				log.Fatalf("Invalid STCP address in key %s: %v", vpnenv.STCPValueEnvPrefix+stcpKey, err)
+			if !ok {
+				log.Fatalf("Env arg %s is not provided", vpnenv.STCPValueEnvPrefix+stcpKey)
 			}
 
 			stcpEntities = append(stcpEntities, stcpAddr)
@@ -154,19 +149,18 @@ func main() {
 	if hypervisorsCountStr != "" {
 		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
 		if err != nil {
-			log.Fatalf("Invalid hypervisors count: %v", err)
+			log.WithError(err).Fatalln("Invalid hypervisors count")
 		}
 
 		hypervisorAddrs = make([]net.IP, 0, hypervisorsCount)
 		for i := 0; i < hypervisorsCount; i++ {
-			hypervisorAddrStr := os.Getenv(vpnenv.HypervisorAddrEnvPrefix + strconv.Itoa(i))
-			if hypervisorAddrStr == "" {
-				log.Fatalf("Env arg %s is missing", vpnenv.HypervisorAddrEnvPrefix+strconv.Itoa(i))
+			hypervisorAddr, ok, err := vpn.IPFromEnv(vpnenv.HypervisorAddrEnvPrefix + strconv.Itoa(i))
+			if err != nil {
+				log.WithError(err).Fatalf("Error getting IP of hypervisor for env key %s",
+					vpnenv.HypervisorAddrEnvPrefix+strconv.Itoa(i))
 			}
-
-			hypervisorAddr := net.ParseIP(hypervisorAddrStr)
-			if hypervisorAddr == nil {
-				log.Fatalf("Invalid hypervisor address in key %s: %v", vpnenv.HypervisorAddrEnvPrefix+strconv.Itoa(i), err)
+			if !ok {
+				log.Fatalf("Env arg %s is not provided", vpnenv.HypervisorAddrEnvPrefix+strconv.Itoa(i))
 			}
 
 			hypervisorAddrs = append(hypervisorAddrs, hypervisorAddr)
@@ -194,6 +188,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error connecting to VPN server: %v", err)
 	}
+
+	log.Infof("Dialed to %s", appConn.RemoteAddr())
 
 	ifc, err := water.New(water.Config{
 		DeviceType: water.TUN,
@@ -229,31 +225,39 @@ func main() {
 
 	// route Skywire service traffic through the default gateway
 	if !dmsgDiscIP.IsLoopback() {
+		log.Infof("Adding direct route to Dmsg discovery: %s", dmsgDiscIP)
 		vpn.AddRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
 	}
 	for _, dmsgIP := range dmsgSrvAddrs {
 		if !dmsgIP.IsLoopback() {
+			log.Infof("Adding direct route to Dmsg server: %s", dmsgIP)
 			vpn.AddRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
 		}
 	}
 	if !tpDiscIP.IsLoopback() {
+		log.Infof("Adding direct route to TP discovery: %s", tpDiscIP)
 		vpn.AddRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
 	}
 	if !rfIP.IsLoopback() {
+		log.Infof("Adding direct route to RF: %s", rfIP)
 		vpn.AddRoute(rfIP.String(), defaultGatewayIP.String(), "")
 	}
 
 	for _, stcpEntity := range stcpEntities {
 		if !stcpEntity.IsLoopback() {
+			log.Infof("Adding direct STCP route to node: %s", stcpEntity)
 			vpn.AddRoute(stcpEntity.String(), defaultGatewayIP.String(), "")
 		}
 	}
 
 	for _, hypervisorAddr := range hypervisorAddrs {
 		if !hypervisorAddr.IsLoopback() {
+			log.Infof("Adding direct route to hypervisor: %s", hypervisorAddr)
 			vpn.AddRoute(hypervisorAddr.String(), defaultGatewayIP.String(), "")
 		}
 	}
+
+	log.Infof("Routing all traffic through TUN %s", ifc.Name())
 
 	// route all traffic through TUN gateway
 	vpn.AddRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask)
@@ -261,31 +265,39 @@ func main() {
 
 	defer func() {
 		if !dmsgDiscIP.IsLoopback() {
+			log.Infof("Removing direct route to Dmsg discovery: %s", dmsgDiscIP)
 			vpn.DeleteRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), "")
 		}
 		for _, dmsgIP := range dmsgSrvAddrs {
 			if !dmsgIP.IsLoopback() {
+				log.Infof("Removing direct route to Dmsg server: %s", dmsgIP)
 				vpn.DeleteRoute(dmsgIP.String(), defaultGatewayIP.String(), "")
 			}
 		}
 		if !tpDiscIP.IsLoopback() {
+			log.Infof("Removing direct route to TP discovery: %s", tpDiscIP)
 			vpn.DeleteRoute(tpDiscIP.String(), defaultGatewayIP.String(), "")
 		}
 		if !rfIP.IsLoopback() {
+			log.Infof("Removing direct route to RG: %s", rfIP)
 			vpn.DeleteRoute(rfIP.String(), defaultGatewayIP.String(), "")
 		}
 
 		for _, stcpEntity := range stcpEntities {
 			if !stcpEntity.IsLoopback() {
+				log.Infof("Removing direct STCP route to node: %s", stcpEntity)
 				vpn.DeleteRoute(stcpEntity.String(), defaultGatewayIP.String(), "")
 			}
 		}
 
 		for _, hypervisorAddr := range hypervisorAddrs {
 			if !hypervisorAddr.IsLoopback() {
+				log.Infof("Removing direct route to hypervisor: %s", hypervisorAddr)
 				vpn.DeleteRoute(hypervisorAddr.String(), defaultGatewayIP.String(), "")
 			}
 		}
+
+		log.Infoln("Routing all traffic through default network gateway")
 
 		// remove main route
 		vpn.DeleteRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask)
