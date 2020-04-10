@@ -204,7 +204,7 @@ func GetIPv6ForwardingValue() (string, error) {
 }
 
 func getIPForwardingValue(cmd string) (string, error) {
-	outBytes, err := exec.Command("bash", "-c", cmd).Output()
+	outBytes, err := exec.Command("sh", "-c", cmd).Output()
 	if err != nil {
 		return "", fmt.Errorf("error running command %s: %w", cmd, err)
 	}
