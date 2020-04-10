@@ -20,7 +20,7 @@ const (
 
 func EnableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
-	if err := exec.Command("bash", "-c", cmd).Wait(); err != nil {
+	if err := exec.Command("/bin/bash", "-c", cmd).Wait(); err != nil {
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
@@ -29,7 +29,7 @@ func EnableIPMasquerading(ifcName string) error {
 
 func DisableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(disableIPMasqueradingCMDFmt, ifcName)
-	if err := exec.Command("bash", "-c", cmd).Wait(); err != nil {
+	if err := exec.Command("/bin/bash", "-c", cmd).Wait(); err != nil {
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
