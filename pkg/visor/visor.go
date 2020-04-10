@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
+	"github.com/SkycoinProject/skywire-mainnet/internal/vpn/vpnenv"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -593,7 +593,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 	var appEnvs map[string]string
 	if appCfg.Name == "vpn-client" {
-		appEnvs = vpn.AppEnvArgsFromVisorConfig(*visor.conf)
+		appEnvs = vpnenv.AppEnvArgs(*visor.conf, []string{"dmsg.server02a2d4c3.skywire.skycoin.com", "dmsg.server02a4.skywire.skycoin.com"})
 	}
 
 	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)
