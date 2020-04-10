@@ -7,11 +7,13 @@ import (
 )
 
 const (
-	DmsgDiscAddrEnvKey   = "ADDR_DMSG_DISC"
 	DmsgAddrsCountEnvKey = "DMSG_SRV_COUNT"
 	DmsgAddrEnvPrefix    = "ADDR_DMSG_SRV_"
-	TPDiscAddrEnvKey     = "ADDR_TP_DISC"
-	RFAddrEnvKey         = "ADDR_RF"
+
+	DmsgDiscAddrEnvKey      = "ADDR_DMSG_DISC"
+	TPDiscAddrEnvKey        = "ADDR_TP_DISC"
+	RFAddrEnvKey            = "ADDR_RF"
+	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
 
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
 	STCPKeyEnvPrefix   = "STCP_TABLE_KEY_"
@@ -23,20 +25,12 @@ const (
 
 // TODO: refactor package, temporary solution
 
-func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf string,
+func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker string,
 	stcpTable map[cipher.PubKey]string, hypervisors, dmsgSrvAddrs []string) map[string]string {
 	envs := make(map[string]string)
 
 	if dmsgDiscovery != "" {
 		envs[DmsgDiscAddrEnvKey] = dmsgDiscovery
-	}
-
-	if len(dmsgSrvAddrs) != 0 {
-		envs[DmsgAddrsCountEnvKey] = strconv.FormatInt(int64(len(dmsgSrvAddrs)), 10)
-
-		for i := range dmsgSrvAddrs {
-			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = dmsgSrvAddrs[i]
-		}
 	}
 
 	if tpDiscovery != "" {
@@ -45,6 +39,10 @@ func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf string,
 
 	if rf != "" {
 		envs[RFAddrEnvKey] = rf
+	}
+
+	if uptimeTracker != "" {
+		envs[UptimeTrackerAddrEnvKey] = uptimeTracker
 	}
 
 	if len(stcpTable) != 0 {
@@ -62,6 +60,14 @@ func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf string,
 
 		for i, h := range hypervisors {
 			envs[HypervisorAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = h
+		}
+	}
+
+	if len(dmsgSrvAddrs) != 0 {
+		envs[DmsgAddrsCountEnvKey] = strconv.FormatInt(int64(len(dmsgSrvAddrs)), 10)
+
+		for i := range dmsgSrvAddrs {
+			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = dmsgSrvAddrs[i]
 		}
 	}
 
