@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 )
 
 func CopyTraffic(from, to io.ReadWriteCloser) error {
@@ -53,11 +55,25 @@ func IPFromEnv(key string) (net.IP, bool, error) {
 		return nil, false, nil
 	}
 
+	// in case whole URL is passed with the scheme
+	if strings.Contains(addr, "://") {
+		url, err := url.Parse(addr)
+		if err == nil {
+			addr = url.Host
+		}
+	}
+
+	// filter out port if it exists
+	if strings.Contains(addr, ":") {
+		addr = strings.Split(addr, ":")[0]
+	}
+
 	ip := net.ParseIP(addr)
 	if ip != nil {
 		return ip, true, nil
 	}
 
+	// got domain instead of IP, need to resolve
 	ips, err := net.LookupIP(addr)
 	if err != nil {
 		return nil, false, err
@@ -226,5 +242,5 @@ func EnableIPv4Forwarding() error {
 }
 
 func EnableIPv6Forwarding() error {
-	return SetIpv6
+	return SetIPv6ForwardingValue("1")
 }
