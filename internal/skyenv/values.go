@@ -63,4 +63,6 @@ const (
 	VPNServerPort = uint16(44)
 
 	VPNClientName = "vpn-client"
+	// TODO: this one's not needed for the app to run but lack of it causes errors
+	VPNClientPort = uint16(43)
 )
