@@ -597,6 +597,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 			dmsgDiscovery string
 			tpDiscovery   string
 			rf            string
+			uptimeTracker string
 			stcpTable     map[cipher.PubKey]string
 			hypervisors   []string
 		)
@@ -608,6 +609,9 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 		}
 		if visor.conf.Routing != nil {
 			rf = visor.conf.Routing.RouteFinder
+		}
+		if visor.conf.UptimeTracker != nil {
+			uptimeTracker = visor.conf.UptimeTracker.Addr
 		}
 		if visor.conf.STCP != nil && len(visor.conf.STCP.PubKeyTable) != 0 {
 			stcpTable = make(map[cipher.PubKey]string, len(visor.conf.STCP.PubKeyTable))
@@ -621,7 +625,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 				hypervisors = append(hypervisors, h.Addr)
 			}
 		}
-		appEnvs = vpnenv.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, stcpTable, hypervisors,
+		appEnvs = vpnenv.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker, stcpTable, hypervisors,
 			[]string{"dmsg.server02a2d4c3.skywire.skycoin.com", "dmsg.server02a4.skywire.skycoin.com"})
 	}
 
