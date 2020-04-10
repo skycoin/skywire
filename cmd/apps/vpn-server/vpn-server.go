@@ -30,6 +30,8 @@ func main() {
 		log.Fatalf("Error getting default network interface: %v", err)
 	}
 
+	log.Infof("Got default network interface: %s", defaultNetworkIfc)
+
 	ipv4ForwardingVal, err := vpn.GetIPv4ForwardingValue()
 	if err != nil {
 		log.Fatalf("Error getting IPv4 forwarding value: %v", err)
@@ -39,30 +41,44 @@ func main() {
 		log.Fatalf("Error getting IPv6 forwarding value: %v", err)
 	}
 
+	log.Infoln("Old IP forwarding values:")
+	log.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
+
 	if err := vpn.EnableIPv4Forwarding(); err != nil {
 		log.Fatalf("Error enabling IPv4 forwarding: %v", err)
 	}
+	log.Infoln("Set IPv4 forwarding = 1")
 	defer func() {
 		if err := vpn.SetIPv4ForwardingValue(ipv4ForwardingVal); err != nil {
-			log.WithError(err).Error("Error reverting IPv4 forwarding: %v", err)
+			log.WithError(err).Error("Error reverting IPv4 forwarding")
+		} else {
+			log.Infof("Set IPv4 forwarding = %s", ipv4ForwardingVal)
 		}
 	}()
 
 	if err := vpn.EnableIPv6Forwarding(); err != nil {
 		log.Fatalf("Error enabling IPv6 forwarding: %v", err)
 	}
+	log.Infoln("Set IPv6 forwarding = 1")
 	defer func() {
 		if err := vpn.SetIPv6ForwardingValue(ipv6ForwardingVal); err != nil {
-			log.WithError(err).Error("Error reverting IPv6 forwarding: %v", err)
+			log.WithError(err).Error("Error reverting IPv6 forwarding")
+		} else {
+			log.Infof("Set IPv6 forwarding = %s", ipv6ForwardingVal)
 		}
 	}()
 
 	if err := vpn.EnableIPMasquerading(defaultNetworkIfc); err != nil {
 		log.WithError(err).Fatalf("Error enabling IP masquerading for %s", defaultNetworkIfc)
 	}
+
+	log.Infoln("Enabled IP masquerading")
+
 	defer func() {
 		if err := vpn.DisableIPMasquerading(defaultNetworkIfc); err != nil {
 			log.WithError(err).Error("Error disabling IP masquerading for %s", defaultNetworkIfc)
+		} else {
+			log.Infoln("Disabled IP masquerading")
 		}
 	}()
 
@@ -98,6 +114,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error listening network %v on port %d: %v\n", netType, vpnPort, err)
 	}
+
+	log.Infof("Got app listener, bound to %d", vpnPort)
 
 	srv := vpn.NewServer(log)
 	defer func() {
