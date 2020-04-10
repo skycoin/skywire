@@ -47,15 +47,17 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, envs map[st
 		customEnvFormat     = "%s=%s"
 	)
 
-	cmd := exec.Command(binaryPath, args...) // nolint:gosec
-
-	cmd.Env = append(cmd.Env, fmt.Sprintf(appKeyEnvFormat, key))
-	cmd.Env = append(cmd.Env, fmt.Sprintf(serverAddrEnvFormat, c.ServerAddr))
-	cmd.Env = append(cmd.Env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
+	env := make([]string, 0, 3+len(envs))
+	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
+	env = append(env, fmt.Sprintf(serverAddrEnvFormat, c.ServerAddr))
+	env = append(env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
 	for k, v := range envs {
-		cmd.Env = append(cmd.Env, fmt.Sprintf(customEnvFormat, k, v))
+		env = append(env, fmt.Sprintf(customEnvFormat, k, v))
 	}
 
+	cmd := exec.Command(binaryPath, args...) // nolint:gosec
+
+	cmd.Env = env
 	cmd.Dir = c.WorkDir
 
 	cmd.Stdout = stdout
