@@ -58,4 +58,9 @@ const (
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
 	SkysocksClientAddr = ":1080"
+
+	VPNServerName = "vpn-server"
+	VPNServerPort = uint16(44)
+
+	VPNClientName = "vpn-client"
 )
