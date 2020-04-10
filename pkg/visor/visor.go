@@ -593,7 +593,36 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 	var appEnvs map[string]string
 	if appCfg.Name == "vpn-client" {
-		appEnvs = vpnenv.AppEnvArgs(*visor.conf, []string{"dmsg.server02a2d4c3.skywire.skycoin.com", "dmsg.server02a4.skywire.skycoin.com"})
+		var (
+			dmsgDiscovery string
+			tpDiscovery   string
+			rf            string
+			stcpTable     map[cipher.PubKey]string
+			hypervisors   []string
+		)
+		if visor.conf.Dmsg != nil {
+			dmsgDiscovery = visor.conf.Dmsg.Discovery
+		}
+		if visor.conf.Transport != nil {
+			tpDiscovery = visor.conf.Transport.Discovery
+		}
+		if visor.conf.Routing != nil {
+			rf = visor.conf.Routing.RouteFinder
+		}
+		if visor.conf.STCP != nil && len(visor.conf.STCP.PubKeyTable) != 0 {
+			stcpTable = make(map[cipher.PubKey]string, len(visor.conf.STCP.PubKeyTable))
+			for k, v := range visor.conf.STCP.PubKeyTable {
+				stcpTable[k] = v
+			}
+		}
+		if len(visor.conf.Hypervisors) != 0 {
+			hypervisors = make([]string, 0, len(visor.conf.Hypervisors))
+			for _, h := range visor.conf.Hypervisors {
+				hypervisors = append(hypervisors, h.Addr)
+			}
+		}
+		appEnvs = vpnenv.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, stcpTable, hypervisors,
+			[]string{"dmsg.server02a2d4c3.skywire.skycoin.com", "dmsg.server02a4.skywire.skycoin.com"})
 	}
 
 	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)

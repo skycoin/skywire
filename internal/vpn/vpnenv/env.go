@@ -3,7 +3,7 @@ package vpnenv
 import (
 	"strconv"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
+	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 const (
@@ -23,10 +23,49 @@ const (
 
 // TODO: refactor package, temporary solution
 
-func AppEnvArgs(c visor.Config, dmsgSrvAddrs []string) map[string]string {
+func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf string,
+	stcpTable map[cipher.PubKey]string, hypervisors, dmsgSrvAddrs []string) map[string]string {
 	envs := make(map[string]string)
 
-	if c.Dmsg != nil {
+	if dmsgDiscovery != "" {
+		envs[DmsgDiscAddrEnvKey] = dmsgDiscovery
+	}
+
+	if len(dmsgSrvAddrs) != 0 {
+		envs[DmsgAddrsCountEnvKey] = strconv.FormatInt(int64(len(dmsgSrvAddrs)), 10)
+
+		for i := range dmsgSrvAddrs {
+			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = dmsgSrvAddrs[i]
+		}
+	}
+
+	if tpDiscovery != "" {
+		envs[TPDiscAddrEnvKey] = tpDiscovery
+	}
+
+	if rf != "" {
+		envs[RFAddrEnvKey] = rf
+	}
+
+	if len(stcpTable) != 0 {
+		envs[STCPTableLenEnvKey] = strconv.FormatInt(int64(len(stcpTable)), 10)
+
+		itemIdx := 0
+		for k, v := range stcpTable {
+			envs[STCPKeyEnvPrefix+strconv.FormatInt(int64(itemIdx), 10)] = k.String()
+			envs[STCPValueEnvPrefix+k.String()] = v
+		}
+	}
+
+	if len(hypervisors) != 0 {
+		envs[HypervisorsCountEnvKey] = strconv.FormatInt(int64(len(hypervisors)), 10)
+
+		for i, h := range hypervisors {
+			envs[HypervisorAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = h
+		}
+	}
+
+	/*if c.Dmsg != nil {
 		envs[DmsgDiscAddrEnvKey] = c.Dmsg.Discovery
 	}
 
@@ -62,7 +101,7 @@ func AppEnvArgs(c visor.Config, dmsgSrvAddrs []string) map[string]string {
 		for i, h := range c.Hypervisors {
 			envs[HypervisorAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = h.Addr
 		}
-	}
+	}*/
 
 	return envs
 }
