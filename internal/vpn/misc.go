@@ -219,13 +219,8 @@ func getIPForwardingValue(cmd string) (string, error) {
 
 func SetIPv4ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
-	ex := exec.Command("/bin/bash", "-c", cmd)
-	if err := ex.Run(); err != nil {
+	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
 		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	if err := ex.Wait(); err != nil {
-		return fmt.Errorf("error during command %s: %w", cmd, err)
 	}
 
 	return nil
@@ -233,13 +228,8 @@ func SetIPv4ForwardingValue(val string) error {
 
 func SetIPv6ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
-	ex := exec.Command("/bin/bash", "-c", cmd)
-	if err := ex.Run(); err != nil {
+	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
 		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	if err := ex.Wait(); err != nil {
-		return fmt.Errorf("error during command %s: %w", cmd, err)
 	}
 
 	return nil
