@@ -213,5 +213,6 @@ func defaultVPNClientConfig() visor.AppConfig {
 	return visor.AppConfig{
 		App:       skyenv.VPNClientName,
 		AutoStart: false,
+		Port:      routing.Port(skyenv.VPNClientPort),
 	}
 }
