@@ -108,7 +108,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		defer wg.Done()
 
 		if err := CopyTraffic(conn, ifc); err != nil {
-			s.log.WithError(err).Error("Error resending traffic from VPN client to TUN %s", ifc.Name())
+			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", ifc.Name())
 		}
 	}()
 
