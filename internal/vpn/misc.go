@@ -173,6 +173,7 @@ func DefaultNetworkIfc() (string, error) {
 			return "", err
 		}
 		for _, addr := range addrs {
+			fmt.Printf("Scanning addr: %s\n", addr)
 			var ip net.IP
 			switch v := addr.(type) {
 			case *net.IPNet:
