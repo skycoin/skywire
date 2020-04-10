@@ -1,4 +1,4 @@
-package vpn
+package vpnenv
 
 import (
 	"strconv"
@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	DmsgDiscAddrEnvKey = "ADDR_DMSG_DISC"
-	DmsgAddrEnvKey     = "ADDR_DMSG_SRV"
-	TPDiscAddrEnvKey   = "ADDR_TP_DISC"
-	RFAddrEnvKey       = "ADDR_RF"
+	DmsgDiscAddrEnvKey   = "ADDR_DMSG_DISC"
+	DmsgAddrsCountEnvKey = "DMSG_SRV_COUNT"
+	DmsgAddrEnvPrefix    = "ADDR_DMSG_SRV_"
+	TPDiscAddrEnvKey     = "ADDR_TP_DISC"
+	RFAddrEnvKey         = "ADDR_RF"
 
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
 	STCPKeyEnvPrefix   = "STCP_TABLE_KEY_"
@@ -20,15 +21,21 @@ const (
 	HypervisorAddrEnvPrefix = "ADDR_HYPERVISOR_"
 )
 
-func AppEnvArgs(c visor.Config, dmsgSrvAddr string) map[string]string {
+// TODO: refactor package, temporary solution
+
+func AppEnvArgs(c visor.Config, dmsgSrvAddrs []string) map[string]string {
 	envs := make(map[string]string)
 
 	if c.Dmsg != nil {
 		envs[DmsgDiscAddrEnvKey] = c.Dmsg.Discovery
 	}
 
-	if dmsgSrvAddr != "" {
-		envs[DmsgAddrEnvKey] = dmsgSrvAddr
+	if len(dmsgSrvAddrs) != 0 {
+		envs[DmsgAddrsCountEnvKey] = strconv.FormatInt(int64(len(dmsgSrvAddrs)), 10)
+
+		for i := range dmsgSrvAddrs {
+			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = dmsgSrvAddrs[i]
+		}
 	}
 
 	if c.Transport != nil {
