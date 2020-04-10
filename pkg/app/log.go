@@ -2,7 +2,6 @@ package app
 
 import (
 	"io"
-	"os"
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -12,15 +11,15 @@ import (
 // for use on any other function used by the app. It's configured from an additional app argument.
 // It modifies os.Args stripping from it such value. Should be called before using os.Args inside the app
 func NewLogger(appName string) *logging.MasterLogger {
-	db, err := newBoltDB(os.Args[1], appName)
+	/*db, err := newBoltDB(os.Args[1], appName)
 	if err != nil {
 		panic(err)
-	}
+	}*/
 
 	l := newAppLogger()
-	l.SetOutput(io.MultiWriter(l.Out, db))
+	//l.SetOutput(io.MultiWriter(l.Out, db))
 
-	os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+	//os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 
 	return l
 }
