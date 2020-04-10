@@ -144,7 +144,7 @@ func GatewayIP(ifcName string) (net.IP, error) {
 		}
 	}
 
-	return nil, errors.New("couldn't find default gateway IP")
+	return nil, fmt.Errorf("couldn't find gateway IP for %s", ifcName)
 }
 
 func DefaultGatewayIP() (net.IP, error) {
@@ -189,10 +189,7 @@ func DefaultNetworkIfc() (string, error) {
 				continue // not an ipv4 address
 			}
 
-			if ip.Equal(net.IPv4(0, 0, 0, 0)) {
-				// found default interface
-				return iface.Name, nil
-			}
+			return iface.Name, nil
 		}
 	}
 	return "", errors.New("no internet connection")
