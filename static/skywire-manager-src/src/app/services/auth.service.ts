@@ -57,6 +57,8 @@ export class AuthService {
           if (err.originalError && (err.originalError as HttpErrorResponse).status === 401) {
             return of(AuthStates.NotLogged);
           }
+
+          return throwError(err);
         })
       );
   }

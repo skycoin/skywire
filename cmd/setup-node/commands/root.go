@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"log"
 	"log/syslog"
 	"net/http"
@@ -62,9 +63,17 @@ var rootCmd = &cobra.Command{
 		}
 
 		conf := &setup.Config{}
-		if err := json.NewDecoder(rdr).Decode(&conf); err != nil {
-			log.Fatalf("Failed to decode %s: %s", rdr, err)
+
+		raw, err := ioutil.ReadAll(rdr)
+		if err != nil {
+			logger.Fatalf("Failed to read config: %v", err)
 		}
+
+		if err := json.Unmarshal(raw, &conf); err != nil {
+			logger.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
+		}
+
+		logger.Infof("Config: %#v", conf)
 
 		sn, err := setup.NewNode(conf, metrics.NewPrometheus("setupnode"))
 		if err != nil {
