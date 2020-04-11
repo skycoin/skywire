@@ -330,7 +330,7 @@ package visor
 //		return true
 //	})
 //	return &Summary{
-//		PubKey:          v.conf.Visor.StaticPubKey,
+//		PubKey:          v.conf.Visor.PubKey,
 //		BuildInfo:       buildinfo.Get(),
 //		AppProtoVersion: supportedProtocolVersion,
 //		Apps:            v.Apps(),
