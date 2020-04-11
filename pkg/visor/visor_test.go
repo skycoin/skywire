@@ -53,9 +53,9 @@ func TestMain(m *testing.M) {
 //	defer srv.Close()
 //
 //	conf := Config{LocalPath: "local", AppsPath: "apps"}
-//	conf.Visor.StaticPubKey = pk
-//	conf.Visor.StaticSecKey = sk
-//	conf.Dmsg.Discovery = "http://skywire.skycoin.com:8001"
+//	conf.Visor.PubKey = pk
+//	conf.Visor.SecKey = sk
+//	conf.Dmsg.Discovery = "http://skywire.skycoin.com:8002"
 //	conf.Dmsg.ServerCount = 10
 //	conf.Transport.Discovery = srv.URL
 //	conf.Apps = []AppConfig{
@@ -122,7 +122,7 @@ func TestVisorStartClose(t *testing.T) {
 	appCfg1 := appcommon.Config{
 		Name:       apps["skychat"].App,
 		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Keys().StaticPubKey.Hex(),
+		VisorPK:    visorCfg.Keys().PubKey.Hex(),
 		WorkDir:    filepath.Join("", apps["skychat"].App),
 	}
 	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
@@ -200,7 +200,7 @@ func TestVisorSpawnApp(t *testing.T) {
 	appCfg := appcommon.Config{
 		Name:       app.App,
 		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Keys().StaticPubKey.Hex(),
+		VisorPK:    visorCfg.Keys().PubKey.Hex(),
 		WorkDir:    filepath.Join("", app.App),
 	}
 
@@ -259,7 +259,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appCfg := appcommon.Config{
 			Name:       app.App,
 			ServerAddr: appcommon.DefaultServerAddr,
-			VisorPK:    c.Keys().StaticPubKey.Hex(),
+			VisorPK:    c.Keys().PubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}
 
@@ -298,7 +298,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appCfg := appcommon.Config{
 			Name:       app.App,
 			ServerAddr: appcommon.DefaultServerAddr,
-			VisorPK:    c.Keys().StaticPubKey.Hex(),
+			VisorPK:    c.Keys().PubKey.Hex(),
 			WorkDir:    filepath.Join("", app.App),
 		}
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
