@@ -10,13 +10,12 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
 const (
-	defaultWebDir           = "./static/skywire-manager-src/dist"
-	defaultHTTPAddr         = ":8080"
+	defaultHTTPAddr         = ":8000"
 	defaultCookieExpiration = 12 * time.Hour
 	hashKeyLen              = 64
 	blockKeyLen             = 32
@@ -56,7 +55,6 @@ type Config struct {
 	EnableTLS     bool          `json:"enable_tls"`     // Whether to enable TLS.
 	TLSCertFile   string        `json:"tls_cert_file"`  // TLS cert file location.
 	TLSKeyFile    string        `json:"tls_key_file"`   // TLS key file location.
-	WebDir        string        `json:"web_dir"`
 }
 
 func makeConfig(testenv bool) Config {
@@ -114,7 +112,6 @@ func (c *Config) FillDefaults(testEnv bool) {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
 	c.HTTPAddr = defaultHTTPAddr
-	c.WebDir = defaultWebDir
 	c.Cookies.FillDefaults()
 }
 
@@ -146,18 +143,32 @@ type CookieConfig struct {
 
 	ExpiresDuration time.Duration `json:"expires_duration"` // Used for determining the 'expires' value for cookies.
 
-	Path     string        `json:"path"`   // optional
-	Domain   string        `json:"domain"` // optional
-	Secure   bool          `json:"secure"`
-	HTTPOnly bool          `json:"http_only"`
-	SameSite http.SameSite `json:"same_site"`
+	Path   string `json:"path"`   // optional
+	Domain string `json:"domain"` // optional
+
+	TLS bool `json:"-"`
 }
 
 // FillDefaults fills config with default values.
 func (c *CookieConfig) FillDefaults() {
 	c.ExpiresDuration = defaultCookieExpiration
 	c.Path = "/"
-	c.Secure = false
-	c.HTTPOnly = true
-	c.SameSite = http.SameSiteDefaultMode
+
+	c.TLS = false
+}
+
+// Secure gets cookie's `Secure` value.
+func (c *CookieConfig) Secure() bool {
+	return c.TLS
+}
+
+// HTTPOnly gets cookie's `HTTPOnly` value.
+func (c *CookieConfig) HTTPOnly() bool {
+	return !c.TLS
+}
+
+// SameSite gets cookie's `SameSite` value.
+func (c *CookieConfig) SameSite() http.SameSite {
+	// using default value for now
+	return http.SameSiteDefaultMode
 }

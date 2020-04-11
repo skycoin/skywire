@@ -6,6 +6,7 @@
 *.test
 *.out
 .DS_Store
+*.pem
 
 .idea/
 
@@ -18,6 +19,7 @@ pkg/visor/apps/
 pkg/visor/bar/
 pkg/visor/foo/
 
+/bin
 /node
 /users.db
 /hypervisor

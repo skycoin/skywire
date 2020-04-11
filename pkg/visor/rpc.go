@@ -146,16 +146,17 @@ type TransportSummary struct {
 	Type    string              `json:"type"`
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
+	IsUp    bool                `json:"is_up"`
 }
 
 func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
-
 	summary := &TransportSummary{
 		ID:      tp.Entry.ID,
 		Local:   tm.Local(),
 		Remote:  tp.Remote(),
 		Type:    tp.Type(),
 		IsSetup: isSetup,
+		IsUp:    tp.IsUp(),
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
@@ -184,7 +185,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.visor.conf.Keys().StaticPubKey,
+		PubKey:          r.visor.conf.Keys().PubKey,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.Apps(),

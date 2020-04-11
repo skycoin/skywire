@@ -3,7 +3,7 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.13
 
 require (
-	github.com/SkycoinProject/dmsg v0.0.0-20200306152741-acee74fa4514
+	github.com/SkycoinProject/dmsg v0.2.0
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -14,6 +14,7 @@ require (
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.7.0
+	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/skycoin/dmsg v0.0.0-20190805065636-70f4c32a994f // indirect

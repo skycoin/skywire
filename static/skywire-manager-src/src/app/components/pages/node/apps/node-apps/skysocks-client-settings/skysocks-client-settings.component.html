@@ -1,0 +1,61 @@
+<app-dialog [headline]="'apps.skysocks-client-settings.title' | translate">
+  <mat-tab-group>
+    <!-- Form. -->
+    <mat-tab [label]="'apps.skysocks-client-settings.remote-visor-tab' | translate">
+      <form [formGroup]="form">
+        <mat-form-field>
+          <input
+            id="pk"
+            formControlName="pk"
+            maxlength="66"
+            [placeholder]="'apps.skysocks-client-settings.public-key' | translate"
+            #firstInput
+            matInput
+          >
+          <mat-error>
+            <ng-container *ngIf="!this.form.get('pk').hasError('pattern');else hexError">
+              {{ 'apps.skysocks-client-settings.remote-key-length-error' | translate }}
+            </ng-container>
+          </mat-error>
+          <ng-template #hexError>
+            {{ 'apps.skysocks-client-settings.remote-key-chars-error' | translate }}
+          </ng-template>
+        </mat-form-field>
+    
+        <app-button
+          #button
+          (action)="saveChanges()"
+          type="mat-raised-button"
+          [disabled]="!form.valid"
+          color="primary"
+          class="float-right"
+        >
+          {{ 'apps.skysocks-client-settings.save' | translate }}
+        </app-button>
+      </form>
+    </mat-tab>
+    <!-- History. -->
+    <mat-tab [label]="'apps.skysocks-client-settings.history-tab' | translate">
+      <!-- Msg shown if there is no history. -->
+      <div *ngIf="history.length === 0">
+        <div class="no-history-text">
+          <mat-icon [inline]="true">error</mat-icon>
+          {{ 'apps.skysocks-client-settings.no-history' | translate:{number: maxHistoryElements} }}
+        </div>
+      </div>
+
+      <div *ngIf="history.length > 0" class="top-history-margin"></div>
+      <ng-container *ngFor="let entry of history">
+        <button
+          mat-button
+          class="grey-button-background w-100"
+          (click)="saveChanges(entry)"
+        >
+          <div class="history-button-content">
+            <span>{{ entry }}</span>
+          </div>
+        </button>
+      </ng-container>
+    </mat-tab>
+  </mat-tab-group>
+</app-dialog>
