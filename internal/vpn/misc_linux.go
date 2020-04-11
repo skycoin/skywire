@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	gatewayForIfcCMDFmt         = "route -n | grep %s | awk '$1 == \"0.0.0.0\" {print $2}'"
+	gatewayForIfcCMDFmt         = "/sbin/route -n | /bin/grep %s | /usr/bin/awk '$1 == \"0.0.0.0\" {print $2}'"
 	setIPv4ForwardingCMDFmt     = "sysctl -w net.ipv4.ip_forward=%s"
 	setIPv6ForwardingCMDFmt     = "sysctl -w net.ipv6.conf.all.forwarding=%s"
 	getIPv4ForwardingCMD        = "sysctl net.ipv4.ip_forward"

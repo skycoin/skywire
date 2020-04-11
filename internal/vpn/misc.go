@@ -124,6 +124,7 @@ func DeleteRoute(ip, gateway, netmask string) {
 func GatewayIP(ifcName string) (net.IP, error) {
 	cmd := fmt.Sprintf(gatewayForIfcCMDFmt, ifcName)
 	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()
+	fmt.Printf("Got out bytes: \"%s\" from cmd \"%s\"\n", string(outBytes), cmd)
 	if err != nil {
 		return nil, fmt.Errorf("error running command %s: %w", cmd, err)
 	}
@@ -144,7 +145,7 @@ func GatewayIP(ifcName string) (net.IP, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("couldn't find gateway IP for %s", ifcName)
+	return nil, fmt.Errorf("couldn't find gateway IP for \"%s\"", ifcName)
 }
 
 func DefaultGatewayIP() (net.IP, error) {

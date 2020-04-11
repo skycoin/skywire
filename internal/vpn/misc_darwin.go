@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	gatewayForIfcCMDFmt     = "netstat -rn | grep default | grep %s | awk '{print $2}'"
+	gatewayForIfcCMDFmt     = "/usr/sbin/netstat -rn | /usr/bin/grep default | /usr/bin/grep %s | /usr/bin/awk '{print $2}'"
 	setIPv4ForwardingCMDFmt = "sysctl -w net.inet.ip.forwarding=%s"
 	setIPv6ForwardingCMDFmt = "sysctl -w net.inet6.ip6.forwarding=%s"
 	getIPv4ForwardingCMD    = "sysctl net.inet.ip.forwarding"
