@@ -51,7 +51,9 @@ var (
 func main() {
 	var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
 	if *serverPKStr == "" {
-		log.Fatalln("VPN server pub key is missing")
+		*serverPKStr = "037e81486e82c62e449a8d0ebdf7b87fafd92e2d676863703d2a295652770f141b"
+		// TODO: fix this
+		//log.Fatalln("VPN server pub key is missing")
 	}
 
 	serverPK := cipher.PubKey{}
@@ -82,19 +84,17 @@ func main() {
 	}
 	dmsgSrvCount, err := strconv.Atoi(dmsgSrvCountStr)
 	if err != nil {
-		log.WithError(err).Fatalln("Invalid Dmsg servers count")
+		log.WithError(err).Fatalf("Invalid Dmsg servers count: %s", dmsgSrvCountStr)
 	}
 
 	dmsgSrvAddrs := make([]net.IP, 0, dmsgSrvCount)
 	for i := 0; i < dmsgSrvCount; i++ {
-		dmsgSrvAddrStr := os.Getenv(vpnenv.DmsgAddrEnvPrefix + strconv.Itoa(i))
-		if dmsgSrvAddrStr == "" {
-			log.Fatalf("Env arg %s is missing", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i))
-		}
-
-		dmsgSrvAddr := net.ParseIP(dmsgSrvAddrStr)
-		if dmsgSrvAddr == nil {
+		dmsgSrvAddr, ok, err := vpn.IPFromEnv(vpnenv.DmsgAddrEnvPrefix + strconv.Itoa(i))
+		if err != nil {
 			log.Fatalf("Invalid Dmsg address in key %s", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i))
+		}
+		if !ok {
+			log.Fatalf("Env arg %s is not provided", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i))
 		}
 
 		dmsgSrvAddrs = append(dmsgSrvAddrs, dmsgSrvAddr)
@@ -121,7 +121,7 @@ func main() {
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
 		if err != nil {
-			log.WithError(err).Fatalln("Invalid STCP table len")
+			log.WithError(err).Fatalf("Invalid STCP table len: %s", stcpTableLenStr)
 		}
 
 		stcpEntities = make([]net.IP, 0, stcpTableLen)
@@ -149,7 +149,7 @@ func main() {
 	if hypervisorsCountStr != "" {
 		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
 		if err != nil {
-			log.WithError(err).Fatalln("Invalid hypervisors count")
+			log.WithError(err).Fatalf("Invalid hypervisors count: %s", hypervisorsCountStr)
 		}
 
 		hypervisorAddrs = make([]net.IP, 0, hypervisorsCount)
