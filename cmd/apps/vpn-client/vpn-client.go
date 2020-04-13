@@ -8,7 +8,9 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn/vpnenv"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -46,15 +48,36 @@ const (
 
 var (
 	log = app.NewLogger(appName)
+	r   = netutil.NewRetrier(time.Second, 0, 1)
 )
+
+func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+	var conn net.Conn
+	err := r.Do(func() error {
+		var err error
+		conn, err = appCl.Dial(appnet.Addr{
+			Net:    netType,
+			PubKey: pk,
+			Port:   vpnPort,
+		})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
 
 func main() {
 	var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
 	if *serverPKStr == "" {
-		*serverPKStr = "037e81486e82c62e449a8d0ebdf7b87fafd92e2d676863703d2a295652770f141b"
+		*serverPKStr = "032f9f32bbc5282ac4afd2370e08c2397453462427c57f277683c3cb412fdd489c"
 		// TODO: fix this
 		//log.Fatalln("VPN server pub key is missing")
 	}
+
+	// TODO: fix cleanup
 
 	serverPK := cipher.PubKey{}
 	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
@@ -180,11 +203,7 @@ func main() {
 		vpnClient.Close()
 	}()
 
-	appConn, err := vpnClient.Dial(appnet.Addr{
-		Net:    netType,
-		PubKey: serverPK,
-		Port:   vpnPort,
-	})
+	appConn, err := dialServer(vpnClient, serverPK)
 	if err != nil {
 		log.Fatalf("Error connecting to VPN server: %v", err)
 	}
