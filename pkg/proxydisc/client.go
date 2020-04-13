@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -14,40 +14,60 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
 )
 
-// JSONError is the object returned to the client when there's an error.
-type JSONError struct {
-	Error string `json:"error"`
-}
-
+// Config configures the HTTPClient.
 type Config struct {
-	PK   cipher.PubKey
-	SK   cipher.SecKey
-	Addr string
+	PK       cipher.PubKey
+	SK       cipher.SecKey
+	Port     uint16
+	DiscAddr string
 }
 
+// HTTPClient is responsible for interacting with the proxy-discovery
 type HTTPClient struct {
 	log    logrus.FieldLogger
-	pk     cipher.PubKey
-	sk     cipher.SecKey
-	addr   string
+	conf   Config
+	entry  Proxy
+	auth   *httpauth.Client
 	client http.Client
 }
 
+// NewClient creates a new HTTPClient.
 func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 	return &HTTPClient{
-		log:    log,
-		pk:     conf.PK,
-		sk:     conf.SK,
-		addr:   conf.Addr,
+		log:  log,
+		conf: conf,
+		entry: Proxy{
+			Addr: NewSWAddr(conf.PK, conf.Port),
+		},
 		client: http.Client{},
 	}
 }
 
-func (c *HTTPClient) Proxies(ctx context.Context) (out []Proxy, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr+"/api/proxies", nil)
+func (c *HTTPClient) addr(path string) string {
+	return c.conf.DiscAddr + path
+}
+
+// Auth returns the internal httpauth.Client
+func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
+	if c.auth != nil {
+		return c.auth, nil
+	}
+	fmt.Println(c.conf.DiscAddr)
+	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK)
 	if err != nil {
 		return nil, err
 	}
+	c.auth = auth
+	return auth, nil
+}
+
+// Proxies calls 'GET /api/proxies'.
+func (c *HTTPClient) Proxies(ctx context.Context) (out []Proxy, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr("/api/proxies"), nil)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -61,26 +81,69 @@ func (c *HTTPClient) Proxies(ctx context.Context) (out []Proxy, err error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		var v JSONError
-		if err = json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		var hErr HTTPError
+		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
 			return nil, err
 		}
-		return nil, errors.New(v.Error)
+		return nil, &hErr
 	}
-
 	err = json.NewDecoder(resp.Body).Decode(&out)
 	return
 }
 
-func (c *HTTPClient) UpdateEntry(ctx context.Context, auth *httpauth.Client, entry Proxy) (err error) {
-	raw, err := json.Marshal(entry)
+// UpdateEntry calls 'POST /api/proxies'.
+func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Proxy, error) {
+	auth, err := c.Auth(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
+
+	raw, err := json.Marshal(&c.entry)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/proxies"), bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := auth.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp != nil {
+		defer func() {
+			if cErr := resp.Body.Close(); cErr != nil && err == nil {
+				err = cErr
+			}
+		}()
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var hErr HTTPError
+		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
+			return nil, err
+		}
+		return nil, &hErr
+	}
+	err = json.NewDecoder(resp.Body).Decode(&c.entry)
+	return &c.entry, err
+}
+
+// DeleteEntry calls 'DELETE /api/proxies/{entry_addr}'.
+func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
+	auth, err := c.Auth(ctx)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr+"/api/proxies", bytes.NewReader(raw))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/proxies/"+c.entry.Addr.String()), nil)
 	if err != nil {
 		return err
 	}
+
 	resp, err := auth.Do(req)
 	if err != nil {
 		return err
@@ -94,53 +157,40 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context, auth *httpauth.Client, ent
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		var v JSONError
-		if err = json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		var hErr HTTPError
+		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
 			return err
 		}
-		return errors.New(v.Error)
+		return &hErr
 	}
-
 	return nil
 }
 
-func (c *HTTPClient) UpdateLoop(ctx context.Context, port uint16, updateInterval time.Duration) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var auth *httpauth.Client
-	for {
-		var err error
-		if auth, err = httpauth.NewClient(ctx, c.addr, c.pk, c.sk); err != nil {
-			c.log.WithError(err).Warn("Failed to setup auth client. Retrying...")
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Second * 5): // TODO(evanlinjin): Exponential backoff.
-				continue
-			}
-		}
-		break
-	}
-
-	ticker := time.NewTicker(updateInterval)
-	defer ticker.Stop()
+// UpdateLoop repetitively calls 'POST /api/proxies' to update entry.
+func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duration) {
+	defer func() { _ = c.DeleteEntry(context.Background()) }() //nolint:errcheck
 
 	update := func() {
 		for {
-			err := c.UpdateEntry(ctx, auth, Proxy{Addr: NewSWAddr(c.pk, port)})
+			entry, err := c.UpdateEntry(ctx)
 			if err != nil {
 				c.log.WithError(err).Warn("Failed to update proxy entry in discovery. Retrying...")
 				time.Sleep(time.Second * 10) // TODO(evanlinjin): Exponential backoff.
 				continue
 			}
+			c.log.WithField("entry", entry).Debug("Entry updated.")
 			break
 		}
 	}
 
+	// Run initial update.
+	update()
+
+	ticker := time.NewTicker(updateInterval)
 	for {
 		select {
 		case <-ctx.Done():
+			ticker.Stop()
 			return
 		case <-ticker.C:
 			update()
