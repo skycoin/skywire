@@ -584,6 +584,8 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
 	appArgs := append([]string{filepath.Join(visor.dir(), config.App)}, config.Args...)
 
+	visor.logger.Infof("APP ARGS: %v", appArgs)
+
 	var appEnvs map[string]string
 	if appCfg.Name == "vpn-client" {
 		var (
