@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -52,7 +51,6 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 	if c.auth != nil {
 		return c.auth, nil
 	}
-	fmt.Println(c.conf.DiscAddr)
 	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK)
 	if err != nil {
 		return nil, err

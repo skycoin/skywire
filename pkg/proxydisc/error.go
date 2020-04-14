@@ -9,8 +9,8 @@ import (
 
 // HTTPError represents an HTTP error.
 type HTTPError struct {
-	Status int    `json:"http_status"` // HTTP Status.
-	Msg    string `json:"error"`       // Message describing error intended for client.
+	HTTPStatus int    `json:"http_status"` // HTTP Status.
+	Msg        string `json:"error"`       // Message describing error intended for client.
 
 	// Actual error. This is hidden as it may be purposely obscured by the server.
 	Err error `json:"-"`
@@ -18,13 +18,13 @@ type HTTPError struct {
 
 // Error implements error.
 func (err *HTTPError) Error() string {
-	return fmt.Sprintf("%s: %s", http.StatusText(err.Status), err.Msg)
+	return fmt.Sprintf("%s: %s", http.StatusText(err.HTTPStatus), err.Msg)
 }
 
 // Log prints a log message for the HTTP error.
 func (err *HTTPError) Log(log logrus.FieldLogger) {
 	log.WithError(err.Err).
 		WithField("msg", err.Msg).
-		WithField("http_status", http.StatusText(err.Status)).
+		WithField("http_status", http.StatusText(err.HTTPStatus)).
 		Warn()
 }
