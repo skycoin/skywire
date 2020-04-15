@@ -67,22 +67,6 @@ func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
 	return run("/sbin/ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
-func AddRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		return run("/sbin/route", "add", "-net", ip, gateway)
-	}
-
-	return run("/sbin/route", "add", "-net", ip, gateway, netmask)
-}
-
-func DeleteRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		return run("/sbin/route", "delete", "-net", ip, gateway)
-	}
-
-	return run("/sbin/route", "delete", "-net", ip, gateway, netmask)
-}
-
 func GatewayIP(ifcName string) (net.IP, error) {
 	cmd := fmt.Sprintf(gatewayForIfcCMDFmt, ifcName)
 	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()

@@ -36,6 +36,22 @@ func DisableIPMasquerading(ifcName string) error {
 	return nil
 }
 
+func AddRoute(ip, gateway, netmask string) error {
+	if netmask == "" {
+		netmask = "255.255.255.255"
+	}
+
+	return run("/sbin/route", "add", "-net", ip, "netmask", netmask, "gw", gateway)
+}
+
+func DeleteRoute(ip, gateway, netmask string) error {
+	if netmask == "" {
+		netmask = "255.255.255.255"
+	}
+
+	return run("/sbin/route", "delete", "-net", ip, "netmask", netmask, "gw", gateway)
+}
+
 func parseIPForwardingOutput(output []byte) (string, error) {
 	output = bytes.TrimRight(output, "\n")
 
