@@ -73,8 +73,6 @@ func main() {
 	var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
 	if *serverPKStr == "" {
-		//*serverPKStr = "032f9f32bbc5282ac4afd2370e08c2397453462427c57f277683c3cb412fdd489c"
-		// TODO: fix this
 		log.Fatalln("VPN server pub key is missing")
 	}
 
