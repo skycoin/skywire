@@ -76,8 +76,6 @@ func main() {
 		log.Fatalln("VPN server pub key is missing")
 	}
 
-	// TODO: fix cleanup
-
 	serverPK := cipher.PubKey{}
 	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
 		log.WithError(err).Fatalln("Invalid VPN server pub key")
@@ -191,12 +189,12 @@ func main() {
 
 	appCfg, err := app.ClientConfigFromEnv()
 	if err != nil {
-		log.Fatalf("Error getting app client config: %v", err)
+		log.WithError(err).Fatalln("Error getting app client config")
 	}
 
 	vpnClient, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
 	if err != nil {
-		log.Fatalf("Error setting up VPN client: v", err)
+		log.WithError(err).Fatalln("Error setting up VPN client")
 	}
 	defer func() {
 		vpnClient.Close()
@@ -204,7 +202,7 @@ func main() {
 
 	appConn, err := dialServer(vpnClient, serverPK)
 	if err != nil {
-		log.Fatalf("Error connecting to VPN server: %v", err)
+		log.WithError(err).Fatalln("Error connecting to VPN server")
 	}
 
 	log.Infof("Dialed to %s", appConn.RemoteAddr())
@@ -213,12 +211,13 @@ func main() {
 		DeviceType: water.TUN,
 	})
 	if nil != err {
-		log.Fatalf("Error allocating TUN interface: %v", err)
+		log.WithError(err).Errorln("Error allocating TUN interface")
+		return
 	}
 	defer func() {
 		tunName := ifc.Name()
 		if err := ifc.Close(); err != nil {
-			log.Errorf("Error closing TUN %s: %v", tunName, err)
+			log.WithError(err).Errorf("Error closing TUN %s", tunName)
 		}
 	}()
 
@@ -325,12 +324,12 @@ func main() {
 	// read all system traffic and pass it to the remote VPN server
 	go func() {
 		if err := vpn.CopyTraffic(ifc, appConn); err != nil {
-			log.Fatalf("Error resending traffic from TUN %s to VPN server: %v", ifc.Name(), err)
+			log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN server", ifc.Name())
 		}
 	}()
 	go func() {
 		if err := vpn.CopyTraffic(appConn, ifc); err != nil {
-			log.Fatalf("Error resending traffic from VPN server to TUN %s: %v", ifc.Name(), err)
+			log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", ifc.Name())
 		}
 	}()
 
@@ -413,6 +412,4 @@ func main() {
 	}()*/
 
 	<-shutdownC
-
-	log.Fatalln("DONE")
 }
