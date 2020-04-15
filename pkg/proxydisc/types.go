@@ -88,10 +88,16 @@ type GeoLocation struct {
 	Region  string  `json:"region,omitempty"`
 }
 
+// Stats provides various statistics on the proxy-discovery service.
+type Stats struct {
+	ConnectedClients int `json:"connected_clients"`
+}
+
 // Proxy represents a proxy entry in proxy-discovery.
 type Proxy struct {
-	Addr SWAddr       `json:"address"`
-	Geo  *GeoLocation `json:"geo,omitempty"`
+	Addr  SWAddr       `json:"address"`
+	Stats *Stats       `json:"stats"`
+	Geo   *GeoLocation `json:"geo,omitempty"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
