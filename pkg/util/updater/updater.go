@@ -24,6 +24,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
 )
 
 const (
@@ -180,13 +181,13 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 		}
 	}
 
-	if err := os.Rename(currentBinaryPath, oldBinaryPath); err != nil {
+	if err := rename.Rename(currentBinaryPath, oldBinaryPath); err != nil {
 		return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
 	}
 
-	if err := os.Rename(downloadedBinaryPath, currentBinaryPath); err != nil {
-		// Try to revert previous os.Rename
-		if err := os.Rename(oldBinaryPath, currentBinaryPath); err != nil {
+	if err := rename.Rename(downloadedBinaryPath, currentBinaryPath); err != nil {
+		// Try to revert previous rename.
+		if err := rename.Rename(oldBinaryPath, currentBinaryPath); err != nil {
 			u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
 		}
 
@@ -201,7 +202,7 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 func (u *Updater) restore(currentBinaryPath string, toBeRemoved string) {
 	u.removeFiles(currentBinaryPath)
 
-	if err := os.Rename(toBeRemoved, currentBinaryPath); err != nil {
+	if err := rename.Rename(toBeRemoved, currentBinaryPath); err != nil {
 		u.log.Errorf("Failed to rename file %q to %q: %v", toBeRemoved, currentBinaryPath, err)
 	}
 }
