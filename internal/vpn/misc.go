@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"os"
@@ -12,42 +11,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-func CopyTraffic(from, to io.ReadWriteCloser) error {
-	//buf := make([]byte, bufSize)
-
-	// TODO: test if it's stable
-	if _, err := io.Copy(from, to); err != nil {
-		return err
-	}
-
-	return nil
-	/*for {
-		rn, rerr := from.Read(buf)
-		if rerr != nil {
-			return fmt.Errorf("error reading from RWC: %v", rerr)
-		}
-
-		header, err := ipv4.ParseHeader(buf[:rn])
-		if err != nil {
-			log.Errorf("Error parsing IP header, skipping...")
-			continue
-		}
-
-		// TODO: match IPs?
-		log.Infof("Sending IP packet %v->%v", header.Src, header.Dst)
-
-		totalWritten := 0
-		for totalWritten != rn {
-			wn, werr := to.Write(buf[:rn])
-			if werr != nil {
-				return fmt.Errorf("error writing to RWC: %v", err)
-			}
-
-			totalWritten += wn
-		}
-	}*/
-}
 
 func IPFromEnv(key string) (net.IP, bool, error) {
 	addr := os.Getenv(key)
@@ -93,38 +56,36 @@ func run(bin string, args ...string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
-	err := cmd.Run()
-	if nil != err {
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error running command %s: %w", bin, err)
 	}
 
 	return nil
 }
 
-func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) {
-	run("/sbin/ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
+func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
+	return run("/sbin/ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
-func AddRoute(ip, gateway, netmask string) {
+func AddRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
-		run("/sbin/route", "add", "-net", ip, gateway)
-	} else {
-		run("/sbin/route", "add", "-net", ip, gateway, netmask)
+		return run("/sbin/route", "add", "-net", ip, gateway)
 	}
+
+	return run("/sbin/route", "add", "-net", ip, gateway, netmask)
 }
 
-func DeleteRoute(ip, gateway, netmask string) {
+func DeleteRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
-		run("/sbin/route", "delete", "-net", ip, gateway)
-	} else {
-		run("/sbin/route", "delete", "-net", ip, gateway, netmask)
+		return run("/sbin/route", "delete", "-net", ip, gateway)
 	}
+
+	return run("/sbin/route", "delete", "-net", ip, gateway, netmask)
 }
 
 func GatewayIP(ifcName string) (net.IP, error) {
 	cmd := fmt.Sprintf(gatewayForIfcCMDFmt, ifcName)
 	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()
-	fmt.Printf("Got out bytes: \"%s\" from cmd \"%s\"\n", string(outBytes), cmd)
 	if err != nil {
 		return nil, fmt.Errorf("error running command %s: %w", cmd, err)
 	}

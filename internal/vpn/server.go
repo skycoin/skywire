@@ -3,6 +3,7 @@ package vpn
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
@@ -78,37 +79,40 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
-	ifc, err := water.New(water.Config{
+	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
 	})
 	if nil != err {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
 	}
 	defer func() {
-		tunName := ifc.Name()
-		if err := ifc.Close(); err != nil {
+		tunName := tun.Name()
+		if err := tun.Close(); err != nil {
 			s.log.WithError(err).Errorf("Error closing TUN %s", tunName)
 		}
 	}()
 
-	s.log.Infof("Allocated TUN %s", ifc.Name())
+	s.log.Infof("Allocated TUN %s", tun.Name())
 
-	SetupTUN(ifc.Name(), tunIP.String(), tunNetmask, tunGateway.String(), tunMTU)
+	if err := SetupTUN(tun.Name(), tunIP.String(), tunNetmask, tunGateway.String(), tunMTU); err != nil {
+		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
+		return
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
 
-		if err := CopyTraffic(ifc, conn); err != nil {
-			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to client", ifc.Name())
+		if _, err := io.Copy(tun, conn); err != nil {
+			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to client", tun.Name())
 		}
 	}()
 	go func() {
 		defer wg.Done()
 
-		if err := CopyTraffic(conn, ifc); err != nil {
-			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", ifc.Name())
+		if _, err := io.Copy(conn, tun); err != nil {
+			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
 	}()
 
