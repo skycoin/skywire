@@ -20,7 +20,8 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.4
-	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+	golang.org/x/tools v0.0.0-20200415000939-92398ad77b89 // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
