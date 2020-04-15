@@ -123,6 +123,8 @@ func main() {
 
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
+	// TODO: fix /run to return error
+
 	srv := vpn.NewServer(log)
 	defer func() {
 		if err := srv.Close(); err != nil {
