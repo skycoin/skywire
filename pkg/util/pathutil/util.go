@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
 )
 
 const (
@@ -43,7 +45,7 @@ func AtomicWriteFile(filename string, data []byte) error {
 		return err
 	}
 
-	if err := os.Rename(tempFilePath, filename); err != nil {
+	if err := rename.Rename(tempFilePath, filename); err != nil {
 		return err
 	}
 
