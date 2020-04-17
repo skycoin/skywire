@@ -30,3 +30,6 @@ script:
   - make install-deps-ui
   - make lint-ui
   - make build-ui
+
+env:
+  - GO111MODULE=on
