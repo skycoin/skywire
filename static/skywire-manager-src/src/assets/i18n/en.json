@@ -330,6 +330,7 @@
       "changes-made": "The changes have been made.",
       "no-history": "This tab will show the last {{ number }} public keys used.",
       "default-note-warning": "The default note has been used.",
+      "pagination-info": "{{ currentElementsRange }} of {{ totalElements }}",
 
       "change-note-dialog": {
         "title": "Change Note",
