@@ -422,7 +422,6 @@ func DefaultUptimeTrackerConfig() *UptimeTrackerConfig {
 // HypervisorConfig represents hypervisor configuration.
 type HypervisorConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
-	Addr   string        `json:"address"`
 }
 
 // AppConfig defines app startup parameters.
