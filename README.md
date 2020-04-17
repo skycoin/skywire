@@ -81,10 +81,7 @@ In the above example, we have two other visors running on localhost (that we wis
 Every node can be controlled by one or more hypervisors. The hypervisor allows to control and configure multiple visors. In order to allow a hypervisor to access a visor, the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
 
 ```json
-  "hypervisors":[{
-		"public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775",
-	       	"address":"127.0.0.1:7080"
-	}],
+  "hypervisors":[{"public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775"}],
 ```
 
 ### Run `skywire-visor`
