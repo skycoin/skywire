@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	tunIP      = "192.168.255.6"
+	tunIP      = "192.168.255.100"
 	tunNetmask = "255.255.255.252"
-	tunGateway = "192.168.255.5"
+	tunGateway = "192.168.255.99"
 	tunMTU     = 1500
 )
 
