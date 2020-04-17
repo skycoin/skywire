@@ -28,7 +28,7 @@ type Server struct {
 func NewServer(l *logging.MasterLogger) *Server {
 	return &Server{
 		log:   l,
-		ipGen: NewTUNIPGenerator(),
+		ipGen: NewTUNIPGenerator(4),
 	}
 }
 
