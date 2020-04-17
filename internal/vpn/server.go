@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	tunNetmask = "255.255.0.0"
+	tunNetmask = "255.255.255.252"
 	tunMTU     = 1500
 )
 
