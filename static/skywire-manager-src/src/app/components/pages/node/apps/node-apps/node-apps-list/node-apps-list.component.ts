@@ -22,9 +22,9 @@ import { SkysocksClientSettingsComponent } from '../skysocks-client-settings/sky
  * List of the columns that can be used to sort the data.
  */
 enum SortableColumns {
+  State = 'apps.apps-list.state',
   Name = 'apps.apps-list.app-name',
   Port = 'apps.apps-list.port',
-  Status = 'apps.apps-list.status',
   AutoStart = 'apps.apps-list.auto-start',
 }
 
@@ -335,9 +335,9 @@ export class NodeAppsListComponent implements OnDestroy {
    */
   config(app: Application): void {
     if (app.name === 'skysocks') {
-      SkysocksSettingsComponent.openDialog(this.dialog, app.name);
+      SkysocksSettingsComponent.openDialog(this.dialog, app);
     } else if (app.name === 'skysocks-client') {
-      SkysocksClientSettingsComponent.openDialog(this.dialog, app.name);
+      SkysocksClientSettingsComponent.openDialog(this.dialog, app);
     } else {
       this.snackbarService.showError('apps.error');
     }
@@ -401,7 +401,7 @@ export class NodeAppsListComponent implements OnDestroy {
           response = !this.sortReverse ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
         } else if (this.sortBy === SortableColumns.Port) {
           response = !this.sortReverse ? a.port - b.port : b.port - a.port;
-        } else if (this.sortBy === SortableColumns.Status) {
+        } else if (this.sortBy === SortableColumns.State) {
           response = !this.sortReverse ? b.status - a.status : a.status - b.status;
         } else if (this.sortBy === SortableColumns.AutoStart) {
           response = !this.sortReverse ? (b.autostart ? 1 : 0) - (a.autostart ? 1 : 0) : (a.autostart ? 1 : 0) - (b.autostart ? 1 : 0);

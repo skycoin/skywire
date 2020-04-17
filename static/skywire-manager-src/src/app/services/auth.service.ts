@@ -42,16 +42,17 @@ export class AuthService {
    * Checks if the user is logged in.
    */
   checkLogin(): Observable<AuthStates> {
-    return this.apiService.get('user', new RequestOptions({ responseType: ResponseTypes.Text, ignoreAuth: true }))
+    return this.apiService.get('user', new RequestOptions({ ignoreAuth: true }))
       .pipe(
-        map(() => AuthStates.Logged),
+        map(response => {
+          if (response.username) {
+            return AuthStates.Logged;
+          } else {
+            return AuthStates.AuthDisabled;
+          }
+        }),
         catchError((err: OperationError) => {
           err = processServiceError(err);
-
-          // The auth options are disabled in the backend.
-          if (err.originalError && (err.originalError as HttpErrorResponse).status === 504) {
-            return of(AuthStates.AuthDisabled);
-          }
 
           // The user is not logged.
           if (err.originalError && (err.originalError as HttpErrorResponse).status === 401) {

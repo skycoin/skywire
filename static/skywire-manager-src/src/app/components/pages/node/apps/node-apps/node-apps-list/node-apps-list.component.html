@@ -51,6 +51,10 @@
     <!-- Column names. -->
     <tr>
       <th></th>
+      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)">
+        <span class="dot-outline-white" [matTooltip]="'apps.apps-list.state-tooltip' | translate"></span>
+        <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
+      </th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Name)">
         {{ 'apps.apps-list.app-name' | translate }}
         <mat-icon *ngIf="sortBy === sortableColumns.Name" [inline]="true">{{ sortingArrow }}</mat-icon>
@@ -58,10 +62,6 @@
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Port)">
         {{ 'apps.apps-list.port' | translate }}
         <mat-icon *ngIf="sortBy === sortableColumns.Port" [inline]="true">{{ sortingArrow }}</mat-icon>
-      </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Status)">
-        {{ 'apps.apps-list.status' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Status" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.AutoStart)">
         {{ 'apps.apps-list.auto-start' | translate }}
@@ -78,16 +78,16 @@
         </mat-checkbox>
       </td>
       <td>
-        {{ app.name }}
-      </td>
-      <td>
-        {{ app.port }}
-      </td>
-      <td>
         <i
           [class]="app.status === 1 ? 'dot-green' : 'dot-red'"
           [matTooltip]="(app.status === 1 ? 'apps.status-running-tooltip' : 'apps.status-stopped-tooltip') | translate"
         ></i>
+      </td>
+      <td>
+        {{ app.name }}
+      </td>
+      <td>
+        {{ app.port }}
       </td>
       <td>
         <button
@@ -168,7 +168,7 @@
             {{ app.port }}
           </div>
           <div class="list-row">
-            <span class="title">{{ 'apps.apps-list.status' | translate }}</span>:
+            <span class="title">{{ 'apps.apps-list.state' | translate }}</span>:
             <span [class]="(app.status === 1 ? 'green-text' : 'red-text') + ' title'">
               {{ (app.status === 1 ? 'apps.status-running' : 'apps.status-stopped') | translate }}
             </span>
