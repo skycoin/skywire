@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { flatMap, map } from 'rxjs/operators';
-import { StorageService } from './storage.service';
 
+import { StorageService } from './storage.service';
 import { Node, Transport, Route, HealthInfo } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { TransportService } from './transport.service';
@@ -85,6 +85,14 @@ export class NodeService {
         node.port = this.getAddressPart(node.tcp_addr, 1);
         node.label = this.storageService.getNodeLabel(node.local_pk);
         currentNode = node;
+
+        // Needed for a change made to the names on the backend.
+        if (node.apps) {
+          node.apps.forEach(app => {
+            app.name = (app as any).app;
+            app.autostart = (app as any).auto_start;
+          });
+        }
 
         // Get the health info.
         return this.apiService.get(`visors/${nodeKey}/health`);
