@@ -82,8 +82,7 @@ Every node can be controlled by one or more hypervisors. The hypervisor allows t
 
 ```json
   "hypervisors":[{
-		"public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775",
-	       	"address":"127.0.0.1:7080"
+		"public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775"
 	}],
 ```
 
