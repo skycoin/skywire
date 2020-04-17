@@ -35,7 +35,10 @@
       >
         <!-- Column names. -->
         <tr>
-          <th></th>
+          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)">
+            <span class="dot-outline-gray" [matTooltip]="'nodes.state-tooltip' | translate"></span>
+            <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
+          </th>
           <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
             {{ 'nodes.label' | translate }}
             <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
