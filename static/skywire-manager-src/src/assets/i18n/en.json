@@ -89,6 +89,7 @@
   "nodes": {
     "title": "Visor list",
     "state": "State",
+    "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
     "view-node": "View visor",
@@ -248,7 +249,8 @@
       "list-title": "Application list",
       "app-name": "Name",
       "port": "Port",
-      "status": "Status",
+      "state": "State",
+      "state-tooltip": "Current state",
       "auto-start": "Auto start",
       "empty": "Visor doesn't have any applications.",
       "disable-autostart": "Disable autostart",
@@ -302,6 +304,8 @@
   "transports": {
     "title": "Transports",
     "list-title": "Transport list",
+    "state": "State",
+    "state-tooltip": "Current state",
     "id": "ID",
     "remote-node": "Remote",
     "type": "Type",
@@ -311,10 +315,17 @@
     "delete": "Delete transport",
     "deleted": "Delete operation completed.",
     "empty": "Visor doesn't have any transports.",
+    "statuses": {
+      "online": "Online",
+      "online-tooltip": "Transport is online",
+      "offline": "Offline",
+      "offline-tooltip": "Transport is offline"
+    },
     "details": {
       "title": "Details",
       "basic": {
         "title": "Basic info",
+        "state": "State:",
         "id": "ID:",
         "local-pk": "Local public key:",
         "remote-pk": "Remote public key:",

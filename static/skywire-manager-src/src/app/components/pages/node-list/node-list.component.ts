@@ -21,6 +21,7 @@ import { processServiceError } from 'src/app/utils/errors';
  * List of the columns that can be used to sort the data.
  */
 enum SortableColumns {
+  State = 'transports.state',
   Label = 'nodes.label',
   Key = 'nodes.key',
 }
@@ -275,6 +276,13 @@ export class NodeListComponent implements OnInit, OnDestroy {
       let response: number;
       if (this.sortBy === SortableColumns.Key) {
         response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
+      } else if (this.sortBy === SortableColumns.State) {
+        if (a.online && !b.online) {
+          response = -1;
+        } else if (!a.online && b.online) {
+          response = 1;
+        }
+        response = response * (this.sortReverse ? -1 : 1);
       } else if (this.sortBy === SortableColumns.Label) {
         response = !this.sortReverse ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
       } else {
