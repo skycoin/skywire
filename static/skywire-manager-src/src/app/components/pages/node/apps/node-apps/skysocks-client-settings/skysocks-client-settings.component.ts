@@ -57,6 +57,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   private readonly historyStorageKey = 'SkysocksClientHistory_';
   // Max elements the history can contain.
   readonly maxHistoryElements = 10;
+  // How many elements to show per page on the proxy discovery tab.
+  readonly maxElementsPerPage = 10;
 
   @ViewChild('button', { static: false }) button: ButtonComponent;
   @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
@@ -67,9 +69,17 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // Proxies obtained from the discovery service.
   proxiesFromDiscovery: ProxyDiscoveryEntry[];
   // Filtered proxies.
+  filteredProxiesFromDiscovery: ProxyDiscoveryEntry[];
+  // Proxies to show in the currently selected page.
   proxiesFromDiscoveryToShow: ProxyDiscoveryEntry[];
   // If the system is still getting the proxies from the discovery service.
   loadingFromDiscovery = true;
+  // How many pages with proxies there are.
+  numberOfPages = 1;
+  // Current page.
+  currentPage = 1;
+  // Which elements are being shown in the currently selected page.
+  currentRange = '1 - 1';
 
   // Current filters for the poxies from the discovery service.
   currentFilters = new SkysocksClientFilters();
@@ -167,9 +177,9 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // the user.
   private filterProxies() {
     if (this.currentFilters.state.state === StateFilterStates.NoFilter && !this.currentFilters.location && !this.currentFilters.key) {
-      this.proxiesFromDiscoveryToShow = this.proxiesFromDiscovery;
+      this.filteredProxiesFromDiscovery = this.proxiesFromDiscovery;
     } else {
-      this.proxiesFromDiscoveryToShow = this.proxiesFromDiscovery.filter(proxy => {
+      this.filteredProxiesFromDiscovery = this.proxiesFromDiscovery.filter(proxy => {
         if (this.currentFilters.state.state === StateFilterStates.Available && !proxy.available) {
           return false;
         }
@@ -188,6 +198,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.updateCurrentFilters();
+    this.updatePagination();
   }
 
   // Updates the texts of the filter button.
@@ -202,6 +213,51 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     }
     if (this.currentFilters.key) {
       this.currentFiltersTexts.push(['apps.skysocks-client-settings.filter-dialog.pub-key', '', this.currentFilters.key]);
+    }
+  }
+
+  // Updates the vars related to the pagination of the proxy discovery tab and shows
+  // the first page.
+  private updatePagination() {
+    this.currentPage = 1;
+    this.numberOfPages = Math.ceil(this.filteredProxiesFromDiscovery.length / this.maxElementsPerPage);
+    this.showCurrentPage();
+  }
+
+  // Goes to the next page in the proxy discovery tab.
+  goToNextPage() {
+    if (this.currentPage >= this.numberOfPages) {
+      return;
+    }
+
+    this.currentPage += 1;
+    this.showCurrentPage();
+  }
+
+  // Goes to the previous page in the proxy discovery tab.
+  goToPreviousPage() {
+    if (this.currentPage <= 1) {
+      return;
+    }
+
+    this.currentPage -= 1;
+    this.showCurrentPage();
+  }
+
+  // Updates the UI to show the elements of the page indicated in the currentPage var.
+  private showCurrentPage() {
+    // Update the elements to show.
+    this.proxiesFromDiscoveryToShow = this.filteredProxiesFromDiscovery.slice(
+      (this.currentPage - 1) * this.maxElementsPerPage,
+      this.currentPage * this.maxElementsPerPage
+    );
+
+    // Update the text with the range currently shown.
+    this.currentRange = (((this.currentPage - 1) * this.maxElementsPerPage) + 1) + ' - ';
+    if (this.currentPage < this.numberOfPages) {
+      this.currentRange += (this.currentPage * this.maxElementsPerPage) + '';
+    } else {
+      this.currentRange += this.filteredProxiesFromDiscovery.length + '';
     }
   }
 
