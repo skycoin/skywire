@@ -4,6 +4,12 @@
       {{ 'transports.details.basic.title' | translate }}
     </div>
     <div class="item">
+      <span>{{ 'transports.details.basic.state' | translate }}</span>
+      <div [class]="'d-inline ' + (data.is_up ? 'green-text' : 'red-text')">
+        {{ ('transports.statuses.' + (data.is_up ? 'online' : 'offline')) | translate }}
+      </div>
+    </div>
+    <div class="item">
       <span>{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}
     </div>
     <div class="item">
