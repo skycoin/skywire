@@ -300,6 +300,7 @@
       "changes-made": "Los cambios han sido realizados.",
       "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas.",
       "default-note-warning": "La nota por defecto ha sido utilizada.",
+      "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
 
       "change-note-dialog": {
         "title": "Cambiar Nota",
