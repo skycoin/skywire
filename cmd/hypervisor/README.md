@@ -22,7 +22,7 @@ Endpoints are documented in the provided [Postman](https://www.getpostman.com/) 
 
 ## Web UI
 
-UI is served on the same port as the API (`:8000` by default). Directory to search for the build frontend is passed in the `web_dir` field of the hypervisor's config.
+UI is served on the same port as the API (`:8000` by default).
 
 ### Authentication information
 
