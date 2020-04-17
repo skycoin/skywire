@@ -62,6 +62,10 @@ $responsive-table-colors: (
     // Column used for the check boxes.
     .selection-col {
       width: 30px;
+      
+      .mat-checkbox {
+        vertical-align: super;
+      }
     }
 
     .action-button {
