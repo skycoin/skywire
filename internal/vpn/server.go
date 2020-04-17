@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	tunNetmask = "255.255.255.252"
+	tunNetmask = "255.255.0.0"
 	tunMTU     = 1500
 )
 
@@ -73,7 +73,7 @@ func (s *Server) closeConn(conn net.Conn) {
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
-	tunIP, tunGateway, err := s.ipGen.Next()
+	tunIP, _, err := s.ipGen.Next()
 	if err != nil {
 		s.log.WithError(err).Errorf("failed to get free IP for TUN for client %s", conn.RemoteAddr())
 		return
@@ -94,7 +94,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	s.log.Infof("Allocated TUN %s", tun.Name())
 
-	if err := SetupTUN(tun.Name(), tunIP.String(), tunNetmask, tunGateway.String(), tunMTU); err != nil {
+	if err := SetupTUN(tun.Name(), tunIP.String(), tunNetmask, "192.168.255.1", tunMTU); err != nil {
 		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
 	}
