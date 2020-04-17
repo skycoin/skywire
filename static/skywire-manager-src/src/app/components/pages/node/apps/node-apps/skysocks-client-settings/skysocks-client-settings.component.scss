@@ -1,4 +1,5 @@
 @import "variables";
+@import "bootstrap_overrides";
 
 form {
   margin-top: 15px;
@@ -89,5 +90,22 @@ form {
         margin-left: 5px;
       }
     }
+  }
+}
+
+.paginator {
+  float: right;
+  margin-top: 15px;
+
+  > span {
+    @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+      & {
+        font-size: $font-size-mini;
+      }
+    }
+  }
+
+  button {
+    margin-left: 5px;
   }
 }

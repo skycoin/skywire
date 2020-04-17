@@ -70,7 +70,7 @@
         </button>
 
         <!-- No proxies with the current filters msg. -->
-        <div class="info-text" *ngIf="proxiesFromDiscoveryToShow.length === 0">
+        <div class="info-text" *ngIf="filteredProxiesFromDiscovery.length === 0">
           <mat-icon [inline]="true">error</mat-icon>
           {{ 'apps.skysocks-client-settings.no-elements-for-filters' | translate }}
         </div>
@@ -105,6 +105,18 @@
           </button>
         </ng-container>
       </ng-container>
+
+      <!-- Paginator. -->
+      <div class="paginator" *ngIf="numberOfPages > 1">
+        <span>{{ 'apps.skysocks-client-settings.pagination-info' | translate:{currentElementsRange: currentRange, totalElements: filteredProxiesFromDiscovery.length} }}</span>
+
+        <button (click)="goToPreviousPage()" mat-icon-button class="hard-grey-button-background">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <button (click)="goToNextPage()" mat-icon-button class="hard-grey-button-background">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
     </mat-tab>
     <!-- History. -->
     <mat-tab [label]="'apps.skysocks-client-settings.history-tab' | translate">
