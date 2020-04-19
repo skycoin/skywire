@@ -132,6 +132,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		if _, err := io.Copy(tun, conn); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to client", tun.Name())
 		}
+		s.log.Errorln("DONE COPYING FROM TUN TO CONN")
 	}()
 	go func() {
 		defer wg.Done()
@@ -139,6 +140,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		if _, err := io.Copy(conn, tun); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
+		s.log.Errorln("DONE COPYING FROM CONN TO TUN")
 	}()
 
 	wg.Wait()
