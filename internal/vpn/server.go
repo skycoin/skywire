@@ -107,7 +107,7 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 	firstOneMx.Unlock()
 
-	if !isFirstOne {
+	if isFirstOne {
 		if err := SetupTUN(tun.Name(), "192.168.255.2", "255.255.255.248", "192.168.255.1", tunMTU); err != nil {
 			s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 			return
