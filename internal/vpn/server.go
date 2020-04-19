@@ -91,6 +91,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
 	}
 	defer func() {
+		s.log.Errorln("DONE SERVING, CLOSING TUN")
 		tunName := tun.Name()
 		if err := tun.Close(); err != nil {
 			s.log.WithError(err).Errorf("Error closing TUN %s", tunName)
@@ -112,7 +113,7 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 	} else {
-		if err := SetupTUN(tun.Name(), "192.168.255.2", "255.255.255.248", "192.168.255.1", tunMTU); err != nil {
+		if err := SetupTUN(tun.Name(), "192.168.255.3", "255.255.255.248", "192.168.255.4", tunMTU); err != nil {
 			s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 			return
 		}
