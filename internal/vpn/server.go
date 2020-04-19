@@ -124,24 +124,27 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}*/
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	connToTunDoneCh := make(chan struct{})
+	tunToConnCh := make(chan struct{})
 	go func() {
-		defer wg.Done()
+		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, conn); err != nil {
-			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to client", tun.Name())
-		}
-		s.log.Errorln("DONE COPYING FROM TUN TO CONN")
-	}()
-	go func() {
-		defer wg.Done()
-
-		if _, err := io.Copy(conn, tun); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
 		s.log.Errorln("DONE COPYING FROM CONN TO TUN")
 	}()
+	go func() {
+		defer close(tunToConnCh)
 
-	wg.Wait()
+		if _, err := io.Copy(conn, tun); err != nil {
+			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
+		}
+		s.log.Errorln("DONE COPYING FROM TUN TO CONN")
+	}()
+
+	select {
+	case <-connToTunDoneCh:
+	case <-tunToConnCh:
+	}
 }
