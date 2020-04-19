@@ -112,7 +112,7 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 	} else {
-		if err := SetupTUN(tun.Name(), "192.168.255.6", "255.255.255.252", "192.168.255.5", tunMTU); err != nil {
+		if err := SetupTUN(tun.Name(), "192.168.255.2", "255.255.255.248", "192.168.255.1", tunMTU); err != nil {
 			s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 			return
 		}
