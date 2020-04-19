@@ -70,14 +70,19 @@ func (s *Server) closeConn(conn net.Conn) {
 	}
 }
 
+var (
+	firstOneMx sync.Mutex
+	firstOne   = true
+)
+
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
-	tunIP, _, err := s.ipGen.Next()
+	/*tunIP, _, err := s.ipGen.Next()
 	if err != nil {
 		s.log.WithError(err).Errorf("failed to get free IP for TUN for client %s", conn.RemoteAddr())
 		return
-	}
+	}*/
 
 	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
@@ -94,10 +99,29 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	s.log.Infof("Allocated TUN %s", tun.Name())
 
-	if err := SetupTUN(tun.Name(), tunIP.String(), tunNetmask, "192.168.255.1", tunMTU); err != nil {
+	firstOneMx.Lock()
+	isFirstOne := firstOne
+	if isFirstOne {
+		firstOne = false
+	}
+	firstOneMx.Unlock()
+
+	if isFirstOne {
+		if err := SetupTUN(tun.Name(), "192.168.255.2", "255.255.255.252", "192.168.255.1", tunMTU); err != nil {
+			s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
+			return
+		}
+	} else {
+		if err := SetupTUN(tun.Name(), "192.168.255.6", "255.255.255.252", "192.168.255.5", tunMTU); err != nil {
+			s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
+			return
+		}
+	}
+
+	/*if err := SetupTUN(tun.Name(), tunIP.String(), tunNetmask, "192.168.255.1", tunMTU); err != nil {
 		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
-	}
+	}*/
 
 	var wg sync.WaitGroup
 	wg.Add(2)
