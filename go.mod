@@ -3,7 +3,7 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.13
 
 require (
-	github.com/SkycoinProject/dmsg v0.2.0
+	github.com/SkycoinProject/dmsg v0.1.1-0.20200420091742-8c1a3d828a49
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -16,13 +16,15 @@ require (
 	github.com/prometheus/common v0.7.0
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
-	github.com/sirupsen/logrus v1.4.2
+	github.com/sirupsen/logrus v1.5.0
 	github.com/skycoin/dmsg v0.0.0-20190805065636-70f4c32a994f // indirect
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.4
+	golang.org/x/crypto v0.0.0-20200414173820-0848c9571904 // indirect
 	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
+	golang.org/x/sys v0.0.0-20200413165638-669c56c373c4 // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
