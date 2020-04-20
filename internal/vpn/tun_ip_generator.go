@@ -44,7 +44,7 @@ func (inc *SubnetIPIncrementer) Next() (net.IP, error) {
 				generatedIP[1] = inc.octets[1]
 				generatedIP[2] = inc.octets[2]
 
-				for o4 := inc.octets[3] + inc.step; o4 != inc.octets[3]; o4++ {
+				for o4 := inc.octets[3] + inc.step; o4 != inc.octets[3]; o4 += inc.step {
 					if o4 >= inc.octetBorders[3] {
 						o4 = inc.octetLowerBorders[3]
 						continue
@@ -62,9 +62,10 @@ func (inc *SubnetIPIncrementer) Next() (net.IP, error) {
 
 				inc.octets[3] = inc.octetLowerBorders[3]
 
-				inc.octets[2]++
-				if inc.octets[2] >= inc.octetBorders[2] {
+				if inc.octets[2] == inc.octetBorders[2] {
 					inc.octets[2] = inc.octetLowerBorders[2]
+				} else {
+					inc.octets[2]++
 				}
 
 				if inc.octets[2] == o3 {
@@ -73,9 +74,10 @@ func (inc *SubnetIPIncrementer) Next() (net.IP, error) {
 				}
 			}
 
-			inc.octets[1]++
-			if inc.octets[1] >= inc.octetBorders[1] {
+			if inc.octets[1] == inc.octetBorders[1] {
 				inc.octets[1] = inc.octetLowerBorders[1]
+			} else {
+				inc.octets[1]++
 			}
 
 			if inc.octets[1] == o2 {
@@ -84,9 +86,10 @@ func (inc *SubnetIPIncrementer) Next() (net.IP, error) {
 			}
 		}
 
-		inc.octets[0]++
-		if inc.octets[0] >= inc.octetBorders[0] {
+		if inc.octets[0] == inc.octetBorders[0] {
 			inc.octets[0] = inc.octetLowerBorders[0]
+		} else {
+			inc.octets[0]++
 		}
 
 		if inc.octets[0] == o1 {
@@ -114,9 +117,9 @@ type TUNIPGenerator struct {
 func NewTUNIPGenerator() *TUNIPGenerator {
 	return &TUNIPGenerator{
 		ranges: []*SubnetIPIncrementer{
-			NewSubnetIPIncrementer([4]uint8{192, 168, 0, 0}, [4]uint8{192, 168, 255, 255}, 4),
-			NewSubnetIPIncrementer([4]uint8{172, 16, 0, 0}, [4]uint8{172, 31, 255, 255}, 4),
-			NewSubnetIPIncrementer([4]uint8{10, 0, 0, 0}, [4]uint8{10, 255, 255, 255}, 4),
+			NewSubnetIPIncrementer([4]uint8{192, 168, 0, 0}, [4]uint8{192, 168, 255, 255}, 8),
+			NewSubnetIPIncrementer([4]uint8{172, 16, 0, 0}, [4]uint8{172, 31, 255, 255}, 8),
+			NewSubnetIPIncrementer([4]uint8{10, 0, 0, 0}, [4]uint8{10, 255, 255, 255}, 8),
 		},
 	}
 }
