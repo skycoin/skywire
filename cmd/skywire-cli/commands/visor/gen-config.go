@@ -88,7 +88,7 @@ func fillInOldKeys(confPath string, conf *visor.Config) error {
 
 	conf.KeyPair = oldConf.KeyPair
 
-	return nil
+	return err
 }
 
 func homeConfig() *visor.Config {

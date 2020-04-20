@@ -495,7 +495,7 @@ func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 // Exec executes a given command in cmd and writes its output to out.
 func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 	defer rpcutil.LogCall(r.log, "Exec", cmd)(out, &err)
-
+	fmt.Println("it also received the RPC call")
 	*out, err = r.visor.Exec(*cmd)
 	return err
 }

@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"path"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -14,6 +17,7 @@ import (
 var (
 	output        string
 	replace       bool
+	retainKeys	bool
 	configLocType = pathutil.WorkingDirLoc
 	testEnv       bool
 )
@@ -22,12 +26,14 @@ var (
 func init() {
 	outputUsage := "path of output config file. Uses default of 'type' flag if unspecified."
 	replaceUsage := "whether to allow rewrite of a file that already exists."
+	retainKeysUsage := "retain current keys"
 	configLocTypeUsage := fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes())
 	testEnvUsage := "whether to use production or test deployment service."
 
 	rootCmd.AddCommand(genConfigCmd)
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", outputUsage)
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, replaceUsage)
+	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, retainKeysUsage)
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", configLocTypeUsage)
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testing-environment", "t", false, testEnvUsage)
 }
@@ -58,6 +64,25 @@ var genConfigCmd = &cobra.Command{
 		default:
 			log.Fatalln("invalid config type:", configLocType)
 		}
+		if replace && retainKeys && pathutil.Exists(output) {
+			_ = fillInOldKeys(output, &conf)
+		}
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
+}
+func fillInOldKeys(confPath string, conf *hypervisor.Config) error {
+	oldConfBytes, err := ioutil.ReadFile(path.Clean(confPath))
+	if err != nil {
+		return fmt.Errorf("error reading old config file: %w", err)
+	}
+
+	var oldConf hypervisor.Config
+	if err := json.Unmarshal(oldConfBytes, &oldConf); err != nil {
+		return fmt.Errorf("invalid old configuration file: %w", err)
+	}
+
+	conf.PK = oldConf.PK
+	conf.SK = oldConf.SK
+
+	return nil
 }

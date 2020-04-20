@@ -746,7 +746,6 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 			return
 		}
-
 		out, err := ctx.RPC.Exec(reqBody.Command)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
