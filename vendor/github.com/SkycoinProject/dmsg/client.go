@@ -53,6 +53,9 @@ type Client struct {
 	once  sync.Once
 
 	sesMx sync.Mutex
+
+	connectedServersMx sync.Mutex
+	connectedServers   map[string]struct{}
 }
 
 // NewClient creates a dmsg client entity.
@@ -85,6 +88,8 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	c.porter = netutil.NewPorter(netutil.PorterMinEphemeral)
 	c.errCh = make(chan error, 10)
 	c.done = make(chan struct{})
+
+	c.connectedServers = make(map[string]struct{})
 
 	return c
 }
@@ -249,6 +254,19 @@ func (ce *Client) AllSessions() []ClientSession {
 	return ce.allClientSessions(ce.porter)
 }
 
+// ConnectedServers obtains all the servers client is connected to.
+func (ce *Client) ConnectedServers() []string {
+	ce.connectedServersMx.Lock()
+	defer ce.connectedServersMx.Unlock()
+
+	addrs := make([]string, 0, len(ce.connectedServers))
+	for addr := range ce.connectedServers {
+		addrs = append(addrs, addr)
+	}
+
+	return addrs
+}
+
 // EnsureAndObtainSession attempts to obtain a session.
 // If the session does not exist, we will attempt to establish one.
 // It returns an error if the session does not exist AND cannot be established.
@@ -303,6 +321,9 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSes
 		_ = dSes.Close() //nolint:errcheck
 		return ClientSession{}, errors.New("session already exists")
 	}
+	ce.connectedServersMx.Lock()
+	ce.connectedServers[entry.Server.Address] = struct{}{}
+	ce.connectedServersMx.Unlock()
 	go func() {
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
 		if err := dSes.serve(); !isClosed(ce.done) {
