@@ -6,7 +6,9 @@ import (
 	"sync"
 )
 
-type IPIncrementer struct {
+// SubnetIPIncrementer is used to increment over the subnet IP address
+// between the specified borders.
+type SubnetIPIncrementer struct {
 	mx                sync.Mutex
 	octets            [4]uint8
 	octetLowerBorders [4]uint8
@@ -15,8 +17,8 @@ type IPIncrementer struct {
 	reserved          map[[4]uint8]struct{}
 }
 
-func NewIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8) *IPIncrementer {
-	return &IPIncrementer{
+func NewSubnetIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8) *SubnetIPIncrementer {
+	return &SubnetIPIncrementer{
 		mx:                sync.Mutex{},
 		octets:            octetLowerBorders,
 		octetLowerBorders: octetLowerBorders,
@@ -26,76 +28,155 @@ func NewIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8) *IPI
 	}
 }
 
-func (inc *IPIncrementer) Next() (ip, gateway net.IP, err error) {
+func (inc *SubnetIPIncrementer) Next() (net.IP, error) {
 	inc.mx.Lock()
 	defer inc.mx.Unlock()
 
-	var ipArr [4]uint8
+	var generatedIP [4]uint8
 
-	for i := 3; i >= 0; i-- {
-		for k := 0; k < i; k++ {
-			ipArr[k] = inc.octets[k]
-		}
-		for k := i + 1; k < 4; k++ {
-			ipArr[k] = inc.octets[k]
-		}
+	o1 := inc.octets[0]
+	o2 := inc.octets[1]
+	o3 := inc.octets[2]
+	for {
+		for {
+			for {
+				generatedIP[0] = inc.octets[0]
+				generatedIP[1] = inc.octets[1]
+				generatedIP[2] = inc.octets[2]
 
-		for j := inc.octets[i] + inc.step; j != inc.octets[i]; j += inc.step {
-			if j >= inc.octetBorders[i] {
-				j = inc.octetLowerBorders[i]
-				continue
+				for o4 := inc.octets[3] + inc.step; o4 != inc.octets[3]; o4++ {
+					if o4 >= inc.octetBorders[3] {
+						o4 = inc.octetLowerBorders[3]
+						continue
+					}
+
+					generatedIP[3] = o4
+
+					if _, ok := inc.reserved[generatedIP]; !ok {
+						inc.octets[3] = o4
+						inc.reserved[generatedIP] = struct{}{}
+
+						return net.IPv4(generatedIP[0], generatedIP[1], generatedIP[2], generatedIP[3]), nil
+					}
+				}
+
+				inc.octets[3] = inc.octetLowerBorders[3]
+
+				inc.octets[2]++
+				if inc.octets[2] >= inc.octetBorders[2] {
+					inc.octets[2] = inc.octetLowerBorders[2]
+				}
+
+				if inc.octets[2] == o3 {
+					inc.octets[2] = inc.octetLowerBorders[2]
+					break
+				}
 			}
 
-			if i == 3 && j == 0 {
-				// TODO: fix to skip only the network address
-				continue
+			inc.octets[1]++
+			if inc.octets[1] >= inc.octetBorders[1] {
+				inc.octets[1] = inc.octetLowerBorders[1]
 			}
 
-			ipArr[i] = j
-			if _, ok := inc.reserved[ipArr]; !ok {
-				inc.octets[i] = j
-				inc.reserved[ipArr] = struct{}{}
-
-				// TODO: fix possible miscalculations
-				return net.IPv4(inc.octets[0], inc.octets[1], inc.octets[2], inc.octets[3]), net.IPv4(inc.octets[0], inc.octets[1], inc.octets[2], inc.octets[3]-1), nil
+			if inc.octets[1] == o2 {
+				inc.octets[1] = inc.octetLowerBorders[1]
+				break
 			}
 		}
 
-		inc.octets[i] = inc.octetLowerBorders[i]
+		inc.octets[0]++
+		if inc.octets[0] >= inc.octetBorders[0] {
+			inc.octets[0] = inc.octetLowerBorders[0]
+		}
+
+		if inc.octets[0] == o1 {
+			inc.octets[0] = inc.octetLowerBorders[0]
+			break
+		}
 	}
 
-	return nil, nil, errors.New("no free IPs left")
+	return nil, errors.New("no free IPs left")
+}
+
+func (inc *SubnetIPIncrementer) Reserve(octets [4]uint8) {
+	inc.mx.Lock()
+	defer inc.mx.Unlock()
+
+	inc.reserved[octets] = struct{}{}
 }
 
 type TUNIPGenerator struct {
 	mx           sync.Mutex
-	currentRange uint8
-	ranges       []*IPIncrementer
+	currentRange int
+	ranges       []*SubnetIPIncrementer
 }
 
 func NewTUNIPGenerator() *TUNIPGenerator {
 	return &TUNIPGenerator{
-		ranges: []*IPIncrementer{
-			NewIPIncrementer([4]uint8{192, 168, 0, 0}, [4]uint8{192, 168, 255, 255}, 4),
-			NewIPIncrementer([4]uint8{172, 16, 0, 0}, [4]uint8{172, 31, 255, 255}, 4),
-			NewIPIncrementer([4]uint8{10, 0, 0, 0}, [4]uint8{10, 255, 255, 255}, 4),
+		ranges: []*SubnetIPIncrementer{
+			NewSubnetIPIncrementer([4]uint8{192, 168, 0, 0}, [4]uint8{192, 168, 255, 255}, 4),
+			NewSubnetIPIncrementer([4]uint8{172, 16, 0, 0}, [4]uint8{172, 31, 255, 255}, 4),
+			NewSubnetIPIncrementer([4]uint8{10, 0, 0, 0}, [4]uint8{10, 255, 255, 255}, 4),
 		},
 	}
 }
 
-func (g *TUNIPGenerator) Next() (ip, gateway net.IP, err error) {
+func (g *TUNIPGenerator) Reserve(ip net.IP) error {
+	octets, err := fetchIPv4Bytes(ip)
+	if err != nil {
+		return err
+	}
+
+	// of course it's best to reserve it within the range it belongs to.
+	// but it really doesn't matter, we may just reserve it in all incrementers,
+	// that is much simpler and works anyway
+	for _, inc := range g.ranges {
+		inc.Reserve(octets)
+	}
+
+	return nil
+}
+
+func (g *TUNIPGenerator) Next() (net.IP, error) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	for i := g.currentRange; i < 4; i++ {
-		ip, gateway, err := g.ranges[i].Next()
+	for i := g.currentRange + 1; i != g.currentRange; i++ {
+		if i >= len(g.ranges) {
+			i = 0
+		}
+
+		ip, err := g.ranges[i].Next()
 		if err != nil {
-			g.currentRange++
 			continue
 		}
 
-		return ip, gateway, nil
+		return ip, nil
 	}
 
-	return nil, nil, errors.New("no free IPs left")
+	return nil, errors.New("no free IPs left")
+}
+
+func fetchIPv4Bytes(ip net.IP) ([4]uint8, error) {
+	if len(ip) == net.IPv4len {
+		return [4]uint8{ip[0], ip[1], ip[2], ip[3]}, nil
+	}
+
+	if len(ip) == net.IPv6len &&
+		isZeros(ip[0:10]) &&
+		ip[10] == 0xff &&
+		ip[11] == 0xff {
+		return [4]uint8{ip[12], ip[13], ip[14], ip[15]}, nil
+	}
+
+	return [4]uint8{}, errors.New("address is not of v4")
+}
+
+func isZeros(p net.IP) bool {
+	for i := 0; i < len(p); i++ {
+		if p[i] != 0 {
+			return false
+		}
+	}
+	return true
 }
