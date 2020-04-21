@@ -1,6 +1,8 @@
 package skyenv
 
 import (
+	"time"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
@@ -8,6 +10,7 @@ import (
 const (
 	DefaultTpDiscAddr        = "http://transport.discovery.skywire.skycoin.com"
 	DefaultDmsgDiscAddr      = "http://dmsg.discovery.skywire.skycoin.com"
+	DefaultProxyDiscAddr     = "http://proxy.discovery.skywire.skycoin.com"
 	DefaultRouteFinderAddr   = "http://routefinder.skywire.skycoin.com"
 	DefaultUptimeTrackerAddr = "http://uptime-tracker.skywire.skycoin.com"
 	DefaultSetupPK           = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
@@ -49,6 +52,11 @@ const (
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
 	SkysocksClientAddr = ":1080"
+)
+
+// Default skywire app discovery constants
+const (
+	AppDiscUpdateInterval = time.Second * 30
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.

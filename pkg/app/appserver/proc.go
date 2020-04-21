@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
@@ -24,6 +26,7 @@ var (
 // the running process itself and the RPC server for
 // app/visor communication.
 type Proc struct {
+	disc      appdisc.Updater // App discovery client.
 	key       appcommon.Key
 	config    appcommon.Config
 	log       *logging.Logger
@@ -34,7 +37,7 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
+func NewProc(log *logging.Logger, disc appdisc.Updater, c appcommon.Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
 	key := appcommon.GenerateAppKey()
 
 	binaryPath := getBinaryPath(c.BinaryDir, c.Name)
@@ -59,6 +62,7 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, std
 	cmd.Stderr = stderr
 
 	return &Proc{
+		disc:   disc,
 		key:    key,
 		config: c,
 		log:    log,
@@ -75,11 +79,15 @@ func (p *Proc) Start() error {
 	if err := p.cmd.Start(); err != nil {
 		return err
 	}
+	p.disc.Start()
 
 	// acquire lock immediately
 	p.waitMx.Lock()
 	go func() {
-		defer p.waitMx.Unlock()
+		defer func() {
+			p.disc.Stop()
+			p.waitMx.Unlock()
+		}()
 		p.waitErr = p.cmd.Wait()
 	}()
 
