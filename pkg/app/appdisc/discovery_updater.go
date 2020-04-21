@@ -28,7 +28,7 @@ type proxyUpdater struct {
 	interval time.Duration
 
 	cancel context.CancelFunc
-	wg     *sync.WaitGroup
+	wg     sync.WaitGroup
 	mu     sync.Mutex
 }
 

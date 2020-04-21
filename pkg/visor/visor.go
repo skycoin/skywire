@@ -221,7 +221,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	visor.appDiscF = &appdisc.Factory{
 		PK:             pk,
 		SK:             sk,
-		UpdateInterval: cfg.AppDiscConfig().UpdateInterval,
+		UpdateInterval: time.Duration(cfg.AppDiscConfig().UpdateInterval),
 		ProxyDisc:      cfg.AppDiscConfig().ProxyDisc,
 	}
 
