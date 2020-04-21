@@ -79,6 +79,7 @@ func GatewayIP(ifcName string) (net.IP, error) {
 	outLines := bytes.Split(outBytes, []byte{'\n'})
 
 	for _, l := range outLines {
+		fmt.Printf("PARSING IP LINE: %s", l)
 		if bytes.Count(l, []byte{'.'}) != 3 {
 			// initially look for IPv4 address
 			continue

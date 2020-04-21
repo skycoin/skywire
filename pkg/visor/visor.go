@@ -625,6 +625,8 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 			dmsgServers)
 		//[]string{"dmsg.server02a2d4c3.skywire.skycoin.com", "dmsg.server02a4.skywire.skycoin.com"})
 		//[]string{"172.105.115.99", "172.104.52.156"})
+
+		visor.logger.Infof("STARTING VPN CLIENT WITH ARGS: %v", appArgs)
 	}
 
 	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)
