@@ -23,7 +23,7 @@ This article represents the central source of information for the Skywire mainne
 * Read this information thoroughly and ask in the [Skywire](https://t.me/skywire) Telegram channel if some things appear to not be covered. 
 * Please join [SkywirePSA](https://t.me/SkywirePSA) as well to get structured public service announcements (PSA) about the Skywire project.
 * In case you bought an official Skyminer in the [Skycoin hardware store](https://store.skycoin.com/) please read [the Official Skyminer Guide](https://github.com/skycoinproject/skywire-mainnet/wiki/Skyminer-Official-Guide) if you haven't done that already. 
-* Participants will contacted at the beginning of every month via the so called *Skywire Status Update Emails* including details of their last month's Skywire mainnet participation.
+* Participants will be contacted at the beginning of every month via the so-called *Skywire Status Update Emails* including details of their last month's Skywire mainnet participation.
 * You can contact support at store.skycoin.com/pages/support
 
 ***
