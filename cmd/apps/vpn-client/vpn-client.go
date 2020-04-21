@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -82,10 +83,17 @@ func main() {
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
 
+	unavailableIPs, err := vpn.GetIPsToReserve()
+	if err != nil {
+		log.WithError(err).Fatalln("Error getting unavailable private IPs")
+	}
+
 	defaultGatewayIP, err := vpn.DefaultGatewayIP()
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting default network gateway")
 	}
+
+	unavailableIPs = append(unavailableIPs, defaultGatewayIP)
 
 	log.Infof("Got default network gateway IP: %s", defaultGatewayIP)
 
@@ -204,7 +212,49 @@ func main() {
 		log.WithError(err).Fatalln("Error connecting to VPN server")
 	}
 
-	log.Infof("Dialed to %s", appConn.RemoteAddr())
+	clHello := vpn.ClientHello{
+		UnavailablePrivateIPs: unavailableIPs,
+	}
+
+	clHelloBytes, err := json.Marshal(&clHello)
+	if err != nil {
+		log.WithError(err).Errorln("Error marshaling client hello")
+		return
+	}
+
+	if _, err := appConn.Write(clHelloBytes); err != nil {
+		log.WithError(err).Errorln("Error sending client hello")
+		return
+	}
+
+	var sHelloBytes []byte
+	buf := make([]byte, 1024)
+	for {
+		n, err := appConn.Read(buf)
+		if err != nil {
+			log.WithError(err).Errorln("Error reading server hello")
+			return
+		}
+
+		sHelloBytes = append(sHelloBytes, buf[:n]...)
+
+		if n < 1024 {
+			break
+		}
+	}
+
+	var sHello vpn.ServerHello
+	if err := json.Unmarshal(sHelloBytes, &sHello); err != nil {
+		log.WithError(err).Errorln("Error unmarshaling server hello")
+		return
+	}
+
+	if sHello.Status != vpn.NegotiationStatusOK {
+		log.Errorf("Got status %v from the server", sHello.Status)
+		return
+	}
+
+	log.Infof("Dialed %s", appConn.RemoteAddr())
 
 	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
@@ -237,7 +287,7 @@ func main() {
 		shutdownC <- struct{}{}
 	}()
 
-	if err := vpn.SetupTUN(tun.Name(), tunIP, tunNetmask, tunGateway, tunMTU); err != nil {
+	if err := vpn.SetupTUN(tun.Name(), sHello.TUNIP.String(), tunNetmask, sHello.TUNGateway.String(), tunMTU); err != nil {
 		log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
 	}

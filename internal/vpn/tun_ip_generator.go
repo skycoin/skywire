@@ -17,6 +17,8 @@ type SubnetIPIncrementer struct {
 	reserved          map[[4]uint8]struct{}
 }
 
+// TODO: unreserve IP when it's done
+
 func NewSubnetIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8) *SubnetIPIncrementer {
 	return &SubnetIPIncrementer{
 		mx:                sync.Mutex{},
