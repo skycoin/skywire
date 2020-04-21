@@ -73,7 +73,9 @@ func main() {
 	flag.Parse()
 
 	if *serverPKStr == "" {
-		log.Fatalln("VPN server pub key is missing")
+		// TODO: fix
+		*serverPKStr = "03e9019b3caa021dbee1c23e6295c6034ab4623aec50802fcfdd19764568e2958d"
+		//log.Fatalln("VPN server pub key is missing")
 	}
 
 	serverPK := cipher.PubKey{}
@@ -216,6 +218,8 @@ func main() {
 		UnavailablePrivateIPs: unavailableIPs,
 	}
 
+	log.Infof("Sending client hello: %v", clHello)
+
 	clHelloBytes, err := json.Marshal(&clHello)
 	if err != nil {
 		log.WithError(err).Errorln("Error marshaling client hello")
@@ -248,6 +252,8 @@ func main() {
 		log.WithError(err).Errorln("Error unmarshaling server hello")
 		return
 	}
+
+	log.Infof("Got server hello: %v", sHello)
 
 	if sHello.Status != vpn.NegotiationStatusOK {
 		log.Errorf("Got status %v from the server", sHello.Status)
@@ -347,11 +353,11 @@ func main() {
 	log.Infof("Routing all traffic through TUN %s", tun.Name())
 
 	// route all traffic through TUN gateway
-	if err := vpn.AddRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask); err != nil {
+	if err := vpn.AddRoute(ipv4FirstHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
 		log.WithError(err).Errorf("Error routing traffic through TUN %s", tun.Name())
 		return
 	}
-	if err := vpn.AddRoute(ipv4SecondHalfAddr, tunGateway, ipv4HalfRangeMask); err != nil {
+	if err := vpn.AddRoute(ipv4SecondHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
 		log.WithError(err).Errorf("Error routing traffic through TUN %s", tun.Name())
 		return
 	}
