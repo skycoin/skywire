@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
@@ -35,15 +37,17 @@ type ProcManager interface {
 // Implements `ProcManager`.
 type procManager struct {
 	log       *logging.Logger
+	discF     *appdisc.Factory
 	procs     map[string]*Proc
 	mx        sync.RWMutex
 	rpcServer *Server
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(log *logging.Logger, rpcServer *Server) ProcManager {
+func NewProcManager(log *logging.Logger, discF *appdisc.Factory, rpcServer *Server) ProcManager {
 	return &procManager{
 		log:       log,
+		discF:     discF,
 		procs:     make(map[string]*Proc),
 		rpcServer: rpcServer,
 	}
@@ -56,7 +60,13 @@ func (m *procManager) Start(log *logging.Logger, c appcommon.Config, args []stri
 		return 0, ErrAppAlreadyStarted
 	}
 
-	p, err := NewProc(log, c, args, stdout, stderr)
+	disc, ok := m.discF.Updater(c)
+	if !ok {
+		log.WithField("appName", c.Name).
+			Debug("No app discovery associated with app.")
+	}
+
+	p, err := NewProc(log, disc, c, args, stdout, stderr)
 	if err != nil {
 		return 0, err
 	}
