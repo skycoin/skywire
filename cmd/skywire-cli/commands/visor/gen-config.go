@@ -150,6 +150,8 @@ func defaultConfig() *visor.Config {
 
 	conf.UptimeTracker = visor.DefaultUptimeTrackerConfig()
 
+	conf.AppDiscovery = visor.DefaultAppDiscConfig()
+
 	conf.AppsPath = visor.DefaultAppsPath
 	conf.LocalPath = visor.DefaultLocalPath
 
