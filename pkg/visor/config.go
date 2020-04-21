@@ -435,14 +435,14 @@ func DefaultUptimeTrackerConfig() *UptimeTrackerConfig {
 
 // AppDiscConfig configures Skywire App Discovery Clients.
 type AppDiscConfig struct {
-	UpdateInterval time.Duration `json:"update_interval,omitempty"`
-	ProxyDisc      string        `json:"proxy_discovery_addr"`
+	UpdateInterval Duration `json:"update_interval,omitempty"`
+	ProxyDisc      string   `json:"proxy_discovery_addr"`
 }
 
 // DefaultAppDiscConfig returns the default app discovery config.
 func DefaultAppDiscConfig() *AppDiscConfig {
 	return &AppDiscConfig{
-		UpdateInterval: skyenv.AppDiscUpdateInterval,
+		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
 		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
 	}
 }
