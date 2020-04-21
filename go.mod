@@ -21,7 +21,6 @@ require (
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.4
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
-	golang.org/x/tools v0.0.0-20200421042724-cfa8b22178d2 // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
