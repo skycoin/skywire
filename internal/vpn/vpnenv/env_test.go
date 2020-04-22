@@ -1,7 +1,6 @@
-package vpn
+package vpnenv
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"testing"
@@ -46,10 +45,6 @@ func TestIPFromEnv(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.name == "Domain with port" {
-				fmt.Println()
-			}
-
 			os.Clearenv()
 
 			err := os.Setenv(envKey, tc.envVal)
