@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -23,13 +22,6 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/songgao/water"
-)
-
-const (
-	tunIP      = "192.168.255.4"
-	tunNetmask = "255.255.255.248"
-	tunGateway = "192.168.255.3"
-	tunMTU     = 1500
 )
 
 const (
@@ -73,8 +65,6 @@ func main() {
 	flag.Parse()
 
 	if *serverPKStr == "" {
-		// TODO: fix
-		//*serverPKStr = "03e9019b3caa021dbee1c23e6295c6034ab4623aec50802fcfdd19764568e2958d"
 		log.Fatalln("VPN server pub key is missing")
 	}
 
@@ -99,7 +89,7 @@ func main() {
 
 	log.Infof("Got default network gateway IP: %s", defaultGatewayIP)
 
-	dmsgDiscIP, ok, err := vpn.IPFromEnv(vpnenv.DmsgDiscAddrEnvKey)
+	dmsgDiscIP, ok, err := vpnenv.IPFromEnv(vpnenv.DmsgDiscAddrEnvKey)
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting Dmsg discovery IP")
 	}
@@ -118,7 +108,7 @@ func main() {
 
 	dmsgSrvAddrs := make([]net.IP, 0, dmsgSrvCount)
 	for i := 0; i < dmsgSrvCount; i++ {
-		dmsgSrvAddr, ok, err := vpn.IPFromEnv(vpnenv.DmsgAddrEnvPrefix + strconv.Itoa(i))
+		dmsgSrvAddr, ok, err := vpnenv.IPFromEnv(vpnenv.DmsgAddrEnvPrefix + strconv.Itoa(i))
 		if err != nil {
 			log.Fatalf("Invalid Dmsg address in key %s", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i))
 		}
@@ -129,7 +119,7 @@ func main() {
 		dmsgSrvAddrs = append(dmsgSrvAddrs, dmsgSrvAddr)
 	}
 
-	tpDiscIP, ok, err := vpn.IPFromEnv(vpnenv.TPDiscAddrEnvKey)
+	tpDiscIP, ok, err := vpnenv.IPFromEnv(vpnenv.TPDiscAddrEnvKey)
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting transport discovery IP")
 	}
@@ -137,7 +127,7 @@ func main() {
 		log.Fatalf("Env arg %s is not provided", vpnenv.TPDiscAddrEnvKey)
 	}
 
-	rfIP, ok, err := vpn.IPFromEnv(vpnenv.RFAddrEnvKey)
+	rfIP, ok, err := vpnenv.IPFromEnv(vpnenv.RFAddrEnvKey)
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting route finder IP")
 	}
@@ -160,7 +150,7 @@ func main() {
 				log.Fatalf("Env arg %s is not provided", vpnenv.STCPKeyEnvPrefix+strconv.Itoa(i))
 			}
 
-			stcpAddr, ok, err := vpn.IPFromEnv(vpnenv.STCPValueEnvPrefix + stcpKey)
+			stcpAddr, ok, err := vpnenv.IPFromEnv(vpnenv.STCPValueEnvPrefix + stcpKey)
 			if err != nil {
 				log.WithError(err).
 					Fatalf("Error getting IP of STCP item for env key %s", vpnenv.STCPValueEnvPrefix+stcpKey)
@@ -183,7 +173,7 @@ func main() {
 
 		hypervisorAddrs = make([]net.IP, 0, hypervisorsCount)
 		for i := 0; i < hypervisorsCount; i++ {
-			hypervisorAddr, ok, err := vpn.IPFromEnv(vpnenv.HypervisorAddrEnvPrefix + strconv.Itoa(i))
+			hypervisorAddr, ok, err := vpnenv.IPFromEnv(vpnenv.HypervisorAddrEnvPrefix + strconv.Itoa(i))
 			if err != nil {
 				log.WithError(err).Fatalf("Error getting IP of hypervisor for env key %s",
 					vpnenv.HypervisorAddrEnvPrefix+strconv.Itoa(i))
@@ -214,49 +204,27 @@ func main() {
 		log.WithError(err).Fatalln("Error connecting to VPN server")
 	}
 
-	clHello := vpn.ClientHello{
+	cHello := vpn.ClientHello{
 		UnavailablePrivateIPs: unavailableIPs,
 	}
 
-	log.Infof("Sending client hello: %v", clHello)
+	log.Infof("Sending client hello: %v", cHello)
 
-	clHelloBytes, err := json.Marshal(&clHello)
-	if err != nil {
-		log.WithError(err).Errorln("Error marshaling client hello")
-		return
-	}
-
-	if _, err := appConn.Write(clHelloBytes); err != nil {
+	if err := vpn.WriteJSON(appConn, &cHello); err != nil {
 		log.WithError(err).Errorln("Error sending client hello")
 		return
 	}
 
-	var sHelloBytes []byte
-	buf := make([]byte, 1024)
-	for {
-		n, err := appConn.Read(buf)
-		if err != nil {
-			log.WithError(err).Errorln("Error reading server hello")
-			return
-		}
-
-		sHelloBytes = append(sHelloBytes, buf[:n]...)
-
-		if n < 1024 {
-			break
-		}
-	}
-
 	var sHello vpn.ServerHello
-	if err := json.Unmarshal(sHelloBytes, &sHello); err != nil {
-		log.WithError(err).Errorln("Error unmarshaling server hello")
+	if err := vpn.ReadJSON(appConn, &sHello); err != nil {
+		log.WithError(err).Errorln("Error reading server hello")
 		return
 	}
 
 	log.Infof("Got server hello: %v", sHello)
 
-	if sHello.Status != vpn.NegotiationStatusOK {
-		log.Errorf("Got status %v from the server", sHello.Status)
+	if sHello.Status != vpn.HandshakeStatusOK {
+		log.Errorf("Got status %d (%s) from the server", sHello.Status, sHello.Status)
 		return
 	}
 
@@ -265,7 +233,7 @@ func main() {
 	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
 	})
-	if nil != err {
+	if err != nil {
 		log.WithError(err).Errorln("Error allocating TUN interface")
 		return
 	}
@@ -285,15 +253,8 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	shutdownC := make(chan struct{})
-
-	go func() {
-		<-osSigs
-
-		shutdownC <- struct{}{}
-	}()
-
-	if err := vpn.SetupTUN(tun.Name(), sHello.TUNIP.String(), tunNetmask, sHello.TUNGateway.String(), tunMTU); err != nil {
+	err = vpn.SetupTUN(tun.Name(), sHello.TUNIP.String(), vpn.TUNNetmask, sHello.TUNGateway.String(), vpn.TUNMTU)
+	if err != nil {
 		log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
 	}
@@ -411,10 +372,10 @@ func main() {
 		log.Infoln("Routing all traffic through default network gateway")
 
 		// remove main route
-		if err := vpn.DeleteRoute(ipv4FirstHalfAddr, tunGateway, ipv4HalfRangeMask); err != nil {
+		if err := vpn.DeleteRoute(ipv4FirstHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
 			log.WithError(err).Errorf("Error routing traffic through default network gateway")
 		}
-		if err := vpn.DeleteRoute(ipv4SecondHalfAddr, tunGateway, ipv4HalfRangeMask); err != nil {
+		if err := vpn.DeleteRoute(ipv4SecondHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
 			log.WithError(err).Errorf("Error routing traffic through default network gateway")
 		}
 	}()
@@ -431,5 +392,5 @@ func main() {
 		}
 	}()
 
-	<-shutdownC
+	<-osSigs
 }
