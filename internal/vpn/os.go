@@ -5,63 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
-	"strings"
 )
-
-func IPFromEnv(key string) (net.IP, bool, error) {
-	addr := os.Getenv(key)
-	if addr == "" {
-		return nil, false, nil
-	}
-
-	// in case whole URL is passed with the scheme
-	if strings.Contains(addr, "://") {
-		url, err := url.Parse(addr)
-		if err == nil {
-			addr = url.Host
-		}
-	}
-
-	// filter out port if it exists
-	if strings.Contains(addr, ":") {
-		addr = strings.Split(addr, ":")[0]
-	}
-
-	ip := net.ParseIP(addr)
-	if ip != nil {
-		return ip, true, nil
-	}
-
-	// got domain instead of IP, need to resolve
-	ips, err := net.LookupIP(addr)
-	if err != nil {
-		return nil, false, err
-	}
-	if len(ips) == 0 {
-		return nil, false, fmt.Errorf("couldn't resolve IPs of %s", addr)
-	}
-
-	// initially take just the first one
-	ip = ips[0]
-
-	return ip, true, nil
-}
-
-func run(bin string, args ...string) error {
-	cmd := exec.Command(bin, args...)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error running command %s: %w", bin, err)
-	}
-
-	return nil
-}
 
 func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
 	return run("/sbin/ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
@@ -79,7 +26,6 @@ func GatewayIP(ifcName string) (net.IP, error) {
 	outLines := bytes.Split(outBytes, []byte{'\n'})
 
 	for _, l := range outLines {
-		fmt.Printf("PARSING IP LINE: %s", l)
 		if bytes.Count(l, []byte{'.'}) != 3 {
 			// initially look for IPv4 address
 			continue
@@ -120,7 +66,6 @@ func DefaultNetworkIfc() (string, error) {
 			return "", err
 		}
 		for _, addr := range addrs {
-			fmt.Printf("Scanning addr: %s\n", addr)
 			var ip net.IP
 			switch v := addr.(type) {
 			case *net.IPNet:
@@ -192,20 +137,6 @@ func GetIPv6ForwardingValue() (string, error) {
 	return getIPForwardingValue(getIPv6ForwardingCMD)
 }
 
-func getIPForwardingValue(cmd string) (string, error) {
-	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()
-	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	val, err := parseIPForwardingOutput(outBytes)
-	if err != nil {
-		return "", fmt.Errorf("error parsing output of command %s: %w", cmd, err)
-	}
-
-	return val, nil
-}
-
 func SetIPv4ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
 	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
@@ -230,4 +161,30 @@ func EnableIPv4Forwarding() error {
 
 func EnableIPv6Forwarding() error {
 	return SetIPv6ForwardingValue("1")
+}
+
+func getIPForwardingValue(cmd string) (string, error) {
+	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()
+	if err != nil {
+		return "", fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	val, err := parseIPForwardingOutput(outBytes)
+	if err != nil {
+		return "", fmt.Errorf("error parsing output of command %s: %w", cmd, err)
+	}
+
+	return val, nil
+}
+
+func run(bin string, args ...string) error {
+	cmd := exec.Command(bin, args...)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error running command %s: %w", bin, err)
+	}
+
+	return nil
 }
