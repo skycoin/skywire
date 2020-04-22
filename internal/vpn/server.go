@@ -13,11 +13,6 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
-const (
-	tunNetmask = "255.255.255.248"
-	tunMTU     = 1500
-)
-
 type Server struct {
 	lisMx     sync.Mutex
 	lis       net.Listener
@@ -62,7 +57,10 @@ func (s *Server) Close() error {
 		return nil
 	}
 
-	return s.lis.Close()
+	err := s.lis.Close()
+	s.lis = nil
+
+	return err
 }
 
 func (s *Server) closeConn(conn net.Conn) {
@@ -74,7 +72,7 @@ func (s *Server) closeConn(conn net.Conn) {
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
-	tunIP, tunGateway, err := s.negotiate(conn)
+	tunIP, tunGateway, err := s.shakeHands(conn)
 	if err != nil {
 		s.log.WithError(err).Errorf("Error negotiating with client %s", conn.RemoteAddr())
 		return
@@ -96,7 +94,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	s.log.Infof("Allocated TUN %s", tun.Name())
 
-	if err := SetupTUN(tun.Name(), tunIP.String(), tunNetmask, tunGateway.String(), tunMTU); err != nil {
+	if err := SetupTUN(tun.Name(), tunIP.String(), TUNNetmask, tunGateway.String(), TUNMTU); err != nil {
 		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
 	}
@@ -126,32 +124,18 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) negotiate(conn net.Conn) (tunIP, tunGateway net.IP, err error) {
-	var cHelloBytes []byte
-	buf := make([]byte, 1024)
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			return nil, nil, fmt.Errorf("error reading client hello: %w", err)
-		}
-
-		cHelloBytes = append(cHelloBytes, buf[:n]...)
-
-		if n < 1024 {
-			break
-		}
-	}
-
+func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error) {
 	var cHello ClientHello
-	if err := json.Unmarshal(cHelloBytes, &cHello); err != nil {
-		return nil, nil, fmt.Errorf("error unmarshaling client helloL %w", err)
+	if err := ReadJSON(conn, &cHello); err != nil {
+		return nil, nil, fmt.Errorf("error reading client hello: %w", err)
 	}
 
 	var sHello ServerHello
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {
-			sHello.Status = NegotiationStatusIPNotReserved
+			// thi happens only on malformed IP
+			sHello.Status = HandshakeStatusBadRequest
 			if err := s.sendServerHello(conn, sHello); err != nil {
 				s.log.WithError(err).Errorln("Error sending server hello")
 			}
@@ -162,7 +146,7 @@ func (s *Server) negotiate(conn net.Conn) (tunIP, tunGateway net.IP, err error) 
 
 	subnet, err := s.ipGen.Next()
 	if err != nil {
-		sHello.Status = NegotiationStatusInternalError
+		sHello.Status = HandshakeNoFreeIPs
 		if err := s.sendServerHello(conn, sHello); err != nil {
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
@@ -172,7 +156,7 @@ func (s *Server) negotiate(conn net.Conn) (tunIP, tunGateway net.IP, err error) 
 
 	subnetOctets, err := fetchIPv4Bytes(subnet)
 	if err != nil {
-		sHello.Status = NegotiationStatusInternalError
+		sHello.Status = HandshakeStatusInternalError
 		if err := s.sendServerHello(conn, sHello); err != nil {
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}

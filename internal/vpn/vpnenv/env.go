@@ -1,7 +1,12 @@
 package vpnenv
 
 import (
+	"fmt"
+	"net"
+	"net/url"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 )
@@ -71,43 +76,44 @@ func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker string,
 		}
 	}
 
-	/*if c.Dmsg != nil {
-		envs[DmsgDiscAddrEnvKey] = c.Dmsg.Discovery
-	}
-
-	if len(dmsgSrvAddrs) != 0 {
-		envs[DmsgAddrsCountEnvKey] = strconv.FormatInt(int64(len(dmsgSrvAddrs)), 10)
-
-		for i := range dmsgSrvAddrs {
-			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = dmsgSrvAddrs[i]
-		}
-	}
-
-	if c.Transport != nil {
-		envs[TPDiscAddrEnvKey] = c.Transport.Discovery
-	}
-
-	if c.Routing != nil {
-		envs[RFAddrEnvKey] = c.Routing.RouteFinder
-	}
-
-	if c.STCP != nil {
-		envs[STCPTableLenEnvKey] = strconv.FormatInt(int64(len(c.STCP.PubKeyTable)), 10)
-
-		itemIdx := 0
-		for k, v := range c.STCP.PubKeyTable {
-			envs[STCPKeyEnvPrefix+strconv.FormatInt(int64(itemIdx), 10)] = k.String()
-			envs[STCPValueEnvPrefix+k.String()] = v
-		}
-	}
-
-	if len(c.Hypervisors) != 0 {
-		envs[HypervisorsCountEnvKey] = strconv.FormatInt(int64(len(c.Hypervisors)), 10)
-
-		for i, h := range c.Hypervisors {
-			envs[HypervisorAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = h.Addr
-		}
-	}*/
-
 	return envs
+}
+
+func IPFromEnv(key string) (net.IP, bool, error) {
+	addr := os.Getenv(key)
+	if addr == "" {
+		return nil, false, nil
+	}
+
+	// in case whole URL is passed with the scheme
+	if strings.Contains(addr, "://") {
+		url, err := url.Parse(addr)
+		if err == nil {
+			addr = url.Host
+		}
+	}
+
+	// filter out port if it exists
+	if strings.Contains(addr, ":") {
+		addr = strings.Split(addr, ":")[0]
+	}
+
+	ip := net.ParseIP(addr)
+	if ip != nil {
+		return ip, true, nil
+	}
+
+	// got domain instead of IP, need to resolve
+	ips, err := net.LookupIP(addr)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(ips) == 0 {
+		return nil, false, fmt.Errorf("couldn't resolve IPs of %s", addr)
+	}
+
+	// initially take just the first one
+	ip = ips[0]
+
+	return ip, true, nil
 }
