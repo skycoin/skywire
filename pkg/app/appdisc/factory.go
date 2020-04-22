@@ -1,6 +1,7 @@
 package appdisc
 
 import (
+	"strings"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -34,7 +35,7 @@ func (f *Factory) setDefaults() {
 }
 
 // Updater obtains an updater based on the app name and configuration.
-func (f *Factory) Updater(conf appcommon.Config) (Updater, bool) {
+func (f *Factory) Updater(conf appcommon.Config, args []string) (Updater, bool) {
 
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
@@ -45,6 +46,12 @@ func (f *Factory) Updater(conf appcommon.Config) (Updater, bool) {
 
 	switch conf.Name {
 	case "skysocks":
+
+		// Do not update in proxy discovery if passcode-protected.
+		if containsFlag(args, "passcode") {
+			return &emptyUpdater{}, false
+		}
+
 		return &proxyUpdater{
 			client: proxydisc.NewClient(log, proxydisc.Config{
 				PK:       f.PK,
@@ -54,7 +61,17 @@ func (f *Factory) Updater(conf appcommon.Config) (Updater, bool) {
 			}),
 			interval: f.UpdateInterval,
 		}, true
+
 	default:
 		return &emptyUpdater{}, false
 	}
+}
+
+func containsFlag(args []string, flag string) bool {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") && strings.Contains(arg, flag) {
+			return true
+		}
+	}
+	return false
 }

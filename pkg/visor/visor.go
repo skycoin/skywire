@@ -564,11 +564,12 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	appCfg := appcommon.Config{
-		Name:       config.App,
-		ServerAddr: visor.conf.AppServerAddr,
-		VisorPK:    visor.conf.Keys().PubKey.Hex(),
-		BinaryDir:  visor.appsPath,
-		WorkDir:    filepath.Join(visor.localPath, config.App),
+		Name:        config.App,
+		ServerAddr:  visor.conf.AppServerAddr,
+		VisorPK:     visor.conf.Keys().PubKey.Hex(),
+		RoutingPort: config.Port,
+		BinaryDir:   visor.appsPath,
+		WorkDir:     filepath.Join(visor.localPath, config.App),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {

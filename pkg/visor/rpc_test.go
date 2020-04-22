@@ -175,10 +175,11 @@ func TestStartStopApp(t *testing.T) {
 	}()
 
 	appCfg1 := appcommon.Config{
-		Name:       app,
-		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Keys().PubKey.Hex(),
-		WorkDir:    filepath.Join("", app),
+		Name:        app,
+		ServerAddr:  appcommon.DefaultServerAddr,
+		VisorPK:     visorCfg.Keys().PubKey.Hex(),
+		RoutingPort: apps["foo"].Port,
+		WorkDir:     filepath.Join("", app),
 	}
 
 	appArgs1 := append([]string{filepath.Join(visor.dir(), app)}, apps["foo"].Args...)
