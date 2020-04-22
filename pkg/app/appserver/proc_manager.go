@@ -60,7 +60,7 @@ func (m *procManager) Start(log *logging.Logger, c appcommon.Config, args []stri
 		return 0, ErrAppAlreadyStarted
 	}
 
-	disc, ok := m.discF.Updater(c)
+	disc, ok := m.discF.Updater(c, args)
 	if !ok {
 		log.WithField("appName", c.Name).
 			Debug("No app discovery associated with app.")
