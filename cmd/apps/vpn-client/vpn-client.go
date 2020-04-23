@@ -186,29 +186,6 @@ func main() {
 		}
 	}
 
-	var hypervisorAddrs []net.IP
-	hypervisorsCountStr := os.Getenv(vpn.HypervisorsCountEnvKey)
-	if hypervisorsCountStr != "" {
-		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
-		if err != nil {
-			log.WithError(err).Fatalf("Invalid hypervisors count: %s", hypervisorsCountStr)
-		}
-
-		hypervisorAddrs = make([]net.IP, 0, hypervisorsCount)
-		for i := 0; i < hypervisorsCount; i++ {
-			hypervisorAddr, ok, err := vpn.IPFromEnv(vpn.HypervisorAddrEnvPrefix + strconv.Itoa(i))
-			if err != nil {
-				log.WithError(err).Fatalf("Error getting IP of hypervisor for env key %s",
-					vpn.HypervisorAddrEnvPrefix+strconv.Itoa(i))
-			}
-			if !ok {
-				log.Fatalf("Env arg %s is not provided", vpn.HypervisorAddrEnvPrefix+strconv.Itoa(i))
-			}
-
-			hypervisorAddrs = append(hypervisorAddrs, hypervisorAddr)
-		}
-	}
-
 	appCfg, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting app client config")
@@ -310,16 +287,6 @@ func main() {
 		}
 	}
 
-	for _, hypervisorAddr := range hypervisorAddrs {
-		if !hypervisorAddr.IsLoopback() {
-			log.Infof("Adding direct route to hypervisor: %s", hypervisorAddr)
-			if err := vpn.AddRoute(hypervisorAddr.String(), defaultGateway.String(), ""); err != nil {
-				log.WithError(err).Errorf("Error adding direct route to hypervisor: %s", hypervisorAddr)
-				return
-			}
-		}
-	}
-
 	log.Infof("Routing all traffic through TUN %s", tun.Name())
 
 	// route all traffic through TUN gateway
@@ -365,15 +332,6 @@ func main() {
 				log.Infof("Removing direct STCP route to visor: %s", stcpEntity)
 				if err := vpn.DeleteRoute(stcpEntity.String(), defaultGateway.String(), ""); err != nil {
 					log.WithError(err).Errorf("Error removing direct STCP route to visor: %s", stcpEntity)
-				}
-			}
-		}
-
-		for _, hypervisorAddr := range hypervisorAddrs {
-			if !hypervisorAddr.IsLoopback() {
-				log.Infof("Removing direct route to hypervisor: %s", hypervisorAddr)
-				if err := vpn.DeleteRoute(hypervisorAddr.String(), defaultGateway.String(), ""); err != nil {
-					log.WithError(err).Errorf("Error removing direct route to hypervisor: %s", hypervisorAddr)
 				}
 			}
 		}

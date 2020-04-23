@@ -32,16 +32,11 @@ const (
 	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
 	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
 	STCPValueEnvPrefix = "STCP_TABLE_"
-
-	// HypervisorsCountEnvKey is env arg holding hypervisors count.
-	HypervisorsCountEnvKey = "HYPERVISOR_COUNT"
-	// HypervisorAddrEnvPrefix is prefix for each hypervisor address.
-	HypervisorAddrEnvPrefix = "ADDR_HYPERVISOR_"
 )
 
 // AppEnvArgs forms env args to pass to the app process.
 func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker string,
-	stcpTable map[cipher.PubKey]string, hypervisors, dmsgSrvAddrs []string) map[string]string {
+	stcpTable map[cipher.PubKey]string, dmsgSrvAddrs []string) map[string]string {
 	envs := make(map[string]string)
 
 	if dmsgDiscovery != "" {
@@ -67,14 +62,6 @@ func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker string,
 		for k, v := range stcpTable {
 			envs[STCPKeyEnvPrefix+strconv.FormatInt(int64(itemIdx), 10)] = k.String()
 			envs[STCPValueEnvPrefix+k.String()] = v
-		}
-	}
-
-	if len(hypervisors) != 0 {
-		envs[HypervisorsCountEnvKey] = strconv.FormatInt(int64(len(hypervisors)), 10)
-
-		for i, h := range hypervisors {
-			envs[HypervisorAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = h
 		}
 	}
 
