@@ -53,7 +53,7 @@ func TestIPFromEnv(t *testing.T) {
 			ip, ok, err := IPFromEnv(envKey)
 			require.NoError(t, err)
 			require.True(t, ok)
-			require.Equal(t, want, ip)
+			require.True(t, ip.Equal(want))
 		})
 	}
 }
