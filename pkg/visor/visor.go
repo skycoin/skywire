@@ -592,7 +592,6 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 			rf            string
 			uptimeTracker string
 			stcpTable     map[cipher.PubKey]string
-			hypervisors   []string
 			dmsgServers   []string
 		)
 		if visor.conf.Dmsg != nil {
@@ -614,19 +613,8 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 				stcpTable[k] = v
 			}
 		}
-		if len(visor.conf.Hypervisors) != 0 {
-			hypervisors = make([]string, 0, len(visor.conf.Hypervisors))
-			for _, h := range visor.conf.Hypervisors {
-				hypervisors = append(hypervisors, h.Addr)
-			}
-		}
 
-		appEnvs = vpn.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker, stcpTable, hypervisors,
-			dmsgServers)
-		//[]string{"dmsg.server02a2d4c3.skywire.skycoin.com", "dmsg.server02a4.skywire.skycoin.com"})
-		//[]string{"172.105.115.99", "172.104.52.156"})
-
-		visor.logger.Infof("STARTING VPN CLIENT WITH ARGS: %v", appArgs)
+		appEnvs = vpn.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker, stcpTable, dmsgServers)
 	}
 
 	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)
