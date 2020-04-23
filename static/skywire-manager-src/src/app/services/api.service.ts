@@ -86,6 +86,11 @@ export class ApiService {
     body = body ? body : {};
     options = options ? options : new RequestOptions();
 
+    // Sanitize the URL.
+    if (url.startsWith('/')) {
+      url = url.substr(1, url.length - 1);
+    }
+
     return this.http.request(method, this.apiPrefix + url, {
       ...this.getRequestOptions(options),
       responseType: options.responseType,
