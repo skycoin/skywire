@@ -1,11 +1,16 @@
 package vpn
 
+// HandshakeStatus is a status of Client/Server handshake.
 type HandshakeStatus int
 
 const (
+	// HandshakeStatusOK is returned on successful handshake.
 	HandshakeStatusOK HandshakeStatus = iota
+	// HandshakeStatusBadRequest is returned if Client hello message was malformed.
 	HandshakeStatusBadRequest
+	// HandshakeNoFreeIPs is returned if no free IPs left to assign to TUNs.
 	HandshakeNoFreeIPs
+	// HandshakeStatusInternalError is returned in all other cases when some server error occurred.
 	HandshakeStatusInternalError
 )
 

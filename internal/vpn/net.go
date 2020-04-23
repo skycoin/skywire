@@ -6,6 +6,7 @@ import (
 	"net"
 )
 
+// WriteJSON marshals `data` and sends it over the `conn`.
 func WriteJSON(conn net.Conn, data interface{}) error {
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
@@ -24,6 +25,7 @@ func WriteJSON(conn net.Conn, data interface{}) error {
 	return nil
 }
 
+// ReadJSON reads portion of data from the `conn` and unmarshals it into `data`.
 func ReadJSON(conn net.Conn, data interface{}) error {
 	const bufSize = 1024
 

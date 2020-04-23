@@ -1,4 +1,4 @@
-package vpnenv
+package vpn
 
 import (
 	"fmt"
@@ -12,24 +12,34 @@ import (
 )
 
 const (
+	// DmsgAddrsCountEnvKey is env arg holding Dmsg servers count.
 	DmsgAddrsCountEnvKey = "DMSG_SRV_COUNT"
-	DmsgAddrEnvPrefix    = "ADDR_DMSG_SRV_"
+	// DmsgAddrEnvPrefix is prefix for each env arg holding Dmsg server address.
+	DmsgAddrEnvPrefix = "ADDR_DMSG_SRV_"
 
-	DmsgDiscAddrEnvKey      = "ADDR_DMSG_DISC"
-	TPDiscAddrEnvKey        = "ADDR_TP_DISC"
-	RFAddrEnvKey            = "ADDR_RF"
+	// DmsgDiscAddrEnvKey is env arg holding Dmsg discovery address.
+	DmsgDiscAddrEnvKey = "ADDR_DMSG_DISC"
+	// TPDiscAddrEnvKey is env arg holding TP discovery address.
+	TPDiscAddrEnvKey = "ADDR_TP_DISC"
+	// RFAddrEnvKey is env arg holding RF address.
+	RFAddrEnvKey = "ADDR_RF"
+	// UptimeTrackerAddrEnvKey is env arg holding uptime tracker address.
 	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
 
+	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
-	STCPKeyEnvPrefix   = "STCP_TABLE_KEY_"
+	// STCPKeyEnvPrefix is prefix for each env arg holding STCP entity key.
+	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
+	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
 	STCPValueEnvPrefix = "STCP_TABLE_"
 
-	HypervisorsCountEnvKey  = "HYPERVISOR_COUNT"
+	// HypervisorsCountEnvKey is env arg holding hypervisors count.
+	HypervisorsCountEnvKey = "HYPERVISOR_COUNT"
+	// HypervisorAddrEnvPrefix is prefix for each hypervisor address.
 	HypervisorAddrEnvPrefix = "ADDR_HYPERVISOR_"
 )
 
-// TODO: refactor package, temporary solution
-
+// AppEnvArgs forms env args to pass to the app process.
 func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker string,
 	stcpTable map[cipher.PubKey]string, hypervisors, dmsgSrvAddrs []string) map[string]string {
 	envs := make(map[string]string)
@@ -79,6 +89,13 @@ func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker string,
 	return envs
 }
 
+// IPFromEnv gets IP address from the env arg `key`. Env value may be one of:
+// - full URL with port;
+// - full URL without port;
+// - domain with port;
+// - domain without port;
+// - IP with port;
+// - IP without port.
 func IPFromEnv(key string) (net.IP, bool, error) {
 	addr := os.Getenv(key)
 	if addr == "" {
@@ -109,7 +126,7 @@ func IPFromEnv(key string) (net.IP, bool, error) {
 		return nil, false, err
 	}
 	if len(ips) == 0 {
-		return nil, false, fmt.Errorf("couldn't resolve IPs of %s", addr)
+		return nil, false, fmt.Errorf("error resolving IPs of %s", addr)
 	}
 
 	// initially take just the first one

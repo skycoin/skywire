@@ -11,11 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
-	"github.com/SkycoinProject/skywire-mainnet/internal/vpn/vpnenv"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -61,6 +59,38 @@ func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	return conn, nil
 }
 
+func shakeHands(conn net.Conn, defaultGateway net.IP) (TUNIP, TUNGateway net.IP, err error) {
+	unavailableIPs, err := vpn.LocalNetworkInterfaceIPs()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
+	}
+
+	unavailableIPs = append(unavailableIPs, defaultGateway)
+
+	cHello := vpn.ClientHello{
+		UnavailablePrivateIPs: unavailableIPs,
+	}
+
+	log.Debugf("Sending client hello: %v", cHello)
+
+	if err := vpn.WriteJSON(conn, &cHello); err != nil {
+		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
+	}
+
+	var sHello vpn.ServerHello
+	if err := vpn.ReadJSON(conn, &sHello); err != nil {
+		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
+	}
+
+	log.Debugf("Got server hello: %v", sHello)
+
+	if sHello.Status != vpn.HandshakeStatusOK {
+		return nil, nil, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
+	}
+
+	return sHello.TUNIP, sHello.TUNGateway, nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -75,29 +105,22 @@ func main() {
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
 
-	unavailableIPs, err := vpn.GetIPsToReserve()
-	if err != nil {
-		log.WithError(err).Fatalln("Error getting unavailable private IPs")
-	}
-
-	defaultGatewayIP, err := vpn.DefaultGatewayIP()
+	defaultGateway, err := vpn.DefaultNetworkGateway()
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting default network gateway")
 	}
 
-	unavailableIPs = append(unavailableIPs, defaultGatewayIP)
+	log.Infof("Got default network gateway IP: %s", defaultGateway)
 
-	log.Infof("Got default network gateway IP: %s", defaultGatewayIP)
-
-	dmsgDiscIP, ok, err := vpnenv.IPFromEnv(vpnenv.DmsgDiscAddrEnvKey)
+	dmsgDiscIP, ok, err := vpn.IPFromEnv(vpn.DmsgDiscAddrEnvKey)
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting Dmsg discovery IP")
 	}
 	if !ok {
-		log.Fatalf("Env arg %s is not provided", vpnenv.DmsgDiscAddrEnvKey)
+		log.Fatalf("Env arg %s is not provided", vpn.DmsgDiscAddrEnvKey)
 	}
 
-	dmsgSrvCountStr := os.Getenv(vpnenv.DmsgAddrsCountEnvKey)
+	dmsgSrvCountStr := os.Getenv(vpn.DmsgAddrsCountEnvKey)
 	if dmsgSrvCountStr == "" {
 		log.Fatalln("Dmsg servers count is not provided")
 	}
@@ -108,35 +131,35 @@ func main() {
 
 	dmsgSrvAddrs := make([]net.IP, 0, dmsgSrvCount)
 	for i := 0; i < dmsgSrvCount; i++ {
-		dmsgSrvAddr, ok, err := vpnenv.IPFromEnv(vpnenv.DmsgAddrEnvPrefix + strconv.Itoa(i))
+		dmsgSrvAddr, ok, err := vpn.IPFromEnv(vpn.DmsgAddrEnvPrefix + strconv.Itoa(i))
 		if err != nil {
-			log.Fatalf("Invalid Dmsg address in key %s", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i))
+			log.Fatalf("Invalid Dmsg address in key %s", vpn.DmsgAddrEnvPrefix+strconv.Itoa(i))
 		}
 		if !ok {
-			log.Fatalf("Env arg %s is not provided", vpnenv.DmsgAddrEnvPrefix+strconv.Itoa(i))
+			log.Fatalf("Env arg %s is not provided", vpn.DmsgAddrEnvPrefix+strconv.Itoa(i))
 		}
 
 		dmsgSrvAddrs = append(dmsgSrvAddrs, dmsgSrvAddr)
 	}
 
-	tpDiscIP, ok, err := vpnenv.IPFromEnv(vpnenv.TPDiscAddrEnvKey)
+	tpDiscIP, ok, err := vpn.IPFromEnv(vpn.TPDiscAddrEnvKey)
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting transport discovery IP")
 	}
 	if !ok {
-		log.Fatalf("Env arg %s is not provided", vpnenv.TPDiscAddrEnvKey)
+		log.Fatalf("Env arg %s is not provided", vpn.TPDiscAddrEnvKey)
 	}
 
-	rfIP, ok, err := vpnenv.IPFromEnv(vpnenv.RFAddrEnvKey)
+	rfIP, ok, err := vpn.IPFromEnv(vpn.RFAddrEnvKey)
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting route finder IP")
 	}
 	if !ok {
-		log.Fatalf("Env arg %s is not provided", vpnenv.RFAddrEnvKey)
+		log.Fatalf("Env arg %s is not provided", vpn.RFAddrEnvKey)
 	}
 
 	var stcpEntities []net.IP
-	stcpTableLenStr := os.Getenv(vpnenv.STCPTableLenEnvKey)
+	stcpTableLenStr := os.Getenv(vpn.STCPTableLenEnvKey)
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
 		if err != nil {
@@ -145,18 +168,18 @@ func main() {
 
 		stcpEntities = make([]net.IP, 0, stcpTableLen)
 		for i := 0; i < stcpTableLen; i++ {
-			stcpKey := os.Getenv(vpnenv.STCPKeyEnvPrefix + strconv.Itoa(i))
+			stcpKey := os.Getenv(vpn.STCPKeyEnvPrefix + strconv.Itoa(i))
 			if stcpKey == "" {
-				log.Fatalf("Env arg %s is not provided", vpnenv.STCPKeyEnvPrefix+strconv.Itoa(i))
+				log.Fatalf("Env arg %s is not provided", vpn.STCPKeyEnvPrefix+strconv.Itoa(i))
 			}
 
-			stcpAddr, ok, err := vpnenv.IPFromEnv(vpnenv.STCPValueEnvPrefix + stcpKey)
+			stcpAddr, ok, err := vpn.IPFromEnv(vpn.STCPValueEnvPrefix + stcpKey)
 			if err != nil {
 				log.WithError(err).
-					Fatalf("Error getting IP of STCP item for env key %s", vpnenv.STCPValueEnvPrefix+stcpKey)
+					Fatalf("Error getting IP of STCP item for env key %s", vpn.STCPValueEnvPrefix+stcpKey)
 			}
 			if !ok {
-				log.Fatalf("Env arg %s is not provided", vpnenv.STCPValueEnvPrefix+stcpKey)
+				log.Fatalf("Env arg %s is not provided", vpn.STCPValueEnvPrefix+stcpKey)
 			}
 
 			stcpEntities = append(stcpEntities, stcpAddr)
@@ -164,7 +187,7 @@ func main() {
 	}
 
 	var hypervisorAddrs []net.IP
-	hypervisorsCountStr := os.Getenv(vpnenv.HypervisorsCountEnvKey)
+	hypervisorsCountStr := os.Getenv(vpn.HypervisorsCountEnvKey)
 	if hypervisorsCountStr != "" {
 		hypervisorsCount, err := strconv.Atoi(hypervisorsCountStr)
 		if err != nil {
@@ -173,13 +196,13 @@ func main() {
 
 		hypervisorAddrs = make([]net.IP, 0, hypervisorsCount)
 		for i := 0; i < hypervisorsCount; i++ {
-			hypervisorAddr, ok, err := vpnenv.IPFromEnv(vpnenv.HypervisorAddrEnvPrefix + strconv.Itoa(i))
+			hypervisorAddr, ok, err := vpn.IPFromEnv(vpn.HypervisorAddrEnvPrefix + strconv.Itoa(i))
 			if err != nil {
 				log.WithError(err).Fatalf("Error getting IP of hypervisor for env key %s",
-					vpnenv.HypervisorAddrEnvPrefix+strconv.Itoa(i))
+					vpn.HypervisorAddrEnvPrefix+strconv.Itoa(i))
 			}
 			if !ok {
-				log.Fatalf("Env arg %s is not provided", vpnenv.HypervisorAddrEnvPrefix+strconv.Itoa(i))
+				log.Fatalf("Env arg %s is not provided", vpn.HypervisorAddrEnvPrefix+strconv.Itoa(i))
 			}
 
 			hypervisorAddrs = append(hypervisorAddrs, hypervisorAddr)
@@ -204,31 +227,17 @@ func main() {
 		log.WithError(err).Fatalln("Error connecting to VPN server")
 	}
 
-	cHello := vpn.ClientHello{
-		UnavailablePrivateIPs: unavailableIPs,
-	}
-
-	log.Infof("Sending client hello: %v", cHello)
-
-	if err := vpn.WriteJSON(appConn, &cHello); err != nil {
-		log.WithError(err).Errorln("Error sending client hello")
-		return
-	}
-
-	var sHello vpn.ServerHello
-	if err := vpn.ReadJSON(appConn, &sHello); err != nil {
-		log.WithError(err).Errorln("Error reading server hello")
-		return
-	}
-
-	log.Infof("Got server hello: %v", sHello)
-
-	if sHello.Status != vpn.HandshakeStatusOK {
-		log.Errorf("Got status %d (%s) from the server", sHello.Status, sHello.Status)
-		return
-	}
-
 	log.Infof("Dialed %s", appConn.RemoteAddr())
+
+	tunIP, tunGateway, err := shakeHands(appConn, defaultGateway)
+	if err != nil {
+		log.WithError(err).Errorln("Error during client/server handshake")
+		return
+	}
+
+	log.Infof("Performed handshake with %s", appConn.RemoteAddr())
+	log.Infof("Local TUN IP: %s", tunIP.String())
+	log.Infof("Local TUN gateway: %s", tunGateway.String())
 
 	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
@@ -253,7 +262,7 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	err = vpn.SetupTUN(tun.Name(), sHello.TUNIP.String(), vpn.TUNNetmask, sHello.TUNGateway.String(), vpn.TUNMTU)
+	err = vpn.SetupTUN(tun.Name(), tunIP.String(), vpn.TUNNetmask, tunGateway.String(), vpn.TUNMTU)
 	if err != nil {
 		log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
@@ -262,7 +271,7 @@ func main() {
 	// route Skywire service traffic through the default gateway
 	if !dmsgDiscIP.IsLoopback() {
 		log.Infof("Adding direct route to Dmsg discovery: %s", dmsgDiscIP)
-		if err := vpn.AddRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), ""); err != nil {
+		if err := vpn.AddRoute(dmsgDiscIP.String(), defaultGateway.String(), ""); err != nil {
 			log.WithError(err).Errorf("Error adding direct route to Dmsg discovery: %s", dmsgDiscIP)
 			return
 		}
@@ -270,7 +279,7 @@ func main() {
 	for _, dmsgIP := range dmsgSrvAddrs {
 		if !dmsgIP.IsLoopback() {
 			log.Infof("Adding direct route to Dmsg server: %s", dmsgIP)
-			if err := vpn.AddRoute(dmsgIP.String(), defaultGatewayIP.String(), ""); err != nil {
+			if err := vpn.AddRoute(dmsgIP.String(), defaultGateway.String(), ""); err != nil {
 				log.WithError(err).Errorf("Error adding direct route to Dmsg server: %s", dmsgIP)
 				return
 			}
@@ -278,14 +287,14 @@ func main() {
 	}
 	if !tpDiscIP.IsLoopback() {
 		log.Infof("Adding direct route to TP discovery: %s", tpDiscIP)
-		if err := vpn.AddRoute(tpDiscIP.String(), defaultGatewayIP.String(), ""); err != nil {
+		if err := vpn.AddRoute(tpDiscIP.String(), defaultGateway.String(), ""); err != nil {
 			log.WithError(err).Errorf("Error adding direct route to TP discovery: %s", tpDiscIP)
 			return
 		}
 	}
 	if !rfIP.IsLoopback() {
 		log.Infof("Adding direct route to RF: %s", rfIP)
-		if err := vpn.AddRoute(rfIP.String(), defaultGatewayIP.String(), ""); err != nil {
+		if err := vpn.AddRoute(rfIP.String(), defaultGateway.String(), ""); err != nil {
 			log.WithError(err).Errorf("Error adding direct route to RF: %s", rfIP)
 			return
 		}
@@ -294,7 +303,7 @@ func main() {
 	for _, stcpEntity := range stcpEntities {
 		if !stcpEntity.IsLoopback() {
 			log.Infof("Adding direct STCP route to visor: %s", stcpEntity)
-			if err := vpn.AddRoute(stcpEntity.String(), defaultGatewayIP.String(), ""); err != nil {
+			if err := vpn.AddRoute(stcpEntity.String(), defaultGateway.String(), ""); err != nil {
 				log.WithError(err).Errorf("Error adding direct route to visor: %s", stcpEntity)
 				return
 			}
@@ -304,7 +313,7 @@ func main() {
 	for _, hypervisorAddr := range hypervisorAddrs {
 		if !hypervisorAddr.IsLoopback() {
 			log.Infof("Adding direct route to hypervisor: %s", hypervisorAddr)
-			if err := vpn.AddRoute(hypervisorAddr.String(), defaultGatewayIP.String(), ""); err != nil {
+			if err := vpn.AddRoute(hypervisorAddr.String(), defaultGateway.String(), ""); err != nil {
 				log.WithError(err).Errorf("Error adding direct route to hypervisor: %s", hypervisorAddr)
 				return
 			}
@@ -314,11 +323,11 @@ func main() {
 	log.Infof("Routing all traffic through TUN %s", tun.Name())
 
 	// route all traffic through TUN gateway
-	if err := vpn.AddRoute(ipv4FirstHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
+	if err := vpn.AddRoute(ipv4FirstHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
 		log.WithError(err).Errorf("Error routing traffic through TUN %s", tun.Name())
 		return
 	}
-	if err := vpn.AddRoute(ipv4SecondHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
+	if err := vpn.AddRoute(ipv4SecondHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
 		log.WithError(err).Errorf("Error routing traffic through TUN %s", tun.Name())
 		return
 	}
@@ -326,27 +335,27 @@ func main() {
 	defer func() {
 		if !dmsgDiscIP.IsLoopback() {
 			log.Infof("Removing direct route to Dmsg discovery: %s", dmsgDiscIP)
-			if err := vpn.DeleteRoute(dmsgDiscIP.String(), defaultGatewayIP.String(), ""); err != nil {
+			if err := vpn.DeleteRoute(dmsgDiscIP.String(), defaultGateway.String(), ""); err != nil {
 				log.WithError(err).Errorf("Error removing direct route to Dmsg discovery: %s", dmsgDiscIP)
 			}
 		}
 		for _, dmsgIP := range dmsgSrvAddrs {
 			if !dmsgIP.IsLoopback() {
 				log.Infof("Removing direct route to Dmsg server: %s", dmsgIP)
-				if err := vpn.DeleteRoute(dmsgIP.String(), defaultGatewayIP.String(), ""); err != nil {
+				if err := vpn.DeleteRoute(dmsgIP.String(), defaultGateway.String(), ""); err != nil {
 					log.WithError(err).Errorf("Error removing direct route to Dmsg server: %s", dmsgIP)
 				}
 			}
 		}
 		if !tpDiscIP.IsLoopback() {
 			log.Infof("Removing direct route to TP discovery: %s", tpDiscIP)
-			if err := vpn.DeleteRoute(tpDiscIP.String(), defaultGatewayIP.String(), ""); err != nil {
+			if err := vpn.DeleteRoute(tpDiscIP.String(), defaultGateway.String(), ""); err != nil {
 				log.WithError(err).Errorf("Error removing direct route to TP discovery: %s", tpDiscIP)
 			}
 		}
 		if !rfIP.IsLoopback() {
 			log.Infof("Removing direct route to RF: %s", rfIP)
-			if err := vpn.DeleteRoute(rfIP.String(), defaultGatewayIP.String(), ""); err != nil {
+			if err := vpn.DeleteRoute(rfIP.String(), defaultGateway.String(), ""); err != nil {
 				log.WithError(err).Errorf("Error removing direct route to RF: %s", rfIP)
 			}
 		}
@@ -354,7 +363,7 @@ func main() {
 		for _, stcpEntity := range stcpEntities {
 			if !stcpEntity.IsLoopback() {
 				log.Infof("Removing direct STCP route to visor: %s", stcpEntity)
-				if err := vpn.DeleteRoute(stcpEntity.String(), defaultGatewayIP.String(), ""); err != nil {
+				if err := vpn.DeleteRoute(stcpEntity.String(), defaultGateway.String(), ""); err != nil {
 					log.WithError(err).Errorf("Error removing direct STCP route to visor: %s", stcpEntity)
 				}
 			}
@@ -363,7 +372,7 @@ func main() {
 		for _, hypervisorAddr := range hypervisorAddrs {
 			if !hypervisorAddr.IsLoopback() {
 				log.Infof("Removing direct route to hypervisor: %s", hypervisorAddr)
-				if err := vpn.DeleteRoute(hypervisorAddr.String(), defaultGatewayIP.String(), ""); err != nil {
+				if err := vpn.DeleteRoute(hypervisorAddr.String(), defaultGateway.String(), ""); err != nil {
 					log.WithError(err).Errorf("Error removing direct route to hypervisor: %s", hypervisorAddr)
 				}
 			}
@@ -372,10 +381,10 @@ func main() {
 		log.Infoln("Routing all traffic through default network gateway")
 
 		// remove main route
-		if err := vpn.DeleteRoute(ipv4FirstHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
+		if err := vpn.DeleteRoute(ipv4FirstHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
 			log.WithError(err).Errorf("Error routing traffic through default network gateway")
 		}
-		if err := vpn.DeleteRoute(ipv4SecondHalfAddr, sHello.TUNGateway.String(), ipv4HalfRangeMask); err != nil {
+		if err := vpn.DeleteRoute(ipv4SecondHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
 			log.WithError(err).Errorf("Error routing traffic through default network gateway")
 		}
 	}()
