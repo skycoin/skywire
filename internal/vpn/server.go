@@ -1,33 +1,34 @@
 package vpn
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"sync"
 
-	"github.com/songgao/water"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/songgao/water"
 )
 
+// Server is a VPN server.
 type Server struct {
 	lisMx     sync.Mutex
 	lis       net.Listener
 	log       *logging.MasterLogger
 	serveOnce sync.Once
-	ipGen     *TUNIPGenerator
+	ipGen     *IPGenerator
 }
 
+// NewServer creates VPN server instance.
 func NewServer(l *logging.MasterLogger) *Server {
 	return &Server{
 		log:   l,
-		ipGen: NewTUNIPGenerator(),
+		ipGen: NewIPGenerator(),
 	}
 }
 
+// Serve accepts connections from `l` and serves them.
 func (s *Server) Serve(l net.Listener) error {
 	serveErr := errors.New("already serving")
 	s.serveOnce.Do(func() {
@@ -49,6 +50,7 @@ func (s *Server) Serve(l net.Listener) error {
 	return serveErr
 }
 
+// Close shuts server down.
 func (s *Server) Close() error {
 	s.lisMx.Lock()
 	defer s.lisMx.Unlock()
@@ -81,8 +83,9 @@ func (s *Server) serveConn(conn net.Conn) {
 	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
 	})
-	if nil != err {
+	if err != nil {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
+		return
 	}
 	defer func() {
 		s.log.Errorln("DONE SERVING, CLOSING TUN")
@@ -107,7 +110,6 @@ func (s *Server) serveConn(conn net.Conn) {
 		if _, err := io.Copy(tun, conn); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
-		s.log.Errorln("DONE COPYING FROM CONN TO TUN")
 	}()
 	go func() {
 		defer close(tunToConnCh)
@@ -115,9 +117,9 @@ func (s *Server) serveConn(conn net.Conn) {
 		if _, err := io.Copy(conn, tun); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
 		}
-		s.log.Errorln("DONE COPYING FROM TUN TO CONN")
 	}()
 
+	// only one side may fail here, so we wait till at least one fails
 	select {
 	case <-connToTunDoneCh:
 	case <-tunToConnCh:
@@ -134,9 +136,9 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {
-			// thi happens only on malformed IP
+			// this happens only on malformed IP
 			sHello.Status = HandshakeStatusBadRequest
-			if err := s.sendServerHello(conn, sHello); err != nil {
+			if err := WriteJSON(conn, &sHello); err != nil {
 				s.log.WithError(err).Errorln("Error sending server hello")
 			}
 
@@ -147,17 +149,17 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	subnet, err := s.ipGen.Next()
 	if err != nil {
 		sHello.Status = HandshakeNoFreeIPs
-		if err := s.sendServerHello(conn, sHello); err != nil {
+		if err := WriteJSON(conn, &sHello); err != nil {
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
 		return nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
 	}
 
-	subnetOctets, err := fetchIPv4Bytes(subnet)
+	subnetOctets, err := fetchIPv4Octets(subnet)
 	if err != nil {
 		sHello.Status = HandshakeStatusInternalError
-		if err := s.sendServerHello(conn, sHello); err != nil {
+		if err := WriteJSON(conn, &sHello); err != nil {
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
@@ -173,33 +175,9 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	sHello.TUNIP = cTUNIP
 	sHello.TUNGateway = cTUNGateway
 
-	if err := s.sendServerHello(conn, sHello); err != nil {
-		return nil, nil, fmt.Errorf("error finishing negotiation: error sending server hello: %w", err)
+	if err := WriteJSON(conn, &sHello); err != nil {
+		return nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
 	}
 
 	return sTUNIP, sTUNGateway, nil
-}
-
-func (s *Server) sendServerHello(conn net.Conn, h ServerHello) error {
-	sHelloBytes, err := json.Marshal(&h)
-	if err != nil {
-		return fmt.Errorf("error marshaling server hello: %w", err)
-	}
-
-	n, err := conn.Write(sHelloBytes)
-	if err != nil {
-		return fmt.Errorf("error writing server hello: %w", err)
-	}
-
-	totalSent := n
-	for totalSent != len(sHelloBytes) {
-		n, err := conn.Write(sHelloBytes[totalSent:])
-		if err != nil {
-			return fmt.Errorf("error writing server hello: %w", err)
-		}
-
-		totalSent += n
-	}
-
-	return nil
 }

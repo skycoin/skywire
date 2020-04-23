@@ -10,11 +10,13 @@ import (
 	"strconv"
 )
 
+// SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
 func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
 	return run("/sbin/ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
-func GatewayIP(ifcName string) (net.IP, error) {
+// NetworkIfcGateway gets gateway of the network interface with name `ifcName`.
+func NetworkIfcGateway(ifcName string) (net.IP, error) {
 	cmd := fmt.Sprintf(gatewayForIfcCMDFmt, ifcName)
 	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()
 	if err != nil {
@@ -40,20 +42,23 @@ func GatewayIP(ifcName string) (net.IP, error) {
 	return nil, fmt.Errorf("couldn't find gateway IP for \"%s\"", ifcName)
 }
 
-func DefaultGatewayIP() (net.IP, error) {
+// DefaultNetworkGateway fetches system's default network gateway.
+func DefaultNetworkGateway() (net.IP, error) {
 	defaultNetworkIfcName, err := DefaultNetworkIfc()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface name: %w", err)
 	}
 
-	return GatewayIP(defaultNetworkIfcName)
+	return NetworkIfcGateway(defaultNetworkIfcName)
 }
 
+// DefaultNetworkIfc fetches default network interface name.
 func DefaultNetworkIfc() (string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error getting network interfaces: %w", err)
 	}
+
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 {
 			continue // interface down
@@ -63,7 +68,7 @@ func DefaultNetworkIfc() (string, error) {
 		}
 		addrs, err := iface.Addrs()
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("error getting addresses for interface %s: %w", iface.Name, err)
 		}
 		for _, addr := range addrs {
 			var ip net.IP
@@ -84,16 +89,18 @@ func DefaultNetworkIfc() (string, error) {
 			return iface.Name, nil
 		}
 	}
+
 	return "", errors.New("no internet connection")
 }
 
-func GetIPsToReserve() ([]net.IP, error) {
-	var toReserve []net.IP
-
+// LocalNetworkInterfaceIPs gets IPs of all local interfaces.
+func LocalNetworkInterfaceIPs() ([]net.IP, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting network interfaces: %w", err)
 	}
+
+	var ips []net.IP
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 {
 			continue // interface down
@@ -103,10 +110,9 @@ func GetIPsToReserve() ([]net.IP, error) {
 		}
 		addrs, err := iface.Addrs()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error getting addresses for interface %s: %w", iface.Name, err)
 		}
 		for _, addr := range addrs {
-			fmt.Printf("Scanning addr: %s\n", addr)
 			var ip net.IP
 			switch v := addr.(type) {
 			case *net.IPNet:
@@ -122,21 +128,24 @@ func GetIPsToReserve() ([]net.IP, error) {
 				continue // not an ipv4 address
 			}
 
-			toReserve = append(toReserve, ip)
+			ips = append(ips, ip)
 		}
 	}
 
-	return toReserve, nil
+	return ips, nil
 }
 
+// GetIPv4ForwardingValue gets current value of IPv4 forwarding.
 func GetIPv4ForwardingValue() (string, error) {
 	return getIPForwardingValue(getIPv4ForwardingCMD)
 }
 
+// GetIPv6ForwardingValue gets current value of IPv6 forwarding.
 func GetIPv6ForwardingValue() (string, error) {
 	return getIPForwardingValue(getIPv6ForwardingCMD)
 }
 
+// SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
 func SetIPv4ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
 	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
@@ -146,6 +155,7 @@ func SetIPv4ForwardingValue(val string) error {
 	return nil
 }
 
+// SetIPv6ForwardingValue sets `val` value of IPv6 forwarding.
 func SetIPv6ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
 	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
@@ -155,10 +165,12 @@ func SetIPv6ForwardingValue(val string) error {
 	return nil
 }
 
+// EnableIPv4Forwarding enables IPv4 forwarding.
 func EnableIPv4Forwarding() error {
 	return SetIPv4ForwardingValue("1")
 }
 
+// EnableIPv6Forwarding enables IPv6 forwarding.
 func EnableIPv6Forwarding() error {
 	return SetIPv6ForwardingValue("1")
 }
@@ -179,9 +191,11 @@ func getIPForwardingValue(cmd string) (string, error) {
 
 func run(bin string, args ...string) error {
 	cmd := exec.Command(bin, args...)
+
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("error running command %s: %w", bin, err)
 	}
