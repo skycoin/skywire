@@ -1,4 +1,4 @@
-package vpnenv
+package vpn
 
 import (
 	"net"

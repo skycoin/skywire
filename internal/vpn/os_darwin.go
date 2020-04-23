@@ -4,6 +4,7 @@ package vpn
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 )
 
@@ -13,20 +14,19 @@ const (
 	setIPv6ForwardingCMDFmt = "sysctl -w net.inet6.ip6.forwarding=%s"
 	getIPv4ForwardingCMD    = "sysctl net.inet.ip.forwarding"
 	getIPv6ForwardingCMD    = "sysctl net.inet6.ip6.forwarding"
-	// TODO: define
-	enableIPMasqueradingCMDFmt  = ""
-	disableIPMasqueradingCMDFmt = ""
 )
 
-// TODO: implement
-func EnableIPMasquerading(ifcName string) error {
-	return nil
+// EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
+func EnableIPMasquerading(_ string) error {
+	return errors.New("cannot be implemented")
 }
 
-func DisableIPMasquerading(ifcName string) error {
-	return nil
+// DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
+func DisableIPMasquerading(_ string) error {
+	return errors.New("cannot be implemented")
 }
 
+// AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func AddRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
 		return run("/sbin/route", "add", "-net", ip, gateway)
@@ -35,6 +35,7 @@ func AddRoute(ip, gateway, netmask string) error {
 	return run("/sbin/route", "add", "-net", ip, gateway, netmask)
 }
 
+// DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
 func DeleteRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
 		return run("/sbin/route", "delete", "-net", ip, gateway)

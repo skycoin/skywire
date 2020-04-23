@@ -18,6 +18,7 @@ const (
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
 )
 
+// EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
 func EnableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
 	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
@@ -27,6 +28,7 @@ func EnableIPMasquerading(ifcName string) error {
 	return nil
 }
 
+// DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
 func DisableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(disableIPMasqueradingCMDFmt, ifcName)
 	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
@@ -36,6 +38,7 @@ func DisableIPMasquerading(ifcName string) error {
 	return nil
 }
 
+// AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func AddRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
 		netmask = "255.255.255.255"
@@ -44,6 +47,7 @@ func AddRoute(ip, gateway, netmask string) error {
 	return run("/sbin/route", "add", "-net", ip, "netmask", netmask, "gw", gateway)
 }
 
+// DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
 func DeleteRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
 		netmask = "255.255.255.255"

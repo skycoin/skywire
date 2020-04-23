@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/vpn/vpnenv"
+	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -621,7 +621,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 			}
 		}
 
-		appEnvs = vpnenv.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker, stcpTable, hypervisors,
+		appEnvs = vpn.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker, stcpTable, hypervisors,
 			dmsgServers)
 		//[]string{"dmsg.server02a2d4c3.skywire.skycoin.com", "dmsg.server02a4.skywire.skycoin.com"})
 		//[]string{"172.105.115.99", "172.104.52.156"})

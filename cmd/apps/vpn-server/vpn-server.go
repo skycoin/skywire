@@ -107,14 +107,6 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	shutdownC := make(chan struct{})
-
-	go func() {
-		<-osSigs
-
-		shutdownC <- struct{}{}
-	}()
-
 	l, err := appClientt.Listen(netType, vpnPort)
 	if err != nil {
 		log.WithError(err).Errorf("Error listening network %v on port %d", netType, vpnPort)
@@ -122,8 +114,6 @@ func main() {
 	}
 
 	log.Infof("Got app listener, bound to %d", vpnPort)
-
-	// TODO: fix /run to return error
 
 	srv := vpn.NewServer(log)
 	defer func() {
@@ -137,5 +127,5 @@ func main() {
 		}
 	}()
 
-	<-shutdownC
+	<-osSigs
 }
