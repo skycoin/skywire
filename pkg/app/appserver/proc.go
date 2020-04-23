@@ -57,8 +57,6 @@ func NewProc(log *logging.Logger, c appcommon.Config, args []string, envs map[st
 
 	cmd := exec.Command(binaryPath, args...) // nolint:gosec
 
-	log.Infof("STARTING APP WITH ARGS: %v", args)
-
 	cmd.Env = env
 	cmd.Dir = c.WorkDir
 
