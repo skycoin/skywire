@@ -89,6 +89,7 @@
   "nodes": {
     "title": "Lista de visores",
     "state": "Estado",
+    "state-tooltip": "Estado actual",
     "label": "Etiqueta",
     "key": "Llave",
     "view-node": "Ver visor",
@@ -248,7 +249,8 @@
       "list-title": "Lista de aplicaciones",
       "app-name": "Nombre",
       "port": "Puerto",
-      "status": "Estatus",
+      "state": "Estado",
+      "state-tooltip": "Estado actual",
       "auto-start": "Autoinicio",
       "empty": "El visor no tiene ninguna aplicación.",
       "disable-autostart": "Deshabilitar autoinicio",
@@ -302,6 +304,8 @@
   "transports": {
     "title": "Transportes",
     "list-title": "Lista de transportes",
+    "state": "Estado",
+    "state-tooltip": "Estado actual",
     "id": "ID",
     "remote-node": "Remoto",
     "type": "Tipo",
@@ -311,10 +315,17 @@
     "delete": "Borrar transporte",
     "deleted": "Operación de borrado completada.",
     "empty": "El visor no tiene ningún transporte.",
+    "statuses": {
+      "online": "Online",
+      "online-tooltip": "El transporte está online",
+      "offline": "Offline",
+      "offline-tooltip": "El transporte está offline"
+    },
     "details": {
       "title": "Detalles",
       "basic": {
         "title": "Información básica",
+        "state": "Estado:",
         "id": "ID:",
         "local-pk": "Llave pública local:",
         "remote-pk": "Llave pública remota:",

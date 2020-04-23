@@ -46,6 +46,10 @@
     <!-- Column names. -->
     <tr>
       <th></th>
+      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)">
+        <span class="dot-outline-white" [matTooltip]="'transports.state-tooltip' | translate"></span>
+        <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
+      </th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Id)">
         {{ 'transports.id' | translate }}
         <mat-icon *ngIf="sortBy === sortableColumns.Id" [inline]="true">{{ sortingArrow }}</mat-icon>
@@ -77,10 +81,13 @@
         </mat-checkbox>
       </td>
       <td>
-        <app-copy-to-clipboard-text [short]="true" text="{{ transport.id }}"></app-copy-to-clipboard-text>
+        <span [class]="transportStatusClass(transport, true)" [matTooltip]="transportStatusText(transport, true) | translate"></span>
       </td>
       <td>
-        <app-copy-to-clipboard-text [short]="true" text="{{ transport.remote_pk }}"></app-copy-to-clipboard-text>
+        <app-copy-to-clipboard-text [short]="true" text="{{ transport.id }}" shortTextLength="4"></app-copy-to-clipboard-text>
+      </td>
+      <td>
+        <app-copy-to-clipboard-text [short]="true" text="{{ transport.remote_pk }}" shortTextLength="4"></app-copy-to-clipboard-text>
       </td>
       <td>
         {{ transport.type }}
@@ -142,6 +149,10 @@
           </mat-checkbox>
         </div>
         <div class="left-part">
+          <div class="list-row">
+            <span class="title">{{ 'transports.state' | translate }}</span>:
+            <span [class]="transportStatusClass(transport, false) + ' title'">{{ transportStatusText(transport, false) | translate }}</span>
+          </div>
           <div class="list-row long-content">
             <span class="title">{{ 'transports.id' | translate }}</span>:
             <app-copy-to-clipboard-text text="{{ transport.id }}"></app-copy-to-clipboard-text>
