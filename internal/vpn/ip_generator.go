@@ -32,7 +32,7 @@ func (g *IPGenerator) Reserve(ip net.IP) error {
 	}
 
 	// of course it's best to reserve it within the range it belongs to.
-	// but it really doesn't matter, we may just reserve it in all incrementers,
+	// but it really doesn't matter, we may just reserve it in all incrementing instances,
 	// that is much simpler and works anyway
 	for _, inc := range g.ranges {
 		inc.reserve(octets)
