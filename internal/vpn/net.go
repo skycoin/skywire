@@ -13,7 +13,7 @@ func WriteJSON(conn net.Conn, data interface{}) error {
 		return fmt.Errorf("error marshaling data: %w", err)
 	}
 
-	for n, totalSent := 0, 0; totalSent != len(dataBytes); totalSent += n {
+	for n, totalSent := 0, 0; totalSent < len(dataBytes); totalSent += n {
 		n, err = conn.Write(dataBytes[totalSent:])
 		if err != nil {
 			return fmt.Errorf("error sending data: %w", err)
