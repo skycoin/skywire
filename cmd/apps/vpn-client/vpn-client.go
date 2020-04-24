@@ -232,7 +232,7 @@ func main() {
 
 	log.Infof("Allocated TUN %s", tun.Name())
 
-	osSigs := make(chan os.Signal)
+	osSigs := make(chan os.Signal, 2)
 
 	sigs := []os.Signal{syscall.SIGTERM, syscall.SIGINT}
 	for _, sig := range sigs {
