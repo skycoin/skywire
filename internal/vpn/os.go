@@ -18,7 +18,7 @@ func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
 // NetworkIfcGateway gets gateway of the network interface with name `ifcName`.
 func NetworkIfcGateway(ifcName string) (net.IP, error) {
 	cmd := fmt.Sprintf(gatewayForIfcCMDFmt, ifcName)
-	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()
+	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output() //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("error running command %s: %w", cmd, err)
 	}
@@ -148,7 +148,7 @@ func GetIPv6ForwardingValue() (string, error) {
 // SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
 func SetIPv4ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
-	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
+	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
@@ -158,7 +158,7 @@ func SetIPv4ForwardingValue(val string) error {
 // SetIPv6ForwardingValue sets `val` value of IPv6 forwarding.
 func SetIPv6ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
-	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
+	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
@@ -176,7 +176,7 @@ func EnableIPv6Forwarding() error {
 }
 
 func getIPForwardingValue(cmd string) (string, error) {
-	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output()
+	outBytes, err := exec.Command("/bin/bash", "-c", cmd).Output() //nolint:gosec
 	if err != nil {
 		return "", fmt.Errorf("error running command %s: %w", cmd, err)
 	}
@@ -190,7 +190,7 @@ func getIPForwardingValue(cmd string) (string, error) {
 }
 
 func run(bin string, args ...string) error {
-	cmd := exec.Command(bin, args...)
+	cmd := exec.Command(bin, args...) //nolint:gosec
 
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
