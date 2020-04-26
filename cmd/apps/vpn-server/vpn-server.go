@@ -91,13 +91,13 @@ func main() {
 		return
 	}
 
-	appClientt, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
+	appClient, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
 	if err != nil {
 		log.WithError(err).Errorln("Error setting up VPN client")
 		return
 	}
 	defer func() {
-		appClientt.Close()
+		appClient.Close()
 	}()
 
 	osSigs := make(chan os.Signal, 2)
@@ -107,7 +107,7 @@ func main() {
 		signal.Notify(osSigs, sig)
 	}
 
-	l, err := appClientt.Listen(netType, vpnPort)
+	l, err := appClient.Listen(netType, vpnPort)
 	if err != nil {
 		log.WithError(err).Errorf("Error listening network %v on port %d", netType, vpnPort)
 		return
