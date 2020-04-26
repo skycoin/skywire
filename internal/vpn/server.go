@@ -88,7 +88,6 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 	defer func() {
-		s.log.Errorln("DONE SERVING, CLOSING TUN")
 		tunName := tun.Name()
 		if err := tun.Close(); err != nil {
 			s.log.WithError(err).Errorf("Error closing TUN %s", tunName)
@@ -165,6 +164,14 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 
 		return nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
 	}
+
+	// basically IP address comprised of `subnetOctets` items is the IP address of the subnet,
+	// we're going to work with. In this subnet we're giving 4 IP addresses: IP and gateway for
+	// the server-side TUN and IP and gateway for the client-side TUN. We do this as follows:
+	// - Server-side TUN gateway = subnet IP + 1
+	// - Server-side TUN IP = subnet IP + 2
+	// - Client-side TUN gateway = subnet IP + 3
+	// - Client-site TUN IP = subnet IP + 4
 
 	sTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+2)
 	sTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+1)
