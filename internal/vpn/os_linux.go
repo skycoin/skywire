@@ -21,7 +21,7 @@ const (
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
 func EnableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
-	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
+	if err := exec.Command("/bin/sh", "-c", cmd).Run(); err != nil {
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
@@ -31,7 +31,7 @@ func EnableIPMasquerading(ifcName string) error {
 // DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
 func DisableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(disableIPMasqueradingCMDFmt, ifcName)
-	if err := exec.Command("/bin/bash", "-c", cmd).Run(); err != nil {
+	if err := exec.Command("/bin/sh", "-c", cmd).Run(); err != nil {
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
