@@ -16,9 +16,9 @@ import (
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
@@ -87,7 +87,7 @@ func (c *Config) flush() error {
 		return ErrNoConfigPath
 	}
 
-	c.log.Infof("Updating visor config to %+v", c)
+	c.log.Infof("Updating visor config to %#v", c)
 
 	bytes, err := json.MarshalIndent(c, "", "\t")
 	if err != nil {
@@ -96,53 +96,6 @@ func (c *Config) flush() error {
 
 	const filePerm = 0644
 	return ioutil.WriteFile(*c.Path, bytes, filePerm)
-}
-
-func (c *Config) updateAppAutoStart(appName string, autoStart bool) error {
-	changed := false
-
-	for i := range c.Apps {
-		if c.Apps[i].App == appName {
-			c.Apps[i].AutoStart = autoStart
-			changed = true
-			break
-		}
-	}
-
-	if !changed {
-		return nil
-	}
-
-	return c.flush()
-}
-
-func (c *Config) updateAppArg(appName, argName, value string) error {
-	configChanged := true
-
-	for i := range c.Apps {
-		argChanged := false
-		if c.Apps[i].App == appName {
-			configChanged = true
-
-			for j := range c.Apps[i].Args {
-				if c.Apps[i].Args[j] == argName && j+1 < len(c.Apps[i].Args) {
-					c.Apps[i].Args[j+1] = value
-					argChanged = true
-					break
-				}
-			}
-
-			if !argChanged {
-				c.Apps[i].Args = append(c.Apps[i].Args, argName, value)
-			}
-		}
-	}
-
-	if configChanged {
-		return c.flush()
-	}
-
-	return nil
 }
 
 // Keys returns visor public and secret keys extracted from config.
@@ -442,7 +395,7 @@ func DefaultLogStoreConfig() *LogStoreConfig {
 
 // RoutingConfig configures routing.
 type RoutingConfig struct {
-	SetupNodes         []cipher.PubKey `json:"setup_nodes"`
+	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 }
@@ -450,7 +403,7 @@ type RoutingConfig struct {
 // DefaultRoutingConfig returns default routing config.
 func DefaultRoutingConfig() *RoutingConfig {
 	return &RoutingConfig{
-		SetupNodes:         []cipher.PubKey{skyenv.MustDefaultSetupPK()},
+		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
 		RouteFinder:        skyenv.DefaultRouteFinderAddr,
 		RouteFinderTimeout: DefaultTimeout,
 	}
@@ -471,7 +424,6 @@ func DefaultUptimeTrackerConfig() *UptimeTrackerConfig {
 // HypervisorConfig represents hypervisor configuration.
 type HypervisorConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
-	Addr   string        `json:"address"`
 }
 
 // AppConfig defines app startup parameters.
@@ -479,7 +431,7 @@ type AppConfig struct {
 	App       string       `json:"app"`
 	AutoStart bool         `json:"auto_start"`
 	Port      routing.Port `json:"port"`
-	Args      []string     `json:"args"`
+	Args      []string     `json:"args,omitempty"`
 }
 
 // InterfaceConfig defines listening interfaces for skywire visor.

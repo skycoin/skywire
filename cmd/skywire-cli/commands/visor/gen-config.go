@@ -7,10 +7,10 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
@@ -143,6 +143,7 @@ func defaultConfig() *visor.Config {
 		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 		conf.Transport.Discovery = skyenv.TestTpDiscAddr
 		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+		conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	}
 
 	conf.Hypervisors = []visor.HypervisorConfig{}

@@ -11,15 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/SkycoinProject/dmsg/netutil"
-
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
 
 const logWriteInterval = time.Second * 3
@@ -93,6 +92,14 @@ func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK c
 	}
 	mt.wg.Add(2)
 	return mt
+}
+
+// IsUp returns true if transport status is up.
+func (mt *ManagedTransport) IsUp() bool {
+	mt.isUpMux.Lock()
+	isUp := mt.isUp && mt.isUpErr == nil
+	mt.isUpMux.Unlock()
+	return isUp
 }
 
 // Serve serves and manages the transport.
