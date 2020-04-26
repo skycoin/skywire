@@ -13,16 +13,18 @@ import { ConfirmationComponent } from '../../../../../layout/confirmation/confir
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
+import { SkysocksSettingsComponent } from '../skysocks-settings/skysocks-settings.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
+import { SkysocksClientSettingsComponent } from '../skysocks-client-settings/skysocks-client-settings.component';
 
 /**
  * List of the columns that can be used to sort the data.
  */
 enum SortableColumns {
+  State = 'apps.apps-list.state',
   Name = 'apps.apps-list.app-name',
   Port = 'apps.apps-list.port',
-  Status = 'apps.apps-list.status',
   AutoStart = 'apps.apps-list.auto-start',
 }
 
@@ -67,6 +69,12 @@ export class NodeAppsListComponent implements OnDestroy {
     this.showShortList_ = val;
     this.recalculateElementsToShow();
   }
+
+  // List with the names of all the apps which can be configured directly on the manager.
+  appsWithConfig = new Map<string, boolean>([
+    ['skysocks', true],
+    ['skysocks-client', true],
+  ]);
 
   allApps: Application[];
   appsToShow: Application[];
@@ -219,6 +227,13 @@ export class NodeAppsListComponent implements OnDestroy {
       }
     ];
 
+    if (this.appsWithConfig.has(app.name)) {
+      options.push({
+        icon: 'settings',
+        label: 'apps.settings',
+      });
+    }
+
     SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.viewLogs(app);
@@ -226,6 +241,8 @@ export class NodeAppsListComponent implements OnDestroy {
         this.changeAppState(app);
       } else if (selectedOption === 3) {
         this.changeAppAutostart(app);
+      } else if (selectedOption === 4) {
+        this.config(app);
       }
     });
   }
@@ -314,6 +331,19 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   /**
+   * Shows the appropriate modal window for configuring the app.
+   */
+  config(app: Application): void {
+    if (app.name === 'skysocks') {
+      SkysocksSettingsComponent.openDialog(this.dialog, app);
+    } else if (app.name === 'skysocks-client') {
+      SkysocksClientSettingsComponent.openDialog(this.dialog, app);
+    } else {
+      this.snackbarService.showError('apps.error');
+    }
+  }
+
+  /**
    * Changes the column and/or order used for sorting the data.
    */
   changeSortingOrder(column: SortableColumns) {
@@ -371,7 +401,7 @@ export class NodeAppsListComponent implements OnDestroy {
           response = !this.sortReverse ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
         } else if (this.sortBy === SortableColumns.Port) {
           response = !this.sortReverse ? a.port - b.port : b.port - a.port;
-        } else if (this.sortBy === SortableColumns.Status) {
+        } else if (this.sortBy === SortableColumns.State) {
           response = !this.sortReverse ? b.status - a.status : a.status - b.status;
         } else if (this.sortBy === SortableColumns.AutoStart) {
           response = !this.sortReverse ? (b.autostart ? 1 : 0) - (a.autostart ? 1 : 0) : (a.autostart ? 1 : 0) - (b.autostart ? 1 : 0);

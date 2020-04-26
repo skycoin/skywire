@@ -35,7 +35,7 @@ Create 2 visor config files:
       "version": "1.0",
       "auto_start": true,
       "port": 1,
-      "args": ["-addr", ":8001"]
+      "args": ["-addr", ":8002"]
     }
   ]
 }
@@ -49,4 +49,4 @@ $ ./skywire-visor skywire1.json
 $ ./skywire-visor skywire2.json
 ```
 
-Chat interface will be available on ports `8000` and `8001`.
+Chat interface will be available on ports `8001` and `8002`.

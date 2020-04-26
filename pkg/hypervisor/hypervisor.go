@@ -23,9 +23,9 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
@@ -54,13 +54,14 @@ type VisorConn struct {
 // Hypervisor manages visors.
 type Hypervisor struct {
 	c      Config
+	assets http.FileSystem             // Web UI.
 	visors map[cipher.PubKey]VisorConn // connected remote visors.
 	users  *UserManager
 	mu     *sync.RWMutex
 }
 
 // New creates a new Hypervisor.
-func New(config Config) (*Hypervisor, error) {
+func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
@@ -72,6 +73,7 @@ func New(config Config) (*Hypervisor, error) {
 
 	return &Hypervisor{
 		c:      config,
+		assets: assets,
 		visors: make(map[cipher.PubKey]VisorConn),
 		users:  NewUserManager(singleUserDB, config.Cookies),
 		mu:     new(sync.RWMutex),
@@ -158,6 +160,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
+				r.Get("/about", hv.getAbout())
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -191,7 +194,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.Get("/{pk}", hv.getPty())
 		})
 
-		r.Handle("/*", http.FileServer(http.Dir(hv.c.WebDir)))
+		r.Handle("/*", http.FileServer(hv.assets))
 	})
 
 	r.ServeHTTP(w, req)
@@ -202,6 +205,21 @@ func (hv *Hypervisor) getPong() http.HandlerFunc {
 		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
 			log.WithError(err).Warn("getPong: Failed to send PONG!")
 		}
+	}
+}
+
+// About provides info about the hypervisor.
+type About struct {
+	PubKey cipher.PubKey   `json:"public_key"` // The hypervisor's public key.
+	Build  *buildinfo.Info `json:"build"`
+}
+
+func (hv *Hypervisor) getAbout() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		httputil.WriteJSON(w, r, http.StatusOK, About{
+			PubKey: hv.c.PK,
+			Build:  buildinfo.Get(),
+		})
 	}
 }
 
@@ -370,29 +388,10 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.AutoStart != nil {
 			if *reqBody.AutoStart != ctx.App.AutoStart {
-				if err := ctx.RPC.SetAutoStart(ctx.App.Name, *reqBody.AutoStart); err != nil {
+				if err := ctx.RPC.SetAutoStart(ctx.App.App, *reqBody.AutoStart); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
-			}
-		}
-
-		if reqBody.Status != nil {
-			switch *reqBody.Status {
-			case statusStop:
-				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			case statusStart:
-				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
-					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-					return
-				}
-			default:
-				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
-				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
-				return
 			}
 		}
 
@@ -401,16 +400,38 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			skysocksClientName = "skysocks-client"
 		)
 
-		if reqBody.Passcode != nil && ctx.App.Name == skysocksName {
+		if reqBody.Passcode != nil && ctx.App.App == skysocksName {
 			if err := ctx.RPC.SetSocksPassword(*reqBody.Passcode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
 
-		if reqBody.PK != nil && ctx.App.Name == skysocksClientName {
+		if reqBody.PK != nil && ctx.App.App == skysocksClientName {
+			log.Errorf("SETTING PK: %s", *reqBody.PK)
 			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
+				log.Errorf("ERROR SETTING PK")
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Status != nil {
+			switch *reqBody.Status {
+			case statusStop:
+				if err := ctx.RPC.StopApp(ctx.App.App); err != nil {
+					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+					return
+				}
+			case statusStart:
+				if err := ctx.RPC.StartApp(ctx.App.App); err != nil {
+					log.Errorf("ERROR STARTING APP")
+					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+					return
+				}
+			default:
+				errMsg := fmt.Errorf("value of 'status' field is %d when expecting 0 or 1", *reqBody.Status)
+				httputil.WriteJSON(w, r, http.StatusBadRequest, errMsg)
 				return
 			}
 		}
@@ -436,7 +457,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 			t = time.Unix(0, 0)
 		}
 
-		logs, err := ctx.RPC.LogsSince(t, ctx.App.Name)
+		logs, err := ctx.RPC.LogsSince(t, ctx.App.App)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -854,7 +875,7 @@ func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 	}
 
 	for _, a := range apps {
-		if a.Name == appName {
+		if a.App == appName {
 			ctx.App = a
 			return ctx, true
 		}
