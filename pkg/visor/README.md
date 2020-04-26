@@ -12,18 +12,24 @@
 - `routing` (*[RoutingConfig](#RoutingConfig))
 - `uptime_tracker` (*[UptimeTrackerConfig](#UptimeTrackerConfig))
 - `apps` ([][AppConfig](#AppConfig))
-- `trusted_visors` ()- `hypervisors` ([][HypervisorConfig](#HypervisorConfig))
+- `trusted_visors` ()
+- `hypervisors` ([][HypervisorConfig](#HypervisorConfig))
 - `apps_path` (string)
 - `local_path` (string)
 - `log_level` (string)
-- `shutdown_timeout` (Duration)- `interfaces` (*[InterfaceConfig](#InterfaceConfig))
+- `shutdown_timeout` (Duration)
+- `interfaces` (*[InterfaceConfig](#InterfaceConfig))
 - `app_server_addr` (string)
 - `restart_check_delay` (string)
 
 
-# KeyPair
+# DmsgPtyConfig
 
-- `public_key` (PubKey)- `secret_key` (SecKey)
+- `port` (uint16)
+- `authorization_file` (string)
+- `cli_network` (string)
+- `cli_address` (string)
+
 
 # TransportConfig
 
@@ -31,47 +37,47 @@
 - `log_store` (*[LogStoreConfig](#LogStoreConfig))
 
 
-# InterfaceConfig
+# KeyPair
 
-- `rpc` (string)
-
-
-# DmsgPtyConfig
-
-- `port` (uint16)- `authorization_file` (string)
-- `cli_network` (string)
-- `cli_address` (string)
+- `public_key` (PubKey)
+- `secret_key` (SecKey)
 
 
 # RoutingConfig
 
-- `setup_nodes` ()- `route_finder` (string)
+- `setup_nodes` ()
+- `route_finder` (string)
 - `route_finder_timeout` (Duration)
+
 
 # UptimeTrackerConfig
 
 - `addr` (string)
 
 
+# LogStoreConfig
+
+- `type` (LogStoreType)
+- `location` (string)
+
+
+# InterfaceConfig
+
+- `rpc` (string)
+
+
 # AppConfig
 
 - `app` (string)
 - `auto_start` (bool)
-- `port` (Port)- `args` ([]string)
+- `port` (Port)
+- `args` ([]string)
 
 
 # HypervisorConfig
 
 - `public_key` (PubKey)
 
-# LogStoreConfig
-
-- `type` (LogStoreType)- `location` (string)
-
-
-# Logger
-
-- `` (FieldLogger)
 
 # DmsgConfig
 
@@ -79,12 +85,18 @@
 - `sessions_count` (int)
 
 
-# STCPConfig
+# Logger
 
-- `pk_table` ()- `local_address` (string)
+- `` (FieldLogger)
 
 
 # Mutex
 
 - `state` (int32)
 - `sema` (uint32)
+
+
+# STCPConfig
+
+- `pk_table` ()
+- `local_address` (string)
