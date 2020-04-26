@@ -15,8 +15,8 @@ func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
 	return run("/sbin/ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
-// NetworkIfcGateway gets gateway of the network interface with name `ifcName`.
-func NetworkIfcGateway(ifcName string) (net.IP, error) {
+// NetworkInterfaceGateway gets gateway of the network interface with name `ifcName`.
+func NetworkInterfaceGateway(ifcName string) (net.IP, error) {
 	cmd := fmt.Sprintf(gatewayForIfcCMDFmt, ifcName)
 	outBytes, err := exec.Command("/bin/sh", "-c", cmd).Output() //nolint:gosec
 	if err != nil {
@@ -49,7 +49,7 @@ func DefaultNetworkGateway() (net.IP, error) {
 		return nil, fmt.Errorf("error getting default network interface name: %w", err)
 	}
 
-	return NetworkIfcGateway(defaultNetworkIfcName)
+	return NetworkInterfaceGateway(defaultNetworkIfcName)
 }
 
 // DefaultNetworkIfc fetches default network interface name.
