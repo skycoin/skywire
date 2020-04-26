@@ -367,18 +367,20 @@ func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
 				continue
 			}
 
-			rg.sendKeepAlive()
+			if err := rg.sendKeepAlive(); err != nil {
+				rg.logger.Warnf("Failed to send keepalive: %v", err)
+			}
 		}
 	}
 }
 
-func (rg *RouteGroup) sendKeepAlive() {
+func (rg *RouteGroup) sendKeepAlive() error {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
 		// if no transports, no rules, then no keepalive
-		return
+		return nil
 	}
 
 	for i := 0; i < len(rg.tps); i++ {
@@ -390,14 +392,13 @@ func (rg *RouteGroup) sendKeepAlive() {
 		}
 
 		packet := routing.MakeKeepAlivePacket(rule.NextRouteID())
-		errCh := rg.writePacketAsync(context.Background(), tp, packet, rule.KeyRouteID())
 
-		go func() {
-			if err := <-errCh; err != nil {
-				rg.logger.WithError(err).Warnf("Failed to send keepalive")
-			}
-		}()
+		if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 // Close closes a RouteGroup with the specified close `code`:
@@ -492,12 +493,9 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	for i := 0; i < len(rg.tps); i++ {
 		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
-		errCh := rg.writePacketAsync(context.Background(), rg.tps[i], packet, rg.fwd[i].KeyRouteID())
-		go func(tp *transport.ManagedTransport) {
-			if err := <-errCh; err != nil {
-				rg.logger.WithError(err).Errorf("Failed to send close packet to %s", tp.Remote())
-			}
-		}(rg.tps[i])
+		if err := rg.writePacket(context.Background(), rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
+			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
+		}
 	}
 }
 

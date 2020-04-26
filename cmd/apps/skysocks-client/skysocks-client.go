@@ -14,11 +14,11 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
-	"github.com/SkycoinProject/skywire-mainnet/internal/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
@@ -75,7 +75,8 @@ func main() {
 	}()
 
 	if *serverPK == "" {
-		log.Fatal("Invalid server PubKey")
+		log.Warn("Empty server PubKey. Exiting")
+		return
 	}
 
 	pk := cipher.PubKey{}

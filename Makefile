@@ -15,6 +15,7 @@ COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/SkycoinProject/skywire-mainnet
 OPTS?=GO111MODULE=on
+MANAGER_UI_DIR = static/skywire-manager-src
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
 DOCKER_NETWORK?=SKYNET 
 DOCKER_NODE?=SKY01
@@ -96,7 +97,7 @@ test-no-ci: ## Run no_ci tests
 	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
 
 install-linters: ## Install linters
-	- VERSION=1.23.1 ./ci_scripts/install-golangci-lint.sh
+	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
 	# GO111MODULE=off go get -u github.com/FiloSottile/vendorcheck
 	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
 	# However, they suggest `curl ... | bash` which we should not do
@@ -137,6 +138,19 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
+
+# Manager UI
+install-deps-ui:  ## Install the UI dependencies
+	cd $(MANAGER_UI_DIR) && npm ci
+
+lint-ui:  ## Lint the UI code
+	cd $(MANAGER_UI_DIR) && npm run lint
+
+build-ui:  ## Builds the UI
+	cd $(MANAGER_UI_DIR) && npm run build
+	mkdir -p ${PWD}/bin
+	${OPTS} GOBIN=${PWD}/bin go get github.com/rakyll/statik
+	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/hypervisor -f
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
