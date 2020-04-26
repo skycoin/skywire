@@ -109,19 +109,19 @@ func TestListApps(t *testing.T) {
 	require.Len(t, reply, 2)
 
 	app1, app2 := reply[0], reply[1]
-	if app1.Name != "foo" {
+	if app1.App != "foo" {
 		// apps inside visor are stored inside a map, so their order
 		// is not deterministic, we should be ready for this and
 		// rearrange the outer array to check values correctly
 		app1, app2 = reply[1], reply[0]
 	}
 
-	assert.Equal(t, "foo", app1.Name)
+	assert.Equal(t, "foo", app1.App)
 	assert.False(t, app1.AutoStart)
 	assert.Equal(t, routing.Port(10), app1.Port)
 	assert.Equal(t, AppStatusStopped, app1.Status)
 
-	assert.Equal(t, "bar", app2.Name)
+	assert.Equal(t, "bar", app2.App)
 	assert.True(t, app2.AutoStart)
 	assert.Equal(t, routing.Port(11), app2.Port)
 	assert.Equal(t, AppStatusRunning, app2.Status)

@@ -5,6 +5,7 @@ import { catchError, map } from 'rxjs/operators';
 import { Router } from '@angular/router';
 
 import { processServiceError } from '../utils/errors';
+import { environment } from 'src/environments/environment';
 
 export enum ResponseTypes {
   Json = 'json',
@@ -32,6 +33,14 @@ export class RequestOptions {
   providedIn: 'root'
 })
 export class ApiService {
+  /**
+   * URL prefix for the API routes. The 'http-api/' prefix is used if the app is running
+   * with the dev server using the http protocol, because the dev server proxy uses it to
+   * route the request to the appropiate url.
+   */
+  private readonly apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ?
+    'http-api/' : 'api/';
+
   constructor(
     private http: HttpClient,
     private router: Router,
@@ -77,7 +86,12 @@ export class ApiService {
     body = body ? body : {};
     options = options ? options : new RequestOptions();
 
-    return this.http.request(method, `api/${url}`, {
+    // Sanitize the URL.
+    if (url.startsWith('/')) {
+      url = url.substr(1, url.length - 1);
+    }
+
+    return this.http.request(method, this.apiPrefix + url, {
       ...this.getRequestOptions(options),
       responseType: options.responseType,
       // Use the session cookies.

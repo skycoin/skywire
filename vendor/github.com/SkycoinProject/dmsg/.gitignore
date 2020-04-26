@@ -10,5 +10,10 @@
 .DS_Store
 
 .idea/
-/vendor
 bin/
+
+dmsg-discovery
+dmsg-server
+dmsgpty-cli
+dmsgpty-host
+dmsgpty-ui
