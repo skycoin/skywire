@@ -1,8 +1,6 @@
 # Config
 
-- `public_key` ([PubKey](#PubKey))
-- `secret_key` ([SecKey](#SecKey))
-- `dmsg` ([DmsgConfig](#DmsgConfig))
+- `public_key` (PubKey)- `secret_key` (SecKey)- `dmsg` ([DmsgConfig](#DmsgConfig))
 - `transport_discovery` (string)
 - `log_level` (string)
 
