@@ -3,7 +3,6 @@ package vpn
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 )
 
@@ -28,9 +27,21 @@ func WriteJSON(conn net.Conn, data interface{}) error {
 
 // ReadJSON reads portion of data from the `conn` and unmarshals it into `data`.
 func ReadJSON(conn net.Conn, data interface{}) error {
-	dataBytes, err := ioutil.ReadAll(conn)
-	if err != nil {
-		return fmt.Errorf("error reading data: %w", err)
+	const bufSize = 1024
+
+	var dataBytes []byte
+	buf := make([]byte, bufSize)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			return fmt.Errorf("error reading data: %w", err)
+		}
+
+		dataBytes = append(dataBytes, buf[:n]...)
+
+		if n < 1024 {
+			break
+		}
 	}
 
 	if err := json.Unmarshal(dataBytes, data); err != nil {
