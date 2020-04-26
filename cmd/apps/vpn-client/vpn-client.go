@@ -13,13 +13,13 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/songgao/water"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/songgao/water"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 const (
