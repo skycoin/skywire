@@ -179,7 +179,8 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 			if entry.Geo != nil {
 				c.entry.Geo = entry.Geo
 			}
-			c.log.WithField("entry", entry).Debug("Entry updated.")
+			j, _ := json.Marshal(entry) //nolint:errcheck
+			c.log.WithField("entry", string(j)).Debug("Entry updated.")
 			break
 		}
 	}
