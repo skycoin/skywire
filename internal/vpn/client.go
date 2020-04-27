@@ -36,30 +36,42 @@ func NewClient(l *logging.MasterLogger, conn net.Conn) (*Client, error) {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)
 	}
 
+	l.Infof("DMSG Disc IP: %s", dmsgDiscIP.String())
+
 	dmsgSrvAddrs, err := dmsgSrvAddrsFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg server addresses: %w", err)
 	}
+
+	l.Infof("DMSG SRV ADDRS: %v", dmsgSrvAddrs)
 
 	tpIP, err := tpIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting TP IP: %w", err)
 	}
 
+	l.Infof("TP IP: %s", tpIP.String())
+
 	rfIP, err := rfIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting RF IP: %w", err)
 	}
+
+	l.Infof("RF IP: %s", rfIP.String())
 
 	stcpEntities, err := stcpEntitiesFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
 	}
 
+	l.Infof("STCP ENTITIES: %v", stcpEntities)
+
 	directIPs := make([]net.IP, 0, 3+len(dmsgSrvAddrs)+len(stcpEntities))
 	directIPs = append(directIPs, dmsgDiscIP, tpIP, rfIP)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
+
+	l.Infof("DIRECT IPS: %v", directIPs)
 
 	defaultGateway, err := DefaultNetworkGateway()
 	if err != nil {
@@ -298,12 +310,12 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 }
 
 func ipFromEnv(key string) (net.IP, error) {
-	ip, ok, err := IPFromEnv(DmsgDiscAddrEnvKey)
+	ip, ok, err := IPFromEnv(key)
 	if err != nil {
 		return nil, fmt.Errorf("error getting IP from %s: %w", key, err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("env arg %s is not provided", DmsgDiscAddrEnvKey)
+		return nil, fmt.Errorf("env arg %s is not provided", key)
 	}
 
 	return ip, nil
