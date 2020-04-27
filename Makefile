@@ -56,6 +56,9 @@ stop: ## Stop running skywire-visor on host
 config: ## Generate skywire.json
 	-./skywire-cli visor gen-config -o  ./skywire.json -r
 
+generate: ## Generate mocks and config README's
+	go generate ./...
+
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
