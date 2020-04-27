@@ -13,25 +13,91 @@ import (
 
 // Server is a VPN server.
 type Server struct {
-	lisMx     sync.Mutex
-	lis       net.Listener
-	log       *logging.MasterLogger
-	serveOnce sync.Once
-	ipGen     *IPGenerator
+	lisMx                   sync.Mutex
+	lis                     net.Listener
+	log                     *logging.MasterLogger
+	serveOnce               sync.Once
+	ipGen                   *IPGenerator
+	defaultNetworkInterface string
+	ipv4ForwardingVal       string
+	ipv6ForwardingVal       string
 }
 
 // NewServer creates VPN server instance.
-func NewServer(l *logging.MasterLogger) *Server {
-	return &Server{
-		log:   l,
-		ipGen: NewIPGenerator(),
+func NewServer(l *logging.MasterLogger) (*Server, error) {
+	defaultNetworkIfc, err := DefaultNetworkInterface()
+	if err != nil {
+		return nil, fmt.Errorf("error getting default network interface: %w", err)
 	}
+
+	l.Infof("Got default network interface: %s", defaultNetworkIfc)
+
+	ipv4ForwardingVal, err := GetIPv4ForwardingValue()
+	if err != nil {
+		return nil, fmt.Errorf("error getting IPv4 forwarding value: %w", err)
+	}
+	ipv6ForwardingVal, err := GetIPv6ForwardingValue()
+	if err != nil {
+		return nil, fmt.Errorf("error getting IPv6 forwarding value")
+	}
+
+	l.Infoln("Old IP forwarding values:")
+	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
+
+	return &Server{
+		log:                     l,
+		ipGen:                   NewIPGenerator(),
+		defaultNetworkInterface: defaultNetworkIfc,
+		ipv4ForwardingVal:       ipv4ForwardingVal,
+		ipv6ForwardingVal:       ipv6ForwardingVal,
+	}, nil
 }
 
 // Serve accepts connections from `l` and serves them.
 func (s *Server) Serve(l net.Listener) error {
 	serveErr := errors.New("already serving")
 	s.serveOnce.Do(func() {
+		if err := EnableIPv4Forwarding(); err != nil {
+			serveErr = fmt.Errorf("error enabling IPv4 forwarding: %w", err)
+			return
+		}
+		s.log.Infoln("Set IPv4 forwarding = 1")
+		defer func() {
+			if err := SetIPv4ForwardingValue(s.ipv4ForwardingVal); err != nil {
+				s.log.WithError(err).Errorln("Error reverting IPv4 forwarding")
+			} else {
+				s.log.Infof("Set IPv4 forwarding = %s", s.ipv4ForwardingVal)
+			}
+		}()
+
+		if err := EnableIPv6Forwarding(); err != nil {
+			serveErr = fmt.Errorf("error enabling IPv6 forwarding: %w", err)
+			return
+		}
+		s.log.Infoln("Set IPv6 forwarding = 1")
+		defer func() {
+			if err := SetIPv6ForwardingValue(s.ipv6ForwardingVal); err != nil {
+				s.log.WithError(err).Errorln("Error reverting IPv6 forwarding")
+			} else {
+				s.log.Infof("Set IPv6 forwarding = %s", s.ipv6ForwardingVal)
+			}
+		}()
+
+		if err := EnableIPMasquerading(s.defaultNetworkInterface); err != nil {
+			serveErr = fmt.Errorf("error enabling IP masquerading for %s: %w", s.defaultNetworkInterface, err)
+			return
+		}
+
+		s.log.Infoln("Enabled IP masquerading")
+
+		defer func() {
+			if err := DisableIPMasquerading(s.defaultNetworkInterface); err != nil {
+				s.log.WithError(err).Errorf("Error disabling IP masquerading for %s", s.defaultNetworkInterface)
+			} else {
+				s.log.Infof("Disabled IP masquerading for %s", s.defaultNetworkInterface)
+			}
+		}()
+
 		s.lisMx.Lock()
 		s.lis = l
 		s.lisMx.Unlock()
