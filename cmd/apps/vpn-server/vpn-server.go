@@ -25,66 +25,6 @@ var (
 )
 
 func main() {
-	defaultNetworkIfc, err := vpn.DefaultNetworkIfc()
-	if err != nil {
-		log.WithError(err).Fatalln("Error getting default network interface")
-	}
-
-	log.Infof("Got default network interface: %s", defaultNetworkIfc)
-
-	ipv4ForwardingVal, err := vpn.GetIPv4ForwardingValue()
-	if err != nil {
-		log.WithError(err).Fatalln("Error getting IPv4 forwarding value")
-	}
-	ipv6ForwardingVal, err := vpn.GetIPv6ForwardingValue()
-	if err != nil {
-		log.WithError(err).Fatalln("Error getting IPv6 forwarding value")
-	}
-
-	log.Infoln("Old IP forwarding values:")
-	log.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
-
-	if err := vpn.EnableIPv4Forwarding(); err != nil {
-		log.WithError(err).Errorln("Error enabling IPv4 forwarding")
-		return
-	}
-	log.Infoln("Set IPv4 forwarding = 1")
-	defer func() {
-		if err := vpn.SetIPv4ForwardingValue(ipv4ForwardingVal); err != nil {
-			log.WithError(err).Errorln("Error reverting IPv4 forwarding")
-		} else {
-			log.Infof("Set IPv4 forwarding = %s", ipv4ForwardingVal)
-		}
-	}()
-
-	if err := vpn.EnableIPv6Forwarding(); err != nil {
-		log.WithError(err).Errorln("Error enabling IPv6 forwarding")
-		return
-	}
-	log.Infoln("Set IPv6 forwarding = 1")
-	defer func() {
-		if err := vpn.SetIPv6ForwardingValue(ipv6ForwardingVal); err != nil {
-			log.WithError(err).Errorln("Error reverting IPv6 forwarding")
-		} else {
-			log.Infof("Set IPv6 forwarding = %s", ipv6ForwardingVal)
-		}
-	}()
-
-	if err := vpn.EnableIPMasquerading(defaultNetworkIfc); err != nil {
-		log.WithError(err).Errorf("Error enabling IP masquerading for %s", defaultNetworkIfc)
-		return
-	}
-
-	log.Infoln("Enabled IP masquerading")
-
-	defer func() {
-		if err := vpn.DisableIPMasquerading(defaultNetworkIfc); err != nil {
-			log.WithError(err).Errorf("Error disabling IP masquerading for %s", defaultNetworkIfc)
-		} else {
-			log.Infoln("Disabled IP masquerading")
-		}
-	}()
-
 	appCfg, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.WithError(err).Errorln("Error getting app client config")
@@ -115,7 +55,10 @@ func main() {
 
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
-	srv := vpn.NewServer(log)
+	srv, err := vpn.NewServer(log)
+	if err != nil {
+		log.WithError(err).Fatalln("Error creating VPN server")
+	}
 	defer func() {
 		if err := srv.Close(); err != nil {
 			log.WithError(err).Errorln("Error closing server")
