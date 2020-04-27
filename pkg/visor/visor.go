@@ -586,35 +586,26 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 	var appEnvs map[string]string
 	if appCfg.Name == "vpn-client" {
-		var (
-			dmsgDiscovery string
-			tpDiscovery   string
-			rf            string
-			uptimeTracker string
-			stcpTable     map[cipher.PubKey]string
-			dmsgServers   []string
-		)
+		var envCfg vpn.DirectRoutesEnvConfig
+
 		if visor.conf.Dmsg != nil {
-			dmsgDiscovery = visor.conf.Dmsg.Discovery
-			dmsgServers = visor.n.Dmsg().ConnectedServers()
+			envCfg.DmsgDiscovery = visor.conf.Dmsg.Discovery
+			envCfg.DmsgServers = visor.n.Dmsg().ConnectedServers()
 		}
 		if visor.conf.Transport != nil {
-			tpDiscovery = visor.conf.Transport.Discovery
+			envCfg.TPDiscovery = visor.conf.Transport.Discovery
 		}
 		if visor.conf.Routing != nil {
-			rf = visor.conf.Routing.RouteFinder
+			envCfg.RF = visor.conf.Routing.RouteFinder
 		}
 		if visor.conf.UptimeTracker != nil {
-			uptimeTracker = visor.conf.UptimeTracker.Addr
+			envCfg.UptimeTracker = visor.conf.UptimeTracker.Addr
 		}
 		if visor.conf.STCP != nil && len(visor.conf.STCP.PubKeyTable) != 0 {
-			stcpTable = make(map[cipher.PubKey]string, len(visor.conf.STCP.PubKeyTable))
-			for k, v := range visor.conf.STCP.PubKeyTable {
-				stcpTable[k] = v
-			}
+			envCfg.STCPTable = visor.conf.STCP.PubKeyTable
 		}
 
-		appEnvs = vpn.AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker, stcpTable, dmsgServers)
+		appEnvs = vpn.AppEnvArgs(envCfg)
 	}
 
 	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)
