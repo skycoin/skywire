@@ -44,7 +44,7 @@ func NetworkInterfaceGateway(ifcName string) (net.IP, error) {
 
 // DefaultNetworkGateway fetches system's default network gateway.
 func DefaultNetworkGateway() (net.IP, error) {
-	defaultNetworkIfcName, err := DefaultNetworkIfc()
+	defaultNetworkIfcName, err := DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface name: %w", err)
 	}
@@ -52,8 +52,8 @@ func DefaultNetworkGateway() (net.IP, error) {
 	return NetworkInterfaceGateway(defaultNetworkIfcName)
 }
 
-// DefaultNetworkIfc fetches default network interface name.
-func DefaultNetworkIfc() (string, error) {
+// DefaultNetworkInterface fetches default network interface name.
+func DefaultNetworkInterface() (string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return "", fmt.Errorf("error getting network interfaces: %w", err)
