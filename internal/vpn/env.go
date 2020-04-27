@@ -34,42 +34,52 @@ const (
 	STCPValueEnvPrefix = "STCP_TABLE_"
 )
 
+// DirectRoutesEnvConfig contains all the addresses which need to be communicated directly,
+// not through the VPN service.
+type DirectRoutesEnvConfig struct {
+	DmsgDiscovery string
+	DmsgServers   []string
+	TPDiscovery   string
+	RF            string
+	UptimeTracker string
+	STCPTable     map[cipher.PubKey]string
+}
+
 // AppEnvArgs forms env args to pass to the app process.
-func AppEnvArgs(dmsgDiscovery, tpDiscovery, rf, uptimeTracker string,
-	stcpTable map[cipher.PubKey]string, dmsgSrvAddrs []string) map[string]string {
+func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 	envs := make(map[string]string)
 
-	if dmsgDiscovery != "" {
-		envs[DmsgDiscAddrEnvKey] = dmsgDiscovery
+	if config.DmsgDiscovery != "" {
+		envs[DmsgDiscAddrEnvKey] = config.DmsgDiscovery
 	}
 
-	if tpDiscovery != "" {
-		envs[TPDiscAddrEnvKey] = tpDiscovery
+	if config.TPDiscovery != "" {
+		envs[TPDiscAddrEnvKey] = config.TPDiscovery
 	}
 
-	if rf != "" {
-		envs[RFAddrEnvKey] = rf
+	if config.RF != "" {
+		envs[RFAddrEnvKey] = config.RF
 	}
 
-	if uptimeTracker != "" {
-		envs[UptimeTrackerAddrEnvKey] = uptimeTracker
+	if config.UptimeTracker != "" {
+		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker
 	}
 
-	if len(stcpTable) != 0 {
-		envs[STCPTableLenEnvKey] = strconv.FormatInt(int64(len(stcpTable)), 10)
+	if len(config.STCPTable) != 0 {
+		envs[STCPTableLenEnvKey] = strconv.FormatInt(int64(len(config.STCPTable)), 10)
 
 		itemIdx := 0
-		for k, v := range stcpTable {
+		for k, v := range config.STCPTable {
 			envs[STCPKeyEnvPrefix+strconv.FormatInt(int64(itemIdx), 10)] = k.String()
 			envs[STCPValueEnvPrefix+k.String()] = v
 		}
 	}
 
-	if len(dmsgSrvAddrs) != 0 {
-		envs[DmsgAddrsCountEnvKey] = strconv.FormatInt(int64(len(dmsgSrvAddrs)), 10)
+	if len(config.DmsgServers) != 0 {
+		envs[DmsgAddrsCountEnvKey] = strconv.FormatInt(int64(len(config.DmsgServers)), 10)
 
-		for i := range dmsgSrvAddrs {
-			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = dmsgSrvAddrs[i]
+		for i := range config.DmsgServers {
+			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = config.DmsgServers[i]
 		}
 	}
 
