@@ -1,6 +1,8 @@
 package skyenv
 
 import (
+	"time"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
@@ -49,6 +51,11 @@ const (
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
 	SkysocksClientAddr = ":1080"
+)
+
+// RPC constants.
+const (
+	DefaultRPCTimeout = time.Second * 5
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
