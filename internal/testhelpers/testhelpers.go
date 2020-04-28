@@ -2,6 +2,7 @@
 package testhelpers
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -33,4 +34,12 @@ func NoErrorN(t *testing.T, errs ...error) {
 	for _, err := range errs {
 		require.NoError(t, err)
 	}
+}
+
+// ToJSON marshals `v` into JSON requiring no error.
+func ToJSON(t *testing.T, v interface{}) []byte {
+	data, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	return data
 }

@@ -2,12 +2,15 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/rpc"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -523,4 +526,58 @@ func (r *RPC) UpdateAvailable(_ *struct{}, version *updater.Version) (err error)
 
 	*version = *v
 	return nil
+}
+
+/*
+	<<< CONFIG MANAGEMENT >>>
+*/
+
+// ConfigValue gets JSON-marshaled config value.
+func (r *RPC) ConfigValue(key *string, val *[]byte) (err error) {
+	defer rpcutil.LogCall(r.log, "UpdateAvailable", key)(val, &err)
+
+	var fieldVal interface{}
+
+	const dmsgConnectedServersKey = "Dmsg.ConnectedServers"
+	if *key == dmsgConnectedServersKey {
+		var dmsgConnectedServers []string
+		// shouldn't be connected with nil config, so just return empty servers array
+		if r.visor.conf.Dmsg != nil {
+			dmsgConnectedServers = r.visor.n.Dmsg().ConnectedServers()
+		}
+
+		fieldVal = dmsgConnectedServers
+	} else {
+		const nameSeparator = "."
+		keyTokens := strings.Split(*key, nameSeparator)
+		var err error
+		fieldVal, err = configValue(reflect.Indirect(reflect.ValueOf(r.visor.conf)), keyTokens, 0)
+		if err != nil {
+			return fmt.Errorf("error getting field value: %w", err)
+		}
+	}
+
+	*val, err = json.Marshal(fieldVal)
+	if err != nil {
+		return fmt.Errorf("error marshaling field value: %w", err)
+	}
+
+	return nil
+}
+
+func configValue(refVal reflect.Value, keyTokens []string, keyTokenIdx int) (interface{}, error) {
+	f := reflect.Indirect(refVal.FieldByName(keyTokens[keyTokenIdx]))
+	if !f.IsValid() {
+		return nil, fmt.Errorf("field %s not found", strings.Join(keyTokens[:keyTokenIdx+1], "."))
+	}
+
+	if keyTokenIdx == len(keyTokens)-1 {
+		return f.Interface(), nil
+	}
+
+	if f.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("field %s is not a struct", strings.Join(keyTokens[:keyTokenIdx+1], "."))
+	}
+
+	return configValue(f, keyTokens, keyTokenIdx+1)
 }

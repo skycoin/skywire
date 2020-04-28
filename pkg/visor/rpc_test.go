@@ -21,6 +21,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
@@ -61,6 +62,87 @@ func TestHealth(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, h.SetupNode)
 		assert.Equal(t, http.StatusNotFound, h.RouteFinder)
 	})
+}
+
+func TestConfigValue(t *testing.T) {
+	c := &Config{
+		KeyPair: NewKeyPair(),
+		Dmsg: &snet.DmsgConfig{
+			SessionsCount: 10,
+		},
+		Transport: &TransportConfig{
+			Discovery: "foo",
+		},
+		Routing: &RoutingConfig{
+			RouteFinder: "foo",
+		},
+	}
+
+	c.Routing.SetupNodes = []cipher.PubKey{c.KeyPair.PubKey}
+
+	rpc := &RPC{visor: &Visor{conf: c}, log: logrus.New()}
+
+	type want struct {
+		val []byte
+		err string
+	}
+
+	tests := []struct {
+		name string
+		key  string
+		want want
+	}{
+		{
+			name: "ok - string",
+			key:  "Routing.RouteFinder",
+			want: want{
+				val: testhelpers.ToJSON(t, &c.Routing.RouteFinder),
+			},
+		},
+		{
+			name: "ok - int",
+			key:  "Dmsg.SessionsCount",
+			want: want{
+				val: testhelpers.ToJSON(t, &c.Dmsg.SessionsCount),
+			},
+		},
+		{
+			name: "fail - missing top level field",
+			key:  "Missing.Field",
+			want: want{
+				err: "error getting field value: field Missing not found",
+			},
+		},
+		{
+			name: "fail - missing field",
+			key:  "Routing.Missing",
+			want: want{
+				err: "error getting field value: field Routing.Missing not found",
+			},
+		},
+		{
+			name: "fail - trying to address field of non-struct element",
+			key:  "Routing.RouteFinder.Addr",
+			want: want{
+				err: "error getting field value: field Routing.RouteFinder is not a struct",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var val []byte
+			err := rpc.ConfigValue(&tc.key, &val)
+			if tc.want.err != "" {
+				require.Error(t, err)
+				require.Equal(t, tc.want.err, err.Error())
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.want.val, val)
+		})
+	}
 }
 
 func TestUptime(t *testing.T) {
