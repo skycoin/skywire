@@ -36,7 +36,7 @@ func New(log *logging.Logger, addr string) *Server {
 
 // Register registers an app key in RPC server.
 func (s *Server) Register(appKey appcommon.Key) error {
-	logger := logging.MustGetLogger(fmt.Sprintf("app_gw:%s", appKey))
+	logger := logging.MustGetLogger(fmt.Sprintf("app_gateway:%s", appKey))
 
 	s.rpcGW = NewRPCGateway(logger)
 	return s.rpcS.RegisterName(string(appKey), s.rpcGW)
