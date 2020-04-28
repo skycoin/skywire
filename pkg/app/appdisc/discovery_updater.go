@@ -10,17 +10,23 @@ import (
 
 // Updater updates the associated app discovery
 type Updater interface {
+
+	// Start starts the updater.
 	Start()
+
+	// Stop stops the updater.
 	Stop()
-	ChangeConnCount(delta int)
+
+	// ChangeValue changes the associated value of the discovery entry.
+	ChangeValue(name string, v []byte) error
 }
 
 // emptyUpdater is for apps that do not require discovery updates.
 type emptyUpdater struct{}
 
-func (emptyUpdater) Start()                    {}
-func (emptyUpdater) Stop()                     {}
-func (emptyUpdater) ChangeConnCount(delta int) {}
+func (emptyUpdater) Start()                                  {}
+func (emptyUpdater) Stop()                                   {}
+func (emptyUpdater) ChangeValue(name string, v []byte) error { return nil }
 
 // proxyUpdater updates proxy-discovery entry of locally running skysocks App.
 type proxyUpdater struct {
@@ -63,6 +69,7 @@ func (u *proxyUpdater) Stop() {
 	u.wg.Wait()
 }
 
-func (u *proxyUpdater) ChangeConnCount(delta int) {
-	// TODO
+func (u *proxyUpdater) ChangeValue(name string, v []byte) error {
+	// TODO: Implement a way to change conn count in discovery entry.
+	return nil
 }
