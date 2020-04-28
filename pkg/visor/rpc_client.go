@@ -101,9 +101,8 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	timer := time.NewTimer(rc.timeout)
 	defer timer.Stop()
 
-	call := rc.client.Go(method, args, reply, nil)
 	select {
-	case <-call.Done:
+	case call := <-rc.client.Go(rc.prefix+"."+method, args, reply, nil).Done:
 		return call.Error
 	case <-timer.C:
 		if err := rc.conn.Close(); err != nil {
