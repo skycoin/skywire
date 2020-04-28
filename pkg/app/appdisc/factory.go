@@ -69,9 +69,30 @@ func (f *Factory) Updater(conf appcommon.Config, args []string) (Updater, bool) 
 
 func containsFlag(args []string, flag string) bool {
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "-") && strings.Contains(arg, flag) {
+		if argEqualsFlag(arg, flag) {
 			return true
 		}
 	}
 	return false
+}
+
+func argEqualsFlag(arg, flag string) bool {
+	arg = strings.TrimSpace(arg)
+
+	// strip prefixed '-'s.
+	for {
+		if len(arg) < 1 {
+			return false
+		}
+		if arg[0] == '-' {
+			arg = arg[1:]
+			continue
+		}
+		break
+	}
+
+	// strip anything after (inclusive) of '='.
+	arg = strings.Split(arg, "=")[0]
+
+	return arg == flag
 }
