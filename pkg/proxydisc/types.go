@@ -96,7 +96,7 @@ type Stats struct {
 // Proxy represents a proxy entry in proxy-discovery.
 type Proxy struct {
 	Addr  SWAddr       `json:"address"`
-	Stats *Stats       `json:"stats"`
+	Stats *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
 	Geo   *GeoLocation `json:"geo,omitempty"`
 }
 
