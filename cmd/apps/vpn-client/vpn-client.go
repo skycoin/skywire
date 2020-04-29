@@ -11,19 +11,20 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 )
 
 const (
-	appName = "vpn-client"
+	appName = skyenv.VPNClientName
 	netType = appnet.TypeSkynet
-	vpnPort = routing.Port(44)
+	vpnPort = routing.Port(skyenv.VPNServerPort)
 )
 
 const (
