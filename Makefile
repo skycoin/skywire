@@ -101,8 +101,11 @@ install-linters: ## Install linters
 	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
 
-format: ## Formats the code. Must have goimports installed (use make install-linters).
-	${OPTS} go mod tidy && go mod vendor
+tidy: ## Tidies and vendors dependencies.
+	${OPTS} go mod tidy -v
+	${OPTS} go mod vendor -v
+
+format: tidy ## Formats the code. Must have goimports installed (use make install-linters).
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
