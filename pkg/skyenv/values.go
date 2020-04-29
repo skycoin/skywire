@@ -10,6 +10,7 @@ import (
 const (
 	DefaultTpDiscAddr        = "http://transport.discovery.skywire.skycoin.com"
 	DefaultDmsgDiscAddr      = "http://dmsg.discovery.skywire.skycoin.com"
+	DefaultProxyDiscAddr     = "http://proxy.discovery.skywire.skycoin.com"
 	DefaultRouteFinderAddr   = "http://routefinder.skywire.skycoin.com"
 	DefaultUptimeTrackerAddr = "http://uptime-tracker.skywire.skycoin.com"
 	DefaultSetupPK           = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
@@ -19,6 +20,7 @@ const (
 const (
 	TestTpDiscAddr      = "http://transport.discovery.skywire.cc"
 	TestDmsgDiscAddr    = "http://dmsg.discovery.skywire.cc"
+	TestProxyDiscAddr   = "http://proxy.discovery.skywire.cc"
 	TestRouteFinderAddr = "http://routefinder.skywire.cc"
 	TestSetupPK         = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
 )
@@ -56,6 +58,11 @@ const (
 // RPC constants.
 const (
 	DefaultRPCTimeout = time.Second * 5
+)
+
+// Default skywire app discovery constants
+const (
+	AppDiscUpdateInterval = time.Second * 30
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
