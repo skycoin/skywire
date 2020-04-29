@@ -13,11 +13,13 @@ import (
 )
 
 // Server is a server for app/visor communication.
+// TODO(evanlinjin): In my humble opinion, this should be renamed to 'RPCServer' to avoid confusion.
 type Server struct {
 	log    *logging.Logger
 	lis    net.Listener
 	addr   string
 	rpcS   *rpc.Server
+	rpcGW  *RPCGateway
 	done   sync.WaitGroup
 	stopCh chan struct{}
 }
@@ -35,9 +37,9 @@ func New(log *logging.Logger, addr string) *Server {
 // Register registers an app key in RPC server.
 func (s *Server) Register(appKey appcommon.Key) error {
 	logger := logging.MustGetLogger(fmt.Sprintf("app_gateway:%s", appKey))
-	gateway := NewRPCGateway(logger)
 
-	return s.rpcS.RegisterName(string(appKey), gateway)
+	s.rpcGW = NewRPCGateway(logger)
+	return s.rpcS.RegisterName(string(appKey), s.rpcGW)
 }
 
 // ListenAndServe starts listening for incoming app connections via tcp socket.

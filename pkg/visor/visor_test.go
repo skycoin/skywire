@@ -120,10 +120,11 @@ func TestVisorStartClose(t *testing.T) {
 
 	pm := &appserver.MockProcManager{}
 	appCfg1 := appcommon.Config{
-		Name:       apps["skychat"].App,
-		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Keys().PubKey.Hex(),
-		WorkDir:    filepath.Join("", apps["skychat"].App),
+		Name:        apps["skychat"].App,
+		ServerAddr:  appcommon.DefaultServerAddr,
+		VisorPK:     visorCfg.Keys().PubKey.Hex(),
+		RoutingPort: apps["skychat"].Port,
+		WorkDir:     filepath.Join("", apps["skychat"].App),
 	}
 	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
@@ -198,10 +199,11 @@ func TestVisorSpawnApp(t *testing.T) {
 	}()
 
 	appCfg := appcommon.Config{
-		Name:       app.App,
-		ServerAddr: appcommon.DefaultServerAddr,
-		VisorPK:    visorCfg.Keys().PubKey.Hex(),
-		WorkDir:    filepath.Join("", app.App),
+		Name:        app.App,
+		ServerAddr:  appcommon.DefaultServerAddr,
+		VisorPK:     visorCfg.Keys().PubKey.Hex(),
+		RoutingPort: app.Port,
+		WorkDir:     filepath.Join("", app.App),
 	}
 
 	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
@@ -257,10 +259,11 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		}
 
 		appCfg := appcommon.Config{
-			Name:       app.App,
-			ServerAddr: appcommon.DefaultServerAddr,
-			VisorPK:    c.Keys().PubKey.Hex(),
-			WorkDir:    filepath.Join("", app.App),
+			Name:        app.App,
+			ServerAddr:  appcommon.DefaultServerAddr,
+			VisorPK:     c.Keys().PubKey.Hex(),
+			RoutingPort: app.Port,
+			WorkDir:     filepath.Join("", app.App),
 		}
 
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
@@ -296,10 +299,11 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 
 		pm := &appserver.MockProcManager{}
 		appCfg := appcommon.Config{
-			Name:       app.App,
-			ServerAddr: appcommon.DefaultServerAddr,
-			VisorPK:    c.Keys().PubKey.Hex(),
-			WorkDir:    filepath.Join("", app.App),
+			Name:        app.App,
+			ServerAddr:  appcommon.DefaultServerAddr,
+			VisorPK:     c.Keys().PubKey.Hex(),
+			RoutingPort: app.Port,
+			WorkDir:     filepath.Join("", app.App),
 		}
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
