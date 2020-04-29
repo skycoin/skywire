@@ -1,0 +1,15 @@
+[Unit]
+Description=Skywire Visor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/skywire-visor /etc/skywire-visor.json
+Restart=on-failure
+RestartSec=20
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target
