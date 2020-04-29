@@ -170,7 +170,7 @@ Besides list of additional arguments, visor passes 3 environmental variables to 
 - `APP_SERVER_ADDR` - address of RPC server for app to communicate with the visor;
 - `VISOR_PK` - pub key of the visor running the app.
 
-These values may be obtained and examined from the environment by any suitable means. For developers working with Go, there is a function `app.ClientConfigFromEnv` which does all the job.
+These values may be obtained and examined from the environment by any suitable means. For developers working with Go, there is a function `app.ClientConfigFromEnv` which does all the job (may be found [here](./pkg/app/client.go)).
 
 #### App-Visor communication
 
