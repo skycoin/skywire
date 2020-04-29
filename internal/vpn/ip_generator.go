@@ -63,26 +63,10 @@ func (g *IPGenerator) Next() (net.IP, error) {
 }
 
 func fetchIPv4Octets(ip net.IP) ([4]uint8, error) {
-	if len(ip) == net.IPv4len {
-		return [4]uint8{ip[0], ip[1], ip[2], ip[3]}, nil
+	ip = ip.To4()
+	if ip == nil {
+		return [4]uint8{}, errors.New("address is not of v4")
 	}
 
-	if len(ip) == net.IPv6len &&
-		isIPZeroed(ip[0:10]) &&
-		ip[10] == 0xff &&
-		ip[11] == 0xff {
-		return [4]uint8{ip[12], ip[13], ip[14], ip[15]}, nil
-	}
-
-	return [4]uint8{}, errors.New("address is not of v4")
-}
-
-func isIPZeroed(p net.IP) bool {
-	for i := 0; i < len(p); i++ {
-		if p[i] != 0 {
-			return false
-		}
-	}
-
-	return true
+	return [4]uint8{ip[0], ip[1], ip[2], ip[3]}, nil
 }
