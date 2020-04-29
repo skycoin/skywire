@@ -130,10 +130,10 @@ After `skywire-visor` is up and running with default environment, default apps a
 ### App Programming API
 
 Skywire supports building custom apps. In order for visor to run a custom app, app binary should be put into the correct directory. This directory is specified in the visor config as `apps_path`. Each app has a list of parameters:
-- App (app) (required) - contains application name. This should be equal to the binary name stored in the `apps_path` directory to be correctly resolved by the visor;
-- AutoStart (auto_start) (defaults to false) - boolean value, indicates if app should be run on the visor start;
-- Port (port) (required) - port app binds to. Port shouldn't clash with one of the reserved ports of standard Skywire apps (list of such ports is defined below);
-- Args (args) - array of additional arguments to be passed to the app binary. May be totally omitted.
+- `app` (required) - contains application name. This should be equal to the binary name stored in the `apps_path` directory to be correctly resolved by the visor;
+- `auto_start` (defaults to false) - boolean value, indicates if app should be run on the visor start;
+- `port` (required) - port app binds to. Port shouldn't clash with one of the reserved ports of standard Skywire apps (list of such ports is defined below);
+- `args` - array of additional arguments to be passed to the app binary. May be totally omitted.
 
 Example part of visor config:
 ```json5
@@ -157,18 +157,18 @@ $ ./apps/custom_app -c ./custom_app_config.json
 
 #### Reserved App Ports
 
-- 0 - Router
-- 1 - Skychat
-- 3 - Skysocks
+- `0` - Router
+- `1` - Skychat
+- `3` - Skysocks
 
 List may be updated.
 
 #### App initialization
 
 Besides list of additional arguments, visor passes 3 environmental variables to each running app. It goes as follows:
-- APP_KEY - used to authenticate app RPC calls (explained in details below);
-- APP_SERVER_ADDR - address of RPC server for app to communicate with the visor;
-- VISOR_PK - pub key of the visor running the app.
+- `APP_KEY` - used to authenticate app RPC calls (explained in details below);
+- `APP_SERVER_ADDR` - address of RPC server for app to communicate with the visor;
+- `VISOR_PK` - pub key of the visor running the app.
 
 These values may be obtained and examined from the environment by any suitable means. For developers working with Go, there is a function `app.ClientConfigFromEnv` which does all the job.
 
