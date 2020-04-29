@@ -4,16 +4,19 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
 )
+
+var appDisc = new(appdisc.Factory)
 
 func TestProcManager_Exists(t *testing.T) {
 	srv := New(nil, appcommon.DefaultServerAddr)
 
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), appDisc, srv)
 	m, ok := mIfc.(*procManager)
 	require.True(t, ok)
 
@@ -31,7 +34,7 @@ func TestProcManager_Exists(t *testing.T) {
 func TestProcManager_Range(t *testing.T) {
 	srv := New(nil, appcommon.DefaultServerAddr)
 
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), appDisc, srv)
 	m, ok := mIfc.(*procManager)
 
 	require.True(t, ok)
@@ -61,7 +64,7 @@ func TestProcManager_Range(t *testing.T) {
 func TestProcManager_Pop(t *testing.T) {
 	srv := New(nil, appcommon.DefaultServerAddr)
 
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
+	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), appDisc, srv)
 	m, ok := mIfc.(*procManager)
 	require.True(t, ok)
 

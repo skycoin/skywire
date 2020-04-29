@@ -17,14 +17,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
@@ -93,6 +93,7 @@ type Visor struct {
 	cliLis net.Listener
 	hvErrs map[cipher.PubKey]chan error // errors returned when the associated hypervisor ServeRPCClient returns
 
+	appDiscF     *appdisc.Factory
 	procManager  appserver.ProcManager
 	appRPCServer *appserver.Server
 
@@ -217,6 +218,13 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
+	visor.appDiscF = &appdisc.Factory{
+		PK:             pk,
+		SK:             sk,
+		UpdateInterval: time.Duration(cfg.AppDiscConfig().UpdateInterval),
+		ProxyDisc:      cfg.AppDiscConfig().ProxyDisc,
+	}
+
 	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerAddr)
 
 	go func() {
@@ -225,7 +233,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		}
 	}()
 
-	visor.procManager = appserver.NewProcManager(logging.MustGetLogger("proc_manager"), visor.appRPCServer)
+	visor.procManager = appserver.NewProcManager(logging.MustGetLogger("proc_manager"), visor.appDiscF, visor.appRPCServer)
 
 	visor.updater = updater.New(visor.logger, visor.restartCtx, visor.appsPath)
 
@@ -556,11 +564,12 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	appCfg := appcommon.Config{
-		Name:       config.App,
-		ServerAddr: visor.conf.AppServerAddr,
-		VisorPK:    visor.conf.Keys().PubKey.Hex(),
-		BinaryDir:  visor.appsPath,
-		WorkDir:    filepath.Join(visor.localPath, config.App),
+		Name:        config.App,
+		ServerAddr:  visor.conf.AppServerAddr,
+		VisorPK:     visor.conf.Keys().PubKey.Hex(),
+		RoutingPort: config.Port,
+		BinaryDir:   visor.appsPath,
+		WorkDir:     filepath.Join(visor.localPath, config.App),
 	}
 
 	if _, err := ensureDir(appCfg.WorkDir); err != nil {
