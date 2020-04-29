@@ -176,7 +176,14 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 				time.Sleep(time.Second * 10) // TODO(evanlinjin): Exponential backoff.
 				continue
 			}
-			c.log.WithField("entry", entry).Debug("Entry updated.")
+			if entry.Geo != nil {
+				c.entry.Geo = entry.Geo
+			}
+			j, err := json.Marshal(entry)
+			if err != nil {
+				panic(err)
+			}
+			c.log.WithField("entry", string(j)).Debug("Entry updated.")
 			break
 		}
 	}

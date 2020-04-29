@@ -140,6 +140,14 @@ func (m *Manager) DoRange(next func(id uint16, v interface{}) bool) {
 	m.mx.RUnlock()
 }
 
+// Len returns the combined count of both reserved and used IDs.
+func (m *Manager) Len() int {
+	m.mx.RLock()
+	out := len(m.values)
+	m.mx.RUnlock()
+	return out
+}
+
 // constructFreeFunc constructs new func responsible for clearing
 // a slot with the specified `id`.
 func (m *Manager) constructFreeFunc(id uint16) func() bool {
