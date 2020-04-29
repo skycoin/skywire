@@ -12,12 +12,13 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 )
 
 const (
-	appName = "vpn-server"
+	appName = skyenv.VPNServerName
 	netType = appnet.TypeSkynet
-	vpnPort = routing.Port(44)
+	vpnPort = routing.Port(skyenv.VPNServerPort)
 )
 
 var (
