@@ -56,6 +56,9 @@ stop: ## Stop running skywire-visor on host
 config: ## Generate skywire.json
 	-./skywire-cli visor gen-config -o  ./skywire.json -r
 
+generate: ## Generate mocks and config README's
+	go generate ./...
+
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
@@ -101,7 +104,11 @@ install-linters: ## Install linters
 	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
 
-format: ## Formats the code. Must have goimports installed (use make install-linters).
+tidy: ## Tidies and vendors dependencies.
+	${OPTS} go mod tidy -v
+	${OPTS} go mod vendor -v
+
+format: tidy ## Formats the code. Must have goimports installed (use make install-linters).
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
