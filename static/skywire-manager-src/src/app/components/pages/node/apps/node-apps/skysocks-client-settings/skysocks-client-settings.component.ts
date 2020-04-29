@@ -17,8 +17,7 @@ import { EditSkysocksClientNoteComponent } from './edit-skysocks-client-note/edi
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import {
   SkysocksClientFilterComponent,
-  SkysocksClientFilters,
-  StateFilterStates
+  SkysocksClientFilters
 } from './skysocks-client-filter/skysocks-client-filter.component';
 
 /**
@@ -88,8 +87,6 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // the value selected by the user if it is a variable for the translate pipe and the third one
   // has the value selected by the user if the translate pipe is not needed,
   currentFiltersTexts: string[][] = [];
-
-  stateFilterStates = StateFilterStates;
 
   // If the operation in currently being made.
   private working = false;
@@ -173,23 +170,62 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Returns an array that can be used to highlight a filter term in a string. No html tags
+   * are returned to avoid security problems.
+   * @param completeText Text string where the filter term must be highlighted.
+   * @param filter term used for filtering the list.
+   * @returns An array in which the value of completeText has been divided. Each even element
+   * has a part of the text which must NOT be highlighted and each odd element has a part
+   * which must be highlighted.
+   */
+  getHighlightedTextParts(completeText: string, filter: string): string[] {
+    if (!filter) {
+      return [completeText];
+    }
+
+    // Lowercase version for comparations.
+    const lowercaseCompleteText = completeText.toLowerCase();
+    const lowercaseFilter = filter.toLowerCase();
+
+    let process = true;
+    let currentIndex = 0;
+
+    const response: string[] = [];
+
+    while (process) {
+      // Get the next part where the filter term is.
+      const index = lowercaseCompleteText.indexOf(lowercaseFilter, currentIndex);
+
+      if (index === -1) {
+        process = false;
+      } else {
+        // Include the part which is before the term.
+        response.push(completeText.substring(currentIndex, index));
+        // Include the term as it is in the original string.
+        response.push(completeText.substring(index, index + filter.length));
+
+        currentIndex = index + filter.length;
+      }
+    }
+
+    // Add the rest of the text.
+    response.push(completeText.substring(currentIndex));
+
+    return response;
+  }
+
   // Filters the proxies obtained from the discovery service using the filters selected by
   // the user.
   private filterProxies() {
-    if (this.currentFilters.state.state === StateFilterStates.NoFilter && !this.currentFilters.location && !this.currentFilters.key) {
+    if (!this.currentFilters.location && !this.currentFilters.key) {
       this.filteredProxiesFromDiscovery = this.proxiesFromDiscovery;
     } else {
       this.filteredProxiesFromDiscovery = this.proxiesFromDiscovery.filter(proxy => {
-        if (this.currentFilters.state.state === StateFilterStates.Available && !proxy.available) {
-          return false;
-        }
-        if (this.currentFilters.state.state === StateFilterStates.Offline && proxy.available) {
-          return false;
-        }
         if (this.currentFilters.location && !proxy.location.toLowerCase().includes(this.currentFilters.location.toLowerCase())) {
           return false;
         }
-        if (this.currentFilters.key && !proxy.publicKeyPort.toLowerCase().includes(this.currentFilters.key.toLowerCase())) {
+        if (this.currentFilters.key && !proxy.address.toLowerCase().includes(this.currentFilters.key.toLowerCase())) {
           return false;
         }
 
@@ -205,9 +241,6 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   private updateCurrentFilters() {
     this.currentFiltersTexts = [];
 
-    if (this.currentFilters.state.state !== StateFilterStates.NoFilter) {
-      this.currentFiltersTexts.push(['apps.skysocks-client-settings.filter-dialog.state', this.currentFilters.state.text, '']);
-    }
     if (this.currentFilters.location) {
       this.currentFiltersTexts.push(['apps.skysocks-client-settings.filter-dialog.location', '', this.currentFilters.location]);
     }
