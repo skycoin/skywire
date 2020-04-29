@@ -14,6 +14,7 @@
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `hypervisor`](#run-hypervisor)
   - [Apps](#Apps)
+    - [App Programming API](#app-programming-api)
   - [Transports](#Transports)
   - [Creating a GitHub release](#creating-a-github-release)
     - [How to create a GitHub release](#how-to-create-a-github-release)
