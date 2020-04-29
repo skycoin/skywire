@@ -55,6 +55,11 @@ const (
 	SkysocksClientAddr = ":1080"
 )
 
+// RPC constants.
+const (
+	DefaultRPCTimeout = time.Second * 5
+)
+
 // Default skywire app discovery constants
 const (
 	AppDiscUpdateInterval = time.Second * 30

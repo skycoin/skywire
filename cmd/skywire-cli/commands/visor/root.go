@@ -2,8 +2,9 @@ package visor
 
 import (
 	"net"
-	"net/rpc"
 	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
@@ -33,7 +34,7 @@ func rpcClient() visor.RPCClient {
 	if err := conn.SetDeadline(time.Now().Add(rpcConnDuration)); err != nil {
 		logger.Fatal("RPC connection failed:", err)
 	}
-	return visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix)
+	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout)
 }
 
 const (
