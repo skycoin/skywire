@@ -11,5 +11,13 @@
     "pathRewrite": {
       "^/http-api" : "/api"
     }
+  },
+  "/discovery-api": {
+    "target": "http://127.0.0.1:8001",
+    "secure": false,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/discovery-api" : "/api"
+    }
   }
 }

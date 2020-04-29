@@ -55,13 +55,12 @@ export interface HealthInfo {
 }
 
 export class ProxyDiscoveryEntry {
-  publicKeyPort: string;
+  address: string;
+  pk: string;
+  port: string;
   country?: string;
-  city?: string;
+  region?: string;
   location?: string;
-  status?: string;
-  available?: boolean;
-  updatedAt?: string;
 }
 
 // old

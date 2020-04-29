@@ -80,26 +80,24 @@
           <button
             mat-button
             class="list-button grey-button-background w-100"
-            (click)="saveChanges(proxy.publicKeyPort, false, proxy.location)"
+            (click)="saveChanges(proxy.pk, false, proxy.location)"
           >
             <div class="button-content">
               <div class="item">
                 <span>{{ 'apps.skysocks-client-settings.key' | translate }}</span>
-                <span> {{ proxy.publicKeyPort }}</span>
+                <span>&nbsp;<ng-container *ngFor="let part of getHighlightedTextParts(proxy.pk, currentFilters.key); let i = index">
+                  <span [ngClass]="{ highlighted: i % 2 !== 0 }">{{ part }}</span>
+                </ng-container></span>
+              </div>
+              <div class="item">
+                <span>{{ 'apps.skysocks-client-settings.port' | translate }}</span>
+                <span> {{ proxy.port }}</span>
               </div>
               <div class="item" *ngIf="proxy.location">
                 <span>{{ 'apps.skysocks-client-settings.location' | translate }}</span>
-                <span> {{ proxy.location }}</span>
-              </div>
-              <div class="item" *ngIf="proxy.available !== null && proxy.available !== undefined">
-                <span>{{ 'apps.skysocks-client-settings.state' | translate }}</span>
-                <span [class]="proxy.available ? 'green-text' : 'red-text'"> 
-                  {{ ('apps.skysocks-client-settings.state-' + (proxy.available ? 'available' : 'offline' )) | translate }}
-                </span>
-              </div>
-              <div class="item" *ngIf="proxy.updatedAt">
-                <span>{{ 'apps.skysocks-client-settings.update' | translate }}</span>
-                <span> {{ proxy.updatedAt }}</span>
+                <span>&nbsp;<ng-container *ngFor="let part of getHighlightedTextParts(proxy.location, currentFilters.location); let i = index">
+                  <span [ngClass]="{ highlighted: i % 2 !== 0 }">{{ part }}</span>
+                </ng-container></span>
               </div>
             </div>
           </button>
