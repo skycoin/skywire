@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -12,7 +13,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -25,16 +26,21 @@ const (
 	vpnPort = routing.Port(44)
 )
 
+const (
+	serverDialInitBO = 1 * time.Second
+	serverDialMaxBO  = 10 * time.Second
+)
+
 var (
 	log = app.NewLogger(appName)
-	r   = netutil.NewRetrier(time.Second, 0, 1)
+	r   = netutil.NewRetrier(log, serverDialInitBO, serverDialMaxBO, 0, 1)
 )
 
 var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
 
 func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 	var conn net.Conn
-	err := r.Do(func() error {
+	err := r.Do(context.Background(), func() error {
 		var err error
 		conn, err = appCl.Dial(appnet.Addr{
 			Net:    netType,
