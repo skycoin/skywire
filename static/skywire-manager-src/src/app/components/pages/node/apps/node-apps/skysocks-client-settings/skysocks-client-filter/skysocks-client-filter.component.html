@@ -1,14 +1,5 @@
 <app-dialog [headline]="'apps.skysocks-client-settings.filter-dialog.title' | translate">
-  <!-- State. -->
   <form [formGroup]="form">
-    <mat-form-field>
-      <mat-select
-        formControlName="state"
-        [placeholder]="'apps.skysocks-client-settings.filter-dialog.state' | translate"
-      >
-        <mat-option *ngFor="let filter of stateFilters" [value]="filter">{{ filter.text | translate }}</mat-option>
-      </mat-select>
-    </mat-form-field>
     <!-- Location. -->
     <mat-form-field>
       <input
