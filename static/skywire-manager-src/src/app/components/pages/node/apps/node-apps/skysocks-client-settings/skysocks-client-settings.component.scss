@@ -71,8 +71,12 @@ form {
       color: $black;
       word-break: break-all;
 
-      span:first-of-type {
+      > span:first-of-type {
         color: $lighter-gray;
+      }
+
+      .highlighted {
+        background-color: yellow;
       }
     }
 

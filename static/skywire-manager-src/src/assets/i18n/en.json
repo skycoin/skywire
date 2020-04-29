@@ -312,11 +312,10 @@
       "note-entered-manually": "Entered manually",
       "note-obtained": "Obtained from the discovery service",
       "key": "Key:",
+      "port": "Port:",
       "location": "Location:",
-      "state": "State:",
       "state-available": "Available",
       "state-offline": "Offline",
-      "update": "Last updated:",
       "public-key": "Remote visor public key",
       "no-elements": "Currently there are no elements to show. Please try again later.",
       "no-elements-for-filters": "There are no elements that meet the filter criteria.",
@@ -339,8 +338,6 @@
 
       "filter-dialog": {
         "title": "Filters",
-        "state": "The state must be",
-        "state-no-filter": "Do not filter",
         "location": "The location must contain",
         "pub-key": "The public key must contain",
         "apply": "Apply"

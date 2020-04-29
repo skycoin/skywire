@@ -282,11 +282,10 @@
       "note-entered-manually": "Introducido manualmente",
       "note-obtained": "Obtenido del servicio de descubrimiento",
       "key": "Llave:",
+      "port": "Puerto:",
       "location": "Ubicación:",
-      "state": "Estado:",
       "state-available": "Disponible",
       "state-offline": "Offline",
-      "update": "Última vez actualizado:",
       "public-key": "Llave pública del visor remoto",
       "no-elements": "Actualmente no hay elementos para mostrar. Por favor, inténtelo de nuevo más tarde.",
       "no-elements-for-filters": "No hay elementos que cumplan los criterios de filtro.",
@@ -309,8 +308,6 @@
 
       "filter-dialog": {
         "title": "Filtros",
-        "state": "El estado debe ser",
-        "state-no-filter": "No filtrar",
         "location": "La ubicación debe contener",
         "pub-key": "La llave pública debe contener",
         "apply": "Aplicar"

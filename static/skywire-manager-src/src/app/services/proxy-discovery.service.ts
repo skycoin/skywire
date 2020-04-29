@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { retryWhen, delay, map } from 'rxjs/operators';
 
 import { ProxyDiscoveryEntry } from '../app.datatypes';
+import { environment } from 'src/environments/environment';
 
 /**
  * Allows to get the proxies registered in the proxy discovery service.
@@ -13,9 +14,10 @@ import { ProxyDiscoveryEntry } from '../app.datatypes';
 })
 export class ProxyDiscoveryService {
   /**
-   * URL of the proxy discovery service.
+   * URL of the proxy discovery service. While in dev mode the url is managed by the
+   * dev server proxy.
    */
-  private readonly discoveryServiceUrl = 'http://localhost:8081';
+  private readonly discoveryServiceUrl = environment.production ? 'http://proxy.discovery.skywire.cc/api' : '/discovery-api';
 
   constructor(
     private http: HttpClient,
@@ -25,34 +27,44 @@ export class ProxyDiscoveryService {
    * Get the proxies registered in the proxy discovery service.
    */
   getProxies(): Observable<ProxyDiscoveryEntry[]> {
-    return this.http.get(this.discoveryServiceUrl + '/api/v1/getAll').pipe(
+    const response: ProxyDiscoveryEntry[] = [];
+
+    return this.http.get(this.discoveryServiceUrl + '/proxies').pipe(
       // In case of error, retry.
       retryWhen(errors => errors.pipe(delay(4000))),
-      map((response: ProxyDiscoveryEntry[]) => {
+      map((result: any[]) => {
         // Process the data.
-        response.forEach(proxy => {
-          // Remove the invalid dates.
-          if (proxy.updatedAt) {
-            proxy.updatedAt = proxy.updatedAt.startsWith('0001-01-01') ? null : proxy.updatedAt;
-          }
+        result.forEach(proxy => {
+          const currentEntry = new ProxyDiscoveryEntry();
 
-          // Process the status.
-          if (proxy.status) {
-            proxy.available = proxy.status.toLowerCase() === 'available';
-          }
+          // The address must have 2 parts: the pk and the port.
+          const addressParts = (proxy.address as string).split(':');
+          if (addressParts.length === 2) {
+            currentEntry.address = proxy.address;
+            currentEntry.pk = addressParts[0];
+            currentEntry.port = addressParts[1];
 
-          // Process the location.
-          let location = '';
-          if (proxy.city) {
-            location += proxy.city;
+            currentEntry.location = '';
+
+            // Process the location.
+            if (proxy.geo) {
+              if (proxy.geo.region) {
+                currentEntry.region = proxy.geo.region;
+                currentEntry.location += currentEntry.region;
+              }
+
+              if (proxy.geo.region && proxy.geo.country) {
+                currentEntry.location += ', ';
+              }
+
+              if (proxy.geo.country) {
+                currentEntry.country = proxy.geo.country;
+                currentEntry.location += currentEntry.country;
+              }
+            }
+
+            response.push(currentEntry);
           }
-          if (proxy.city && proxy.country) {
-            location += ', ';
-          }
-          if (proxy.country) {
-            location += proxy.country;
-          }
-          proxy.location = location;
         });
 
         return response;
