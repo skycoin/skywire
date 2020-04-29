@@ -388,10 +388,12 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 	err := mc.do(false, func() error {
 		out = *mc.s
 		for _, a := range mc.s.Apps {
-			out.Apps = append(out.Apps, &(*a))
+			a := a
+			out.Apps = append(out.Apps, a)
 		}
 		for _, tp := range mc.s.Transports {
-			out.Transports = append(out.Transports, &(*tp))
+			tp := tp
+			out.Transports = append(out.Transports, tp)
 		}
 		out.RoutesCount = mc.s.RoutesCount
 		return nil
@@ -420,7 +422,8 @@ func (mc *mockRPCClient) Apps() ([]*AppState, error) {
 	var apps []*AppState
 	err := mc.do(false, func() error {
 		for _, a := range mc.s.Apps {
-			apps = append(apps, &(*a))
+			a := a
+			apps = append(apps, a)
 		}
 		return nil
 	})
@@ -495,6 +498,7 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 	var summaries []*TransportSummary
 	err := mc.do(false, func() error {
 		for _, tp := range mc.s.Transports {
+			tp := tp
 			if types != nil {
 				for _, reqT := range types {
 					if tp.Type == reqT {
@@ -518,7 +522,7 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 				temp.Log = nil
 				summaries = append(summaries, &temp)
 			} else {
-				summaries = append(summaries, &(*tp))
+				summaries = append(summaries, tp)
 			}
 		}
 		return nil
