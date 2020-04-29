@@ -139,16 +139,11 @@ func defaultConfig() *visor.Config {
 	conf.Transport = visor.DefaultTransportConfig()
 	conf.Routing = visor.DefaultRoutingConfig()
 
-	if testenv {
-		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
-		conf.Transport.Discovery = skyenv.TestTpDiscAddr
-		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-		conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
-	}
-
 	conf.Hypervisors = []visor.HypervisorConfig{}
 
 	conf.UptimeTracker = visor.DefaultUptimeTrackerConfig()
+
+	conf.AppDiscovery = visor.DefaultAppDiscConfig()
 
 	conf.AppsPath = visor.DefaultAppsPath
 	conf.LocalPath = visor.DefaultLocalPath
@@ -162,6 +157,14 @@ func defaultConfig() *visor.Config {
 
 	conf.AppServerAddr = appcommon.DefaultServerAddr
 	conf.RestartCheckDelay = restart.DefaultCheckDelay.String()
+
+	if testenv {
+		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
+		conf.Transport.Discovery = skyenv.TestTpDiscAddr
+		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+		conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
+		conf.AppDiscovery.ProxyDisc = skyenv.TestProxyDiscAddr
+	}
 
 	return conf
 }
