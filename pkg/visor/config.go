@@ -24,6 +24,8 @@ import (
 	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
+//go:generate readmegen -n Config -o ./README.md ./config.go
+
 const (
 	// DefaultTimeout is used for default config generation and if it is not set in config.
 	DefaultTimeout = Duration(10 * time.Second)
@@ -57,6 +59,7 @@ type Config struct {
 	Transport     *TransportConfig     `json:"transport"`
 	Routing       *RoutingConfig       `json:"routing"`
 	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker,omitempty"`
+	AppDiscovery  *AppDiscConfig       `json:"app_discovery,omitempty"`
 
 	Apps []AppConfig `json:"apps"`
 
@@ -218,6 +221,19 @@ func (c *Config) RoutingConfig() *RoutingConfig {
 	}
 
 	return c.Routing
+}
+
+// AppDiscConfig extracts and returns AppDiscConfig from visor config.
+// If it is not found, it sets it as DefaultAppDisConfig() and returns it.
+func (c *Config) AppDiscConfig() *AppDiscConfig {
+	if c.AppDiscovery == nil {
+		c.AppDiscovery = DefaultAppDiscConfig()
+		if err := c.flush(); err != nil && c.log != nil {
+			c.log.WithError(err).Errorf("Failed to flush config to disk")
+		}
+	}
+
+	return c.AppDiscovery
 }
 
 // AppsConfig decodes AppsConfig from a local json config file.
@@ -416,6 +432,20 @@ type UptimeTrackerConfig struct {
 func DefaultUptimeTrackerConfig() *UptimeTrackerConfig {
 	return &UptimeTrackerConfig{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
+	}
+}
+
+// AppDiscConfig configures Skywire App Discovery Clients.
+type AppDiscConfig struct {
+	UpdateInterval Duration `json:"update_interval,omitempty"`
+	ProxyDisc      string   `json:"proxy_discovery_addr"`
+}
+
+// DefaultAppDiscConfig returns the default app discovery config.
+func DefaultAppDiscConfig() *AppDiscConfig {
+	return &AppDiscConfig{
+		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
 	}
 }
 
