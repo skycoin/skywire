@@ -186,7 +186,7 @@ func TestStartStopApp(t *testing.T) {
 	appPID1 := appcommon.ProcID(10)
 
 	pm := &appserver.MockProcManager{}
-	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", app).Return(testhelpers.NoErr)
 	pm.On("Stop", app).Return(testhelpers.NoErr)

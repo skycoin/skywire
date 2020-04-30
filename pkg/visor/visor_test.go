@@ -128,7 +128,7 @@ func TestVisorStartClose(t *testing.T) {
 	}
 	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
-	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
+	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything, mock.Anything).
 		Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", apps["skychat"].App).Return(testhelpers.NoErr)
 
@@ -211,7 +211,7 @@ func TestVisorSpawnApp(t *testing.T) {
 
 	pm := &appserver.MockProcManager{}
 	pm.On("Wait", app.App).Return(testhelpers.NoErr)
-	pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+	pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything, mock.Anything).
 		Return(appPID, testhelpers.NoErr)
 	pm.On("Exists", app.App).Return(true)
 	pm.On("Stop", app.App).Return(testhelpers.NoErr)
@@ -270,7 +270,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appPID := appcommon.ProcID(10)
 
 		pm := &appserver.MockProcManager{}
-		pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+		pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything, mock.Anything).
 			Return(appPID, testhelpers.NoErr)
 		pm.On("Exists", app.App).Return(false)
 
@@ -308,7 +308,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
 		appPID := appcommon.ProcID(10)
-		pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
+		pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything, mock.Anything).
 			Return(appPID, appserver.ErrAppAlreadyStarted)
 		pm.On("Exists", app.App).Return(true)
 
