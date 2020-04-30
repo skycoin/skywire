@@ -594,7 +594,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appArgs := append([]string{filepath.Join(visor.dir(), config.App)}, config.Args...)
 
 	appEnvs := make(map[string]string)
-	if appCfg.Name == "vpn-client" {
+	if appCfg.Name == skyenv.VPNClientName {
 		var envCfg vpn.DirectRoutesEnvConfig
 
 		if visor.conf.Dmsg != nil {
@@ -615,6 +615,9 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 		}
 
 		appEnvs = vpn.AppEnvArgs(envCfg)
+	}
+
+	if appCfg.Name == skyenv.VPNClientName || appCfg.Name == skyenv.VPNServerName {
 		appEnvs["PATH"] = os.Getenv("PATH")
 	}
 
