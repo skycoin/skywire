@@ -60,6 +60,7 @@ func NewProc(log *logging.Logger, disc appdisc.Updater, c appcommon.Config, args
 	cmd := exec.Command(binaryPath, args...) // nolint:gosec
 
 	cmd.Env = env
+	log.Infof("RUNNING APP WITH ENVS: %v", cmd.Env)
 	cmd.Dir = c.WorkDir
 
 	cmd.Stdout = stdout
