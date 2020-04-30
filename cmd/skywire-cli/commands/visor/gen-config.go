@@ -132,8 +132,8 @@ func defaultConfig() *visor.Config {
 		defaultSkychatConfig(),
 		defaultSkysocksConfig(""),
 		defaultSkysocksClientConfig(),
-		defaultVPNServerConfig(),
-		defaultVPNClientConfig(),
+		defaultVPNServerConfig(""),
+		defaultVPNClientConfig(""),
 	}
 
 	conf.TrustedVisors = []cipher.PubKey{}
@@ -210,18 +210,30 @@ func defaultSkysocksClientConfig() visor.AppConfig {
 	}
 }
 
-func defaultVPNServerConfig() visor.AppConfig {
+func defaultVPNServerConfig(passcode string) visor.AppConfig {
+	var args []string
+	if passcode != "" {
+		args = []string{"-passcode", passcode}
+	}
+
 	return visor.AppConfig{
 		App:       skyenv.VPNServerName,
 		AutoStart: true,
 		Port:      routing.Port(skyenv.VPNServerPort),
+		Args:      args,
 	}
 }
 
-func defaultVPNClientConfig() visor.AppConfig {
+func defaultVPNClientConfig(passcode string) visor.AppConfig {
+	var args []string
+	if passcode != "" {
+		args = []string{"-passcode", passcode}
+	}
+
 	return visor.AppConfig{
 		App:       skyenv.VPNClientName,
 		AutoStart: false,
 		Port:      routing.Port(skyenv.VPNClientPort),
+		Args:      args,
 	}
 }
