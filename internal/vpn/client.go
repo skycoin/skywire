@@ -277,6 +277,7 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 
 	cHello := ClientHello{
 		UnavailablePrivateIPs: unavailableIPs,
+		Passcode:              c.cfg.Passcode,
 	}
 
 	c.log.Debugf("Sending client hello: %v", cHello)
