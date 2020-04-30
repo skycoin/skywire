@@ -207,7 +207,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
-		return nil, nil, fmt.Errorf("got wrong passcode from client: %s", cHello.Passcode)
+		return nil, nil, errors.New("got wrong passcode from client")
 	}
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
