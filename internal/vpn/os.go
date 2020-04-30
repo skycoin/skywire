@@ -13,7 +13,7 @@ import (
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
 func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
 	//return run("/sbin/ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
-	return run("$(command -v ifconfig)", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
+	return run("ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
 // NetworkInterfaceGateway gets gateway of the network interface with name `ifcName`.
