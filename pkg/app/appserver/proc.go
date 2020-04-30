@@ -36,7 +36,8 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(log *logging.Logger, disc appdisc.Updater, c appcommon.Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
+func NewProc(log *logging.Logger, disc appdisc.Updater, c appcommon.Config, args []string,
+	envs map[string]string, stdout, stderr io.Writer) (*Proc, error) {
 	key := appcommon.GenerateAppKey()
 
 	binaryPath := getBinaryPath(c.BinaryDir, c.Name)
@@ -45,12 +46,16 @@ func NewProc(log *logging.Logger, disc appdisc.Updater, c appcommon.Config, args
 		appKeyEnvFormat     = appcommon.EnvAppKey + "=%s"
 		serverAddrEnvFormat = appcommon.EnvServerAddr + "=%s"
 		visorPKEnvFormat    = appcommon.EnvVisorPK + "=%s"
+		customEnvFormat     = "%s=%s"
 	)
 
-	env := make([]string, 0, 4)
+	env := make([]string, 0, 3+len(envs))
 	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
 	env = append(env, fmt.Sprintf(serverAddrEnvFormat, c.ServerAddr))
 	env = append(env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
+	for k, v := range envs {
+		env = append(env, fmt.Sprintf(customEnvFormat, k, v))
+	}
 
 	cmd := exec.Command(binaryPath, args...) // nolint:gosec
 

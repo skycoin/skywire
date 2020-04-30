@@ -26,6 +26,10 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 
 // DialStream attempts to dial a stream to a remote client via the dmsg server that this session is connected to.
 func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
+	log := cs.log.
+		WithField("func", "ClientSession.DialStream").
+		WithField("dst_addr", dst)
+
 	if dStr, err = newInitiatingStream(cs); err != nil {
 		return nil, err
 	}
@@ -33,8 +37,9 @@ func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
 	// Close stream on failure.
 	defer func() {
 		if err != nil {
-			cs.log.WithError(dStr.Close()).
-				Debug("Stream closed on DialStream() failure.")
+			log.WithError(err).
+				WithField("close_error", dStr.Close()).
+				Debug("Stream closed on failure.")
 		}
 	}()
 
@@ -74,7 +79,7 @@ func (cs *ClientSession) serve() error {
 			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
 				cs.log.
 					WithError(err).
-					Info("ClientSession.acceptStream() temporary error, continuing...")
+					Info("Failed to accept stream.")
 				continue
 			}
 			cs.log.WithError(err).Warn("Stopped accepting streams.")

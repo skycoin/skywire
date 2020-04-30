@@ -362,11 +362,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 	rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
 	r.rgs[rules.Desc] = rg
 
-	rg.fwd = append(rg.fwd, rules.Forward)
-	rg.rvs = append(rg.rvs, rules.Reverse)
-
-	tp := r.tm.Transport(rules.Forward.NextTransportID())
-	rg.tps = append(rg.tps, tp)
+	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
 
 	return rg
 }

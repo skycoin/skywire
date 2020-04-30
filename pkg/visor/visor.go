@@ -17,14 +17,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
@@ -593,7 +593,35 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
 	appArgs := append([]string{filepath.Join(visor.dir(), config.App)}, config.Args...)
 
-	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, logger, errLogger)
+	appEnvs := make(map[string]string)
+	if appCfg.Name == skyenv.VPNClientName {
+		var envCfg vpn.DirectRoutesEnvConfig
+
+		if visor.conf.Dmsg != nil {
+			envCfg.DmsgDiscovery = visor.conf.Dmsg.Discovery
+			envCfg.DmsgServers = visor.n.Dmsg().ConnectedServers()
+		}
+		if visor.conf.Transport != nil {
+			envCfg.TPDiscovery = visor.conf.Transport.Discovery
+		}
+		if visor.conf.Routing != nil {
+			envCfg.RF = visor.conf.Routing.RouteFinder
+		}
+		if visor.conf.UptimeTracker != nil {
+			envCfg.UptimeTracker = visor.conf.UptimeTracker.Addr
+		}
+		if visor.conf.STCP != nil && len(visor.conf.STCP.PubKeyTable) != 0 {
+			envCfg.STCPTable = visor.conf.STCP.PubKeyTable
+		}
+
+		appEnvs = vpn.AppEnvArgs(envCfg)
+	}
+
+	if appCfg.Name == skyenv.VPNClientName || appCfg.Name == skyenv.VPNServerName {
+		appEnvs["PATH"] = os.Getenv("PATH")
+	}
+
+	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}
