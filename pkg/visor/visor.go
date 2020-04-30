@@ -593,7 +593,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
 	appArgs := append([]string{filepath.Join(visor.dir(), config.App)}, config.Args...)
 
-	var appEnvs map[string]string
+	appEnvs := make(map[string]string)
 	if appCfg.Name == "vpn-client" {
 		var envCfg vpn.DirectRoutesEnvConfig
 
@@ -616,6 +616,9 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 		appEnvs = vpn.AppEnvArgs(envCfg)
 	}
+
+	pathEnv := os.Getenv("PATH")
+	appEnvs["PATH"] = pathEnv
 
 	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)
 	if err != nil {
