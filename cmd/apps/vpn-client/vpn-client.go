@@ -71,6 +71,8 @@ func main() {
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
 
+	log.Infof("GOT PATH ENV: %s", os.Getenv("PATH"))
+
 	appCfg, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.WithError(err).Fatalln("Error getting app client config")
