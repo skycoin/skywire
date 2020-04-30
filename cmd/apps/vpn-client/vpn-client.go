@@ -37,25 +37,10 @@ var (
 	r   = netutil.NewRetrier(log, serverDialInitBO, serverDialMaxBO, 0, 1)
 )
 
-var serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
-
-func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
-	var conn net.Conn
-	err := r.Do(context.Background(), func() error {
-		var err error
-		conn, err = appCl.Dial(appnet.Addr{
-			Net:    netType,
-			PubKey: pk,
-			Port:   vpnPort,
-		})
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
-}
+var (
+	serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
+	passcode    = flag.String("passcode", "", "Passcode to authenticate connection")
+)
 
 func main() {
 	flag.Parse()
@@ -96,7 +81,10 @@ func main() {
 
 	log.Infof("Dialed %s", appConn.RemoteAddr())
 
-	vpnClient, err := vpn.NewClient(log, appConn)
+	vpnClientCfg := vpn.ClientConfig{
+		Passcode: *passcode,
+	}
+	vpnClient, err := vpn.NewClient(vpnClientCfg, log, appConn)
 	if err != nil {
 		log.WithError(err).Fatalln("Error creating VPN client")
 	}
@@ -115,4 +103,22 @@ func main() {
 	if err := vpnClient.Serve(); err != nil {
 		log.WithError(err).Fatalln("Error serving VPN")
 	}
+}
+
+func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
+	var conn net.Conn
+	err := r.Do(context.Background(), func() error {
+		var err error
+		conn, err = appCl.Dial(appnet.Addr{
+			Net:    netType,
+			PubKey: pk,
+			Port:   vpnPort,
+		})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
 }
