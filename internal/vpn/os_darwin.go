@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	gatewayForIfcCMDFmt     = "/usr/sbin/netstat -rn | /usr/bin/grep default | /usr/bin/grep %s | /usr/bin/awk '{print $2}'"
+	gatewayForIfcCMDFmt     = "netstat -rn | grep default | grep %s | awk '{print $2}'"
 	setIPv4ForwardingCMDFmt = "sysctl -w net.inet.ip.forwarding=%s"
 	setIPv6ForwardingCMDFmt = "sysctl -w net.inet6.ip6.forwarding=%s"
 	getIPv4ForwardingCMD    = "sysctl net.inet.ip.forwarding"
@@ -29,19 +29,19 @@ func DisableIPMasquerading(_ string) error {
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func AddRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
-		return run("/sbin/route", "add", "-net", ip, gateway)
+		return run("route", "add", "-net", ip, gateway)
 	}
 
-	return run("/sbin/route", "add", "-net", ip, gateway, netmask)
+	return run("route", "add", "-net", ip, gateway, netmask)
 }
 
 // DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
 func DeleteRoute(ip, gateway, netmask string) error {
 	if netmask == "" {
-		return run("/sbin/route", "delete", "-net", ip, gateway)
+		return run("route", "delete", "-net", ip, gateway)
 	}
 
-	return run("/sbin/route", "delete", "-net", ip, gateway, netmask)
+	return run("route", "delete", "-net", ip, gateway, netmask)
 }
 
 func parseIPForwardingOutput(output []byte) (string, error) {
