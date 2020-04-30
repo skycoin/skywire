@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -25,7 +26,13 @@ var (
 	log = app.NewLogger(appName)
 )
 
+var (
+	passcode = flag.String("passcode", "", "Passcode to authenticate connecting users")
+)
+
 func main() {
+	flag.Parse()
+
 	appCfg, err := app.ClientConfigFromEnv()
 	if err != nil {
 		log.WithError(err).Errorln("Error getting app client config")
@@ -56,7 +63,10 @@ func main() {
 
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
-	srv, err := vpn.NewServer(log)
+	srvCfg := vpn.ServerConfig{
+		Passcode: *passcode,
+	}
+	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {
 		log.WithError(err).Fatalln("Error creating VPN server")
 	}

@@ -13,6 +13,7 @@ import (
 
 // Server is a VPN server.
 type Server struct {
+	cfg                     ServerConfig
 	lisMx                   sync.Mutex
 	lis                     net.Listener
 	log                     *logging.MasterLogger
@@ -24,7 +25,7 @@ type Server struct {
 }
 
 // NewServer creates VPN server instance.
-func NewServer(l *logging.MasterLogger) (*Server, error) {
+func NewServer(cfg ServerConfig, l *logging.MasterLogger) (*Server, error) {
 	defaultNetworkIfc, err := DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
@@ -45,6 +46,7 @@ func NewServer(l *logging.MasterLogger) (*Server, error) {
 	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
 	return &Server{
+		cfg:                     cfg,
 		log:                     l,
 		ipGen:                   NewIPGenerator(),
 		defaultNetworkInterface: defaultNetworkIfc,
@@ -198,6 +200,15 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	}
 
 	var sHello ServerHello
+
+	if s.cfg.Passcode != "" && cHello.Passcode != s.cfg.Passcode {
+		sHello.Status = HandshakeStatusForbidden
+		if err := WriteJSON(conn, &sHello); err != nil {
+			s.log.WithError(err).Errorln("Error sending server hello")
+		}
+
+		return nil, nil, fmt.Errorf("wrong passcode from client %s", conn.RemoteAddr())
+	}
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {

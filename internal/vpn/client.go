@@ -21,6 +21,7 @@ const (
 
 // Client is a VPN client.
 type Client struct {
+	cfg            ClientConfig
 	log            *logging.MasterLogger
 	conn           net.Conn
 	directIPs      []net.IP
@@ -30,7 +31,7 @@ type Client struct {
 }
 
 // NewClient creates VPN client instance.
-func NewClient(l *logging.MasterLogger, conn net.Conn) (*Client, error) {
+func NewClient(cfg ClientConfig, l *logging.MasterLogger, conn net.Conn) (*Client, error) {
 	dmsgDiscIP, err := dmsgDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)
@@ -69,6 +70,7 @@ func NewClient(l *logging.MasterLogger, conn net.Conn) (*Client, error) {
 	l.Infof("Got default network gateway IP: %s", defaultGateway)
 
 	return &Client{
+		cfg:            cfg,
 		log:            l,
 		conn:           conn,
 		directIPs:      directIPs,
