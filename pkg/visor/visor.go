@@ -615,10 +615,8 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 		}
 
 		appEnvs = vpn.AppEnvArgs(envCfg)
+		appEnvs["PATH"] = os.Getenv("PATH")
 	}
-
-	pathEnv := os.Getenv("PATH")
-	appEnvs["PATH"] = pathEnv
 
 	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, appEnvs, logger, errLogger)
 	if err != nil {
