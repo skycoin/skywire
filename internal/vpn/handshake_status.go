@@ -26,6 +26,8 @@ func (hs HandshakeStatus) String() string {
 		return "No free IPs left to serve"
 	case HandshakeStatusInternalError:
 		return "Internal server error"
+	case HandshakeStatusForbidden:
+		return "Forbidden"
 	default:
 		return "Unknown code"
 	}
