@@ -94,7 +94,7 @@ func (c *Client) Serve() error {
 		DeviceType: water.TUN,
 	})
 	if err != nil {
-		return fmt.Errorf("error allocating TUN interace: %w", err)
+		return fmt.Errorf("error allocating TUN interface: %w", err)
 	}
 	defer func() {
 		tunName := tun.Name()
