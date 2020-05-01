@@ -89,10 +89,6 @@
                   <span [ngClass]="{ highlighted: i % 2 !== 0 }">{{ part }}</span>
                 </ng-container></span>
               </div>
-              <div class="item">
-                <span>{{ 'apps.skysocks-client-settings.port' | translate }}</span>
-                <span> {{ proxy.port }}</span>
-              </div>
               <div class="item" *ngIf="proxy.location">
                 <span>{{ 'apps.skysocks-client-settings.location' | translate }}</span>
                 <span>&nbsp;<ng-container *ngFor="let part of getHighlightedTextParts(proxy.location, currentFilters.location); let i = index">

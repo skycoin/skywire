@@ -17,7 +17,9 @@ export class ProxyDiscoveryService {
    * URL of the proxy discovery service. While in dev mode the url is managed by the
    * dev server proxy.
    */
-  private readonly discoveryServiceUrl = environment.production ? 'http://proxy.discovery.skywire.cc/api' : '/discovery-api';
+  private readonly discoveryServiceUrl = environment.production ?
+    (window.location.protocol + '//proxy.discovery.skywire.cc/api') :
+    '/discovery-api';
 
   constructor(
     private http: HttpClient,
