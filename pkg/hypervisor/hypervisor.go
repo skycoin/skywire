@@ -408,9 +408,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		}
 
 		if reqBody.PK != nil && ctx.App.App == skysocksClientName {
-			log.Errorf("SETTING PK: %s", *reqBody.PK)
 			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
-				log.Errorf("ERROR SETTING PK")
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -425,7 +423,6 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 				}
 			case statusStart:
 				if err := ctx.RPC.StartApp(ctx.App.App); err != nil {
-					log.Errorf("ERROR STARTING APP")
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
