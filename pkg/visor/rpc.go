@@ -234,6 +234,7 @@ func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) (err error) {
 	return r.visor.setAutoStart(in.AppName, in.AutoStart)
 }
 
+// SetAppPasswordIn is input for SetAppPassword.
 type SetAppPasswordIn struct {
 	AppName  string
 	Password string
@@ -246,6 +247,7 @@ func (r *RPC) SetAppPassword(in *SetAppPasswordIn, _ *struct{}) (err error) {
 	return r.visor.setAppPassword(in.AppName, in.Password)
 }
 
+// SetAppPKIn is input for SetAppPK.
 type SetAppPKIn struct {
 	AppName string
 	PK      cipher.PubKey
