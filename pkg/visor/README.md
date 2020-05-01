@@ -11,24 +11,38 @@
 - `transport` (*[TransportConfig](#TransportConfig))
 - `routing` (*[RoutingConfig](#RoutingConfig))
 - `uptime_tracker` (*[UptimeTrackerConfig](#UptimeTrackerConfig))
+- `app_discovery` (*[AppDiscConfig](#AppDiscConfig))
 - `apps` ([][AppConfig](#AppConfig))
-- `trusted_visors` ()
+- `trusted_visors` ([][PubKey](#PubKey))
 - `hypervisors` ([][HypervisorConfig](#HypervisorConfig))
 - `apps_path` (string)
 - `local_path` (string)
 - `log_level` (string)
-- `shutdown_timeout` (Duration)
+- `shutdown_timeout` ([Duration](#Duration))
 - `interfaces` (*[InterfaceConfig](#InterfaceConfig))
 - `app_server_addr` (string)
 - `restart_check_delay` (string)
 
 
+# KeyPair
+
+- `public_key` ([PubKey](#PubKey))
+- `secret_key` ([SecKey](#SecKey))
+
+
 # DmsgPtyConfig
 
-- `port` (uint16)
+- `port` ([uint16](#uint16))
 - `authorization_file` (string)
 - `cli_network` (string)
 - `cli_address` (string)
+
+
+# RoutingConfig
+
+- `setup_nodes` ([][PubKey](#PubKey))
+- `route_finder` (string)
+- `route_finder_timeout` ([Duration](#Duration))
 
 
 # TransportConfig
@@ -37,27 +51,33 @@
 - `log_store` (*[LogStoreConfig](#LogStoreConfig))
 
 
-# KeyPair
-
-- `public_key` (PubKey)
-- `secret_key` (SecKey)
-
-
-# RoutingConfig
-
-- `setup_nodes` ()
-- `route_finder` (string)
-- `route_finder_timeout` (Duration)
-
-
 # UptimeTrackerConfig
 
 - `addr` (string)
 
 
+# AppDiscConfig
+
+- `update_interval` ([Duration](#Duration))
+- `proxy_discovery_addr` (string)
+
+
+# AppConfig
+
+- `app` (string)
+- `auto_start` (bool)
+- `port` ([Port](#Port))
+- `args` ([]string)
+
+
+# HypervisorConfig
+
+- `public_key` ([PubKey](#PubKey))
+
+
 # LogStoreConfig
 
-- `type` (LogStoreType)
+- `type` ([LogStoreType](#LogStoreType))
 - `location` (string)
 
 
@@ -66,37 +86,24 @@
 - `rpc` (string)
 
 
-# AppConfig
-
-- `app` (string)
-- `auto_start` (bool)
-- `port` (Port)
-- `args` ([]string)
-
-
-# HypervisorConfig
-
-- `public_key` (PubKey)
-
-
 # DmsgConfig
 
 - `discovery` (string)
 - `sessions_count` (int)
 
 
+# STCPConfig
+
+- `pk_table` (map[[PubKey](#PubKey)]string)
+- `local_address` (string)
+
+
 # Logger
 
-- `` (FieldLogger)
+- `` ([FieldLogger](#FieldLogger))
 
 
 # Mutex
 
 - `state` (int32)
-- `sema` (uint32)
-
-
-# STCPConfig
-
-- `pk_table` ()
-- `local_address` (string)
+- `sema` ([uint32](#uint32))
