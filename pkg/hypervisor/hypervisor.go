@@ -395,20 +395,15 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		const (
-			skysocksName       = "skysocks"
-			skysocksClientName = "skysocks-client"
-		)
-
-		if reqBody.Passcode != nil && ctx.App.App == skysocksName {
-			if err := ctx.RPC.SetSocksPassword(*reqBody.Passcode); err != nil {
+		if reqBody.Passcode != nil {
+			if err := ctx.RPC.SetAppPassword(ctx.App.App, *reqBody.Passcode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
 
-		if reqBody.PK != nil && ctx.App.App == skysocksClientName {
-			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
+		if reqBody.PK != nil {
+			if err := ctx.RPC.SetAppPK(ctx.App.App, *reqBody.PK); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
