@@ -275,10 +275,10 @@ func (c *Config) LocalDir() (string, error) {
 }
 
 // AppServerAddress extracts and returns AppServerAddr from Visor Config.
-// If it is not found, it sets appcommon.DefaultServerAddr as AppServerAddr and returns it.
+// If it is not found, it sets appcommon.DefaultAppSrvAddr as AppServerAddr and returns it.
 func (c *Config) AppServerAddress() string {
 	if c.AppServerAddr == "" {
-		c.AppServerAddr = appcommon.DefaultServerAddr
+		c.AppServerAddr = appcommon.DefaultAppSrvAddr
 		if err := c.flush(); err != nil && c.log != nil {
 			c.log.WithError(err).Errorf("Failed to flush config to disk")
 		}

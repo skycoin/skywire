@@ -93,9 +93,8 @@ type Visor struct {
 	cliLis net.Listener
 	hvErrs map[cipher.PubKey]chan error // errors returned when the associated hypervisor ServeRPCClient returns
 
-	appDiscF     *appdisc.Factory
-	procManager  appserver.ProcManager
-	appRPCServer *appserver.Server
+	appDiscF *appdisc.Factory
+	procM    appserver.ProcManager
 
 	// cancel is to be called when visor.Close is triggered.
 	cancel context.CancelFunc
@@ -225,15 +224,11 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		ProxyDisc:      cfg.AppDiscConfig().ProxyDisc,
 	}
 
-	visor.appRPCServer = appserver.New(logging.MustGetLogger("app_rpc_server"), visor.conf.AppServerAddr)
-
-	go func() {
-		if err := visor.appRPCServer.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			visor.logger.WithError(err).Error("Serve app_rpc stopped.")
-		}
-	}()
-
-	visor.procManager = appserver.NewProcManager(logging.MustGetLogger("proc_manager"), visor.appDiscF, visor.appRPCServer)
+	logProcM := logging.MustGetLogger("proc_manager")
+	visor.procM, err = appserver.NewProcManager(logProcM, visor.appDiscF, visor.conf.AppServerAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start proc manager: %w", err)
+	}
 
 	visor.updater = updater.New(visor.logger, visor.restartCtx, visor.appsPath)
 
@@ -390,6 +385,7 @@ func (visor *Visor) startRPC(ctx context.Context) {
 	}
 }
 
+// TODO: We should have this re-defined.
 func (visor *Visor) dir() string {
 	return pathutil.VisorDir(visor.conf.Keys().PubKey.String())
 }
@@ -483,16 +479,16 @@ func (visor *Visor) Close() (err error) {
 		}
 	}
 
-	visor.procManager.StopAll()
-
-	if err = visor.router.Close(); err != nil {
-		visor.logger.WithError(err).Error("Failed to stop router.")
+	if err := visor.procM.Close(); err != nil {
+		visor.logger.WithError(err).Error("Proc manager closed with unexpected error.")
 	} else {
-		visor.logger.Info("Router stopped successfully.")
+		visor.logger.Info("Proc manager closed cleanly.")
 	}
 
-	if err := visor.appRPCServer.Close(); err != nil {
-		visor.logger.WithError(err).Error("RPC server closed with error.")
+	if err = visor.router.Close(); err != nil {
+		visor.logger.WithError(err).Error("Router closed with unexpected error.")
+	} else {
+		visor.logger.Info("Router closed cleanly.")
 	}
 
 	return err
@@ -505,7 +501,7 @@ func (visor *Visor) App(name string) (*AppState, bool) {
 		return nil, false
 	}
 	state := &AppState{AppConfig: app, Status: AppStatusStopped}
-	if visor.procManager.Exists(app.App) {
+	if visor.procM.Exists(app.App) {
 		state.Status = AppStatusRunning
 	}
 	return state, true
@@ -519,7 +515,7 @@ func (visor *Visor) Apps() []*AppState {
 	for _, app := range visor.appsConf {
 		state := &AppState{AppConfig: app, Status: AppStatusStopped}
 
-		if visor.procManager.Exists(app.App) {
+		if visor.procM.Exists(app.App) {
 			state.Status = AppStatusRunning
 		}
 
@@ -554,6 +550,8 @@ func (visor *Visor) StartApp(appName string) error {
 
 // SpawnApp configures and starts new App.
 func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
+	ctx := context.Background()
+
 	visor.logger.
 		WithField("app_name", config.App).
 		WithField("args", config.Args).
@@ -563,9 +561,9 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
 	}
 
-	appCfg := appcommon.Config{
-		Name:        config.App,
-		ServerAddr:  visor.conf.AppServerAddr,
+	appCfg := appcommon.ProcConfig{
+		AppName:     config.App,
+		AppSrvAddr:  visor.conf.AppServerAddr,
 		VisorPK:     visor.conf.Keys().PubKey.Hex(),
 		RoutingPort: config.Port,
 		BinaryDir:   visor.appsPath,
@@ -591,9 +589,8 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}()
 
 	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
-	appArgs := append([]string{filepath.Join(visor.dir(), config.App)}, config.Args...)
 
-	pid, err := visor.procManager.Start(appLogger, appCfg, appArgs, logger, errLogger)
+	pid, err := visor.procM.Start(ctx, appLogger, appCfg, logger, errLogger)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}
@@ -613,7 +610,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 	visor.pidMu.Unlock()
 
-	return visor.procManager.Wait(config.App)
+	return visor.procM.Wait(config.App)
 }
 
 func (visor *Visor) persistPID(name string, pid appcommon.ProcID) error {
@@ -637,13 +634,13 @@ func (visor *Visor) persistPID(name string, pid appcommon.ProcID) error {
 
 // StopApp stops running App.
 func (visor *Visor) StopApp(appName string) error {
-	if !visor.procManager.Exists(appName) {
+	if !visor.procM.Exists(appName) {
 		return ErrUnknownApp
 	}
 
 	visor.logger.Infof("Stopping app %s and closing ports", appName)
 
-	if err := visor.procManager.Stop(appName); err != nil {
+	if err := visor.procM.Stop(appName); err != nil {
 		visor.logger.Warn("Failed to stop app: ", err)
 		return err
 	}
@@ -723,7 +720,7 @@ func (visor *Visor) setSocksPassword(password string) error {
 		return err
 	}
 
-	if visor.procManager.Exists(socksName) {
+	if visor.procM.Exists(socksName) {
 		visor.logger.Infof("Updated %v password, restarting it", socksName)
 		return visor.RestartApp(socksName)
 	}
@@ -745,7 +742,7 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 		return err
 	}
 
-	if visor.procManager.Exists(socksClientName) {
+	if visor.procM.Exists(socksClientName) {
 		visor.logger.Infof("Updated %v PK, restarting it", socksClientName)
 		return visor.RestartApp(socksClientName)
 	}

@@ -98,8 +98,8 @@ func TestListApps(t *testing.T) {
 	pm.On("Exists", apps["bar"].App).Return(true)
 
 	n := Visor{
-		appsConf:    apps,
-		procManager: pm,
+		appsConf: apps,
+		procM:    pm,
 	}
 
 	rpc := &RPC{visor: &n, log: logrus.New()}
@@ -158,7 +158,7 @@ func TestStartStopApp(t *testing.T) {
 
 	visorCfg := Config{
 		KeyPair:       keyPair,
-		AppServerAddr: appcommon.DefaultServerAddr,
+		AppServerAddr: appcommon.DefaultAppSrvAddr,
 	}
 
 	visor := &Visor{
@@ -174,9 +174,9 @@ func TestStartStopApp(t *testing.T) {
 		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
-	appCfg1 := appcommon.Config{
-		Name:        app,
-		ServerAddr:  appcommon.DefaultServerAddr,
+	appCfg1 := appcommon.ProcConfig{
+		AppName:     app,
+		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 		VisorPK:     visorCfg.Keys().PubKey.Hex(),
 		RoutingPort: apps["foo"].Port,
 		WorkDir:     filepath.Join("", app),
@@ -193,7 +193,7 @@ func TestStartStopApp(t *testing.T) {
 	pm.On("Exists", app).Return(true)
 	pm.On("Exists", unknownApp).Return(false)
 
-	visor.procManager = pm
+	visor.procM = pm
 
 	rpc := &RPC{visor: visor, log: logrus.New()}
 

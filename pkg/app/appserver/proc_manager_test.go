@@ -14,7 +14,7 @@ import (
 var appDisc = new(appdisc.Factory)
 
 func TestProcManager_Exists(t *testing.T) {
-	srv := New(nil, appcommon.DefaultServerAddr)
+	srv := New(nil, appcommon.DefaultAppSrvAddr)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), appDisc, srv)
 	m, ok := mIfc.(*procManager)
@@ -32,7 +32,7 @@ func TestProcManager_Exists(t *testing.T) {
 }
 
 func TestProcManager_Range(t *testing.T) {
-	srv := New(nil, appcommon.DefaultServerAddr)
+	srv := New(nil, appcommon.DefaultAppSrvAddr)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), appDisc, srv)
 	m, ok := mIfc.(*procManager)
@@ -62,7 +62,7 @@ func TestProcManager_Range(t *testing.T) {
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	srv := New(nil, appcommon.DefaultServerAddr)
+	srv := New(nil, appcommon.DefaultAppSrvAddr)
 
 	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), appDisc, srv)
 	m, ok := mIfc.(*procManager)

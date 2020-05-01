@@ -26,17 +26,17 @@ const (
 func TestServer_ListenAndServe(t *testing.T) {
 	l := logging.MustGetLogger("app_server")
 
-	s := appserver.New(l, appcommon.DefaultServerAddr)
+	s := appserver.New(l, appcommon.DefaultAppSrvAddr)
 
-	appKey := appcommon.GenerateAppKey()
+	appKey := appcommon.RandProcKey()
 
 	require.NoError(t, s.Register(appKey))
 
 	visorPK, _ := cipher.GenerateKeyPair()
 	clientConfig := app.ClientConfig{
 		VisorPK:    visorPK,
-		ServerAddr: appcommon.DefaultServerAddr,
-		AppKey:     appKey,
+		ServerAddr: appcommon.DefaultAppSrvAddr,
+		ProcKey:    appKey,
 	}
 
 	errCh := make(chan error, 1)

@@ -1,12 +1,13 @@
 package appserver
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"io"
+	"net"
+	"net/rpc"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 
@@ -25,69 +26,83 @@ var (
 // the running process itself and the RPC server for
 // app/visor communication.
 type Proc struct {
-	disc      appdisc.Updater // App discovery client.
-	key       appcommon.Key
-	config    appcommon.Config
-	log       *logging.Logger
+	disc appdisc.Updater // App discovery client.
+	conf appcommon.ProcConfig
+	log  *logging.Logger
+
 	cmd       *exec.Cmd
 	isRunning int32
 	waitMx    sync.Mutex
 	waitErr   error
+
+	connCh chan net.Conn
 }
 
 // NewProc constructs `Proc`.
-func NewProc(log *logging.Logger, disc appdisc.Updater, c appcommon.Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
-	key := appcommon.GenerateAppKey()
-
-	binaryPath := getBinaryPath(c.BinaryDir, c.Name)
-
-	const (
-		appKeyEnvFormat     = appcommon.EnvAppKey + "=%s"
-		serverAddrEnvFormat = appcommon.EnvServerAddr + "=%s"
-		visorPKEnvFormat    = appcommon.EnvVisorPK + "=%s"
-	)
-
-	env := make([]string, 0, 4)
-	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
-	env = append(env, fmt.Sprintf(serverAddrEnvFormat, c.ServerAddr))
-	env = append(env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
-
-	cmd := exec.Command(binaryPath, args...) // nolint:gosec
-
-	cmd.Env = env
-	cmd.Dir = c.WorkDir
-
+func NewProc(log *logging.Logger, conf appcommon.ProcConfig, disc appdisc.Updater, stdout, stderr io.Writer) *Proc {
+	cmd := exec.Command(conf.BinaryLoc(), conf.ProcArgs...) // nolint:gosec
+	cmd.Env = conf.Envs()
+	cmd.Dir = conf.WorkDir
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
 	return &Proc{
 		disc:   disc,
-		key:    key,
-		config: c,
+		conf:   conf,
 		log:    log,
 		cmd:    cmd,
-	}, nil
+		connCh: make(chan net.Conn, 1),
+	}
+}
+
+// InjectConn introduces the connection to the Proc after it is started.
+func (p *Proc) InjectConn(conn net.Conn) bool {
+	select {
+	case p.connCh <- conn:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Proc) awaitConn(ctx context.Context) error {
+	select {
+	case conn := <-p.connCh:
+		rpcS := rpc.NewServer()
+		if err := rpcS.RegisterName(p.conf.ProcKey.String(), NewRPCGateway(p.log)); err != nil {
+			panic(err)
+		}
+		go rpcS.ServeConn(conn)
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Start starts the application.
-func (p *Proc) Start() error {
+func (p *Proc) Start(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&p.isRunning, 0, 1) {
 		return errProcAlreadyRunning
 	}
 
-	if err := p.cmd.Start(); err != nil {
-		return err
-	}
-	p.disc.Start()
-
 	// acquire lock immediately
 	p.waitMx.Lock()
+
+	if err := p.cmd.Start(); err != nil {
+		p.waitMx.Unlock()
+		return err
+	}
+	if err := p.awaitConn(ctx); err != nil {
+		_ = p.cmd.Process.Kill() //nolint:errcheck
+		p.waitMx.Unlock()
+		return err
+	}
+
 	go func() {
-		defer func() {
-			p.disc.Stop()
-			p.waitMx.Unlock()
-		}()
+		p.disc.Start()
 		p.waitErr = p.cmd.Wait()
+		p.disc.Stop()
+		p.waitMx.Unlock()
 	}()
 
 	return nil
@@ -127,9 +142,4 @@ func (p *Proc) Wait() error {
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
-}
-
-// getBinaryPath formats binary path using app dir, name and version.
-func getBinaryPath(dir, name string) string {
-	return filepath.Join(dir, name)
 }

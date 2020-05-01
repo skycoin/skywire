@@ -1,12 +1,15 @@
 package appserver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -16,73 +19,166 @@ import (
 
 //go:generate mockery -name ProcManager -case underscore -inpkg
 
+const (
+	// ProcStartTimeout represents the duration in which a proc should have started and connected with the app server.
+	ProcStartTimeout = time.Second * 5
+)
+
 var (
 	// ErrAppAlreadyStarted is returned when trying to run the already running app.
 	ErrAppAlreadyStarted = errors.New("app already started")
 	errNoSuchApp         = errors.New("no such app")
+
+	ErrClosed = errors.New("proc manager is already closed")
 )
 
 // ProcManager allows to manage skywire applications.
 type ProcManager interface {
-	Start(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (appcommon.ProcID, error)
+	io.Closer
+	Start(ctx context.Context, log *logging.Logger, conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error)
 	Exists(name string) bool
 	Stop(name string) error
 	Wait(name string) error
 	Range(next func(name string, proc *Proc) bool)
-	StopAll()
 }
 
-// procManager allows to manage skywire applications.
-// Implements `ProcManager`.
+// procManager manages skywire applications. It implements `ProcManager`.
 type procManager struct {
-	log       *logging.Logger
-	discF     *appdisc.Factory
-	procs     map[string]*Proc
-	mx        sync.RWMutex
-	rpcServer *Server
+	log *logging.Logger
+
+	addr    string // listening address
+	lis     net.Listener
+	conns   map[string]net.Conn
+	connsWG sync.WaitGroup
+
+	discF      *appdisc.Factory
+	procs      map[string]*Proc
+	procsByKey map[appcommon.ProcKey]*Proc
+
+	mx       sync.RWMutex
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(log *logging.Logger, discF *appdisc.Factory, rpcServer *Server) ProcManager {
-	return &procManager{
-		log:       log,
-		discF:     discF,
-		procs:     make(map[string]*Proc),
-		rpcServer: rpcServer,
+func NewProcManager(log *logging.Logger, discF *appdisc.Factory, addr string) (ProcManager, error) {
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	procM := &procManager{
+		addr:       addr,
+		log:        log,
+		lis:        lis,
+		conns:      make(map[string]net.Conn),
+		discF:      discF,
+		procs:      make(map[string]*Proc),
+		procsByKey: make(map[appcommon.ProcKey]*Proc),
+		done:       make(chan struct{}),
+	}
+
+	procM.connsWG.Add(1)
+	go func() {
+		defer procM.connsWG.Done()
+		procM.serve()
+	}()
+
+	return procM, nil
+}
+
+func (m *procManager) serve() {
+	defer func() {
+		for _, conn := range m.conns {
+			_ = conn.Close() //nolint:errcheck
+		}
+	}()
+
+	for {
+		conn, err := m.lis.Accept()
+		if err != nil {
+			if !isDone(m.done) {
+				m.log.WithError(err).WithField("remote_addr", conn.RemoteAddr()).
+					Info("Unexpected error occurred when accepting app conn.")
+			}
+			return
+		}
+		m.conns[conn.RemoteAddr().String()] = conn
+
+		m.connsWG.Add(1)
+		go func(conn net.Conn) {
+			defer m.connsWG.Done()
+
+			if ok := m.handleConn(conn); !ok {
+				if err := conn.Close(); err != nil {
+					m.log.WithError(err).WithField("remote_addr", conn.RemoteAddr()).
+						Warn("Failed to close problematic app conn.")
+				}
+			}
+		}(conn)
 	}
 }
 
-// Start start the application according to its config and additional args.
-func (m *procManager) Start(log *logging.Logger, c appcommon.Config, args []string,
-	stdout, stderr io.Writer) (appcommon.ProcID, error) {
-	if m.Exists(c.Name) {
+func (m *procManager) handleConn(conn net.Conn) bool {
+	// Read in and check key.
+	var key appcommon.ProcKey
+	if n, err := io.ReadFull(conn, key[:]); err != nil {
+		m.log.
+			WithError(err).
+			WithField("n", n).
+			WithField("remote_addr", conn.RemoteAddr()).
+			Warn("Failed to read proc key.")
+		return false
+	}
+
+	// Push conn to Proc.
+	m.mx.RLock()
+	proc, ok := m.procsByKey[key]
+	m.mx.RUnlock()
+	if !ok {
+		return false
+	}
+	if ok := proc.InjectConn(conn); !ok {
+		return false
+	}
+	return true
+}
+
+// Start starts the application according to its config and additional args.
+func (m *procManager) Start(ctx context.Context, log *logging.Logger, conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	// isDone should be called within the protection of a mutex.
+	// Otherwise we may be able to start an app after calling Close.
+	if isDone(m.done) {
+		return 0, ErrClosed
+	}
+
+	if _, ok := m.procs[conf.AppName]; ok {
 		return 0, ErrAppAlreadyStarted
 	}
 
-	disc, ok := m.discF.Updater(c, args)
+	conf.EnsureKey()
+
+	disc, ok := m.discF.Updater(conf)
 	if !ok {
-		log.WithField("appName", c.Name).
+		log.WithField("appName", conf.AppName).
 			Debug("No app discovery associated with app.")
 	}
 
-	p, err := NewProc(log, disc, c, args, stdout, stderr)
-	if err != nil {
+	proc := NewProc(log, conf, disc, stdout, stderr)
+	m.procs[conf.AppName] = proc
+	m.procsByKey[conf.ProcKey] = proc
+
+	ctx, cancel := context.WithTimeout(ctx, ProcStartTimeout)
+	defer cancel()
+
+	if err := proc.Start(ctx); err != nil {
 		return 0, err
 	}
 
-	if err := m.rpcServer.Register(p.key); err != nil {
-		return 0, err
-	}
-
-	m.mx.Lock()
-	m.procs[c.Name] = p
-	m.mx.Unlock()
-
-	if err := p.Start(); err != nil {
-		return 0, err
-	}
-
-	return appcommon.ProcID(p.cmd.Process.Pid), nil
+	return appcommon.ProcID(proc.cmd.Process.Pid), nil
 }
 
 // Exists check whether app exists in the manager instance.
@@ -144,11 +240,8 @@ func (m *procManager) Range(next func(name string, proc *Proc) bool) {
 	}
 }
 
-// StopAll stops all the apps run with this manager instance.
-func (m *procManager) StopAll() {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-
+// stopAll stops all the apps run with this manager instance.
+func (m *procManager) stopAll() {
 	for name, proc := range m.procs {
 		log := m.log.WithField("app_name", name)
 		if err := proc.Stop(); err != nil && strings.Contains(err.Error(), "process already finished") {
@@ -159,6 +252,22 @@ func (m *procManager) StopAll() {
 	}
 
 	m.procs = make(map[string]*Proc)
+}
+
+// Close implements io.Closer
+func (m *procManager) Close() error {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	if isDone(m.done) {
+		return ErrClosed
+	}
+	close(m.done)
+
+	m.stopAll()
+	err := m.lis.Close()
+	m.connsWG.Wait()
+	return err
 }
 
 // pop removes application from the manager instance and returns it.
@@ -187,4 +296,13 @@ func (m *procManager) get(name string) (*Proc, error) {
 	}
 
 	return p, nil
+}
+
+func isDone(done chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
 }

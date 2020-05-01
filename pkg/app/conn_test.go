@@ -242,7 +242,7 @@ func TestConn_TestConn(t *testing.T) {
 		cl1 := Client{
 			log:     logging.MustGetLogger("test_client_1"),
 			visorPK: keys[0].PK,
-			rpc:     NewRPCClient(rpcCl1, appcommon.Key(appKeys[0].PK.Hex())),
+			rpc:     NewRPCClient(rpcCl1, appcommon.ProcKey(appKeys[0].PK.Hex())),
 			lm:      idmanager.New(),
 			cm:      idmanager.New(),
 		}
@@ -255,7 +255,7 @@ func TestConn_TestConn(t *testing.T) {
 		cl2 := Client{
 			log:     logging.MustGetLogger("test_client_2"),
 			visorPK: keys[1].PK,
-			rpc:     NewRPCClient(rpcCl2, appcommon.Key(appKeys[1].PK.Hex())),
+			rpc:     NewRPCClient(rpcCl2, appcommon.ProcKey(appKeys[1].PK.Hex())),
 			lm:      idmanager.New(),
 			cm:      idmanager.New(),
 		}

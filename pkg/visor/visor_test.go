@@ -105,7 +105,7 @@ func TestVisorStartClose(t *testing.T) {
 
 	visorCfg := Config{
 		KeyPair:       NewKeyPair(),
-		AppServerAddr: appcommon.DefaultServerAddr,
+		AppServerAddr: appcommon.DefaultAppSrvAddr,
 	}
 
 	logger := logging.MustGetLogger("test")
@@ -119,9 +119,9 @@ func TestVisorStartClose(t *testing.T) {
 	}
 
 	pm := &appserver.MockProcManager{}
-	appCfg1 := appcommon.Config{
-		Name:        apps["skychat"].App,
-		ServerAddr:  appcommon.DefaultServerAddr,
+	appCfg1 := appcommon.ProcConfig{
+		AppName:     apps["skychat"].App,
+		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 		VisorPK:     visorCfg.Keys().PubKey.Hex(),
 		RoutingPort: apps["skychat"].Port,
 		WorkDir:     filepath.Join("", apps["skychat"].App),
@@ -134,7 +134,7 @@ func TestVisorStartClose(t *testing.T) {
 
 	pm.On("StopAll").Return()
 
-	visor.procManager = pm
+	visor.procM = pm
 
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock(), nil)
 	go dmsgC.Serve()
@@ -182,7 +182,7 @@ func TestVisorSpawnApp(t *testing.T) {
 
 	visorCfg := Config{
 		KeyPair:       NewKeyPair(),
-		AppServerAddr: appcommon.DefaultServerAddr,
+		AppServerAddr: appcommon.DefaultAppSrvAddr,
 	}
 
 	visor := &Visor{
@@ -198,9 +198,9 @@ func TestVisorSpawnApp(t *testing.T) {
 		require.NoError(t, os.RemoveAll(visor.dir()))
 	}()
 
-	appCfg := appcommon.Config{
-		Name:        app.App,
-		ServerAddr:  appcommon.DefaultServerAddr,
+	appCfg := appcommon.ProcConfig{
+		AppName:     app.App,
+		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 		VisorPK:     visorCfg.Keys().PubKey.Hex(),
 		RoutingPort: app.Port,
 		WorkDir:     filepath.Join("", app.App),
@@ -216,12 +216,12 @@ func TestVisorSpawnApp(t *testing.T) {
 	pm.On("Exists", app.App).Return(true)
 	pm.On("Stop", app.App).Return(testhelpers.NoErr)
 
-	visor.procManager = pm
+	visor.procM = pm
 
 	require.NoError(t, visor.StartApp(app.App))
 	time.Sleep(100 * time.Millisecond)
 
-	require.True(t, visor.procManager.Exists(app.App))
+	require.True(t, visor.procM.Exists(app.App))
 
 	require.NoError(t, visor.StopApp(app.App))
 }
@@ -237,7 +237,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 
 	c := &Config{
 		KeyPair:       NewKeyPair(),
-		AppServerAddr: appcommon.DefaultServerAddr,
+		AppServerAddr: appcommon.DefaultAppSrvAddr,
 	}
 
 	visor := &Visor{
@@ -258,9 +258,9 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 			Port: 3,
 		}
 
-		appCfg := appcommon.Config{
-			Name:        app.App,
-			ServerAddr:  appcommon.DefaultServerAddr,
+		appCfg := appcommon.ProcConfig{
+			AppName:     app.App,
+			AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 			VisorPK:     c.Keys().PubKey.Hex(),
 			RoutingPort: app.Port,
 			WorkDir:     filepath.Join("", app.App),
@@ -274,7 +274,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 			Return(appPID, testhelpers.NoErr)
 		pm.On("Exists", app.App).Return(false)
 
-		visor.procManager = pm
+		visor.procM = pm
 
 		errCh := make(chan error)
 		go func() {
@@ -298,9 +298,9 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		wantErr := fmt.Sprintf("error running app skychat: %s", appserver.ErrAppAlreadyStarted)
 
 		pm := &appserver.MockProcManager{}
-		appCfg := appcommon.Config{
-			Name:        app.App,
-			ServerAddr:  appcommon.DefaultServerAddr,
+		appCfg := appcommon.ProcConfig{
+			AppName:     app.App,
+			AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 			VisorPK:     c.Keys().PubKey.Hex(),
 			RoutingPort: app.Port,
 			WorkDir:     filepath.Join("", app.App),
@@ -312,7 +312,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 			Return(appPID, appserver.ErrAppAlreadyStarted)
 		pm.On("Exists", app.App).Return(true)
 
-		visor.procManager = pm
+		visor.procM = pm
 
 		errCh := make(chan error)
 		go func() {

@@ -17,10 +17,10 @@ import (
 
 func TestClientConfigFromEnv(t *testing.T) {
 	resetEnv := func(t *testing.T) {
-		err := os.Setenv(appcommon.EnvAppKey, "")
+		err := os.Setenv(appcommon.EnvProcKey, "")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerAddr, "")
+		err = os.Setenv(appcommon.EnvAppSrvAddr, "")
 		require.NoError(t, err)
 
 		err = os.Setenv(appcommon.EnvVisorPK, "")
@@ -34,14 +34,14 @@ func TestClientConfigFromEnv(t *testing.T) {
 
 		wantCfg := ClientConfig{
 			VisorPK:    visorPK,
-			ServerAddr: appcommon.DefaultServerAddr,
-			AppKey:     "key",
+			ServerAddr: appcommon.DefaultAppSrvAddr,
+			ProcKey:    "key",
 		}
 
-		err := os.Setenv(appcommon.EnvAppKey, string(wantCfg.AppKey))
+		err := os.Setenv(appcommon.EnvProcKey, string(wantCfg.ProcKey))
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerAddr, wantCfg.ServerAddr)
+		err = os.Setenv(appcommon.EnvAppSrvAddr, wantCfg.ServerAddr)
 		require.NoError(t, err)
 
 		err = os.Setenv(appcommon.EnvVisorPK, wantCfg.VisorPK.Hex())
@@ -56,13 +56,13 @@ func TestClientConfigFromEnv(t *testing.T) {
 		resetEnv(t)
 
 		_, err := ClientConfigFromEnv()
-		require.Equal(t, err, ErrAppKeyNotProvided)
+		require.Equal(t, err, ErrProcKeyNotProvided)
 	})
 
 	t.Run("no app server address", func(t *testing.T) {
 		resetEnv(t)
 
-		err := os.Setenv(appcommon.EnvAppKey, "val")
+		err := os.Setenv(appcommon.EnvProcKey, "val")
 		require.NoError(t, err)
 
 		_, err = ClientConfigFromEnv()
@@ -72,10 +72,10 @@ func TestClientConfigFromEnv(t *testing.T) {
 	t.Run("no visor PK", func(t *testing.T) {
 		resetEnv(t)
 
-		err := os.Setenv(appcommon.EnvAppKey, "val")
+		err := os.Setenv(appcommon.EnvProcKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
+		err = os.Setenv(appcommon.EnvAppSrvAddr, appcommon.DefaultAppSrvAddr)
 		require.NoError(t, err)
 
 		_, err = ClientConfigFromEnv()
@@ -85,10 +85,10 @@ func TestClientConfigFromEnv(t *testing.T) {
 	t.Run("invalid visor PK", func(t *testing.T) {
 		resetEnv(t)
 
-		err := os.Setenv(appcommon.EnvAppKey, "val")
+		err := os.Setenv(appcommon.EnvProcKey, "val")
 		require.NoError(t, err)
 
-		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
+		err = os.Setenv(appcommon.EnvAppSrvAddr, appcommon.DefaultAppSrvAddr)
 		require.NoError(t, err)
 
 		err = os.Setenv(appcommon.EnvVisorPK, "val")

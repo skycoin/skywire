@@ -97,7 +97,7 @@ package visor
 //
 //		if reqBody.AutoStart != nil {
 //			if *reqBody.AutoStart != appS.AutoStart {
-//				if err := v.setAutoStart(appS.Name, *reqBody.AutoStart); err != nil {
+//				if err := v.setAutoStart(appS.AppName, *reqBody.AutoStart); err != nil {
 //					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //					return
 //				}
@@ -107,12 +107,12 @@ package visor
 //		if reqBody.Status != nil {
 //			switch *reqBody.Status {
 //			case statusStop:
-//				if err := v.StopApp(appS.Name); err != nil {
+//				if err := v.StopApp(appS.AppName); err != nil {
 //					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //					return
 //				}
 //			case statusStart:
-//				if err := v.StartApp(appS.Name); err != nil {
+//				if err := v.StartApp(appS.AppName); err != nil {
 //					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //					return
 //				}
@@ -128,21 +128,21 @@ package visor
 //			skysocksClientName = "skysocks-client"
 //		)
 //
-//		if reqBody.Passcode != nil && appS.Name == skysocksName {
+//		if reqBody.Passcode != nil && appS.AppName == skysocksName {
 //			if err := v.setSocksPassword(*reqBody.Passcode); err != nil {
 //				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //				return
 //			}
 //		}
 //
-//		if reqBody.PK != nil && appS.Name == skysocksClientName {
+//		if reqBody.PK != nil && appS.AppName == skysocksClientName {
 //			if err := v.setSocksClientPK(*reqBody.PK); err != nil {
 //				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //				return
 //			}
 //		}
 //
-//		appS, _ = v.App(appS.Name)
+//		appS, _ = v.App(appS.AppName)
 //		httputil.WriteJSON(w, r, http.StatusOK, appS)
 //	}
 //}
@@ -169,7 +169,7 @@ package visor
 //			t = time.Unix(0, 0)
 //		}
 //
-//		ls, err := app.NewLogStore(filepath.Join(v.dir(), appS.Name), appS.Name, "bbolt")
+//		ls, err := app.NewLogStore(filepath.Join(v.dir(), appS.AppName), appS.AppName, "bbolt")
 //		if err != nil {
 //			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //			return

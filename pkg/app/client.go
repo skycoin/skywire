@@ -24,25 +24,32 @@ var (
 	ErrVisorPKInvalid = errors.New("visor PK is invalid")
 	// ErrServerAddrNotProvided is returned when app server address is not provided.
 	ErrServerAddrNotProvided = errors.New("server address is not provided")
-	// ErrAppKeyNotProvided is returned when the app key is not provided.
-	ErrAppKeyNotProvided = errors.New("app key is not provided")
+	// ErrProcKeyNotProvided is returned when the proc key is not provided.
+	ErrProcKeyNotProvided = errors.New("proc key is not provided")
+	// ErrProcKeyInvalid occurs when proc key is invalid.
+	ErrProcKeyInvalid = errors.New("proc key is invalid")
 )
 
 // ClientConfig is a configuration for `Client`.
 type ClientConfig struct {
 	VisorPK    cipher.PubKey
 	ServerAddr string
-	AppKey     appcommon.Key
+	ProcKey    appcommon.ProcKey
 }
 
 // ClientConfigFromEnv creates client config from the ENV args.
 func ClientConfigFromEnv() (ClientConfig, error) {
-	appKey := os.Getenv(appcommon.EnvAppKey)
-	if appKey == "" {
-		return ClientConfig{}, ErrAppKeyNotProvided
+	procKeyStr := os.Getenv(appcommon.EnvProcKey)
+	if procKeyStr == "" {
+		return ClientConfig{}, ErrProcKeyNotProvided
 	}
 
-	serverAddr := os.Getenv(appcommon.EnvServerAddr)
+	var procKey appcommon.ProcKey
+	if err := procKey.UnmarshalText([]byte(procKeyStr)); err != nil {
+		return ClientConfig{}, ErrProcKeyInvalid
+	}
+
+	serverAddr := os.Getenv(appcommon.EnvAppSrvAddr)
 	if serverAddr == "" {
 		return ClientConfig{}, ErrServerAddrNotProvided
 	}
@@ -57,11 +64,12 @@ func ClientConfigFromEnv() (ClientConfig, error) {
 		return ClientConfig{}, ErrVisorPKInvalid
 	}
 
-	return ClientConfig{
+	conf := ClientConfig{
 		VisorPK:    visorPK,
 		ServerAddr: serverAddr,
-		AppKey:     appcommon.Key(appKey),
-	}, nil
+		ProcKey:    procKey,
+	}
+	return conf, nil
 }
 
 // Client is used by skywire apps.
@@ -77,15 +85,19 @@ type Client struct {
 // - log: logger instance.
 // - config: client configuration.
 func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
-	rpcCl, err := rpc.Dial("tcp", config.ServerAddr)
+	conn, err := net.Dial("tcp", config.ServerAddr)
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to the app server: %v", err)
+		return nil, fmt.Errorf("failed to dial to app server: %w", err)
 	}
+	if _, err := conn.Write(config.ProcKey[:]); err != nil {
+		return nil, fmt.Errorf("failed to provide proc key to app server: %w", err)
+	}
+	rpcC := rpc.NewClient(conn)
 
 	return &Client{
 		log:     log,
 		visorPK: config.VisorPK,
-		rpc:     NewRPCClient(rpcCl, config.AppKey),
+		rpc:     NewRPCClient(rpcC, config.ProcKey),
 		lm:      idmanager.New(),
 		cm:      idmanager.New(),
 	}, nil

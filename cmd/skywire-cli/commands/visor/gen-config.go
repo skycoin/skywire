@@ -155,7 +155,7 @@ func defaultConfig() *visor.Config {
 		RPCAddress: "localhost:3435",
 	}
 
-	conf.AppServerAddr = appcommon.DefaultServerAddr
+	conf.AppServerAddr = appcommon.DefaultAppSrvAddr
 	conf.RestartCheckDelay = restart.DefaultCheckDelay.String()
 
 	if testenv {

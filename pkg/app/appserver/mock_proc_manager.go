@@ -37,18 +37,18 @@ func (_m *MockProcManager) Range(next func(string, *Proc) bool) {
 }
 
 // Start provides a mock function with given fields: log, c, args, stdout, stderr
-func (_m *MockProcManager) Start(log *logging.Logger, c appcommon.Config, args []string, stdout io.Writer, stderr io.Writer) (appcommon.ProcID, error) {
+func (_m *MockProcManager) Start(log *logging.Logger, c appcommon.ProcConfig, args []string, stdout io.Writer, stderr io.Writer) (appcommon.ProcID, error) {
 	ret := _m.Called(log, c, args, stdout, stderr)
 
 	var r0 appcommon.ProcID
-	if rf, ok := ret.Get(0).(func(*logging.Logger, appcommon.Config, []string, io.Writer, io.Writer) appcommon.ProcID); ok {
+	if rf, ok := ret.Get(0).(func(*logging.Logger, appcommon.ProcConfig, []string, io.Writer, io.Writer) appcommon.ProcID); ok {
 		r0 = rf(log, c, args, stdout, stderr)
 	} else {
 		r0 = ret.Get(0).(appcommon.ProcID)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*logging.Logger, appcommon.Config, []string, io.Writer, io.Writer) error); ok {
+	if rf, ok := ret.Get(1).(func(*logging.Logger, appcommon.ProcConfig, []string, io.Writer, io.Writer) error); ok {
 		r1 = rf(log, c, args, stdout, stderr)
 	} else {
 		r1 = ret.Error(1)
