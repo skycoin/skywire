@@ -739,46 +739,73 @@ func (visor *Visor) setAutoStart(appName string, autoStart bool) error {
 	return visor.updateAppAutoStart(appName, autoStart)
 }
 
-func (visor *Visor) setSocksPassword(password string) error {
-	visor.logger.Infof("Changing skysocks password to %q", password)
+func (visor *Visor) setAppPassword(appName, password string) error {
+	allowedToChangePassword := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.SkysocksName:  {},
+			skyenv.VPNClientName: {},
+			skyenv.VPNServerName: {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePassword(appName) {
+		return fmt.Errorf("app %s is not allowed to change password", appName)
+	}
+
+	visor.logger.Infof("Changing %s password to %q", appName, password)
 
 	const (
-		socksName       = "skysocks"
 		passcodeArgName = "-passcode"
 	)
 
-	if err := visor.updateAppArg(socksName, passcodeArgName, password); err != nil {
+	if err := visor.updateAppArg(appName, passcodeArgName, password); err != nil {
 		return err
 	}
 
-	if visor.procManager.Exists(socksName) {
-		visor.logger.Infof("Updated %v password, restarting it", socksName)
-		return visor.RestartApp(socksName)
+	if visor.procManager.Exists(appName) {
+		visor.logger.Infof("Updated %v password, restarting it", appName)
+		return visor.RestartApp(appName)
 	}
 
-	visor.logger.Infof("Updated %v password", socksName)
+	visor.logger.Infof("Updated %v password", appName)
 
 	return nil
 }
 
-func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
-	visor.logger.Infof("Changing skysocks-client PK to %q", pk)
+func (visor *Visor) setAppPK(appName string, pk cipher.PubKey) error {
+	allowedToChangePK := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.SkysocksClientName: {},
+			skyenv.VPNClientName:      {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePK(appName) {
+		return fmt.Errorf("app %s is not allowed to change PK", appName)
+	}
+
+	visor.logger.Infof("Changing %s PK to %q", appName, pk)
 
 	const (
-		socksClientName = "skysocks-client"
-		pkArgName       = "-srv"
+		pkArgName = "-srv"
 	)
 
-	if err := visor.updateAppArg(socksClientName, pkArgName, pk.String()); err != nil {
+	if err := visor.updateAppArg(appName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
-	if visor.procManager.Exists(socksClientName) {
-		visor.logger.Infof("Updated %v PK, restarting it", socksClientName)
-		return visor.RestartApp(socksClientName)
+	if visor.procManager.Exists(appName) {
+		visor.logger.Infof("Updated %v PK, restarting it", appName)
+		return visor.RestartApp(appName)
 	}
 
-	visor.logger.Infof("Updated %v PK", socksClientName)
+	visor.logger.Infof("Updated %v PK", appName)
 
 	return nil
 }
