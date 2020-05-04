@@ -164,7 +164,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	s.log.Infof("Allocated TUN %s", tun.Name())
 
-	if err := SetupTUN(tun.Name(), tunIP.String(), TUNNetmask, tunGateway.String(), TUNMTU); err != nil {
+	if err := SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
 		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
 	}
