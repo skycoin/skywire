@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
-	"path/filepath"
 	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -120,7 +120,7 @@ type AppLogsRequest struct {
 func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "LogsSince", in)(out, &err)
 
-	ls, err := app.NewLogStore(filepath.Join(r.visor.dir(), in.AppName), in.AppName, "bbolt")
+	ls, err := appcommon.NewLogStore(r.visor.appLogLoc(in.AppName), in.AppName, "bbolt")
 	if err != nil {
 		return err
 	}

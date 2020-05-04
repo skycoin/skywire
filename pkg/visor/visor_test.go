@@ -124,7 +124,7 @@ func TestVisorStartClose(t *testing.T) {
 		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 		VisorPK:     visorCfg.Keys().PubKey.Hex(),
 		RoutingPort: apps["skychat"].Port,
-		WorkDir:     filepath.Join("", apps["skychat"].App),
+		ProcWorkDir: filepath.Join("", apps["skychat"].App),
 	}
 	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
@@ -203,7 +203,7 @@ func TestVisorSpawnApp(t *testing.T) {
 		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 		VisorPK:     visorCfg.Keys().PubKey.Hex(),
 		RoutingPort: app.Port,
-		WorkDir:     filepath.Join("", app.App),
+		ProcWorkDir: filepath.Join("", app.App),
 	}
 
 	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
@@ -263,7 +263,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 			AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 			VisorPK:     c.Keys().PubKey.Hex(),
 			RoutingPort: app.Port,
-			WorkDir:     filepath.Join("", app.App),
+			ProcWorkDir: filepath.Join("", app.App),
 		}
 
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
@@ -303,7 +303,7 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 			AppSrvAddr:  appcommon.DefaultAppSrvAddr,
 			VisorPK:     c.Keys().PubKey.Hex(),
 			RoutingPort: app.Port,
-			WorkDir:     filepath.Join("", app.App),
+			ProcWorkDir: filepath.Join("", app.App),
 		}
 		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 

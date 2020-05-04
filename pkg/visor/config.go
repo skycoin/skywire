@@ -47,9 +47,9 @@ var (
 
 // Config defines configuration parameters for Visor.
 type Config struct {
-	Path    *string `json:"-"`
-	log     *logging.Logger
-	flushMu sync.Mutex
+	Path    *string         `json:"-"`
+	log     *logging.Logger `json:"-"`
+	flushMu sync.Mutex      `json:"-"`
 
 	Version       string               `json:"version"`
 	KeyPair       *KeyPair             `json:"key_pair"`
@@ -59,24 +59,21 @@ type Config struct {
 	Transport     *TransportConfig     `json:"transport"`
 	Routing       *RoutingConfig       `json:"routing"`
 	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker,omitempty"`
-	AppDiscovery  *AppDiscConfig       `json:"app_discovery,omitempty"`
 
-	Apps []AppConfig `json:"apps"`
+	AppDiscovery  *AppDiscConfig `json:"app_discovery,omitempty"`
+	Apps          []AppConfig    `json:"apps"`
+	AppServerAddr string         `json:"app_server_addr"`
+	AppsPath      string         `json:"apps_path"`
+	LocalPath     string         `json:"local_path"`
 
 	TrustedVisors []cipher.PubKey    `json:"trusted_visors"`
 	Hypervisors   []HypervisorConfig `json:"hypervisors"`
 
-	AppsPath  string `json:"apps_path"`
-	LocalPath string `json:"local_path"`
-
-	LogLevel        string   `json:"log_level"`
-	ShutdownTimeout Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
-
 	Interfaces *InterfaceConfig `json:"interfaces"`
 
-	AppServerAddr string `json:"app_server_addr"`
-
-	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
+	LogLevel          string   `json:"log_level"`
+	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
+	RestartCheckDelay string   `json:"restart_check_delay,omitempty"`
 }
 
 // Flush flushes config to file.

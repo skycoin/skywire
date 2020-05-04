@@ -10,11 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
@@ -279,7 +280,7 @@ type mockRPCClient struct {
 	s         *Summary
 	tpTypes   []string
 	rt        routing.Table
-	appls     app.LogStore
+	logS      appcommon.LogStore
 	sync.RWMutex
 }
 
@@ -483,9 +484,9 @@ func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
 	})
 }
 
-// LogsSince implements RPCClient. Manually set (*mockRPPClient).appls before calling this function
+// LogsSince implements RPCClient. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
-	return mc.appls.LogsSince(timestamp)
+	return mc.logS.LogsSince(timestamp)
 }
 
 // TransportTypes implements RPCClient.

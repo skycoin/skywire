@@ -1,8 +1,7 @@
-package app
+package appcommon
 
 import (
 	"io"
-	"os"
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -11,8 +10,8 @@ import (
 // NewLogger returns a logger which persists app logs. This logger should be passed down
 // for use on any other function used by the app. It's configured from an additional app argument.
 // It modifies os.Args stripping from it such value. Should be called before using os.Args inside the app
-func NewLogger(appName string) *logging.MasterLogger {
-	db, err := newBoltDB(os.Args[1], appName)
+func NewLogger(dbPath string, appName string) *logging.MasterLogger {
+	db, err := newBoltDB(dbPath, appName)
 	if err != nil {
 		panic(err)
 	}
@@ -20,7 +19,7 @@ func NewLogger(appName string) *logging.MasterLogger {
 	l := newAppLogger()
 	l.SetOutput(io.MultiWriter(l.Out, db))
 
-	os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+	//os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 
 	return l
 }

@@ -2,10 +2,13 @@ package appcommon
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"os"
 
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -15,12 +18,19 @@ import (
 const DefaultAppSrvAddr = "localhost:5505"
 
 const (
+	// EnvProcConfig is the env name which contains a JSON-encoded proc config.
+	EnvProcConfig = "PROC_CONFIG"
+
 	// EnvProcKey is a name for env arg containing skywire application key.
 	EnvProcKey = "PROC_KEY"
 	// EnvAppSrvAddr is a name for env arg containing app server address.
 	EnvAppSrvAddr = "APP_SERVER_ADDR"
 	// EnvVisorPK is a name for env arg containing public key of visor.
 	EnvVisorPK = "VISOR_PK"
+)
+
+var (
+	ErrProcConfigEnvNotDefined = fmt.Errorf("env '%s' is not defined", EnvProcConfig)
 )
 
 // ProcKey is a unique key to authenticate a proc within the app server.
@@ -68,14 +78,28 @@ type ProcID uint16
 
 // ProcConfig defines configuration parameters for `Proc`.
 type ProcConfig struct {
-	AppName     string       `json:"app_name"`
-	AppSrvAddr  string       `json:"app_server_addr"`
-	ProcKey     ProcKey      `json:"proc_key"`
-	ProcArgs    []string     `json:"proc_args"`
-	VisorPK     string       `json:"visor_pk"`
-	RoutingPort routing.Port `json:"routing_port"`
-	BinaryDir   string       `json:"binary_dir"`
-	WorkDir     string       `json:"work_dir"`
+	AppName     string        `json:"app_name"`
+	AppSrvAddr  string        `json:"app_server_addr"`
+	ProcKey     ProcKey       `json:"proc_key"`
+	ProcArgs    []string      `json:"proc_args"`
+	ProcWorkDir string        `json:"proc_work_dir"`
+	VisorPK     cipher.PubKey `json:"visor_pk"`
+	RoutingPort routing.Port  `json:"routing_port"`
+	BinaryLoc   string        `json:"binary_loc"`
+	LogDBLoc    string        `json:"log_db_loc"`
+}
+
+// ProcConfigFromEnv obtains a ProcConfig from the associated env variable, returning an error if any.
+func ProcConfigFromEnv() (ProcConfig, error) {
+	v, ok := os.LookupEnv(EnvProcConfig)
+	if !ok {
+		return ProcConfig{}, ErrProcConfigEnvNotDefined
+	}
+	var conf ProcConfig
+	if err := json.Unmarshal([]byte(v), &conf); err != nil {
+		return ProcConfig{}, fmt.Errorf("invalid %s env value: %w", EnvProcConfig, err)
+	}
+	return conf, nil
 }
 
 // EnsureKey ensures that a proc key is provided in the ProcConfig.
@@ -85,17 +109,23 @@ func (c *ProcConfig) EnsureKey() {
 	}
 }
 
-// BinaryLoc returns the binary path using the associated fields of the ProcConfig.
-func (c *ProcConfig) BinaryLoc() string {
-	return filepath.Join(c.BinaryDir, c.AppName)
-}
-
 // Envs returns the env variables that are passed to the associated proc.
 func (c *ProcConfig) Envs() []string {
 	const format = "%s=%s"
 	return []string{
-		fmt.Sprintf(format, EnvProcKey, c.ProcKey),
-		fmt.Sprintf(format, EnvAppSrvAddr, c.AppSrvAddr),
-		fmt.Sprintf(format, EnvVisorPK, c.VisorPK),
+		fmt.Sprintf(format, EnvProcConfig, string(c.encodeJSON())),
 	}
+}
+
+func (c *ProcConfig) encodeJSON() []byte {
+	b, err := json.Marshal(c)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// Logger returns the associated logger for the app.
+func (c *ProcConfig) Logger() *logging.MasterLogger {
+	return NewLogger(c.LogDBLoc, c.AppName)
 }

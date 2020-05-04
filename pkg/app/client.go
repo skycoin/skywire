@@ -1,14 +1,11 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/rpc"
-	"os"
 	"strings"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
@@ -17,90 +14,56 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-var (
-	// ErrVisorPKNotProvided is returned when the visor PK is not provided.
-	ErrVisorPKNotProvided = errors.New("visor PK is not provided")
-	// ErrVisorPKInvalid is returned when the visor PK is invalid.
-	ErrVisorPKInvalid = errors.New("visor PK is invalid")
-	// ErrServerAddrNotProvided is returned when app server address is not provided.
-	ErrServerAddrNotProvided = errors.New("server address is not provided")
-	// ErrProcKeyNotProvided is returned when the proc key is not provided.
-	ErrProcKeyNotProvided = errors.New("proc key is not provided")
-	// ErrProcKeyInvalid occurs when proc key is invalid.
-	ErrProcKeyInvalid = errors.New("proc key is invalid")
-)
-
-// ClientConfig is a configuration for `Client`.
-type ClientConfig struct {
-	VisorPK    cipher.PubKey
-	ServerAddr string
-	ProcKey    appcommon.ProcKey
-}
-
-// ClientConfigFromEnv creates client config from the ENV args.
-func ClientConfigFromEnv() (ClientConfig, error) {
-	procKeyStr := os.Getenv(appcommon.EnvProcKey)
-	if procKeyStr == "" {
-		return ClientConfig{}, ErrProcKeyNotProvided
-	}
-
-	var procKey appcommon.ProcKey
-	if err := procKey.UnmarshalText([]byte(procKeyStr)); err != nil {
-		return ClientConfig{}, ErrProcKeyInvalid
-	}
-
-	serverAddr := os.Getenv(appcommon.EnvAppSrvAddr)
-	if serverAddr == "" {
-		return ClientConfig{}, ErrServerAddrNotProvided
-	}
-
-	visorPKStr := os.Getenv(appcommon.EnvVisorPK)
-	if visorPKStr == "" {
-		return ClientConfig{}, ErrVisorPKNotProvided
-	}
-
-	var visorPK cipher.PubKey
-	if err := visorPK.UnmarshalText([]byte(visorPKStr)); err != nil {
-		return ClientConfig{}, ErrVisorPKInvalid
-	}
-
-	conf := ClientConfig{
-		VisorPK:    visorPK,
-		ServerAddr: serverAddr,
-		ProcKey:    procKey,
-	}
-	return conf, nil
-}
-
 // Client is used by skywire apps.
 type Client struct {
-	log     *logging.Logger
-	visorPK cipher.PubKey
-	rpc     RPCClient
-	lm      *idmanager.Manager // contains listeners associated with their IDs
-	cm      *idmanager.Manager // contains connections associated with their IDs
+	log  *logging.MasterLogger
+	conf appcommon.ProcConfig
+	rpc  RPCClient
+	lm   *idmanager.Manager // contains listeners associated with their IDs
+	cm   *idmanager.Manager // contains connections associated with their IDs
 }
 
-// NewClient creates a new `Client`. The `Client` needs to be provided with:
-// - log: logger instance.
-// - config: client configuration.
-func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
-	conn, err := net.Dial("tcp", config.ServerAddr)
+// NewClient creates a new Client, panicking on any error.
+func NewClient() *Client {
+	conf, err := appcommon.ProcConfigFromEnv()
+	if err != nil {
+		panic(fmt.Errorf("failed to obtain proc config: %w", err))
+	}
+	client, err := NewClientFromConfig(conf)
+	if err != nil {
+		conf.Logger().Panicf("app client: %v", err)
+	}
+	return client
+}
+
+// NewClientFromConfig creates a new client from a given proc config.
+func NewClientFromConfig(conf appcommon.ProcConfig) (*Client, error) {
+	conn, err := net.Dial("tcp", conf.AppSrvAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to app server: %w", err)
 	}
-	if _, err := conn.Write(config.ProcKey[:]); err != nil {
-		return nil, fmt.Errorf("failed to provide proc key to app server: %w", err)
+	if _, err := conn.Write(conf.ProcKey[:]); err != nil {
+		return nil, fmt.Errorf("failed to send proc key back to app server: %w", err)
 	}
 	rpcC := rpc.NewClient(conn)
 
 	return &Client{
-		log:     log,
-		visorPK: config.VisorPK,
-		rpc:     NewRPCClient(rpcC, config.ProcKey),
-		lm:      idmanager.New(),
-		cm:      idmanager.New(),
+		log:  conf.Logger(),
+		conf: conf,
+		rpc:  NewRPCClient(rpcC, conf.ProcKey),
+		lm:   idmanager.New(),
+		cm:   idmanager.New(),
 	}, nil
+}
+
+// Config returns the underlying proc config.
+func (c *Client) Config() appcommon.ProcConfig {
+	return c.conf
+}
+
+// Logger returns the underlying logger.
+func (c *Client) Logger() *logging.MasterLogger {
+	return c.log
 }
 
 // Dial dials the remote visor using `remote`.
@@ -115,7 +78,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		rpc: c.rpc,
 		local: appnet.Addr{
 			Net:    remote.Net,
-			PubKey: c.visorPK,
+			PubKey: c.conf.VisorPK,
 			Port:   localPort,
 		},
 		remote: remote,
@@ -146,7 +109,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) {
 	local := appnet.Addr{
 		Net:    n,
-		PubKey: c.visorPK,
+		PubKey: c.conf.VisorPK,
 		Port:   port,
 	}
 

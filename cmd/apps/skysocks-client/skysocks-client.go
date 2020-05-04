@@ -5,13 +5,11 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io"
 	"net"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
@@ -49,7 +47,10 @@ func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 }
 
 func main() {
-	log := app.NewLogger(appName)
+	appC := app.NewClient()
+	defer appC.Close()
+
+	log := appC.Logger()
 	skysocks.Log = log.PackageLogger("skysocks")
 
 	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
@@ -59,20 +60,6 @@ func main() {
 	var addr = flag.String("addr", skyenv.SkysocksClientAddr, "Client address to listen on")
 	var serverPK = flag.String("srv", "", "PubKey of the server to connect to")
 	flag.Parse()
-
-	config, err := app.ClientConfigFromEnv()
-	if err != nil {
-		log.Fatalf("Error getting client config: %v\n", err)
-	}
-
-	socksApp, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
-
-	if err != nil {
-		log.Fatal("Setup failure: ", err)
-	}
-	defer func() {
-		socksApp.Close()
-	}()
 
 	if *serverPK == "" {
 		log.Warn("Empty server PubKey. Exiting")
@@ -85,7 +72,7 @@ func main() {
 	}
 
 	for {
-		conn, err := dialServer(socksApp, pk)
+		conn, err := dialServer(appC, pk)
 		if err != nil {
 			log.Fatalf("Failed to dial to a server: %v", err)
 		}

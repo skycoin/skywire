@@ -40,9 +40,9 @@ type Proc struct {
 
 // NewProc constructs `Proc`.
 func NewProc(log *logging.Logger, conf appcommon.ProcConfig, disc appdisc.Updater, stdout, stderr io.Writer) *Proc {
-	cmd := exec.Command(conf.BinaryLoc(), conf.ProcArgs...) // nolint:gosec
-	cmd.Env = conf.Envs()
-	cmd.Dir = conf.WorkDir
+	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	cmd.Dir = conf.ProcWorkDir
+	cmd.Env = append(os.Environ(), conf.Envs()...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 

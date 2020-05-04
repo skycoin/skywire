@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
@@ -23,7 +25,6 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -469,7 +470,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: app.TimestampFromLog(logs[len(logs)-1]),
+			LastLogTimestamp: appcommon.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
 	})

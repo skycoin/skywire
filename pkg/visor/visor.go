@@ -133,13 +133,13 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		STCP:   cfg.STCP,
 	})
 	if err := visor.n.Init(ctx); err != nil {
-		return nil, fmt.Errorf("failed to init network: %v", err)
+		return nil, fmt.Errorf("failed to init network: %w", err)
 	}
 
 	if cfg.DmsgPty != nil {
 		pty, err := cfg.DmsgPtyHost(visor.n.Dmsg())
 		if err != nil {
-			return nil, fmt.Errorf("failed to setup pty: %v", err)
+			return nil, fmt.Errorf("failed to setup pty: %w", err)
 		}
 		visor.pty = pty
 	} else {
@@ -148,12 +148,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	trDiscovery, err := cfg.TransportDiscovery()
 	if err != nil {
-		return nil, fmt.Errorf("invalid transport discovery config: %s", err)
+		return nil, fmt.Errorf("invalid transport discovery config: %w", err)
 	}
 
 	logStore, err := cfg.TransportLogStore()
 	if err != nil {
-		return nil, fmt.Errorf("invalid TransportLogStore: %s", err)
+		return nil, fmt.Errorf("invalid TransportLogStore: %w", err)
 	}
 
 	tmConfig := &transport.ManagerConfig{
@@ -166,7 +166,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	visor.tm, err = transport.NewManager(visor.n, tmConfig)
 	if err != nil {
-		return nil, fmt.Errorf("transport manager: %s", err)
+		return nil, fmt.Errorf("transport manager: %w", err)
 	}
 
 	rConfig := &router.Config{
@@ -180,23 +180,26 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	r, err := router.New(visor.n, rConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup router: %v", err)
+		return nil, fmt.Errorf("failed to setup router: %w", err)
 	}
 	visor.router = r
 
 	visor.appsConf, err = cfg.AppsConfig()
 	if err != nil {
-		return nil, fmt.Errorf("invalid AppsConfig: %s", err)
+		return nil, fmt.Errorf("invalid AppsConfig: %w", err)
 	}
 
 	visor.appsPath, err = cfg.AppsDir()
 	if err != nil {
-		return nil, fmt.Errorf("invalid AppsPath: %s", err)
+		return nil, fmt.Errorf("invalid AppsPath: %w", err)
 	}
 
 	visor.localPath, err = cfg.LocalDir()
 	if err != nil {
-		return nil, fmt.Errorf("invalid LocalPath: %s", err)
+		return nil, fmt.Errorf("invalid LocalPath: %w", err)
+	}
+	if err := pathutil.EnsureDir(visor.localPath); err != nil {
+		return nil, fmt.Errorf("failed to ensure 'local_path': %w", err)
 	}
 
 	if lvl, err := logging.LevelFromString(cfg.LogLevel); err == nil {
@@ -206,7 +209,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	if cfg.Interfaces != nil {
 		l, err := net.Listen("tcp", cfg.Interfaces.RPCAddress)
 		if err != nil {
-			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
+			return nil, fmt.Errorf("failed to setup RPC listener: %w", err)
 		}
 
 		visor.cliLis = l
@@ -247,10 +250,6 @@ func (visor *Visor) Start() error {
 	defer cancel()
 
 	visor.startedAt = time.Now()
-
-	if err := pathutil.EnsureDir(visor.dir()); err != nil {
-		return err
-	}
 
 	if err := visor.startApps(); err != nil {
 		return err
@@ -385,13 +384,8 @@ func (visor *Visor) startRPC(ctx context.Context) {
 	}
 }
 
-// TODO: We should have this re-defined.
-func (visor *Visor) dir() string {
-	return pathutil.VisorDir(visor.conf.Keys().PubKey.String())
-}
-
-func (visor *Visor) pidFile() (*os.File, error) {
-	f, err := os.OpenFile(filepath.Join(visor.dir(), "apps-pid.txt"), os.O_RDWR|os.O_CREATE, 0600)
+func (visor *Visor) appsPIDFile() (*os.File, error) {
+	f, err := os.OpenFile(filepath.Join(visor.appsPath, "apps-pid.txt"), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +396,7 @@ func (visor *Visor) pidFile() (*os.File, error) {
 func (visor *Visor) closePreviousApps() error {
 	visor.logger.Info("killing previously ran apps if any...")
 
-	pids, err := visor.pidFile()
+	pids, err := visor.appsPIDFile()
 	if err != nil {
 		return err
 	}
@@ -547,6 +541,9 @@ func (visor *Visor) StartApp(appName string) error {
 
 	return ErrUnknownApp
 }
+func (visor *Visor) appLogLoc(appName string) string {
+	return filepath.Join(visor.appsPath, appName+"_log.db")
+}
 
 // SpawnApp configures and starts new App.
 func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
@@ -564,33 +561,35 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	appCfg := appcommon.ProcConfig{
 		AppName:     config.App,
 		AppSrvAddr:  visor.conf.AppServerAddr,
-		VisorPK:     visor.conf.Keys().PubKey.Hex(),
+		ProcKey:     appcommon.RandProcKey(),
+		ProcArgs:    config.Args,
+		ProcWorkDir: filepath.Join(visor.localPath, config.App),
+		VisorPK:     visor.conf.Keys().PubKey,
 		RoutingPort: config.Port,
-		BinaryDir:   visor.appsPath,
-		WorkDir:     filepath.Join(visor.localPath, config.App),
+		BinaryLoc:   filepath.Join(visor.appsPath, config.App),
+		LogDBLoc:    visor.appLogLoc(config.App),
 	}
 
-	if _, err := ensureDir(appCfg.WorkDir); err != nil {
+	if _, err := ensureDir(appCfg.ProcWorkDir); err != nil {
 		return err
 	}
 
 	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
-	logger := visor.logger.WithField("_module", config.App).Writer()
-	errLogger := visor.logger.WithField("_module", config.App+"[ERROR]").Writer()
+	stdout := visor.logger.WithField("_module", config.App).Writer()
+	stderr := visor.logger.WithField("_module", config.App+"[ERROR]").Writer()
 
 	defer func() {
-		if logErr := logger.Close(); err == nil && logErr != nil {
+		if logErr := stdout.Close(); err == nil && logErr != nil {
 			err = logErr
 		}
-
-		if logErr := errLogger.Close(); err == nil && logErr != nil {
+		if logErr := stderr.Close(); err == nil && logErr != nil {
 			err = logErr
 		}
 	}()
 
 	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
 
-	pid, err := visor.procM.Start(ctx, appLogger, appCfg, logger, errLogger)
+	pid, err := visor.procM.Start(ctx, appLogger, appCfg, stdout, stderr)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}
@@ -614,7 +613,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 }
 
 func (visor *Visor) persistPID(name string, pid appcommon.ProcID) error {
-	pidF, err := visor.pidFile()
+	pidF, err := visor.appsPIDFile()
 	if err != nil {
 		return err
 	}
