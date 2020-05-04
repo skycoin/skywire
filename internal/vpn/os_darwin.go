@@ -21,14 +21,12 @@ const (
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
 func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
-	ip, net, err := net.ParseCIDR(ipCIDR)
+	ip, netmask, err := parseCIDR(ipCIDR)
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	netmask := fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3])
-
-	return run("ifconfig", ifcName, ip.String(), gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
+	return run("ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
 // DefaultNetworkGateway fetches system's default network gateway.
@@ -53,26 +51,22 @@ func DisableIPMasquerading(_ string) error {
 
 // AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
 func AddRoute(ipCIDR, gateway string) error {
-	ip, net, err := net.ParseCIDR(ipCIDR)
+	ip, netmask, err := parseCIDR(ipCIDR)
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	netmask := fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3])
-
-	return run("route", "add", "-net", ip.String(), gateway, netmask)
+	return run("route", "add", "-net", ip, gateway, netmask)
 }
 
 // DeleteRoute removes route to `ipCIDR` through the `gateway` from the OS routing table.
 func DeleteRoute(ipCIDR, gateway string) error {
-	ip, net, err := net.ParseCIDR(ipCIDR)
+	ip, netmask, err := parseCIDR(ipCIDR)
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	netmask := fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3])
-
-	return run("route", "delete", "-net", ip.String(), gateway, netmask)
+	return run("route", "delete", "-net", ip, gateway, netmask)
 }
 
 // networkInterfaceGateway gets gateway of the network interface with name `ifcName`.
