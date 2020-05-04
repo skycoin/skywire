@@ -5,11 +5,12 @@ package vpn
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"os/exec"
 )
 
 const (
-	gatewayForIfcCMDFmt         = "ip r | grep \"default via\" | awk '{print $3}'"
+	defaultNetworkGatewayCMD    = "ip r | grep \"default via\" | awk '{print $3}'"
 	setIPv4ForwardingCMDFmt     = "sysctl -w net.ipv4.ip_forward=%s"
 	setIPv6ForwardingCMDFmt     = "sysctl -w net.ipv6.conf.all.forwarding=%s"
 	getIPv4ForwardingCMD        = "sysctl net.ipv4.ip_forward"
@@ -17,6 +18,32 @@ const (
 	enableIPMasqueradingCMDFmt  = "iptables -t nat -A POSTROUTING -o %s -j MASQUERADE"
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
 )
+
+// DefaultNetworkGateway fetches system's default network gateway.
+func DefaultNetworkGateway() (net.IP, error) {
+	outBytes, err := exec.Command("sh", "-c", defaultNetworkGatewayCMD).Output() //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	outBytes = bytes.TrimRight(outBytes, "\n")
+
+	outLines := bytes.Split(outBytes, []byte{'\n'})
+
+	for _, l := range outLines {
+		if bytes.Count(l, []byte{'.'}) != 3 {
+			// initially look for IPv4 address
+			continue
+		}
+
+		ip := net.ParseIP(string(l))
+		if ip != nil {
+			return ip, nil
+		}
+	}
+
+	return nil, fmt.Errorf("couldn't find gateway IP for \"%s\"", ifcName)
+}
 
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
 func EnableIPMasquerading(ifcName string) error {
