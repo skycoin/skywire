@@ -40,9 +40,12 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error setting interface up: %w", err)
 	}
 
-	if err := run("route", "add", ip.String(), "gw", gateway); err != nil {
+	if err := AddRoute(ip.String(), gateway); err != nil {
 		return fmt.Errorf("error setting gateway for interface: %w", err)
 	}
+	/*if err := run("route", "add", ip.String(), "gw", gateway); err != nil {
+		return fmt.Errorf("error setting gateway for interface: %w", err)
+	}*/
 
 	return nil
 }
@@ -94,21 +97,13 @@ func DisableIPMasquerading(ifcName string) error {
 }
 
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
-func AddRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		netmask = "255.255.255.255"
-	}
-
-	return run("route", "add", "-net", ip, "netmask", netmask, "gw", gateway)
+func AddRoute(ip, gateway string) error {
+	return run("ip", "r", "add", ip, "via", gateway)
 }
 
 // DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
-func DeleteRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		netmask = "255.255.255.255"
-	}
-
-	return run("route", "delete", "-net", ip, "netmask", netmask, "gw", gateway)
+func DeleteRoute(ip, gateway string) error {
+	return run("ip", "r", "del", ip, "via", gateway)
 }
 
 func parseIPForwardingOutput(output []byte) (string, error) {
