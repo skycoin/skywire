@@ -20,6 +20,32 @@ const (
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
 )
 
+// SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
+func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
+	if err := run("ip", "a", "add", ipCIDR, "dev", ifcName); err != nil {
+		return fmt.Errorf("error assigning IP: %w", err)
+	}
+
+	if err := run("ip", "link", "set", "dev", ifcName, "mtu", mtu); err != nil {
+		return fmt.Errorf("error setting MTU: %w", err)
+	}
+
+	ip, _, err := net.ParseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
+	}
+
+	if err := run("route", "add", ip.String(), "gw", gateway); err != nil {
+		return fmt.Errorf("error setting gateway for interface: %w", err)
+	}
+
+	if err := run("ip", "link", "set", ifcName, "up"); err != nil {
+		return fmt.Errorf("error setting interface up: %w", err)
+	}
+
+	return nil
+}
+
 // DefaultNetworkGateway fetches system's default network gateway.
 func DefaultNetworkGateway() (net.IP, error) {
 	outBytes, err := exec.Command("sh", "-c", defaultNetworkGatewayCMD).Output() //nolint:gosec
