@@ -145,6 +145,15 @@ func getIPForwardingValue(cmd string) (string, error) {
 	return val, nil
 }
 
+func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
+	ip, net, err := net.ParseCIDR(ipCIDR)
+	if err != nil {
+		return "", "", err
+	}
+
+	return ip.String(), fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3]), nil
+}
+
 func run(bin string, args ...string) error {
 	cmd := exec.Command(bin, args...) //nolint:gosec
 
