@@ -6,13 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
 )
-
-// SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
-func SetupTUN(ifcName, ip, netmask, gateway string, mtu int) error {
-	return run("ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
-}
 
 // DefaultNetworkInterface fetches default network interface name.
 func DefaultNetworkInterface() (string, error) {

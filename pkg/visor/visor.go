@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/netutil"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
@@ -599,7 +601,19 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 
 		if visor.conf.Dmsg != nil {
 			envCfg.DmsgDiscovery = visor.conf.Dmsg.Discovery
-			envCfg.DmsgServers = visor.n.Dmsg().ConnectedServers()
+
+			retrier := netutil.NewRetrier(visor.logger, 1*time.Second, 10*time.Second, 0, 1)
+			err := retrier.Do(context.Background(), func() error {
+				envCfg.DmsgServers = visor.n.Dmsg().ConnectedServers()
+				if len(envCfg.DmsgServers) == 0 {
+					return errors.New("not yet connected over Dmsg")
+				}
+
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("error running app %s: %v", config.App, err)
+			}
 		}
 		if visor.conf.Transport != nil {
 			envCfg.TPDiscovery = visor.conf.Transport.Discovery
