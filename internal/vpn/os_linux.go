@@ -4,6 +4,7 @@ package vpn
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
@@ -23,7 +24,7 @@ const (
 func DefaultNetworkGateway() (net.IP, error) {
 	outBytes, err := exec.Command("sh", "-c", defaultNetworkGatewayCMD).Output() //nolint:gosec
 	if err != nil {
-		return nil, fmt.Errorf("error running command %s: %w", cmd, err)
+		return nil, fmt.Errorf("error running command %s: %w", defaultNetworkGatewayCMD, err)
 	}
 
 	outBytes = bytes.TrimRight(outBytes, "\n")
@@ -42,7 +43,7 @@ func DefaultNetworkGateway() (net.IP, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("couldn't find gateway IP for \"%s\"", ifcName)
+	return nil, errors.New("couldn't find default network gateway")
 }
 
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
