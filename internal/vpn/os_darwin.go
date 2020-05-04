@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strconv"
 )
 
 const (
@@ -17,6 +18,18 @@ const (
 	getIPv4ForwardingCMD    = "sysctl net.inet.ip.forwarding"
 	getIPv6ForwardingCMD    = "sysctl net.inet6.ip6.forwarding"
 )
+
+// SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
+func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
+	ip, net, err := net.ParseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
+	}
+
+	netmask := fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3])
+
+	return run("ifconfig", ifcName, ip.String(), gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
+}
 
 // DefaultNetworkGateway fetches system's default network gateway.
 func DefaultNetworkGateway() (net.IP, error) {
