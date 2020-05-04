@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	ipv4FirstHalfAddr  = "0.0.0.0"
-	ipv4SecondHalfAddr = "128.0.0.0"
-	ipv4HalfRangeMask  = "128.0.0.0"
+	ipv4FirstHalfAddr      = "0.0.0.0/1"
+	ipv4SecondHalfAddr     = "128.0.0.0/1"
+	directRouteNetmaskCIDR = "/32"
 )
 
 // Client is a VPN client.
@@ -157,10 +157,10 @@ func (c *Client) Close() {
 
 func (c *Client) routeTrafficThroughTUN(tunGateway net.IP) error {
 	// route all traffic through TUN gateway
-	if err := AddRoute(ipv4FirstHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
+	if err := AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 		return err
 	}
-	if err := AddRoute(ipv4SecondHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
+	if err := AddRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
 		return err
 	}
 
@@ -171,10 +171,10 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 	c.log.Infoln("Routing all traffic through default network gateway")
 
 	// remove main route
-	if err := DeleteRoute(ipv4FirstHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
+	if err := DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 		c.log.WithError(err).Errorf("Error routing traffic through default network gateway")
 	}
-	if err := DeleteRoute(ipv4SecondHalfAddr, tunGateway.String(), ipv4HalfRangeMask); err != nil {
+	if err := DeleteRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
 		c.log.WithError(err).Errorf("Error routing traffic through default network gateway")
 	}
 }
@@ -183,7 +183,7 @@ func (c *Client) setupDirectRoutes() error {
 	for _, ip := range c.directIPs {
 		if !ip.IsLoopback() {
 			c.log.Infof("Adding direct route to %s", ip.String())
-			if err := AddRoute(ip.String(), c.defaultGateway.String(), ""); err != nil {
+			if err := AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 				return fmt.Errorf("error adding direct route to %s", ip.String())
 			}
 		}
@@ -196,7 +196,7 @@ func (c *Client) removeDirectRoutes() {
 	for _, ip := range c.directIPs {
 		if !ip.IsLoopback() {
 			c.log.Infof("Removing direct route to %s", ip.String())
-			if err := DeleteRoute(ip.String(), c.defaultGateway.String(), ""); err != nil {
+			if err := DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 				// shouldn't return, just keep on trying the other IPs
 				c.log.WithError(err).Errorf("Error removing direct route to %s", ip.String())
 			}

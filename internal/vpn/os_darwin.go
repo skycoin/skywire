@@ -51,22 +51,28 @@ func DisableIPMasquerading(_ string) error {
 	return errors.New("cannot be implemented")
 }
 
-// AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
-func AddRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		return run("route", "add", "-net", ip, gateway)
+// AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
+func AddRoute(ipCIDR, gateway string) error {
+	ip, net, err := net.ParseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	return run("route", "add", "-net", ip, gateway, netmask)
+	netmask := fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3])
+
+	return run("route", "add", "-net", ip.String(), gateway, netmask)
 }
 
-// DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
-func DeleteRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		return run("route", "delete", "-net", ip, gateway)
+// DeleteRoute removes route to `ipCIDR` through the `gateway` from the OS routing table.
+func DeleteRoute(ipCIDR, gateway string) error {
+	ip, net, err := net.ParseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	return run("route", "delete", "-net", ip, gateway, netmask)
+	netmask := fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3])
+
+	return run("route", "delete", "-net", ip.String(), gateway, netmask)
 }
 
 // networkInterfaceGateway gets gateway of the network interface with name `ifcName`.
