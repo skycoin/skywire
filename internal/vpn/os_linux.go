@@ -36,12 +36,12 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	if err := run("route", "add", ip.String(), "gw", gateway); err != nil {
-		return fmt.Errorf("error setting gateway for interface: %w", err)
-	}
-
 	if err := run("ip", "link", "set", ifcName, "up"); err != nil {
 		return fmt.Errorf("error setting interface up: %w", err)
+	}
+
+	if err := run("route", "add", ip.String(), "gw", gateway); err != nil {
+		return fmt.Errorf("error setting gateway for interface: %w", err)
 	}
 
 	return nil
