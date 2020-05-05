@@ -106,7 +106,7 @@ func (tm *Manager) serve(ctx context.Context) {
 					return
 				default:
 					if err := tm.acceptTransport(ctx, lis); err != nil {
-						tm.Logger.Warnf("Failed to accept connection: %s", err)
+						tm.Logger.Warnf("Failed to accept connection: %v", err)
 						if strings.Contains(err.Error(), "closed") {
 							return
 						}

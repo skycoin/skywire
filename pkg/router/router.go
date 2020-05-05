@@ -202,7 +202,7 @@ func (r *router) DialRoutes(
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK
 		r.logger.WithError(err).Error("Failed to dial routes.")
-		return nil, fmt.Errorf("failed to dial routes: %v", err)
+		return nil, fmt.Errorf("failed to dial routes: %w", err)
 	}
 
 	lPK := r.conf.PubKey
@@ -210,7 +210,7 @@ func (r *router) DialRoutes(
 
 	forwardPath, reversePath, err := r.fetchBestRoutes(lPK, rPK, opts)
 	if err != nil {
-		return nil, fmt.Errorf("route finder: %s", err)
+		return nil, fmt.Errorf("route finder: %w", err)
 	}
 
 	req := routing.BidirectionalRoute{
@@ -516,7 +516,7 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 func (r *router) GetRule(routeID routing.RouteID) (routing.Rule, error) {
 	rule, err := r.rt.Rule(routeID)
 	if err != nil {
-		return nil, fmt.Errorf("routing table: %s", err)
+		return nil, fmt.Errorf("routing table: %w", err)
 	}
 
 	if rule == nil {
@@ -666,7 +666,7 @@ func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
 	for _, rule := range rules {
 		if err := r.rt.SaveRule(rule); err != nil {
 			r.logger.WithError(err).Error("Error saving rule to routing table")
-			return fmt.Errorf("routing table: %s", err)
+			return fmt.Errorf("routing table: %w", err)
 		}
 
 		r.logger.Infof("Save new Routing Rule with ID %d %s", rule.KeyRouteID(), rule)

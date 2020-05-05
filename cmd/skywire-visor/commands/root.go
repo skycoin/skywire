@@ -153,7 +153,7 @@ func (cfg *runCfg) readConfig() *runCfg {
 
 		file, err := os.Open(filepath.Clean(cp))
 		if err != nil {
-			cfg.logger.Fatalf("Failed to open config: %s", err)
+			cfg.logger.Fatalf("Failed to open config: %v", err)
 		}
 
 		defer func() {

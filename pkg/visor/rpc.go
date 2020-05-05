@@ -52,7 +52,7 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 	}
 
 	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
-		return nil, fmt.Errorf("failed to create visor RPC server: %v", err)
+		return nil, fmt.Errorf("failed to create visor RPC server: %w", err)
 	}
 
 	return rpcS, nil

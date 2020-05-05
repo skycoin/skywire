@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -164,7 +165,7 @@ func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
 	hypervisorWL := dmsgpty.NewMemoryWhitelist()
 	for _, hv := range c.Hypervisors {
 		if err := hypervisorWL.Add(hv.PubKey); err != nil {
-			return nil, fmt.Errorf("failed to add hypervisor PK to whitelist: %v", err)
+			return nil, fmt.Errorf("failed to add hypervisor PK to whitelist: %w", err)
 		}
 	}
 
@@ -274,7 +275,7 @@ func (c *Config) AppServerAddress() string {
 func ensureDir(path string) (string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("failed to expand path: %s", err)
+		return "", fmt.Errorf("failed to expand path: %w", err)
 	}
 
 	if _, err := os.Stat(absPath); !os.IsNotExist(err) {
@@ -282,7 +283,7 @@ func ensureDir(path string) (string, error) {
 	}
 
 	if err := os.MkdirAll(absPath, 0750); err != nil {
-		return "", fmt.Errorf("failed to create dir: %s", err)
+		return "", fmt.Errorf("failed to create dir: %w", err)
 	}
 
 	return absPath, nil
@@ -321,7 +322,8 @@ func DefaultSTCPConfig() (*snet.STCPConfig, error) {
 	}
 
 	c := &snet.STCPConfig{
-		LocalAddr: lIPaddr,
+		LocalAddr:       lIPaddr,
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
 	}
 
 	return c, nil
@@ -454,7 +456,7 @@ func getLocalIPAddress() (string, error) {
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if ipnet.IP.To4() != nil {
-				return fmt.Sprintf("%s:%d", ipnet.IP.String(), DefaultSTCPPort), nil
+				return net.JoinHostPort(ipnet.IP.String(), strconv.Itoa(DefaultSTCPPort)), nil
 			}
 		}
 	}

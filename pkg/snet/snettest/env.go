@@ -12,8 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
 )
 
 // KeyPair holds a public/private key pair.
@@ -61,7 +62,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
 	}
 
-	table := stcp.NewTable(tableEntries)
+	//table := stcp.NewTable(tableEntries)
 
 	var hasDmsg, hasStcp bool
 
@@ -87,7 +88,11 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		}
 
 		if hasStcp {
-			stcpClient = stcp.NewClient(pairs.PK, pairs.SK, table)
+			var err error
+			stcpClient, err = stcp.NewClient(pairs.PK, pairs.SK, skyenv.TestAddressResolverAddr)
+			if err != nil {
+				panic(err)
+			}
 		}
 
 		port := 7033

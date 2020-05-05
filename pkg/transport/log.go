@@ -123,7 +123,7 @@ func FileTransportLogStore(dir string) (LogStore, error) {
 func (tls *fileTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
 	f, err := os.Open(filepath.Join(tls.dir, fmt.Sprintf("%s.log", id)))
 	if err != nil {
-		return nil, fmt.Errorf("open: %s", err)
+		return nil, fmt.Errorf("open: %w", err)
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
@@ -133,7 +133,7 @@ func (tls *fileTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
 
 	entry := &LogEntry{}
 	if err := json.NewDecoder(f).Decode(entry); err != nil {
-		return nil, fmt.Errorf("json: %s", err)
+		return nil, fmt.Errorf("json: %w", err)
 	}
 
 	return entry, nil
@@ -142,7 +142,7 @@ func (tls *fileTransportLogStore) Entry(id uuid.UUID) (*LogEntry, error) {
 func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 	f, err := os.OpenFile(filepath.Join(tls.dir, fmt.Sprintf("%s.log", id)), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
-		return fmt.Errorf("open: %s", err)
+		return fmt.Errorf("open: %w", err)
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
@@ -151,7 +151,7 @@ func (tls *fileTransportLogStore) Record(id uuid.UUID, entry *LogEntry) error {
 	}()
 
 	if err := json.NewEncoder(f).Encode(entry); err != nil {
-		return fmt.Errorf("json: %s", err)
+		return fmt.Errorf("json: %w", err)
 	}
 
 	return nil

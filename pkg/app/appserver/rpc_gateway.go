@@ -322,7 +322,7 @@ func (r *RPCGateway) SetWriteDeadline(req *DeadlineReq, _ *struct{}) error {
 func (r *RPCGateway) popListener(lisID uint16) (net.Listener, error) {
 	lisIfc, err := r.lm.Pop(lisID)
 	if err != nil {
-		return nil, fmt.Errorf("no listener: %v", err)
+		return nil, fmt.Errorf("no listener: %w", err)
 	}
 
 	return idmanager.AssertListener(lisIfc)
@@ -333,7 +333,7 @@ func (r *RPCGateway) popListener(lisID uint16) (net.Listener, error) {
 func (r *RPCGateway) popConn(connID uint16) (net.Conn, error) {
 	connIfc, err := r.cm.Pop(connID)
 	if err != nil {
-		return nil, fmt.Errorf("no conn: %v", err)
+		return nil, fmt.Errorf("no conn: %w", err)
 	}
 
 	return idmanager.AssertConn(connIfc)

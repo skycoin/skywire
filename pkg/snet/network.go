@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -55,8 +55,8 @@ func (c *DmsgConfig) Type() string {
 
 // STCPConfig defines config for STCP network.
 type STCPConfig struct {
-	PubKeyTable map[cipher.PubKey]string `json:"pk_table"`
-	LocalAddr   string                   `json:"local_address"`
+	AddressResolver string `json:"address_resolver"`
+	LocalAddr       string `json:"local_address"`
 }
 
 // Type returns STCPType.
@@ -81,7 +81,7 @@ type Network struct {
 }
 
 // New creates a network from a config.
-func New(conf Config) *Network {
+func New(conf Config) (*Network, error) {
 	var dmsgC *dmsg.Client
 	var stcpC *stcp.Client
 
@@ -95,11 +95,17 @@ func New(conf Config) *Network {
 	}
 
 	if conf.STCP != nil {
-		stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.STCP.PubKeyTable))
+		//stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.STCP.PubKeyTable))
+		var err error
+		stcpC, err = stcp.NewClient(conf.PubKey, conf.SecKey, conf.STCP.AddressResolver)
+		if err != nil {
+			return nil, err
+		}
+
 		stcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 	}
 
-	return NewRaw(conf, dmsgC, stcpC)
+	return NewRaw(conf, dmsgC, stcpC), nil
 }
 
 // NewRaw creates a network from a config and a dmsg client.
@@ -133,7 +139,7 @@ func (n *Network) Init(_ context.Context) error {
 	if n.conf.STCP != nil {
 		if n.stcpC != nil && n.conf.STCP.LocalAddr != "" {
 			if err := n.stcpC.Serve(n.conf.STCP.LocalAddr); err != nil {
-				return fmt.Errorf("failed to initiate 'stcp': %v", err)
+				return fmt.Errorf("failed to initiate 'stcp': %w", err)
 			}
 		} else {
 			fmt.Println("No config found for stcp")

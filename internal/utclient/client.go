@@ -45,7 +45,7 @@ type httpClient struct {
 func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
 	client, err := httpauth.NewClient(context.Background(), addr, pk, sk)
 	if err != nil {
-		return nil, fmt.Errorf("httpauth: %s", err)
+		return nil, fmt.Errorf("httpauth: %w", err)
 	}
 
 	return &httpClient{client: client, pk: pk, sk: sk}, nil
@@ -53,7 +53,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error)
 
 // Get performs a new GET request.
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", c.client.Addr()+path, new(bytes.Buffer))
+	req, err := http.NewRequest(http.MethodGet, c.client.Addr()+path, new(bytes.Buffer))
 	if err != nil {
 		return nil, err
 	}

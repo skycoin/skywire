@@ -79,7 +79,7 @@ type Client struct {
 func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
 	rpcCl, err := rpc.Dial("tcp", config.ServerAddr)
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to the app server: %v", err)
+		return nil, fmt.Errorf("error connecting to the app server: %w", err)
 	}
 
 	return &Client{

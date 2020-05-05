@@ -143,6 +143,7 @@ func defaultConfig() *visor.Config {
 		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 		conf.Transport.Discovery = skyenv.TestTpDiscAddr
 		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+		conf.STCP.AddressResolver = skyenv.TestAddressResolverAddr
 		conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	}
 

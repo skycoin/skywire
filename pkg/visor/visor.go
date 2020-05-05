@@ -126,20 +126,25 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	visor.restartCtx = restartCtx
 
-	visor.n = snet.New(snet.Config{
+	snetConfig := snet.Config{
 		PubKey: pk,
 		SecKey: sk,
 		Dmsg:   cfg.DmsgConfig(),
 		STCP:   cfg.STCP,
-	})
+	}
+	visor.n, err = snet.New(snetConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create network: %w", err)
+	}
+
 	if err := visor.n.Init(ctx); err != nil {
-		return nil, fmt.Errorf("failed to init network: %v", err)
+		return nil, fmt.Errorf("failed to init network: %w", err)
 	}
 
 	if cfg.DmsgPty != nil {
 		pty, err := cfg.DmsgPtyHost(visor.n.Dmsg())
 		if err != nil {
-			return nil, fmt.Errorf("failed to setup pty: %v", err)
+			return nil, fmt.Errorf("failed to setup pty: %w", err)
 		}
 		visor.pty = pty
 	} else {
@@ -148,12 +153,12 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	trDiscovery, err := cfg.TransportDiscovery()
 	if err != nil {
-		return nil, fmt.Errorf("invalid transport discovery config: %s", err)
+		return nil, fmt.Errorf("invalid transport discovery config: %w", err)
 	}
 
 	logStore, err := cfg.TransportLogStore()
 	if err != nil {
-		return nil, fmt.Errorf("invalid TransportLogStore: %s", err)
+		return nil, fmt.Errorf("invalid TransportLogStore: %w", err)
 	}
 
 	tmConfig := &transport.ManagerConfig{
@@ -166,7 +171,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	visor.tm, err = transport.NewManager(visor.n, tmConfig)
 	if err != nil {
-		return nil, fmt.Errorf("transport manager: %s", err)
+		return nil, fmt.Errorf("transport manager: %w", err)
 	}
 
 	rConfig := &router.Config{
@@ -180,23 +185,23 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 
 	r, err := router.New(visor.n, rConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup router: %v", err)
+		return nil, fmt.Errorf("failed to setup router: %w", err)
 	}
 	visor.router = r
 
 	visor.appsConf, err = cfg.AppsConfig()
 	if err != nil {
-		return nil, fmt.Errorf("invalid AppsConfig: %s", err)
+		return nil, fmt.Errorf("invalid AppsConfig: %w", err)
 	}
 
 	visor.appsPath, err = cfg.AppsDir()
 	if err != nil {
-		return nil, fmt.Errorf("invalid AppsPath: %s", err)
+		return nil, fmt.Errorf("invalid AppsPath: %w", err)
 	}
 
 	visor.localPath, err = cfg.LocalDir()
 	if err != nil {
-		return nil, fmt.Errorf("invalid LocalPath: %s", err)
+		return nil, fmt.Errorf("invalid LocalPath: %w", err)
 	}
 
 	if lvl, err := logging.LevelFromString(cfg.LogLevel); err == nil {
@@ -206,7 +211,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	if cfg.Interfaces != nil {
 		l, err := net.Listen("tcp", cfg.Interfaces.RPCAddress)
 		if err != nil {
-			return nil, fmt.Errorf("failed to setup RPC listener: %s", err)
+			return nil, fmt.Errorf("failed to setup RPC listener: %w", err)
 		}
 
 		visor.cliLis = l
@@ -236,7 +241,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 func (visor *Visor) Start() error {
 	skywireNetworker := appnet.NewSkywireNetworker(logging.MustGetLogger("skynet"), visor.router)
 	if err := appnet.AddNetworker(appnet.TypeSkynet, skywireNetworker); err != nil {
-		return fmt.Errorf("failed to add skywire networker: %v", err)
+		return fmt.Errorf("failed to add skywire networker: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -262,7 +267,7 @@ func (visor *Visor) Start() error {
 	visor.logger.Info("Starting packet router")
 
 	if err := visor.router.Serve(ctx); err != nil {
-		return fmt.Errorf("failed to start Visor: %s", err)
+		return fmt.Errorf("failed to start Visor: %w", err)
 	}
 
 	return nil
@@ -317,7 +322,7 @@ func (visor *Visor) serveDmsgPtyCLI(ctx context.Context, log *logging.Logger) er
 
 	ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
 	if err != nil {
-		return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
+		return fmt.Errorf("failed to start dmsgpty cli listener: %w", err)
 	}
 
 	go func() {
@@ -405,7 +410,7 @@ func (visor *Visor) closePreviousApps() error {
 
 	defer func() {
 		if err := pids.Close(); err != nil {
-			visor.logger.Warnf("error closing PID file: %s", err)
+			visor.logger.Warnf("error closing PID file: %v", err)
 		}
 	}()
 

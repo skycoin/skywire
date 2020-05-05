@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -44,7 +45,8 @@ type HTTPError struct {
 
 // Client implements Client for auth services.
 type Client struct {
-	client http.Client
+	mu     sync.Mutex
+	client *http.Client
 	key    cipher.PubKey
 	sec    cipher.SecKey
 	addr   string // sanitized address of the client, which may differ from addr used in NewClient
@@ -59,7 +61,7 @@ type Client struct {
 // * SW-Sig:    The signature of the payload + the nonce
 func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey) (*Client, error) {
 	c := &Client{
-		client: http.Client{},
+		client: http.DefaultClient,
 		key:    key,
 		sec:    sec,
 		addr:   sanitizedAddr(addr),
@@ -126,6 +128,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 // Nonce calls the remote API to retrieve the next expected nonce
 func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	req, err := http.NewRequest(http.MethodGet, c.addr+"/security/nonces/"+key.Hex(), nil)
 	if err != nil {
 		return 0, err
@@ -155,6 +160,13 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	return nr.NextNonce, nil
 }
 
+func (c *Client) SetTransport(transport http.RoundTripper) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.client.Transport = transport
+}
+
 // SetNonce sets client current nonce to given nonce
 func (c *Client) SetNonce(n Nonce) {
 	atomic.StoreUint64(&c.nonce, uint64(n))
@@ -176,6 +188,9 @@ func (c *Client) doRequest(req *http.Request, body []byte) (*http.Response, erro
 	req.Header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
 	req.Header.Set("SW-Sig", sign.Hex())
 	req.Header.Set("SW-Public", c.key.Hex())
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	return c.client.Do(req)
 }
