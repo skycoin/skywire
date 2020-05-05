@@ -5,7 +5,8 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/yamux"
 	"github.com/armon/go-socks5"
 )
@@ -14,12 +15,12 @@ import (
 type Server struct {
 	socks    *socks5.Server
 	listener net.Listener
-	log      *logging.MasterLogger
+	log      logrus.FieldLogger
 	closed   uint32
 }
 
 // NewServer constructs a new Server.
-func NewServer(passcode string, l *logging.MasterLogger) (*Server, error) {
+func NewServer(passcode string, l logrus.FieldLogger) (*Server, error) {
 	var credentials socks5.CredentialStore
 	if passcode != "" {
 		credentials = passcodeCredentials(passcode)

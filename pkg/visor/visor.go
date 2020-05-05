@@ -572,20 +572,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 		return err
 	}
 
-	// TODO: make PackageLogger return *RuleEntry. FieldLogger doesn't expose Writer.
-	stdout := visor.logger.WithField("_module", config.App).Writer()
-	stderr := visor.logger.WithField("_module", config.App+"[ERROR]").Writer()
-
-	defer func() {
-		if logErr := stdout.Close(); err == nil && logErr != nil {
-			err = logErr
-		}
-		if logErr := stderr.Close(); err == nil && logErr != nil {
-			err = logErr
-		}
-	}()
-
-	pid, err := visor.procM.Start(appCfg, stdout, stderr)
+	pid, err := visor.procM.Start(appCfg)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}

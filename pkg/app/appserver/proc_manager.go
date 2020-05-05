@@ -34,7 +34,7 @@ var (
 // ProcManager allows to manage skywire applications.
 type ProcManager interface {
 	io.Closer
-	Start(conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error)
+	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	Exists(name string) bool
 	Stop(name string) error
 	Wait(name string) error
@@ -151,7 +151,7 @@ func (m *procManager) handleConn(conn net.Conn) bool {
 }
 
 // Start starts the application according to its config and additional args.
-func (m *procManager) Start(conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error) {
+func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
@@ -182,7 +182,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig, stdout, stderr io.Writer)
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(log, conf, disc, stdout, stderr)
+	proc := NewProc(conf, disc)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 

@@ -2,7 +2,6 @@ package appcommon
 
 import (
 	"io"
-	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
@@ -16,11 +15,8 @@ func NewLogger(dbPath string, appName string) *logging.MasterLogger {
 		panic(err)
 	}
 
-	l := newAppLogger()
+	l := logging.NewMasterLogger()
 	l.SetOutput(io.MultiWriter(l.Out, db))
-
-	//os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
-
 	return l
 }
 
@@ -28,23 +24,4 @@ func NewLogger(dbPath string, appName string) *logging.MasterLogger {
 // if the time layout is changed
 func TimestampFromLog(log string) string {
 	return log[1:36]
-}
-
-func newPersistentLogger(path, appName string) (*logging.MasterLogger, LogStore, error) {
-	db, err := newBoltDB(path, appName)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	l := newAppLogger()
-	l.SetOutput(io.MultiWriter(l.Out, db))
-
-	return l, db, nil
-}
-
-func newAppLogger() *logging.MasterLogger {
-	l := logging.NewMasterLogger()
-	l.Logger.Formatter.(*logging.TextFormatter).TimestampFormat = time.RFC3339Nano
-
-	return l
 }

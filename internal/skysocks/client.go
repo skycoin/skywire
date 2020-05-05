@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/yamux"
 
@@ -14,7 +16,7 @@ import (
 )
 
 // Log is skysocks package level logger, it can be replaced with a different one from outside the package
-var Log = logging.MustGetLogger("skysocks") // nolint: gochecknoglobals
+var Log logrus.FieldLogger = logging.MustGetLogger("skysocks") // nolint: gochecknoglobals
 
 // Client implement multiplexing proxy client using yamux.
 type Client struct {

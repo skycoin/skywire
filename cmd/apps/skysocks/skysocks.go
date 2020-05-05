@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -21,12 +23,17 @@ const (
 	port    routing.Port = 3
 )
 
+var log = logrus.New()
+
+func init() {
+	log.SetFormatter(&logrus.JSONFormatter{})
+}
+
 func main() {
 	appC := app.NewClient()
 	defer appC.Close()
 
-	log := appC.Logger()
-	skysocks.Log = log.PackageLogger(appName)
+	skysocks.Log = log
 
 	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 		log.Printf("Failed to output build info: %v", err)

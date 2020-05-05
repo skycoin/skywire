@@ -2,7 +2,7 @@ package appserver
 
 import (
 	"errors"
-	"io"
+	"fmt"
 	"net"
 	"net/rpc"
 	"os"
@@ -39,17 +39,22 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(log *logging.Logger, conf appcommon.ProcConfig, disc appdisc.Updater, stdout, stderr io.Writer) *Proc {
+func NewProc(conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
+
+	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
+
 	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
 	cmd.Dir = conf.ProcWorkDir
 	cmd.Env = append(os.Environ(), conf.Envs()...)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
+
+	log := conf.Logger()
+	cmd.Stdout = log.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
+	cmd.Stderr = log.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
 	return &Proc{
 		disc:   disc,
 		conf:   conf,
-		log:    log,
+		log:    logging.MustGetLogger(moduleName),
 		cmd:    cmd,
 		connCh: make(chan net.Conn, 1),
 	}

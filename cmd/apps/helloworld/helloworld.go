@@ -6,6 +6,8 @@ package main
 import (
 	"os"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
@@ -18,11 +20,15 @@ const (
 	netType = appnet.TypeSkynet
 )
 
+var log = logrus.New()
+
+func init() {
+	log.SetFormatter(&logrus.JSONFormatter{})
+}
+
 func main() {
 	appC := app.NewClient()
 	defer appC.Close()
-
-	log := appC.Logger()
 
 	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 		log.Printf("Failed to output build info: %v", err)

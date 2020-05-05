@@ -6,7 +6,7 @@ import (
 	"net/rpc"
 	"strings"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -16,7 +16,7 @@ import (
 
 // Client is used by skywire apps.
 type Client struct {
-	log  *logging.MasterLogger
+	log  logrus.FieldLogger
 	conf appcommon.ProcConfig
 	rpc  RPCClient
 	lm   *idmanager.Manager // contains listeners associated with their IDs
@@ -25,11 +25,14 @@ type Client struct {
 
 // NewClient creates a new Client, panicking on any error.
 func NewClient() *Client {
+	log := logrus.New()
+	log.SetFormatter(&logrus.JSONFormatter{})
+
 	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
-		panic(fmt.Errorf("failed to obtain proc config: %w", err))
+		log.WithError(err).Fatal("Failed to obtain proc config.")
 	}
-	client, err := NewClientFromConfig(conf)
+	client, err := NewClientFromConfig(log, conf)
 	if err != nil {
 		conf.Logger().Panicf("app client: %v", err)
 	}
@@ -37,7 +40,7 @@ func NewClient() *Client {
 }
 
 // NewClientFromConfig creates a new client from a given proc config.
-func NewClientFromConfig(conf appcommon.ProcConfig) (*Client, error) {
+func NewClientFromConfig(log logrus.FieldLogger, conf appcommon.ProcConfig) (*Client, error) {
 	conn, err := net.Dial("tcp", conf.AppSrvAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to app server: %w", err)
@@ -48,7 +51,7 @@ func NewClientFromConfig(conf appcommon.ProcConfig) (*Client, error) {
 	rpcC := rpc.NewClient(conn)
 
 	return &Client{
-		log:  conf.Logger(),
+		log:  log,
 		conf: conf,
 		rpc:  NewRPCClient(rpcC, conf.ProcKey),
 		lm:   idmanager.New(),
@@ -59,11 +62,6 @@ func NewClientFromConfig(conf appcommon.ProcConfig) (*Client, error) {
 // Config returns the underlying proc config.
 func (c *Client) Config() appcommon.ProcConfig {
 	return c.conf
-}
-
-// Logger returns the underlying logger.
-func (c *Client) Logger() *logging.MasterLogger {
-	return c.log
 }
 
 // Dial dials the remote visor using `remote`.
@@ -92,7 +90,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		conn.freeConnMx.Unlock()
 
 		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			c.log.WithError(err).Error("Unexpected error while closing conn.")
+			//log.Printf("Received unexpected error when closing conn: %v", err)
 		}
 
 		return nil, err

@@ -9,6 +9,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
@@ -25,6 +27,12 @@ const (
 	netType   = appnet.TypeSkynet
 	socksPort = routing.Port(3)
 )
+
+var log = logrus.New()
+
+func init() {
+	log.SetFormatter(&logrus.JSONFormatter{})
+}
 
 var r = netutil.NewRetrier(time.Second, 0, 1)
 
@@ -50,8 +58,7 @@ func main() {
 	appC := app.NewClient()
 	defer appC.Close()
 
-	log := appC.Logger()
-	skysocks.Log = log.PackageLogger("skysocks")
+	skysocks.Log = log
 
 	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 		log.Printf("Failed to output build info: %v", err)

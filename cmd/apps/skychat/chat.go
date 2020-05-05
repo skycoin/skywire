@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
@@ -33,20 +35,22 @@ var addr = flag.String("addr", ":8001", "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
+	log      = logrus.New()
 	appC     *app.Client
 	clientCh chan string
 	conns    map[cipher.PubKey]net.Conn // Chat connections
 	connsMu  sync.Mutex
-	log      *logging.MasterLogger
 )
+
+func init() {
+	log.SetFormatter(&logrus.JSONFormatter{})
+}
 
 func main() {
 	appC = app.NewClient()
 	defer appC.Close()
 
-	log = appC.Logger()
-
-	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		log.Printf("Failed to output build info: %v", err)
 	}
 
