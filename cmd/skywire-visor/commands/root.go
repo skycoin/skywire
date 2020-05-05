@@ -21,10 +21,10 @@ import (
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
+	skywirelogging "github.com/SkycoinProject/skywire-mainnet/pkg/logging"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
@@ -132,7 +132,7 @@ func (cfg *runCfg) startLogger() *runCfg {
 	cfg.logger = cfg.masterLogger.PackageLogger(cfg.tag)
 
 	if cfg.syslogAddr != "none" {
-		hook, err := logrussyslog.NewSyslogHook("udp", cfg.syslogAddr, syslog.LOG_INFO, cfg.tag)
+		hook, err := skywirelogging.NewSysLogHook("udp", cfg.syslogAddr, syslog.LOG_INFO, cfg.tag)
 		if err != nil {
 			cfg.logger.Error("Unable to connect to syslog daemon:", err)
 		} else {
