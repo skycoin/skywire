@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -123,9 +122,4 @@ func (c *ProcConfig) encodeJSON() []byte {
 		panic(err)
 	}
 	return b
-}
-
-// Logger returns the associated logger for the app.
-func (c *ProcConfig) Logger() *logging.MasterLogger {
-	return NewLogger(c.LogDBLoc, c.AppName)
 }

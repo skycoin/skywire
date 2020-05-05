@@ -9,8 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -120,12 +118,12 @@ type AppLogsRequest struct {
 func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "LogsSince", in)(out, &err)
 
-	ls, err := appcommon.NewLogStore(r.visor.appLogLoc(in.AppName), in.AppName, "bbolt")
-	if err != nil {
-		return err
+	proc, ok := r.visor.procM.ProcByName(in.AppName)
+	if !ok {
+		return fmt.Errorf("proc of app name '%s' is not found", in.AppName)
 	}
 
-	res, err := ls.LogsSince(in.TimeStamp)
+	res, err := proc.Logs().LogsSince(in.TimeStamp)
 	if err != nil {
 		return err
 	}

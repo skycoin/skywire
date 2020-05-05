@@ -21,13 +21,13 @@ func TestNewLogger(t *testing.T) {
 	l, _, err := newPersistentLogger(p.Name(), appName)
 	require.NoError(t, err)
 
-	dbl, err := newBoltDB(p.Name(), appName)
+	dbl, err := NewBBoltLogStore(p.Name(), appName)
 	require.NoError(t, err)
 
 	l.Info("bar")
 
 	beginning := time.Unix(0, 0)
-	res, err := dbl.(*boltDBappLogs).LogsSince(beginning)
+	res, err := dbl.(*bBoltLogStore).LogsSince(beginning)
 	require.NoError(t, err)
 	require.Len(t, res, 1)
 	require.Contains(t, res[0], "bar")

@@ -34,7 +34,7 @@ func NewClient() *Client {
 	}
 	client, err := NewClientFromConfig(log, conf)
 	if err != nil {
-		conf.Logger().Panicf("app client: %v", err)
+		log.WithError(err).Panic("Failed to create app client.")
 	}
 	return client
 }

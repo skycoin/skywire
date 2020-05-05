@@ -199,14 +199,14 @@ func TestStartStopApp(t *testing.T) {
 
 	err = rpc.StartApp(&unknownApp, nil)
 	require.Error(t, err)
-	assert.Equal(t, ErrUnknownApp, err)
+	assert.Equal(t, ErrAppProcNotRunning, err)
 
 	require.NoError(t, rpc.StartApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
 
 	err = rpc.StopApp(&unknownApp, nil)
 	require.Error(t, err)
-	assert.Equal(t, ErrUnknownApp, err)
+	assert.Equal(t, ErrAppProcNotRunning, err)
 
 	require.NoError(t, rpc.StopApp(&app, nil))
 	time.Sleep(100 * time.Millisecond)
@@ -362,7 +362,7 @@ These tests have been commented out for the following reasons:
 //
 //		err := gateway.SetAutoStart(&in1, &struct{}{})
 //		require.Error(t, err)
-//		assert.Equal(t, ErrUnknownApp, err)
+//		assert.Equal(t, ErrAppProcNotRunning, err)
 //
 //		require.NoError(t, gateway.SetAutoStart(&in2, &struct{}{}))
 //		assert.True(t, visor.appsConf[0].AutoStart)
@@ -374,7 +374,7 @@ These tests have been commented out for the following reasons:
 //
 //		err = client.SetAutoStart(in1.AppName, in1.AutoStart)
 //		require.Error(t, err)
-//		assert.Equal(t, ErrUnknownApp.Error(), err.Error())
+//		assert.Equal(t, ErrAppProcNotRunning.Error(), err.Error())
 //
 //		require.NoError(t, client.SetAutoStart(in2.AppName, in2.AutoStart))
 //		assert.True(t, visor.appsConf[0].AutoStart)

@@ -35,10 +35,10 @@ var (
 type ProcManager interface {
 	io.Closer
 	Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
-	Exists(name string) bool
-	Stop(name string) error
-	Wait(name string) error
-	Range(next func(name string, proc *Proc) bool)
+	ProcByName(appName string) (*Proc, bool)
+	Stop(appName string) error
+	Wait(appName string) error
+	Range(next func(appName string, proc *Proc) bool)
 }
 
 // procManager manages skywire applications. It implements `ProcManager`.
@@ -193,14 +193,12 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	return appcommon.ProcID(proc.cmd.Process.Pid), nil
 }
 
-// Exists check whether app exists in the manager instance.
-func (m *procManager) Exists(name string) bool {
+func (m *procManager) ProcByName(appName string) (*Proc, bool) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 
-	_, ok := m.procs[name]
-
-	return ok
+	proc, ok := m.procs[appName]
+	return proc, ok
 }
 
 // Stop stops the application.

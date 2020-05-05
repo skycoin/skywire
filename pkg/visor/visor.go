@@ -50,8 +50,8 @@ const (
 )
 
 var (
-	// ErrUnknownApp represents lookup error for App related calls.
-	ErrUnknownApp = errors.New("unknown app")
+	// ErrAppProcNotRunning represents lookup error for App related calls.
+	ErrAppProcNotRunning = errors.New("no process of given app is running")
 )
 
 const (
@@ -495,7 +495,7 @@ func (visor *Visor) App(name string) (*AppState, bool) {
 		return nil, false
 	}
 	state := &AppState{AppConfig: app, Status: AppStatusStopped}
-	if visor.procM.Exists(app.App) {
+	if _, ok := visor.procM.ProcByName(app.App); ok {
 		state.Status = AppStatusRunning
 	}
 	return state, true
@@ -509,7 +509,7 @@ func (visor *Visor) Apps() []*AppState {
 	for _, app := range visor.appsConf {
 		state := &AppState{AppConfig: app, Status: AppStatusStopped}
 
-		if visor.procM.Exists(app.App) {
+		if _, ok := visor.procM.ProcByName(app.App); ok {
 			state.Status = AppStatusRunning
 		}
 
@@ -539,7 +539,7 @@ func (visor *Visor) StartApp(appName string) error {
 		}
 	}
 
-	return ErrUnknownApp
+	return ErrAppProcNotRunning
 }
 func (visor *Visor) appLogLoc(appName string) string {
 	return filepath.Join(visor.localPath, appName+"_log.db")
@@ -616,8 +616,8 @@ func (visor *Visor) persistPID(name string, pid appcommon.ProcID) error {
 
 // StopApp stops running App.
 func (visor *Visor) StopApp(appName string) error {
-	if !visor.procM.Exists(appName) {
-		return ErrUnknownApp
+	if _, ok := visor.procM.ProcByName(appName); !ok {
+		return ErrAppProcNotRunning
 	}
 
 	visor.logger.Infof("Stopping app %s and closing ports", appName)
@@ -679,7 +679,7 @@ func (visor *Visor) UpdateAvailable() (*updater.Version, error) {
 func (visor *Visor) setAutoStart(appName string, autoStart bool) error {
 	appConf, ok := visor.appsConf[appName]
 	if !ok {
-		return ErrUnknownApp
+		return ErrAppProcNotRunning
 	}
 
 	appConf.AutoStart = autoStart
@@ -702,7 +702,7 @@ func (visor *Visor) setSocksPassword(password string) error {
 		return err
 	}
 
-	if visor.procM.Exists(socksName) {
+	if _, ok := visor.procM.ProcByName(socksName); ok {
 		visor.logger.Infof("Updated %v password, restarting it", socksName)
 		return visor.RestartApp(socksName)
 	}
@@ -724,7 +724,7 @@ func (visor *Visor) setSocksClientPK(pk cipher.PubKey) error {
 		return err
 	}
 
-	if visor.procM.Exists(socksClientName) {
+	if _, ok := visor.procM.ProcByName(socksClientName); ok {
 		visor.logger.Infof("Updated %v PK, restarting it", socksClientName)
 		return visor.RestartApp(socksClientName)
 	}

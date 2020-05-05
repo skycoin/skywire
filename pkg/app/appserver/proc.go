@@ -25,44 +25,52 @@ var (
 // the running process itself and the RPC server for
 // app/visor communication.
 type Proc struct {
-	disc appdisc.Updater // App discovery client.
+	disc appdisc.Updater // app discovery client
 	conf appcommon.ProcConfig
 	log  *logging.Logger
+
+	logDB appcommon.LogStore
 
 	cmd       *exec.Cmd
 	isRunning int32
 	waitMx    sync.Mutex
 	waitErr   error
 
-	rpcGW    *RPCGateway
-	conn     net.Conn
-	connCh   chan struct{} // closes when conn is received.
-	connOnce sync.Once
+	rpcGW    *RPCGateway   // gateway shared over 'conn' - introduced AFTER proc is started
+	conn     net.Conn      // connection to proc - introduced AFTER proc is started
+	connCh   chan struct{} // push here when conn is received - protected by 'connOnce'
+	connOnce sync.Once     // ensures we only push to 'connCh' once
 }
 
 // NewProc constructs `Proc`.
 func NewProc(conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
-
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
 	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
 	cmd.Dir = conf.ProcWorkDir
 	cmd.Env = append(os.Environ(), conf.Envs()...)
 
-	log := conf.Logger()
-	cmd.Stdout = log.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
-	cmd.Stderr = log.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
+	appLog, appLogDB := appcommon.NewProcLogger(conf)
+	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
+	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
 	return &Proc{
 		disc:   disc,
 		conf:   conf,
 		log:    logging.MustGetLogger(moduleName),
+		logDB:  appLogDB,
 		cmd:    cmd,
 		connCh: make(chan struct{}, 1),
 	}
 }
 
+// Logs obtains the log store.
+func (p *Proc) Logs() appcommon.LogStore {
+	return p.logDB
+}
+
 // InjectConn introduces the connection to the Proc after it is started.
+// Only the first call will return true.
 // It also prepares the RPC gateway.
 func (p *Proc) InjectConn(conn net.Conn) bool {
 	ok := false
@@ -72,7 +80,7 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 		p.conn = conn
 		p.rpcGW = NewRPCGateway(p.log)
 
-		// Send signal.
+		// Send ready signal.
 		p.connCh <- struct{}{}
 		close(p.connCh)
 	})
