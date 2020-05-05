@@ -3,6 +3,7 @@ package idmanager
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 )
 
@@ -146,6 +147,27 @@ func (m *Manager) Len() int {
 	out := len(m.values)
 	m.mx.RUnlock()
 	return out
+}
+
+func (m *Manager) CloseAll() {
+	wg := new(sync.WaitGroup)
+
+	m.mx.Lock()
+	for _, v := range m.values {
+		c, ok := v.(io.Closer)
+		if !ok {
+			continue
+		}
+		wg.Add(1)
+		go func(c io.Closer) {
+			_ = c.Close() // nolint:errcheck
+			wg.Done()
+		}(c)
+	}
+	m.values = make(map[uint16]interface{})
+	m.mx.Unlock()
+
+	wg.Wait()
 }
 
 // constructFreeFunc constructs new func responsible for clearing

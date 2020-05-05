@@ -34,7 +34,9 @@ type Proc struct {
 	waitMx    sync.Mutex
 	waitErr   error
 
-	connCh   chan net.Conn
+	rpcGW    *RPCGateway
+	conn     net.Conn
+	connCh   chan struct{} // closes when conn is received.
 	connOnce sync.Once
 }
 
@@ -56,31 +58,37 @@ func NewProc(conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
 		conf:   conf,
 		log:    logging.MustGetLogger(moduleName),
 		cmd:    cmd,
-		connCh: make(chan net.Conn, 1),
+		connCh: make(chan struct{}, 1),
 	}
 }
 
 // InjectConn introduces the connection to the Proc after it is started.
+// It also prepares the RPC gateway.
 func (p *Proc) InjectConn(conn net.Conn) bool {
 	ok := false
+
 	p.connOnce.Do(func() {
-		p.connCh <- conn
-		close(p.connCh)
 		ok = true
+		p.conn = conn
+		p.rpcGW = NewRPCGateway(p.log)
+
+		// Send signal.
+		p.connCh <- struct{}{}
+		close(p.connCh)
 	})
+
 	return ok
 }
 
 func (p *Proc) awaitConn() bool {
-	conn, ok := <-p.connCh
-	if !ok {
+	if _, ok := <-p.connCh; !ok {
 		return false
 	}
 	rpcS := rpc.NewServer()
-	if err := rpcS.RegisterName(p.conf.ProcKey.String(), NewRPCGateway(p.log)); err != nil {
+	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
 	}
-	go rpcS.ServeConn(conn)
+	go rpcS.ServeConn(p.conn)
 	p.log.Info("Associated and serving proc conn.")
 	return true
 }
@@ -91,7 +99,7 @@ func (p *Proc) Start() error {
 		return errProcAlreadyRunning
 	}
 
-	// acquire lock immediately
+	// Acquire lock immediately.
 	p.waitMx.Lock()
 
 	if err := p.cmd.Start(); err != nil {
@@ -105,9 +113,22 @@ func (p *Proc) Start() error {
 			p.waitMx.Unlock()
 			return
 		}
+
+		// App discovery start/stop.
 		p.disc.Start()
+		defer p.disc.Stop()
+
+		// Wait for proc to exit.
 		p.waitErr = p.cmd.Wait()
-		p.disc.Stop()
+
+		// Close proc conn and associated listeners and connections.
+		if err := p.conn.Close(); err != nil {
+			p.log.WithError(err).Warn("Closing proc conn returned non-nil error.")
+		}
+		p.rpcGW.cm.CloseAll()
+		p.rpcGW.lm.CloseAll()
+
+		// Unlock.
 		p.waitMx.Unlock()
 	}()
 
@@ -129,9 +150,7 @@ func (p *Proc) Stop() error {
 	p.waitMx.Lock()
 	defer func() {
 		p.waitMx.Unlock()
-		p.connOnce.Do(func() {
-			close(p.connCh)
-		})
+		p.connOnce.Do(func() { close(p.connCh) })
 	}()
 
 	return nil
