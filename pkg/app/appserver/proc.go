@@ -1,7 +1,6 @@
 package appserver
 
 import (
-	"context"
 	"errors"
 	"io"
 	"net"
@@ -35,7 +34,8 @@ type Proc struct {
 	waitMx    sync.Mutex
 	waitErr   error
 
-	connCh chan net.Conn
+	connCh   chan net.Conn
+	connOnce sync.Once
 }
 
 // NewProc constructs `Proc`.
@@ -57,30 +57,31 @@ func NewProc(log *logging.Logger, conf appcommon.ProcConfig, disc appdisc.Update
 
 // InjectConn introduces the connection to the Proc after it is started.
 func (p *Proc) InjectConn(conn net.Conn) bool {
-	select {
-	case p.connCh <- conn:
-		return true
-	default:
-		return false
-	}
+	ok := false
+	p.connOnce.Do(func() {
+		p.connCh <- conn
+		close(p.connCh)
+		ok = true
+	})
+	return ok
 }
 
-func (p *Proc) awaitConn(ctx context.Context) error {
-	select {
-	case conn := <-p.connCh:
-		rpcS := rpc.NewServer()
-		if err := rpcS.RegisterName(p.conf.ProcKey.String(), NewRPCGateway(p.log)); err != nil {
-			panic(err)
-		}
-		go rpcS.ServeConn(conn)
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+func (p *Proc) awaitConn() bool {
+	conn, ok := <-p.connCh
+	if !ok {
+		return false
 	}
+	rpcS := rpc.NewServer()
+	if err := rpcS.RegisterName(p.conf.ProcKey.String(), NewRPCGateway(p.log)); err != nil {
+		panic(err)
+	}
+	go rpcS.ServeConn(conn)
+	p.log.Info("Associated and serving proc conn.")
+	return true
 }
 
 // Start starts the application.
-func (p *Proc) Start(ctx context.Context) error {
+func (p *Proc) Start() error {
 	if !atomic.CompareAndSwapInt32(&p.isRunning, 0, 1) {
 		return errProcAlreadyRunning
 	}
@@ -92,13 +93,13 @@ func (p *Proc) Start(ctx context.Context) error {
 		p.waitMx.Unlock()
 		return err
 	}
-	if err := p.awaitConn(ctx); err != nil {
-		_ = p.cmd.Process.Kill() //nolint:errcheck
-		p.waitMx.Unlock()
-		return err
-	}
 
 	go func() {
+		if ok := p.awaitConn(); !ok {
+			_ = p.cmd.Process.Kill() //nolint:errcheck
+			p.waitMx.Unlock()
+			return
+		}
 		p.disc.Start()
 		p.waitErr = p.cmd.Wait()
 		p.disc.Stop()
@@ -121,7 +122,12 @@ func (p *Proc) Stop() error {
 
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
-	defer p.waitMx.Unlock()
+	defer func() {
+		p.waitMx.Unlock()
+		p.connOnce.Do(func() {
+			close(p.connCh)
+		})
+	}()
 
 	return nil
 }

@@ -385,7 +385,7 @@ func (visor *Visor) startRPC(ctx context.Context) {
 }
 
 func (visor *Visor) appsPIDFile() (*os.File, error) {
-	f, err := os.OpenFile(filepath.Join(visor.appsPath, "apps-pid.txt"), os.O_RDWR|os.O_CREATE, 0600)
+	f, err := os.OpenFile(filepath.Join(visor.localPath, "apps-pid.txt"), os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -542,13 +542,11 @@ func (visor *Visor) StartApp(appName string) error {
 	return ErrUnknownApp
 }
 func (visor *Visor) appLogLoc(appName string) string {
-	return filepath.Join(visor.appsPath, appName+"_log.db")
+	return filepath.Join(visor.localPath, appName+"_log.db")
 }
 
 // SpawnApp configures and starts new App.
 func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
-	ctx := context.Background()
-
 	visor.logger.
 		WithField("app_name", config.App).
 		WithField("args", config.Args).
@@ -587,9 +585,7 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 		}
 	}()
 
-	appLogger := logging.MustGetLogger(fmt.Sprintf("app_%s", config.App))
-
-	pid, err := visor.procM.Start(ctx, appLogger, appCfg, stdout, stderr)
+	pid, err := visor.procM.Start(appCfg, stdout, stderr)
 	if err != nil {
 		return fmt.Errorf("error running app %s: %v", config.App, err)
 	}

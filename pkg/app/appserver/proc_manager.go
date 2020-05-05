@@ -1,7 +1,6 @@
 package appserver
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -35,7 +34,7 @@ var (
 // ProcManager allows to manage skywire applications.
 type ProcManager interface {
 	io.Closer
-	Start(ctx context.Context, log *logging.Logger, conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error)
+	Start(conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error)
 	Exists(name string) bool
 	Stop(name string) error
 	Wait(name string) error
@@ -120,34 +119,43 @@ func (m *procManager) serve() {
 }
 
 func (m *procManager) handleConn(conn net.Conn) bool {
+	log := m.log.WithField("remote", conn.RemoteAddr())
+	log.Debug("Accepting proc conn...")
+
 	// Read in and check key.
 	var key appcommon.ProcKey
 	if n, err := io.ReadFull(conn, key[:]); err != nil {
-		m.log.
-			WithError(err).
+		log.WithError(err).
 			WithField("n", n).
-			WithField("remote_addr", conn.RemoteAddr()).
 			Warn("Failed to read proc key.")
 		return false
 	}
+
+	log = log.WithField("proc_key", key.String())
+	log.Debug("Read proc key.")
 
 	// Push conn to Proc.
 	m.mx.RLock()
 	proc, ok := m.procsByKey[key]
 	m.mx.RUnlock()
 	if !ok {
+		log.Error("Failed to find proc of given key.")
 		return false
 	}
 	if ok := proc.InjectConn(conn); !ok {
+		log.Error("Failed to associate conn with proc.")
 		return false
 	}
+	log.Info("Accepted proc conn.")
 	return true
 }
 
 // Start starts the application according to its config and additional args.
-func (m *procManager) Start(ctx context.Context, log *logging.Logger, conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error) {
+func (m *procManager) Start(conf appcommon.ProcConfig, stdout, stderr io.Writer) (appcommon.ProcID, error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
+
+	log := logging.MustGetLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
 
 	// isDone should be called within the protection of a mutex.
 	// Otherwise we may be able to start an app after calling Close.
@@ -159,7 +167,14 @@ func (m *procManager) Start(ctx context.Context, log *logging.Logger, conf appco
 		return 0, ErrAppAlreadyStarted
 	}
 
-	conf.EnsureKey()
+	// Ensure proc key is unique (just in case - this is probably not necessary).
+	for {
+		if _, ok := m.procsByKey[conf.ProcKey]; ok {
+			conf.EnsureKey()
+			continue
+		}
+		break
+	}
 
 	disc, ok := m.discF.Updater(conf)
 	if !ok {
@@ -171,10 +186,7 @@ func (m *procManager) Start(ctx context.Context, log *logging.Logger, conf appco
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
-	ctx, cancel := context.WithTimeout(ctx, ProcStartTimeout)
-	defer cancel()
-
-	if err := proc.Start(ctx); err != nil {
+	if err := proc.Start(); err != nil {
 		return 0, err
 	}
 
