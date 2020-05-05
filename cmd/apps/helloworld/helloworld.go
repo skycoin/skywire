@@ -22,10 +22,6 @@ const (
 
 var log = logrus.New()
 
-func init() {
-	log.SetFormatter(&logrus.JSONFormatter{})
-}
-
 func main() {
 	appC := app.NewClient()
 	defer appC.Close()

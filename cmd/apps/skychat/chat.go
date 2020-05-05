@@ -42,10 +42,6 @@ var (
 	connsMu  sync.Mutex
 )
 
-func init() {
-	log.SetFormatter(&logrus.JSONFormatter{})
-}
-
 func main() {
 	appC = app.NewClient()
 	defer appC.Close()

@@ -30,10 +30,6 @@ const (
 
 var log = logrus.New()
 
-func init() {
-	log.SetFormatter(&logrus.JSONFormatter{})
-}
-
 var r = netutil.NewRetrier(time.Second, 0, 1)
 
 func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
