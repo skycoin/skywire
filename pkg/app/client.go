@@ -26,7 +26,6 @@ type Client struct {
 // NewClient creates a new Client, panicking on any error.
 func NewClient() *Client {
 	log := logrus.New()
-	log.SetFormatter(&logrus.JSONFormatter{})
 
 	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
