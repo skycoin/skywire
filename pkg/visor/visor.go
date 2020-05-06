@@ -21,7 +21,6 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
@@ -77,7 +76,7 @@ type Visor struct {
 	router router.Router
 	n      *snet.Network
 	tm     *transport.Manager
-	pty    *dmsgpty.Host
+	pty    pty
 
 	Logger *logging.MasterLogger
 	logger *logging.Logger
@@ -139,14 +138,8 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		return nil, fmt.Errorf("failed to init network: %v", err)
 	}
 
-	if cfg.DmsgPty != nil {
-		pty, err := cfg.DmsgPtyHost(visor.n.Dmsg())
-		if err != nil {
-			return nil, fmt.Errorf("failed to setup pty: %v", err)
-		}
-		visor.pty = pty
-	} else {
-		logger.Info("'dmsgpty' is not configured, skipping...")
+	if err := visor.setupDmsgPTY(); err != nil {
+		return nil, err
 	}
 
 	trDiscovery, err := cfg.TransportDiscovery()
@@ -299,67 +292,6 @@ func (visor *Visor) startApps() error {
 	}
 
 	return nil
-}
-
-func (visor *Visor) startDmsgPty(ctx context.Context) error {
-	if visor.pty == nil {
-		return nil
-	}
-
-	log := visor.Logger.PackageLogger("dmsgpty")
-
-	err2 := visor.serveDmsgPtyCLI(ctx, log)
-	if err2 != nil {
-		return err2
-	}
-
-	go visor.serveDmsgPty(ctx, log)
-
-	return nil
-}
-
-func (visor *Visor) serveDmsgPtyCLI(ctx context.Context, log *logging.Logger) error {
-	if visor.conf.DmsgPty.CLINet == "unix" {
-		if err := os.MkdirAll(filepath.Dir(visor.conf.DmsgPty.CLIAddr), ownerRWX); err != nil {
-			log.WithError(err).Debug("Failed to prepare unix file dir.")
-		}
-	}
-
-	ptyL, err := net.Listen(visor.conf.DmsgPty.CLINet, visor.conf.DmsgPty.CLIAddr)
-	if err != nil {
-		return fmt.Errorf("failed to start dmsgpty cli listener: %v", err)
-	}
-
-	go func() {
-		log.WithField("net", visor.conf.DmsgPty.CLINet).
-			WithField("addr", visor.conf.DmsgPty.CLIAddr).
-			Info("Serving dmsgpty CLI.")
-
-		if err := visor.pty.ServeCLI(ctx, ptyL); err != nil {
-			log.WithError(err).
-				WithField("entity", "dmsgpty-host").
-				WithField("func", ".ServeCLI()").
-				Error()
-
-			visor.cancel()
-		}
-	}()
-
-	return nil
-}
-
-func (visor *Visor) serveDmsgPty(ctx context.Context, log *logging.Logger) {
-	log.WithField("dmsg_port", visor.conf.DmsgPty.Port).
-		Info("Serving dmsg.")
-
-	if err := visor.pty.ListenAndServe(ctx, visor.conf.DmsgPty.Port); err != nil {
-		log.WithError(err).
-			WithField("entity", "dmsgpty-host").
-			WithField("func", ".ListenAndServe()").
-			Error()
-
-		visor.cancel()
-	}
 }
 
 func (visor *Visor) startRPC(ctx context.Context) {
