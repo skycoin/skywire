@@ -15,5 +15,9 @@ func (visor *Visor) startDmsgPty(ctx context.Context) error {
 }
 
 func (visor *Visor) setupDmsgPTY() error {
-	return errors.New("dmsgpty is not supported for this OS")
+	if visor.conf.DmsgPty != nil {
+		return errors.New("dmsgpty is not supported for this OS")
+	}
+
+	return nil
 }
