@@ -11,7 +11,7 @@ type pty struct {
 }
 
 func (visor *Visor) startDmsgPty(ctx context.Context) error {
-	return errors.New("dmsgpty is not supported for this OS")
+	return nil
 }
 
 func (visor *Visor) setupDmsgPTY() error {
