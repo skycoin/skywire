@@ -29,7 +29,7 @@ func DefaultNetworkInterface() (string, error) {
 
 	lines := bytes.Split(outputBytes, []byte{'\n'})
 	// take only first one, should be enough in most cases
-	return lines[0], nil
+	return string(lines[0]), nil
 }
 
 // GetIPv4ForwardingValue gets current value of IPv4 forwarding.
