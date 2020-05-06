@@ -47,12 +47,11 @@ func NewClientFromConfig(log logrus.FieldLogger, conf appcommon.ProcConfig) (*Cl
 	if _, err := conn.Write(conf.ProcKey[:]); err != nil {
 		return nil, fmt.Errorf("failed to send proc key back to app server: %w", err)
 	}
-	rpcC := rpc.NewClient(conn)
 
 	return &Client{
 		log:  log,
 		conf: conf,
-		rpc:  NewRPCClient(rpcC, conf.ProcKey),
+		rpc:  NewRPCClient(rpc.NewClient(conn), conf.ProcKey),
 		lm:   idmanager.New(),
 		cm:   idmanager.New(),
 	}, nil
@@ -89,7 +88,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		conn.freeConnMx.Unlock()
 
 		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			//log.Printf("Received unexpected error when closing conn: %v", err)
+			c.log.WithError(err).Error("Received unexpected error when closing conn.")
 		}
 
 		return nil, err
@@ -130,7 +129,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 		listener.freeLisMx.Unlock()
 
 		if err := listener.Close(); err != nil {
-			c.log.WithError(err).Error("error closing listener")
+			c.log.WithError(err).Error("Unexpected error while closing listener.")
 		}
 
 		return nil, err

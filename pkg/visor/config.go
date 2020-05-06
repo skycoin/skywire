@@ -47,9 +47,9 @@ var (
 
 // Config defines configuration parameters for Visor.
 type Config struct {
-	Path    *string         `json:"-"`
-	log     *logging.Logger `json:"-"`
-	flushMu sync.Mutex      `json:"-"`
+	Path    *string `json:"-"`
+	log     *logging.Logger
+	flushMu sync.Mutex
 
 	Version       string               `json:"version"`
 	KeyPair       *KeyPair             `json:"key_pair"`

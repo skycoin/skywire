@@ -93,8 +93,7 @@ type Visor struct {
 	cliLis net.Listener
 	hvErrs map[cipher.PubKey]chan error // errors returned when the associated hypervisor ServeRPCClient returns
 
-	appDiscF *appdisc.Factory
-	procM    appserver.ProcManager
+	procM appserver.ProcManager
 
 	// cancel is to be called when visor.Close is triggered.
 	cancel context.CancelFunc
@@ -220,7 +219,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 		visor.hvErrs[hv.PubKey] = make(chan error, 1)
 	}
 
-	visor.appDiscF = &appdisc.Factory{
+	appDiscF := &appdisc.Factory{
 		PK:             pk,
 		SK:             sk,
 		UpdateInterval: time.Duration(cfg.AppDiscConfig().UpdateInterval),
@@ -228,7 +227,7 @@ func NewVisor(cfg *Config, logger *logging.MasterLogger, restartCtx *restart.Con
 	}
 
 	logProcM := logging.MustGetLogger("proc_manager")
-	visor.procM, err = appserver.NewProcManager(logProcM, visor.appDiscF, visor.conf.AppServerAddr)
+	visor.procM, err = appserver.NewProcManager(logProcM, appDiscF, visor.conf.AppServerAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start proc manager: %w", err)
 	}

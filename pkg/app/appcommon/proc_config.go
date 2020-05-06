@@ -13,22 +13,17 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-// DefaultAppSrvAddr is the default address to run the app server at.
-const DefaultAppSrvAddr = "localhost:5505"
-
 const (
+	// DefaultAppSrvAddr is the default address to run the app server at.
+	// TODO: Move to 'pkg/skyenv'
+	DefaultAppSrvAddr = "localhost:5505"
+
 	// EnvProcConfig is the env name which contains a JSON-encoded proc config.
 	EnvProcConfig = "PROC_CONFIG"
-
-	// EnvProcKey is a name for env arg containing skywire application key.
-	EnvProcKey = "PROC_KEY"
-	// EnvAppSrvAddr is a name for env arg containing app server address.
-	EnvAppSrvAddr = "APP_SERVER_ADDR"
-	// EnvVisorPK is a name for env arg containing public key of visor.
-	EnvVisorPK = "VISOR_PK"
 )
 
 var (
+	// ErrProcConfigEnvNotDefined occurs when an expected env is not defined.
 	ErrProcConfigEnvNotDefined = fmt.Errorf("env '%s' is not defined", EnvProcConfig)
 )
 

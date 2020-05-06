@@ -13,21 +13,44 @@
 - `uptime_tracker` (*[UptimeTrackerConfig](#UptimeTrackerConfig))
 - `app_discovery` (*[AppDiscConfig](#AppDiscConfig))
 - `apps` ([][AppConfig](#AppConfig))
-- `trusted_visors` ([][PubKey](#PubKey))
-- `hypervisors` ([][HypervisorConfig](#HypervisorConfig))
+- `app_server_addr` (string)
 - `apps_path` (string)
 - `local_path` (string)
+- `trusted_visors` ([][PubKey](#PubKey))
+- `hypervisors` ([][HypervisorConfig](#HypervisorConfig))
+- `interfaces` (*[InterfaceConfig](#InterfaceConfig))
 - `log_level` (string)
 - `shutdown_timeout` ([Duration](#Duration))
-- `interfaces` (*[InterfaceConfig](#InterfaceConfig))
-- `app_server_addr` (string)
 - `restart_check_delay` (string)
+
+
+# UptimeTrackerConfig
+
+- `addr` (string)
 
 
 # KeyPair
 
 - `public_key` ([PubKey](#PubKey))
 - `secret_key` ([SecKey](#SecKey))
+
+
+# HypervisorConfig
+
+- `public_key` ([PubKey](#PubKey))
+
+
+# AppDiscConfig
+
+- `update_interval` ([Duration](#Duration))
+- `proxy_discovery_addr` (string)
+
+
+# RoutingConfig
+
+- `setup_nodes` ([][PubKey](#PubKey))
+- `route_finder` (string)
+- `route_finder_timeout` ([Duration](#Duration))
 
 
 # DmsgPtyConfig
@@ -38,28 +61,15 @@
 - `cli_address` (string)
 
 
-# RoutingConfig
-
-- `setup_nodes` ([][PubKey](#PubKey))
-- `route_finder` (string)
-- `route_finder_timeout` ([Duration](#Duration))
-
-
 # TransportConfig
 
 - `discovery` (string)
 - `log_store` (*[LogStoreConfig](#LogStoreConfig))
 
 
-# UptimeTrackerConfig
+# InterfaceConfig
 
-- `addr` (string)
-
-
-# AppDiscConfig
-
-- `update_interval` ([Duration](#Duration))
-- `proxy_discovery_addr` (string)
+- `rpc` (string)
 
 
 # AppConfig
@@ -70,26 +80,10 @@
 - `args` ([]string)
 
 
-# HypervisorConfig
-
-- `public_key` ([PubKey](#PubKey))
-
-
 # LogStoreConfig
 
 - `type` ([LogStoreType](#LogStoreType))
 - `location` (string)
-
-
-# InterfaceConfig
-
-- `rpc` (string)
-
-
-# DmsgConfig
-
-- `discovery` (string)
-- `sessions_count` (int)
 
 
 # STCPConfig
@@ -98,12 +92,18 @@
 - `local_address` (string)
 
 
-# Logger
-
-- `` ([FieldLogger](#FieldLogger))
-
-
 # Mutex
 
 - `state` (int32)
 - `sema` ([uint32](#uint32))
+
+
+# DmsgConfig
+
+- `discovery` (string)
+- `sessions_count` (int)
+
+
+# Logger
+
+- `` ([FieldLogger](#FieldLogger))

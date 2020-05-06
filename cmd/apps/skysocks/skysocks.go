@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	appName              = "skysocks"
 	netType              = appnet.TypeSkynet
 	port    routing.Port = 3
 )

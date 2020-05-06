@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
 func TestHealth(t *testing.T) {
@@ -94,8 +92,8 @@ func TestListApps(t *testing.T) {
 	}
 
 	pm := &appserver.MockProcManager{}
-	pm.On("Exists", apps["foo"].App).Return(false)
-	pm.On("Exists", apps["bar"].App).Return(true)
+	pm.On("ProcByName", apps["foo"].App).Return(new(appserver.Proc), false)
+	pm.On("ProcByName", apps["bar"].App).Return(new(appserver.Proc), true)
 
 	n := Visor{
 		appsConf: apps,
@@ -138,6 +136,7 @@ func TestStartStopApp(t *testing.T) {
 
 	defer func() {
 		require.NoError(t, os.RemoveAll("skychat"))
+		require.NoError(t, os.RemoveAll("apps-pid.txt"))
 	}()
 
 	appCfg := []AppConfig{
@@ -168,30 +167,14 @@ func TestStartStopApp(t *testing.T) {
 		conf:     &visorCfg,
 	}
 
-	require.NoError(t, pathutil.EnsureDir(visor.dir()))
-
-	defer func() {
-		require.NoError(t, os.RemoveAll(visor.dir()))
-	}()
-
-	appCfg1 := appcommon.ProcConfig{
-		AppName:     app,
-		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
-		VisorPK:     visorCfg.Keys().PubKey.Hex(),
-		RoutingPort: apps["foo"].Port,
-		ProcWorkDir: filepath.Join("", app),
-	}
-
-	appArgs1 := append([]string{filepath.Join(visor.dir(), app)}, apps["foo"].Args...)
 	appPID1 := appcommon.ProcID(10)
 
 	pm := &appserver.MockProcManager{}
-	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
-		Return(appPID1, testhelpers.NoErr)
+	pm.On("Start", mock.Anything).Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", app).Return(testhelpers.NoErr)
 	pm.On("Stop", app).Return(testhelpers.NoErr)
-	pm.On("Exists", app).Return(true)
-	pm.On("Exists", unknownApp).Return(false)
+	pm.On("ProcByName", app).Return(new(appserver.Proc), true)
+	pm.On("ProcByName", unknownApp).Return(new(appserver.Proc), false)
 
 	visor.procM = pm
 

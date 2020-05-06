@@ -149,22 +149,24 @@ func (m *Manager) Len() int {
 	return out
 }
 
+// CloseAll closes and removes all internal values that implements io.Closer
 func (m *Manager) CloseAll() {
 	wg := new(sync.WaitGroup)
 
 	m.mx.Lock()
-	for _, v := range m.values {
+	for k, v := range m.values {
 		c, ok := v.(io.Closer)
 		if !ok {
 			continue
 		}
+		delete(m.values, k)
+
 		wg.Add(1)
 		go func(c io.Closer) {
 			_ = c.Close() // nolint:errcheck
 			wg.Done()
 		}(c)
 	}
-	m.values = make(map[uint16]interface{})
 	m.mx.Unlock()
 
 	wg.Wait()

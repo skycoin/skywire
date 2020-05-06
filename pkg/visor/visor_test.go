@@ -23,7 +23,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
 var masterLogger *logging.MasterLogger
@@ -78,6 +77,13 @@ func TestMain(m *testing.M) {
 //}
 
 func TestVisorStartClose(t *testing.T) {
+	tmpDir, err := ioutil.TempDir(os.TempDir(), "")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.RemoveAll(tmpDir))
+		require.NoError(t, os.RemoveAll("apps-pid.txt"))
+	}()
+
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -110,30 +116,24 @@ func TestVisorStartClose(t *testing.T) {
 
 	logger := logging.MustGetLogger("test")
 
+	//procM, err := appserver.NewProcManager(logger, nil, ":0")
+	//require.NoError(t, err)
+	//visorCfg.AppServerAddr = procM.Addr().String()
+
 	visor := &Visor{
-		conf:         &visorCfg,
-		router:       r,
-		appsConf:     apps,
-		logger:       logger,
-		appRPCServer: appserver.New(logger, visorCfg.AppServerAddr),
+		conf:     &visorCfg,
+		router:   r,
+		appsConf: apps,
+		logger:   logger,
+		//procM:        procM,
 	}
 
 	pm := &appserver.MockProcManager{}
-	appCfg1 := appcommon.ProcConfig{
-		AppName:     apps["skychat"].App,
-		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
-		VisorPK:     visorCfg.Keys().PubKey.Hex(),
-		RoutingPort: apps["skychat"].Port,
-		ProcWorkDir: filepath.Join("", apps["skychat"].App),
-	}
-	appArgs1 := append([]string{filepath.Join(visor.dir(), apps["skychat"].App)}, apps["skychat"].Args...)
 	appPID1 := appcommon.ProcID(10)
-	pm.On("Start", mock.Anything, appCfg1, appArgs1, mock.Anything, mock.Anything).
-		Return(appPID1, testhelpers.NoErr)
+
+	pm.On("Start", mock.Anything).Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", apps["skychat"].App).Return(testhelpers.NoErr)
-
-	pm.On("StopAll").Return()
-
+	pm.On("Close").Return(testhelpers.NoErr)
 	visor.procM = pm
 
 	dmsgC := dmsg.NewClient(cipher.PubKey{}, cipher.SecKey{}, disc.NewMock(), nil)
@@ -162,6 +162,13 @@ func TestVisorStartClose(t *testing.T) {
 }
 
 func TestVisorSpawnApp(t *testing.T) {
+	tmpDir, err := ioutil.TempDir(os.TempDir(), "")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.RemoveAll(tmpDir))
+		require.NoError(t, os.RemoveAll("apps-pid.txt"))
+	}()
+
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -192,28 +199,20 @@ func TestVisorSpawnApp(t *testing.T) {
 		conf:     &visorCfg,
 	}
 
-	require.NoError(t, pathutil.EnsureDir(visor.dir()))
+	//appCfg := appcommon.ProcConfig{
+	//	AppName:     app.App,
+	//	AppSrvAddr:  appcommon.DefaultAppSrvAddr,
+	//	VisorPK:     visorCfg.Keys().PubKey,
+	//	RoutingPort: app.Port,
+	//	ProcWorkDir: filepath.Join(tmpDir, app.App),
+	//}
 
-	defer func() {
-		require.NoError(t, os.RemoveAll(visor.dir()))
-	}()
-
-	appCfg := appcommon.ProcConfig{
-		AppName:     app.App,
-		AppSrvAddr:  appcommon.DefaultAppSrvAddr,
-		VisorPK:     visorCfg.Keys().PubKey.Hex(),
-		RoutingPort: app.Port,
-		ProcWorkDir: filepath.Join("", app.App),
-	}
-
-	appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 	appPID := appcommon.ProcID(10)
 
 	pm := &appserver.MockProcManager{}
 	pm.On("Wait", app.App).Return(testhelpers.NoErr)
-	pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
-		Return(appPID, testhelpers.NoErr)
-	pm.On("Exists", app.App).Return(true)
+	pm.On("Start", mock.Anything).Return(appPID, testhelpers.NoErr)
+	pm.On("ProcByName", app.App).Return(new(appserver.Proc), true)
 	pm.On("Stop", app.App).Return(testhelpers.NoErr)
 
 	visor.procM = pm
@@ -221,12 +220,17 @@ func TestVisorSpawnApp(t *testing.T) {
 	require.NoError(t, visor.StartApp(app.App))
 	time.Sleep(100 * time.Millisecond)
 
-	require.True(t, visor.procM.Exists(app.App))
+	_, ok := visor.procM.ProcByName(app.App)
+	require.True(t, ok)
 
 	require.NoError(t, visor.StopApp(app.App))
 }
 
 func TestVisorSpawnAppValidations(t *testing.T) {
+	tmpDir, err := ioutil.TempDir(os.TempDir(), "")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, os.RemoveAll(tmpDir)) }()
+
 	r := &router.MockRouter{}
 	r.On("Serve", mock.Anything /* context */).Return(testhelpers.NoErr)
 	r.On("Close").Return(testhelpers.NoErr)
@@ -246,12 +250,6 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		conf:   c,
 	}
 
-	require.NoError(t, pathutil.EnsureDir(visor.dir()))
-
-	defer func() {
-		require.NoError(t, os.RemoveAll(visor.dir()))
-	}()
-
 	t.Run("fail - can't bind to reserved port", func(t *testing.T) {
 		app := AppConfig{
 			App:  "skychat",
@@ -261,18 +259,16 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		appCfg := appcommon.ProcConfig{
 			AppName:     app.App,
 			AppSrvAddr:  appcommon.DefaultAppSrvAddr,
-			VisorPK:     c.Keys().PubKey.Hex(),
+			VisorPK:     c.Keys().PubKey,
 			RoutingPort: app.Port,
-			ProcWorkDir: filepath.Join("", app.App),
+			ProcWorkDir: filepath.Join(tmpDir, app.App),
 		}
 
-		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 		appPID := appcommon.ProcID(10)
 
 		pm := &appserver.MockProcManager{}
-		pm.On("Run", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
-			Return(appPID, testhelpers.NoErr)
-		pm.On("Exists", app.App).Return(false)
+		pm.On("Run", mock.Anything, appCfg, app.Args, mock.Anything, mock.Anything).Return(appPID, testhelpers.NoErr)
+		pm.On("ProcByName", app.App).Return(new(appserver.Proc), false)
 
 		visor.procM = pm
 
@@ -298,19 +294,10 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 		wantErr := fmt.Sprintf("error running app skychat: %s", appserver.ErrAppAlreadyStarted)
 
 		pm := &appserver.MockProcManager{}
-		appCfg := appcommon.ProcConfig{
-			AppName:     app.App,
-			AppSrvAddr:  appcommon.DefaultAppSrvAddr,
-			VisorPK:     c.Keys().PubKey.Hex(),
-			RoutingPort: app.Port,
-			ProcWorkDir: filepath.Join("", app.App),
-		}
-		appArgs := append([]string{filepath.Join(visor.dir(), app.App)}, app.Args...)
 
 		appPID := appcommon.ProcID(10)
-		pm.On("Start", mock.Anything, appCfg, appArgs, mock.Anything, mock.Anything).
-			Return(appPID, appserver.ErrAppAlreadyStarted)
-		pm.On("Exists", app.App).Return(true)
+		pm.On("Start", mock.Anything).Return(appPID, appserver.ErrAppAlreadyStarted)
+		pm.On("ProcByName", app.App).Return(new(appserver.Proc), true)
 
 		visor.procM = pm
 

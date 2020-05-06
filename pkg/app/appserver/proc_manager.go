@@ -28,6 +28,7 @@ var (
 	ErrAppAlreadyStarted = errors.New("app already started")
 	errNoSuchApp         = errors.New("no such app")
 
+	// ErrClosed occurs when an action is called after proc manager is closed.
 	ErrClosed = errors.New("proc manager is already closed")
 )
 
@@ -39,13 +40,13 @@ type ProcManager interface {
 	Stop(appName string) error
 	Wait(appName string) error
 	Range(next func(appName string, proc *Proc) bool)
+	Addr() net.Addr
 }
 
 // procManager manages skywire applications. It implements `ProcManager`.
 type procManager struct {
 	log *logging.Logger
 
-	addr    string // listening address
 	lis     net.Listener
 	conns   map[string]net.Conn
 	connsWG sync.WaitGroup
@@ -54,20 +55,25 @@ type procManager struct {
 	procs      map[string]*Proc
 	procsByKey map[appcommon.ProcKey]*Proc
 
-	mx       sync.RWMutex
-	done     chan struct{}
-	doneOnce sync.Once
+	mx   sync.RWMutex
+	done chan struct{}
 }
 
 // NewProcManager constructs `ProcManager`.
 func NewProcManager(log *logging.Logger, discF *appdisc.Factory, addr string) (ProcManager, error) {
+	if log == nil {
+		log = logging.MustGetLogger("proc_manager")
+	}
+	if discF == nil {
+		discF = new(appdisc.Factory)
+	}
+
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
 	procM := &procManager{
-		addr:       addr,
 		log:        log,
 		lis:        lis,
 		conns:      make(map[string]net.Conn),
@@ -262,6 +268,11 @@ func (m *procManager) stopAll() {
 	}
 
 	m.procs = make(map[string]*Proc)
+}
+
+// Addr returns the underlying listener's listening address.
+func (m *procManager) Addr() net.Addr {
+	return m.lis.Addr()
 }
 
 // Close implements io.Closer
