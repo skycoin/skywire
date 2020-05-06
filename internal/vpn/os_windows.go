@@ -15,6 +15,8 @@ const (
 	defaultNetworkGatewayCMD = "route PRINT"
 	tunSetupCMDFmt           = "netsh interface ip set address \"%s\" static %s %s %s"
 	tunMTUSetupCMDFmt        = "netsh interface ipv4 set subinterface \"%s\" mtu=%d"
+	addRouteCMDFmt           = "route add %s mask %s %s"
+	deleteRouteCMDFmt        = "route delete %s mask %s %s"
 )
 
 var redundantWhitespacesCleanupRegex = regexp.MustCompile(`[\s\p{Zs}]{2,}`)
@@ -72,4 +74,26 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	}
 
 	return nil
+}
+
+// AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
+func AddRoute(ipCIDR, gateway string) error {
+	ip, netmask, err := parseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
+	}
+
+	cmd := fmt.Sprintf(addRouteCMDFmt, ip, netmask, gateway)
+	return run("cmd", "/C", cmd)
+}
+
+// DeleteRoute removes route to `ipCIDR` through the `gateway` from the OS routing table.
+func DeleteRoute(ipCIDR, gateway string) error {
+	ip, netmask, err := parseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
+	}
+
+	cmd := fmt.Sprintf(deleteRouteCMDFmt, ip, netmask, gateway)
+	return run("cmd", "/C", cmd)
 }
