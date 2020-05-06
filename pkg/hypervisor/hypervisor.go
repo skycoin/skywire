@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
@@ -47,7 +47,7 @@ var (
 type VisorConn struct {
 	Addr  dmsg.Addr
 	RPC   visor.RPCClient
-	PtyUI *dmsgpty.UI
+	PtyUI *dmsgPtyUI
 }
 
 // Hypervisor manages visors.
@@ -87,16 +87,15 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 			return err
 		}
 		addr := conn.RawRemoteAddr()
-		ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: addr.PK, Port: skyenv.DmsgPtyPort})
 		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
-		visorConn := VisorConn{
-			Addr:  addr,
-			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
-			PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+		visorConn := &VisorConn{
+			Addr: addr,
+			RPC:  visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
 		}
+		visorConn.setupDmsgPtyUI(dmsgC, addr.PK)
 		log.WithField("remote_addr", addr).Info("Accepted.")
 		hv.mu.Lock()
-		hv.visors[addr.PK] = visorConn
+		hv.visors[addr.PK] = *visorConn
 		hv.mu.Unlock()
 	}
 }
@@ -187,12 +186,14 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			})
 		})
 
-		r.Route("/pty", func(r chi.Router) {
-			if hv.c.EnableAuth {
-				r.Use(hv.users.Authorize)
-			}
-			r.Get("/{pk}", hv.getPty())
-		})
+		if runtime.GOOS != "windows" {
+			r.Route("/pty", func(r chi.Router) {
+				if hv.c.EnableAuth {
+					r.Use(hv.users.Authorize)
+				}
+				r.Get("/{pk}", hv.getPty())
+			})
+		}
 
 		r.Handle("/*", http.FileServer(hv.assets))
 	})
@@ -336,12 +337,6 @@ func (hv *Hypervisor) getVisor() http.HandlerFunc {
 			TCPAddr: ctx.Addr.String(),
 			Summary: summary,
 		})
-	})
-}
-
-func (hv *Hypervisor) getPty() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ctx.PtyUI.Handler()(w, r)
 	})
 }
 
