@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"path"
 	"path/filepath"
+	"runtime"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
@@ -123,8 +124,11 @@ func defaultConfig() *visor.Config {
 
 	conf.Dmsg = visor.DefaultDmsgConfig()
 
-	ptyConf := defaultDmsgPtyConfig()
-	conf.DmsgPty = &ptyConf
+	// should be completely disabled for Windows systems
+	if runtime.GOOS != "windows" {
+		ptyConf := defaultDmsgPtyConfig()
+		conf.DmsgPty = &ptyConf
+	}
 
 	// TODO(evanlinjin): We have disabled skysocks passcode by default for now - We should make a cli arg for this.
 	//passcode := base64.StdEncoding.Strict().EncodeToString(cipher.RandByte(8))
