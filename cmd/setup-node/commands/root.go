@@ -6,13 +6,11 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"log/syslog"
 	"net/http"
 	"os"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
@@ -37,11 +35,7 @@ var rootCmd = &cobra.Command{
 
 		logger := logging.MustGetLogger(tag)
 		if syslogAddr != "" {
-			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
-			if err != nil {
-				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
-			}
-			logging.AddHook(hook)
+			setupSyslog(logger)
 		}
 
 		var rdr io.Reader
