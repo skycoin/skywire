@@ -333,10 +333,14 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error
 		defer cancel()
 	}
 
+	r.log.Debugf("Saving transport to %v via %v", in.RemotePK, in.TpType)
+
 	tp, err := r.visor.tm.SaveTransport(ctx, in.RemotePK, in.TpType)
 	if err != nil {
 		return err
 	}
+
+	r.log.Debugf("Saved transport to %v via %v", in.RemotePK, in.TpType)
 
 	*out = *newTransportSummary(r.visor.tm, tp, false, r.visor.router.SetupIsTrusted(tp.Remote()))
 	return nil

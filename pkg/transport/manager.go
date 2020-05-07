@@ -219,10 +219,13 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 	for i := 0; i < tries; i++ {
 		mTp, err := tm.saveTransport(remote, tpType)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("save transport: %w", err)
 		}
 
+		tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.netName)
+
 		if err = mTp.Dial(ctx); err != nil {
+			tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.netName, err)
 			// TODO(nkryuchkov): Check for an error that underlying connection is not established
 			// and try again in this case. Otherwise, return the error.
 			pkTableErr := fmt.Sprintf("pk table: entry of %s does not exist", remote.String())
@@ -235,6 +238,8 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 			}
 
 			if err == ErrNotServing {
+				tm.Logger.Warn("Transport is no longer served")
+
 				mTp.wg.Wait()
 				delete(tm.tps, mTp.Entry.ID)
 				continue
@@ -244,6 +249,8 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				WithError(err).
 				Warn("Underlying connection is not yet established. Will retry later.")
 		}
+		tm.Logger.Debugf("Returning transport to %v via %v", mTp.Remote(), mTp.netName)
+
 		return mTp, nil
 	}
 

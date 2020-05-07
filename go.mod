@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/libp2p/go-reuseport v0.0.1
+	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/pion/ice v0.7.12 // indirect
 	github.com/pion/turn v1.4.0 // indirect
@@ -27,4 +28,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-//replace github.com/SkycoinProject/dmsg => ../dmsg
+replace github.com/SkycoinProject/dmsg => ../dmsg

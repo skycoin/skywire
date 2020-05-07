@@ -271,7 +271,7 @@ func (mt *ManagedTransport) Dial(ctx context.Context) error {
 func (mt *ManagedTransport) dial(ctx context.Context) error {
 	tp, err := mt.n.Dial(ctx, mt.netName, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
-		return err
+		return fmt.Errorf("snet.Dial: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
@@ -280,7 +280,12 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	if err := MakeSettlementHS(true).Do(ctx, mt.dc, tp, mt.n.LocalSK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
-	return mt.setConn(tp)
+
+	if err := mt.setConn(tp); err != nil {
+		return fmt.Errorf("setConn: %w", err)
+	}
+
+	return nil
 }
 
 // redial only actually dials if transport is still registered in transport discovery.

@@ -209,14 +209,14 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 
 		conn, err := n.dmsgC.Dial(ctx, addr)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("dmsg client: %w", err)
 		}
 
 		return makeConn(conn, network), nil
 	case STCPType:
 		conn, err := n.stcpC.Dial(ctx, pk, port)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("stcp client: %w", err)
 		}
 
 		return makeConn(conn, network), nil

@@ -69,6 +69,7 @@ func (c *Client) Serve(tcpAddr string) error {
 		return errors.New("already listening")
 	}
 
+	c.log.Debugf("reuseport.Listen: %v", tcpAddr)
 	lTCP, err := reuseport.Listen("tcp", tcpAddr)
 	if err != nil {
 		return err
@@ -100,12 +101,16 @@ func (c *Client) Serve(tcpAddr string) error {
 
 	c.addressResolver.SetTransport(transport)
 
-	_, port, err := net.SplitHostPort(localAddr.String())
-	if err != nil {
-		port = ""
-	}
+	//_, port, err := net.SplitHostPort(localAddr.String())
+	//if err != nil {
+	//	port = ""
+	//}
 
-	if err := c.addressResolver.Bind(context.Background(), port); err != nil {
+	//if err := c.addressResolver.Bind(context.Background(), port); err != nil {
+	//	return fmt.Errorf("bind PK")
+	//}
+
+	if err := c.addressResolver.Bind(context.Background(), ""); err != nil {
 		return fmt.Errorf("bind PK")
 	}
 
@@ -130,9 +135,10 @@ func (c *Client) acceptTCPConn() error {
 		return io.ErrClosedPipe
 	}
 
+	c.log.Debugf("Accepting conn on %v", c.lTCP.Addr())
 	tcpConn, err := c.lTCP.Accept()
 	if err != nil {
-		return err
+		return fmt.Errorf("lTCP.Accept: %w", err)
 	}
 
 	var lis *Listener
@@ -168,19 +174,27 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		return nil, err
 	}
 
-	conn, err := net.Dial("tcp", addr)
+	c.log.Debugf("PK %v resolved to address %v", rPK, addr)
+	c.log.Debugf("Dialing tcp address %v", addr)
+
+	netConn, err := net.Dial("tcp", addr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("net.Dial: %w", err)
 	}
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ReserveEphemeral: %w", err)
 	}
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	return newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort)
+	stcpConn, err := newConn(netConn, time.Now().Add(HandshakeTimeout), hs, freePort)
+	if err != nil {
+		return nil, fmt.Errorf("newConn: %w", err)
+	}
+
+	return stcpConn, nil
 }
 
 // Listen creates a new listener for stcp.
