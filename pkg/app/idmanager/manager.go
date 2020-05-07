@@ -10,8 +10,8 @@ import (
 var (
 	// ErrNoMoreAvailableValues is returned when all the slots are reserved.
 	ErrNoMoreAvailableValues = errors.New("no more available values")
-	// ErrValueAlreadyExists is returned when value associated with the specified
-	// key already exists.
+
+	// ErrValueAlreadyExists is returned when value associated with the specified key already exists.
 	ErrValueAlreadyExists = errors.New("value already exists")
 )
 
@@ -22,6 +22,8 @@ type Manager struct {
 	values map[uint16]interface{}
 	mx     sync.RWMutex
 	lstID  uint16
+
+	di *DeltaInformer // optional
 }
 
 // New constructs new `Manager`.
@@ -29,6 +31,15 @@ func New() *Manager {
 	return &Manager{
 		values: make(map[uint16]interface{}),
 	}
+}
+
+// AddDeltaInformer adds a DeltaInformer to the id manager and returns the DeltaInformer.
+func (m *Manager) AddDeltaInformer() *DeltaInformer {
+	di := NewDeltaInformer()
+	m.mx.Lock()
+	m.di = di
+	m.mx.Unlock()
+	return di
 }
 
 // ReserveNextID reserves next free slot for the value and returns the id for it.
@@ -50,6 +61,7 @@ func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 	m.values[nxtID] = nil
 	m.lstID = nxtID
 
+	m.di.Trigger(len(m.values))
 	m.mx.Unlock()
 
 	return &nxtID, m.constructFreeFunc(nxtID), nil
@@ -73,6 +85,7 @@ func (m *Manager) Pop(id uint16) (interface{}, error) {
 
 	delete(m.values, id)
 
+	m.di.Trigger(len(m.values))
 	m.mx.Unlock()
 
 	return v, nil
@@ -89,6 +102,7 @@ func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 
 	m.values[id] = v
 
+	m.di.Trigger(len(m.values))
 	m.mx.Unlock()
 
 	return m.constructFreeFunc(id), nil
@@ -167,6 +181,7 @@ func (m *Manager) CloseAll() {
 			wg.Done()
 		}(c)
 	}
+	m.di.Stop()
 	m.mx.Unlock()
 
 	wg.Wait()
