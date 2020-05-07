@@ -70,7 +70,7 @@ func (c *Client) Serve(tcpAddr string) error {
 	}
 
 	c.log.Debugf("reuseport.Listen: %v", tcpAddr)
-	lTCP, err := reuseport.Listen("tcp", tcpAddr)
+	lTCP, err := reuseport.Listen("tcp4", tcpAddr)
 	if err != nil {
 		return err
 	}
@@ -175,11 +175,23 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	}
 
 	c.log.Debugf("PK %v resolved to address %v", rPK, addr)
-	c.log.Debugf("Dialing tcp address %v", addr)
 
-	netConn, err := net.Dial("tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("net.Dial: %w", err)
+	var netConn net.Conn
+	for i := 1; i <= 100; i++ {
+		c.log.Debugf("Dialing tcp address %v attempt %v", addr, i)
+
+		var err error
+		netConn, err = net.DialTimeout("tcp", addr, 5*time.Second)
+		if err == nil {
+			break
+		}
+
+		if i == 100 {
+			return nil, fmt.Errorf("net.Dial: %w", err)
+		}
+
+		c.log.Errorf("Failed to dial %v: %v. Retrying...", addr, err)
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
