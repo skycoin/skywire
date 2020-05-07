@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/rpc"
@@ -15,6 +16,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -28,6 +30,9 @@ var (
 	// ErrAlreadyServing is returned when an operation fails due to an operation
 	// that is currently running.
 	ErrAlreadyServing = errors.New("already serving")
+
+	// ErrTimeout represents a timed-out call.
+	ErrTimeout = errors.New("rpc client timeout")
 )
 
 // RPCClient represents a RPC Client implementation.
@@ -70,18 +75,41 @@ type RPCClient interface {
 // RPCClient provides methods to call an RPC Server.
 // It implements RPCClient
 type rpcClient struct {
-	client *rpc.Client
-	prefix string
+	log     logrus.FieldLogger
+	timeout time.Duration
+	conn    io.ReadWriteCloser
+	client  *rpc.Client
+	prefix  string
 }
 
 // NewRPCClient creates a new RPCClient.
-func NewRPCClient(rc *rpc.Client, prefix string) RPCClient {
-	return &rpcClient{client: rc, prefix: prefix}
+func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) RPCClient {
+	if log == nil {
+		log = logging.MustGetLogger("visor_rpc_client")
+	}
+	return &rpcClient{
+		log:     log,
+		timeout: timeout,
+		conn:    conn,
+		client:  rpc.NewClient(conn),
+		prefix:  prefix,
+	}
 }
 
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
-	return rc.client.Call(rc.prefix+"."+method, args, reply)
+	timer := time.NewTimer(rc.timeout)
+	defer timer.Stop()
+
+	select {
+	case call := <-rc.client.Go(rc.prefix+"."+method, args, reply, nil).Done:
+		return call.Error
+	case <-timer.C:
+		if err := rc.conn.Close(); err != nil {
+			rc.log.WithError(err).Warn("failed to close underlying rpc connection after timeout error")
+		}
+		return ErrTimeout
+	}
 }
 
 // Summary calls Summary.

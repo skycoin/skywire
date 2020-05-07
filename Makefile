@@ -131,6 +131,8 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 # Bin 
 bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
@@ -148,6 +150,8 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist

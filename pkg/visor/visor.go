@@ -17,14 +17,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
@@ -540,22 +540,16 @@ func (visor *Visor) StartApp(appName string) error {
 
 	return ErrAppProcNotRunning
 }
-func (visor *Visor) appLogLoc(appName string) string {
-	return filepath.Join(visor.localPath, appName+"_log.db")
-}
 
 // SpawnApp configures and starts new App.
 func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err error) {
-	visor.logger.
-		WithField("app_name", config.App).
-		WithField("args", config.Args).
-		Info("Spawning app.")
+	visor.logger.WithField("app_name", config.App).WithField("args", config.Args).Info("Spawning app.")
 
 	if app, ok := reservedPorts[config.Port]; ok && app != config.App {
 		return fmt.Errorf("can't bind to reserved port %d", config.Port)
 	}
 
-	appCfg := appcommon.ProcConfig{
+	procConf := appcommon.ProcConfig{
 		AppName:     config.App,
 		AppSrvAddr:  visor.conf.AppServerAddr,
 		ProcKey:     appcommon.RandProcKey(),
@@ -564,16 +558,19 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 		VisorPK:     visor.conf.Keys().PubKey,
 		RoutingPort: config.Port,
 		BinaryLoc:   filepath.Join(visor.appsPath, config.App),
-		LogDBLoc:    visor.appLogLoc(config.App),
+		LogDBLoc:    appLogLoc(visor.localPath, config.App),
 	}
-
-	if _, err := ensureDir(appCfg.ProcWorkDir); err != nil {
+	if _, err := ensureDir(procConf.ProcWorkDir); err != nil {
 		return err
 	}
+	switch procConf.AppName {
+	case skyenv.VPNClientName, skyenv.VPNServerName:
+		procConf.ProcEnvs = makeVPNEnvs(visor.conf, visor.n)
+	}
 
-	pid, err := visor.procM.Start(appCfg)
+	pid, err := visor.procM.Start(procConf)
 	if err != nil {
-		return fmt.Errorf("error running app %s: %v", config.App, err)
+		return fmt.Errorf("failed to start app %s: %w", config.App, err)
 	}
 
 	if startCh != nil {
@@ -581,17 +578,47 @@ func (visor *Visor) SpawnApp(config *AppConfig, startCh chan<- struct{}) (err er
 	}
 
 	visor.pidMu.Lock()
-
-	visor.logger.Infof("storing app %s pid %d", config.App, pid)
-
+	visor.logger.WithField("app_name", procConf.AppName).WithField("pid", pid).Debugf("Persisting app pid.")
 	if err := visor.persistPID(config.App, pid); err != nil {
 		visor.pidMu.Unlock()
 		return err
 	}
-
 	visor.pidMu.Unlock()
 
 	return visor.procM.Wait(config.App)
+}
+
+func appLogLoc(localPath, appName string) string {
+	return filepath.Join(localPath, appName+"_log.db")
+}
+
+func makeVPNEnvs(visorConf *Config, n *snet.Network) []string {
+	var envCfg vpn.DirectRoutesEnvConfig
+
+	if visorConf.Dmsg != nil {
+		envCfg.DmsgDiscovery = visorConf.Dmsg.Discovery
+		envCfg.DmsgServers = n.Dmsg().ConnectedServers()
+	}
+	if visorConf.Transport != nil {
+		envCfg.TPDiscovery = visorConf.Transport.Discovery
+	}
+	if visorConf.Routing != nil {
+		envCfg.RF = visorConf.Routing.RouteFinder
+	}
+	if visorConf.UptimeTracker != nil {
+		envCfg.UptimeTracker = visorConf.UptimeTracker.Addr
+	}
+	if visorConf.STCP != nil && len(visorConf.STCP.PubKeyTable) != 0 {
+		envCfg.STCPTable = visorConf.STCP.PubKeyTable
+	}
+
+	envMap := vpn.AppEnvArgs(envCfg)
+
+	envs := make([]string, 0, len(envMap))
+	for k, v := range vpn.AppEnvArgs(envCfg) {
+		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+	}
+	return envs
 }
 
 func (visor *Visor) persistPID(name string, pid appcommon.ProcID) error {

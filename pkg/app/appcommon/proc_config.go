@@ -76,6 +76,7 @@ type ProcConfig struct {
 	AppSrvAddr  string        `json:"app_server_addr"`
 	ProcKey     ProcKey       `json:"proc_key"`
 	ProcArgs    []string      `json:"proc_args"`
+	ProcEnvs    []string      `json:"proc_envs"` // Additional env variables. Will be overwritten if they conflict with skywire-app specific envs.
 	ProcWorkDir string        `json:"proc_work_dir"`
 	VisorPK     cipher.PubKey `json:"visor_pk"`
 	RoutingPort routing.Port  `json:"routing_port"`
@@ -106,9 +107,7 @@ func (c *ProcConfig) EnsureKey() {
 // Envs returns the env variables that are passed to the associated proc.
 func (c *ProcConfig) Envs() []string {
 	const format = "%s=%s"
-	return []string{
-		fmt.Sprintf(format, EnvProcConfig, string(c.encodeJSON())),
-	}
+	return append(c.ProcEnvs, fmt.Sprintf(format, EnvProcConfig, string(c.encodeJSON())))
 }
 
 func (c *ProcConfig) encodeJSON() []byte {

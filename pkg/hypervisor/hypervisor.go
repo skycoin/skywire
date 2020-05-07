@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"net/rpc"
 	"strconv"
 	"strings"
 	"sync"
@@ -90,9 +89,10 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 		}
 		addr := conn.RawRemoteAddr()
 		ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: addr.PK, Port: skyenv.DmsgPtyPort})
+		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
 		visorConn := VisorConn{
 			Addr:  addr,
-			RPC:   visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
+			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
 			PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 		}
 		log.WithField("remote_addr", addr).Info("Accepted.")

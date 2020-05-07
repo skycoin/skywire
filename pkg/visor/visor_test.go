@@ -116,21 +116,16 @@ func TestVisorStartClose(t *testing.T) {
 
 	logger := logging.MustGetLogger("test")
 
-	//procM, err := appserver.NewProcManager(logger, nil, ":0")
-	//require.NoError(t, err)
-	//visorCfg.AppServerAddr = procM.Addr().String()
-
 	visor := &Visor{
 		conf:     &visorCfg,
 		router:   r,
 		appsConf: apps,
 		logger:   logger,
-		//procM:        procM,
 	}
 
-	pm := &appserver.MockProcManager{}
 	appPID1 := appcommon.ProcID(10)
 
+	pm := &appserver.MockProcManager{}
 	pm.On("Start", mock.Anything).Return(appPID1, testhelpers.NoErr)
 	pm.On("Wait", apps["skychat"].App).Return(testhelpers.NoErr)
 	pm.On("Close").Return(testhelpers.NoErr)
@@ -198,14 +193,6 @@ func TestVisorSpawnApp(t *testing.T) {
 		logger:   logging.MustGetLogger("test"),
 		conf:     &visorCfg,
 	}
-
-	//appCfg := appcommon.ProcConfig{
-	//	AppName:     app.App,
-	//	AppSrvAddr:  appcommon.DefaultAppSrvAddr,
-	//	VisorPK:     visorCfg.Keys().PubKey,
-	//	RoutingPort: app.Port,
-	//	ProcWorkDir: filepath.Join(tmpDir, app.App),
-	//}
 
 	appPID := appcommon.ProcID(10)
 
@@ -291,11 +278,11 @@ func TestVisorSpawnAppValidations(t *testing.T) {
 			App:  "skychat",
 			Port: 10,
 		}
-		wantErr := fmt.Sprintf("error running app skychat: %s", appserver.ErrAppAlreadyStarted)
-
-		pm := &appserver.MockProcManager{}
+		wantErr := fmt.Sprintf("failed to start app skychat: %s", appserver.ErrAppAlreadyStarted)
 
 		appPID := appcommon.ProcID(10)
+
+		pm := &appserver.MockProcManager{}
 		pm.On("Start", mock.Anything).Return(appPID, appserver.ErrAppAlreadyStarted)
 		pm.On("ProcByName", app.App).Return(new(appserver.Proc), true)
 

@@ -252,7 +252,7 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 		copy(resp.B, buf[:resp.N])
 	}
 	if err != nil {
-		r.log.WithError(err).Warn("Received error when reading from server side.")
+		r.log.WithError(err).Warn("Received unexpected error when reading from server.")
 	}
 
 	resp.Err = ioErrToRPCIOErr(err)

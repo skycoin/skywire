@@ -53,6 +53,18 @@ const (
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
 	SkysocksClientAddr = ":1080"
+
+	VPNServerName = "vpn-server"
+	VPNServerPort = uint16(44)
+
+	VPNClientName = "vpn-client"
+	// TODO: this one's not needed for the app to run but lack of it causes errors
+	VPNClientPort = uint16(43)
+)
+
+// RPC constants.
+const (
+	DefaultRPCTimeout = time.Second * 5
 )
 
 // Default skywire app discovery constants
