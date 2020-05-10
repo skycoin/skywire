@@ -6,8 +6,10 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/songgao/water"
@@ -114,10 +116,34 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error setting up direct routes: %w", err)
 	}
 
-	defer c.routeTrafficDirectly(tunGateway)
-	c.log.Infof("Routing all traffic through TUN %s", tun.Name())
-	if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
-		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
+	if runtime.GOOS == "windows" {
+		time.Sleep(10 * time.Second)
+	}
+
+	/*defer func() {
+		if err := AddRoute("0.0.0.0/0", "192.168.1.1"); err != nil {
+			panic(err)
+		}
+	}()
+	if err := DeleteRoute("0.0.0.0/0", "192.168.1.1"); err != nil {
+		panic(err)
+	}*/
+	/*if err := AddRoute("0.0.0.0/0", tunGateway.String()); err != nil {
+		panic(err)
+	}*/
+
+	if runtime.GOOS == "windows" {
+		defer c.routeTrafficDirectly(tunGateway)
+		c.log.Infof("Routing all traffic through TUN %s", tun.Name())
+		if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
+			return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
+		}
+	} else {
+		defer c.routeTrafficDirectly(tunGateway)
+		c.log.Infof("Routing all traffic through TUN %s", tun.Name())
+		if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
+			return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
+		}
 	}
 
 	connToTunDoneCh := make(chan struct{})
@@ -132,6 +158,20 @@ func (c *Client) Serve() error {
 	}()
 	go func() {
 		defer close(tunToConnCh)
+
+		/*buf := make([]byte, 1024)
+		for {
+			n, err := tun.Read(buf)
+			if err != nil {
+				panic(err)
+			}
+
+			c.log.Infof("READ INFO FROM TUN: %v", buf[:n])
+
+			if _, err := c.conn.Write(buf[:n]); err != nil {
+				panic(err)
+			}
+		}*/
 
 		if _, err := io.Copy(c.conn, tun); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())

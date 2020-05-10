@@ -4,10 +4,11 @@ package vpn
 
 import (
 	"fmt"
+	"os"
 )
 
 const (
-	tunSetupCMDFmt    = "netsh interface ip set address \"%s\" static %s %s %s"
+	tunSetupCMDFmt    = "netsh interface ip set address name=\"%s\" source=static addr=%s mask=%s gateway=none"
 	tunMTUSetupCMDFmt = "netsh interface ipv4 set subinterface \"%s\" mtu=%d"
 	addRouteCMDFmt    = "route add %s mask %s %s"
 	deleteRouteCMDFmt = "route delete %s mask %s %s"
@@ -20,7 +21,7 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	setupCmd := fmt.Sprintf(tunSetupCMDFmt, ifcName, ip, netmask, gateway)
+	setupCmd := fmt.Sprintf(tunSetupCMDFmt, ifcName, ip, netmask)
 	if err := run("cmd", "/C", setupCmd); err != nil {
 		return fmt.Errorf("error running command %s: %w", setupCmd, err)
 	}
@@ -41,6 +42,7 @@ func AddRoute(ipCIDR, gateway string) error {
 	}
 
 	cmd := fmt.Sprintf(addRouteCMDFmt, ip, netmask, gateway)
+	fmt.Fprintf(os.Stdout, "Running command: \"%s\"\n", cmd)
 	return run("cmd", "/C", cmd)
 }
 
