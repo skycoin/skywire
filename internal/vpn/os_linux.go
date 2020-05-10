@@ -17,10 +17,10 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	}*/
 	// TODO: change back
 
-	ip, _, err := parseCIDR(ipCIDR)
+	/*ip, _, err := parseCIDR(ipCIDR)
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
-	}
+	}*/
 
 	if err := run("ip", "link", "set", ifcName, "up"); err != nil {
 		return fmt.Errorf("error setting interface up: %w", err)
