@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
-
 	"github.com/songgao/water"
 )
 

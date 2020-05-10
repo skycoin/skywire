@@ -7,10 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/yamux"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 )

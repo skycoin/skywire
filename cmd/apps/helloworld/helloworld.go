@@ -6,9 +6,8 @@ package main
 import (
 	"os"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"

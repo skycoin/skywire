@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-
 	"go.etcd.io/bbolt"
 )
 
