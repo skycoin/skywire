@@ -254,13 +254,12 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	sTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+2)
 	sTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+1)
 
-	//cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
-	cTUNIP := sTUNIP
+	cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
 	//cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
 	sHello.TUNIP = cTUNIP
 	// TODO: change back
-	sHello.TUNGateway = sTUNGateway
+	sHello.TUNGateway = sTUNIP
 
 	if err := WriteJSON(conn, &sHello); err != nil {
 		return nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
