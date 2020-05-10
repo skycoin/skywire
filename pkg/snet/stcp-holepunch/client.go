@@ -189,7 +189,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		if i == 100 {
 			return nil, fmt.Errorf("net.Dial: %w", err)
 		}
-
+		// TODO: websocket signaling
 		c.log.Errorf("Failed to dial %v: %v. Retrying...", addr, err)
 		time.Sleep(500 * time.Millisecond)
 	}
