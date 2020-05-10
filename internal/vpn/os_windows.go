@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	tunSetupCMDFmt    = "netsh interface ip set address name=\"%s\" source=static addr=%s mask=%s gateway=none"
+	tunSetupCMDFmt    = "netsh interface ip set address name=\"%s\" source=static addr=%s mask=%s gateway=%s"
 	tunMTUSetupCMDFmt = "netsh interface ipv4 set subinterface \"%s\" mtu=%d"
 	addRouteCMDFmt    = "route add %s mask %s %s"
 	deleteRouteCMDFmt = "route delete %s mask %s %s"
@@ -21,7 +21,7 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	setupCmd := fmt.Sprintf(tunSetupCMDFmt, ifcName, ip, netmask)
+	setupCmd := fmt.Sprintf(tunSetupCMDFmt, ifcName, ip, netmask, gateway)
 	if err := run("cmd", "/C", setupCmd); err != nil {
 		return fmt.Errorf("error running command %s: %w", setupCmd, err)
 	}
