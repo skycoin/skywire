@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/songgao/water"
 )
 
 const (
@@ -92,9 +91,7 @@ func (c *Client) Serve() error {
 	c.log.Infof("Local TUN IP: %s", tunIP.String())
 	c.log.Infof("Local TUN gateway: %s", tunGateway.String())
 
-	tun, err := water.New(water.Config{
-		DeviceType: water.TUN,
-	})
+	tun, err := createTUN()
 	if err != nil {
 		return fmt.Errorf("error allocating TUN interface: %w", err)
 	}
@@ -120,6 +117,7 @@ func (c *Client) Serve() error {
 		time.Sleep(10 * time.Second)
 	}
 
+	// TODO: remove when appropriate
 	if runtime.GOOS == "windows" {
 		defer c.routeTrafficDirectly(tunGateway)
 		c.log.Infof("Routing all traffic through TUN %s", tun.Name())
