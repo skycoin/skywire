@@ -46,6 +46,7 @@ func main() {
 	flag.Parse()
 
 	if *serverPKStr == "" {
+		// TODO: change back
 		*serverPKStr = "03e9019b3caa021dbee1c23e6295c6034ab4623aec50802fcfdd19764568e2958d"
 		//log.Fatalln("VPN server pub key is missing")
 	}
@@ -54,6 +55,7 @@ func main() {
 	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
 		log.WithError(err).Fatalln("Invalid VPN server pub key")
 	}
+	// TODO: change back
 	*passcode = "1234"
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
