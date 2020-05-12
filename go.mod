@@ -26,6 +26,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200427165652-729f1e841bcc // indirect
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
 	golang.org/x/sys v0.0.0-20200428200454-593003d681fa // indirect
+	golang.zx2c4.com/wireguard v0.0.20200320 // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'

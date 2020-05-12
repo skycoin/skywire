@@ -120,18 +120,6 @@ func (c *Client) Serve() error {
 		time.Sleep(10 * time.Second)
 	}
 
-	/*defer func() {
-		if err := AddRoute("0.0.0.0/0", "192.168.1.1"); err != nil {
-			panic(err)
-		}
-	}()
-	if err := DeleteRoute("0.0.0.0/0", "192.168.1.1"); err != nil {
-		panic(err)
-	}*/
-	/*if err := AddRoute("0.0.0.0/0", tunGateway.String()); err != nil {
-		panic(err)
-	}*/
-
 	if runtime.GOOS == "windows" {
 		defer c.routeTrafficDirectly(tunGateway)
 		c.log.Infof("Routing all traffic through TUN %s", tun.Name())
