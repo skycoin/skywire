@@ -2,11 +2,34 @@
 
 package vpn
 
-import "golang.zx2c4.com/wireguard/tun"
+import (
+	"fmt"
+
+	"golang.zx2c4.com/wireguard/tun"
+)
 
 type tunDevice struct {
 	tun  tun.Device
 	name string
+}
+
+func newTUNDevice() (TUNDevice, error) {
+	const tunName = "tun0"
+
+	tun, err := tun.CreateTUN(tunName, TUNMTU)
+	if err != nil {
+		return nil, fmt.Errorf("error allocating TUN interface: %w", err)
+	}
+
+	name, err := tun.Name()
+	if err != nil {
+		return nil, fmt.Errorf("error getting interface name: %w", err)
+	}
+
+	return &tunDevice{
+		tun:  tun,
+		name: name,
+	}, nil
 }
 
 func (t *tunDevice) Read(buf []byte) (int, error) {
