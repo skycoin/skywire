@@ -147,7 +147,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
-	tun, err := createTUN()
+	tun, err := newTUNDevice()
 	if err != nil {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
 		return
@@ -254,7 +254,6 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
 	sHello.TUNIP = cTUNIP
-	// TODO: change back
 	sHello.TUNGateway = cTUNGateway
 
 	if err := WriteJSON(conn, &sHello); err != nil {

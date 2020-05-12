@@ -91,7 +91,7 @@ func (c *Client) Serve() error {
 	c.log.Infof("Local TUN IP: %s", tunIP.String())
 	c.log.Infof("Local TUN gateway: %s", tunGateway.String())
 
-	tun, err := createTUN()
+	tun, err := newTUNDevice()
 	if err != nil {
 		return fmt.Errorf("error allocating TUN interface: %w", err)
 	}
@@ -114,22 +114,17 @@ func (c *Client) Serve() error {
 	}
 
 	if runtime.GOOS == "windows" {
+		// okay, so, here's done because after the `SetupTUN` call,
+		// interface doesn't get its values immediately. Reason is unknown,
+		// all credits go to Microsoft. Delay may be different, this one is
+		// fairly large to cover not really performant systems.
 		time.Sleep(10 * time.Second)
 	}
 
-	// TODO: remove when appropriate
-	if runtime.GOOS == "windows" {
-		defer c.routeTrafficDirectly(tunGateway)
-		c.log.Infof("Routing all traffic through TUN %s", tun.Name())
-		if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
-			return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
-		}
-	} else {
-		defer c.routeTrafficDirectly(tunGateway)
-		c.log.Infof("Routing all traffic through TUN %s", tun.Name())
-		if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
-			return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
-		}
+	defer c.routeTrafficDirectly(tunGateway)
+	c.log.Infof("Routing all traffic through TUN %s", tun.Name())
+	if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
+		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
 	connToTunDoneCh := make(chan struct{})
@@ -144,20 +139,6 @@ func (c *Client) Serve() error {
 	}()
 	go func() {
 		defer close(tunToConnCh)
-
-		/*buf := make([]byte, 1024)
-		for {
-			n, err := tun.Read(buf)
-			if err != nil {
-				panic(err)
-			}
-
-			c.log.Infof("READ INFO FROM TUN: %v", buf[:n])
-
-			if _, err := c.conn.Write(buf[:n]); err != nil {
-				panic(err)
-			}
-		}*/
 
 		if _, err := io.Copy(c.conn, tun); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())
