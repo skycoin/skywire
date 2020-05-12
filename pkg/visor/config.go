@@ -5,39 +5,30 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"net"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
 )
 
 //go:generate readmegen -n Config -o ./README.md ./config.go
 
 const (
 	// DefaultTimeout is used for default config generation and if it is not set in config.
+	// TODO: Put this in skyenv.
 	DefaultTimeout = Duration(10 * time.Second)
-	// DefaultLocalPath is used for default config generation and if it is not set in config.
-	DefaultLocalPath = "./local"
-	// DefaultAppsPath is used for default config generation and if it is not set in config.
-	DefaultAppsPath = "./apps"
-	// DefaultLogLevel is used for default config generation and if it is not set in config.
-	DefaultLogLevel = "info"
-	// DefaultSTCPPort ???
-	// TODO: Define above or remove below.
-	DefaultSTCPPort = 7777
+
+	// ConfigVersion of the visor config.
+	// TODO: Put this in skyenv?
+	ConfigVersion = "v1.0.0"
 )
 
 var (
@@ -47,29 +38,22 @@ var (
 
 // Config defines configuration parameters for Visor.
 type Config struct {
-	Path    *string `json:"-"`
-	log     *logging.Logger
-	flushMu sync.Mutex
+	path string
+	log  *logging.MasterLogger
+	mu   sync.RWMutex
 
 	Version       string               `json:"version"`
 	KeyPair       *KeyPair             `json:"key_pair"`
 	Dmsg          *snet.DmsgConfig     `json:"dmsg"`
-	DmsgPty       *DmsgPtyConfig       `json:"dmsg_pty,omitempty"`
+	Dmsgpty       *DmsgptyConfig       `json:"dmsgpty,omitempty"`
 	STCP          *snet.STCPConfig     `json:"stcp,omitempty"`
 	Transport     *TransportConfig     `json:"transport"`
 	Routing       *RoutingConfig       `json:"routing"`
 	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker,omitempty"`
+	Launcher      *LauncherConfig      `json:"launcher"`
 
-	AppDiscovery  *AppDiscConfig `json:"app_discovery,omitempty"`
-	Apps          []AppConfig    `json:"apps"`
-	AppServerAddr string         `json:"app_server_addr"`
-	AppsPath      string         `json:"apps_path"`
-	LocalPath     string         `json:"local_path"`
-
-	TrustedVisors []cipher.PubKey    `json:"trusted_visors"`
-	Hypervisors   []HypervisorConfig `json:"hypervisors"`
-
-	Interfaces *InterfaceConfig `json:"interfaces"`
+	Hypervisors []HypervisorConfig `json:"hypervisors"`
+	CLIAddr     string             `json:"cli_addr"`
 
 	LogLevel          string   `json:"log_level"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
@@ -77,31 +61,228 @@ type Config struct {
 }
 
 // Flush flushes config to file.
-func (c *Config) flush() error {
-	c.flushMu.Lock()
-	defer c.flushMu.Unlock()
+func (c *Config) Flush() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	if c.Path == nil {
+	return c.flush()
+}
+
+func (c *Config) flush() error {
+	switch c.path {
+	case "":
 		return ErrNoConfigPath
+	case "STDIN":
+		return nil
+	default:
 	}
 
-	c.log.Infof("Updating visor config to %#v", c)
+	j, err := json.Marshal(c)
+	if err != nil {
+		panic(err)
+	}
+	c.log.Debugf("Updating visor config to: %s", string(j))
 
 	bytes, err := json.MarshalIndent(c, "", "\t")
 	if err != nil {
 		return err
 	}
-
 	const filePerm = 0644
-	return ioutil.WriteFile(*c.Path, bytes, filePerm)
+	return ioutil.WriteFile(c.path, bytes, filePerm)
+}
+
+// BaseConfig returns a visor config with 'enforced' fields only.
+// This is used as default values if no config is given, or for missing *required* fields.
+func BaseConfig(log *logging.MasterLogger, configPath string) *Config {
+	if log == nil {
+		log = logging.NewMasterLogger()
+	}
+	conf := &Config{
+		path:    configPath,
+		log:     log,
+		Version: ConfigVersion,
+		Dmsg: &snet.DmsgConfig{
+			Discovery:     skyenv.DefaultDmsgDiscAddr,
+			SessionsCount: 1,
+		},
+		Transport: &TransportConfig{
+			Discovery: skyenv.DefaultTpDiscAddr,
+			LogStore: &LogStoreConfig{
+				Type: LogStoreMemory,
+			},
+		},
+		Routing: &RoutingConfig{
+			SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
+			RouteFinder:        skyenv.DefaultRouteFinderAddr,
+			RouteFinderTimeout: DefaultTimeout,
+		},
+		Launcher: &LauncherConfig{
+			Discovery:  nil,
+			Apps:       nil,
+			ServerAddr: skyenv.DefaultAppSrvAddr,
+			BinPath:    skyenv.DefaultAppBinPath,
+			LocalPath:  skyenv.DefaultAppLocalPath,
+		},
+		CLIAddr:           skyenv.DefaultRPCAddr,
+		LogLevel:          skyenv.DefaultLogLevel,
+		ShutdownTimeout:   DefaultTimeout,
+		RestartCheckDelay: restart.DefaultCheckDelay.String(), // TODO: Use Duration type.
+	}
+	return conf
+}
+
+// DefaultConfig returns the default visor config from a given key pair (if specified).
+// The config's key_pair field will be nil if not specified.
+// Generated config will be saved to 'configPath'
+func DefaultConfig(log *logging.MasterLogger, configPath string, keys *KeyPair) (*Config, error) {
+	conf := BaseConfig(log, configPath)
+	conf.Dmsgpty = &DmsgptyConfig{
+		Port:     skyenv.DmsgPtyPort,
+		AuthFile: skyenv.DefaultDmsgPtyWhitelist,
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	}
+	conf.STCP = &snet.STCPConfig{
+		LocalAddr: skyenv.DefaultSTCPAddr,
+		PKTable:   nil,
+	}
+	conf.Transport.LogStore = &LogStoreConfig{
+		Type:     LogStoreFile,
+		Location: skyenv.DefaultTpLogStore,
+	}
+	conf.UptimeTracker = &UptimeTrackerConfig{
+		Addr: skyenv.DefaultUptimeTrackerAddr,
+	}
+	conf.Launcher.Discovery = &AppDiscConfig{
+		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
+	}
+	conf.Launcher.Apps = []launcher.AppConfig{
+		{
+			Name:      skyenv.SkychatName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkychatPort),
+			Args:      []string{"-addr", skyenv.SkychatAddr},
+		},
+		{
+			Name:      skyenv.SkysocksName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkysocksPort),
+		},
+		{
+			Name:      skyenv.SkysocksClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkysocksClientPort),
+		},
+		{
+			Name:      skyenv.VPNServerName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.VPNServerPort),
+		},
+		{
+			Name:      skyenv.VPNClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNClientPort),
+		},
+	}
+	if keys != nil {
+		conf.KeyPair = keys
+		conf.ensureKeys()
+	}
+	return conf, conf.Flush()
+}
+
+// UpdateAppAutostart modifies a single app's autostart value within the config and also the given launcher.
+// The updated config gets flushed to file is there are any changes.
+func (c *Config) UpdateAppAutostart(launch *launcher.Launcher, appName string, autoStart bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	conf := c.Launcher
+
+	changed := false
+	for i := range conf.Apps {
+		if conf.Apps[i].Name == appName {
+			conf.Apps[i].AutoStart = autoStart
+			changed = true
+			break
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	launch.ResetConfig(launcher.Config{
+		VisorPK:    c.KeyPair.PubKey,
+		Apps:       conf.Apps,
+		ServerAddr: conf.ServerAddr,
+		BinPath:    conf.BinPath,
+		LocalPath:  conf.LocalPath,
+	})
+	return c.flush()
+}
+
+// UpdateAppArg updates the cli flag of the specified app config and also within the launcher.
+// The updated config gets flushed to file is there are any changes.
+func (c *Config) UpdateAppArg(launch *launcher.Launcher, appName, argName, value string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	conf := c.Launcher
+
+	configChanged := true
+	for i := range conf.Apps {
+		if conf.Apps[i].Name == appName {
+			configChanged = true
+
+			argChanged := false
+			for j := range conf.Apps[i].Args {
+				if conf.Apps[i].Args[j] == argName && j+1 < len(conf.Apps[i].Args) {
+					conf.Apps[i].Args[j+1] = value
+					argChanged = true
+					break
+				}
+			}
+			if !argChanged {
+				conf.Apps[i].Args = append(conf.Apps[i].Args, argName, value)
+			}
+		}
+	}
+
+	if !configChanged {
+		return nil
+	}
+
+	launch.ResetConfig(launcher.Config{
+		VisorPK:    c.KeyPair.PubKey,
+		Apps:       conf.Apps,
+		ServerAddr: conf.ServerAddr,
+		BinPath:    conf.BinPath,
+		LocalPath:  conf.LocalPath,
+	})
+	return c.flush()
 }
 
 // Keys returns visor public and secret keys extracted from config.
 // If they are not found, new keys are generated.
 func (c *Config) Keys() *KeyPair {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if changed := c.ensureKeys(); !changed {
+		return c.KeyPair
+	}
+	if err := c.flush(); err != nil && c.log != nil {
+		c.log.WithError(err).Errorf("Failed to Flush config to disk")
+	}
+	return c.KeyPair
+}
+
+func (c *Config) ensureKeys() (changed bool) {
 	// If both keys are set, no additional action is needed.
 	if c.KeyPair != nil && !c.KeyPair.SecKey.Null() && !c.KeyPair.PubKey.Null() {
-		return c.KeyPair
+		return false
 	}
 
 	// If either no keys are set or SecKey is not set, a new key pair is generated.
@@ -120,185 +301,7 @@ func (c *Config) Keys() *KeyPair {
 		}
 	}
 
-	if err := c.flush(); err != nil && c.log != nil {
-		c.log.WithError(err).Errorf("Failed to flush config to disk")
-	}
-
-	return c.KeyPair
-}
-
-// DmsgConfig extracts and returns DmsgConfig from Visor Config.
-// If it is not found, it sets DefaultDmsgConfig() as RoutingConfig and returns it.
-func (c *Config) DmsgConfig() *snet.DmsgConfig {
-	if c.Dmsg == nil {
-		c.Dmsg = DefaultDmsgConfig()
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	return c.Dmsg
-}
-
-// DmsgPtyHost extracts DmsgPtyConfig and returns *dmsgpty.Host based on the config.
-// If DmsgPtyConfig is not found, DefaultDmsgPtyConfig() is used.
-func (c *Config) DmsgPtyHost(dmsgC *dmsg.Client) (*dmsgpty.Host, error) {
-	if c.DmsgPty == nil {
-		c.DmsgPty = DefaultDmsgPtyConfig()
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	var wl dmsgpty.Whitelist
-	if c.DmsgPty.AuthFile == "" {
-		wl = dmsgpty.NewMemoryWhitelist()
-	} else {
-		var err error
-		if wl, err = dmsgpty.NewJSONFileWhiteList(c.DmsgPty.AuthFile); err != nil {
-			return nil, err
-		}
-	}
-
-	// Whitelist hypervisor PKs.
-	hypervisorWL := dmsgpty.NewMemoryWhitelist()
-	for _, hv := range c.Hypervisors {
-		if err := hypervisorWL.Add(hv.PubKey); err != nil {
-			return nil, fmt.Errorf("failed to add hypervisor PK to whitelist: %v", err)
-		}
-	}
-
-	host := dmsgpty.NewHost(dmsgC, dmsgpty.NewCombinedWhitelist(0, wl, hypervisorWL))
-	return host, nil
-}
-
-// TransportDiscovery extracts TransportConfig and returns transport.DiscoveryClient based on the config.
-// If TransportConfig is not found, DefaultTransportConfig() is used.
-func (c *Config) TransportDiscovery() (transport.DiscoveryClient, error) {
-	if c.Transport == nil {
-		c.Transport = DefaultTransportConfig()
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	return trClient.NewHTTP(c.Transport.Discovery, c.Keys().PubKey, c.Keys().SecKey)
-}
-
-// TransportLogStore extracts LogStoreConfig and returns transport.LogStore based on the config.
-// If LogStoreConfig is not found, DefaultLogStoreConfig() is used.
-func (c *Config) TransportLogStore() (transport.LogStore, error) {
-	if c.Transport == nil {
-		c.Transport = DefaultTransportConfig()
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	} else if c.Transport.LogStore == nil {
-		c.Transport.LogStore = DefaultLogStoreConfig()
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	if c.Transport.LogStore.Type == LogStoreFile {
-		return transport.FileTransportLogStore(c.Transport.LogStore.Location)
-	}
-
-	return transport.InMemoryTransportLogStore(), nil
-}
-
-// RoutingConfig extracts and returns RoutingConfig from Visor Config.
-// If it is not found, it sets DefaultRoutingConfig() as RoutingConfig and returns it.
-func (c *Config) RoutingConfig() *RoutingConfig {
-	if c.Routing == nil {
-		c.Routing = DefaultRoutingConfig()
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	return c.Routing
-}
-
-// AppDiscConfig extracts and returns AppDiscConfig from visor config.
-// If it is not found, it sets it as DefaultAppDisConfig() and returns it.
-func (c *Config) AppDiscConfig() *AppDiscConfig {
-	if c.AppDiscovery == nil {
-		c.AppDiscovery = DefaultAppDiscConfig()
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	return c.AppDiscovery
-}
-
-// AppsConfig decodes AppsConfig from a local json config file.
-func (c *Config) AppsConfig() (map[string]AppConfig, error) {
-	apps := make(map[string]AppConfig)
-	for _, app := range c.Apps {
-		apps[app.App] = app
-	}
-
-	return apps, nil
-}
-
-// AppsDir returns absolute path for directory with application binaries.
-// Directory will be created if necessary.
-// If it is not set in config, DefaultAppsPath is used.
-func (c *Config) AppsDir() (string, error) {
-	if c.AppsPath == "" {
-		c.AppsPath = DefaultAppsPath
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	return ensureDir(c.AppsPath)
-}
-
-// LocalDir returns absolute path for app work directory.
-// Directory will be created if necessary.
-// If it is not set in config, DefaultLocalPath is used.
-func (c *Config) LocalDir() (string, error) {
-	if c.LocalPath == "" {
-		c.LocalPath = DefaultLocalPath
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	return ensureDir(c.LocalPath)
-}
-
-// AppServerAddress extracts and returns AppServerAddr from Visor Config.
-// If it is not found, it sets appcommon.DefaultAppSrvAddr as AppServerAddr and returns it.
-func (c *Config) AppServerAddress() string {
-	if c.AppServerAddr == "" {
-		c.AppServerAddr = appcommon.DefaultAppSrvAddr
-		if err := c.flush(); err != nil && c.log != nil {
-			c.log.WithError(err).Errorf("Failed to flush config to disk")
-		}
-	}
-
-	return c.AppServerAddr
-}
-
-func ensureDir(path string) (string, error) {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to expand path: %s", err)
-	}
-
-	if _, err := os.Stat(absPath); !os.IsNotExist(err) {
-		return absPath, nil
-	}
-
-	if err := os.MkdirAll(absPath, 0750); err != nil {
-		return "", fmt.Errorf("failed to create dir: %s", err)
-	}
-
-	return absPath, nil
+	return true
 }
 
 // KeyPair defines Visor public and secret key pair.
@@ -326,58 +329,19 @@ func RestoreKeyPair(sk cipher.SecKey) *KeyPair {
 	return &KeyPair{PubKey: pk, SecKey: sk}
 }
 
-// DefaultSTCPConfig returns default STCP config.
-func DefaultSTCPConfig() (*snet.STCPConfig, error) {
-	lIPaddr, err := getLocalIPAddress()
-	if err != nil {
-		return nil, err
-	}
-
-	c := &snet.STCPConfig{
-		LocalAddr: lIPaddr,
-	}
-
-	return c, nil
-}
-
-// DefaultDmsgConfig returns default Dmsg config.
-func DefaultDmsgConfig() *snet.DmsgConfig {
-	return &snet.DmsgConfig{
-		Discovery:     skyenv.DefaultDmsgDiscAddr,
-		SessionsCount: 1,
-	}
-}
-
-// DmsgPtyConfig configures the dmsgpty-host.
-type DmsgPtyConfig struct {
+// DmsgptyConfig configures the dmsgpty-host.
+type DmsgptyConfig struct {
 	Port     uint16 `json:"port"`
 	AuthFile string `json:"authorization_file"`
 	CLINet   string `json:"cli_network"`
 	CLIAddr  string `json:"cli_address"`
 }
 
-// DefaultDmsgPtyConfig returns default DmsgPty config.
-func DefaultDmsgPtyConfig() *DmsgPtyConfig {
-	return &DmsgPtyConfig{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: "./skywire/dmsgpty/whitelist.json",
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
-	}
-}
-
 // TransportConfig defines a transport config.
 type TransportConfig struct {
-	Discovery string          `json:"discovery"`
-	LogStore  *LogStoreConfig `json:"log_store"`
-}
-
-// DefaultTransportConfig returns default transport config.
-func DefaultTransportConfig() *TransportConfig {
-	return &TransportConfig{
-		Discovery: skyenv.DefaultTpDiscAddr,
-		LogStore:  DefaultLogStoreConfig(),
-	}
+	Discovery     string          `json:"discovery"`
+	LogStore      *LogStoreConfig `json:"log_store"`
+	TrustedVisors []cipher.PubKey `json:"trusted_visors"`
 }
 
 // LogStoreType defines a type for LogStore. It may be either file or memory.
@@ -396,14 +360,6 @@ type LogStoreConfig struct {
 	Location string       `json:"location"`
 }
 
-// DefaultLogStoreConfig returns default LogStore config.
-func DefaultLogStoreConfig() *LogStoreConfig {
-	return &LogStoreConfig{
-		Type:     LogStoreFile,
-		Location: "./skywire/transport_logs",
-	}
-}
-
 // RoutingConfig configures routing.
 type RoutingConfig struct {
 	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
@@ -411,25 +367,9 @@ type RoutingConfig struct {
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
 }
 
-// DefaultRoutingConfig returns default routing config.
-func DefaultRoutingConfig() *RoutingConfig {
-	return &RoutingConfig{
-		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
-		RouteFinder:        skyenv.DefaultRouteFinderAddr,
-		RouteFinderTimeout: DefaultTimeout,
-	}
-}
-
 // UptimeTrackerConfig configures uptime tracker.
 type UptimeTrackerConfig struct {
 	Addr string `json:"addr"`
-}
-
-// DefaultUptimeTrackerConfig returns default uptime tracker config.
-func DefaultUptimeTrackerConfig() *UptimeTrackerConfig {
-	return &UptimeTrackerConfig{
-		Addr: skyenv.DefaultUptimeTrackerAddr,
-	}
 }
 
 // AppDiscConfig configures Skywire App Discovery Clients.
@@ -438,12 +378,13 @@ type AppDiscConfig struct {
 	ProxyDisc      string   `json:"proxy_discovery_addr"`
 }
 
-// DefaultAppDiscConfig returns the default app discovery config.
-func DefaultAppDiscConfig() *AppDiscConfig {
-	return &AppDiscConfig{
-		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
-		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
-	}
+// LauncherConfig configures the app launcher.
+type LauncherConfig struct {
+	Discovery  *AppDiscConfig       `json:"discovery"`
+	Apps       []launcher.AppConfig `json:"apps"`
+	ServerAddr string               `json:"server_addr"`
+	BinPath    string               `json:"bin_path"`
+	LocalPath  string               `json:"local_path"`
 }
 
 // HypervisorConfig represents hypervisor configuration.
@@ -451,38 +392,7 @@ type HypervisorConfig struct {
 	PubKey cipher.PubKey `json:"public_key"`
 }
 
-// AppConfig defines app startup parameters.
-type AppConfig struct {
-	App       string       `json:"app"`
-	AutoStart bool         `json:"auto_start"`
-	Port      routing.Port `json:"port"`
-	Args      []string     `json:"args,omitempty"`
-}
-
 // InterfaceConfig defines listening interfaces for skywire visor.
 type InterfaceConfig struct {
 	RPCAddress string `json:"rpc"` // RPC address and port for command-line interface (leave blank to disable RPC interface).
-}
-
-// DefaultInterfaceConfig returns default server interface config.
-func DefaultInterfaceConfig() *InterfaceConfig {
-	return &InterfaceConfig{
-		RPCAddress: "localhost:3435",
-	}
-}
-
-func getLocalIPAddress() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-
-	for _, a := range addrs {
-		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return fmt.Sprintf("%s:%d", ipnet.IP.String(), DefaultSTCPPort), nil
-			}
-		}
-	}
-	return "", errors.New("could not find local IP address")
 }

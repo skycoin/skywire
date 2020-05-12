@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
@@ -388,7 +390,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.AutoStart != nil {
 			if *reqBody.AutoStart != ctx.App.AutoStart {
-				if err := ctx.RPC.SetAutoStart(ctx.App.App, *reqBody.AutoStart); err != nil {
+				if err := ctx.RPC.SetAutoStart(ctx.App.Name, *reqBody.AutoStart); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
@@ -400,14 +402,14 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			skysocksClientName = "skysocks-client"
 		)
 
-		if reqBody.Passcode != nil && ctx.App.App == skysocksName {
+		if reqBody.Passcode != nil && ctx.App.Name == skysocksName {
 			if err := ctx.RPC.SetSocksPassword(*reqBody.Passcode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
 
-		if reqBody.PK != nil && ctx.App.App == skysocksClientName {
+		if reqBody.PK != nil && ctx.App.Name == skysocksClientName {
 			log.Errorf("SETTING PK: %s", *reqBody.PK)
 			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
 				log.Errorf("ERROR SETTING PK")
@@ -419,12 +421,12 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		if reqBody.Status != nil {
 			switch *reqBody.Status {
 			case statusStop:
-				if err := ctx.RPC.StopApp(ctx.App.App); err != nil {
+				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
 			case statusStart:
-				if err := ctx.RPC.StartApp(ctx.App.App); err != nil {
+				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
 					log.Errorf("ERROR STARTING APP")
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
@@ -457,7 +459,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 			t = time.Unix(0, 0)
 		}
 
-		logs, err := ctx.RPC.LogsSince(t, ctx.App.App)
+		logs, err := ctx.RPC.LogsSince(t, ctx.App.Name)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -819,7 +821,7 @@ type httpCtx struct {
 	VisorConn
 
 	// App
-	App *visor.AppState
+	App *launcher.AppState
 
 	// Transport
 	Tp *visor.TransportSummary
@@ -875,7 +877,7 @@ func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 	}
 
 	for _, a := range apps {
-		if a.App == appName {
+		if a.Name == appName {
 			ctx.App = a
 			return ctx, true
 		}

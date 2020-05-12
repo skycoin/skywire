@@ -260,8 +260,8 @@ func (m *procManager) Range(next func(name string, proc *Proc) bool) {
 func (m *procManager) stopAll() {
 	for name, proc := range m.procs {
 		log := m.log.WithField("app_name", name)
-		if err := proc.Stop(); err != nil && strings.Contains(err.Error(), "process already finished") {
-			log.WithError(err).Error("Failed to stop app.")
+		if err := proc.Stop(); err != nil && !strings.Contains(err.Error(), "process already finished") {
+			log.WithError(err).Error("App stopped with unexpected error.")
 			continue
 		}
 		log.Infof("App stopped successfully.")

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -42,7 +44,7 @@ type RPCClient interface {
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
 
-	Apps() ([]*AppState, error)
+	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
@@ -134,8 +136,8 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // Apps calls Apps.
-func (rc *rpcClient) Apps() ([]*AppState, error) {
-	states := make([]*AppState, 0)
+func (rc *rpcClient) Apps() ([]*launcher.AppState, error) {
+	states := make([]*launcher.AppState, 0)
 	err := rc.Call("Apps", &struct{}{}, &states)
 	return states, err
 }
@@ -385,9 +387,9 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 			PubKey:          localPK,
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
-			Apps: []*AppState{
-				{AppConfig: AppConfig{App: "foo.v1.0", AutoStart: false, Port: 10}},
-				{AppConfig: AppConfig{App: "bar.v2.0", AutoStart: false, Port: 20}},
+			Apps: []*launcher.AppState{
+				{AppConfig: launcher.AppConfig{Name: "foo.v1.0", AutoStart: false, Port: 10}},
+				{AppConfig: launcher.AppConfig{Name: "bar.v2.0", AutoStart: false, Port: 20}},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),
@@ -447,8 +449,8 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // Apps implements RPCClient.
-func (mc *mockRPCClient) Apps() ([]*AppState, error) {
-	var apps []*AppState
+func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
+	var apps []*launcher.AppState
 	err := mc.do(false, func() error {
 		for _, a := range mc.s.Apps {
 			a := a
@@ -473,7 +475,7 @@ func (*mockRPCClient) StopApp(string) error {
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
 		for _, a := range mc.s.Apps {
-			if a.App == appName {
+			if a.Name == appName {
 				a.AutoStart = autostart
 				return nil
 			}
@@ -488,7 +490,7 @@ func (mc *mockRPCClient) SetSocksPassword(string) error {
 		const socksName = "skysocks"
 
 		for i := range mc.s.Apps {
-			if mc.s.Apps[i].App == socksName {
+			if mc.s.Apps[i].Name == socksName {
 				return nil
 			}
 		}
@@ -503,7 +505,7 @@ func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
 		const socksName = "skysocks-client"
 
 		for i := range mc.s.Apps {
-			if mc.s.Apps[i].App == socksName {
+			if mc.s.Apps[i].Name == socksName {
 				return nil
 			}
 		}

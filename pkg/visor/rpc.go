@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -46,7 +48,7 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 	rpcS := rpc.NewServer()
 	rpcG := &RPC{
 		visor: v,
-		log:   v.Logger.PackageLogger("visor_rpc:" + remoteName),
+		log:   v.MasterLogger().PackageLogger("visor_rpc:" + remoteName),
 	}
 
 	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
@@ -75,15 +77,18 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	out.RouteFinder = http.StatusOK
 	out.SetupNode = http.StatusOK
 
-	if _, err = r.visor.conf.TransportDiscovery(); err != nil {
+	_, err = r.visor.TpDiscClient().GetTransportsByEdge(context.Background(), r.visor.conf.KeyPair.PubKey)
+	if err != nil {
 		out.TransportDiscovery = http.StatusNotFound
 	}
 
-	if r.visor.conf.RoutingConfig().RouteFinder == "" {
+	// TODO(evanlinjin): This should actually poll the route finder service.
+	if r.visor.conf.Routing.RouteFinder == "" {
 		out.RouteFinder = http.StatusNotFound
 	}
 
-	if len(r.visor.conf.RoutingConfig().SetupNodes) == 0 {
+	// TODO(evanlinjin): This should actually poll the setup nodes services.
+	if len(r.visor.conf.Routing.SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
 	}
 
@@ -164,12 +169,12 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 
 // Summary provides a summary of a Skywire Visor.
 type Summary struct {
-	PubKey          cipher.PubKey       `json:"local_pk"`
-	BuildInfo       *buildinfo.Info     `json:"build_info"`
-	AppProtoVersion string              `json:"app_protocol_version"`
-	Apps            []*AppState         `json:"apps"`
-	Transports      []*TransportSummary `json:"transports"`
-	RoutesCount     int                 `json:"routes_count"`
+	PubKey          cipher.PubKey        `json:"local_pk"`
+	BuildInfo       *buildinfo.Info      `json:"build_info"`
+	AppProtoVersion string               `json:"app_protocol_version"`
+	Apps            []*launcher.AppState `json:"apps"`
+	Transports      []*TransportSummary  `json:"transports"`
+	RoutesCount     int                  `json:"routes_count"`
 }
 
 // Summary provides a summary of the AppNode.
@@ -177,16 +182,16 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
 
 	var summaries []*TransportSummary
-	r.visor.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+	r.visor.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		summaries = append(summaries,
-			newTransportSummary(r.visor.tm, tp, false, r.visor.router.SetupIsTrusted(tp.Remote())))
+			newTransportSummary(r.visor.tpM, tp, false, r.visor.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
 	*out = Summary{
 		PubKey:          r.visor.conf.Keys().PubKey,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
-		Apps:            r.visor.Apps(),
+		Apps:            r.visor.appL.AppStates(),
 		Transports:      summaries,
 		RoutesCount:     r.visor.router.RoutesCount(),
 	}
@@ -198,10 +203,10 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 */
 
 // Apps returns list of Apps registered on the Visor.
-func (r *RPC) Apps(_ *struct{}, reply *[]*AppState) (err error) {
+func (r *RPC) Apps(_ *struct{}, reply *[]*launcher.AppState) (err error) {
 	defer rpcutil.LogCall(r.log, "Apps", nil)(reply, &err)
 
-	*reply = r.visor.Apps()
+	*reply = r.visor.appL.AppStates()
 	return nil
 }
 
@@ -209,14 +214,15 @@ func (r *RPC) Apps(_ *struct{}, reply *[]*AppState) (err error) {
 func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", name)(nil, &err)
 
-	return r.visor.StartApp(*name)
+	return r.visor.appL.StartApp(*name, nil, nil)
 }
 
 // StopApp stops App with provided name.
 func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
 
-	return r.visor.StopApp(*name)
+	_, err = r.visor.appL.StopApp(*name)
+	return err
 }
 
 // SetAutoStartIn is input for SetAutoStart.
@@ -254,7 +260,7 @@ func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) (err error) {
 func (r *RPC) TransportTypes(_ *struct{}, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "TransportTypes", nil)(out, &err)
 
-	*out = r.visor.tm.Networks()
+	*out = r.visor.tpM.Networks()
 	return nil
 }
 
@@ -291,9 +297,9 @@ func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) (err error)
 		}
 		return true
 	}
-	r.visor.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if typeIncluded(tp.Type()) && pkIncluded(r.visor.tm.Local(), tp.Remote()) {
-			*out = append(*out, newTransportSummary(r.visor.tm, tp, in.ShowLogs, r.visor.router.SetupIsTrusted(tp.Remote())))
+	r.visor.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if typeIncluded(tp.Type()) && pkIncluded(r.visor.tpM.Local(), tp.Remote()) {
+			*out = append(*out, newTransportSummary(r.visor.tpM, tp, in.ShowLogs, r.visor.router.SetupIsTrusted(tp.Remote())))
 		}
 		return true
 	})
@@ -304,11 +310,11 @@ func (r *RPC) Transports(in *TransportsIn, out *[]*TransportSummary) (err error)
 func (r *RPC) Transport(in *uuid.UUID, out *TransportSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "Transport", in)(out, &err)
 
-	tp := r.visor.tm.Transport(*in)
+	tp := r.visor.tpM.Transport(*in)
 	if tp == nil {
 		return ErrNotFound
 	}
-	*out = *newTransportSummary(r.visor.tm, tp, true, r.visor.router.SetupIsTrusted(tp.Remote()))
+	*out = *newTransportSummary(r.visor.tpM, tp, true, r.visor.router.SetupIsTrusted(tp.Remote()))
 	return nil
 }
 
@@ -332,12 +338,12 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error
 		defer cancel()
 	}
 
-	tp, err := r.visor.tm.SaveTransport(ctx, in.RemotePK, in.TpType)
+	tp, err := r.visor.tpM.SaveTransport(ctx, in.RemotePK, in.TpType)
 	if err != nil {
 		return err
 	}
 
-	*out = *newTransportSummary(r.visor.tm, tp, false, r.visor.router.SetupIsTrusted(tp.Remote()))
+	*out = *newTransportSummary(r.visor.tpM, tp, false, r.visor.router.SetupIsTrusted(tp.Remote()))
 	return nil
 }
 
@@ -345,7 +351,7 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error
 func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveTransport", tid)(nil, &err)
 
-	r.visor.tm.DeleteTransport(*tid)
+	r.visor.tpM.DeleteTransport(*tid)
 	return nil
 }
 
@@ -357,10 +363,7 @@ func (r *RPC) RemoveTransport(tid *uuid.UUID, _ *struct{}) (err error) {
 func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryWithStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "DiscoverTransportsByPK", pk)(out, &err)
 
-	tpD, err := r.visor.conf.TransportDiscovery()
-	if err != nil {
-		return err
-	}
+	tpD := r.visor.TpDiscClient()
 
 	entries, err := tpD.GetTransportsByEdge(context.Background(), *pk)
 	if err != nil {
@@ -375,10 +378,7 @@ func (r *RPC) DiscoverTransportsByPK(pk *cipher.PubKey, out *[]*transport.EntryW
 func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.EntryWithStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "DiscoverTransportByID", id)(out, &err)
 
-	tpD, err := r.visor.conf.TransportDiscovery()
-	if err != nil {
-		return err
-	}
+	tpD := r.visor.TpDiscClient()
 
 	entry, err := tpD.GetTransportByID(context.Background(), *id)
 	if err != nil {

@@ -14,10 +14,6 @@ import (
 )
 
 const (
-	// DefaultAppSrvAddr is the default address to run the app server at.
-	// TODO: Move to 'pkg/skyenv'
-	DefaultAppSrvAddr = "localhost:5505"
-
 	// EnvProcConfig is the env name which contains a JSON-encoded proc config.
 	EnvProcConfig = "PROC_CONFIG"
 )

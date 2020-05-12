@@ -196,7 +196,7 @@ package visor
 //
 //func handleTransportTypes(v *Visor) http.HandlerFunc {
 //	return func(w http.ResponseWriter, r *http.Request) {
-//		httputil.WriteJSON(w, r, http.StatusOK, v.tm.Networks())
+//		httputil.WriteJSON(w, r, http.StatusOK, v.tpM.Networks())
 //	}
 //}
 //
@@ -207,7 +207,7 @@ package visor
 //			return
 //		}
 //		httputil.WriteJSON(w, r, http.StatusOK,
-//			newTransportSummary(v.tm, tp, true, v.router.SetupIsTrusted(tp.Remote())))
+//			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 //	}
 //}
 //
@@ -257,13 +257,13 @@ package visor
 //				fmt.Errorf("failed to read JSON from http request body: %v", err))
 //			return
 //		}
-//		mTp, err := v.tm.SaveTransport(r.Context(), reqB.Remote, reqB.TpType)
+//		mTp, err := v.tpM.SaveTransport(r.Context(), reqB.Remote, reqB.TpType)
 //		if err != nil {
 //			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //			return
 //		}
 //		httputil.WriteJSON(w, r, http.StatusOK,
-//			newTransportSummary(v.tm, mTp, false, v.router.SetupIsTrusted(mTp.Remote())))
+//			newTransportSummary(v.tpM, mTp, false, v.router.SetupIsTrusted(mTp.Remote())))
 //	}
 //}
 //
@@ -273,7 +273,7 @@ package visor
 //		if !ok {
 //			return
 //		}
-//		v.tm.DeleteTransport(tp.Entry.ID)
+//		v.tpM.DeleteTransport(tp.Entry.ID)
 //	}
 //}
 //
@@ -304,7 +304,7 @@ package visor
 //		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 //		return nil, false
 //	}
-//	tp := v.tm.Transport(tid)
+//	tp := v.tpM.Transport(tid)
 //	if tp == nil {
 //		httputil.WriteJSON(w, r, http.StatusNotFound,
 //			fmt.Errorf("transport of ID %v is not found", tid))
@@ -324,9 +324,9 @@ package visor
 //
 //func makeVisorSummary(v *Visor) *Summary {
 //	var tpSums []*TransportSummary
-//	v.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+//	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 //		isSetup := v.router.SetupIsTrusted(tp.Remote())
-//		tpSums = append(tpSums, newTransportSummary(v.tm, tp, true, isSetup))
+//		tpSums = append(tpSums, newTransportSummary(v.tpM, tp, true, isSetup))
 //		return true
 //	})
 //	return &Summary{
@@ -404,9 +404,9 @@ package visor
 //		return true
 //	}
 //	var tps []*TransportSummary
-//	v.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-//		if typeIncluded(tp.Type()) && pkIncluded(v.tm.Local(), tp.Remote()) {
-//			tps = append(tps, newTransportSummary(v.tm, tp, in.ShowLogs, v.router.SetupIsTrusted(tp.Remote())))
+//	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+//		if typeIncluded(tp.Type()) && pkIncluded(v.tpM.Local(), tp.Remote()) {
+//			tps = append(tps, newTransportSummary(v.tpM, tp, in.ShowLogs, v.router.SetupIsTrusted(tp.Remote())))
 //		}
 //		return true
 //	})

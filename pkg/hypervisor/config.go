@@ -48,7 +48,7 @@ func (hk *Key) UnmarshalText(text []byte) error {
 type Config struct {
 	PK            cipher.PubKey `json:"public_key"`
 	SK            cipher.SecKey `json:"secret_key"`
-	DBPath        string        `json:"db_path"`        // Path to store database file.
+	DBPath        string        `json:"db_path"`        // path to store database file.
 	EnableAuth    bool          `json:"enable_auth"`    // Whether to enable user management.
 	Cookies       CookieConfig  `json:"cookies"`        // Configures cookies (for session management).
 	DmsgDiscovery string        `json:"dmsg_discovery"` // Dmsg discovery address.
