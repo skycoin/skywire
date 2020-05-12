@@ -4,6 +4,7 @@ package vpn
 
 import (
 	"fmt"
+	"strconv"
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
@@ -12,23 +13,23 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error assigning IP: %w", err)
 	}
 
-	/*if err := run("ip", "link", "set", "dev", ifcName, "mtu", strconv.Itoa(mtu)); err != nil {
+	if err := run("ip", "link", "set", "dev", ifcName, "mtu", strconv.Itoa(mtu)); err != nil {
 		return fmt.Errorf("error setting MTU: %w", err)
-	}*/
+	}
 	// TODO: change back
 
-	/*ip, _, err := parseCIDR(ipCIDR)
+	ip, _, err := parseCIDR(ipCIDR)
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
-	}*/
+	}
 
 	if err := run("ip", "link", "set", ifcName, "up"); err != nil {
 		return fmt.Errorf("error setting interface up: %w", err)
 	}
 
-	/*if err := AddRoute(ip, gateway); err != nil {
+	if err := AddRoute(ip, gateway); err != nil {
 		return fmt.Errorf("error setting gateway for interface: %w", err)
-	}*/
+	}
 	// TODO: change back
 
 	return nil
