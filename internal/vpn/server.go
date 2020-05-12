@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/songgao/water"
 )
 
 // Server is a VPN server.
@@ -148,10 +147,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
-	tun, err := water.New(water.Config{
-		// TODO: change back
-		DeviceType: water.TUN,
-	})
+	tun, err := createTUN()
 	if err != nil {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
 		return
