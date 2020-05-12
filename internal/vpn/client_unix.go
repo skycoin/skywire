@@ -4,12 +4,12 @@ package vpn
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/songgao/water"
 )
 
-func createTUN() (io.ReadWriteCloser, error) {
+func createTUN() (TUNDevice, error) {
+	// TODO: change back
 	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
 	})
