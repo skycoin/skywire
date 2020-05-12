@@ -150,7 +150,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	tun, err := water.New(water.Config{
 		// TODO: change back
-		DeviceType: water.TAP,
+		DeviceType: water.TUN,
 	})
 	if err != nil {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
@@ -252,16 +252,14 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	// - Client-site TUN IP = subnet IP + 4
 
 	sTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+2)
-
-	//sTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+2)
 	sTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+1)
 
-	//cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
-	//cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
+	cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
+	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
-	sHello.TUNIP = sTUNGateway
+	sHello.TUNIP = cTUNIP
 	// TODO: change back
-	sHello.TUNGateway = sTUNIP
+	sHello.TUNGateway = cTUNGateway
 
 	if err := WriteJSON(conn, &sHello); err != nil {
 		return nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
