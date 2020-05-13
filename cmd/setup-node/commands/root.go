@@ -9,14 +9,13 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
