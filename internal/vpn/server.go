@@ -186,6 +186,10 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 
 			rw = noise.NewReadWriter(rw, ns)
+
+			s.log.Infoln("Enabling encryption")
+		} else {
+			s.log.Infoln("Encryption is disabled")
 		}
 	}
 
