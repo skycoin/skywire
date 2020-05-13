@@ -35,7 +35,6 @@ func init() {
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", configLocTypeUsage)
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testing-environment", "t", false, testEnvUsage)
 	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
-
 }
 
 // nolint:gochecknoglobals
@@ -66,7 +65,7 @@ var genConfigCmd = &cobra.Command{
 		}
 		if replace && retainKeys && pathutil.Exists(output) {
 			if err := fillInOldKeys(output, &conf); err != nil {
-				log.Fatalln("Error retaining old key",err)
+				log.Fatalln("Error retaining old keys", err)
 			}
 		}
 		pathutil.WriteJSONConfig(conf, output, replace)
@@ -84,7 +83,6 @@ func fillInOldKeys(confPath string, conf *hypervisor.Config) error {
 	}
 
 	conf.PK = oldConf.PK
-	conf.SK=oldConf.SK
-
+	conf.SK = oldConf.SK
 	return nil
 }
