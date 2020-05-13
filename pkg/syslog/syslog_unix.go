@@ -10,6 +10,7 @@ import (
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 )
 
+// SetupHook sets up syslog hook to the daemon on `addr`.
 func SetupHook(addr, tag string) (logrus.Hook, error) {
 	hook, err := logrussyslog.NewSyslogHook("udp", addr, syslog.LOG_INFO, tag)
 	if err != nil {
