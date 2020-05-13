@@ -18,7 +18,6 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/sirupsen/logrus v1.5.0
-	github.com/skycoin/skycoin v0.26.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
