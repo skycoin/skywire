@@ -143,6 +143,10 @@ func (c *Client) Serve() error {
 		}
 
 		conn = noise.NewReadWriter(c.conn, ns)
+
+		c.log.Infoln("Enabling encryption")
+	} else {
+		c.log.Infoln("Encryption is disabled")
 	}
 
 	connToTunDoneCh := make(chan struct{})
