@@ -78,6 +78,8 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	// Prepare `snets`.
 	ns := make([]*snet.Network, len(keys))
 
+	const port = 7033
+
 	for i, pairs := range keys {
 		var dmsgClient *dmsg.Client
 		var stcpClient *stcp.Client
@@ -89,13 +91,12 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 		if hasStcp {
 			var err error
-			stcpClient, err = stcp.NewClient(pairs.PK, pairs.SK, skyenv.TestAddressResolverAddr)
+			stcpClient, err = stcp.NewClient(pairs.PK, pairs.SK, skyenv.TestAddressResolverAddr, "127.0.0.1:"+strconv.Itoa(port+i))
 			if err != nil {
 				panic(err)
 			}
 		}
 
-		port := 7033
 		n := snet.NewRaw(
 			snet.Config{
 				PubKey: pairs.PK,

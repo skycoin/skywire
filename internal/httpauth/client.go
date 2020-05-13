@@ -45,12 +45,14 @@ type HTTPError struct {
 
 // Client implements Client for auth services.
 type Client struct {
-	mu     sync.Mutex
-	client *http.Client
-	key    cipher.PubKey
-	sec    cipher.SecKey
-	addr   string // sanitized address of the client, which may differ from addr used in NewClient
-	nonce  uint64 // has to be handled with the atomic package at all time
+	mu          sync.Mutex
+	client      *http.Client
+	reuseClient *http.Client
+	key         cipher.PubKey
+	sec         cipher.SecKey
+	addr        string // sanitized address of the client, which may differ from addr used in NewClient
+	padding     [4]byte
+	nonce       uint64 // has to be handled with the atomic package at all time
 }
 
 // NewClient creates a new client setting a public key to the client to be used for Auth.
@@ -61,10 +63,11 @@ type Client struct {
 // * SW-Sig:    The signature of the payload + the nonce
 func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.SecKey) (*Client, error) {
 	c := &Client{
-		client: http.DefaultClient,
-		key:    key,
-		sec:    sec,
-		addr:   sanitizedAddr(addr),
+		client:      &http.Client{},
+		reuseClient: &http.Client{},
+		key:         key,
+		sec:         sec,
+		addr:        sanitizedAddr(addr),
 	}
 
 	// request server for a nonce
@@ -77,9 +80,65 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 	return c, nil
 }
 
+func (c *Client) Header() (http.Header, error) {
+	nonce := c.getCurrentNonce()
+	body := make([]byte, 0)
+	sign, err := Sign(body, nonce, c.sec)
+	if err != nil {
+		return nil, err
+	}
+
+	header := make(http.Header)
+
+	// use nonce, later, if no err from req update such nonce
+	header.Set("SW-Nonce", strconv.FormatUint(uint64(nonce), 10))
+	header.Set("SW-Sig", sign.Hex())
+	header.Set("SW-Public", c.key.Hex())
+
+	return header, nil
+}
+
+func (c *Client) CheckResponse(resp *http.Response) (repeat bool, err error) {
+	if resp == nil {
+		return false, nil
+	}
+
+	//isNonceValid, err := isNonceValid(resp)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//if !isNonceValid {
+	//	nonce, err := c.Nonce(context.Background(), c.key)
+	//	if err != nil {
+	//		return false, err
+	//	}
+	//	c.SetNonce(nonce)
+	//
+	//	if err := resp.Body.Close(); err != nil {
+	//		log.WithError(err).Warn("Failed to close HTTP response body")
+	//	}
+	//	return true, nil
+	//}
+
+	if resp.StatusCode == http.StatusOK {
+		c.incrementNonce()
+	}
+
+	return false, nil
+}
+
 // Do performs a new authenticated Request and returns the response. Internally, if the request was
 // successful nonce is incremented
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.do(c.client, req)
+}
+
+func (c *Client) DoWithReuse(req *http.Request) (*http.Response, error) {
+	return c.do(c.reuseClient, req)
+}
+
+func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, error) {
 	body := make([]byte, 0)
 	if req.ContentLength != 0 {
 		auxBody, err := ioutil.ReadAll(req.Body)
@@ -93,7 +152,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		body = auxBody
 	}
 
-	resp, err := c.doRequest(req, body)
+	resp, err := c.doRequest(client, req, body)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +172,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		if err := resp.Body.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close HTTP response body")
 		}
-		resp, err = c.doRequest(req, body)
+		resp, err = c.doRequest(client, req, body)
 		if err != nil {
 			return nil, err
 		}
@@ -160,11 +219,18 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	return nr.NextNonce, nil
 }
 
+func (c *Client) ReuseClient() *http.Client {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.reuseClient
+}
+
 func (c *Client) SetTransport(transport http.RoundTripper) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.client.Transport = transport
+	c.reuseClient.Transport = transport
 }
 
 // SetNonce sets client current nonce to given nonce
@@ -177,7 +243,7 @@ func (c *Client) Addr() string {
 	return c.addr
 }
 
-func (c *Client) doRequest(req *http.Request, body []byte) (*http.Response, error) {
+func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) (*http.Response, error) {
 	nonce := c.getCurrentNonce()
 	sign, err := Sign(body, nonce, c.sec)
 	if err != nil {
@@ -192,7 +258,7 @@ func (c *Client) doRequest(req *http.Request, body []byte) (*http.Response, erro
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.client.Do(req)
+	return client.Do(req)
 }
 
 func (c *Client) getCurrentNonce() Nonce {

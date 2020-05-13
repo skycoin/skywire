@@ -97,7 +97,7 @@ func New(conf Config) (*Network, error) {
 	if conf.STCP != nil {
 		//stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.STCP.PubKeyTable))
 		var err error
-		stcpC, err = stcp.NewClient(conf.PubKey, conf.SecKey, conf.STCP.AddressResolver)
+		stcpC, err = stcp.NewClient(conf.PubKey, conf.SecKey, conf.STCP.AddressResolver, conf.STCP.LocalAddr)
 		if err != nil {
 			return nil, err
 		}

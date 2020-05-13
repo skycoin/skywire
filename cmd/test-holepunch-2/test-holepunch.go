@@ -17,9 +17,10 @@ func main() {
 	network := os.Args[1]
 	src := os.Args[2]
 	dst := os.Args[3]
-	text := os.Args[4]
+	from := os.Args[4]
+	to := os.Args[5]
 
-	logrus.Infof("Dialing %v from %v via %v, text = %q", dst, src, network, text)
+	logrus.Infof("Dialing %v from %v via %v, from %v to %v", dst, src, network, from, to)
 
 	addr, err := net.ResolveTCPAddr("tcp4", src)
 	if err != nil {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"sync"
 	"time"
 
@@ -21,6 +20,10 @@ import (
 // Type is stcp type.
 const Type = "stcp"
 
+const DialTimeout = 1 * time.Minute
+
+var ErrTimeout = errors.New("timeout")
+
 // Client is the central control for incoming and outgoing 'stcp.Conn's.
 type Client struct {
 	log *logging.Logger
@@ -30,17 +33,20 @@ type Client struct {
 	p               *Porter
 	addressResolver arclient.APIClient
 
-	lTCP net.Listener
-	lMap map[uint16]*Listener // key: lPort
-	mx   sync.Mutex
+	localAddr string
+	connCh    <-chan string
+	dialCh    chan cipher.PubKey
+	lMap      map[uint16]*Listener // key: lPort
+	mx        sync.Mutex
 
 	done chan struct{}
 	once sync.Once
 }
 
 // NewClient creates a net Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL string) (*Client, error) {
-	addressResolver, err := arclient.NewHTTP(addressResolverURL, pk, sk)
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL, localAddr string) (*Client, error) {
+	// TODO: choose random free port
+	addressResolver, err := arclient.NewHTTP(addressResolverURL, pk, sk, arclient.LocalAddr(localAddr))
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +56,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL string) (*
 		lPK:             pk,
 		lSK:             sk,
 		addressResolver: addressResolver,
+		localAddr:       localAddr,
 		p:               newPorter(PorterMinEphemeral),
 		lMap:            make(map[uint16]*Listener),
 		done:            make(chan struct{}),
@@ -64,59 +71,30 @@ func (c *Client) SetLogger(log *logging.Logger) {
 }
 
 // Serve serves the listening portion of the client.
-func (c *Client) Serve(tcpAddr string) error {
-	if c.lTCP != nil {
+func (c *Client) Serve(localAddr string) error {
+	if c.connCh != nil {
 		return errors.New("already listening")
 	}
 
-	c.log.Debugf("reuseport.Listen: %v", tcpAddr)
-	lTCP, err := reuseport.Listen("tcp4", tcpAddr)
+	ctx := context.Background()
+
+	dialCh := make(chan cipher.PubKey)
+
+	connCh, err := c.addressResolver.Listen(ctx, dialCh)
 	if err != nil {
 		return err
 	}
 
-	c.lTCP = lTCP
+	c.connCh = connCh
+	//c.dialCh = dialCh
 
-	localAddr := lTCP.Addr()
-	c.log.Infof("listening on tcp addr: %v", localAddr)
-
-	transport := &http.Transport{
-		DialContext: func(_ context.Context, network, addr string) (conn net.Conn, err error) {
-			for i := 1; i <= 100; i++ {
-				c.log.WithField("attempt", i).Infof("[reuseport.Dial] Trying to connect to %v via %v", addr, network)
-				conn, err = reuseport.Dial(network, localAddr.String(), addr)
-				if err == nil {
-					break
-				}
-
-				const delay = 100 * time.Millisecond
-				c.log.WithError(err).Warnf("[reuseport.Dial] Failed to establish connection to %v via %v, waiting %v", addr, network, delay)
-				time.Sleep(delay)
-			}
-			c.log.Infof("[reuseport.Dial] Established connection to %v via %v", addr, network)
-			return conn, err
-		},
-		DisableKeepAlives: false,
-	}
-
-	c.addressResolver.SetTransport(transport)
-
-	//_, port, err := net.SplitHostPort(localAddr.String())
-	//if err != nil {
-	//	port = ""
-	//}
-
-	//if err := c.addressResolver.Bind(context.Background(), port); err != nil {
-	//	return fmt.Errorf("bind PK")
-	//}
-
-	if err := c.addressResolver.Bind(context.Background(), ""); err != nil {
-		return fmt.Errorf("bind PK")
-	}
+	c.log.Infof("listening websocket events on %v", localAddr)
 
 	go func() {
-		for {
-			if err := c.acceptTCPConn(); err != nil {
+		for addr := range c.connCh {
+			c.log.Infof("Received signal to dial %v", addr)
+
+			if err := c.acceptTCPConn(addr); err != nil {
 				c.log.Warnf("failed to accept incoming connection: %v", err)
 
 				if !IsHandshakeError(err) {
@@ -130,15 +108,34 @@ func (c *Client) Serve(tcpAddr string) error {
 	return nil
 }
 
-func (c *Client) acceptTCPConn() error {
+func (c *Client) dialTimeout(addr string) (net.Conn, error) {
+	timer := time.NewTimer(DialTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			return nil, ErrTimeout
+		default:
+			c.log.Infof("Dialing %v from %v via tcp", addr, c.localAddr)
+			conn, err := reuseport.Dial("tcp", c.localAddr, addr)
+			if err == nil {
+				return conn, nil
+			}
+
+			c.log.WithError(err).Errorf("Failed to dial %v from %v, trying again: %v", addr, c.localAddr, err)
+		}
+	}
+}
+
+func (c *Client) acceptTCPConn(addr string) error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	c.log.Debugf("Accepting conn on %v", c.lTCP.Addr())
-	tcpConn, err := c.lTCP.Accept()
+	tcpConn, err := c.dialTimeout(addr)
 	if err != nil {
-		return fmt.Errorf("lTCP.Accept: %w", err)
+		return err
 	}
 
 	var lis *Listener
@@ -169,29 +166,27 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		return nil, io.ErrClosedPipe
 	}
 
-	addr, err := c.addressResolver.Resolve(ctx, rPK)
+	c.log.Infof("Dialing PK %v", rPK)
+
+	//c.dialCh <- rPK
+
+	//addr, err := c.addressResolver.Resolve(ctx, rPK)
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	addr, err := c.addressResolver.Dial(ctx, rPK)
 	if err != nil {
 		return nil, err
 	}
 
-	c.log.Debugf("PK %v resolved to address %v", rPK, addr)
+	c.log.Infof("Dialed PK %v", rPK)
 
-	var netConn net.Conn
-	for i := 1; i <= 100; i++ {
-		c.log.Debugf("Dialing tcp address %v attempt %v", addr, i)
+	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, addr)
 
-		var err error
-		netConn, err = net.DialTimeout("tcp", addr, 5*time.Second)
-		if err == nil {
-			break
-		}
-
-		if i == 100 {
-			return nil, fmt.Errorf("net.Dial: %w", err)
-		}
-		// TODO: websocket signaling
-		c.log.Errorf("Failed to dial %v: %v. Retrying...", addr, err)
-		time.Sleep(500 * time.Millisecond)
+	tcpConn, err := c.dialTimeout(addr)
+	if err != nil {
+		return nil, err
 	}
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
@@ -201,7 +196,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	stcpConn, err := newConn(netConn, time.Now().Add(HandshakeTimeout), hs, freePort)
+	stcpConn, err := newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, freePort)
 	if err != nil {
 		return nil, fmt.Errorf("newConn: %w", err)
 	}
@@ -242,10 +237,6 @@ func (c *Client) Close() error {
 
 		c.mx.Lock()
 		defer c.mx.Unlock()
-
-		if c.lTCP != nil {
-			_ = c.lTCP.Close() //nolint:errcheck
-		}
 
 		for _, lis := range c.lMap {
 			_ = lis.Close() // nolint:errcheck
