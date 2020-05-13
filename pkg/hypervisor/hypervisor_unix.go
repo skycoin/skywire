@@ -8,16 +8,19 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 )
 
+// dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with
+// `*dmsgpty.UI` will be included for Unix systems and excluded for Windows.
 type dmsgPtyUI struct {
 	PtyUI *dmsgpty.UI
 }
 
-func (vc *VisorConn) setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) {
+func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
-	vc.PtyUI = &dmsgPtyUI{
+	return &dmsgPtyUI{
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}
 }
