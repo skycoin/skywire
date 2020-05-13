@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/noise"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
@@ -127,20 +129,36 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
+	conn := io.ReadWriter(c.conn)
+	if !c.cfg.Credentials.PKIsNil() && !c.cfg.Credentials.SKIsNil() {
+		ns, err := noise.New(noise.HandshakeKK, noise.Config{
+			LocalPK: c.cfg.Credentials.PK,
+			LocalSK: c.cfg.Credentials.SK,
+			// TODO: get this PK from conn.Addr
+			RemotePK:  c.cfg.ServerPK,
+			Initiator: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to prepare stream noise object: %w", err)
+		}
+
+		conn = noise.NewReadWriter(c.conn, ns)
+	}
+
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	// read all system traffic and pass it to the remote VPN server
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, c.conn); err != nil {
+		if _, err := io.Copy(tun, conn); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN server", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(c.conn, tun); err != nil {
+		if _, err := io.Copy(conn, tun); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())
 		}
 	}()
