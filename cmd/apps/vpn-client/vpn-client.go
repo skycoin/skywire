@@ -39,6 +39,8 @@ var (
 
 var (
 	serverPKStr = flag.String("srv", "", "PubKey of the server to connect to")
+	localPKStr  = flag.String("pk", "", "Local PubKey")
+	localSKStr  = flag.String("sk", "", "Local SecKey")
 	passcode    = flag.String("passcode", "", "Passcode to authenticate connection")
 )
 
@@ -54,6 +56,20 @@ func main() {
 	serverPK := cipher.PubKey{}
 	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
 		log.WithError(err).Fatalln("Invalid VPN server pub key")
+	}
+
+	localPK := cipher.PubKey{}
+	if *localPKStr != "" {
+		if err := localPK.UnmarshalText([]byte(*localPKStr)); err != nil {
+			log.WithError(err).Fatalln("Invalid local PK")
+		}
+	}
+
+	localSK := cipher.SecKey{}
+	if *localSKStr != "" {
+		if err := localSK.UnmarshalText([]byte(*localSKStr)); err != nil {
+			log.WithError(err).Fatalln("Invalid local SK")
+		}
 	}
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
@@ -85,6 +101,11 @@ func main() {
 
 	vpnClientCfg := vpn.ClientConfig{
 		Passcode: *passcode,
+		ServerPK: serverPK,
+		Credentials: vpn.NoiseCredentials{
+			PK: localPK,
+			SK: localSK,
+		},
 	}
 	vpnClient, err := vpn.NewClient(vpnClientCfg, log, appConn)
 	if err != nil {

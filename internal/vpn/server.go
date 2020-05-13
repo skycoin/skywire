@@ -7,6 +7,9 @@ import (
 	"net"
 	"sync"
 
+	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
@@ -166,19 +169,39 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
+	rw := io.ReadWriter(conn)
+	if !s.cfg.Credentials.SKIsNil() && !s.cfg.Credentials.PKIsNil() {
+		remoteAddr, isAppConn := conn.RemoteAddr().(appnet.Addr)
+		if isAppConn {
+			ns, err := noise.New(noise.HandshakeKK, noise.Config{
+				LocalPK: s.cfg.Credentials.PK,
+				LocalSK: s.cfg.Credentials.SK,
+				// TODO: get this PK from conn.Addr
+				RemotePK:  remoteAddr.PubKey,
+				Initiator: false,
+			})
+			if err != nil {
+				s.log.WithError(err).Errorf("Failed to prepare stream noise object: %v", err)
+				return
+			}
+
+			rw = noise.NewReadWriter(rw, ns)
+		}
+	}
+
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, conn); err != nil {
+		if _, err := io.Copy(tun, rw); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(conn, tun); err != nil {
+		if _, err := io.Copy(rw, tun); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
 		}
 	}()
