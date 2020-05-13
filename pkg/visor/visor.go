@@ -17,10 +17,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/netutil"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
