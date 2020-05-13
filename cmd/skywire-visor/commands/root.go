@@ -24,6 +24,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
@@ -121,6 +122,23 @@ func (cfg *runCfg) startProfiler() *runCfg {
 	}
 
 	cfg.profileStop = profile.Start(profile.ProfilePath("./logs/"+cfg.tag), option).Stop
+
+	return cfg
+}
+
+func (cfg *runCfg) startLogger() *runCfg {
+	cfg.masterLogger = logging.NewMasterLogger()
+	cfg.logger = cfg.masterLogger.PackageLogger(cfg.tag)
+
+	if cfg.syslogAddr != "none" {
+		hook, err := syslog.SetupHook(cfg.syslogAddr, cfg.tag)
+		if err != nil {
+			cfg.logger.Errorf("Error setting up syslog: %v", err)
+		} else {
+			cfg.masterLogger.AddHook(hook)
+			cfg.masterLogger.Out = ioutil.Discard
+		}
+	}
 
 	return cfg
 }

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
@@ -35,7 +37,12 @@ var rootCmd = &cobra.Command{
 
 		logger := logging.MustGetLogger(tag)
 		if syslogAddr != "" {
-			setupSyslog(logger)
+			hook, err := syslog.SetupHook(syslogAddr, tag)
+			if err != nil {
+				log.Fatalf("Error setting up syslog: %v", err)
+			}
+
+			logging.AddHook(hook)
 		}
 
 		var rdr io.Reader
