@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/SkycoinProject/dmsg/dmsgpty"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
@@ -39,9 +38,8 @@ func (visor *Visor) startDmsgPty(ctx context.Context) error {
 
 	log := visor.Logger.PackageLogger("dmsgpty")
 
-	err2 := visor.serveDmsgPtyCLI(ctx, log)
-	if err2 != nil {
-		return err2
+	if err := visor.serveDmsgPtyCLI(ctx, log); err != nil {
+		return err
 	}
 
 	go visor.serveDmsgPty(ctx, log)
