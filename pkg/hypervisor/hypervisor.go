@@ -89,10 +89,10 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 		addr := conn.RawRemoteAddr()
 		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
 		visorConn := &VisorConn{
-			Addr: addr,
-			RPC:  visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
+			Addr:  addr,
+			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
+			PtyUI: setupDmsgPtyUI(dmsgC, addr.PK),
 		}
-		visorConn.setupDmsgPtyUI(dmsgC, addr.PK)
 		log.WithField("remote_addr", addr).Info("Accepted.")
 		hv.mu.Lock()
 		hv.visors[addr.PK] = *visorConn
@@ -186,6 +186,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			})
 		})
 
+		// we don't enable `dmsgpty` endpoints for Windows
 		if runtime.GOOS != "windows" {
 			r.Route("/pty", func(r chi.Router) {
 				if hv.c.EnableAuth {
