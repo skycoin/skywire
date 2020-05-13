@@ -71,6 +71,7 @@ var genConfigCmd = &cobra.Command{
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
 }
+
 func fillInOldKeys(confPath string, conf *hypervisor.Config) error {
 	oldConfBytes, err := ioutil.ReadFile(path.Clean(confPath))
 	if err != nil {
