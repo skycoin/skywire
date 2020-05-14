@@ -142,7 +142,12 @@ func (c *Client) Serve() error {
 			return fmt.Errorf("failed to prepare stream noise object: %w", err)
 		}
 
-		conn = noise.NewReadWriter(c.conn, ns)
+		rw := noise.NewReadWriter(c.conn, ns)
+		if err := rw.Handshake(HSTimeout); err != nil {
+			return fmt.Errorf("error performing noise handshake: %w", err)
+		}
+
+		conn = rw
 
 		c.log.Infoln("Enabling encryption")
 	} else {
