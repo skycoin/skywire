@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
@@ -27,11 +28,27 @@ var (
 )
 
 var (
-	passcode = flag.String("passcode", "", "Passcode to authenticate connecting users")
+	localPKStr = flag.String("pk", "", "Local PubKey")
+	localSKStr = flag.String("sk", "", "Local SecKey")
+	passcode   = flag.String("passcode", "", "Passcode to authenticate connecting users")
 )
 
 func main() {
 	flag.Parse()
+
+	localPK := cipher.PubKey{}
+	if *localPKStr != "" {
+		if err := localPK.UnmarshalText([]byte(*localPKStr)); err != nil {
+			log.WithError(err).Fatalln("Invalid local PK")
+		}
+	}
+
+	localSK := cipher.SecKey{}
+	if *localSKStr != "" {
+		if err := localSK.UnmarshalText([]byte(*localSKStr)); err != nil {
+			log.WithError(err).Fatalln("Invalid local SK")
+		}
+	}
 
 	appCfg, err := app.ClientConfigFromEnv()
 	if err != nil {
@@ -65,6 +82,10 @@ func main() {
 
 	srvCfg := vpn.ServerConfig{
 		Passcode: *passcode,
+		Credentials: vpn.NoiseCredentials{
+			PK: localPK,
+			SK: localSK,
+		},
 	}
 	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {
