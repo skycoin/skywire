@@ -7,9 +7,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/SkycoinProject/dmsg/noise"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
@@ -169,7 +166,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
-	rw := io.ReadWriter(conn)
+	/*rw := io.ReadWriter(conn)
 	if !s.cfg.Credentials.SKIsNil() && !s.cfg.Credentials.PKIsNil() {
 		remoteAddr, isAppConn := conn.RemoteAddr().(appnet.Addr)
 		if isAppConn {
@@ -191,21 +188,21 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 	} else {
 		s.log.Infoln("Encryption is disabled")
-	}
+	}*/
 
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, rw); err != nil {
+		if _, err := io.Copy(tun, conn); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(rw, tun); err != nil {
+		if _, err := io.Copy(conn, tun); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
 		}
 	}()
