@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/noise"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
@@ -84,7 +82,7 @@ func NewClient(cfg ClientConfig, l *logging.MasterLogger, conn net.Conn) (*Clien
 
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
 func (c *Client) Serve() error {
-	tunIP, tunGateway, err := c.shakeHands()
+	tunIP, tunGateway, encrypt, err := c.shakeHands()
 	if err != nil {
 		return fmt.Errorf("error during client/server handshake: %w", err)
 	}
@@ -129,29 +127,18 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
-	conn := io.ReadWriter(c.conn)
-	if !c.cfg.Credentials.PKIsNil() && !c.cfg.Credentials.SKIsNil() {
-		ns, err := noise.New(noise.HandshakeKK, noise.Config{
-			LocalPK: c.cfg.Credentials.PK,
-			LocalSK: c.cfg.Credentials.SK,
-			// TODO: get this PK from conn.Addr
-			RemotePK:  c.cfg.ServerPK,
-			Initiator: true,
-		})
+	rw := io.ReadWriter(c.conn)
+	if encrypt {
+		c.log.Infoln("Enabling encryption...")
+
+		rw, err = WrapRWWithNoise(c.conn, true, c.cfg.Credentials.PK, c.cfg.Credentials.SK)
 		if err != nil {
-			return fmt.Errorf("failed to prepare stream noise object: %w", err)
+			return fmt.Errorf("failed to enable encryption: %w", err)
 		}
 
-		rw := noise.NewReadWriter(c.conn, ns)
-		if err := rw.Handshake(HSTimeout); err != nil {
-			return fmt.Errorf("error performing noise handshake: %w", err)
-		}
-
-		conn = rw
-
-		c.log.Infoln("Enabling encryption")
+		c.log.Infoln("Encryption enabled")
 	} else {
-		c.log.Infoln("Encryption is disabled")
+		c.log.Infoln("Encryption disabled")
 	}
 
 	connToTunDoneCh := make(chan struct{})
@@ -160,14 +147,14 @@ func (c *Client) Serve() error {
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, conn); err != nil {
+		if _, err := io.Copy(tun, rw); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN server", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(conn, tun); err != nil {
+		if _, err := io.Copy(rw, tun); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())
 		}
 	}()
@@ -301,10 +288,10 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	return stcpEntities, nil
 }
 
-func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
+func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
 	unavailableIPs, err := LocalNetworkInterfaceIPs()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
+		return nil, nil, false, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
 
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
@@ -317,21 +304,21 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 	c.log.Debugf("Sending client hello: %v", cHello)
 
 	if err := WriteJSON(c.conn, &cHello); err != nil {
-		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
+		return nil, nil, false, fmt.Errorf("error sending client hello: %w", err)
 	}
 
 	var sHello ServerHello
 	if err := ReadJSON(c.conn, &sHello); err != nil {
-		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
+		return nil, nil, false, fmt.Errorf("error reading server hello: %w", err)
 	}
 
 	c.log.Debugf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
+		return nil, nil, false, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
 	}
 
-	return sHello.TUNIP, sHello.TUNGateway, nil
+	return sHello.TUNIP, sHello.TUNGateway, sHello.EncryptionEnabled, nil
 }
 
 func ipFromEnv(key string) (net.IP, error) {
