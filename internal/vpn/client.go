@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/noise"
+
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
@@ -128,7 +130,7 @@ func (c *Client) Serve() error {
 	}
 
 	conn := io.ReadWriter(c.conn)
-	/*if !c.cfg.Credentials.PKIsNil() && !c.cfg.Credentials.SKIsNil() {
+	if !c.cfg.Credentials.PKIsNil() && !c.cfg.Credentials.SKIsNil() {
 		ns, err := noise.New(noise.HandshakeKK, noise.Config{
 			LocalPK: c.cfg.Credentials.PK,
 			LocalSK: c.cfg.Credentials.SK,
@@ -145,7 +147,7 @@ func (c *Client) Serve() error {
 		c.log.Infoln("Enabling encryption")
 	} else {
 		c.log.Infoln("Encryption is disabled")
-	}*/
+	}
 
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})

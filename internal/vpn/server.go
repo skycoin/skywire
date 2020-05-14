@@ -7,7 +7,9 @@ import (
 	"net"
 	"sync"
 
+	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 )
 
 // Server is a VPN server.
@@ -167,7 +169,7 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 
 	rw := io.ReadWriter(conn)
-	/*if !s.cfg.Credentials.SKIsNil() && !s.cfg.Credentials.PKIsNil() {
+	if !s.cfg.Credentials.SKIsNil() && !s.cfg.Credentials.PKIsNil() {
 		remoteAddr, isAppConn := conn.RemoteAddr().(appnet.Addr)
 		if isAppConn {
 			ns, err := noise.New(noise.HandshakeKK, noise.Config{
@@ -188,7 +190,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 	} else {
 		s.log.Infoln("Encryption is disabled")
-	}*/
+	}
 
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
