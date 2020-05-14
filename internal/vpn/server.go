@@ -180,11 +180,17 @@ func (s *Server) serveConn(conn net.Conn) {
 				Initiator: false,
 			})
 			if err != nil {
-				s.log.WithError(err).Errorf("Failed to prepare stream noise object: %v", err)
+				s.log.WithError(err).Errorln("Failed to prepare stream noise object")
 				return
 			}
 
-			rw = noise.NewReadWriter(rw, ns)
+			noiseRW := noise.NewReadWriter(rw, ns)
+			if err := noiseRW.Handshake(HSTimeout); err != nil {
+				s.log.WithError(err).Errorln("error performing noise handshake")
+				return
+			}
+
+			rw = noiseRW
 
 			s.log.Infoln("Enabling encryption")
 		}
