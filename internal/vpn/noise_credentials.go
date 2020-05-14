@@ -1,6 +1,14 @@
 package vpn
 
-import "github.com/SkycoinProject/dmsg/cipher"
+import (
+	"time"
+
+	"github.com/SkycoinProject/dmsg/cipher"
+)
+
+const (
+	HSTimeout = 5 * time.Second
+)
 
 type NoiseCredentials struct {
 	PK cipher.PubKey
