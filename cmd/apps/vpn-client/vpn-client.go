@@ -101,7 +101,6 @@ func main() {
 
 	vpnClientCfg := vpn.ClientConfig{
 		Passcode: *passcode,
-		ServerPK: serverPK,
 		Credentials: vpn.NoiseCredentials{
 			PK: localPK,
 			SK: localSK,
