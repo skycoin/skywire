@@ -166,8 +166,8 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
-	/*rw := io.ReadWriter(conn)
-	if !s.cfg.Credentials.SKIsNil() && !s.cfg.Credentials.PKIsNil() {
+	rw := io.ReadWriter(conn)
+	/*if !s.cfg.Credentials.SKIsNil() && !s.cfg.Credentials.PKIsNil() {
 		remoteAddr, isAppConn := conn.RemoteAddr().(appnet.Addr)
 		if isAppConn {
 			ns, err := noise.New(noise.HandshakeKK, noise.Config{
@@ -195,14 +195,14 @@ func (s *Server) serveConn(conn net.Conn) {
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, conn); err != nil {
+		if _, err := io.Copy(tun, rw); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(conn, tun); err != nil {
+		if _, err := io.Copy(rw, tun); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
 		}
 	}()
