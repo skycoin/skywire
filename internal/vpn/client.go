@@ -127,8 +127,8 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
-	/*conn := io.ReadWriter(c.conn)
-	if !c.cfg.Credentials.PKIsNil() && !c.cfg.Credentials.SKIsNil() {
+	conn := io.ReadWriter(c.conn)
+	/*if !c.cfg.Credentials.PKIsNil() && !c.cfg.Credentials.SKIsNil() {
 		ns, err := noise.New(noise.HandshakeKK, noise.Config{
 			LocalPK: c.cfg.Credentials.PK,
 			LocalSK: c.cfg.Credentials.SK,
@@ -153,14 +153,14 @@ func (c *Client) Serve() error {
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, c.conn); err != nil {
+		if _, err := io.Copy(tun, conn); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN server", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(c.conn, tun); err != nil {
+		if _, err := io.Copy(conn, tun); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())
 		}
 	}()
