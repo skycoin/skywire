@@ -54,6 +54,8 @@ var genConfigCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		var conf *visor.Config
 
+		// TODO(evanlinjin): Decide whether we still need this feature in the future.
+		// https://github.com/SkycoinProject/skywire-mainnet/pull/360#discussion_r425080223
 		switch configLocType {
 		case pathutil.WorkingDirLoc:
 			var err error
