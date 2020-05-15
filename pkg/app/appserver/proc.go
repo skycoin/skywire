@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -68,6 +69,11 @@ func NewProc(conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
 // Logs obtains the log store.
 func (p *Proc) Logs() appcommon.LogStore {
 	return p.logDB
+}
+
+// Cmd returns the internal cmd name.
+func (p *Proc) Cmd() *exec.Cmd {
+	return p.cmd
 }
 
 // InjectConn introduces the connection to the Proc after it is started.
@@ -154,8 +160,8 @@ func (p *Proc) Start() error {
 		p.waitErr = p.cmd.Wait()
 
 		// Close proc conn and associated listeners and connections.
-		if err := p.conn.Close(); err != nil {
-			p.log.WithError(err).Warn("Closing proc conn returned non-nil error.")
+		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
 		}
 		p.rpcGW.cm.CloseAll()
 		p.rpcGW.lm.CloseAll()
