@@ -24,6 +24,10 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
+const (
+	appsPIDFileName = "apps-pid.txt"
+)
+
 // Launcher associated errors.
 var (
 	ErrAppNotFound   = errors.New("app not found")
@@ -284,7 +288,7 @@ func ensureDir(path *string) error {
 */
 
 func (l *Launcher) pidFile() (*os.File, error) {
-	return os.OpenFile(filepath.Join(l.conf.LocalPath, "apps-pid.txt"), os.O_RDWR|os.O_CREATE, 0600)
+	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0600)
 }
 
 func (l *Launcher) persistPID(appName string, pid appcommon.ProcID) error {

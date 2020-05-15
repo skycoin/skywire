@@ -193,7 +193,7 @@ func DefaultConfig(log *logging.MasterLogger, configPath string, keys *KeyPair) 
 }
 
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given launcher.
-// The updated config gets flushed to file is there are any changes.
+// The updated config gets flushed to file if there are any changes.
 func (c *Config) UpdateAppAutostart(launch *launcher.Launcher, appName string, autoStart bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -224,7 +224,7 @@ func (c *Config) UpdateAppAutostart(launch *launcher.Launcher, appName string, a
 }
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the launcher.
-// The updated config gets flushed to file is there are any changes.
+// The updated config gets flushed to file if there are any changes.
 func (c *Config) UpdateAppArg(launch *launcher.Launcher, appName, argName, value string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

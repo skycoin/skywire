@@ -29,7 +29,21 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
-type startFunc func(v *Visor) bool
+type initFunc func(v *Visor) bool
+
+func initStack() []initFunc {
+	return []initFunc{
+		initUpdater,
+		initSNet,
+		initDmsgpty,
+		initTransport,
+		initRouter,
+		initLauncher,
+		initCLI,
+		initHypervisors,
+		initUptimeTracker,
+	}
+}
 
 func initUpdater(v *Visor) bool {
 	report := v.makeReporter("updater")

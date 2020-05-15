@@ -128,24 +128,12 @@ func NewVisor(conf *Config, restartCtx *restart.Context) (v *Visor, ok bool) {
 	log.WithField("public_key", conf.KeyPair.PubKey).Info("Begin startup.")
 	v.startedAt = time.Now()
 
-	startStack := []startFunc{
-		initUpdater,
-		initSNet,
-		initDmsgpty,
-		initTransport,
-		initRouter,
-		initLauncher,
-		initCLI,
-		initHypervisors,
-		initUptimeTracker,
-	}
-
-	for i, startFn := range startStack {
+	for i, startFn := range initStack() {
 		name := strings.ToLower(strings.TrimPrefix(filepath.Base(runtime.FuncForPC(reflect.ValueOf(startFn).Pointer()).Name()), "visor.init"))
 		start := time.Now()
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:startup:%s", name)).
-			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(startStack)))
+			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(initStack())))
 		log.Info("Starting module...")
 
 		if ok := startFn(v); !ok {
