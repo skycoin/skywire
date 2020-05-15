@@ -1,4 +1,4 @@
-package app
+package appcommon
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ func TestLogStore(t *testing.T) {
 
 	defer os.Remove(p.Name()) // nolint
 
-	ls, err := newBoltDB(p.Name(), "foo")
+	ls, err := NewBBoltLogStore(p.Name(), "foo")
 	require.NoError(t, err)
 
 	t3, err := time.Parse(time.RFC3339, "2000-03-01T00:00:00Z")
