@@ -8,12 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
@@ -29,6 +28,9 @@ const (
 	// ConfigVersion of the visor config.
 	// TODO: Put this in skyenv?
 	ConfigVersion = "v1.0.0"
+
+	// StdinName is the path name used to identify STDIN.
+	StdinName = "STDIN"
 )
 
 var (
@@ -72,9 +74,8 @@ func (c *Config) flush() error {
 	switch c.path {
 	case "":
 		return ErrNoConfigPath
-	case "STDIN":
+	case StdinName:
 		return nil
-	default:
 	}
 
 	j, err := json.Marshal(c)

@@ -160,10 +160,11 @@ func (rc *runConf) readConfig() *runConf {
 		rc.logger.WithField("file", cp).Info("Reading config from file...")
 		reader = file
 		confPath = cp
+
 	} else {
 		rc.logger.Info("Reading config from STDIN...")
 		reader = bufio.NewReader(os.Stdin)
-		confPath = "STDIN"
+		confPath = visor.StdinName
 	}
 
 	rc.conf = visor.BaseConfig(rc.masterLogger, confPath)

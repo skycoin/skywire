@@ -353,7 +353,7 @@ func initCLI(v *Visor) bool {
 	if err != nil {
 		return report(fmt.Errorf("failed to start rpc server for cli: %w", err))
 	}
-	go rpcS.Accept(cliL) // We not not use sync.WaitGroup here as it will never return anyway.
+	go rpcS.Accept(cliL) // We do not use sync.WaitGroup here as it will never return anyway.
 
 	return report(nil)
 }
@@ -395,6 +395,8 @@ func initHypervisors(v *Visor) bool {
 }
 
 func initUptimeTracker(v *Visor) bool {
+	const tickDuration = time.Second
+
 	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker
 
@@ -412,7 +414,7 @@ func initUptimeTracker(v *Visor) bool {
 	}
 
 	log := v.MasterLogger().PackageLogger("uptime_tracker")
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(tickDuration)
 
 	go func() {
 		for range ticker.C {

@@ -9,12 +9,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"

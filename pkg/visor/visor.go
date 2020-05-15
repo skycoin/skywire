@@ -12,15 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
@@ -37,6 +35,12 @@ const (
 	supportedProtocolVersion = "0.1.0"
 	ownerRWX                 = 0700
 	shortHashLen             = 6
+)
+
+const (
+	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
+	// Otherwise the shutdown logic will continue and report a timeout error.
+	moduleShutdownTimeout = time.Second * 2
 )
 
 // Visor provides messaging runtime for Apps by setting up all
@@ -167,7 +171,7 @@ func (v *Visor) Close() error {
 
 		start := time.Now()
 		done := make(chan bool, 1)
-		t := time.NewTimer(time.Second * 2)
+		t := time.NewTimer(moduleShutdownTimeout)
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", ce.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
@@ -180,12 +184,15 @@ func (v *Visor) Close() error {
 
 		select {
 		case ok := <-done:
+			t.Stop()
+
 			if !ok {
 				log.WithField("elapsed", time.Since(start)).Warn("Module stopped with unexpected result.")
 				v.processReports(log, nil)
 				continue
 			}
 			log.WithField("elapsed", time.Since(start)).Info("Module stopped cleanly.")
+
 		case <-t.C:
 			log.WithField("elapsed", time.Since(start)).Error("Module timed out.")
 		}
