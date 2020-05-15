@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"runtime/debug"
-	"strings"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -28,8 +27,7 @@ var log = logging.MustGetLogger("arclient")
 const (
 	bindPath    = "/bind"
 	resolvePath = "/resolve/"
-	dialPath    = "/dial/"
-	listenPath  = "/listen"
+	wsPath      = "/ws"
 )
 
 var (
@@ -48,8 +46,7 @@ type Error struct {
 type APIClient interface {
 	Bind(ctx context.Context, port string) error
 	Resolve(ctx context.Context, pk cipher.PubKey) (string, error)
-	Dial(ctx context.Context, pk cipher.PubKey) (string, error)
-	Listen(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan string, error)
+	WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan string, error)
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -109,7 +106,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 		return nil, err
 	}
 
-	return c.client.DoWithReuse(req.WithContext(ctx))
+	return c.client.Do(req.WithContext(ctx))
 }
 
 // Post performs a POST request.
@@ -127,7 +124,7 @@ func (c *httpClient) Post(ctx context.Context, path string, payload interface{})
 		return nil, err
 	}
 
-	return c.client.DoWithReuse(req.WithContext(ctx))
+	return c.client.Do(req.WithContext(ctx))
 }
 
 // Websocket performs a new websocket request.
@@ -152,8 +149,6 @@ func (c *httpClient) Websocket(ctx context.Context, path string) (*websocket.Con
 	case "https":
 		addr.Scheme = "wss"
 	}
-
-	addr.Host = strings.Replace(addr.Host, "9093", "9095", -1)
 
 	addr.Path = path
 
@@ -256,44 +251,10 @@ func (c *httpClient) Resolve(ctx context.Context, pk cipher.PubKey) (string, err
 	return resolveResp.Addr, nil
 }
 
-func (c *httpClient) Dial(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Post(ctx, dialPath+pk.String(), nil)
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	if resp.StatusCode == http.StatusUnprocessableEntity {
-		return "", ErrNotConnected
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
-	}
-
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var resolveResp ResolveResponse
-
-	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return "", err
-	}
-
-	return resolveResp.Addr, nil
-}
-
-func (c *httpClient) Listen(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan string, error) {
+func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan string, error) {
 	addrCh := make(chan string)
 
-	conn, err := c.Websocket(ctx, listenPath)
+	conn, err := c.Websocket(ctx, wsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +265,7 @@ func (c *httpClient) Listen(ctx context.Context, dialCh <-chan cipher.PubKey) (<
 		}()
 
 		for {
-			typ, rawMsg, err := conn.Read(context.TODO())
+			kind, rawMsg, err := conn.Read(context.TODO())
 			if err != nil {
 				log.Errorf("Failed to read WS message: %v", err)
 				return
@@ -312,20 +273,19 @@ func (c *httpClient) Listen(ctx context.Context, dialCh <-chan cipher.PubKey) (<
 
 			msg := string(rawMsg)
 
-			log.Infof("New WS message of type %v: %v", typ.String(), msg)
+			log.Infof("New WS message of type %v: %v", kind.String(), msg)
 			addrCh <- msg
 		}
 	}(conn, addrCh)
 
-	//go func(conn net.Conn, dialCh <-chan cipher.PubKey) {
-	//	for dial := range dialCh {
-	//		_, err := conn.Write([]byte(dial.String()))
-	//		if err != nil {
-	//			log.Errorf("Failed to write to %v: %v", conn.RemoteAddr(), err)
-	//			return
-	//		}
-	//	}
-	//}(conn, dialCh)
+	go func(conn *websocket.Conn, dialCh <-chan cipher.PubKey) {
+		for pk := range dialCh {
+			if err := conn.Write(ctx, websocket.MessageText, []byte(pk.String())); err != nil {
+				log.Errorf("Failed to write to %v: %v", pk, err)
+				return
+			}
+		}
+	}(conn, dialCh)
 
 	return addrCh, nil
 }

@@ -80,13 +80,13 @@ func (c *Client) Serve(localAddr string) error {
 
 	dialCh := make(chan cipher.PubKey)
 
-	connCh, err := c.addressResolver.Listen(ctx, dialCh)
+	connCh, err := c.addressResolver.WS(ctx, dialCh)
 	if err != nil {
 		return err
 	}
 
 	c.connCh = connCh
-	//c.dialCh = dialCh
+	c.dialCh = dialCh
 
 	c.log.Infof("listening websocket events on %v", localAddr)
 
@@ -168,17 +168,17 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialing PK %v", rPK)
 
-	//c.dialCh <- rPK
+	c.dialCh <- rPK
 
-	//addr, err := c.addressResolver.Resolve(ctx, rPK)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	addr, err := c.addressResolver.Dial(ctx, rPK)
+	addr, err := c.addressResolver.Resolve(ctx, rPK)
 	if err != nil {
 		return nil, err
 	}
+
+	//addr, err := c.addressResolver.Dial(ctx, rPK)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	c.log.Infof("Dialed PK %v", rPK)
 
