@@ -22,9 +22,9 @@ var (
 	errProcNotStarted     = errors.New("process is not started")
 )
 
-// Proc is a wrapper for a skywire app. Encapsulates
-// the running process itself and the RPC server for
-// app/visor communication.
+// Proc is an instance of a skywire app. It encapsulates the running process itself and the RPC server for app/visor
+// communication.
+// TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
 	disc appdisc.Updater // app discovery client
 	conf appcommon.ProcConfig
