@@ -7,6 +7,7 @@ import (
 )
 
 // Duration wraps around time.Duration to allow parsing from and to JSON
+// TODO: Put this in a suitable module.
 type Duration time.Duration
 
 // MarshalJSON implements json marshaling

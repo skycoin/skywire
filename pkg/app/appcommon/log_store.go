@@ -1,14 +1,39 @@
-package app
+package appcommon
 
 import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"go.etcd.io/bbolt"
 )
+
+const timeLayout = time.RFC3339Nano
+
+// NewProcLogger returns a new proc logger.
+func NewProcLogger(conf ProcConfig) (*logging.MasterLogger, LogStore) {
+	db, err := NewBBoltLogStore(conf.LogDBLoc, conf.AppName)
+	if err != nil {
+		panic(err)
+	}
+
+	log := logging.NewMasterLogger()
+	log.Logger.Formatter.(*logging.TextFormatter).TimestampFormat = time.RFC3339Nano
+	log.SetOutput(io.MultiWriter(os.Stdout, db))
+
+	return log, db
+}
+
+// TimestampFromLog is an utility function for retrieving the timestamp from a log. This function should be modified
+// if the time layout is changed
+func TimestampFromLog(log string) string {
+	return log[1 : 1+len(timeLayout)]
+}
 
 // LogStore stores logs from apps, for later consumption from the hypervisor
 type LogStore interface {
@@ -24,22 +49,14 @@ type LogStore interface {
 	LogsSince(t time.Time) ([]string, error)
 }
 
-// NewLogStore returns a LogStore with path and app name of the given kind
-func NewLogStore(path, appName, kind string) (LogStore, error) {
-	switch kind {
-	case "bbolt":
-		return newBoltDB(path, appName)
-	default:
-		return nil, fmt.Errorf("no LogStore of type %s", kind)
-	}
-}
-
-type boltDBappLogs struct {
+type bBoltLogStore struct {
 	dbpath string
 	bucket []byte
+	mx     sync.RWMutex
 }
 
-func newBoltDB(path, appName string) (_ LogStore, err error) {
+// NewBBoltLogStore returns a bbolt implementation of an app log store.
+func NewBBoltLogStore(path, appName string) (_ LogStore, err error) {
 	db, err := bbolt.Open(path, 0600, nil)
 	if err != nil {
 		return nil, err
@@ -63,13 +80,19 @@ func newBoltDB(path, appName string) (_ LogStore, err error) {
 		return nil, err
 	}
 
-	return &boltDBappLogs{path, b}, nil
+	return &bBoltLogStore{
+		dbpath: path,
+		bucket: b,
+	}, nil
 }
 
 // Write implements io.Writer
-func (l *boltDBappLogs) Write(p []byte) (n int, err error) {
+func (l *bBoltLogStore) Write(p []byte) (n int, err error) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
 	// ensure there is at least timestamp long bytes
-	if len(p) < 37 {
+	if len(p) < len(timeLayout)+2 {
 		return 0, io.ErrShortBuffer
 	}
 
@@ -85,7 +108,7 @@ func (l *boltDBappLogs) Write(p []byte) (n int, err error) {
 	}()
 
 	// time in RFC3339Nano is between the bytes 1 and 36. This will change if other time layout is in use
-	t := p[1:36]
+	t := p[1 : 1+len(timeLayout)]
 
 	err = db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(l.bucket)
@@ -100,7 +123,10 @@ func (l *boltDBappLogs) Write(p []byte) (n int, err error) {
 }
 
 // Store implements LogStore
-func (l *boltDBappLogs) Store(t time.Time, s string) (err error) {
+func (l *bBoltLogStore) Store(t time.Time, s string) (err error) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
 	db, err := bbolt.Open(l.dbpath, 0600, nil)
 	if err != nil {
 		return err
@@ -111,7 +137,7 @@ func (l *boltDBappLogs) Store(t time.Time, s string) (err error) {
 		err = cErr
 	}()
 
-	parsedTime := []byte(t.Format(time.RFC3339Nano))
+	parsedTime := []byte(t.Format(timeLayout))
 
 	return db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(l.bucket)
@@ -120,7 +146,10 @@ func (l *boltDBappLogs) Store(t time.Time, s string) (err error) {
 }
 
 // LogSince implements LogStore
-func (l *boltDBappLogs) LogsSince(t time.Time) (logs []string, err error) {
+func (l *bBoltLogStore) LogsSince(t time.Time) (logs []string, err error) {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
+
 	db, err := bbolt.Open(l.dbpath, 0600, nil)
 	if err != nil {
 		return nil, err
@@ -135,7 +164,7 @@ func (l *boltDBappLogs) LogsSince(t time.Time) (logs []string, err error) {
 
 	err = db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(l.bucket)
-		parsedTime := []byte(t.Format(time.RFC3339Nano))
+		parsedTime := []byte(t.Format(timeLayout))
 		c := b.Cursor()
 
 		v := b.Get(parsedTime)
