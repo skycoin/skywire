@@ -35,20 +35,20 @@ func (f *Factory) setDefaults() {
 }
 
 // Updater obtains an updater based on the app name and configuration.
-func (f *Factory) Updater(conf appcommon.Config, args []string) (Updater, bool) {
+func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
 		return &emptyUpdater{}, false
 	}
 
-	log := f.Log.WithField("appName", conf.Name)
+	log := f.Log.WithField("appName", conf.AppName)
 
-	switch conf.Name {
+	switch conf.AppName {
 	case "skysocks":
 
 		// Do not update in proxy discovery if passcode-protected.
-		if containsFlag(args, "passcode") {
+		if containsFlag(conf.ProcArgs, "passcode") {
 			return &emptyUpdater{}, false
 		}
 

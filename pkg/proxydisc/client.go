@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -23,11 +24,12 @@ type Config struct {
 
 // HTTPClient is responsible for interacting with the proxy-discovery
 type HTTPClient struct {
-	log    logrus.FieldLogger
-	conf   Config
-	entry  Proxy
-	auth   *httpauth.Client
-	client http.Client
+	log     logrus.FieldLogger
+	conf    Config
+	entry   Proxy
+	entryMx sync.Mutex // only used if UpdateLoop && UpdateStats functions are used.
+	auth    *httpauth.Client
+	client  http.Client
 }
 
 // NewClient creates a new HTTPClient.
@@ -36,7 +38,8 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 		log:  log,
 		conf: conf,
 		entry: Proxy{
-			Addr: NewSWAddr(conf.PK, conf.Port),
+			Addr:  NewSWAddr(conf.PK, conf.Port),
+			Stats: &Stats{ConnectedClients: 0},
 		},
 		client: http.Client{},
 	}
@@ -126,6 +129,7 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Proxy, error) {
 		}
 		return nil, &hErr
 	}
+
 	err = json.NewDecoder(resp.Body).Decode(&c.entry)
 	return &c.entry, err
 }
@@ -170,21 +174,26 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 
 	update := func() {
 		for {
+			c.entryMx.Lock()
 			entry, err := c.UpdateEntry(ctx)
+			c.entryMx.Unlock()
+
 			if err != nil {
 				c.log.WithError(err).Warn("Failed to update proxy entry in discovery. Retrying...")
 				time.Sleep(time.Second * 10) // TODO(evanlinjin): Exponential backoff.
 				continue
 			}
-			if entry.Geo != nil {
-				c.entry.Geo = entry.Geo
-			}
+
+			c.entryMx.Lock()
 			j, err := json.Marshal(entry)
+			c.entryMx.Unlock()
+
 			if err != nil {
 				panic(err)
 			}
+
 			c.log.WithField("entry", string(j)).Debug("Entry updated.")
-			break
+			return
 		}
 	}
 
@@ -201,4 +210,11 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 			update()
 		}
 	}
+}
+
+// UpdateStats updates the stats field of the internal proxy entry state.
+func (c *HTTPClient) UpdateStats(stats Stats) {
+	c.entryMx.Lock()
+	c.entry.Stats = &stats
+	c.entryMx.Unlock()
 }

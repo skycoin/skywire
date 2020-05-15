@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 	"github.com/songgao/water"
 )
 
@@ -21,7 +21,7 @@ const (
 
 // Client is a VPN client.
 type Client struct {
-	log            *logging.MasterLogger
+	log            logrus.FieldLogger
 	conn           net.Conn
 	directIPs      []net.IP
 	defaultGateway net.IP
@@ -30,7 +30,7 @@ type Client struct {
 }
 
 // NewClient creates VPN client instance.
-func NewClient(l *logging.MasterLogger, conn net.Conn) (*Client, error) {
+func NewClient(l logrus.FieldLogger, conn net.Conn) (*Client, error) {
 	dmsgDiscIP, err := dmsgDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)
@@ -92,7 +92,7 @@ func (c *Client) Serve() error {
 		DeviceType: water.TUN,
 	})
 	if err != nil {
-		return fmt.Errorf("error allocating TUN interace: %w", err)
+		return fmt.Errorf("error allocating TUN interface: %w", err)
 	}
 	defer func() {
 		tunName := tun.Name()

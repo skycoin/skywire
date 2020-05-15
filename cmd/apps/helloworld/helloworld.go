@@ -4,11 +4,10 @@ simple client server app for skywire visor testing
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -20,25 +19,19 @@ const (
 	netType = appnet.TypeSkynet
 )
 
+var log = logrus.New()
+
 func main() {
+	appC := app.NewClient()
+	defer appC.Close()
+
 	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 		log.Printf("Failed to output build info: %v", err)
 	}
 
-	clientConfig, err := app.ClientConfigFromEnv()
-	if err != nil {
-		log.Fatalf("Error getting client config: %v\n", err)
-	}
-
-	app, err := app.NewClient(logging.MustGetLogger("helloworld"), clientConfig)
-	if err != nil {
-		log.Fatalf("Error creating app client: %v\n", err)
-	}
-	defer app.Close()
-
 	if len(os.Args) == 1 {
 		port := routing.Port(1024)
-		l, err := app.Listen(netType, port)
+		l, err := appC.Listen(netType, port)
 		if err != nil {
 			log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
 		}
@@ -72,7 +65,7 @@ func main() {
 		log.Fatal("Failed to construct PubKey: ", err, os.Args[1])
 	}
 
-	conn, err := app.Dial(appnet.Addr{
+	conn, err := appC.Dial(appnet.Addr{
 		Net:    netType,
 		PubKey: remotePK,
 		Port:   10,

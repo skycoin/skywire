@@ -2,6 +2,7 @@ package appdisc
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"time"
 
@@ -70,6 +71,13 @@ func (u *proxyUpdater) Stop() {
 }
 
 func (u *proxyUpdater) ChangeValue(name string, v []byte) error {
-	// TODO: Implement a way to change conn count in discovery entry.
+	switch name {
+	case ConnCountValue:
+		n, err := strconv.Atoi(string(v))
+		if err != nil {
+			return err
+		}
+		go u.client.UpdateStats(proxydisc.Stats{ConnectedClients: n})
+	}
 	return nil
 }
