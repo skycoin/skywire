@@ -1,4 +1,4 @@
-package stcp
+package stcph
 
 import (
 	"bytes"

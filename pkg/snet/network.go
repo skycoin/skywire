@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -28,8 +29,9 @@ const (
 
 // Network types.
 const (
-	DmsgType = dmsg.Type
-	STCPType = stcp.Type
+	DmsgType  = dmsg.Type
+	STCPType  = stcp.Type
+	STCPHType = stcph.Type
 )
 
 var (
@@ -78,12 +80,16 @@ type Network struct {
 	networks []string // networks to be used with transports
 	dmsgC    *dmsg.Client
 	stcpC    *stcp.Client
+	stcphC   *stcph.Client
 }
 
 // New creates a network from a config.
 func New(conf Config) (*Network, error) {
-	var dmsgC *dmsg.Client
-	var stcpC *stcp.Client
+	var (
+		dmsgC  *dmsg.Client
+		stcpC  *stcp.Client
+		stcphC *stcph.Client
+	)
 
 	if conf.Dmsg != nil {
 		c := &dmsg.Config{
@@ -95,21 +101,29 @@ func New(conf Config) (*Network, error) {
 	}
 
 	if conf.STCP != nil {
-		//stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.STCP.PubKeyTable))
 		var err error
+
 		stcpC, err = stcp.NewClient(conf.PubKey, conf.SecKey, conf.STCP.AddressResolver, conf.STCP.LocalAddr)
 		if err != nil {
 			return nil, err
 		}
 
 		stcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
+
+		stcphC, err = stcph.NewClient(conf.PubKey, conf.SecKey, conf.STCP.AddressResolver, conf.STCP.LocalAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		stcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
 	}
 
-	return NewRaw(conf, dmsgC, stcpC), nil
+	return NewRaw(conf, dmsgC, stcpC, stcphC), nil
 }
 
 // NewRaw creates a network from a config and a dmsg client.
-func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
+// TODO: change the way args are passed
+func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client, stcphC *stcph.Client) *Network {
 	networks := make([]string, 0)
 
 	if dmsgC != nil {
@@ -120,11 +134,16 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
 		networks = append(networks, STCPType)
 	}
 
+	if stcphC != nil {
+		networks = append(networks, STCPHType)
+	}
+
 	return &Network{
 		conf:     conf,
 		networks: networks,
 		dmsgC:    dmsgC,
 		stcpC:    stcpC,
+		stcphC:   stcphC,
 	}
 }
 
@@ -138,11 +157,19 @@ func (n *Network) Init(_ context.Context) error {
 
 	if n.conf.STCP != nil {
 		if n.stcpC != nil && n.conf.STCP.LocalAddr != "" {
-			if err := n.stcpC.Serve(n.conf.STCP.LocalAddr); err != nil {
+			if err := n.stcpC.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcp': %w", err)
 			}
 		} else {
 			fmt.Println("No config found for stcp")
+		}
+
+		if n.stcphC != nil && n.conf.STCP.LocalAddr != "" {
+			if err := n.stcphC.Serve(); err != nil {
+				return fmt.Errorf("failed to initiate 'stcph': %w", err)
+			}
+		} else {
+			fmt.Println("No config found for stcph")
 		}
 	}
 
@@ -152,7 +179,7 @@ func (n *Network) Init(_ context.Context) error {
 // Close closes underlying connections.
 func (n *Network) Close() error {
 	wg := new(sync.WaitGroup)
-	wg.Add(2)
+	wg.Add(3)
 
 	var dmsgErr error
 	go func() {
@@ -166,13 +193,23 @@ func (n *Network) Close() error {
 		wg.Done()
 	}()
 
+	var stcphErr error
+	go func() {
+		stcphErr = n.stcphC.Close()
+		wg.Done()
+	}()
+
 	wg.Wait()
 
 	if dmsgErr != nil {
 		return dmsgErr
 	}
+
 	if stcpErr != nil {
 		return stcpErr
+	}
+	if stcphErr != nil {
+		return stcphErr
 	}
 	return nil
 }
@@ -191,6 +228,9 @@ func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
 
 // STcp returns the underlying stcp.Client.
 func (n *Network) STcp() *stcp.Client { return n.stcpC }
+
+// STcpH returns the underlying stcph.Client.
+func (n *Network) STcpH() *stcph.Client { return n.stcphC }
 
 // Dialer is an entity that can be dialed and asked for its type.
 type Dialer interface {

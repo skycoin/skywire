@@ -27,6 +27,7 @@ type Client struct {
 	lSK             cipher.SecKey
 	p               *Porter
 	addressResolver arclient.APIClient
+	localAddr       string
 
 	lTCP net.Listener
 	lMap map[uint16]*Listener // key: lPort
@@ -37,7 +38,7 @@ type Client struct {
 }
 
 // NewClient creates a net Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL string) (*Client, error) {
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL, localAddr string) (*Client, error) {
 	addressResolver, err := arclient.NewHTTP(addressResolverURL, pk, sk)
 	if err != nil {
 		return nil, err
@@ -48,6 +49,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL string) (*
 		lPK:             pk,
 		lSK:             sk,
 		addressResolver: addressResolver,
+		localAddr:       localAddr,
 		p:               newPorter(PorterMinEphemeral),
 		lMap:            make(map[uint16]*Listener),
 		done:            make(chan struct{}),
@@ -62,12 +64,12 @@ func (c *Client) SetLogger(log *logging.Logger) {
 }
 
 // Serve serves the listening portion of the client.
-func (c *Client) Serve(tcpAddr string) error {
+func (c *Client) Serve() error {
 	if c.lTCP != nil {
 		return errors.New("already listening")
 	}
 
-	lTCP, err := net.Listen("tcp", tcpAddr)
+	lTCP, err := net.Listen("tcp", c.localAddr)
 	if err != nil {
 		return err
 	}

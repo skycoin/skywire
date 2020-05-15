@@ -1,4 +1,4 @@
-package stcp
+package stcph
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
 )
 
-// Type is stcp type.
-const Type = "stcp"
+// Type is stcp holepunch type.
+const Type = "stcph"
 
 const DialTimeout = 1 * time.Minute
 
@@ -45,7 +45,7 @@ type Client struct {
 
 // NewClient creates a net Client.
 func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL, localAddr string) (*Client, error) {
-	// TODO: choose random free port
+	// TODO: choose random free port instead of localAddr
 	addressResolver, err := arclient.NewHTTP(addressResolverURL, pk, sk, arclient.LocalAddr(localAddr))
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (c *Client) SetLogger(log *logging.Logger) {
 }
 
 // Serve serves the listening portion of the client.
-func (c *Client) Serve(localAddr string) error {
+func (c *Client) Serve() error {
 	if c.connCh != nil {
 		return errors.New("already listening")
 	}
@@ -88,7 +88,7 @@ func (c *Client) Serve(localAddr string) error {
 	c.connCh = connCh
 	c.dialCh = dialCh
 
-	c.log.Infof("listening websocket events on %v", localAddr)
+	c.log.Infof("listening websocket events on %v", c.localAddr)
 
 	go func() {
 		for addr := range c.connCh {
@@ -174,11 +174,6 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	if err != nil {
 		return nil, err
 	}
-
-	//addr, err := c.addressResolver.Dial(ctx, rPK)
-	//if err != nil {
-	//	return nil, err
-	//}
 
 	c.log.Infof("Dialed PK %v", rPK)
 
