@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/SkycoinProject/dmsg/netutil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
@@ -23,14 +23,14 @@ var (
 
 // SkywireNetworker implements `Networker` for skynet.
 type SkywireNetworker struct {
-	log       *logging.Logger
+	log       logrus.FieldLogger
 	r         router.Router
 	porter    *netutil.Porter
 	isServing int32
 }
 
 // NewSkywireNetworker constructs skywire networker.
-func NewSkywireNetworker(l *logging.Logger, r router.Router) Networker {
+func NewSkywireNetworker(l logrus.FieldLogger, r router.Router) Networker {
 	return &SkywireNetworker{
 		log:    l,
 		r:      r,

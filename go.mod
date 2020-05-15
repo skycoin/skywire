@@ -18,7 +18,6 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/sirupsen/logrus v1.5.0
-	github.com/skycoin/dmsg v0.0.0-20190805065636-70f4c32a994f // indirect
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
@@ -26,6 +25,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200427165652-729f1e841bcc // indirect
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
 	golang.org/x/sys v0.0.0-20200428200454-593003d681fa // indirect
+	golang.org/x/text v0.3.2 // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
