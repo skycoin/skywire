@@ -9,9 +9,11 @@
 
 VERSION := $(shell git describe)
 
-PACKAGEVERSION :=$(shell git describe --abbrev=0 | tr --delete v)
-PACKAGEARCH :=$(shell dpkg --print-architecture)
+PACKAGEVERSION := $(shell git describe --abbrev=0 | tr --delete v)
+PACKAGEARCH := $(shell dpkg --print-architecture)
 PACKAGEDIR := $(shell echo "skywire-${PACKAGEVERSION}-${PACKAGEARCH}")
+PACKAGEDIRARM64 := $(shell echo "skywire-${PACKAGEVERSION}-arm64")
+PACKAGEDIRARMHF := $(shell echo "skywire-${PACKAGEVERSION}-armhf")
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
@@ -137,14 +139,14 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 
-package: ## Build the debian package. USE ROOT FOR THIS.
+package-amd64: ## Build the debian package. USE ROOT FOR THIS.
 	mkdir -p ${PACKAGEDIR}/DEBIAN ${PACKAGEDIR}/usr/bin ${PACKAGEDIR}/etc/systemd/system
 	cp -b static/*.service  ${PACKAGEDIR}/etc/systemd/system/
 	echo "Package: skywire" > ${PACKAGEDIR}/DEBIAN/control
 	echo "Version: ${PACKAGEVERSION}" >> ${PACKAGEDIR}/DEBIAN/control
 	echo "Priority: optional" >> ${PACKAGEDIR}/DEBIAN/control
 	echo "Section: web" >> ${PACKAGEDIR}/DEBIAN/control
-	echo "Architecture: $PACKAGEARCH" >> ${PACKAGEDIR}/DEBIAN/control
+	echo "Architecture: amd64" >> ${PACKAGEDIR}/DEBIAN/control
 	echo "Maintainer: SkycoinProject" >> ${PACKAGEDIR}/DEBIAN/control
 	echo "Description: Skywire Mainnet Node implementation" >> ${PACKAGEDIR}/DEBIAN/control
 	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/skywire-visor ./cmd/skywire-visor
@@ -155,6 +157,46 @@ package: ## Build the debian package. USE ROOT FOR THIS.
 	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/apps/skysocks-client  ./cmd/apps/skysocks-client
 	dpkg-deb --build ${PACKAGEDIR}
 	rm -rf ${PACKAGEDIR}
+
+package-arm64: ## Build the debian package. USE ROOT FOR THIS.
+	mkdir -p ${PACKAGEDIRARM64}/DEBIAN ${PACKAGEDIRARM64}/usr/bin ${PACKAGEDIRARM64}/etc/systemd/system
+	cp -b static/*.service  ${PACKAGEDIRARM64}/etc/systemd/system/
+	echo "Package: skywire" > ${PACKAGEDIRARM64}/DEBIAN/control
+	echo "Version: ${PACKAGEVERSION}" >> ${PACKAGEDIRARM64}/DEBIAN/control
+	echo "Priority: optional" >> ${PACKAGEDIRARM64}/DEBIAN/control
+	echo "Section: web" >> ${PACKAGEDIRARM64}/DEBIAN/control
+	echo "Architecture: arm64" >> ${PACKAGEDIRARM64}/DEBIAN/control
+	echo "Maintainer: SkycoinProject" >> ${PACKAGEDIRARM64}/DEBIAN/control
+	echo "Description: Skywire Mainnet Node implementation" >> ${PACKAGEDIRARM64}/DEBIAN/control
+	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/skywire-visor ./cmd/skywire-visor
+	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/skywire-cli  ./cmd/skywire-cli
+	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/hypervisor ./cmd/hypervisor
+	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/apps/skychat ./cmd/apps/skychat
+	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/apps/skysocks ./cmd/apps/skysocks
+	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/apps/skysocks-client  ./cmd/apps/skysocks-client
+	dpkg-deb --build ${PACKAGEDIRARM64}
+	rm -rf ${PACKAGEDIRARM64}
+
+package-armhf: ## Build the debian package. USE ROOT FOR THIS.
+	mkdir -p ${PACKAGEDIRARMHF}/DEBIAN ${PACKAGEDIRARMHF}/usr/bin ${PACKAGEDIRARMHF}/etc/systemd/system
+	cp -b static/*.service  ${PACKAGEDIRARMHF}/etc/systemd/system/
+	echo "Package: skywire" > ${PACKAGEDIRARMHF}/DEBIAN/control
+	echo "Version: ${PACKAGEVERSION}" >> ${PACKAGEDIRARMHF}/DEBIAN/control
+	echo "Priority: optional" >> ${PACKAGEDIRARMHF}/DEBIAN/control
+	echo "Section: web" >> ${PACKAGEDIRARMHF}/DEBIAN/control
+	echo "Architecture: armhf" >> ${PACKAGEDIRARMHF}/DEBIAN/control
+	echo "Maintainer: SkycoinProject" >> ${PACKAGEDIRARMHF}/DEBIAN/control
+	echo "Description: Skywire Mainnet Node implementation" >> ${PACKAGEDIRARMHF}/DEBIAN/control
+	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/skywire-visor ./cmd/skywire-visor
+	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/skywire-cli  ./cmd/skywire-cli
+	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/hypervisor ./cmd/hypervisor
+	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/apps/skychat ./cmd/apps/skychat
+	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/apps/skysocks ./cmd/apps/skysocks
+	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/apps/skysocks-client  ./cmd/apps/skysocks-client
+	dpkg-deb --build ${PACKAGEDIRARMHF}
+	rm -rf ${PACKAGEDIRARMHF}
+
+all-packages: package-amd64 package-arm64 package-armhf
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
