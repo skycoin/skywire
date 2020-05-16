@@ -94,6 +94,14 @@ func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK c
 	return mt
 }
 
+// IsUp returns true if transport status is up.
+func (mt *ManagedTransport) IsUp() bool {
+	mt.isUpMux.Lock()
+	isUp := mt.isUp && mt.isUpErr == nil
+	mt.isUpMux.Unlock()
+	return isUp
+}
+
 // Serve serves and manages the transport.
 func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	defer mt.wg.Done()

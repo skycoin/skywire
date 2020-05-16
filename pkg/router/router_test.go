@@ -142,10 +142,12 @@ func Test_router_Introduce_AcceptRoutes(t *testing.T) {
 	rg, err := r0.AcceptRoutes(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, rg)
+	rg.mu.Lock()
 	require.Equal(t, desc, rg.desc)
 	require.Equal(t, []routing.Rule{fwdRule}, rg.fwd)
 	require.Equal(t, []routing.Rule{cnsmRule}, rg.rvs)
 	require.Len(t, rg.tps, 1)
+	rg.mu.Unlock()
 
 	allRules := rg.rt.AllRules()
 	require.Len(t, allRules, 2)

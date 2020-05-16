@@ -11,6 +11,7 @@ import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { AppsService } from 'src/app/services/apps.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { Application } from 'src/app/app.datatypes';
 
 /**
  * Modal window used for configuring the Skysocks app.
@@ -31,9 +32,9 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, appName: string): MatDialogRef<SkysocksSettingsComponent, any> {
+  public static openDialog(dialog: MatDialog, app: Application): MatDialogRef<SkysocksSettingsComponent, any> {
     const config = new MatDialogConfig();
-    config.data = appName;
+    config.data = app;
     config.autoFocus = false;
     config.width = AppConfig.mediumModalWidth;
 
@@ -41,7 +42,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   }
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) private data: string,
+    @Inject(MAT_DIALOG_DATA) private data: Application,
     private appsService: AppsService,
     private formBuilder: FormBuilder,
     private dialogRef: MatDialogRef<SkysocksSettingsComponent>,
@@ -95,7 +96,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     this.operationSubscription = this.appsService.changeAppSettings(
       // The node pk is obtained from the currently openned node page.
       NodeComponent.getCurrentNodeKey(),
-      this.data,
+      this.data.name,
       { passcode: this.form.get('password').value },
     ).subscribe({
       next: this.onSuccess.bind(this),

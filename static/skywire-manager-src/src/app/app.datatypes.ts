@@ -23,6 +23,7 @@ export interface Application {
   autostart: boolean;
   port: number;
   status: number;
+  args?: any[];
 }
 
 export interface Transport {
@@ -31,6 +32,7 @@ export interface Transport {
   remote_pk: string;
   type: string;
   log?: TransportLog;
+  is_up: boolean;
 }
 
 export interface TransportLog {
