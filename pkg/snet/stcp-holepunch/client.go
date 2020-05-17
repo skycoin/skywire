@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +20,8 @@ import (
 // Type is stcp hole punch type.
 const Type = "stcph"
 
-const DialTimeout = 1 * time.Minute
+// TODO: Find best value.
+const DialTimeout = 5 * time.Second
 
 var ErrTimeout = errors.New("timeout")
 
@@ -46,15 +46,6 @@ type Client struct {
 
 // NewClient creates a net Client.
 func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient, localAddr string) (*Client, error) {
-	//addr, err := getFreeAddr()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//localAddr = addr
-
-	localAddr = strings.Replace(localAddr, "7777", "7778", -1)
-
 	c := &Client{
 		log:             logging.MustGetLogger(Type),
 		lPK:             pk,
@@ -67,19 +58,6 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIC
 	}
 
 	return c, nil
-}
-
-func getFreeAddr() (addr string, err error) {
-	l, err := net.Listen("tcp", "")
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		err = l.Close()
-	}()
-
-	return l.Addr().String(), nil
 }
 
 // SetLogger sets a logger for Client.
@@ -187,7 +165,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.dialCh <- rPK
 
-	addr, err := c.addressResolver.Resolve(ctx, rPK)
+	addr, err := c.addressResolver.ResolveHolePunch(ctx, rPK)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +194,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	return stcpConn, nil
 }
 
-// Listen creates a new listener for stcp.
+// Listen creates a new listener for stcp hole punch.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
 func (c *Client) Listen(lPort uint16) (*Listener, error) {
 	if c.isClosed() {

@@ -103,7 +103,10 @@ func New(conf Config) (*Network, error) {
 	}
 
 	if conf.STCP != nil {
-		localAddr := strings.Replace(conf.STCP.LocalAddr, "7777", "7778", -1)
+		localAddr, err := getFreeAddr()
+		if err != nil {
+			return nil, err
+		}
 
 		addressResolver, err := arclient.NewHTTP(conf.STCP.AddressResolver, conf.PubKey, conf.SecKey, arclient.LocalAddr(localAddr))
 		if err != nil {
@@ -114,7 +117,7 @@ func New(conf Config) (*Network, error) {
 
 		stcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 
-		stcphC, err = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.STCP.LocalAddr)
+		stcphC, err = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver, localAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +270,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 	case STCPHType:
 		conn, err := n.stcphC.Dial(ctx, pk, port)
 		if err != nil {
-			return nil, fmt.Errorf("stcp client: %w", err)
+			return nil, fmt.Errorf("stcph client: %w", err)
 		}
 
 		return makeConn(conn, network), nil
@@ -385,4 +388,17 @@ func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
 	}
 
 	return
+}
+
+func getFreeAddr() (addr string, err error) {
+	l, err := net.Listen("tcp", "")
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		err = l.Close()
+	}()
+
+	return l.Addr().String(), nil
 }

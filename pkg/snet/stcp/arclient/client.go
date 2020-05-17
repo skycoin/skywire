@@ -24,9 +24,10 @@ import (
 var log = logging.MustGetLogger("arclient")
 
 const (
-	bindPath    = "/bind"
-	resolvePath = "/resolve/"
-	wsPath      = "/ws"
+	bindPath             = "/bind"
+	resolvePath          = "/resolve/"
+	resolveHolePunchPath = "/resolve_hole_punch/"
+	wsPath               = "/ws"
 )
 
 var (
@@ -45,6 +46,7 @@ type Error struct {
 type APIClient interface {
 	Bind(ctx context.Context, port string) error
 	Resolve(ctx context.Context, pk cipher.PubKey) (string, error)
+	ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error)
 	WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan string, error)
 }
 
@@ -196,6 +198,40 @@ type ResolveResponse struct {
 
 func (c *httpClient) Resolve(ctx context.Context, pk cipher.PubKey) (string, error) {
 	resp, err := c.Get(ctx, resolvePath+pk.String())
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", ErrNoEntry
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+	}
+
+	rawBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var resolveResp ResolveResponse
+
+	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
+		return "", err
+	}
+
+	return resolveResp.Addr, nil
+}
+
+func (c *httpClient) ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error) {
+	resp, err := c.Get(ctx, resolveHolePunchPath+pk.String())
 	if err != nil {
 		return "", err
 	}
