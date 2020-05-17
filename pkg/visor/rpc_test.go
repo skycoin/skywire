@@ -17,10 +17,10 @@ import (
 func TestHealth(t *testing.T) {
 	c := &Config{
 		KeyPair: NewKeyPair(),
-		Transport: &TransportConfig{
+		Transport: &TransportV1{
 			Discovery: "foo",
 		},
-		Routing: &RoutingConfig{
+		Routing: &RoutingV1{
 			RouteFinder: "foo",
 		},
 	}
@@ -49,7 +49,7 @@ func TestHealth(t *testing.T) {
 	t.Run("Report as unavailable", func(t *testing.T) {
 		conf := &Config{
 			KeyPair: NewKeyPair(),
-			Routing: &RoutingConfig{},
+			Routing: &RoutingV1{},
 		}
 		v := &Visor{
 			conf: conf,
