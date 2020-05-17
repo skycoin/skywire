@@ -3,7 +3,6 @@ package commands
 // NOTE: "net/http/pprof" is used for profiling.
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,6 +15,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
@@ -45,7 +46,7 @@ type runConf struct {
 	profileStop  func()
 	logger       *logging.Logger
 	masterLogger *logging.MasterLogger
-	conf         *visor.Config
+	conf         *visorconfig.V1
 	visor        *visor.Visor
 	restartCtx   *restart.Context
 }
@@ -164,19 +165,23 @@ func (rc *runConf) readConfig() *runConf {
 	} else {
 		rc.logger.Info("Reading config from STDIN...")
 		reader = bufio.NewReader(os.Stdin)
-		confPath = visor.StdinName
+		confPath = visorconfig.StdinName
 	}
 
-	rc.conf = visor.BaseConfig(rc.masterLogger, confPath)
-	dec := json.NewDecoder(reader)
-	dec.DisallowUnknownFields()
+	raw, err := ioutil.ReadAll(reader)
+	if err != nil {
+		rc.logger.WithError(err).
+			WithField("src", confPath).
+			Fatal("Failed to read config.")
+	}
 
-	if err := dec.Decode(rc.conf); err != nil {
-		rc.logger.WithError(err).Fatal("Failed to decode config.")
+	rc.conf, err = visorconfig.Parse(rc.masterLogger, confPath, raw)
+	if err != nil {
+		rc.logger.WithError(err).
+			WithField("src", confPath).
+			Fatal("Failed to parse config.")
 	}
-	if err := rc.conf.Flush(); err != nil {
-		rc.logger.WithError(err).Fatal("Failed to flush config.")
-	}
+
 	return rc
 }
 
