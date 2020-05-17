@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
@@ -63,8 +65,8 @@ func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
 	n := snet.New(snet.Config{
-		PubKey: v.conf.KeyPair.PubKey,
-		SecKey: v.conf.KeyPair.SecKey,
+		PubKey: v.conf.PK(),
+		SecKey: v.conf.SK,
 		Dmsg:   v.conf.Dmsg,
 		STCP:   v.conf.STCP,
 	})
@@ -164,27 +166,27 @@ func initTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
-	tpdC, err := tpdclient.NewHTTP(conf.Discovery, v.conf.KeyPair.PubKey, v.conf.KeyPair.SecKey)
+	tpdC, err := tpdclient.NewHTTP(conf.Discovery, v.conf.PK(), v.conf.SK)
 	if err != nil {
 		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
 	}
 
 	var logS transport.LogStore
 	switch conf.LogStore.Type {
-	case LogStoreFile:
+	case visorconfig.FileLogStore:
 		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
 		if err != nil {
-			return report(fmt.Errorf("failed to create %s log store: %w", LogStoreFile, err))
+			return report(fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err))
 		}
-	case LogStoreMemory:
+	case visorconfig.MemoryLogStore:
 		logS = transport.InMemoryTransportLogStore()
 	default:
 		return report(fmt.Errorf("invalid log store type: %s", conf.LogStore.Type))
 	}
 
 	tpMConf := transport.ManagerConfig{
-		PubKey:          v.conf.KeyPair.PubKey,
-		SecKey:          v.conf.KeyPair.SecKey,
+		PubKey:          v.conf.PK(),
+		SecKey:          v.conf.SK,
 		DefaultVisors:   conf.TrustedVisors,
 		DiscoveryClient: tpdC,
 		LogStore:        logS,
@@ -221,8 +223,8 @@ func initRouter(v *Visor) bool {
 
 	rConf := router.Config{
 		Logger:           v.MasterLogger().PackageLogger("router"),
-		PubKey:           v.conf.KeyPair.PubKey,
-		SecKey:           v.conf.KeyPair.SecKey,
+		PubKey:           v.conf.PK(),
+		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
 		RouteFinder:      rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout)),
 		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
@@ -263,8 +265,8 @@ func initLauncher(v *Visor) bool {
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{Log: v.MasterLogger().PackageLogger("app_disc")}
 	if conf.Discovery != nil {
-		factory.PK = v.conf.KeyPair.PubKey
-		factory.SK = v.conf.KeyPair.SecKey
+		factory.PK = v.conf.PK()
+		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
 		factory.ProxyDisc = conf.Discovery.ProxyDisc
 	}
@@ -282,7 +284,7 @@ func initLauncher(v *Visor) bool {
 
 	// Prepare launcher.
 	launchConf := launcher.Config{
-		VisorPK:    v.conf.KeyPair.PubKey,
+		VisorPK:    v.conf.PK(),
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
@@ -303,7 +305,7 @@ func initLauncher(v *Visor) bool {
 	return report(nil)
 }
 
-func makeVPNEnvs(conf *Config, n *snet.Network) []string {
+func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) []string {
 	var envCfg vpn.DirectRoutesEnvConfig
 
 	if conf.Dmsg != nil {
@@ -363,7 +365,7 @@ func initHypervisors(v *Visor) bool {
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
-		hvErrs[hv.PubKey] = make(chan error, 1)
+		hvErrs[hv] = make(chan error, 1)
 	}
 
 	for hvPK, hvErrs := range hvErrs {
@@ -405,7 +407,7 @@ func initUptimeTracker(v *Visor) bool {
 		return true
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.KeyPair.PubKey, v.conf.KeyPair.SecKey)
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK(), v.conf.SK)
 	if err != nil {
 		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
 		//return report(err)

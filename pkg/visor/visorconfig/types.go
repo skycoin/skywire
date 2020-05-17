@@ -1,4 +1,4 @@
-package visor
+package visorconfig
 
 import (
 	"encoding/json"
@@ -6,8 +6,18 @@ import (
 	"time"
 )
 
+// LogStore types.
+const (
+	FileLogStore   = "file"
+	MemoryLogStore = "memory"
+)
+
+const (
+	// DefaultTimeout is used for default config generation and if it is not set in config.
+	DefaultTimeout = Duration(10 * time.Second)
+)
+
 // Duration wraps around time.Duration to allow parsing from and to JSON
-// TODO: Put this in a suitable module.
 type Duration time.Duration
 
 // MarshalJSON implements json marshaling

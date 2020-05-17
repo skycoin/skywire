@@ -7,11 +7,12 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
 func init() {
@@ -52,14 +53,19 @@ var genConfigCmd = &cobra.Command{
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		var conf *visor.Config
+		var conf *visorconfig.V1
 
 		// TODO(evanlinjin): Decide whether we still need this feature in the future.
 		// https://github.com/SkycoinProject/skywire-mainnet/pull/360#discussion_r425080223
 		switch configLocType {
 		case pathutil.WorkingDirLoc:
-			var err error
-			if conf, err = visor.DefaultConfig(nil, output, visor.NewKeyPair()); err != nil {
+			cc, err := visorconfig.NewCommon(nil, output, visorconfig.V1Name, nil)
+			if err != nil {
+				logger.WithError(err).Fatal("Failed to create default config.")
+			}
+			_, sk := cipher.GenerateKeyPair()
+			conf, err = visorconfig.MakeDefaultConfig(cc, &sk)
+			if err != nil {
 				logger.WithError(err).Fatal("Failed to create default config.")
 			}
 		default:
@@ -74,18 +80,20 @@ var genConfigCmd = &cobra.Command{
 	},
 }
 
-func fillInOldKeys(confPath string, conf *visor.Config) error {
-	oldConfBytes, err := ioutil.ReadFile(path.Clean(confPath))
+func fillInOldKeys(confPath string, conf *visorconfig.V1) error {
+	oldRaw, err := ioutil.ReadFile(path.Clean(confPath))
 	if err != nil {
 		return fmt.Errorf("error reading old config file: %w", err)
 	}
 
-	var oldConf visor.Config
-	if err := json.Unmarshal(oldConfBytes, &oldConf); err != nil {
+	oldCC, err := visorconfig.NewCommon(nil, confPath, "", nil)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(oldRaw, oldCC); err != nil {
 		return fmt.Errorf("invalid old configuration file: %w", err)
 	}
 
-	conf.KeyPair = oldConf.KeyPair
-
+	conf.SK = oldCC.SK
 	return nil
 }
