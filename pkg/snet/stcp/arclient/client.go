@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"runtime/debug"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -85,9 +84,8 @@ func LocalAddr(localAddr string) ClientOption {
 		c.localAddr = localAddr
 
 		transport := &http.Transport{
-			DialContext: func(_ context.Context, network, addr string) (conn net.Conn, err error) {
-				fmt.Printf("[LocalAddr] Dialing %v from %v via %v\nstack: %v\n", addr, localAddr, network, string(debug.Stack()))
-				return reuseport.Dial(network, localAddr, addr)
+			DialContext: func(_ context.Context, network, remoteAddr string) (conn net.Conn, err error) {
+				return reuseport.Dial(network, localAddr, remoteAddr)
 			},
 			DisableKeepAlives: false,
 		}
@@ -99,7 +97,6 @@ func LocalAddr(localAddr string) ClientOption {
 // Get performs a new GET request.
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
 	addr := c.client.Addr() + path
-	fmt.Printf("[get request] addr: %v\n", addr)
 
 	req, err := http.NewRequest(http.MethodGet, addr, new(bytes.Buffer))
 	if err != nil {
@@ -117,7 +114,6 @@ func (c *httpClient) Post(ctx context.Context, path string, payload interface{})
 	}
 
 	addr := c.client.Addr() + path
-	fmt.Printf("[post request] addr: %v\n", addr)
 
 	req, err := http.NewRequest(http.MethodPost, addr, body)
 	if err != nil {
@@ -152,32 +148,13 @@ func (c *httpClient) Websocket(ctx context.Context, path string) (*websocket.Con
 
 	addr.Path = path
 
-	var conn *websocket.Conn
-	for {
-		fmt.Printf("[websocket] dialing %v\n", addr.String())
+	conn, resp, err := websocket.Dial(ctx, addr.String(), dialOpts)
+	if err != nil {
+		return nil, err
+	}
 
-		wsConn, resp, err := websocket.Dial(ctx, addr.String(), dialOpts)
-		if err != nil {
-			return nil, err
-		}
-
-		fmt.Printf("[websocket] dialed, pinging %v\n", addr.String())
-
-		if err := wsConn.Write(context.TODO(), websocket.MessageText, []byte("ping")); err != nil {
-			return nil, fmt.Errorf("ping: %w", err)
-		}
-
-		fmt.Printf("[websocket] pinged %v\n", addr.String())
-
-		repeat, err := c.client.CheckResponse(resp)
-		if err != nil {
-			return nil, err
-		}
-
-		if !repeat {
-			conn = wsConn
-			break
-		}
+	if resp.StatusCode == http.StatusOK {
+		c.client.IncrementNonce()
 	}
 
 	return conn, nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
 )
 
-// Type is stcp holepunch type.
+// Type is stcp hole punch type.
 const Type = "stcph"
 
 const DialTimeout = 1 * time.Minute
@@ -44,12 +45,15 @@ type Client struct {
 }
 
 // NewClient creates a net Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL, localAddr string) (*Client, error) {
-	// TODO: choose random free port instead of localAddr
-	addressResolver, err := arclient.NewHTTP(addressResolverURL, pk, sk, arclient.LocalAddr(localAddr))
-	if err != nil {
-		return nil, err
-	}
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient, localAddr string) (*Client, error) {
+	//addr, err := getFreeAddr()
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//localAddr = addr
+
+	localAddr = strings.Replace(localAddr, "7777", "7778", -1)
 
 	c := &Client{
 		log:             logging.MustGetLogger(Type),
@@ -63,6 +67,19 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL, localAddr
 	}
 
 	return c, nil
+}
+
+func getFreeAddr() (addr string, err error) {
+	l, err := net.Listen("tcp", "")
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		err = l.Close()
+	}()
+
+	return l.Addr().String(), nil
 }
 
 // SetLogger sets a logger for Client.

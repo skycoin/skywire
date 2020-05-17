@@ -12,7 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -108,22 +109,21 @@ var addTpCmd = &cobra.Command{
 
 			logger.Infof("Established %v transport to %v", transportType, pk)
 		} else {
-			transportType = stcp.Type
-
-			tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
-			if err != nil {
-				logger.WithError(err).
-					Warnf("Failed to establish stcp transport. Trying to establish dmsg transport")
-
-				transportType = dmsg.Type
-
-				tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
-				if err != nil {
-					logger.WithError(err).Fatalf("Failed to establish dmsg transport")
-				}
+			transportTypes := []string{
+				stcp.Type,
+				stcph.Type,
+				dmsg.Type,
 			}
 
-			logger.Infof("Established %v transport to %v", transportType, pk)
+			for _, transportType := range transportTypes {
+				tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
+				if err == nil {
+					logger.Infof("Established %v transport to %v", transportType, pk)
+					break
+				}
+
+				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
+			}
 		}
 
 		printTransports(tp)

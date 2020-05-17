@@ -16,6 +16,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
 )
 
 // KeyPair holds a public/private key pair.
@@ -93,17 +94,18 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 		addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
 
+		addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK, arclient.LocalAddr(addr))
+		if err != nil {
+			panic(err)
+		}
+
 		if hasStcp {
-			var err error
-			stcpClient, err = stcp.NewClient(pairs.PK, pairs.SK, skyenv.TestAddressResolverAddr, addr)
-			if err != nil {
-				panic(err)
-			}
+			stcpClient = stcp.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
 		}
 
 		if hasStcph {
 			var err error
-			stcphClient, err = stcph.NewClient(pairs.PK, pairs.SK, skyenv.TestAddressResolverAddr, addr)
+			stcphClient, err = stcph.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
 			if err != nil {
 				panic(err)
 			}

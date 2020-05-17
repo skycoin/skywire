@@ -38,12 +38,7 @@ type Client struct {
 }
 
 // NewClient creates a net Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL, localAddr string) (*Client, error) {
-	addressResolver, err := arclient.NewHTTP(addressResolverURL, pk, sk)
-	if err != nil {
-		return nil, err
-	}
-
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient, localAddr string) *Client {
 	c := &Client{
 		log:             logging.MustGetLogger(Type),
 		lPK:             pk,
@@ -55,7 +50,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolverURL, localAddr
 		done:            make(chan struct{}),
 	}
 
-	return c, nil
+	return c
 }
 
 // SetLogger sets a logger for Client.

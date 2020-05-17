@@ -98,34 +98,9 @@ func (c *Client) Header() (http.Header, error) {
 	return header, nil
 }
 
-func (c *Client) CheckResponse(resp *http.Response) (repeat bool, err error) {
-	if resp == nil {
-		return false, nil
-	}
+func (c *Client) CheckResponse(resp *http.Response) {
 
-	//isNonceValid, err := isNonceValid(resp)
-	//if err != nil {
-	//	return false, err
-	//}
-	//
-	//if !isNonceValid {
-	//	nonce, err := c.Nonce(context.Background(), c.key)
-	//	if err != nil {
-	//		return false, err
-	//	}
-	//	c.SetNonce(nonce)
-	//
-	//	if err := resp.Body.Close(); err != nil {
-	//		log.WithError(err).Warn("Failed to close HTTP response body")
-	//	}
-	//	return true, nil
-	//}
-
-	if resp.StatusCode == http.StatusOK {
-		c.incrementNonce()
-	}
-
-	return false, nil
+	return
 }
 
 // Do performs a new authenticated Request and returns the response. Internally, if the request was
@@ -179,7 +154,7 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		c.incrementNonce()
+		c.IncrementNonce()
 	}
 
 	return resp, nil
@@ -265,7 +240,7 @@ func (c *Client) getCurrentNonce() Nonce {
 	return Nonce(atomic.LoadUint64(&c.nonce))
 }
 
-func (c *Client) incrementNonce() {
+func (c *Client) IncrementNonce() {
 	atomic.AddUint64(&c.nonce, 1)
 }
 

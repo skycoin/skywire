@@ -11,6 +11,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -59,6 +60,7 @@ func (c *DmsgConfig) Type() string {
 type STCPConfig struct {
 	AddressResolver string `json:"address_resolver"`
 	LocalAddr       string `json:"local_address"`
+	HolepunchAddr   string `json:"holepunch_address"`
 }
 
 // Type returns STCPType.
@@ -101,16 +103,18 @@ func New(conf Config) (*Network, error) {
 	}
 
 	if conf.STCP != nil {
-		var err error
+		localAddr := strings.Replace(conf.STCP.LocalAddr, "7777", "7778", -1)
 
-		stcpC, err = stcp.NewClient(conf.PubKey, conf.SecKey, conf.STCP.AddressResolver, conf.STCP.LocalAddr)
+		addressResolver, err := arclient.NewHTTP(conf.STCP.AddressResolver, conf.PubKey, conf.SecKey, arclient.LocalAddr(localAddr))
 		if err != nil {
 			return nil, err
 		}
 
+		stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.STCP.LocalAddr)
+
 		stcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 
-		stcphC, err = stcph.NewClient(conf.PubKey, conf.SecKey, conf.STCP.AddressResolver, conf.STCP.LocalAddr)
+		stcphC, err = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.STCP.LocalAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -260,6 +264,13 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 		}
 
 		return makeConn(conn, network), nil
+	case STCPHType:
+		conn, err := n.stcphC.Dial(ctx, pk, port)
+		if err != nil {
+			return nil, fmt.Errorf("stcp client: %w", err)
+		}
+
+		return makeConn(conn, network), nil
 	default:
 		return nil, ErrUnknownNetwork
 	}
@@ -277,6 +288,13 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		return makeListener(lis, network), nil
 	case STCPType:
 		lis, err := n.stcpC.Listen(port)
+		if err != nil {
+			return nil, err
+		}
+
+		return makeListener(lis, network), nil
+	case STCPHType:
+		lis, err := n.stcphC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
