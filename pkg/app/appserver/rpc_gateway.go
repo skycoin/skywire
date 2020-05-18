@@ -64,6 +64,9 @@ type RPCGateway struct {
 
 // NewRPCGateway constructs new server RPC interface.
 func NewRPCGateway(log *logging.Logger) *RPCGateway {
+	if log == nil {
+		log = logging.MustGetLogger("app_rpc_gateway")
+	}
 	return &RPCGateway{
 		lm:  idmanager.New(),
 		cm:  idmanager.New(),
@@ -247,6 +250,9 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 	if resp.N != 0 {
 		resp.B = make([]byte, resp.N)
 		copy(resp.B, buf[:resp.N])
+	}
+	if err != nil {
+		r.log.WithError(err).Warn("Received unexpected error when reading from server.")
 	}
 
 	resp.Err = ioErrToRPCIOErr(err)

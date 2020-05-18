@@ -221,13 +221,21 @@ func TestConn_TestConn(t *testing.T) {
 
 		appKeys := snettest.GenKeyPairs(2)
 
+		var (
+			procKey1 appcommon.ProcKey
+			procKey2 appcommon.ProcKey
+		)
+		copy(procKey1[:], appKeys[0].PK[:])
+		copy(procKey2[:], appKeys[1].PK[:])
+
 		gateway1 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway1"))
 		gateway2 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway2"))
-		err = rpcS.RegisterName(appKeys[0].PK.Hex(), gateway1)
+
+		err = rpcS.RegisterName(procKey1.String(), gateway1)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		err = rpcS.RegisterName(appKeys[1].PK.Hex(), gateway2)
+		err = rpcS.RegisterName(procKey2.String(), gateway2)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -240,11 +248,13 @@ func TestConn_TestConn(t *testing.T) {
 		}
 
 		cl1 := Client{
-			log:     logging.MustGetLogger("test_client_1"),
-			visorPK: keys[0].PK,
-			rpc:     NewRPCClient(rpcCl1, appcommon.Key(appKeys[0].PK.Hex())),
-			lm:      idmanager.New(),
-			cm:      idmanager.New(),
+			log: logging.MustGetLogger("test_client_1"),
+			conf: appcommon.ProcConfig{
+				VisorPK: keys[0].PK,
+			},
+			rpc: NewRPCClient(rpcCl1, procKey1),
+			lm:  idmanager.New(),
+			cm:  idmanager.New(),
 		}
 
 		rpcCl2, err := rpc.Dial(rpcL.Addr().Network(), rpcL.Addr().String())
@@ -253,11 +263,13 @@ func TestConn_TestConn(t *testing.T) {
 		}
 
 		cl2 := Client{
-			log:     logging.MustGetLogger("test_client_2"),
-			visorPK: keys[1].PK,
-			rpc:     NewRPCClient(rpcCl2, appcommon.Key(appKeys[1].PK.Hex())),
-			lm:      idmanager.New(),
-			cm:      idmanager.New(),
+			log: logging.MustGetLogger("test_client_2"),
+			conf: appcommon.ProcConfig{
+				VisorPK: keys[1].PK,
+			},
+			rpc: NewRPCClient(rpcCl2, procKey2),
+			lm:  idmanager.New(),
+			cm:  idmanager.New(),
 		}
 
 		c1, err := cl1.Dial(a2)

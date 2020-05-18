@@ -55,8 +55,8 @@ func (c *DmsgConfig) Type() string {
 
 // STCPConfig defines config for STCP network.
 type STCPConfig struct {
-	PubKeyTable map[cipher.PubKey]string `json:"pk_table"`
-	LocalAddr   string                   `json:"local_address"`
+	PKTable   map[cipher.PubKey]string `json:"pk_table"`
+	LocalAddr string                   `json:"local_address"`
 }
 
 // Type returns STCPType.
@@ -68,8 +68,8 @@ func (c *STCPConfig) Type() string {
 type Config struct {
 	PubKey cipher.PubKey
 	SecKey cipher.SecKey
-	Dmsg   *DmsgConfig
-	STCP   *STCPConfig
+	Dmsg   *DmsgConfig // The dmsg service will not be started if nil.
+	STCP   *STCPConfig // The stcp service will not be started if nil.
 }
 
 // Network represents a network between nodes in Skywire.
@@ -95,7 +95,7 @@ func New(conf Config) *Network {
 	}
 
 	if conf.STCP != nil {
-		stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.STCP.PubKeyTable))
+		stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.STCP.PKTable))
 		stcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 	}
 
@@ -123,7 +123,7 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client) *Network {
 }
 
 // Init initiates server connections.
-func (n *Network) Init(_ context.Context) error {
+func (n *Network) Init() error {
 	if n.dmsgC != nil {
 		time.Sleep(200 * time.Millisecond)
 		go n.dmsgC.Serve()
