@@ -3,7 +3,6 @@ package visor
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -42,33 +41,40 @@ var genConfigCmd = &cobra.Command{
 		if output, err = filepath.Abs(output); err != nil {
 			logger.WithError(err).Fatal("Invalid output provided.")
 		}
-		// TODO(evanlinjin): This is a temporary measure before it gets implemented.
-		if testEnv {
-			log.Fatal("The flag 'testenv,t' has not yet been implemented.")
-		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
 		mLog.SetLevel(logrus.InfoLevel)
 
+		// Read in old config (if any) and obtain old secret key.
+		// Otherwise, we generate a new random secret key.
 		var sk cipher.SecKey
-
-		// Read in old config.
 		if oldConf, ok := readOldConfig(mLog, output, replace); !ok {
 			_, sk = cipher.GenerateKeyPair()
 		} else {
 			sk = oldConf.SK
 		}
 
-		conf, err := visorconfig.MakeDefaultConfig(mLog, output, &sk)
-		if err != nil {
-			logger.WithError(err).Fatal("Failed to create default config.")
+		// Determine config type to generate.
+		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*visorconfig.V1, error)
+		if testEnv {
+			genConf = visorconfig.MakeTestConfig
+		} else {
+			genConf = visorconfig.MakeDefaultConfig
 		}
 
+		// Generate config.
+		conf, err := genConf(mLog, output, &sk)
+		if err != nil {
+			logger.WithError(err).Fatal("Failed to create config.")
+		}
+
+		// Save config to file.
 		if err := conf.Flush(); err != nil {
 			logger.WithError(err).Fatal("Failed to flush config to file.")
 		}
 
+		// Print results.
 		j, err := json.MarshalIndent(conf, "", "\t")
 		if err != nil {
 			logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
