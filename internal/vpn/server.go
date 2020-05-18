@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 )
 
 // Server is a VPN server.
@@ -15,7 +15,7 @@ type Server struct {
 	cfg                     ServerConfig
 	lisMx                   sync.Mutex
 	lis                     net.Listener
-	log                     *logging.MasterLogger
+	log                     logrus.FieldLogger
 	serveOnce               sync.Once
 	ipGen                   *IPGenerator
 	defaultNetworkInterface string
@@ -24,7 +24,7 @@ type Server struct {
 }
 
 // NewServer creates VPN server instance.
-func NewServer(cfg ServerConfig, l *logging.MasterLogger) (*Server, error) {
+func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 	defaultNetworkIfc, err := DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
