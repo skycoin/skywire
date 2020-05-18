@@ -52,7 +52,7 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 		if err := conf.ensureKeys(); err != nil {
 			return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 		}
-		return conf, conf.flush()
+		return conf, conf.flush(conf)
 
 	default:
 		return nil, ErrUnsupportedConfigVersion
@@ -98,8 +98,12 @@ func MakeBaseConfig(common *Common) *V1 {
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(common *Common, sk *cipher.SecKey) (*V1, error) {
-	conf := MakeBaseConfig(common)
+func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
+	cc, err := NewCommon(log, confPath, V1Name, sk)
+	if err != nil {
+		return nil, err
+	}
+	conf := MakeBaseConfig(cc)
 	if sk != nil {
 		conf.SK = *sk
 	}

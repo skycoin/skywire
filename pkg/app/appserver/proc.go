@@ -175,13 +175,15 @@ func (p *Proc) Start() error {
 
 // Stop stops the application.
 func (p *Proc) Stop() error {
-	if atomic.LoadInt32(&p.isRunning) != 1 {
+	if atomic.LoadInt32(&p.isRunning) == 0 {
 		return errProcNotStarted
 	}
 
-	err := p.cmd.Process.Signal(os.Interrupt) //TODO: panic here.
-	if err != nil {
-		return err
+	if p.cmd.Process != nil {
+		err := p.cmd.Process.Signal(os.Interrupt) //TODO: panic here.
+		if err != nil {
+			return err
+		}
 	}
 
 	// the lock will be acquired as soon as the cmd finishes its work

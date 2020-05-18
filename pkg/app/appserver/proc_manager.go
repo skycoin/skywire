@@ -193,6 +193,9 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	m.procsByKey[conf.ProcKey] = proc
 
 	if err := proc.Start(); err != nil {
+		delete(m.procs, conf.AppName)
+		delete(m.procsByKey, conf.ProcKey)
+
 		return 0, err
 	}
 
