@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"sync"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -26,7 +25,6 @@ var (
 type Common struct {
 	path string
 	log  *logging.MasterLogger
-	mu   sync.RWMutex
 
 	Version string        `json:"version"`
 	SK      cipher.SecKey `json:"sk,omitempty"`
@@ -52,34 +50,9 @@ func NewCommon(log *logging.MasterLogger, confPath string, version string, sk *c
 	return c, nil
 }
 
-// Flush flushes config to file.
-func (c *Common) Flush() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.flush()
-}
-
-func (c *Common) flush() error {
-	switch c.path {
-	case "":
-		return ErrNoConfigPath
-	case StdinName:
-		return nil
-	}
-
-	j, err := json.Marshal(c)
-	if err != nil {
-		panic(err)
-	}
-	c.log.Debugf("Updating visor config to: %s", string(j))
-
-	bytes, err := json.MarshalIndent(c, "", "\t")
-	if err != nil {
-		return err
-	}
-	const filePerm = 0644
-	return ioutil.WriteFile(c.path, bytes, filePerm)
+// MasterLogger returns the underlying master logger.
+func (c *Common) MasterLogger() *logging.MasterLogger {
+	return c.log
 }
 
 // PK returns the visor's public key.
@@ -105,7 +78,24 @@ func (c *Common) ensureKeys() error {
 	return nil
 }
 
-// MasterLogger returns the underlying master logger.
-func (c *Common) MasterLogger() *logging.MasterLogger {
-	return c.log
+func (c *Common) flush(v interface{}) error {
+	switch c.path {
+	case "":
+		return ErrNoConfigPath
+	case StdinName:
+		return nil
+	}
+
+	j, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	c.log.Debugf("Updating visor config to: %s", string(j))
+
+	raw, err := json.MarshalIndent(v, "", "\t")
+	if err != nil {
+		return err
+	}
+	const filePerm = 0644
+	return ioutil.WriteFile(c.path, raw, filePerm)
 }
