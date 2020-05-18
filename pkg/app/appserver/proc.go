@@ -179,7 +179,7 @@ func (p *Proc) Stop() error {
 		return errProcNotStarted
 	}
 
-	err := p.cmd.Process.Signal(os.Interrupt)
+	err := p.cmd.Process.Signal(os.Interrupt) //TODO: panic here.
 	if err != nil {
 		return err
 	}
