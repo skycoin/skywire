@@ -131,7 +131,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	}
 
 	log := v.MasterLogger().PackageLogger("visor:startup")
-	log.WithField("public_key", conf.PK()).Info("Begin startup.")
+	log.WithField("public_key", conf.PK()).
+		Info("Begin startup.")
 	v.startedAt = time.Now()
 
 	for i, startFn := range initStack() {
@@ -169,7 +170,8 @@ func (v *Visor) Close() error {
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
 
-	for i, ce := range v.closeStack {
+	for i := len(v.closeStack) - 1; i >= 0; i-- {
+		ce := v.closeStack[i]
 
 		start := time.Now()
 		done := make(chan bool, 1)
