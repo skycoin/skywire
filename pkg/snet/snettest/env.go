@@ -13,9 +13,9 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
 )
 
 // KeyPair holds a public/private key pair.

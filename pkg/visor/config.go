@@ -3,7 +3,6 @@ package visor
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"sync"
 	"time"
@@ -144,8 +143,8 @@ func DefaultConfig(log *logging.MasterLogger, configPath string, keys *KeyPair) 
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
 	conf.STCP = &snet.STCPConfig{
-		LocalAddr: skyenv.DefaultSTCPAddr,
-		PKTable:   nil,
+		LocalAddr:       skyenv.DefaultSTCPAddr,
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
 	}
 	conf.Transport.LogStore = &LogStoreConfig{
 		Type:     LogStoreFile,
@@ -321,30 +320,6 @@ func NewKeyPair() *KeyPair {
 	}
 }
 
-// RestoreKeyPair generates a key pair using just the secret key.
-func RestoreKeyPair(sk cipher.SecKey) *KeyPair {
-	pk, err := sk.PubKey()
-	if err != nil {
-		panic(fmt.Errorf("failed to restore key pair: %v", err))
-	}
-	return &KeyPair{PubKey: pk, SecKey: sk}
-}
-
-// DefaultSTCPConfig returns default STCP config.
-func DefaultSTCPConfig() (*snet.STCPConfig, error) {
-	lIPaddr, err := getLocalIPAddress()
-	if err != nil {
-		return nil, err
-	}
-
-	c := &snet.STCPConfig{
-		LocalAddr:       lIPaddr,
-		AddressResolver: skyenv.DefaultAddressResolverAddr,
-	}
-
-	return c, nil
-}
-
 // DmsgptyConfig configures the dmsgpty-host.
 type DmsgptyConfig struct {
 	Port     uint16 `json:"port"`
@@ -411,20 +386,4 @@ type HypervisorConfig struct {
 // InterfaceConfig defines listening interfaces for skywire visor.
 type InterfaceConfig struct {
 	RPCAddress string `json:"rpc"` // RPC address and port for command-line interface (leave blank to disable RPC interface).
-}
-
-func getLocalIPAddress() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-
-	for _, a := range addrs {
-		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return net.JoinHostPort(ipnet.IP.String(), strconv.Itoa(DefaultSTCPPort)), nil
-			}
-		}
-	}
-	return "", errors.New("could not find local IP address")
 }

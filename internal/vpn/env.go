@@ -7,8 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 const (
@@ -25,24 +23,19 @@ const (
 	RFAddrEnvKey = "ADDR_RF"
 	// UptimeTrackerAddrEnvKey is env arg holding uptime tracker address.
 	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
-
-	// STCPTableLenEnvKey is env arg holding Stcp table length.
-	STCPTableLenEnvKey = "STCP_TABLE_LEN"
-	// STCPKeyEnvPrefix is prefix for each env arg holding STCP entity key.
-	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
-	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
-	STCPValueEnvPrefix = "STCP_TABLE_"
+	// AddressResolverAddrEnvKey is env arg holding address resolver address.
+	AddressResolverAddrEnvKey = "ADDR_ADDRESS_RESOLVER"
 )
 
 // DirectRoutesEnvConfig contains all the addresses which need to be communicated directly,
 // not through the VPN service.
 type DirectRoutesEnvConfig struct {
-	DmsgDiscovery string
-	DmsgServers   []string
-	TPDiscovery   string
-	RF            string
-	UptimeTracker string
-	STCPTable     map[cipher.PubKey]string
+	DmsgDiscovery   string
+	DmsgServers     []string
+	TPDiscovery     string
+	RF              string
+	UptimeTracker   string
+	AddressResolver string
 }
 
 // AppEnvArgs forms env args to pass to the app process.
@@ -65,14 +58,8 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker
 	}
 
-	if len(config.STCPTable) != 0 {
-		envs[STCPTableLenEnvKey] = strconv.FormatInt(int64(len(config.STCPTable)), 10)
-
-		itemIdx := 0
-		for k, v := range config.STCPTable {
-			envs[STCPKeyEnvPrefix+strconv.FormatInt(int64(itemIdx), 10)] = k.String()
-			envs[STCPValueEnvPrefix+k.String()] = v
-		}
+	if config.AddressResolver != "" {
+		envs[AddressResolverAddrEnvKey] = config.AddressResolver
 	}
 
 	if len(config.DmsgServers) != 0 {

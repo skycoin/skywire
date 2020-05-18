@@ -13,7 +13,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
 
 // Type is stcp type.

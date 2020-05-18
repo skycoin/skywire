@@ -14,7 +14,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/libp2p/go-reuseport"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
 
 // Type is stcp hole punch type.

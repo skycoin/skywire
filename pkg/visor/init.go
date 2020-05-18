@@ -62,15 +62,22 @@ func initUpdater(v *Visor) bool {
 func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
-	n := snet.New(snet.Config{
+	conf := snet.Config{
 		PubKey: v.conf.KeyPair.PubKey,
 		SecKey: v.conf.KeyPair.SecKey,
 		Dmsg:   v.conf.Dmsg,
 		STCP:   v.conf.STCP,
-	})
+	}
+
+	n, err := snet.New(conf)
+	if err != nil {
+		return report(err)
+	}
+
 	if err := n.Init(); err != nil {
 		return report(err)
 	}
+
 	v.pushCloseStack("snet", func() bool {
 		return report(n.Close())
 	})
@@ -319,8 +326,8 @@ func makeVPNEnvs(conf *Config, n *snet.Network) []string {
 	if conf.UptimeTracker != nil {
 		envCfg.UptimeTracker = conf.UptimeTracker.Addr
 	}
-	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
-		envCfg.STCPTable = conf.STCP.PKTable
+	if conf.STCP != nil {
+		envCfg.AddressResolver = conf.STCP.AddressResolver
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)

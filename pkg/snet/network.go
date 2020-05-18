@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp/arclient"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
