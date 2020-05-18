@@ -161,3 +161,18 @@ func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	}
 	return conf, nil
 }
+
+// MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
+func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk)
+	if err != nil {
+		return nil, err
+	}
+	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
+	conf.Transport.Discovery = skyenv.TestTpDiscAddr
+	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
+	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
+	conf.Launcher.Discovery.ProxyDisc = skyenv.TestProxyDiscAddr
+	return conf, nil
+}
