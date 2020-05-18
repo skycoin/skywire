@@ -18,11 +18,12 @@ const (
 
 // Constants for testing deployment.
 const (
-	TestTpDiscAddr      = "http://transport.discovery.skywire.cc"
-	TestDmsgDiscAddr    = "http://dmsg.discovery.skywire.cc"
-	TestProxyDiscAddr   = "http://proxy.discovery.skywire.cc"
-	TestRouteFinderAddr = "http://routefinder.skywire.cc"
-	TestSetupPK         = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
+	TestTpDiscAddr        = "http://transport.discovery.skywire.cc"
+	TestDmsgDiscAddr      = "http://dmsg.discovery.skywire.cc"
+	TestProxyDiscAddr     = "http://proxy.discovery.skywire.cc"
+	TestRouteFinderAddr   = "http://routefinder.skywire.cc"
+	TestUptimeTrackerAddr = "http://uptime-tracker.skywire.cc"
+	TestSetupPK           = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
 )
 
 // Dmsg port constants.
