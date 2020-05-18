@@ -60,7 +60,6 @@ func (c *DmsgConfig) Type() string {
 type STCPConfig struct {
 	AddressResolver string `json:"address_resolver"`
 	LocalAddr       string `json:"local_address"`
-	HolepunchAddr   string `json:"holepunch_address"`
 }
 
 // Type returns STCPType.
