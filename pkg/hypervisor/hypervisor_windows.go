@@ -1,3 +1,5 @@
+//+build windows
+
 package hypervisor
 
 import (
@@ -11,7 +13,7 @@ import (
 type dmsgPtyUI struct {
 }
 
-func (vc *VisorConn) setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
+func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 	// this method doesn't depend on config values and will be invoked anyway,
 	// so this dummy is needed
 	return nil

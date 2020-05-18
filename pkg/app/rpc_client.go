@@ -30,11 +30,11 @@ type RPCClient interface {
 // rpcClient implements `RPCClient`.
 type rpcClient struct {
 	rpc    *rpc.Client
-	appKey appcommon.Key
+	appKey appcommon.ProcKey
 }
 
 // NewRPCClient constructs new `rpcClient`.
-func NewRPCClient(rpc *rpc.Client, appKey appcommon.Key) RPCClient {
+func NewRPCClient(rpc *rpc.Client, appKey appcommon.ProcKey) RPCClient {
 	return &rpcClient{
 		rpc:    rpc,
 		appKey: appKey,
@@ -148,5 +148,5 @@ func (c *rpcClient) SetWriteDeadline(id uint16, t time.Time) error {
 // formatMethod formats complete RPC method signature.
 func (c *rpcClient) formatMethod(method string) string {
 	const methodFmt = "%s.%s"
-	return fmt.Sprintf(methodFmt, c.appKey, method)
+	return fmt.Sprintf(methodFmt, c.appKey.String(), method)
 }

@@ -22,7 +22,8 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -384,7 +385,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.AutoStart != nil {
 			if *reqBody.AutoStart != ctx.App.AutoStart {
-				if err := ctx.RPC.SetAutoStart(ctx.App.App, *reqBody.AutoStart); err != nil {
+				if err := ctx.RPC.SetAutoStart(ctx.App.Name, *reqBody.AutoStart); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
@@ -392,14 +393,14 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		}
 
 		if reqBody.Passcode != nil {
-			if err := ctx.RPC.SetAppPassword(ctx.App.App, *reqBody.Passcode); err != nil {
+			if err := ctx.RPC.SetAppPassword(ctx.App.Name, *reqBody.Passcode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
 
 		if reqBody.PK != nil {
-			if err := ctx.RPC.SetAppPK(ctx.App.App, *reqBody.PK); err != nil {
+			if err := ctx.RPC.SetAppPK(ctx.App.Name, *reqBody.PK); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -408,12 +409,12 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		if reqBody.Status != nil {
 			switch *reqBody.Status {
 			case statusStop:
-				if err := ctx.RPC.StopApp(ctx.App.App); err != nil {
+				if err := ctx.RPC.StopApp(ctx.App.Name); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
 			case statusStart:
-				if err := ctx.RPC.StartApp(ctx.App.App); err != nil {
+				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
@@ -445,7 +446,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 			t = time.Unix(0, 0)
 		}
 
-		logs, err := ctx.RPC.LogsSince(t, ctx.App.App)
+		logs, err := ctx.RPC.LogsSince(t, ctx.App.Name)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -457,7 +458,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: app.TimestampFromLog(logs[len(logs)-1]),
+			LastLogTimestamp: appcommon.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
 	})
@@ -807,7 +808,7 @@ type httpCtx struct {
 	VisorConn
 
 	// App
-	App *visor.AppState
+	App *launcher.AppState
 
 	// Transport
 	Tp *visor.TransportSummary
@@ -863,7 +864,7 @@ func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 	}
 
 	for _, a := range apps {
-		if a.App == appName {
+		if a.Name == appName {
 			ctx.App = a
 			return ctx, true
 		}

@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -14,90 +13,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
-
-func TestClientConfigFromEnv(t *testing.T) {
-	resetEnv := func(t *testing.T) {
-		err := os.Setenv(appcommon.EnvAppKey, "")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, "")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvVisorPK, "")
-		require.NoError(t, err)
-	}
-
-	t.Run("ok", func(t *testing.T) {
-		resetEnv(t)
-
-		visorPK, _ := cipher.GenerateKeyPair()
-
-		wantCfg := ClientConfig{
-			VisorPK:    visorPK,
-			ServerAddr: appcommon.DefaultServerAddr,
-			AppKey:     "key",
-		}
-
-		err := os.Setenv(appcommon.EnvAppKey, string(wantCfg.AppKey))
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, wantCfg.ServerAddr)
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvVisorPK, wantCfg.VisorPK.Hex())
-		require.NoError(t, err)
-
-		gotCfg, err := ClientConfigFromEnv()
-		require.NoError(t, err)
-		require.Equal(t, wantCfg, gotCfg)
-	})
-
-	t.Run("no app key", func(t *testing.T) {
-		resetEnv(t)
-
-		_, err := ClientConfigFromEnv()
-		require.Equal(t, err, ErrAppKeyNotProvided)
-	})
-
-	t.Run("no app server address", func(t *testing.T) {
-		resetEnv(t)
-
-		err := os.Setenv(appcommon.EnvAppKey, "val")
-		require.NoError(t, err)
-
-		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrServerAddrNotProvided)
-	})
-
-	t.Run("no visor PK", func(t *testing.T) {
-		resetEnv(t)
-
-		err := os.Setenv(appcommon.EnvAppKey, "val")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
-		require.NoError(t, err)
-
-		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrVisorPKNotProvided)
-	})
-
-	t.Run("invalid visor PK", func(t *testing.T) {
-		resetEnv(t)
-
-		err := os.Setenv(appcommon.EnvAppKey, "val")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvVisorPK, "val")
-		require.NoError(t, err)
-
-		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrVisorPKInvalid)
-	})
-}
 
 func TestClient_Dial(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
@@ -370,11 +285,23 @@ func TestClient_Close(t *testing.T) {
 }
 
 func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc RPCClient) *Client {
+	var procKey appcommon.ProcKey
+	copy(procKey[:], visorPK[:])
 	return &Client{
-		log:     l,
-		visorPK: visorPK,
-		rpc:     rpc,
-		lm:      idmanager.New(),
-		cm:      idmanager.New(),
+		log: l,
+		conf: appcommon.ProcConfig{
+			AppName:     "",
+			AppSrvAddr:  "",
+			ProcKey:     procKey,
+			ProcArgs:    nil,
+			ProcWorkDir: "",
+			VisorPK:     visorPK,
+			RoutingPort: 0,
+			BinaryLoc:   "",
+			LogDBLoc:    "",
+		},
+		rpc: rpc,
+		lm:  idmanager.New(),
+		cm:  idmanager.New(),
 	}
 }

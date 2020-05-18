@@ -2,13 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
@@ -18,13 +17,12 @@ import (
 )
 
 const (
-	appName = skyenv.VPNServerName
 	netType = appnet.TypeSkynet
 	vpnPort = routing.Port(skyenv.VPNServerPort)
 )
 
 var (
-	log = app.NewLogger(appName)
+	log = logrus.New()
 )
 
 var (
@@ -50,20 +48,8 @@ func main() {
 		}
 	}
 
-	appCfg, err := app.ClientConfigFromEnv()
-	if err != nil {
-		log.WithError(err).Errorln("Error getting app client config")
-		return
-	}
-
-	appClient, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
-	if err != nil {
-		log.WithError(err).Errorln("Error setting up VPN client")
-		return
-	}
-	defer func() {
-		appClient.Close()
-	}()
+	appClient := app.NewClient()
+	defer appClient.Close()
 
 	osSigs := make(chan os.Signal, 2)
 
