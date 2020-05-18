@@ -4,41 +4,39 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 )
 
-func TestProcManager_Exists(t *testing.T) {
-	srv := New(nil, appcommon.DefaultServerAddr)
+func TestProcManager_ProcByName(t *testing.T) {
+	mI, err := NewProcManager(nil, nil, ":0")
+	require.NoError(t, err)
 
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
-	m, ok := mIfc.(*procManager)
+	m, ok := mI.(*procManager)
 	require.True(t, ok)
 
 	appName := "app"
 
-	ok = m.Exists(appName)
+	_, ok = m.ProcByName(appName)
 	require.False(t, ok)
 
+	m.mx.Lock()
 	m.procs[appName] = nil
+	m.mx.Unlock()
 
-	ok = m.Exists(appName)
+	_, ok = m.ProcByName(appName)
 	require.True(t, ok)
 }
 
 func TestProcManager_Range(t *testing.T) {
-	srv := New(nil, appcommon.DefaultServerAddr)
+	mI, err := NewProcManager(nil, nil, ":0")
+	require.NoError(t, err)
 
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
-	m, ok := mIfc.(*procManager)
-
+	m, ok := mI.(*procManager)
 	require.True(t, ok)
 
-	wantAppNames := []string{"app1", "app2", "app3"}
+	appNames := []string{"app1", "app2", "app3"}
 
-	for _, n := range wantAppNames {
+	for _, n := range appNames {
 		m.procs[n] = nil
 	}
 
@@ -55,14 +53,14 @@ func TestProcManager_Range(t *testing.T) {
 	m.Range(next)
 
 	sort.Strings(gotAppNames)
-	require.Equal(t, gotAppNames, wantAppNames)
+	require.Equal(t, gotAppNames, appNames)
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	srv := New(nil, appcommon.DefaultServerAddr)
+	mI, err := NewProcManager(nil, nil, ":0")
+	require.NoError(t, err)
 
-	mIfc := NewProcManager(logging.MustGetLogger("proc_manager"), srv)
-	m, ok := mIfc.(*procManager)
+	m, ok := mI.(*procManager)
 	require.True(t, ok)
 
 	appName := "app"

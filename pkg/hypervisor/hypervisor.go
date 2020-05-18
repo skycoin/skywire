@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"net/rpc"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,7 +22,8 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
@@ -89,9 +89,10 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 		}
 		addr := conn.RawRemoteAddr()
 		ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: addr.PK, Port: skyenv.DmsgPtyPort})
+		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
 		visorConn := VisorConn{
 			Addr:  addr,
-			RPC:   visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
+			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
 			PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 		}
 		log.WithField("remote_addr", addr).Info("Accepted.")
@@ -469,7 +470,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: app.TimestampFromLog(logs[len(logs)-1]),
+			LastLogTimestamp: appcommon.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
 	})
@@ -819,7 +820,7 @@ type httpCtx struct {
 	VisorConn
 
 	// App
-	App *visor.AppState
+	App *launcher.AppState
 
 	// Transport
 	Tp *visor.TransportSummary

@@ -11,11 +11,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
@@ -25,7 +26,6 @@ import (
 )
 
 const (
-	appName = "skychat"
 	netType = appnet.TypeSkynet
 	port    = routing.Port(1)
 )
@@ -34,40 +34,28 @@ var addr = flag.String("addr", ":8001", "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
-	chatApp   *app.Client
-	clientCh  chan string
-	chatConns map[cipher.PubKey]net.Conn
-	connsMu   sync.Mutex
-	log       *logging.MasterLogger
+	log      = logrus.New()
+	appC     *app.Client
+	clientCh chan string
+	conns    map[cipher.PubKey]net.Conn // Chat connections
+	connsMu  sync.Mutex
 )
 
 func main() {
-	log = app.NewLogger(appName)
-	flag.Parse()
+	appC = app.NewClient()
+	defer appC.Close()
 
-	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 		log.Printf("Failed to output build info: %v", err)
 	}
 
-	clientConfig, err := app.ClientConfigFromEnv()
-	if err != nil {
-		log.Fatalf("Error getting client config: %v\n", err)
-	}
-
-	// TODO: pass `log`?
-	a, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), clientConfig)
-	if err != nil {
-		log.Fatal("Setup failure: ", err)
-	}
-	defer a.Close()
-	log.Println("Successfully created skychat app")
-
-	chatApp = a
+	flag.Parse()
+	log.Println("Successfully started skychat.")
 
 	clientCh = make(chan string)
 	defer close(clientCh)
 
-	chatConns = make(map[cipher.PubKey]net.Conn)
+	conns = make(map[cipher.PubKey]net.Conn)
 	go listenLoop()
 
 	http.Handle("/", http.FileServer(FS(false)))
@@ -79,7 +67,7 @@ func main() {
 }
 
 func listenLoop() {
-	l, err := chatApp.Listen(netType, port)
+	l, err := appC.Listen(netType, port)
 	if err != nil {
 		log.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
 		return
@@ -96,7 +84,7 @@ func listenLoop() {
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
-		chatConns[raddr.PubKey] = conn
+		conns[raddr.PubKey] = conn
 		connsMu.Unlock()
 		log.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
@@ -113,7 +101,7 @@ func handleConn(conn net.Conn) {
 			log.Println("Failed to read packet:", err)
 			raddr := conn.RemoteAddr().(appnet.Addr)
 			connsMu.Lock()
-			delete(chatConns, raddr.PubKey)
+			delete(conns, raddr.PubKey)
 			connsMu.Unlock()
 			return
 		}
@@ -150,13 +138,13 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 		Port:   1,
 	}
 	connsMu.Lock()
-	conn, ok := chatConns[pk]
+	conn, ok := conns[pk]
 	connsMu.Unlock()
 
 	if !ok {
 		var err error
 		err = r.Do(func() error {
-			conn, err = chatApp.Dial(addr)
+			conn, err = appC.Dial(addr)
 			return err
 		})
 		if err != nil {
@@ -165,7 +153,7 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		connsMu.Lock()
-		chatConns[pk] = conn
+		conns[pk] = conn
 		connsMu.Unlock()
 
 		go handleConn(conn)
@@ -174,9 +162,11 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 	_, err := conn.Write([]byte(data["message"]))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+
 		connsMu.Lock()
-		delete(chatConns, pk)
+		delete(conns, pk)
 		connsMu.Unlock()
+
 		return
 	}
 

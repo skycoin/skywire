@@ -56,5 +56,5 @@ $ ./skywire-visor skywire2.json
 You should be able to connect to a secondary visor via `curl`:
 
 ```sh
-$ curl -v -x socks5://123456:@localhost:9443 https://api.ipify.org
+$ curl -v -x socks5://123456:@localhost:1080 https://api.ipify.org
 ```

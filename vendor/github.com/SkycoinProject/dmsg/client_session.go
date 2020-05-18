@@ -1,7 +1,6 @@
 package dmsg
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -27,59 +26,40 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 
 // DialStream attempts to dial a stream to a remote client via the dmsg server that this session is connected to.
 func (cs *ClientSession) DialStream(dst Addr) (dStr *Stream, err error) {
-	fmt.Println("[DEBUG] DialStream is called")
+	log := cs.log.
+		WithField("func", "ClientSession.DialStream").
+		WithField("dst_addr", dst)
+
 	if dStr, err = newInitiatingStream(cs); err != nil {
 		return nil, err
 	}
 
-	//// Close stream on failure.
-	//defer func() {
-	//	if err != nil {
-	//		cs.log.WithError(err).WithField("dst", dst).
-	//			Debug("Stream closed on DialStream() failure.")
-	//		if err := dStr.Close(); err != nil {
-	//			cs.log.WithError(err).WithField("dst", dst).Debugf("Failed to close stream")
-	//		}
-	//	}
-	//}()
+	// Close stream on failure.
+	defer func() {
+		if err != nil {
+			log.WithError(err).
+				WithField("close_error", dStr.Close()).
+				Debug("Stream closed on failure.")
+		}
+	}()
 
 	// Prepare deadline.
 	if err = dStr.SetDeadline(time.Now().Add(HandshakeTimeout)); err != nil {
-		cs.log.WithError(err).WithField("dst", dst).WithField("func", "SetDeadline").
-			Debug("[1] Stream closed on DialStream() failure")
-		if err := dStr.Close(); err != nil {
-			cs.log.WithError(err).WithField("dst", dst).Debugf("Failed to close stream")
-		}
 		return nil, err
 	}
 
 	// Do stream handshake.
 	req, err := dStr.writeRequest(dst)
 	if err != nil {
-		cs.log.WithError(err).WithField("dst", dst).WithField("func", "writeRequest").
-			Debug("[2] Stream closed on DialStream() failure")
-		if err := dStr.Close(); err != nil {
-			cs.log.WithError(err).WithField("dst", dst).Debugf("Failed to close stream")
-		}
 		return nil, err
 	}
 
 	if err := dStr.readResponse(req); err != nil {
-		cs.log.WithError(err).WithField("dst", dst).WithField("func", "readResponse").
-			Debug("[3] Stream closed on DialStream() failure")
-		if err := dStr.Close(); err != nil {
-			cs.log.WithError(err).WithField("dst", dst).Debugf("Failed to close stream")
-		}
 		return nil, err
 	}
 
 	// Clear deadline.
 	if err = dStr.SetDeadline(time.Time{}); err != nil {
-		cs.log.WithError(err).WithField("dst", dst).WithField("func", "SetDeadline").
-			Debug("[4] Stream closed on DialStream() failure")
-		if err := dStr.Close(); err != nil {
-			cs.log.WithError(err).WithField("dst", dst).Debugf("Failed to close stream")
-		}
 		return nil, err
 	}
 
@@ -99,7 +79,7 @@ func (cs *ClientSession) serve() error {
 			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
 				cs.log.
 					WithError(err).
-					Info("ClientSession.acceptStream() temporary error, continuing...")
+					Info("Failed to accept stream.")
 				continue
 			}
 			cs.log.WithError(err).Warn("Stopped accepting streams.")

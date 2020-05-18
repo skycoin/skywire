@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.1.0 => ../dmsg
+# github.com/SkycoinProject/dmsg v0.1.1-0.20200420091742-8c1a3d828a49
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/disc
@@ -69,10 +69,8 @@ github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
 # github.com/klauspost/pgzip v1.2.1
 github.com/klauspost/pgzip
-# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+# github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/libp2p/go-reuseport v0.0.1
-github.com/libp2p/go-reuseport
 # github.com/mattn/go-colorable v0.1.6
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
@@ -90,8 +88,6 @@ github.com/nwaples/rardecode
 # github.com/pierrec/lz4 v2.0.5+incompatible
 github.com/pierrec/lz4
 github.com/pierrec/lz4/internal/xxh32
-# github.com/pkg/errors v0.8.1
-github.com/pkg/errors
 # github.com/pkg/profile v1.3.0
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
@@ -116,16 +112,18 @@ github.com/prometheus/procfs/internal/util
 github.com/rakyll/statik/fs
 # github.com/schollz/progressbar/v2 v2.15.0
 github.com/schollz/progressbar/v2
-# github.com/sirupsen/logrus v1.4.2
+# github.com/sirupsen/logrus v1.5.0
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
+# github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+github.com/songgao/water
 # github.com/spf13/cobra v0.0.5
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
 # github.com/stretchr/objx v0.1.1
 github.com/stretchr/objx
-# github.com/stretchr/testify v1.5.1
+# github.com/stretchr/testify v1.4.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
@@ -138,7 +136,7 @@ github.com/ulikunitz/xz/lzma
 github.com/xi2/xz
 # go.etcd.io/bbolt v1.3.4
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
+# golang.org/x/crypto v0.0.0-20200427165652-729f1e841bcc
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
@@ -147,12 +145,12 @@ golang.org/x/crypto/curve25519
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+# golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
 golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd
+# golang.org/x/sys v0.0.0-20200428200454-593003d681fa
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows

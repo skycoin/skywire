@@ -71,8 +71,8 @@ func (c *STCPConfig) Type() string {
 type Config struct {
 	PubKey cipher.PubKey
 	SecKey cipher.SecKey
-	Dmsg   *DmsgConfig
-	STCP   *STCPConfig
+	Dmsg   *DmsgConfig // The dmsg service will not be started if nil.
+	STCP   *STCPConfig // The stcp service will not be started if nil.
 }
 
 // Network represents a network between nodes in Skywire.
@@ -154,7 +154,7 @@ func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client, stcphC *stcph.C
 }
 
 // Init initiates server connections.
-func (n *Network) Init(_ context.Context) error {
+func (n *Network) Init() error {
 	if n.dmsgC != nil {
 		time.Sleep(200 * time.Millisecond)
 		go n.dmsgC.Serve()
@@ -214,9 +214,11 @@ func (n *Network) Close() error {
 	if stcpErr != nil {
 		return stcpErr
 	}
+
 	if stcphErr != nil {
 		return stcphErr
 	}
+
 	return nil
 }
 

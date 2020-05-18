@@ -14,6 +14,7 @@
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `hypervisor`](#run-hypervisor)
   - [Apps](#Apps)
+    - [App Programming API](#app-programming-api)
   - [Transports](#Transports)
   - [Creating a GitHub release](#creating-a-github-release)
     - [How to create a GitHub release](#how-to-create-a-github-release)
@@ -87,8 +88,7 @@ the address and PubKey of the hypervisor needs to be configured first on the vis
 ```json
 {
   "hypervisors": [{
-    "public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775",
-    "address":"127.0.0.1:7080"
+    "public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775"
   }]
 }
 ```
@@ -139,6 +139,61 @@ Refer to the following for usage of the apps:
 
 - [Skychat](/cmd/apps/skychat)
 - [Skysocks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
+
+### App Programming API
+
+Skywire supports building custom apps. In order for visor to run a custom app, app binary should be put into the correct directory. This directory is specified in the visor config as `apps_path`. Each app has a list of parameters:
+- `app` (required) - contains application name. This should be equal to the binary name stored in the `apps_path` directory to be correctly resolved by the visor;
+- `auto_start` (defaults to false) - boolean value, indicates if app should be run on the visor start;
+- `port` (required) - port app binds to. Port shouldn't clash with one of the reserved ports of standard Skywire apps (list of such ports is defined below);
+- `args` - array of additional arguments to be passed to the app binary. May be totally omitted.
+
+Example part of visor config:
+```json5
+{
+  "apps_path": "./apps",
+  "apps": [
+    {
+      "app": "custom_app",
+      "auto_start": true,
+      "port": 15,
+      "args": ["-c", "./custom_app_config.json"]
+    }
+  ],
+}
+```
+
+This way, binary will be run by the visor like this:
+```bash
+$ ./apps/custom_app -c ./custom_app_config.json
+```
+
+#### Reserved App Ports
+
+- `0` - Router
+- `1` - Skychat
+- `3` - Skysocks
+
+List may be updated.
+
+#### App initialization
+
+Besides list of additional arguments, visor passes 3 environmental variables to each running app. It goes as follows:
+- `APP_KEY` - used to authenticate app RPC calls (explained in details below);
+- `APP_SERVER_ADDR` - address of RPC server for app to communicate with the visor;
+- `VISOR_PK` - pub key of the visor running the app.
+
+These values may be obtained and examined from the environment by any suitable means. For developers working with Go, there is a function `app.ClientConfigFromEnv` which does all the job (may be found [here](./pkg/app/client.go)).
+
+#### App-Visor communication
+
+Visor has RPC gateway to communicate with the apps. Address and the authentication key are passed in the environmental variables as described above. App key is used a prefix to all RPC calls, so the server may distinguish apps and authenticate calls. So, if app needs to call `Dial` method for example, it should call `APP_KEY.Dial`, where `APP_KEY` is the actual key taken from the corresponding environmental variable.
+
+Basically, apps on different visors communicate with each other through Skywire network. App performs an RPC call to its visor, visor communicates with the remote visor, then the remote visor passes data to its app. That's why visor's RPC gateway for the apps mostly contains methods for networking.
+
+#### Visor RPC API
+
+Full info on each call input and output may be found in the [corresponding file](./pkg/app/appserver/rpc_gateway.go). Here will be just a list of minor details. If you're coming from the language different than Go, you'll have to communicate with the RPC gateway directly. 2 important concepts are listener ID and connection ID. Server gives these in response for some of the app's calls. Each time connection is being created (as a result of `Dial` and `Accept` calls for example) server will return connection ID to the app. In order to communicate over this connection, its ID must be passed with the needed RPC call input. This is also true for the listener ID. Each time listener is created (result of `Listen` call), listener ID is being returned to the client. This ID may be used to `Accept` connections for example. For developers working with go, there is a client available which may be constructed by `app.NewClient` call. For details you may consult any of Skywire standard apps and [client code](./pkg/app/client.go). Each connection obtained from this client should be treated as a connection between the current app instance and the remote app.
 
 ### Transports
 

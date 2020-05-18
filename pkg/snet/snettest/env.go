@@ -1,7 +1,6 @@
 package snettest
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -126,7 +125,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			stcpClient,
 			stcphClient,
 		)
-		require.NoError(t, n.Init(context.TODO()))
+		require.NoError(t, n.Init())
 		ns[i] = n
 	}
 
