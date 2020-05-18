@@ -6,14 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
 var (
@@ -27,152 +22,103 @@ var (
 // Parse parses the visor config from a given reader.
 // If the config file is not the most recent version, it is upgraded and written back to 'path'.
 func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
-	common, err := NewCommon(log, path, "", nil)
+	cc, err := NewCommon(log, path, "", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(raw, common); err != nil {
+	if err := json.Unmarshal(raw, cc); err != nil {
 		return nil, fmt.Errorf("failed to obtain config version: %w", err)
 	}
 
-	switch common.Version {
-	case V0Name, "": // TODO
-		return nil, ErrUnsupportedConfigVersion
-
+	switch cc.Version {
 	case V1Name: // Current version.
-		conf := MakeBaseConfig(common)
-
-		dec := json.NewDecoder(bytes.NewReader(raw))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&conf); err != nil {
-			return nil, err
-		}
-
-		if err := conf.ensureKeys(); err != nil {
-			return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
-		}
-		return conf, conf.flush(conf)
-
+		return parseV1(cc, raw)
+	case V0Name, "":
+		return parseV0(cc, raw)
 	default:
 		return nil, ErrUnsupportedConfigVersion
 	}
 }
 
-// MakeBaseConfig returns a visor config with 'enforced' fields only.
-// This is used as default values if no config is given, or for missing *required* fields.
-// This function always returns the latest config version.
-func MakeBaseConfig(common *Common) *V1 {
-	conf := new(V1)
-	conf.Common = common
-	conf.Dmsg = &snet.DmsgConfig{
-		Discovery:     skyenv.DefaultDmsgDiscAddr,
-		SessionsCount: 1,
-	}
-	conf.Transport = &V1Transport{
-		Discovery: skyenv.DefaultTpDiscAddr,
-		LogStore: &V1LogStore{
-			Type: "memory",
-		},
-	}
-	conf.Routing = &V1Routing{
-		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
-		RouteFinder:        skyenv.DefaultRouteFinderAddr,
-		RouteFinderTimeout: DefaultTimeout,
-	}
-	conf.Launcher = &V1Launcher{
-		Discovery:  nil,
-		Apps:       nil,
-		ServerAddr: skyenv.DefaultAppSrvAddr,
-		BinPath:    skyenv.DefaultAppBinPath,
-		LocalPath:  skyenv.DefaultAppLocalPath,
-	}
-	conf.CLIAddr = skyenv.DefaultRPCAddr
-	conf.LogLevel = skyenv.DefaultLogLevel
-	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = restart.DefaultCheckDelay.String() // TODO: Use Duration type.
-	return conf
-}
-
-// MakeDefaultConfig returns the default visor config from a given secret key (if specified).
-// The config's 'sk' field will be nil if not specified.
-// Generated config will be saved to 'confPath'.
-// This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
-	cc, err := NewCommon(log, confPath, V1Name, sk)
-	if err != nil {
-		return nil, err
-	}
+func parseV1(cc *Common, raw []byte) (*V1, error) {
 	conf := MakeBaseConfig(cc)
-	if sk != nil {
-		conf.SK = *sk
-	}
-	if err := conf.ensureKeys(); err != nil {
+
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&conf); err != nil {
 		return nil, err
 	}
-	conf.Dmsgpty = &V1Dmsgpty{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: skyenv.DefaultDmsgPtyWhitelist,
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+
+	if err := conf.ensureKeys(); err != nil {
+		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
-	conf.STCP = &snet.STCPConfig{
-		LocalAddr: skyenv.DefaultSTCPAddr,
-		PKTable:   nil,
-	}
-	conf.Transport.LogStore = &V1LogStore{
-		Type:     "file",
-		Location: skyenv.DefaultTpLogStore,
-	}
-	conf.UptimeTracker = &V1UptimeTracker{
-		Addr: skyenv.DefaultUptimeTrackerAddr,
-	}
-	conf.Launcher.Discovery = &V1AppDisc{
-		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
-		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
-	}
-	conf.Launcher.Apps = []launcher.AppConfig{
-		{
-			Name:      skyenv.SkychatName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkychatPort),
-			Args:      []string{"-addr", skyenv.SkychatAddr},
-		},
-		{
-			Name:      skyenv.SkysocksName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.SkysocksPort),
-		},
-		{
-			Name:      skyenv.SkysocksClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.SkysocksClientPort),
-		},
-		{
-			Name:      skyenv.VPNServerName,
-			AutoStart: true,
-			Port:      routing.Port(skyenv.VPNServerPort),
-		},
-		{
-			Name:      skyenv.VPNClientName,
-			AutoStart: false,
-			Port:      routing.Port(skyenv.VPNClientPort),
-		},
-	}
-	return conf, nil
+	return conf, conf.flush(conf)
 }
 
-// MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
-func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk)
+func parseV0(cc *Common, raw []byte) (*V1, error) {
+	// Unmarshal old config.
+	var old V0
+	if err := json.Unmarshal(raw, &old); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal old config of version '%s': %w", cc.Version, err)
+	}
+
+	// Extract keys from old config and save it in Common.
+	sk := old.KeyPair.SecKey
+	if sk.Null() {
+		return nil, fmt.Errorf("old config of version '%s' has no secret key defined", cc.Version)
+	}
+	pk, err := sk.PubKey()
+	if err != nil {
+		return nil, fmt.Errorf("old config of version '%s' has invalid secret key: %w", cc.Version, err)
+	}
+	cc.SK = sk
+	cc.pk = pk
+
+	// Start with default config as template.
+	conf, err := defaultConfigFromCommon(cc)
 	if err != nil {
 		return nil, err
 	}
-	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
-	conf.Transport.Discovery = skyenv.TestTpDiscAddr
-	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
-	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.Discovery.ProxyDisc = skyenv.TestProxyDiscAddr
-	return conf, nil
+
+	// Fill config with old values.
+	if old.Dmsg != nil {
+		conf.Dmsg = old.Dmsg
+	}
+	if old.DmsgPty != nil {
+		conf.Dmsgpty = old.DmsgPty
+	}
+	if old.STCP != nil {
+		conf.STCP = old.STCP
+	}
+	if old.Transport != nil {
+		conf.Transport.Discovery = old.Transport.Discovery
+		conf.Transport.LogStore = old.Transport.LogStore
+	}
+	conf.Transport.TrustedVisors = old.TrustedVisors
+	if old.Routing != nil {
+		conf.Routing = old.Routing
+	}
+	if old.UptimeTracker != nil {
+		conf.UptimeTracker = old.UptimeTracker
+	}
+	conf.Launcher.Apps = make([]launcher.AppConfig, len(old.Apps))
+	for i, oa := range old.Apps {
+		conf.Launcher.Apps[i] = launcher.AppConfig{
+			Name:      oa.App,
+			Args:      oa.Args,
+			AutoStart: oa.AutoStart,
+			Port:      oa.Port,
+		}
+	}
+	conf.Launcher.BinPath = old.AppsPath
+	conf.Launcher.LocalPath = old.LocalPath
+	conf.Launcher.ServerAddr = old.AppServerAddr
+	if old.Interfaces != nil {
+		conf.CLIAddr = old.Interfaces.RPCAddress
+	}
+	conf.LogLevel = old.LogLevel
+	conf.ShutdownTimeout = old.ShutdownTimeout
+	conf.RestartCheckDelay = old.RestartCheckDelay
+	return conf, conf.flush(conf)
 }
