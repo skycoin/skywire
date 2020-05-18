@@ -45,7 +45,7 @@ func NewCommon(log *logging.MasterLogger, confPath string, version string, sk *c
 	c.Version = version
 	if sk != nil {
 		c.SK = *sk
-		if _, err := c.ensureKeys(); err != nil {
+		if err := c.ensureKeys(); err != nil {
 			return nil, err
 		}
 	}
@@ -84,24 +84,25 @@ func (c *Common) flush() error {
 
 // PK returns the visor's public key.
 func (c *Common) PK() cipher.PubKey {
-	if _, err := c.ensureKeys(); err != nil {
+	if err := c.ensureKeys(); err != nil {
 		panic(fmt.Errorf("invalid 'sk' defined in visor config: %w", err))
 	}
 	return c.pk
 }
 
-func (c *Common) ensureKeys() (changed bool, err error) {
+func (c *Common) ensureKeys() error {
 	if !c.pk.Null() {
-		return false, nil
+		return nil
 	}
 	if c.SK.Null() {
 		c.pk, c.SK = cipher.GenerateKeyPair()
-		return true, nil
+		return nil
 	}
+	var err error
 	if c.pk, err = c.SK.PubKey(); err != nil {
-		return false, err
+		return err
 	}
-	return true, nil
+	return nil
 }
 
 // MasterLogger returns the underlying master logger.

@@ -37,7 +37,7 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 	}
 
 	switch common.Version {
-	case V0Name: // TODO
+	case V0Name, "": // TODO
 		return nil, ErrUnsupportedConfigVersion
 
 	case V1Name: // Current version.
@@ -49,7 +49,7 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 			return nil, err
 		}
 
-		if _, err := conf.ensureKeys(); err != nil {
+		if err := conf.ensureKeys(); err != nil {
 			return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 		}
 		return conf, conf.flush()
@@ -103,7 +103,7 @@ func MakeDefaultConfig(common *Common, sk *cipher.SecKey) (*V1, error) {
 	if sk != nil {
 		conf.SK = *sk
 	}
-	if _, err := conf.ensureKeys(); err != nil {
+	if err := conf.ensureKeys(); err != nil {
 		return nil, err
 	}
 	conf.Dmsgpty = &V1Dmsgpty{
