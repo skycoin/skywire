@@ -2,10 +2,14 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/SkycoinProject/dmsg/netutil"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -209,7 +213,19 @@ func makeVPNEnvs(conf *Config, n *snet.Network) []string {
 
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
-		envCfg.DmsgServers = n.Dmsg().ConnectedServers()
+		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+		err := r.Do(context.Background(), func() error {
+			envCfg.DmsgServers = n.Dmsg().ConnectedServers()
+			if len(envCfg.DmsgServers) == 0 {
+				return errors.New("no Dmsg servers found")
+			}
+
+			return nil
+		})
+		if err != nil {
+			// TODO: remove panic
+			panic(fmt.Errorf("error getting Dmsg servers: %w", err))
+		}
 	}
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
