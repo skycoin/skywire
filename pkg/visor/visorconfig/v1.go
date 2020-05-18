@@ -1,6 +1,8 @@
 package visorconfig
 
 import (
+	"sync"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
@@ -15,6 +17,7 @@ const V1Name = "v1.0.0"
 // V1 is visor config v1.0.0
 type V1 struct {
 	*Common
+	mu sync.RWMutex
 
 	Dmsg          *snet.DmsgConfig `json:"dmsg"`
 	Dmsgpty       *V1Dmsgpty       `json:"dmsgpty,omitempty"`
@@ -81,6 +84,14 @@ type V1Launcher struct {
 	LocalPath  string               `json:"local_path"`
 }
 
+// Flush flushes the config to file (if specified).
+func (v1 *V1) Flush() error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	return v1.Common.flush(v1)
+}
+
 // UpdateAppAutostart modifies a single app's autostart value within the config and also the given launcher.
 // The updated config gets flushed to file if there are any changes.
 func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, autoStart bool) error {
@@ -109,7 +120,7 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 		BinPath:    conf.BinPath,
 		LocalPath:  conf.LocalPath,
 	})
-	return v1.flush()
+	return v1.flush(v1)
 }
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the launcher.
@@ -150,5 +161,5 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value st
 		BinPath:    conf.BinPath,
 		LocalPath:  conf.LocalPath,
 	})
-	return v1.flush()
+	return v1.flush(v1)
 }

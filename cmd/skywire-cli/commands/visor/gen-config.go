@@ -2,17 +2,18 @@ package visor
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"path"
+	"log"
+	"os"
 	"path/filepath"
+
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
 func init() {
@@ -20,80 +21,79 @@ func init() {
 }
 
 var (
-	sk            cipher.SecKey
-	output        string
-	replace       bool
-	retainKeys    bool
-	configLocType = pathutil.WorkingDirLoc
-	testenv       bool
+	sk      cipher.SecKey
+	output  string
+	replace bool
+	testEnv bool
 )
 
 func init() {
-	genConfigCmd.Flags().VarP(&sk, "secret-key", "s", "if unspecified, a random key pair will be generated.")
-	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
-	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
-	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
-	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
-
-	// TODO(evanlinjin): Re-implement this at a later stage.
-	//genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
+	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.")
+	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
+	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists (this retains the keys).")
+	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
 }
 
 var genConfigCmd = &cobra.Command{
 	Use:   "gen-config",
 	Short: "Generates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		if output == "" {
-			output = pathutil.VisorDefaults().Get(configLocType)
-			logger.Infof("No 'output' set; using default path: %s", output)
-		}
 		var err error
 		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatalln("invalid output provided")
+			logger.WithError(err).Fatal("Invalid output provided.")
+		}
+		// TODO(evanlinjin): This is a temporary measure before it gets implemented.
+		if testEnv {
+			log.Fatal("The flag 'testenv,t' has not yet been implemented.")
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		var conf *visorconfig.V1
+		mLog := logging.NewMasterLogger()
+		mLog.SetLevel(logrus.InfoLevel)
 
-		// TODO(evanlinjin): Decide whether we still need this feature in the future.
-		// https://github.com/SkycoinProject/skywire-mainnet/pull/360#discussion_r425080223
-		switch configLocType {
-		case pathutil.WorkingDirLoc:
-			cc, err := visorconfig.NewCommon(nil, output, visorconfig.V1Name, nil)
-			if err != nil {
-				logger.WithError(err).Fatal("Failed to create default config.")
-			}
-			_, sk := cipher.GenerateKeyPair()
-			conf, err = visorconfig.MakeDefaultConfig(cc, &sk)
-			if err != nil {
-				logger.WithError(err).Fatal("Failed to create default config.")
-			}
-		default:
-			logger.Fatalln("invalid config type:", configLocType)
+		var sk cipher.SecKey
+
+		// Read in old config.
+		if oldConf, ok := readOldConfig(mLog, output, replace); !ok {
+			_, sk = cipher.GenerateKeyPair()
+		} else {
+			sk = oldConf.SK
 		}
-		if replace && retainKeys && pathutil.Exists(output) {
-			if err := fillInOldKeys(output, conf); err != nil {
-				logger.WithError(err).Fatalln("Error retaining old keys")
-			}
+
+		conf, err := visorconfig.MakeDefaultConfig(mLog, output, &sk)
+		if err != nil {
+			logger.WithError(err).Fatal("Failed to create default config.")
 		}
-		pathutil.WriteJSONConfig(conf, output, replace)
+
+		if err := conf.Flush(); err != nil {
+			logger.WithError(err).Fatal("Failed to flush config to file.")
+		}
+
+		j, err := json.MarshalIndent(conf, "", "\t")
+		if err != nil {
+			logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
+		}
+		logger.Infof("Updated file '%s' to: %s", output, j)
 	},
 }
 
-func fillInOldKeys(confPath string, conf *visorconfig.V1) error {
-	oldRaw, err := ioutil.ReadFile(path.Clean(confPath))
+func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*visorconfig.V1, bool) {
+	raw, err := ioutil.ReadFile(confPath) //nolint:gosec
 	if err != nil {
-		return fmt.Errorf("error reading old config file: %w", err)
+		if os.IsNotExist(err) {
+			return nil, false
+		}
+		logger.WithError(err).Fatal("Unexpected error occurred when attempting to read old config.")
 	}
 
-	oldCC, err := visorconfig.NewCommon(nil, confPath, "", nil)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(oldRaw, oldCC); err != nil {
-		return fmt.Errorf("invalid old configuration file: %w", err)
+	if !replace {
+		logger.Fatal("Config file already exists. Specify the 'replace,r' flag to replace this.")
 	}
 
-	conf.SK = oldCC.SK
-	return nil
+	conf, err := visorconfig.Parse(log, confPath, raw)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to parse old config file.")
+	}
+
+	return conf, true
 }
