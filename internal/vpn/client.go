@@ -43,7 +43,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		return nil, fmt.Errorf("error getting Dmsg server addresses: %w", err)
 	}
 
-	tpIP, err := tpIPFromEnv()
+	tpDiscIP, err := tpDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting TP IP: %w", err)
 	}
@@ -59,7 +59,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 	}
 
 	directIPs := make([]net.IP, 0, 3+len(dmsgSrvAddrs)+len(stcpEntities))
-	directIPs = append(directIPs, dmsgDiscIP, tpIP, rfIP)
+	directIPs = append(directIPs, dmsgDiscIP, tpDiscIP, rfIP)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
 
@@ -252,7 +252,7 @@ func dmsgSrvAddrsFromEnv() ([]net.IP, error) {
 	return dmsgSrvAddrs, nil
 }
 
-func tpIPFromEnv() (net.IP, error) {
+func tpDiscIPFromEnv() (net.IP, error) {
 	return ipFromEnv(TPDiscAddrEnvKey)
 }
 
