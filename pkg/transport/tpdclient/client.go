@@ -1,5 +1,5 @@
-// Package client implements transport discovery client
-package client
+// Package tpdclient implements transport discovery client
+package tpdclient
 
 import (
 	"bytes"

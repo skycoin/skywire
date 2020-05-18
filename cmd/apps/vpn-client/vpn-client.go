@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -12,7 +11,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/netutil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
@@ -22,7 +21,6 @@ import (
 )
 
 const (
-	appName = skyenv.VPNClientName
 	netType = appnet.TypeSkynet
 	vpnPort = routing.Port(skyenv.VPNServerPort)
 )
@@ -33,7 +31,7 @@ const (
 )
 
 var (
-	log = app.NewLogger(appName)
+	log = logrus.New()
 	r   = netutil.NewRetrier(log, serverDialInitBO, serverDialMaxBO, 0, 1)
 )
 
@@ -72,20 +70,10 @@ func main() {
 		}
 	}
 
+	appClient := app.NewClient()
+	defer appClient.Close()
+
 	log.Infof("Connecting to VPN server %s", serverPK.String())
-
-	appCfg, err := app.ClientConfigFromEnv()
-	if err != nil {
-		log.WithError(err).Fatalln("Error getting app client config")
-	}
-
-	appClient, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), appCfg)
-	if err != nil {
-		log.WithError(err).Fatalln("Error setting up VPN client")
-	}
-	defer func() {
-		appClient.Close()
-	}()
 
 	appConn, err := dialServer(appClient, serverPK)
 	if err != nil {

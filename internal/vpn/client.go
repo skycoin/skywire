@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 // Client is a VPN client.
 type Client struct {
 	cfg            ClientConfig
-	log            *logging.MasterLogger
+	log            logrus.FieldLogger
 	conn           net.Conn
 	directIPs      []net.IP
 	defaultGateway net.IP
@@ -32,7 +32,7 @@ type Client struct {
 }
 
 // NewClient creates VPN client instance.
-func NewClient(cfg ClientConfig, l *logging.MasterLogger, conn net.Conn) (*Client, error) {
+func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, error) {
 	dmsgDiscIP, err := dmsgDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)
