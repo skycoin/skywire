@@ -10,7 +10,7 @@ if [[ "$VERSION" != "latest" ]]; then
   VERSION="v$VERSION"
 fi
 
-[[ -z "${GOBIN}" ]] export GOBIN=$HOME/go/bin
+if [[ -z "${GOBIN}" ]]; then export GOBIN=$HOME/go/bin; fi
 echo "GOBIN=${GOBIN}"
 
 # In alpine linux (as it does not come with curl by default)
