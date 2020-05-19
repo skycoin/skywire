@@ -131,7 +131,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	}
 
 	log := v.MasterLogger().PackageLogger("visor:startup")
-	log.WithField("public_key", conf.PK()).
+	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
 	v.startedAt = time.Now()
 
