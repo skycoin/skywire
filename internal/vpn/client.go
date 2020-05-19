@@ -56,8 +56,13 @@ func NewClient(l logrus.FieldLogger, conn net.Conn) (*Client, error) {
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
 	}
 
+	arIP, err := addressResolverIPFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("error getting AR IP: %w", err)
+	}
+
 	directIPs := make([]net.IP, 0, 3+len(dmsgSrvAddrs)+len(stcpEntities))
-	directIPs = append(directIPs, dmsgDiscIP, tpIP, rfIP)
+	directIPs = append(directIPs, dmsgDiscIP, tpIP, rfIP, arIP)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
 
@@ -263,6 +268,10 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	}
 
 	return stcpEntities, nil
+}
+
+func addressResolverIPFromEnv() (net.IP, error) {
+	return ipFromEnv(AddressResolverAddrEnvKey)
 }
 
 func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
