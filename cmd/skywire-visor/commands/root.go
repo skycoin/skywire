@@ -1,6 +1,5 @@
 package commands
 
-// NOTE: "net/http/pprof" is used for profiling.
 import (
 	"context"
 	"fmt"
@@ -8,7 +7,7 @@ import (
 	"io/ioutil"
 	"log/syslog"
 	"net/http"
-	_ "net/http/pprof" // nolint:gosec https://golang.org/doc/diagnostics.html#profiling
+	_ "net/http/pprof" //nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 
 	"github.com/SkycoinProject/dmsg/cmdutil"
@@ -43,13 +42,13 @@ func init() {
 
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor [config-path]",
-	Short: "Skywire visor.",
+	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
 
 		log := initLogger(tag, syslogAddr)
 
 		if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
-			log.WithError(err).Error("Failed to obtain build info.")
+			log.WithError(err).Error("Failed to output build info.")
 		}
 
 		stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
