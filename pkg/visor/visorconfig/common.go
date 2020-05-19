@@ -31,7 +31,7 @@ type Common struct {
 }
 
 // NewCommon returns a new Common.
-func NewCommon(log *logging.MasterLogger, confPath string, version string, sk *cipher.SecKey) (*Common, error) {
+func NewCommon(log *logging.MasterLogger, confPath, version string, sk *cipher.SecKey) (*Common, error) {
 	if log == nil {
 		log = logging.NewMasterLogger()
 	}
