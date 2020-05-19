@@ -73,7 +73,7 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 		return nil, fmt.Errorf("old config of version '%s' has invalid secret key: %w", cc.Version, err)
 	}
 	cc.SK = sk
-	cc.pk = pk
+	cc.PK = pk
 
 	// Start with default config as template.
 	conf, err := defaultConfigFromCommon(cc)
