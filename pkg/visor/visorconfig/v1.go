@@ -114,7 +114,7 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 	}
 
 	launch.ResetConfig(launcher.Config{
-		VisorPK:    v1.PK(),
+		VisorPK:    v1.PK,
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
@@ -155,7 +155,7 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value st
 	}
 
 	launch.ResetConfig(launcher.Config{
-		VisorPK:    v1.PK(),
+		VisorPK:    v1.PK,
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,

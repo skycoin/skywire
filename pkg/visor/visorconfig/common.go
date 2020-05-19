@@ -3,7 +3,6 @@ package visorconfig
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -28,7 +27,7 @@ type Common struct {
 
 	Version string        `json:"version"`
 	SK      cipher.SecKey `json:"sk,omitempty"`
-	pk      cipher.PubKey
+	PK      cipher.PubKey `json:"pk,omitempty"`
 }
 
 // NewCommon returns a new Common.
@@ -55,24 +54,16 @@ func (c *Common) MasterLogger() *logging.MasterLogger {
 	return c.log
 }
 
-// PK returns the visor's public key.
-func (c *Common) PK() cipher.PubKey {
-	if err := c.ensureKeys(); err != nil {
-		panic(fmt.Errorf("invalid 'sk' defined in visor config: %w", err))
-	}
-	return c.pk
-}
-
 func (c *Common) ensureKeys() error {
-	if !c.pk.Null() {
+	if !c.PK.Null() {
 		return nil
 	}
 	if c.SK.Null() {
-		c.pk, c.SK = cipher.GenerateKeyPair()
+		c.PK, c.SK = cipher.GenerateKeyPair()
 		return nil
 	}
 	var err error
-	if c.pk, err = c.SK.PubKey(); err != nil {
+	if c.PK, err = c.SK.PubKey(); err != nil {
 		return err
 	}
 	return nil

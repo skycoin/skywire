@@ -30,7 +30,7 @@ func TestHealth(t *testing.T) {
 		}
 		c.Routing = &visorconfig.V1Routing{
 			RouteFinder: "foo",
-			SetupNodes:  []cipher.PubKey{c.PK()},
+			SetupNodes:  []cipher.PubKey{c.PK},
 		}
 
 		v := &Visor{
