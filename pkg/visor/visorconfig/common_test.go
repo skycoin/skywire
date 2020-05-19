@@ -23,11 +23,11 @@ func TestCommon_ensureKeys(t *testing.T) {
 		require.NoError(t, cc.ensureKeys())
 
 		// check
-		assert.False(t, cc.pk.Null())
+		assert.False(t, cc.PK.Null())
 		assert.False(t, cc.SK.Null())
 		pk, err := cc.SK.PubKey()
 		assert.NoError(t, err)
-		assert.Equal(t, cc.pk, pk)
+		assert.Equal(t, cc.PK, pk)
 	})
 
 	t.Run("both_keys", func(t *testing.T) {
@@ -37,14 +37,14 @@ func TestCommon_ensureKeys(t *testing.T) {
 
 		// init: expected key pair (this should not change)
 		pk, sk := cipher.GenerateKeyPair()
-		cc.pk = pk
+		cc.PK = pk
 		cc.SK = sk
 
 		// test
 		require.NoError(t, cc.ensureKeys())
 
 		// check
-		assert.Equal(t, pk, cc.pk)
+		assert.Equal(t, pk, cc.PK)
 		assert.Equal(t, sk, cc.SK)
 	})
 
@@ -61,7 +61,7 @@ func TestCommon_ensureKeys(t *testing.T) {
 		require.NoError(t, cc.ensureKeys())
 
 		// check
-		assert.Equal(t, pk, cc.pk)
+		assert.Equal(t, pk, cc.PK)
 		assert.Equal(t, sk, cc.SK)
 	})
 }
