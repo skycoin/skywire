@@ -198,21 +198,25 @@ func initLauncher(v *Visor) bool {
 	if err != nil {
 		return report(fmt.Errorf("failed to start launcher: %w", err))
 	}
-	launch.AutoStart(map[string]func() []string{
-		skyenv.VPNClientName: func() []string { return makeVPNEnvs(v.conf, v.net) },
-		skyenv.VPNServerName: func() []string { return makeVPNEnvs(v.conf, v.net) },
+	err = launch.AutoStart(map[string]func() ([]string, error){
+		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
+		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 	})
+	if err != nil {
+		return report(fmt.Errorf("failed to autostart apps: %w", err))
+	}
 
 	v.procM = procM
 	v.appL = launch
 	return report(nil)
 }
 
-func makeVPNEnvs(conf *Config, n *snet.Network) []string {
+func makeVPNEnvs(conf *Config, n *snet.Network) ([]string, error) {
 	var envCfg vpn.DirectRoutesEnvConfig
 
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
+
 		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
 			envCfg.DmsgServers = n.Dmsg().ConnectedServers()
@@ -223,8 +227,7 @@ func makeVPNEnvs(conf *Config, n *snet.Network) []string {
 			return nil
 		})
 		if err != nil {
-			// TODO: remove panic
-			panic(fmt.Errorf("error getting Dmsg servers: %w", err))
+			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
 	}
 	if conf.Transport != nil {
@@ -246,7 +249,8 @@ func makeVPNEnvs(conf *Config, n *snet.Network) []string {
 	for k, v := range vpn.AppEnvArgs(envCfg) {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
-	return envs
+
+	return envs, nil
 }
 
 func initCLI(v *Visor) bool {
