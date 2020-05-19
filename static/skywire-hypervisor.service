@@ -1,0 +1,15 @@
+[Unit]
+Description=Skywire Hypervisor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/skywire-hypervisor -c /etc/skywire-hypervisor.json
+Restart=on-failure
+RestartSec=20
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target
