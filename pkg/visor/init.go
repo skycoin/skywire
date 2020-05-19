@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgpty"
@@ -29,6 +27,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
 
 type initFunc func(v *Visor) bool
@@ -65,7 +64,7 @@ func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
 	n := snet.New(snet.Config{
-		PubKey: v.conf.PK(),
+		PubKey: v.conf.PK,
 		SecKey: v.conf.SK,
 		Dmsg:   v.conf.Dmsg,
 		STCP:   v.conf.STCP,
@@ -173,7 +172,7 @@ func initTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
-	tpdC, err := tpdclient.NewHTTP(conf.Discovery, v.conf.PK(), v.conf.SK)
+	tpdC, err := tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
 	if err != nil {
 		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
 	}
@@ -192,7 +191,7 @@ func initTransport(v *Visor) bool {
 	}
 
 	tpMConf := transport.ManagerConfig{
-		PubKey:          v.conf.PK(),
+		PubKey:          v.conf.PK,
 		SecKey:          v.conf.SK,
 		DefaultVisors:   conf.TrustedVisors,
 		DiscoveryClient: tpdC,
@@ -230,7 +229,7 @@ func initRouter(v *Visor) bool {
 
 	rConf := router.Config{
 		Logger:           v.MasterLogger().PackageLogger("router"),
-		PubKey:           v.conf.PK(),
+		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
 		RouteFinder:      rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout)),
@@ -272,7 +271,7 @@ func initLauncher(v *Visor) bool {
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{Log: v.MasterLogger().PackageLogger("app_disc")}
 	if conf.Discovery != nil {
-		factory.PK = v.conf.PK()
+		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
 		factory.ProxyDisc = conf.Discovery.ProxyDisc
@@ -291,7 +290,7 @@ func initLauncher(v *Visor) bool {
 
 	// Prepare launcher.
 	launchConf := launcher.Config{
-		VisorPK:    v.conf.PK(),
+		VisorPK:    v.conf.PK,
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
@@ -414,7 +413,7 @@ func initUptimeTracker(v *Visor) bool {
 		return true
 	}
 
-	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK(), v.conf.SK)
+	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
 	if err != nil {
 		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
 		//return report(err)

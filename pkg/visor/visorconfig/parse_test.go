@@ -42,7 +42,7 @@ func TestParse(t *testing.T) {
 		require.JSONEq(t, jsonString(MakeBaseConfig(conf.Common)), jsonString(conf))
 
 		// check: saved config contains all base values.
-		raw2, err := ioutil.ReadFile(filename)
+		raw2, err := ioutil.ReadFile(filename) //nolint:gosec
 		require.NoError(t, err)
 		require.JSONEq(t, jsonString(MakeBaseConfig(conf.Common)), string(raw2))
 	})
