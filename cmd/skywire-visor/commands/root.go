@@ -132,7 +132,9 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	return stop
 }
 
-func initConfig(log *logging.MasterLogger, confPath string) *visorconfig.V1 {
+func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 {
+	log := mLog.PackageLogger("visor:config")
+
 	var r io.Reader
 
 	switch confPath {
@@ -148,9 +150,9 @@ func initConfig(log *logging.MasterLogger, confPath string) *visorconfig.V1 {
 				Fatal("Failed to read config file.")
 		}
 		defer func() {
-			err := f.Close()
-			log.WithError(err).
-				Debug("Closed config file.")
+			if err := f.Close(); err != nil {
+				log.WithError(err).Error("Closing config file resulted in error.")
+			}
 		}()
 		r = f
 	}
@@ -160,7 +162,7 @@ func initConfig(log *logging.MasterLogger, confPath string) *visorconfig.V1 {
 		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
-	conf, err := visorconfig.Parse(log, confPath, raw)
+	conf, err := visorconfig.Parse(mLog, confPath, raw)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to parse config.")
 	}
