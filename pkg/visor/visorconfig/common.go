@@ -69,7 +69,7 @@ func (c *Common) ensureKeys() error {
 	return nil
 }
 
-func (c *Common) flush(v interface{}) error {
+func (c *Common) flush(v interface{}) (err error) {
 	switch c.path {
 	case "":
 		return ErrNoConfigPath
@@ -77,11 +77,16 @@ func (c *Common) flush(v interface{}) error {
 		return nil
 	}
 
-	j, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	c.log.Debugf("Updating visor config to: %s", string(j))
+	log := c.log.
+		PackageLogger("visor:config").
+		WithField("filepath", c.path).
+		WithField("config_version", c.Version)
+	log.Info("Flushing config to file.")
+	defer func() {
+		if err != nil {
+			log.WithError(err).Error("Failed to flush config to file.")
+		}
+	}()
 
 	raw, err := json.MarshalIndent(v, "", "\t")
 	if err != nil {

@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 )
 
 var (
