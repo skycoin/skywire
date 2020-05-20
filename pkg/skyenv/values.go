@@ -13,7 +13,7 @@ const (
 	DefaultProxyDiscAddr       = "http://proxy.discovery.skywire.skycoin.com"
 	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
 	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://address-resolver.skywire.skycoin.com"
+	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
 	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
