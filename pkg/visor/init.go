@@ -198,7 +198,7 @@ func initTransport(v *Visor) bool {
 		LogStore:        logS,
 	}
 
-	tpM, err := transport.NewManager(v.net, &tpMConf)
+	tpM, err := transport.NewManager(v.MasterLogger().PackageLogger("transport_manager"), v.net, &tpMConf)
 	if err != nil {
 		return report(fmt.Errorf("failed to start transport manager: %w", err))
 	}
@@ -269,7 +269,9 @@ func initLauncher(v *Visor) bool {
 	conf := v.conf.Launcher
 
 	// Prepare app discovery factory.
-	factory := appdisc.Factory{Log: v.MasterLogger().PackageLogger("app_disc")}
+	factory := appdisc.Factory{
+		Log: v.MasterLogger().PackageLogger("app_discovery"),
+	}
 	if conf.Discovery != nil {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
@@ -278,8 +280,7 @@ func initLauncher(v *Visor) bool {
 	}
 
 	// Prepare proc manager.
-	procMLog := v.MasterLogger().PackageLogger("proc_manager")
-	procM, err := appserver.NewProcManager(procMLog, &factory, conf.ServerAddr)
+	procM, err := appserver.NewProcManager(v.MasterLogger(), &factory, conf.ServerAddr)
 	if err != nil {
 		return report(fmt.Errorf("failed to start proc_manager: %w", err))
 	}
