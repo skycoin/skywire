@@ -126,8 +126,11 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		restartCtx: restartCtx,
 	}
 
-	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
-		v.conf.MasterLogger().SetLevel(lvl)
+	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
+		v.log.WithError(err).Warn("Failed to read log level from config.")
+	} else {
+		v.conf.MasterLogger().SetLevel(logLvl)
+		logging.SetLevel(logLvl)
 	}
 
 	log := v.MasterLogger().PackageLogger("visor:startup")

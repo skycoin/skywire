@@ -45,7 +45,8 @@ type ProcManager interface {
 
 // procManager manages skywire applications. It implements `ProcManager`.
 type procManager struct {
-	log *logging.Logger
+	mLog *logging.MasterLogger
+	log  *logging.Logger
 
 	lis     net.Listener
 	conns   map[string]net.Conn
@@ -60,9 +61,9 @@ type procManager struct {
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(log *logging.Logger, discF *appdisc.Factory, addr string) (ProcManager, error) {
-	if log == nil {
-		log = logging.MustGetLogger("proc_manager")
+func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, addr string) (ProcManager, error) {
+	if mLog == nil {
+		mLog = logging.NewMasterLogger()
 	}
 	if discF == nil {
 		discF = new(appdisc.Factory)
@@ -74,7 +75,8 @@ func NewProcManager(log *logging.Logger, discF *appdisc.Factory, addr string) (P
 	}
 
 	procM := &procManager{
-		log:        log,
+		mLog:       mLog,
+		log:        mLog.PackageLogger("proc_manager"),
 		lis:        lis,
 		conns:      make(map[string]net.Conn),
 		discF:      discF,
@@ -161,7 +163,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
-	log := logging.MustGetLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
+	log := m.mLog.PackageLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
 
 	// isDone should be called within the protection of a mutex.
 	// Otherwise we may be able to start an app after calling Close.
@@ -188,7 +190,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(conf, disc)
+	proc := NewProc(m.mLog, conf, disc)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
