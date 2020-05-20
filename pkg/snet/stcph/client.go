@@ -20,9 +20,11 @@ import (
 // Type is stcp hole punch type.
 const Type = "stcph"
 
+// DialTimeout represents a timeout for dialing.
 // TODO: Find best value.
 const DialTimeout = 5 * time.Second
 
+// ErrTimeout indicates a timeout.
 var ErrTimeout = errors.New("timeout")
 
 // Client is the central control for incoming and outgoing 'stcp.Conn's.

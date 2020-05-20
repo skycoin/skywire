@@ -45,14 +45,13 @@ type HTTPError struct {
 
 // Client implements Client for auth services.
 type Client struct {
+	nonce       uint64 // has to be handled with the atomic package at all time, needs to be 8 byte aligned
 	mu          sync.Mutex
 	client      *http.Client
 	reuseClient *http.Client
 	key         cipher.PubKey
 	sec         cipher.SecKey
 	addr        string // sanitized address of the client, which may differ from addr used in NewClient
-	padding     [4]byte
-	nonce       uint64 // has to be handled with the atomic package at all time
 }
 
 // NewClient creates a new client setting a public key to the client to be used for Auth.
@@ -80,6 +79,7 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 	return c, nil
 }
 
+// Header returns headers for httpauth.
 func (c *Client) Header() (http.Header, error) {
 	nonce := c.getCurrentNonce()
 	body := make([]byte, 0)
@@ -98,19 +98,10 @@ func (c *Client) Header() (http.Header, error) {
 	return header, nil
 }
 
-func (c *Client) CheckResponse(resp *http.Response) {
-
-	return
-}
-
 // Do performs a new authenticated Request and returns the response. Internally, if the request was
 // successful nonce is incremented
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.do(c.client, req)
-}
-
-func (c *Client) DoWithReuse(req *http.Request) (*http.Response, error) {
-	return c.do(c.reuseClient, req)
 }
 
 func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, error) {
@@ -194,6 +185,7 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 	return nr.NextNonce, nil
 }
 
+// ReuseClient returns HTTP client that reuses port for dialing.
 func (c *Client) ReuseClient() *http.Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -201,6 +193,7 @@ func (c *Client) ReuseClient() *http.Client {
 	return c.reuseClient
 }
 
+// SetTransport sets transport for HTTP client that reuses port for dialing.
 func (c *Client) SetTransport(transport http.RoundTripper) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -240,6 +233,7 @@ func (c *Client) getCurrentNonce() Nonce {
 	return Nonce(atomic.LoadUint64(&c.nonce))
 }
 
+// IncrementNonce increments client's current nonce.
 func (c *Client) IncrementNonce() {
 	atomic.AddUint64(&c.nonce, 1)
 }

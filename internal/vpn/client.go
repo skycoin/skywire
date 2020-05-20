@@ -61,7 +61,7 @@ func NewClient(l logrus.FieldLogger, conn net.Conn) (*Client, error) {
 		return nil, fmt.Errorf("error getting stcpr AR IP: %w", err)
 	}
 
-	stcphARip, err := stcprAddressResolverIPFromEnv()
+	stcphARip, err := stcphAddressResolverIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting stcph AR IP: %w", err)
 	}

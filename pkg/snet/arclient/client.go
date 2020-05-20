@@ -59,8 +59,6 @@ type httpClient struct {
 	sk        cipher.SecKey
 }
 
-type ClientOption func(c *httpClient)
-
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
 // When keys are set, the client will sign request before submitting.
 // The signature information is transmitted in the header using:

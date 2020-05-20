@@ -61,7 +61,7 @@ func (c *STCPConfig) Type() string {
 	return stcp.Type
 }
 
-// STCPConfig defines config for STCP network.
+// STCPRConfig defines config for STCPR network.
 type STCPRConfig struct {
 	AddressResolver string `json:"address_resolver"`
 	LocalAddr       string `json:"local_address"`
@@ -72,7 +72,7 @@ func (c *STCPRConfig) Type() string {
 	return stcpr.Type
 }
 
-// STCPConfig defines config for STCP network.
+// STCPHConfig defines config for STCPH network.
 type STCPHConfig struct {
 	AddressResolver string `json:"address_resolver"`
 }
@@ -89,6 +89,7 @@ type Config struct {
 	NetworkConfigs NetworkConfigs
 }
 
+// NetworkConfigs represents all network configs.
 type NetworkConfigs struct {
 	Dmsg  *DmsgConfig  // The dmsg service will not be started if nil.
 	STCP  *STCPConfig  // The stcp service will not be started if nil.
@@ -96,6 +97,7 @@ type NetworkConfigs struct {
 	STCPH *STCPHConfig // The stcph service will not be started if nil.
 }
 
+// NetworkClients represents all network clients.
 type NetworkClients struct {
 	DmsgC  *dmsg.Client
 	StcpC  *stcp.Client
