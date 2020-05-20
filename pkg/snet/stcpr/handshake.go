@@ -1,4 +1,4 @@
-package stcph
+package stcpr
 
 import (
 	"bytes"
@@ -28,7 +28,7 @@ type HandshakeError string
 
 // Error implements error.
 func (err HandshakeError) Error() string {
-	return fmt.Sprintln("stcp handshake failed:", string(err))
+	return fmt.Sprintln("stcpr handshake failed:", string(err))
 }
 
 // IsHandshakeError determines whether the error occurred during the handshake.

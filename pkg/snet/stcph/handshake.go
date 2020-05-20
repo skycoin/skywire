@@ -1,4 +1,4 @@
-package stcp
+package stcph
 
 import (
 	"bytes"
@@ -28,7 +28,7 @@ type HandshakeError string
 
 // Error implements error.
 func (err HandshakeError) Error() string {
-	return fmt.Sprintln("stcp handshake failed:", string(err))
+	return fmt.Sprintln("stcpr handshake failed:", string(err))
 }
 
 // IsHandshakeError determines whether the error occurred during the handshake.
@@ -43,12 +43,14 @@ func handshakeMiddleware(origin Handshake) Handshake {
 		if err = conn.SetDeadline(deadline); err != nil {
 			return
 		}
+
 		if lAddr, rAddr, err = origin(conn, deadline); err != nil {
 			err = HandshakeError(err.Error())
 		}
 
 		// reset deadline
 		_ = conn.SetDeadline(time.Time{}) //nolint:errcheck
+
 		return
 	}
 }
@@ -129,6 +131,7 @@ func (f2 *Frame2) Sign(srcSK cipher.SecKey) error {
 	if err != nil {
 		return err
 	}
+
 	f2.SrcAddr.PK = pk
 	f2.Sig = cipher.Sig{}
 
@@ -136,13 +139,16 @@ func (f2 *Frame2) Sign(srcSK cipher.SecKey) error {
 	if err := json.NewEncoder(&b).Encode(f2); err != nil {
 		return err
 	}
+
 	sig, err := cipher.SignPayload(b.Bytes(), srcSK)
 	if err != nil {
 		return err
 	}
+
 	f2.Sig = sig
 
 	fmt.Println("SIGN! len(b.Bytes)", len(b.Bytes()), cipher2.SumSHA256(b.Bytes()).Hex())
+
 	return nil
 }
 
@@ -161,9 +167,12 @@ func (f2 Frame2) Verify(nonce [HandshakeNonceSize]byte) error {
 	if err := json.NewEncoder(&b).Encode(f2); err != nil {
 		return err
 	}
+
 	hash := cipher.SumSHA256(b.Bytes())
 	rPK, err := cipher2.PubKeyFromSig(cipher2.Sig(sig), cipher2.SHA256(hash))
-	fmt.Println("VERIFY! len(b.Bytes)", len(b.Bytes()), cipher2.SHA256(hash).Hex(), "recovered:", rPK, err, "expected:", f2.SrcAddr.PK)
+
+	fmt.Println("VERIFY! len(b.Bytes)", len(b.Bytes()), cipher2.SHA256(hash).Hex(),
+		"recovered:", rPK, err, "expected:", f2.SrcAddr.PK)
 
 	return cipher.VerifyPubKeySignedPayload(f2.SrcAddr.PK, sig, b.Bytes())
 }
@@ -181,6 +190,7 @@ func writeFrame1(w io.Writer, nonce [HandshakeNonceSize]byte) error {
 func readFrame1(r io.Reader) (Frame1, error) {
 	var f1 Frame1
 	err := json.NewDecoder(r).Decode(&f1)
+
 	return f1, err
 }
 
@@ -191,6 +201,7 @@ func writeFrame2(w io.Writer, f2 Frame2) error {
 func readFrame2(r io.Reader) (Frame2, error) {
 	var f2 Frame2
 	err := json.NewDecoder(r).Decode(&f2)
+
 	return f2, err
 }
 
@@ -200,11 +211,13 @@ func writeFrame3(w io.Writer, err error) error {
 		f3.OK = false
 		f3.ErrMsg = err.Error()
 	}
+
 	return json.NewEncoder(w).Encode(f3)
 }
 
 func readFrame3(r io.Reader) (Frame3, error) {
 	var f3 Frame3
 	err := json.NewDecoder(r).Decode(&f3)
+
 	return f3, err
 }

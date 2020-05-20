@@ -1,4 +1,4 @@
-package stcph
+package stcpr
 
 import (
 	"context"
@@ -12,18 +12,12 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/libp2p/go-reuseport"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
 
-// Type is stcp hole punch type.
-const Type = "stcph"
-
-// TODO: Find best value.
-const DialTimeout = 5 * time.Second
-
-var ErrTimeout = errors.New("timeout")
+// Type is stcp with address resolving type.
+const Type = "stcpr"
 
 // Client is the central control for incoming and outgoing 'stcp.Conn's.
 type Client struct {
@@ -33,19 +27,18 @@ type Client struct {
 	lSK             cipher.SecKey
 	p               *Porter
 	addressResolver arclient.APIClient
+	localAddr       string
 
-	localAddr string
-	connCh    <-chan string
-	dialCh    chan cipher.PubKey
-	lMap      map[uint16]*Listener // key: lPort
-	mx        sync.Mutex
+	lTCP net.Listener
+	lMap map[uint16]*Listener // key: lPort
+	mx   sync.Mutex
 
 	done chan struct{}
 	once sync.Once
 }
 
 // NewClient creates a net Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient, localAddr string) (*Client, error) {
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient, localAddr string) *Client {
 	c := &Client{
 		log:             logging.MustGetLogger(Type),
 		lPK:             pk,
@@ -57,7 +50,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIC
 		done:            make(chan struct{}),
 	}
 
-	return c, nil
+	return c
 }
 
 // SetLogger sets a logger for Client.
@@ -67,33 +60,36 @@ func (c *Client) SetLogger(log *logging.Logger) {
 
 // Serve serves the listening portion of the client.
 func (c *Client) Serve() error {
-	if c.connCh != nil {
+	if c.lTCP != nil {
 		return errors.New("already listening")
 	}
 
-	ctx := context.Background()
-
-	dialCh := make(chan cipher.PubKey)
-
-	connCh, err := c.addressResolver.WS(ctx, dialCh)
+	lTCP, err := net.Listen("tcp", c.localAddr)
 	if err != nil {
 		return err
 	}
 
-	c.connCh = connCh
-	c.dialCh = dialCh
+	c.lTCP = lTCP
 
-	c.log.Infof("listening websocket events on %v", c.localAddr)
+	addr := lTCP.Addr()
+	c.log.Infof("listening on tcp addr: %v", addr)
+
+	_, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		port = ""
+	}
+
+	if err := c.addressResolver.Bind(context.Background(), port); err != nil {
+		return fmt.Errorf("bind PK")
+	}
 
 	go func() {
-		for addr := range c.connCh {
-			c.log.Infof("Received signal to dial %v", addr)
-
-			if err := c.acceptTCPConn(addr); err != nil {
+		for {
+			if err := c.acceptTCPConn(); err != nil {
 				c.log.Warnf("failed to accept incoming connection: %v", err)
 
 				if !IsHandshakeError(err) {
-					c.log.Warnf("stopped serving stcp")
+					c.log.Warnf("stopped serving stcpr")
 					return
 				}
 			}
@@ -103,32 +99,12 @@ func (c *Client) Serve() error {
 	return nil
 }
 
-func (c *Client) dialTimeout(addr string) (net.Conn, error) {
-	timer := time.NewTimer(DialTimeout)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-timer.C:
-			return nil, ErrTimeout
-		default:
-			c.log.Infof("Dialing %v from %v via tcp", addr, c.localAddr)
-			conn, err := reuseport.Dial("tcp", c.localAddr, addr)
-			if err == nil {
-				return conn, nil
-			}
-
-			c.log.WithError(err).Errorf("Failed to dial %v from %v, trying again: %v", addr, c.localAddr, err)
-		}
-	}
-}
-
-func (c *Client) acceptTCPConn(addr string) error {
+func (c *Client) acceptTCPConn() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	tcpConn, err := c.dialTimeout(addr)
+	tcpConn, err := c.lTCP.Accept()
 	if err != nil {
 		return err
 	}
@@ -161,40 +137,27 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		return nil, io.ErrClosedPipe
 	}
 
-	c.log.Infof("Dialing PK %v", rPK)
-
-	c.dialCh <- rPK
-
-	addr, err := c.addressResolver.ResolveHolePunch(ctx, rPK)
+	addr, err := c.addressResolver.Resolve(ctx, rPK)
 	if err != nil {
 		return nil, err
 	}
 
-	c.log.Infof("Dialed PK %v", rPK)
-
-	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, addr)
-
-	tcpConn, err := c.dialTimeout(addr)
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("ReserveEphemeral: %w", err)
+		return nil, err
 	}
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	stcpConn, err := newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, freePort)
-	if err != nil {
-		return nil, fmt.Errorf("newConn: %w", err)
-	}
-
-	return stcpConn, nil
+	return newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort)
 }
 
-// Listen creates a new listener for stcp hole punch.
+// Listen creates a new listener for stcp.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
 func (c *Client) Listen(lPort uint16) (*Listener, error) {
 	if c.isClosed() {
@@ -227,6 +190,10 @@ func (c *Client) Close() error {
 
 		c.mx.Lock()
 		defer c.mx.Unlock()
+
+		if c.lTCP != nil {
+			_ = c.lTCP.Close() //nolint:errcheck
+		}
 
 		for _, lis := range c.lMap {
 			_ = lis.Close() // nolint:errcheck

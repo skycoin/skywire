@@ -1,4 +1,4 @@
-package stcp
+package stcpr
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 const (
 	// PorterMinEphemeral is the minimum ephemeral port.
-	PorterMinEphemeral = uint16(49152)
+	PorterMinEphemeral uint16 = 49152
 )
 
 // Porter reserves stcp ports.
@@ -38,7 +38,9 @@ func (p *Porter) Reserve(port uint16) (bool, func()) {
 	if _, ok := p.ports[port]; ok {
 		return false, nil
 	}
+
 	p.ports[port] = struct{}{}
+
 	return true, p.portFreer(port)
 }
 
@@ -53,6 +55,7 @@ func (p *Porter) ReserveEphemeral(ctx context.Context) (uint16, func(), error) {
 		if p.eph < p.minEph {
 			p.eph = p.minEph
 		}
+
 		if _, ok := p.ports[p.eph]; ok {
 			select {
 			case <-ctx.Done():
@@ -61,12 +64,14 @@ func (p *Porter) ReserveEphemeral(ctx context.Context) (uint16, func(), error) {
 				continue
 			}
 		}
+
 		return p.eph, p.portFreer(p.eph), nil
 	}
 }
 
 func (p *Porter) portFreer(port uint16) func() {
 	once := new(sync.Once)
+
 	return func() {
 		once.Do(func() {
 			p.mx.Lock()

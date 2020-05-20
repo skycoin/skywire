@@ -15,7 +15,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 )
 
 // KeyPair holds a public/private key pair.
@@ -63,7 +64,9 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
 	}
 
-	var hasDmsg, hasStcp, hasStcph bool
+	table := stcp.NewTable(tableEntries)
+
+	var hasDmsg, hasStcp, hasStcpr, hasStcph bool
 
 	for _, network := range networks {
 		switch network {
@@ -71,6 +74,8 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			hasDmsg = true
 		case stcp.Type:
 			hasStcp = true
+		case stcpr.Type:
+			hasStcpr = true
 		case stcph.Type:
 			hasStcph = true
 		}
@@ -82,49 +87,55 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	const stcpBasePort = 7033
 
 	for i, pairs := range keys {
-		var dmsgClient *dmsg.Client
-		var stcpClient *stcp.Client
-		var stcphClient *stcph.Client
+		var clients snet.NetworkClients
 
 		if hasDmsg {
-			dmsgClient = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go dmsgClient.Serve()
+			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go clients.DmsgC.Serve()
 		}
 
 		addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
 
-		addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK, arclient.LocalAddr(addr))
+		addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
 		if err != nil {
 			panic(err)
 		}
 
 		if hasStcp {
-			stcpClient = stcp.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
+		}
+
+		if hasStcpr {
+			clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
 		}
 
 		if hasStcph {
-			var err error
-			stcphClient, err = stcph.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-			if err != nil {
-				panic(err)
-			}
+			clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
 		}
 
-		n := snet.NewRaw(
-			snet.Config{
-				PubKey: pairs.PK,
-				SecKey: pairs.SK,
-				Dmsg: &snet.DmsgConfig{
-					SessionsCount: 1,
-				},
-				STCP: &snet.STCPConfig{
-					LocalAddr: addr,
-				},
+		networkConfigs := snet.NetworkConfigs{
+			Dmsg: &snet.DmsgConfig{
+				SessionsCount: 1,
 			},
-			dmsgClient,
-			stcpClient,
-			stcphClient,
-		)
+			STCP: &snet.STCPConfig{
+				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
+			},
+			STCPR: &snet.STCPRConfig{
+				LocalAddr:       "127.0.0.1:" + strconv.Itoa(stcpBasePort+i+1000),
+				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
+			STCPH: &snet.STCPHConfig{
+				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
+		}
+
+		snetConfig := snet.Config{
+			PubKey:         pairs.PK,
+			SecKey:         pairs.SK,
+			NetworkConfigs: networkConfigs,
+		}
+
+		n := snet.NewRaw(snetConfig, clients)
 		require.NoError(t, n.Init())
 		ns[i] = n
 	}

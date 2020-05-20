@@ -48,6 +48,8 @@ type Config struct {
 	Dmsg          *snet.DmsgConfig     `json:"dmsg"`
 	Dmsgpty       *DmsgptyConfig       `json:"dmsgpty,omitempty"`
 	STCP          *snet.STCPConfig     `json:"stcp,omitempty"`
+	STCPR         *snet.STCPRConfig    `json:"stcpr,omitempty"`
+	STCPH         *snet.STCPHConfig    `json:"stcph,omitempty"`
 	Transport     *TransportConfig     `json:"transport"`
 	Routing       *RoutingConfig       `json:"routing"`
 	UptimeTracker *UptimeTrackerConfig `json:"uptime_tracker,omitempty"`
@@ -143,7 +145,14 @@ func DefaultConfig(log *logging.MasterLogger, configPath string, keys *KeyPair) 
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
 	conf.STCP = &snet.STCPConfig{
+		LocalAddr: skyenv.DefaultSTCPAddr,
+		PKTable:   nil,
+	}
+	conf.STCPR = &snet.STCPRConfig{
 		LocalAddr:       skyenv.DefaultSTCPAddr,
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
+	}
+	conf.STCPH = &snet.STCPHConfig{
 		AddressResolver: skyenv.DefaultAddressResolverAddr,
 	}
 	conf.Transport.LogStore = &LogStoreConfig{

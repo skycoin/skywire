@@ -13,7 +13,8 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -81,7 +82,9 @@ var (
 
 func init() {
 	const (
-		typeFlagUsage    = "type of transport to add; if unspecified, cli will attempt to establish a transport in the following order: stcp, dmsg"
+		// TODO: add stcpr implementation
+		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
+			"in the following order: stcp, stcpr, stcph, dmsg"
 		publicFlagUsage  = "whether to make the transport public"
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
@@ -111,6 +114,7 @@ var addTpCmd = &cobra.Command{
 		} else {
 			transportTypes := []string{
 				stcp.Type,
+				stcpr.Type,
 				stcph.Type,
 				dmsg.Type,
 			}

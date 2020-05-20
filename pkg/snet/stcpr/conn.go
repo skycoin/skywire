@@ -1,4 +1,4 @@
-package stcp
+package stcpr
 
 import (
 	"net"

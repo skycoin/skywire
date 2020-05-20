@@ -11,7 +11,8 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	stcph "github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp-holepunch"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -26,13 +27,6 @@ const (
 	SetupPort      = uint16(36)  // Listening port of a setup node.
 	AwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
 	TransportPort  = uint16(45)  // Listening port of a visor for incoming transports.
-)
-
-// Network types.
-const (
-	DmsgType  = dmsg.Type
-	STCPType  = stcp.Type
-	STCPHType = stcph.Type
 )
 
 var (
@@ -53,125 +47,178 @@ type DmsgConfig struct {
 
 // Type returns DmsgType.
 func (c *DmsgConfig) Type() string {
-	return DmsgType
+	return dmsg.Type
 }
 
 // STCPConfig defines config for STCP network.
 type STCPConfig struct {
-	AddressResolver string `json:"address_resolver"`
-	LocalAddr       string `json:"local_address"`
+	PKTable   map[cipher.PubKey]string `json:"pk_table"`
+	LocalAddr string                   `json:"local_address"`
 }
 
 // Type returns STCPType.
 func (c *STCPConfig) Type() string {
-	return STCPType
+	return stcp.Type
+}
+
+// STCPConfig defines config for STCP network.
+type STCPRConfig struct {
+	AddressResolver string `json:"address_resolver"`
+	LocalAddr       string `json:"local_address"`
+}
+
+// Type returns STCPRType.
+func (c *STCPRConfig) Type() string {
+	return stcpr.Type
+}
+
+// STCPConfig defines config for STCP network.
+type STCPHConfig struct {
+	AddressResolver string `json:"address_resolver"`
+}
+
+// Type returns STCPHType.
+func (c *STCPHConfig) Type() string {
+	return stcph.Type
 }
 
 // Config represents a network configuration.
 type Config struct {
-	PubKey cipher.PubKey
-	SecKey cipher.SecKey
-	Dmsg   *DmsgConfig // The dmsg service will not be started if nil.
-	STCP   *STCPConfig // The stcp service will not be started if nil.
+	PubKey         cipher.PubKey
+	SecKey         cipher.SecKey
+	NetworkConfigs NetworkConfigs
+}
+
+type NetworkConfigs struct {
+	Dmsg  *DmsgConfig  // The dmsg service will not be started if nil.
+	STCP  *STCPConfig  // The stcp service will not be started if nil.
+	STCPR *STCPRConfig // The stcpr service will not be started if nil.
+	STCPH *STCPHConfig // The stcph service will not be started if nil.
+}
+
+type NetworkClients struct {
+	DmsgC  *dmsg.Client
+	StcpC  *stcp.Client
+	StcprC *stcpr.Client
+	StcphC *stcph.Client
 }
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
 	conf     Config
 	networks []string // networks to be used with transports
-	dmsgC    *dmsg.Client
-	stcpC    *stcp.Client
-	stcphC   *stcph.Client
+	clients  NetworkClients
 }
 
 // New creates a network from a config.
 func New(conf Config) (*Network, error) {
 	var (
-		dmsgC  *dmsg.Client
-		stcpC  *stcp.Client
-		stcphC *stcph.Client
+		clients         NetworkClients
+		addressResolver arclient.APIClient
 	)
 
-	if conf.Dmsg != nil {
+	if conf.NetworkConfigs.Dmsg != nil {
 		c := &dmsg.Config{
-			MinSessions: conf.Dmsg.SessionsCount,
+			MinSessions: conf.NetworkConfigs.Dmsg.SessionsCount,
 		}
 
-		dmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Dmsg.Discovery), c)
-		dmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
+		clients.DmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.NetworkConfigs.Dmsg.Discovery), c)
+		clients.DmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 	}
 
-	if conf.STCP != nil {
-		localAddr, err := getFreeAddr()
-		if err != nil {
-			return nil, err
-		}
-
-		addressResolver, err := arclient.NewHTTP(conf.STCP.AddressResolver, conf.PubKey, conf.SecKey, arclient.LocalAddr(localAddr))
-		if err != nil {
-			return nil, err
-		}
-
-		stcpC = stcp.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.STCP.LocalAddr)
-
-		stcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
-
-		stcphC, err = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver, localAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		stcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+	if conf.NetworkConfigs.STCP != nil {
+		clients.StcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.NetworkConfigs.STCP.PKTable))
+		clients.StcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 	}
 
-	return NewRaw(conf, dmsgC, stcpC, stcphC), nil
+	if conf.NetworkConfigs.STCPR != nil {
+		ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
+		if err != nil {
+			return nil, err
+		}
+
+		addressResolver = ar
+
+		clients.StcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.NetworkConfigs.STCP.LocalAddr)
+		clients.StcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
+	}
+
+	if conf.NetworkConfigs.STCPH != nil {
+		// If address resolver is not already created or if stcpr and stcph address resolvers differ
+		if conf.NetworkConfigs.STCPR == nil || conf.NetworkConfigs.STCPR.AddressResolver != conf.NetworkConfigs.STCPH.AddressResolver {
+			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
+			if err != nil {
+				return nil, err
+			}
+
+			addressResolver = ar
+		}
+
+		clients.StcphC = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver)
+		clients.StcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+	}
+
+	return NewRaw(conf, clients), nil
 }
 
 // NewRaw creates a network from a config and a dmsg client.
-// TODO: change the way args are passed
-func NewRaw(conf Config, dmsgC *dmsg.Client, stcpC *stcp.Client, stcphC *stcph.Client) *Network {
+func NewRaw(conf Config, clients NetworkClients) *Network {
 	networks := make([]string, 0)
 
-	if dmsgC != nil {
-		networks = append(networks, DmsgType)
+	if clients.DmsgC != nil {
+		networks = append(networks, dmsg.Type)
 	}
 
-	if stcpC != nil {
-		networks = append(networks, STCPType)
+	if clients.StcpC != nil {
+		networks = append(networks, stcp.Type)
 	}
 
-	if stcphC != nil {
-		networks = append(networks, STCPHType)
+	if clients.StcprC != nil {
+		networks = append(networks, stcpr.Type)
+	}
+
+	if clients.StcphC != nil {
+		networks = append(networks, stcph.Type)
 	}
 
 	return &Network{
 		conf:     conf,
 		networks: networks,
-		dmsgC:    dmsgC,
-		stcpC:    stcpC,
-		stcphC:   stcphC,
+		clients:  clients,
 	}
 }
 
 // Init initiates server connections.
 func (n *Network) Init() error {
-	if n.dmsgC != nil {
+	if n.clients.DmsgC != nil {
 		time.Sleep(200 * time.Millisecond)
-		go n.dmsgC.Serve()
+		go n.clients.DmsgC.Serve()
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	if n.conf.STCP != nil {
-		if n.stcpC != nil && n.conf.STCP.LocalAddr != "" {
-			if err := n.stcpC.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcp': %w", err)
+	if n.conf.NetworkConfigs.STCP != nil {
+		if n.clients.StcpC != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
+			if err := n.clients.StcpC.Serve(n.conf.NetworkConfigs.STCP.LocalAddr); err != nil {
+				return fmt.Errorf("failed to initiate 'stcp': %v", err)
 			}
 		} else {
 			fmt.Println("No config found for stcp")
 		}
+	}
 
-		if n.stcphC != nil && n.conf.STCP.LocalAddr != "" {
-			if err := n.stcphC.Serve(); err != nil {
+	if n.conf.NetworkConfigs.STCPR != nil {
+		if n.clients.StcprC != nil && n.conf.NetworkConfigs.STCPR.LocalAddr != "" {
+			if err := n.clients.StcprC.Serve(); err != nil {
+				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
+			}
+		} else {
+			fmt.Println("No config found for stcpr")
+		}
+	}
+
+	if n.conf.NetworkConfigs.STCPH != nil {
+		if n.clients.StcphC != nil {
+			if err := n.clients.StcphC.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcph': %w", err)
 			}
 		} else {
@@ -185,23 +232,29 @@ func (n *Network) Init() error {
 // Close closes underlying connections.
 func (n *Network) Close() error {
 	wg := new(sync.WaitGroup)
-	wg.Add(3)
+	wg.Add(4)
 
 	var dmsgErr error
 	go func() {
-		dmsgErr = n.dmsgC.Close()
+		dmsgErr = n.clients.DmsgC.Close()
 		wg.Done()
 	}()
 
 	var stcpErr error
 	go func() {
-		stcpErr = n.stcpC.Close()
+		stcpErr = n.clients.StcpC.Close()
+		wg.Done()
+	}()
+
+	var stcprErr error
+	go func() {
+		stcprErr = n.clients.StcprC.Close()
 		wg.Done()
 	}()
 
 	var stcphErr error
 	go func() {
-		stcphErr = n.stcphC.Close()
+		stcphErr = n.clients.StcphC.Close()
 		wg.Done()
 	}()
 
@@ -213,6 +266,10 @@ func (n *Network) Close() error {
 
 	if stcpErr != nil {
 		return stcpErr
+	}
+
+	if stcprErr != nil {
+		return stcprErr
 	}
 
 	if stcphErr != nil {
@@ -232,13 +289,16 @@ func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 func (n *Network) TransportNetworks() []string { return n.networks }
 
 // Dmsg returns underlying dmsg client.
-func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
+func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
 
 // STcp returns the underlying stcp.Client.
-func (n *Network) STcp() *stcp.Client { return n.stcpC }
+func (n *Network) STcp() *stcp.Client { return n.clients.StcpC }
+
+// STcpr returns the underlying stcpr.Client.
+func (n *Network) STcpr() *stcpr.Client { return n.clients.StcprC }
 
 // STcpH returns the underlying stcph.Client.
-func (n *Network) STcpH() *stcph.Client { return n.stcphC }
+func (n *Network) STcpH() *stcph.Client { return n.clients.StcphC }
 
 // Dialer is an entity that can be dialed and asked for its type.
 type Dialer interface {
@@ -249,27 +309,34 @@ type Dialer interface {
 // Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
 	switch network {
-	case DmsgType:
+	case dmsg.Type:
 		addr := dmsg.Addr{
 			PK:   pk,
 			Port: port,
 		}
 
-		conn, err := n.dmsgC.Dial(ctx, addr)
+		conn, err := n.clients.DmsgC.Dial(ctx, addr)
 		if err != nil {
 			return nil, fmt.Errorf("dmsg client: %w", err)
 		}
 
 		return makeConn(conn, network), nil
-	case STCPType:
-		conn, err := n.stcpC.Dial(ctx, pk, port)
+	case stcp.Type:
+		conn, err := n.clients.StcpC.Dial(ctx, pk, port)
 		if err != nil {
-			return nil, fmt.Errorf("stcp client: %w", err)
+			return nil, fmt.Errorf("stcpr client: %w", err)
 		}
 
 		return makeConn(conn, network), nil
-	case STCPHType:
-		conn, err := n.stcphC.Dial(ctx, pk, port)
+	case stcpr.Type:
+		conn, err := n.clients.StcprC.Dial(ctx, pk, port)
+		if err != nil {
+			return nil, fmt.Errorf("stcpr client: %w", err)
+		}
+
+		return makeConn(conn, network), nil
+	case stcph.Type:
+		conn, err := n.clients.StcphC.Dial(ctx, pk, port)
 		if err != nil {
 			return nil, fmt.Errorf("stcph client: %w", err)
 		}
@@ -283,22 +350,22 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 // Listen listens on the specified port.
 func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 	switch network {
-	case DmsgType:
-		lis, err := n.dmsgC.Listen(port)
+	case dmsg.Type:
+		lis, err := n.clients.DmsgC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
 
 		return makeListener(lis, network), nil
-	case STCPType:
-		lis, err := n.stcpC.Listen(port)
+	case stcp.Type:
+		lis, err := n.clients.StcpC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
 
 		return makeListener(lis, network), nil
-	case STCPHType:
-		lis, err := n.stcphC.Listen(port)
+	case stcph.Type:
+		lis, err := n.clients.StcphC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
@@ -308,69 +375,6 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		return nil, ErrUnknownNetwork
 	}
 }
-
-// Listener represents a listener.
-type Listener struct {
-	net.Listener
-	lPK     cipher.PubKey
-	lPort   uint16
-	network string
-}
-
-func makeListener(l net.Listener, network string) *Listener {
-	lPK, lPort := disassembleAddr(l.Addr())
-	return &Listener{Listener: l, lPK: lPK, lPort: lPort, network: network}
-}
-
-// LocalPK returns a local public key of listener.
-func (l Listener) LocalPK() cipher.PubKey { return l.lPK }
-
-// LocalPort returns a local port of listener.
-func (l Listener) LocalPort() uint16 { return l.lPort }
-
-// Network returns a network of listener.
-func (l Listener) Network() string { return l.network }
-
-// AcceptConn accepts a connection from listener.
-func (l Listener) AcceptConn() (*Conn, error) {
-	conn, err := l.Listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-
-	return makeConn(conn, l.network), nil
-}
-
-// Conn represent a connection between nodes in Skywire.
-type Conn struct {
-	net.Conn
-	lPK     cipher.PubKey
-	rPK     cipher.PubKey
-	lPort   uint16
-	rPort   uint16
-	network string
-}
-
-func makeConn(conn net.Conn, network string) *Conn {
-	lPK, lPort := disassembleAddr(conn.LocalAddr())
-	rPK, rPort := disassembleAddr(conn.RemoteAddr())
-	return &Conn{Conn: conn, lPK: lPK, rPK: rPK, lPort: lPort, rPort: rPort, network: network}
-}
-
-// LocalPK returns local public key of connection.
-func (c Conn) LocalPK() cipher.PubKey { return c.lPK }
-
-// RemotePK returns remote public key of connection.
-func (c Conn) RemotePK() cipher.PubKey { return c.rPK }
-
-// LocalPort returns local port of connection.
-func (c Conn) LocalPort() uint16 { return c.lPort }
-
-// RemotePort returns remote port of connection.
-func (c Conn) RemotePort() uint16 { return c.rPort }
-
-// Network returns network of connection.
-func (c Conn) Network() string { return c.network }
 
 func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
 	strs := strings.Split(addr.String(), ":")
@@ -389,17 +393,4 @@ func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
 	}
 
 	return
-}
-
-func getFreeAddr() (addr string, err error) {
-	l, err := net.Listen("tcp", "")
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		err = l.Close()
-	}()
-
-	return l.Addr().String(), nil
 }

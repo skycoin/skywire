@@ -44,6 +44,7 @@ type Error struct {
 
 // APIClient implements DMSG discovery API client.
 type APIClient interface {
+	LocalAddr() string
 	Bind(ctx context.Context, port string) error
 	Resolve(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error)
@@ -66,34 +67,38 @@ type ClientOption func(c *httpClient)
 // * SW-Public: The specified public key
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, opts ...ClientOption) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
 		return nil, fmt.Errorf("httpauth: %w", err)
 	}
 
-	client := &httpClient{client: httpAuthClient, pk: pk, sk: sk}
+	localAddr, err := getFreeAddr()
+	if err != nil {
+		return nil, err
+	}
 
-	for _, opt := range opts {
-		opt(client)
+	transport := &http.Transport{
+		DialContext: func(_ context.Context, network, remoteAddr string) (conn net.Conn, err error) {
+			return reuseport.Dial(network, localAddr, remoteAddr)
+		},
+		DisableKeepAlives: false,
+	}
+
+	httpAuthClient.SetTransport(transport)
+
+	client := &httpClient{
+		client:    httpAuthClient,
+		pk:        pk,
+		sk:        sk,
+		localAddr: localAddr,
 	}
 
 	return client, nil
 }
 
-func LocalAddr(localAddr string) ClientOption {
-	return func(c *httpClient) {
-		c.localAddr = localAddr
-
-		transport := &http.Transport{
-			DialContext: func(_ context.Context, network, remoteAddr string) (conn net.Conn, err error) {
-				return reuseport.Dial(network, localAddr, remoteAddr)
-			},
-			DisableKeepAlives: false,
-		}
-
-		c.client.SetTransport(transport)
-	}
+func (c *httpClient) LocalAddr() string {
+	return c.localAddr
 }
 
 // Get performs a new GET request.
@@ -317,4 +322,17 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(apiError.Error)
+}
+
+func getFreeAddr() (addr string, err error) {
+	l, err := net.Listen("tcp", "")
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		err = l.Close()
+	}()
+
+	return l.Addr().String(), nil
 }

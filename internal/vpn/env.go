@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 const (
@@ -23,19 +25,30 @@ const (
 	RFAddrEnvKey = "ADDR_RF"
 	// UptimeTrackerAddrEnvKey is env arg holding uptime tracker address.
 	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
-	// AddressResolverAddrEnvKey is env arg holding address resolver address.
-	AddressResolverAddrEnvKey = "ADDR_ADDRESS_RESOLVER"
+	// STCPRAddressResolverAddrEnvKey is env arg holding stcpr address resolver address.
+	STCPRAddressResolverAddrEnvKey = "STCPR_ADDR_ADDRESS_RESOLVER"
+	// STCPHAddressResolverAddrEnvKey is env arg holding stcph address resolver address.
+	STCPHAddressResolverAddrEnvKey = "STCPH_ADDR_ADDRESS_RESOLVER"
+
+	// STCPTableLenEnvKey is env arg holding Stcp table length.
+	STCPTableLenEnvKey = "STCP_TABLE_LEN"
+	// STCPKeyEnvPrefix is prefix for each env arg holding STCP entity key.
+	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
+	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
+	STCPValueEnvPrefix = "STCP_TABLE_"
 )
 
 // DirectRoutesEnvConfig contains all the addresses which need to be communicated directly,
 // not through the VPN service.
 type DirectRoutesEnvConfig struct {
-	DmsgDiscovery   string
-	DmsgServers     []string
-	TPDiscovery     string
-	RF              string
-	UptimeTracker   string
-	AddressResolver string
+	DmsgDiscovery        string
+	DmsgServers          []string
+	TPDiscovery          string
+	RF                   string
+	UptimeTracker        string
+	STCPRAddressResolver string
+	STCPHAddressResolver string
+	STCPTable            map[cipher.PubKey]string
 }
 
 // AppEnvArgs forms env args to pass to the app process.
@@ -58,8 +71,22 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker
 	}
 
-	if config.AddressResolver != "" {
-		envs[AddressResolverAddrEnvKey] = config.AddressResolver
+	if config.STCPRAddressResolver != "" {
+		envs[STCPRAddressResolverAddrEnvKey] = config.STCPRAddressResolver
+	}
+
+	if config.STCPHAddressResolver != "" {
+		envs[STCPHAddressResolverAddrEnvKey] = config.STCPHAddressResolver
+	}
+
+	if len(config.STCPTable) != 0 {
+		envs[STCPTableLenEnvKey] = strconv.FormatInt(int64(len(config.STCPTable)), 10)
+
+		itemIdx := 0
+		for k, v := range config.STCPTable {
+			envs[STCPKeyEnvPrefix+strconv.FormatInt(int64(itemIdx), 10)] = k.String()
+			envs[STCPValueEnvPrefix+k.String()] = v
+		}
 	}
 
 	if len(config.DmsgServers) != 0 {

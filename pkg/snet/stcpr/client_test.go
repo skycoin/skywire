@@ -1,4 +1,4 @@
-package stcp
+package stcpr
 
 import (
 	"net"
@@ -25,18 +25,24 @@ func prepareConns(t *testing.T) (*Conn, *Conn, func()) {
 
 	aConn, bConn := net.Pipe()
 
-	ihs := InitiatorHandshake(aSK, dmsg.Addr{PK: aPK, Port: 1}, dmsg.Addr{PK: bPK, Port: 1})
+	const port = 1
+
+	ihs := InitiatorHandshake(aSK, dmsg.Addr{PK: aPK, Port: port}, dmsg.Addr{PK: bPK, Port: port})
 
 	rhs := ResponderHandshake(func(f2 Frame2) error {
 		return nil
 	})
 
-	var b *Conn
-	var respErr error
+	var (
+		b       *Conn
+		respErr error
+	)
+
 	done := make(chan struct{})
 
 	go func() {
 		b, respErr = newConn(bConn, time.Now().Add(HandshakeTimeout), rhs, nil)
+
 		close(done)
 	}()
 

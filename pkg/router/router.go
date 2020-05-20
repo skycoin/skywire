@@ -150,7 +150,7 @@ type router struct {
 func New(n *snet.Network, config *Config) (Router, error) {
 	config.SetDefaults()
 
-	sl, err := n.Listen(snet.DmsgType, skyenv.DmsgAwaitSetupPort)
+	sl, err := n.Listen(dmsg.Type, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
 		return nil, err
 	}
