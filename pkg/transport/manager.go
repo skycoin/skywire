@@ -47,13 +47,16 @@ type Manager struct {
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(n *snet.Network, config *ManagerConfig) (*Manager, error) {
+func NewManager(log *logging.Logger, n *snet.Network, config *ManagerConfig) (*Manager, error) {
+	if log == nil {
+		log = logging.MustGetLogger("tp_manager")
+	}
 	nets := make(map[string]struct{})
 	for _, netType := range n.TransportNetworks() {
 		nets[netType] = struct{}{}
 	}
 	tm := &Manager{
-		Logger: logging.MustGetLogger("tp_manager"),
+		Logger: log,
 		Conf:   config,
 		nets:   nets,
 		tps:    make(map[uuid.UUID]*ManagedTransport),
@@ -414,7 +417,7 @@ func CreateTransportPair(
 	// Prepare tp manager 0.
 	pk0, sk0 := keys[0].PK, keys[0].SK
 	ls0 := InMemoryTransportLogStore()
-	m0, err = NewManager(nEnv.Nets[0], &ManagerConfig{
+	m0, err = NewManager(nil, nEnv.Nets[0], &ManagerConfig{
 		PubKey:          pk0,
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
@@ -429,7 +432,7 @@ func CreateTransportPair(
 	// Prepare tp manager 1.
 	pk1, sk1 := keys[1].PK, keys[1].SK
 	ls1 := InMemoryTransportLogStore()
-	m1, err = NewManager(nEnv.Nets[1], &ManagerConfig{
+	m1, err = NewManager(nil, nEnv.Nets[1], &ManagerConfig{
 		PubKey:          pk1,
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,

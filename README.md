@@ -13,6 +13,7 @@
     - [Run `skywire-visor`](#run-skywire-visor)
     - [Run `skywire-cli`](#run-skywire-cli)
     - [Run `hypervisor`](#run-hypervisor)
+    - [Windows](#windows)
   - [Apps](#Apps)
     - [App Programming API](#app-programming-api)
   - [Transports](#Transports)
@@ -130,6 +131,43 @@ $ hypervisor
 ```
 
 You can open up the hypervisor UI on `localhost:8000`. 
+
+### Windows
+
+Skywire node may be run on Windows, but this process requires some manual operations at the moment.
+
+In order to run the skywire visor on Windows, you will need to manually build it. Do not forget the `.exe` extensions.
+
+`go build -o ./skywire-visor.exe ./cmd/skywire-visor`
+
+Apps may be built the same way:
+
+`go build -o ./apps/vpn-client.exe ./cmd/apps/vpn-client`
+
+Apps should be stated in the config without `.exe` extension, as usual.
+
+Some log lines may seem strange due to the Windows encoding in terminal. To make life easier you may change encoding to UTF-8 executing:
+```
+CHCP 65001
+```
+
+#### Not Supported Features
+
+- `dmsgpty`
+- `syslog`
+
+Trying to run these will result in failure.
+
+#### Running VPN
+
+Running VPN on Windows requires `wintun` driver to be installed. This may be achieved by installing the driver itself, or simply installing `Wireguard` which installs this driver too.
+
+VPN client requires `local system` user rights to be run. This may be achieved by downloading `PsExec`: https://docs.microsoft.com/en-us/sysinternals/downloads/psexec . Then you may run terminal with the `local system` rights like this:
+```
+PsExec.exe -i -s C:\Windows\system32\cmd.exe
+```
+
+And then simply run skywire from the opened terminal.
 
 ### Apps
 

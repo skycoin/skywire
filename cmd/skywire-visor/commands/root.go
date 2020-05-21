@@ -1,236 +1,170 @@
 package commands
 
-// NOTE: "net/http/pprof" is used for profiling.
 import (
-	"bufio"
-	"encoding/json"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
-	"log/syslog"
 	"net/http"
-	_ "net/http/pprof" // nolint:gosec // TODO: consider removing for security reasons
+	_ "net/http/pprof" //nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
-	"time"
 
+	"github.com/SkycoinProject/dmsg/cmdutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
 
-// TODO(evanlinjin): Determine if this is still needed.
-//import _ "net/http/pprof" // used for HTTP profiling
+var restartCtx = restart.CaptureContext()
 
-const configEnv = "SW_CONFIG"
+var (
+	tag        string
+	syslogAddr string
+	pprofMode  string
+	pprofAddr  string
+	confPath   string
+)
 
-type runConf struct {
-	syslogAddr    string
-	tag           string
-	confFromStdin bool
-	profileMode   string
-	port          string
-	startDelay    string
-	args          []string
-
-	profileStop  func()
-	logger       *logging.Logger
-	masterLogger *logging.MasterLogger
-	conf         *visor.Config
-	visor        *visor.Visor
-	restartCtx   *restart.Context
+func init() {
+	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
+	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
+	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
+	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", "skywire-config.json", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 }
-
-var conf *runConf
 
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor [config-path]",
-	Short: "Visor for skywire",
+	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
-		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
-			log.Printf("Failed to output build info: %v", err)
+
+		log := initLogger(tag, syslogAddr)
+
+		if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
+			log.WithError(err).Error("Failed to output build info.")
 		}
 
-		conf.args = args
+		stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
+		defer stopPProf()
 
-		conf.startProfiler().
-			startLogger().
-			readConfig().
-			runVisor().
-			waitOsSignals().
-			stopVisor()
+		conf := initConfig(log, confPath)
+
+		v, ok := visor.NewVisor(conf, restartCtx)
+		if !ok {
+			log.Fatal("Failed to start visor.")
+		}
+
+		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+		defer cancel()
+
+		// Wait.
+		<-ctx.Done()
+
+		if err := v.Close(); err != nil {
+			log.WithError(err).Error("Visor closed with error.")
+		}
 	},
 	Version: buildinfo.Get().Version,
-}
-
-func init() {
-	conf = new(runConf)
-	rootCmd.Flags().StringVarP(&conf.syslogAddr, "syslog", "", "none", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVarP(&conf.tag, "tag", "", "skywire", "logging tag")
-	rootCmd.Flags().BoolVarP(&conf.confFromStdin, "stdin", "i", false, "read config from STDIN")
-	rootCmd.Flags().StringVarP(&conf.profileMode, "profile", "p", "none", "enable profiling with pprof. Mode:  none or one of: [cpu, mem, mutex, block, trace, http]")
-	rootCmd.Flags().StringVarP(&conf.port, "port", "", "6060", "port for http-mode of pprof")
-	rootCmd.Flags().StringVarP(&conf.startDelay, "delay", "", "0ns", "delay before visor start")
-
-	conf.restartCtx = restart.CaptureContext()
 }
 
 // Execute executes root CLI command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
 }
 
-func (rc *runConf) startProfiler() *runConf {
-	var option func(*profile.Profile)
+func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
+	log := logging.NewMasterLogger()
 
-	switch rc.profileMode {
-	case "none":
-		rc.profileStop = func() {}
-		return rc
+	if syslogAddr != "" {
+		hook, err := syslog.SetupHook(syslogAddr, tag)
+		if err != nil {
+			log.WithError(err).Error("Failed to connect to the syslog daemon.")
+		} else {
+			log.AddHook(hook)
+			log.Out = ioutil.Discard
+		}
+	}
+
+	return log
+}
+
+func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr string) (stop func()) {
+	var optFunc func(*profile.Profile)
+
+	switch profMode {
+	case "none", "":
 	case "http":
 		go func() {
-			log.Println(http.ListenAndServe(fmt.Sprintf("localhost:%v", rc.port), nil))
+			err := http.ListenAndServe(profAddr, nil)
+			log.WithError(err).
+				WithField("mode", profMode).
+				WithField("addr", profAddr).
+				Info("Stopped serving pprof on http.")
 		}()
-
-		rc.profileStop = func() {}
-
-		return rc
 	case "cpu":
-		option = profile.CPUProfile
+		optFunc = profile.CPUProfile
 	case "mem":
-		option = profile.MemProfile
+		optFunc = profile.MemProfile
 	case "mutex":
-		option = profile.MutexProfile
+		optFunc = profile.MutexProfile
 	case "block":
-		option = profile.BlockProfile
+		optFunc = profile.BlockProfile
 	case "trace":
-		option = profile.TraceProfile
+		optFunc = profile.TraceProfile
 	}
 
-	rc.profileStop = profile.Start(profile.ProfilePath("./logs/"+rc.tag), option).Stop
-
-	return rc
-}
-
-func (rc *runConf) startLogger() *runConf {
-	rc.masterLogger = logging.NewMasterLogger()
-	rc.logger = rc.masterLogger.PackageLogger(rc.tag)
-
-	if rc.syslogAddr != "none" {
-		hook, err := logrussyslog.NewSyslogHook("udp", rc.syslogAddr, syslog.LOG_INFO, rc.tag)
-		if err != nil {
-			rc.logger.Error("Unable to connect to syslog daemon:", err)
-		} else {
-			rc.masterLogger.AddHook(hook)
-			rc.masterLogger.Out = ioutil.Discard
-		}
+	if optFunc != nil {
+		stop = profile.Start(profile.ProfilePath("./logs/"+tag), optFunc).Stop
 	}
 
-	return rc
+	if stop == nil {
+		stop = func() {}
+	}
+	return stop
 }
 
-func (rc *runConf) readConfig() *runConf {
-	var reader io.Reader
-	var confPath string
+func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 {
+	log := mLog.PackageLogger("visor:config")
 
-	if !rc.confFromStdin {
-		cp := pathutil.FindConfigPath(rc.args, 0, configEnv, pathutil.VisorDefaults())
+	var r io.Reader
 
-		file, err := os.Open(filepath.Clean(cp))
+	switch confPath {
+	case visorconfig.StdinName:
+		log.Info("Reading config from STDIN.")
+		r = os.Stdin
+	default:
+		log.WithField("filepath", confPath).Info("Reading config from file.")
+		f, err := os.Open(confPath) //nolint:gosec
 		if err != nil {
-			rc.logger.WithError(err).Fatal("Failed to open config file.")
+			log.WithError(err).
+				WithField("filepath", confPath).
+				Fatal("Failed to read config file.")
 		}
 		defer func() {
-			if err := file.Close(); err != nil {
-				rc.logger.WithError(err).Warn("Failed to close config file.")
+			if err := f.Close(); err != nil {
+				log.WithError(err).Error("Closing config file resulted in error.")
 			}
 		}()
-
-		rc.logger.WithField("file", cp).Info("Reading config from file...")
-		reader = file
-		confPath = cp
-
-	} else {
-		rc.logger.Info("Reading config from STDIN...")
-		reader = bufio.NewReader(os.Stdin)
-		confPath = visor.StdinName
+		r = f
 	}
 
-	rc.conf = visor.BaseConfig(rc.masterLogger, confPath)
-	dec := json.NewDecoder(reader)
-	dec.DisallowUnknownFields()
-
-	if err := dec.Decode(rc.conf); err != nil {
-		rc.logger.WithError(err).Fatal("Failed to decode config.")
-	}
-	if err := rc.conf.Flush(); err != nil {
-		rc.logger.WithError(err).Fatal("Failed to flush config.")
-	}
-	return rc
-}
-
-func (rc *runConf) runVisor() *runConf {
-	startDelay, err := time.ParseDuration(rc.startDelay)
+	raw, err := ioutil.ReadAll(r)
 	if err != nil {
-		rc.logger.Warnf("Using no visor start delay due to parsing failure: %v", err)
-
-		startDelay = time.Duration(0)
+		log.WithError(err).Fatal("Failed to read in config.")
 	}
 
-	if startDelay != 0 {
-		rc.logger.Infof("Visor start delay is %v, waiting...", startDelay)
+	conf, err := visorconfig.Parse(mLog, confPath, raw)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to parse config.")
 	}
 
-	time.Sleep(startDelay)
-
-	if rc.conf.Dmsgpty != nil {
-		if err := visor.UnlinkSocketFiles(rc.conf.Dmsgpty.CLIAddr); err != nil {
-			rc.logger.Fatal("failed to unlink socket files: ", err)
-		}
-	}
-
-	v, ok := visor.NewVisor(rc.conf, rc.restartCtx)
-	if !ok {
-		rc.logger.Fatal("Failed to start visor.")
-	}
-
-	rc.visor = v
-	return rc
-}
-
-func (rc *runConf) stopVisor() *runConf {
-	defer rc.profileStop()
-
-	if err := rc.visor.Close(); err != nil {
-		rc.logger.WithError(err).Fatal("Failed to close visor.")
-	}
-	return rc
-}
-
-func (rc *runConf) waitOsSignals() *runConf {
-	ch := make(chan os.Signal, 2)
-	signal.Notify(ch, []os.Signal{syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT}...)
-	<-ch
-
-	go func() {
-		select {
-		case <-time.After(time.Duration(rc.conf.ShutdownTimeout)):
-			rc.logger.Fatal("Timeout reached: terminating")
-		case s := <-ch:
-			rc.logger.Fatalf("Received signal %s: terminating", s)
-		}
-	}()
-
-	return rc
+	return conf
 }

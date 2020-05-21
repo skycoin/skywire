@@ -28,6 +28,7 @@ require (
 	golang.org/x/sys v0.0.0-20200428200454-593003d681fa // indirect
 	golang.org/x/text v0.3.2 // indirect
 	nhooyr.io/websocket v1.8.2
+	golang.zx2c4.com/wireguard v0.0.20200320
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
