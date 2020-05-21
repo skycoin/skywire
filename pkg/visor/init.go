@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
+	"github.com/SkycoinProject/dmsg/netutil"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
@@ -31,20 +30,6 @@ import (
 )
 
 type initFunc func(v *Visor) bool
-
-func initStack() []initFunc {
-	return []initFunc{
-		initUpdater,
-		initSNet,
-		initDmsgpty,
-		initTransport,
-		initRouter,
-		initLauncher,
-		initCLI,
-		initHypervisors,
-		initUptimeTracker,
-	}
-}
 
 func initUpdater(v *Visor) bool {
 	report := v.makeReporter("updater")
@@ -77,94 +62,6 @@ func initSNet(v *Visor) bool {
 	})
 
 	v.net = n
-	return report(nil)
-}
-
-func initDmsgpty(v *Visor) bool {
-	report := v.makeReporter("dmsgpty")
-	conf := v.conf.Dmsgpty
-
-	if conf == nil {
-		v.log.Info("'dmsgpty' is not configured, skipping.")
-		return report(nil)
-	}
-
-	// Unlink dmsg socket files (just in case).
-	if conf.CLINet == "unix" {
-		if err := UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			return report(err)
-		}
-	}
-
-	var wl dmsgpty.Whitelist
-	if conf.AuthFile == "" {
-		wl = dmsgpty.NewMemoryWhitelist()
-	} else {
-		var err error
-		if wl, err = dmsgpty.NewJSONFileWhiteList(v.conf.Dmsgpty.AuthFile); err != nil {
-			return report(err)
-		}
-	}
-
-	dmsgC := v.net.Dmsg()
-	if dmsgC == nil {
-		return report(errors.New("cannot create dmsgpty with nil dmsg client"))
-	}
-
-	pty := dmsgpty.NewHost(dmsgC, wl)
-
-	if ptyPort := conf.Port; ptyPort != 0 {
-
-		ctx, cancel := context.WithCancel(context.Background())
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			if err := pty.ListenAndServe(ctx, ptyPort); err != nil {
-				report(fmt.Errorf("listen and serve stopped: %w", err))
-			}
-		}()
-
-		v.pushCloseStack("dmsgpty.serve", func() bool {
-			cancel()
-			wg.Wait()
-			return report(nil)
-		})
-	}
-
-	if conf.CLINet != "" {
-		if conf.CLINet == "unix" {
-			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
-				return report(fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err))
-			}
-		}
-
-		cliL, err := net.Listen(conf.CLINet, conf.CLIAddr)
-		if err != nil {
-			return report(fmt.Errorf("failed to start dmsgpty cli listener: %w", err))
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			if err := pty.ServeCLI(ctx, cliL); err != nil {
-				report(fmt.Errorf("serve cli stopped: %w", err))
-			}
-		}()
-
-		v.pushCloseStack("dmsgpty.cli", func() bool {
-			cancel()
-			ok := report(cliL.Close())
-			wg.Wait()
-			return ok
-		})
-	}
-
-	v.pty = pty
 	return report(nil)
 }
 
@@ -302,22 +199,37 @@ func initLauncher(v *Visor) bool {
 	if err != nil {
 		return report(fmt.Errorf("failed to start launcher: %w", err))
 	}
-	launch.AutoStart(map[string]func() []string{
-		skyenv.VPNClientName: func() []string { return makeVPNEnvs(v.conf, v.net) },
-		skyenv.VPNServerName: func() []string { return makeVPNEnvs(v.conf, v.net) },
+	err = launch.AutoStart(map[string]func() ([]string, error){
+		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
+		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 	})
+	if err != nil {
+		return report(fmt.Errorf("failed to autostart apps: %w", err))
+	}
 
 	v.procM = procM
 	v.appL = launch
 	return report(nil)
 }
 
-func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) []string {
+func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	var envCfg vpn.DirectRoutesEnvConfig
 
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
-		envCfg.DmsgServers = n.Dmsg().ConnectedServers()
+
+		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+		err := r.Do(context.Background(), func() error {
+			envCfg.DmsgServers = n.Dmsg().ConnectedServers()
+			if len(envCfg.DmsgServers) == 0 {
+				return errors.New("no Dmsg servers found")
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
+		}
 	}
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
@@ -338,7 +250,8 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) []string {
 	for k, v := range vpn.AppEnvArgs(envCfg) {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
-	return envs
+
+	return envs, nil
 }
 
 func initCLI(v *Visor) bool {
