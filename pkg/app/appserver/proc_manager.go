@@ -14,6 +14,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 )
 
 //go:generate mockery -name ProcManager -case underscore -inpkg
@@ -56,17 +57,23 @@ type procManager struct {
 	procs      map[string]*Proc
 	procsByKey map[appcommon.ProcKey]*Proc
 
+	// event broadcaster: broadcasts events to apps
+	eb *appevent.Broadcaster
+
 	mx   sync.RWMutex
 	done chan struct{}
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, addr string) (ProcManager, error) {
+func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr string) (ProcManager, error) {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
 	if discF == nil {
 		discF = new(appdisc.Factory)
+	}
+	if eb == nil {
+		eb = appevent.NewBroadcaster(mLog.PackageLogger("event_broadcaster"), time.Second)
 	}
 
 	lis, err := net.Listen("tcp", addr)
@@ -82,6 +89,7 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, addr str
 		discF:      discF,
 		procs:      make(map[string]*Proc),
 		procsByKey: make(map[appcommon.ProcKey]*Proc),
+		eb:         eb,
 		done:       make(chan struct{}),
 	}
 
@@ -130,21 +138,18 @@ func (m *procManager) handleConn(conn net.Conn) bool {
 	log := m.log.WithField("remote", conn.RemoteAddr())
 	log.Debug("Accepting proc conn...")
 
-	// Read in and check key.
-	var key appcommon.ProcKey
-	if n, err := io.ReadFull(conn, key[:]); err != nil {
-		log.WithError(err).
-			WithField("n", n).
-			Warn("Failed to read proc key.")
+	hello, err := appevent.DoRespHandshake(m.eb, conn)
+	if err != nil {
+		log.WithError(err).Error("Failed to do handshake with proc.")
 		return false
 	}
 
-	log = log.WithField("proc_key", key.String())
-	log.Debug("Read proc key.")
+	log = log.WithField("hello", hello.String())
+	log.Debug("Read hello from proc.")
 
 	// Push conn to Proc.
 	m.mx.RLock()
-	proc, ok := m.procsByKey[key]
+	proc, ok := m.procsByKey[hello.ProcKey]
 	m.mx.RUnlock()
 	if !ok {
 		log.Error("Failed to find proc of given key.")
