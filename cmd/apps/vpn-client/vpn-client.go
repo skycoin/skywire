@@ -70,6 +70,17 @@ func main() {
 		}
 	}
 
+	var noiseCreds vpn.NoiseCredentials
+	if localPK.Null() && !localSK.Null() {
+		var err error
+		noiseCreds, err = vpn.NewNoiseCredentialsFromSK(localSK)
+		if err != nil {
+			log.WithError(err).Fatalln("error creating noise credentials")
+		}
+	} else {
+		noiseCreds = vpn.NewNoiseCredentials(localSK, localPK)
+	}
+
 	appClient := app.NewClient()
 	defer appClient.Close()
 
@@ -88,11 +99,8 @@ func main() {
 	log.Infof("Dialed %s", appConn.RemoteAddr())
 
 	vpnClientCfg := vpn.ClientConfig{
-		Passcode: *passcode,
-		Credentials: vpn.NoiseCredentials{
-			PK: localPK,
-			SK: localSK,
-		},
+		Passcode:    *passcode,
+		Credentials: noiseCreds,
 	}
 	vpnClient, err := vpn.NewClient(vpnClientCfg, log, appConn)
 	if err != nil {
