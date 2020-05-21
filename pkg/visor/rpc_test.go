@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -14,20 +16,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func baseConfig(t *testing.T) *visorconfig.V1 {
+	cc, err := visorconfig.NewCommon(nil, visorconfig.StdinName, visorconfig.V1Name, nil)
+	require.NoError(t, err)
+	return visorconfig.MakeBaseConfig(cc)
+}
+
 func TestHealth(t *testing.T) {
-	c := &Config{
-		KeyPair: NewKeyPair(),
-		Transport: &TransportConfig{
-			Discovery: "foo",
-		},
-		Routing: &RoutingConfig{
-			RouteFinder: "foo",
-		},
-	}
-
-	c.Routing.SetupNodes = []cipher.PubKey{c.KeyPair.PubKey}
-
 	t.Run("Report all the services as available", func(t *testing.T) {
+		c := baseConfig(t)
+		c.Transport = &visorconfig.V1Transport{
+			Discovery: "foo",
+		}
+		c.Routing = &visorconfig.V1Routing{
+			RouteFinder: "foo",
+			SetupNodes:  []cipher.PubKey{c.PK},
+		}
+
 		v := &Visor{
 			conf: c,
 			tpM: &transport.Manager{
@@ -47,12 +52,11 @@ func TestHealth(t *testing.T) {
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
-		conf := &Config{
-			KeyPair: NewKeyPair(),
-			Routing: &RoutingConfig{},
-		}
+		c := baseConfig(t)
+		c.Routing = &visorconfig.V1Routing{}
+
 		v := &Visor{
-			conf: conf,
+			conf: c,
 			tpM: &transport.Manager{
 				Conf: &transport.ManagerConfig{
 					DiscoveryClient: transport.NewDiscoveryMock(),

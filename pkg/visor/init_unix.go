@@ -41,6 +41,13 @@ func initDmsgpty(v *Visor) bool {
 		return report(nil)
 	}
 
+	// Unlink dmsg socket files (just in case).
+	if conf.CLINet == "unix" {
+		if err := UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+			return report(err)
+		}
+	}
+
 	var wl dmsgpty.Whitelist
 	if conf.AuthFile == "" {
 		wl = dmsgpty.NewMemoryWhitelist()
