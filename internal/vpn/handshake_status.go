@@ -12,6 +12,8 @@ const (
 	HandshakeNoFreeIPs
 	// HandshakeStatusInternalError is returned in all other cases when some server error occurred.
 	HandshakeStatusInternalError
+	// HandshakeStatusForbidden is returned if client had sent the wrong passcode.
+	HandshakeStatusForbidden
 )
 
 func (hs HandshakeStatus) String() string {
@@ -24,6 +26,8 @@ func (hs HandshakeStatus) String() string {
 		return "No free IPs left to serve"
 	case HandshakeStatusInternalError:
 		return "Internal server error"
+	case HandshakeStatusForbidden:
+		return "Forbidden"
 	default:
 		return "Unknown code"
 	}
