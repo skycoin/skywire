@@ -10,7 +10,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
-// Errors associated with proxy discovery types.
+// Errors associated with service discovery types.
 var (
 	ErrInvalidSWAddr = errors.New("invalid skywire address")
 )
@@ -88,30 +88,30 @@ type GeoLocation struct {
 	Region  string  `json:"region,omitempty"`
 }
 
-// Stats provides various statistics on the proxy-discovery service.
+// Stats provides various statistics on the service-discovery service.
 type Stats struct {
 	ConnectedClients int `json:"connected_clients"`
 }
 
-// Proxy represents a proxy entry in proxy-discovery.
-type Proxy struct {
+// Service represents a service entry in service-discovery.
+type Service struct {
 	Addr  SWAddr       `json:"address"`
 	Stats *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
 	Geo   *GeoLocation `json:"geo,omitempty"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
-func (p *Proxy) MarshalBinary() ([]byte, error) {
+func (p *Service) MarshalBinary() ([]byte, error) {
 	return json.Marshal(p)
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler
-func (p *Proxy) UnmarshalBinary(data []byte) error {
+func (p *Service) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, p)
 }
 
 // Check ensures fields are valid.
-func (p Proxy) Check() error {
+func (p Service) Check() error {
 	if p.Addr.PubKey().Null() {
 		return errors.New("public key cannot be null in address")
 	}
