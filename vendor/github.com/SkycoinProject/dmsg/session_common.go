@@ -20,11 +20,12 @@ type SessionCommon struct {
 	entity *EntityCommon // back reference
 	rPK    cipher.PubKey // remote pk
 
-	ys   *yamux.Session
-	ns   *noise.Noise
-	nMap noise.NonceMap
-	rMx  sync.Mutex
-	wMx  sync.Mutex
+	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
+	ys      *yamux.Session
+	ns      *noise.Noise
+	nMap    noise.NonceMap
+	rMx     sync.Mutex
+	wMx     sync.Mutex
 
 	log logrus.FieldLogger
 }
@@ -55,6 +56,7 @@ func (sc *SessionCommon) initClient(entity *EntityCommon, conn net.Conn, rPK cip
 
 	sc.entity = entity
 	sc.rPK = rPK
+	sc.netConn = conn
 	sc.ys = ySes
 	sc.ns = ns
 	sc.nMap = make(noise.NonceMap)
@@ -87,6 +89,7 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 
 	sc.entity = entity
 	sc.rPK = ns.RemoteStatic()
+	sc.netConn = conn
 	sc.ys = ySes
 	sc.ns = ns
 	sc.nMap = make(noise.NonceMap)
@@ -133,6 +136,12 @@ func (sc *SessionCommon) LocalPK() cipher.PubKey { return sc.entity.pk }
 
 // RemotePK returns the remote public key of the session.
 func (sc *SessionCommon) RemotePK() cipher.PubKey { return sc.rPK }
+
+// LocalTCPAddr returns the local address of the underlying TCP connection.
+func (sc *SessionCommon) LocalTCPAddr() net.Addr { return sc.netConn.LocalAddr() }
+
+// RemoteTCPAddr returns the remote address of the underlying TCP connection.
+func (sc *SessionCommon) RemoteTCPAddr() net.Addr { return sc.netConn.RemoteAddr() }
 
 // Close closes the session.
 func (sc *SessionCommon) Close() (err error) {

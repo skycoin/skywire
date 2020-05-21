@@ -16,6 +16,7 @@ func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
 	return ip.String(), fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3]), nil
 }
 
+//nolint:unparam
 func run(bin string, args ...string) error {
 	cmd := exec.Command(bin, args...) //nolint:gosec
 

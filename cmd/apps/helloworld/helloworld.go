@@ -4,84 +4,167 @@ simple client server app for skywire visor testing
 package main
 
 import (
-	"os"
+	"flag"
+	"fmt"
+	"net"
+	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 const (
-	netType = appnet.TypeSkynet
+	modeServer = "server"
+	modeClient = "client"
+)
+
+var (
+	mode    = flag.String("mode", modeServer, fmt.Sprintf("mode of operation: %v", []string{modeServer, modeClient}))
+	network = flag.String("net", string(appnet.TypeSkynet), fmt.Sprintf("network: %v", []appnet.Type{appnet.TypeSkynet, appnet.TypeDmsg}))
+	remote  = flag.String("remote", "", "remote public key to dial to (client mode only)")
+	port    = flag.Uint("port", 1024, "port to either dial to (client mode), or listen from (server mode)")
 )
 
 var log = logrus.New()
 
 func main() {
-	appC := app.NewClient()
+	flag.Parse()
+
+	subs := prepareSubscriptions()
+	appC := app.NewClient(subs)
 	defer appC.Close()
 
 	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
-		log.Printf("Failed to output build info: %v", err)
+		log.WithError(err).Info("Failed to output build info.")
 	}
 
-	if len(os.Args) == 1 {
-		port := routing.Port(1024)
-		l, err := appC.Listen(netType, port)
-		if err != nil {
-			log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
-		}
-
-		log.Println("listening for incoming connections")
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-				log.Fatalf("Failed to accept conn: %v\n", err)
-			}
-
-			log.Printf("got new connection from: %v\n", conn.RemoteAddr())
-			go func() {
-				buf := make([]byte, 4)
-				if _, err := conn.Read(buf); err != nil {
-					log.Printf("Failed to read remote data: %v\n", err)
-					// TODO: close conn
-				}
-
-				log.Printf("Message from %s: %s\n", conn.RemoteAddr().String(), string(buf))
-				if _, err := conn.Write([]byte("pong")); err != nil {
-					log.Printf("Failed to write to a remote visor: %v\n", err)
-					// TODO: close conn
-				}
-			}()
-		}
+	switch *mode {
+	case modeServer:
+		runServer(appC)
+	case modeClient:
+		runClient(appC)
+	default:
+		log.WithField("mode", *mode).Fatal("Invalid mode.")
 	}
+}
 
-	remotePK := cipher.PubKey{}
-	if err := remotePK.UnmarshalText([]byte(os.Args[1])); err != nil {
-		log.Fatal("Failed to construct PubKey: ", err, os.Args[1])
-	}
+func prepareSubscriptions() *appevent.Subscriber {
+	subs := appevent.NewSubscriber()
 
-	conn, err := appC.Dial(appnet.Addr{
-		Net:    netType,
-		PubKey: remotePK,
-		Port:   10,
+	subs.TCPDial(func(data appevent.TCPDialData) {
+		log.WithField("event_type", data.Type()).
+			WithField("event_data", data).
+			Info("Received event.")
 	})
+
+	subs.TCPClose(func(data appevent.TCPCloseData) {
+		log.WithField("event_type", data.Type()).
+			WithField("event_data", data).
+			Info("Received event.")
+	})
+
+	return subs
+}
+
+func runServer(appC *app.Client) {
+	log := log.
+		WithField("network", *network).
+		WithField("port", *port)
+
+	lis, err := appC.Listen(appnet.Type(*network), routing.Port(*port))
 	if err != nil {
-		log.Fatalf("Failed to open remote conn: %v\n", err)
+		log.WithError(err).Fatal("Failed to listen.")
+	}
+	log.Info("Listening for incoming connections.")
+
+	for {
+		conn, err := lis.Accept()
+		if err != nil {
+			log.WithError(err).Fatal("Failed to accept connection.")
+		}
+		go handleServerConn(log, conn)
+	}
+}
+
+func handleServerConn(log logrus.FieldLogger, conn net.Conn) {
+	log = log.WithField("remote_addr", conn.RemoteAddr())
+	log.Info("Serving connection.")
+	defer func() {
+		log.WithError(conn.Close()).Debug("Closed connection.")
+	}()
+
+	for {
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.WithField("n", n).WithError(err).
+				Error("Failed to read from connection.")
+			return
+		}
+		msg := string(buf[:n])
+		log.WithField("n", n).WithField("data", msg).Info("Read from connection.")
+
+		n, err = conn.Write([]byte(fmt.Sprintf("I've got your message: %s", msg)))
+		if err != nil {
+			log.WithField("n", n).WithError(err).
+				Error("Failed to write to connection.")
+			return
+		}
+		log.WithField("n", n).Info("Wrote response message.")
+	}
+}
+
+func runClient(appC *app.Client) {
+
+	var remotePK cipher.PubKey
+	if err := remotePK.UnmarshalText([]byte(*remote)); err != nil {
+		log.WithError(err).Fatal("Invalid remote public key.")
 	}
 
-	if _, err := conn.Write([]byte("ping")); err != nil {
-		log.Fatalf("Failed to write to a remote visor: %v\n", err)
-	}
+	var conn net.Conn
 
-	buf := make([]byte, 4)
-	if _, err = conn.Read(buf); err != nil {
-		log.Fatalf("Failed to read remote data: %v\n", err)
-	}
+	for i := 0; true; i++ {
 
-	log.Printf("Message from %s: %s", conn.RemoteAddr().String(), string(buf))
+		time.Sleep(time.Second * 2)
+
+		if conn != nil {
+			log.WithError(conn.Close()).Debug("Connection closed.")
+			conn = nil
+		}
+
+		var err error
+		conn, err = appC.Dial(appnet.Addr{
+			Net:    appnet.Type(*network),
+			PubKey: remotePK,
+			Port:   routing.Port(*port),
+		})
+		if err != nil {
+			log.WithError(err).Error("Failed to dial.")
+			time.Sleep(time.Second)
+			continue
+		}
+
+		n, err := conn.Write([]byte(fmt.Sprintf("Hello world! %d", i)))
+		if err != nil {
+			log.WithField("n", n).WithError(err).
+				Error("Failed to write to connection.")
+			continue
+		}
+
+		buf := make([]byte, 1024)
+		n, err = conn.Read(buf)
+		if err != nil {
+			log.WithField("n", n).WithError(err).
+				Error("Failed to read from connection.")
+			continue
+		}
+		msg := string(buf[:n])
+		log.WithField("n", n).WithField("data", msg).Info("Read reply from connection.")
+	}
 }
