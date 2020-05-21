@@ -135,9 +135,8 @@ Apps may be built the same way:
 
 Apps should be stated in the config without `.exe` extension, as usual.
 
-Some log lines may seem strange due to the Windows encoding in terminal. To make life easier you may use:
+Some log lines may seem strange due to the Windows encoding in terminal. To make life easier you may change encoding to UTF-8 executing:
 ```
-REM change CHCP to UTF-8
 CHCP 65001
 ```
 
@@ -154,7 +153,7 @@ Running VPN on Windows requires `wintun` driver to be installed. This may be ach
 
 VPN client requires `local system` user rights to be run. This may be achieved by downloading `PsExec`: https://docs.microsoft.com/en-us/sysinternals/downloads/psexec . Then you may run terminal with the `local system` rights like this:
 ```
-PsExec.exe -i -s C:/Windows/system32/cmd.exe
+PsExec.exe -i -s C:\Windows\system32\cmd.exe
 ```
 
 And then simply run skywire from the opened terminal.

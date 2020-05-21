@@ -181,7 +181,7 @@ func DefaultConfig(log *logging.MasterLogger, configPath string, keys *KeyPair) 
 		},
 		{
 			Name:      skyenv.VPNServerName,
-			AutoStart: true,
+			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNServerPort),
 		},
 		{

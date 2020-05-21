@@ -8,11 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/netutil"
-	"github.com/sirupsen/logrus"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/netutil"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
