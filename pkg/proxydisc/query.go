@@ -71,14 +71,14 @@ func (q *GeoQuery) Fill(v url.Values) error {
 	return nil
 }
 
-// ProxiesQuery represents query values for a proxies call.
-type ProxiesQuery struct {
+// ServicesQuery represents query values for a proxies call.
+type ServicesQuery struct {
 	Count  int64  // <=0 : no limit
 	Cursor uint64 // <=0 : 0 offset
 }
 
-// Fill fills ProxiesQuery with query values.
-func (q *ProxiesQuery) Fill(v url.Values) error {
+// Fill fills ServicesQuery with query values.
+func (q *ServicesQuery) Fill(v url.Values) error {
 	if countS := v.Get("count"); countS != "" {
 		count, err := strconv.ParseInt(countS, 10, 64)
 		if err != nil {
