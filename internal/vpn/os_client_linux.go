@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultNetworkGatewayCMD = "ip r | grep \"default via\" | awk '{print $3}'"
+	defaultNetworkGatewayCMD = `ip r | grep "default via" | awk '{print $3}'`
 )
 
 // DefaultNetworkGateway fetches system's default network gateway.
