@@ -1,6 +1,7 @@
 # github.com/SkycoinProject/dmsg v0.1.1-0.20200420091742-8c1a3d828a49
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/cipher
+github.com/SkycoinProject/dmsg/cmdutil
 github.com/SkycoinProject/dmsg/disc
 github.com/SkycoinProject/dmsg/dmsgpty
 github.com/SkycoinProject/dmsg/httputil
