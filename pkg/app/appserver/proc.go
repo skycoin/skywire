@@ -45,7 +45,10 @@ type Proc struct {
 }
 
 // NewProc constructs `Proc`.
-func NewProc(conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
+func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
+	if mLog == nil {
+		mLog = logging.NewMasterLogger()
+	}
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
 	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
@@ -59,7 +62,7 @@ func NewProc(conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
 	return &Proc{
 		disc:   disc,
 		conf:   conf,
-		log:    logging.MustGetLogger(moduleName),
+		log:    mLog.PackageLogger(moduleName),
 		logDB:  appLogDB,
 		cmd:    cmd,
 		connCh: make(chan struct{}, 1),
@@ -175,13 +178,15 @@ func (p *Proc) Start() error {
 
 // Stop stops the application.
 func (p *Proc) Stop() error {
-	if atomic.LoadInt32(&p.isRunning) != 1 {
+	if atomic.LoadInt32(&p.isRunning) == 0 {
 		return errProcNotStarted
 	}
 
-	err := p.cmd.Process.Signal(os.Interrupt)
-	if err != nil {
-		return err
+	if p.cmd.Process != nil {
+		err := p.cmd.Process.Signal(os.Interrupt) //TODO: panic here.
+		if err != nil {
+			return err
+		}
 	}
 
 	// the lock will be acquired as soon as the cmd finishes its work
