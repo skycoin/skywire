@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -193,7 +194,7 @@ func (rc *runConf) runVisor() *runConf {
 
 	time.Sleep(startDelay)
 
-	if rc.conf.Dmsgpty != nil {
+	if rc.conf.Dmsgpty != nil && runtime.GOOS != "windows" {
 		if err := visor.UnlinkSocketFiles(rc.conf.Dmsgpty.CLIAddr); err != nil {
 			rc.logger.Fatal("failed to unlink socket files: ", err)
 		}
