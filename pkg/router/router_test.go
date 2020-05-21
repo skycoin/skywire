@@ -695,7 +695,7 @@ func NewTestEnv(t *testing.T, nets []*snet.Network) *TestEnv {
 			LogStore:        transport.InMemoryTransportLogStore(),
 		}
 
-		ms[i], err = transport.NewManager(n, mConfs[i])
+		ms[i], err = transport.NewManager(nil, n, mConfs[i])
 		require.NoError(t, err)
 
 		go ms[i].Serve(context.TODO())
