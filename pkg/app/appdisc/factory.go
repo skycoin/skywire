@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/proxydisc"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/servicedisc"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 )
 
@@ -53,7 +53,7 @@ func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
 		}
 
 		return &proxyUpdater{
-			client: proxydisc.NewClient(log, proxydisc.Config{
+			client: servicedisc.NewClient(log, servicedisc.Config{
 				PK:       f.PK,
 				SK:       f.SK,
 				Port:     uint16(conf.RoutingPort),
