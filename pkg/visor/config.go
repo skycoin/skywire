@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"runtime"
 	"sync"
 	"time"
 
@@ -137,11 +138,14 @@ func BaseConfig(log *logging.MasterLogger, configPath string) *Config {
 // Generated config will be saved to 'configPath'
 func DefaultConfig(log *logging.MasterLogger, configPath string, keys *KeyPair) (*Config, error) {
 	conf := BaseConfig(log, configPath)
-	conf.Dmsgpty = &DmsgptyConfig{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: skyenv.DefaultDmsgPtyWhitelist,
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	// disallow dmsgpty for Windows systems
+	if runtime.GOOS != "windows" {
+		conf.Dmsgpty = &DmsgptyConfig{
+			Port:     skyenv.DmsgPtyPort,
+			AuthFile: skyenv.DefaultDmsgPtyWhitelist,
+			CLINet:   skyenv.DefaultDmsgPtyCLINet,
+			CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+		}
 	}
 	conf.STCP = &snet.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
