@@ -10,6 +10,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
@@ -31,7 +32,7 @@ func TestClient_Dial(t *testing.T) {
 		dialLocalPort := routing.Port(1)
 		var dialErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -75,7 +76,7 @@ func TestClient_Dial(t *testing.T) {
 
 		var closeErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 		rpc.On("CloseConn", dialConnID).Return(closeErr)
 
@@ -96,7 +97,7 @@ func TestClient_Dial(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 		rpc.On("CloseConn", dialConnID).Return(closeErr)
 
@@ -113,7 +114,7 @@ func TestClient_Dial(t *testing.T) {
 	t.Run("dial error", func(t *testing.T) {
 		dialErr := errors.New("dial error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(uint16(0), routing.Port(0), dialErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -139,7 +140,7 @@ func TestClient_Listen(t *testing.T) {
 		listenLisID := uint16(1)
 		var listenErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -168,7 +169,7 @@ func TestClient_Listen(t *testing.T) {
 
 		var closeErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 		rpc.On("CloseListener", listenLisID).Return(closeErr)
 
@@ -188,7 +189,7 @@ func TestClient_Listen(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 		rpc.On("CloseListener", listenLisID).Return(closeErr)
 
@@ -205,7 +206,7 @@ func TestClient_Listen(t *testing.T) {
 	t.Run("listen error", func(t *testing.T) {
 		listenErr := errors.New("listen error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(uint16(0), listenErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -225,7 +226,7 @@ func TestClient_Close(t *testing.T) {
 		closeErr   = errors.New("close error")
 	)
 
-	rpc := &MockRPCClient{}
+	rpc := &appserver.MockRPCIngressClient{}
 
 	lisID1 := uint16(1)
 	lisID2 := uint16(2)
@@ -284,7 +285,7 @@ func TestClient_Close(t *testing.T) {
 	require.False(t, ok)
 }
 
-func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc RPCClient) *Client {
+func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc appserver.RPCIngressClient) *Client {
 	var procKey appcommon.ProcKey
 	copy(procKey[:], visorPK[:])
 	return &Client{
@@ -300,8 +301,8 @@ func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc RPCClient) *Client
 			BinaryLoc:   "",
 			LogDBLoc:    "",
 		},
-		rpc: rpc,
-		lm:  idmanager.New(),
-		cm:  idmanager.New(),
+		rpcC: rpc,
+		lm:   idmanager.New(),
+		cm:   idmanager.New(),
 	}
 }

@@ -59,7 +59,7 @@ func main() {
 		noiseCreds = vpn.NewNoiseCredentials(localSK, localPK)
 	}
 
-	appClient := app.NewClient()
+	appClient := app.NewClient(nil)
 	defer appClient.Close()
 
 	osSigs := make(chan os.Signal, 2)
