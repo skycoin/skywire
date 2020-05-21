@@ -49,7 +49,7 @@ func dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, error) {
 }
 
 func main() {
-	appC := app.NewClient()
+	appC := app.NewClient(nil)
 	defer appC.Close()
 
 	skysocks.Log = log

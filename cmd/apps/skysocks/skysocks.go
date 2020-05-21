@@ -25,7 +25,7 @@ const (
 var log = logrus.New()
 
 func main() {
-	appC := app.NewClient()
+	appC := app.NewClient(nil)
 	defer appC.Close()
 
 	skysocks.Log = log

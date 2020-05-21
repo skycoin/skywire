@@ -8,7 +8,7 @@ import (
 )
 
 func TestProcManager_ProcByName(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
@@ -28,7 +28,7 @@ func TestProcManager_ProcByName(t *testing.T) {
 }
 
 func TestProcManager_Range(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
@@ -57,7 +57,7 @@ func TestProcManager_Range(t *testing.T) {
 }
 
 func TestProcManager_Pop(t *testing.T) {
-	mI, err := NewProcManager(nil, nil, ":0")
+	mI, err := NewProcManager(nil, nil, nil, ":0")
 	require.NoError(t, err)
 
 	m, ok := mI.(*procManager)
