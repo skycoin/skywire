@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 )
 
 // Conn is a connection from app client to the server.
 // Implements `net.Conn`.
 type Conn struct {
 	id         uint16
-	rpc        RPCClient
+	rpc        appserver.RPCIngressClient
 	local      appnet.Addr
 	remote     appnet.Addr
 	freeConn   func() bool

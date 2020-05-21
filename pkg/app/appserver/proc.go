@@ -38,10 +38,10 @@ type Proc struct {
 	waitMx    sync.Mutex
 	waitErr   error
 
-	rpcGW    *RPCGateway   // gateway shared over 'conn' - introduced AFTER proc is started
-	conn     net.Conn      // connection to proc - introduced AFTER proc is started
-	connCh   chan struct{} // push here when conn is received - protected by 'connOnce'
-	connOnce sync.Once     // ensures we only push to 'connCh' once
+	rpcGW    *RPCIngressGateway // gateway shared over 'conn' - introduced AFTER proc is started
+	conn     net.Conn           // connection to proc - introduced AFTER proc is started
+	connCh   chan struct{}      // push here when conn is received - protected by 'connOnce'
+	connOnce sync.Once          // ensures we only push to 'connCh' once
 }
 
 // NewProc constructs `Proc`.
@@ -183,7 +183,7 @@ func (p *Proc) Stop() error {
 	}
 
 	if p.cmd.Process != nil {
-		err := p.cmd.Process.Signal(os.Interrupt) //TODO: panic here.
+		err := p.cmd.Process.Signal(os.Interrupt)
 		if err != nil {
 			return err
 		}

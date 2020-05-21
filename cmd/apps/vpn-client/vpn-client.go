@@ -81,7 +81,7 @@ func main() {
 		noiseCreds = vpn.NewNoiseCredentials(localSK, localPK)
 	}
 
-	appClient := app.NewClient()
+	appClient := app.NewClient(nil)
 	defer appClient.Close()
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
