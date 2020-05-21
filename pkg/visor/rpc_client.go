@@ -46,8 +46,8 @@ type RPCClient interface {
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
-	SetSocksPassword(password string) error
-	SetSocksClientPK(pk cipher.PubKey) error
+	SetAppPassword(appName, password string) error
+	SetAppPK(appName string, pk cipher.PubKey) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -158,14 +158,20 @@ func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 	}, &struct{}{})
 }
 
-// SetSocksPassword calls SetSocksPassword.
-func (rc *rpcClient) SetSocksPassword(password string) error {
-	return rc.Call("SetSocksPassword", &password, &struct{}{})
+// SetAppPassword calls SetAppPassword.
+func (rc *rpcClient) SetAppPassword(appName, password string) error {
+	return rc.Call("SetAppPassword", &SetAppPasswordIn{
+		AppName:  appName,
+		Password: password,
+	}, &struct{}{})
 }
 
-// SetSocksClientPK calls SetSocksClientPK.
-func (rc *rpcClient) SetSocksClientPK(pk cipher.PubKey) error {
-	return rc.Call("SetSocksClientPK", &pk, &struct{}{})
+// SetAppPK calls SetAppPK.
+func (rc *rpcClient) SetAppPK(appName string, pk cipher.PubKey) error {
+	return rc.Call("SetSocksClientPK", &SetAppPKIn{
+		AppName: appName,
+		PK:      pk,
+	}, &struct{}{})
 }
 
 // LogsSince calls LogsSince
@@ -482,8 +488,8 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	})
 }
 
-// SetSocksPassword implements RPCClient.
-func (mc *mockRPCClient) SetSocksPassword(string) error {
+// SetAppPassword implements RPCClient.
+func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -497,8 +503,8 @@ func (mc *mockRPCClient) SetSocksPassword(string) error {
 	})
 }
 
-// SetSocksClientPK implements RPCClient.
-func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
+// SetAppPK implements RPCClient.
+func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
 

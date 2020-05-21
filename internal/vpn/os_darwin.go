@@ -3,54 +3,36 @@
 package vpn
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
+	"strconv"
 )
 
-const (
-	gatewayForIfcCMDFmt     = "netstat -rn | grep default | grep %s | awk '{print $2}'"
-	setIPv4ForwardingCMDFmt = "sysctl -w net.inet.ip.forwarding=%s"
-	setIPv6ForwardingCMDFmt = "sysctl -w net.inet6.ip6.forwarding=%s"
-	getIPv4ForwardingCMD    = "sysctl net.inet.ip.forwarding"
-	getIPv6ForwardingCMD    = "sysctl net.inet6.ip6.forwarding"
-)
+// SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
+func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
+	ip, netmask, err := parseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
+	}
 
-// EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
-func EnableIPMasquerading(_ string) error {
-	return errors.New("cannot be implemented")
+	return run("ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
-// DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
-func DisableIPMasquerading(_ string) error {
-	return errors.New("cannot be implemented")
-}
-
-// AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
-func AddRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		return run("route", "add", "-net", ip, gateway)
+// AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
+func AddRoute(ipCIDR, gateway string) error {
+	ip, netmask, err := parseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
 	return run("route", "add", "-net", ip, gateway, netmask)
 }
 
-// DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
-func DeleteRoute(ip, gateway, netmask string) error {
-	if netmask == "" {
-		return run("route", "delete", "-net", ip, gateway)
+// DeleteRoute removes route to `ipCIDR` through the `gateway` from the OS routing table.
+func DeleteRoute(ipCIDR, gateway string) error {
+	ip, netmask, err := parseCIDR(ipCIDR)
+	if err != nil {
+		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
 	return run("route", "delete", "-net", ip, gateway, netmask)
-}
-
-func parseIPForwardingOutput(output []byte) (string, error) {
-	output = bytes.TrimRight(output, "\n")
-
-	outTokens := bytes.Split(output, []byte{':'})
-	if len(outTokens) != 2 {
-		return "", fmt.Errorf("invalid output: %s", output)
-	}
-
-	return string(bytes.Trim(outTokens[1], " ")), nil
 }

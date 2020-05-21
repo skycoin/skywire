@@ -15,7 +15,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -59,7 +59,7 @@ type Visor struct {
 	updater    *updater.Updater
 
 	net    *snet.Network
-	pty    *dmsgpty.Host
+	pty    pty
 	tpM    *transport.Manager
 	router router.Router
 
@@ -255,46 +255,73 @@ func (v *Visor) setAutoStart(appName string, autoStart bool) error {
 	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
 }
 
-func (v *Visor) setSocksPassword(password string) error {
-	v.log.Infof("Changing skysocks password to %q", password)
+func (v *Visor) setAppPassword(appName, password string) error {
+	allowedToChangePassword := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.SkysocksName:  {},
+			skyenv.VPNClientName: {},
+			skyenv.VPNServerName: {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePassword(appName) {
+		return fmt.Errorf("app %s is not allowed to change password", appName)
+	}
+
+	v.log.Infof("Changing %s password to %q", appName, password)
 
 	const (
-		socksName       = "skysocks"
 		passcodeArgName = "-passcode"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, socksName, passcodeArgName, password); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(socksName); ok {
-		v.log.Infof("Updated %v password, restarting it", socksName)
-		return v.appL.RestartApp(socksName)
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v password, restarting it", appName)
+		return v.appL.RestartApp(appName)
 	}
 
-	v.log.Infof("Updated %v password", socksName)
+	v.log.Infof("Updated %v password", appName)
 
 	return nil
 }
 
-func (v *Visor) setSocksClientPK(pk cipher.PubKey) error {
-	v.log.Infof("Changing skysocks-client PK to %q", pk)
+func (v *Visor) setAppPK(appName string, pk cipher.PubKey) error {
+	allowedToChangePK := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.SkysocksClientName: {},
+			skyenv.VPNClientName:      {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePK(appName) {
+		return fmt.Errorf("app %s is not allowed to change PK", appName)
+	}
+
+	v.log.Infof("Changing %s PK to %q", appName, pk)
 
 	const (
-		socksClientName = "skysocks-client"
-		pkArgName       = "-srv"
+		pkArgName = "-srv"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, socksClientName, pkArgName, pk.String()); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(socksClientName); ok {
-		v.log.Infof("Updated %v PK, restarting it", socksClientName)
-		return v.appL.RestartApp(socksClientName)
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v PK, restarting it", appName)
+		return v.appL.RestartApp(appName)
 	}
 
-	v.log.Infof("Updated %v PK", socksClientName)
+	v.log.Infof("Updated %v PK", appName)
 
 	return nil
 }
