@@ -12,7 +12,6 @@ import (
 )
 
 func TestParse(t *testing.T) {
-
 	jsonString := func(v interface{}) string {
 		j, err := json.Marshal(v)
 		require.NoError(t, err)
