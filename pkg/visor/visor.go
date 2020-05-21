@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
@@ -49,7 +51,7 @@ type Visor struct {
 	reportCh   chan vReport
 	closeStack []closeElem
 
-	conf *Config
+	conf *visorconfig.V1
 	log  *logging.Logger
 
 	startedAt  time.Time
@@ -110,26 +112,30 @@ func (v *Visor) pushCloseStack(src string, fn func() bool) {
 
 // MasterLogger returns the underlying master logger (currently contained in visor config).
 func (v *Visor) MasterLogger() *logging.MasterLogger {
-	return v.conf.log
+	return v.conf.MasterLogger()
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(conf *Config, restartCtx *restart.Context) (v *Visor, ok bool) {
+func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok bool) {
 	ok = true
 
 	v = &Visor{
 		reportCh:   make(chan vReport, 100),
-		log:        conf.log.PackageLogger("visor"),
+		log:        conf.MasterLogger().PackageLogger("visor"),
 		conf:       conf,
 		restartCtx: restartCtx,
 	}
 
-	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
-		v.conf.log.SetLevel(lvl)
+	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
+		v.log.WithError(err).Warn("Failed to read log level from config.")
+	} else {
+		v.conf.MasterLogger().SetLevel(logLvl)
+		logging.SetLevel(logLvl)
 	}
 
 	log := v.MasterLogger().PackageLogger("visor:startup")
-	log.WithField("public_key", conf.KeyPair.PubKey).Info("Begin startup.")
+	log.WithField("public_key", conf.PK).
+		Info("Begin startup.")
 	v.startedAt = time.Now()
 
 	for i, startFn := range initStack() {
@@ -167,7 +173,8 @@ func (v *Visor) Close() error {
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
 
-	for i, ce := range v.closeStack {
+	for i := len(v.closeStack) - 1; i >= 0; i-- {
+		ce := v.closeStack[i]
 
 		start := time.Now()
 		done := make(chan bool, 1)
