@@ -38,7 +38,7 @@ type Client struct {
 	p               *Porter
 	addressResolver arclient.APIClient
 
-	connCh <-chan string
+	connCh <-chan arclient.RemoteVisor
 	dialCh chan cipher.PubKey
 	lMap   map[uint16]*Listener // key: lPort
 	mx     sync.Mutex
@@ -117,21 +117,22 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 			c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalAddr())
 			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalAddr(), addr)
 			if err == nil {
+				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())
 				return conn, nil
 			}
 
 			c.log.WithError(err).
-				Errorf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalAddr(), err)
+				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalAddr(), err)
 		}
 	}
 }
 
-func (c *Client) acceptTCPConn(addr string) error {
+func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	tcpConn, err := c.dialTimeout(addr)
+	tcpConn, err := c.dialTimeout(remote.Addr)
 	if err != nil {
 		return err
 	}
@@ -140,21 +141,19 @@ func (c *Client) acceptTCPConn(addr string) error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	if appConn, isAppConn := tcpConn.(noisewrapper.PK); isAppConn {
-		config := noise.Config{
-			LocalPK:   c.lPK,
-			LocalSK:   c.lSK,
-			RemotePK:  appConn.PK(),
-			Initiator: false,
-		}
-
-		tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
-		if err != nil {
-			return fmt.Errorf("encrypt connection: %w", err)
-		}
-
-		c.log.Infof("Connection with %v is encrypted", remoteAddr)
+	config := noise.Config{
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		RemotePK:  remote.PK,
+		Initiator: false,
 	}
+
+	tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
+	if err != nil {
+		return fmt.Errorf("encrypt connection: %w", err)
+	}
+
+	c.log.Infof("Connection with %v is encrypted", remoteAddr)
 
 	var lis *Listener
 
@@ -202,21 +201,19 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
 
-	if appConn, isAppConn := tcpConn.(noisewrapper.PK); isAppConn {
-		config := noise.Config{
-			LocalPK:   c.lPK,
-			LocalSK:   c.lSK,
-			RemotePK:  appConn.PK(),
-			Initiator: true,
-		}
-
-		tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt connection: %w", err)
-		}
-
-		c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
+	config := noise.Config{
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		RemotePK:  rPK,
+		Initiator: true,
 	}
+
+	tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt connection: %w", err)
+	}
+
+	c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
@@ -266,6 +263,9 @@ func (c *Client) Close() error {
 
 		c.mx.Lock()
 		defer c.mx.Unlock()
+
+		// TODO: log error
+		_ = c.addressResolver.Close() // nolint:errcheck
 
 		for _, lis := range c.lMap {
 			_ = lis.Close() // nolint:errcheck

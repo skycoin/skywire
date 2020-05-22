@@ -44,11 +44,12 @@ type Error struct {
 
 // APIClient implements DMSG discovery API client.
 type APIClient interface {
+	io.Closer
 	LocalAddr() string
 	Bind(ctx context.Context, port string) error
 	Resolve(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error)
-	WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan string, error)
+	WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -57,6 +58,7 @@ type httpClient struct {
 	localAddr string
 	pk        cipher.PubKey
 	sk        cipher.SecKey
+	wsConn    *websocket.Conn
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -267,15 +269,28 @@ func (c *httpClient) ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (st
 	return resolveResp.Addr, nil
 }
 
-func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan string, error) {
-	addrCh := make(chan string)
+type RemoteVisor struct {
+	PK   cipher.PubKey
+	Addr string
+}
+
+func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
+	addrCh := make(chan RemoteVisor)
+
+	if c.wsConn != nil {
+		if err := c.wsConn.Close(websocket.StatusNormalClosure, "new connection created"); err != nil {
+			_ = err // TODO: log error
+		}
+	}
 
 	conn, err := c.Websocket(ctx, wsPath)
 	if err != nil {
 		return nil, err
 	}
 
-	go func(conn *websocket.Conn, addrCh chan<- string) {
+	c.wsConn = conn
+
+	go func(conn *websocket.Conn, addrCh chan<- RemoteVisor) {
 		defer func() {
 			close(addrCh)
 		}()
@@ -287,10 +302,15 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 				return
 			}
 
-			msg := string(rawMsg)
+			log.Infof("New WS message of type %v: %v", kind.String(), string(rawMsg))
 
-			log.Infof("New WS message of type %v: %v", kind.String(), msg)
-			addrCh <- msg
+			var remote RemoteVisor
+			if err := json.Unmarshal(rawMsg, &remote); err != nil {
+				log.Errorf("Failed to read unmarshal message: %v", err)
+				continue
+			}
+
+			addrCh <- remote
 		}
 	}(conn, addrCh)
 
@@ -304,6 +324,10 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 	}(conn, dialCh)
 
 	return addrCh, nil
+}
+
+func (c *httpClient) Close() error {
+	return c.wsConn.Close(websocket.StatusNormalClosure, "client closing")
 }
 
 // extractError returns the decoded error message from Body.

@@ -129,6 +129,8 @@ func (c *Client) acceptTCPConn() error {
 		}
 
 		c.log.Infof("Connection with %v is encrypted", remoteAddr)
+	} else {
+		c.log.Infof("Connection with %v is not encrypted", remoteAddr)
 	}
 
 	var lis *Listener
@@ -171,21 +173,19 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
 
-	if appConn, isAppConn := conn.(noisewrapper.PK); isAppConn {
-		config := noise.Config{
-			LocalPK:   c.lPK,
-			LocalSK:   c.lSK,
-			RemotePK:  appConn.PK(),
-			Initiator: true,
-		}
-
-		conn, err = noisewrapper.WrapConn(config, conn)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt connection: %w", err)
-		}
-
-		c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
+	config := noise.Config{
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		RemotePK:  rPK,
+		Initiator: true,
 	}
+
+	conn, err = noisewrapper.WrapConn(config, conn)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt connection: %w", err)
+	}
+
+	c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
