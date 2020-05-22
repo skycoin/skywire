@@ -21,7 +21,9 @@ type V0 struct {
 
 	DmsgPty *V1Dmsgpty `json:"dmsg_pty,omitempty"`
 
-	STCP *snet.STCPConfig `json:"stcp,omitempty"`
+	STCP  *snet.STCPConfig  `json:"stcp,omitempty"`
+	STCPR *snet.STCPRConfig `json:"stcpr,omitempty"`
+	STCPH *snet.STCPHConfig `json:"stcph,omitempty"`
 
 	Transport *struct {
 		Discovery string      `json:"discovery"`

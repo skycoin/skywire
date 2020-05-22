@@ -67,27 +67,42 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 
 	// Actual config generation.
 	conf := MakeBaseConfig(cc)
+
 	conf.Dmsgpty = &V1Dmsgpty{
 		Port:     skyenv.DmsgPtyPort,
 		AuthFile: skyenv.DefaultDmsgPtyWhitelist,
 		CLINet:   skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
+
 	conf.STCP = &snet.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
 		PKTable:   nil,
 	}
+
+	conf.STCPR = &snet.STCPRConfig{
+		LocalAddr:       skyenv.DefaultSTCPRAddr,
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
+	}
+
+	conf.STCPH = &snet.STCPHConfig{
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
+	}
+
 	conf.Transport.LogStore = &V1LogStore{
 		Type:     "file",
 		Location: skyenv.DefaultTpLogStore,
 	}
+
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
+
 	conf.Launcher.Discovery = &V1AppDisc{
 		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
 		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
 	}
+
 	conf.Launcher.Apps = []launcher.AppConfig{
 		{
 			Name:      skyenv.SkychatName,
@@ -116,6 +131,9 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 			Port:      routing.Port(skyenv.VPNClientPort),
 		},
 	}
+
+	conf.Hypervisors = make([]cipher.PubKey, 0)
+
 	return conf, nil
 }
 

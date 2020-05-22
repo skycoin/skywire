@@ -141,7 +141,7 @@ func New(conf Config) (*Network, error) {
 
 		addressResolver = ar
 
-		clients.StcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.NetworkConfigs.STCP.LocalAddr)
+		clients.StcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.NetworkConfigs.STCPR.LocalAddr)
 		clients.StcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
 	}
 
@@ -361,6 +361,13 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		return makeListener(lis, network), nil
 	case stcp.Type:
 		lis, err := n.clients.StcpC.Listen(port)
+		if err != nil {
+			return nil, err
+		}
+
+		return makeListener(lis, network), nil
+	case stcpr.Type:
+		lis, err := n.clients.StcprC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
