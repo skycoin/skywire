@@ -11,9 +11,11 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
 )
 
 // Type is stcp with address resolving type.
@@ -109,6 +111,26 @@ func (c *Client) acceptTCPConn() error {
 		return err
 	}
 
+	remoteAddr := tcpConn.RemoteAddr()
+
+	c.log.Infof("Accepted connection from %v", remoteAddr)
+
+	if appConn, isAppConn := tcpConn.(noisewrapper.PK); isAppConn {
+		config := noise.Config{
+			LocalPK:   c.lPK,
+			LocalSK:   c.lSK,
+			RemotePK:  appConn.PK(),
+			Initiator: false,
+		}
+
+		tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
+		if err != nil {
+			return fmt.Errorf("encrypt connection: %w", err)
+		}
+
+		c.log.Infof("Connection with %v is encrypted", remoteAddr)
+	}
+
 	var lis *Listener
 
 	hs := ResponderHandshake(func(f2 Frame2) error {
@@ -145,6 +167,24 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
+	}
+
+	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
+
+	if appConn, isAppConn := conn.(noisewrapper.PK); isAppConn {
+		config := noise.Config{
+			LocalPK:   c.lPK,
+			LocalSK:   c.lSK,
+			RemotePK:  appConn.PK(),
+			Initiator: true,
+		}
+
+		conn, err = noisewrapper.WrapConn(config, conn)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt connection: %w", err)
+		}
+
+		c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
 	}
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)

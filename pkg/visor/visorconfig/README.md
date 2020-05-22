@@ -1,8 +1,12 @@
 # V1
 
+- `` (*[Common](#Common))
+- `mu` ([RWMutex](#RWMutex))
 - `dmsg` (*[DmsgConfig](#DmsgConfig))
 - `dmsgpty` (*[V1Dmsgpty](#V1Dmsgpty))
 - `stcp` (*[STCPConfig](#STCPConfig))
+- `stcpr` (*[STCPRConfig](#STCPRConfig))
+- `stcph` (*[STCPHConfig](#STCPHConfig))
 - `transport` (*[V1Transport](#V1Transport))
 - `routing` (*[V1Routing](#V1Routing))
 - `uptime_tracker` (*[V1UptimeTracker](#V1UptimeTracker))
@@ -14,38 +18,11 @@
 - `restart_check_delay` (string)
 
 
-# V1Launcher
-
-- `discovery` (*[V1AppDisc](#V1AppDisc))
-- `apps` ([][AppConfig](#AppConfig))
-- `server_addr` (string)
-- `bin_path` (string)
-- `local_path` (string)
-
-
 # V1Transport
 
 - `discovery` (string)
 - `log_store` (*[V1LogStore](#V1LogStore))
 - `trusted_visors` ()
-
-
-# V1AppDisc
-
-- `update_interval` (Duration)
-- `proxy_discovery_addr` (string)
-
-
-# V1UptimeTracker
-
-- `addr` (string)
-
-
-# V1Routing
-
-- `setup_nodes` ()
-- `route_finder` (string)
-- `route_finder_timeout` (Duration)
 
 
 # V1LogStore
@@ -62,6 +39,42 @@
 - `cli_address` (string)
 
 
+# V1UptimeTracker
+
+- `addr` (string)
+
+
+# V1Launcher
+
+- `discovery` (*[V1AppDisc](#V1AppDisc))
+- `apps` ([][AppConfig](#AppConfig))
+- `server_addr` (string)
+- `bin_path` (string)
+- `local_path` (string)
+
+
+# V1Routing
+
+- `setup_nodes` ()
+- `route_finder` (string)
+- `route_finder_timeout` (Duration)
+
+
+# V1AppDisc
+
+- `update_interval` (Duration)
+- `proxy_discovery_addr` (string)
+
+
+# Common
+
+- `path` (string)
+- `log` (*[MasterLogger](#MasterLogger))
+- `version` (string)
+- `sk` (SecKey)
+- `pk` (PubKey)
+
+
 # AppConfig
 
 - `name` (string)
@@ -70,13 +83,49 @@
 - `port` (Port)
 
 
-# DmsgConfig
+# STCPHConfig
 
-- `discovery` (string)
-- `sessions_count` (int)
+- `address_resolver` (string)
 
 
 # STCPConfig
 
 - `pk_table` ()
 - `local_address` (string)
+
+
+# RWMutex
+
+- `w` ([Mutex](#Mutex))
+- `writerSem` (uint32)
+- `readerSem` (uint32)
+- `readerCount` (int32)
+- `readerWait` (int32)
+
+
+# Mutex
+
+- `state` (int32)
+- `sema` (uint32)
+
+
+# DmsgConfig
+
+- `discovery` (string)
+- `sessions_count` (int)
+
+
+# STCPRConfig
+
+- `address_resolver` (string)
+- `local_address` (string)
+
+
+# MasterLogger
+
+- `` (*[Logger](#Logger))
+
+
+# Logger
+
+- `` (FieldLogger)
