@@ -327,7 +327,7 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 }
 
 func (c *httpClient) Close() error {
-	return c.wsConn.Close(websocket.StatusNormalClosure, "client closing")
+	return c.wsConn.Close(websocket.StatusNormalClosure, "client closed")
 }
 
 // extractError returns the decoded error message from Body.
