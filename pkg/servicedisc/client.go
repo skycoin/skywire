@@ -33,20 +33,27 @@ type HTTPClient struct {
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
+func NewClient(log logrus.FieldLogger, conf Config, sType string) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		conf: conf,
 		entry: Service{
 			Addr:  NewSWAddr(conf.PK, conf.Port),
 			Stats: &Stats{ConnectedClients: 0},
+			Type:  sType,
 		},
 		client: http.Client{},
 	}
 }
 
-func (c *HTTPClient) addr(path string) string {
-	return c.conf.DiscAddr + path
+func (c *HTTPClient) addr(path string, sType string) string {
+	addr := c.conf.DiscAddr + path
+
+	if sType != "" {
+		addr += "?type=" + sType
+	}
+
+	return addr
 }
 
 // Auth returns the internal httpauth.Client
@@ -64,7 +71,7 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 
 // Services calls 'GET /api/services'.
 func (c *HTTPClient) Services(ctx context.Context) (out []Service, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr("/api/services"), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr("/api/services", c.entry.Type), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +112,7 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/services"), bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/services", ""), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +148,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/services/"+c.entry.Addr.String()), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type), nil)
 	if err != nil {
 		return err
 	}
