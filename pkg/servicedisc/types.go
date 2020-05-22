@@ -10,6 +10,11 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
+const (
+	ServiceTypeProxy = "proxy"
+	ServiceTypeVPN   = "vpn"
+)
+
 // Errors associated with service discovery types.
 var (
 	ErrInvalidSWAddr = errors.New("invalid skywire address")
@@ -96,6 +101,7 @@ type Stats struct {
 // Service represents a service entry in service-discovery.
 type Service struct {
 	Addr  SWAddr       `json:"address"`
+	Type  string       `json:"type"`
 	Stats *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
 	Geo   *GeoLocation `json:"geo,omitempty"`
 }
