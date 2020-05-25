@@ -237,18 +237,30 @@ func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) (err error) {
 	return r.visor.setAutoStart(in.AppName, in.AutoStart)
 }
 
-// SetSocksPassword sets password for skysocks.
-func (r *RPC) SetSocksPassword(in *string, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetSocksPassword", in)(nil, &err)
-
-	return r.visor.setSocksPassword(*in)
+// SetAppPasswordIn is input for SetAppPassword.
+type SetAppPasswordIn struct {
+	AppName  string
+	Password string
 }
 
-// SetSocksClientPK sets PK for skysocks-client.
-func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetSocksClientPK", in)(nil, &err)
+// SetAppPassword sets password for the app.
+func (r *RPC) SetAppPassword(in *SetAppPasswordIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppPassword", in)(nil, &err)
 
-	return r.visor.setSocksClientPK(*in)
+	return r.visor.setAppPassword(in.AppName, in.Password)
+}
+
+// SetAppPKIn is input for SetAppPK.
+type SetAppPKIn struct {
+	AppName string
+	PK      cipher.PubKey
+}
+
+// SetAppPK sets PK for the app.
+func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
+
+	return r.visor.setAppPK(in.AppName, in.PK)
 }
 
 /*

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log/syslog"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
@@ -13,10 +12,10 @@ import (
 	"github.com/SkycoinProject/dmsg/cmdutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
@@ -41,7 +40,7 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "skywire-visor [config-path]",
+	Use:   "skywire-visor",
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
 
@@ -85,7 +84,7 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 	log := logging.NewMasterLogger()
 
 	if syslogAddr != "" {
-		hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
+		hook, err := syslog.SetupHook(syslogAddr, tag)
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to the syslog daemon.")
 		} else {
