@@ -11,8 +11,10 @@ import (
 )
 
 const (
+	// ServiceTypeProxy stands for the proxy discovery.
 	ServiceTypeProxy = "proxy"
-	ServiceTypeVPN   = "vpn"
+	// ServiceTypeVPN stands for the VPN discovery.
+	ServiceTypeVPN = "vpn"
 )
 
 // Errors associated with service discovery types.
