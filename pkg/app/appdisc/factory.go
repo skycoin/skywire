@@ -36,7 +36,6 @@ func (f *Factory) setDefaults() {
 
 // Updater obtains an updater based on the app name and configuration.
 func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
-
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
 		return &emptyUpdater{}, false
@@ -44,24 +43,31 @@ func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	log := f.Log.WithField("appName", conf.AppName)
 
+	// Do not update in proxy discovery if passcode-protected.
+	if containsFlag(conf.ProcArgs, "passcode") {
+		return &emptyUpdater{}, false
+	}
+
 	switch conf.AppName {
-	case "skysocks":
-
-		// Do not update in proxy discovery if passcode-protected.
-		if containsFlag(conf.ProcArgs, "passcode") {
-			return &emptyUpdater{}, false
-		}
-
+	case skyenv.SkysocksName:
 		return &proxyUpdater{
 			client: servicedisc.NewClient(log, servicedisc.Config{
 				PK:       f.PK,
 				SK:       f.SK,
 				Port:     uint16(conf.RoutingPort),
 				DiscAddr: f.ProxyDisc,
-			}),
+			}, servicedisc.ServiceTypeProxy),
 			interval: f.UpdateInterval,
 		}, true
-
+	case skyenv.VPNServerName:
+		return &proxyUpdater{
+			client: servicedisc.NewClient(log, servicedisc.Config{
+				PK:       f.PK,
+				SK:       f.SK,
+				Port:     uint16(conf.RoutingPort),
+				DiscAddr: f.ProxyDisc,
+			}, servicedisc.ServiceTypeVPN),
+		}, true
 	default:
 		return &emptyUpdater{}, false
 	}
