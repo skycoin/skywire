@@ -24,11 +24,6 @@ type Server struct {
 	once sync.Once
 	wg   sync.WaitGroup
 
-	// Public TCP address which the dmsg server advertises itself as.
-	// This should only be set once. Once set, addrDone closes.
-	addr     string
-	addrDone chan struct{}
-
 	maxSessions int
 }
 
@@ -38,15 +33,14 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, maxSession
 	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
 	s.ready = make(chan struct{})
 	s.done = make(chan struct{})
-	s.addrDone = make(chan struct{})
 	s.maxSessions = maxSessions
 	s.setSessionCallback = func(ctx context.Context, sessionCount int) error {
 		available := s.maxSessions - sessionCount
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), available)
+		return s.updateServerEntry(ctx, "", available)
 	}
 	s.delSessionCallback = func(ctx context.Context, sessionCount int) error {
 		available := s.maxSessions - sessionCount
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), available)
+		return s.updateServerEntry(ctx, "", available)
 	}
 	return s
 }
@@ -65,14 +59,11 @@ func (s *Server) Close() error {
 
 // Serve serves the server.
 func (s *Server) Serve(lis net.Listener, addr string) error {
-	s.SetAdvertisedAddr(lis, &addr)
-
-	log := s.log.
-		WithField("advertised_addr", addr).
-		WithField("local_pk", s.pk)
+	log := logrus.FieldLogger(s.log.WithField("local_addr", addr).WithField("local_pk", s.pk))
 
 	log.Info("Serving server.")
 	s.wg.Add(1)
+
 	defer func() {
 		log.Info("Stopped server.")
 		s.wg.Done()
@@ -84,7 +75,10 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 			Info("Stopping server, net.Listener closed.")
 	}()
 
-	if err := s.updateEntryLoop(); err != nil {
+	if addr == "" {
+		addr = lis.Addr().String()
+	}
+	if err := s.updateEntryLoop(addr); err != nil {
 		return err
 	}
 
@@ -116,30 +110,12 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 	}
 }
 
-// AdvertisedAddr returns the TCP address in which the dmsg server is advertised by.
-// This is the TCP address that should be contained within the dmsg discovery entry of this server.
-func (s *Server) AdvertisedAddr() string {
-	<-s.addrDone
-	return s.addr
-}
-
-// SetAdvertisedAddr sets the advertised TCP address in which the dmsg server is advertised by.
-// This should only be called once.
-func (s *Server) SetAdvertisedAddr(lis net.Listener, addr *string) {
-	if *addr == "" {
-		s.log.Warn("We are using a local addr as the advertised addr. This should only be done in a local test env.")
-		*addr = lis.Addr().String()
-	}
-	s.addr = *addr
-	close(s.addrDone)
-}
-
 // Ready returns a chan which blocks until the server begins serving.
 func (s *Server) Ready() <-chan struct{} {
 	return s.ready
 }
 
-func (s *Server) updateEntryLoop() error {
+func (s *Server) updateEntryLoop(addr string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -150,7 +126,7 @@ func (s *Server) updateEntryLoop() error {
 		}
 	}()
 	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+		return s.updateServerEntry(ctx, addr, s.maxSessions)
 	})
 }
 

@@ -202,23 +202,24 @@ func (c *Client) acceptTCPConn() error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	if appConn, isAppConn := tcpConn.(noisewrapper.PK); isAppConn {
-		config := noise.Config{
-			LocalPK:   c.lPK,
-			LocalSK:   c.lSK,
-			RemotePK:  appConn.PK(),
-			Initiator: false,
-		}
-
-		tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
-		if err != nil {
-			c.log.Errorf("Failed to encrypt connection with %v: %v", remoteAddr, err)
-		} else {
-			c.log.Infof("Connection with %v is encrypted", remoteAddr)
-		}
-	} else {
-		c.log.Infof("Connection with %v is not encrypted", remoteAddr)
+	appConn, isAppConn := tcpConn.(noisewrapper.PK)
+	if !isAppConn {
+		return fmt.Errorf("encrypt connection to %v: failed to get remote PK", remoteAddr)
 	}
+
+	config := noise.Config{
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		RemotePK:  appConn.PK(),
+		Initiator: false,
+	}
+
+	tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
+	if err != nil {
+		return fmt.Errorf("encrypt connection to %v: %w", appConn.PK(), err)
+	}
+
+	c.log.Infof("Connection with %v is encrypted", remoteAddr)
 
 	var lis *Listener
 	hs := ResponderHandshake(func(f2 Frame2) error {
@@ -255,6 +256,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	if !ok {
 		return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
 	}
+
 	conn, err := net.Dial("tcp", tcpAddr)
 	if err != nil {
 		return nil, err
@@ -269,10 +271,12 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		Initiator: true,
 	}
 
-	conn, err = noisewrapper.WrapConn(config, conn)
+	wrappedConn, err := noisewrapper.WrapConn(config, conn)
 	if err != nil {
-		return nil, fmt.Errorf("encrypt connection: %w", err)
+		return nil, fmt.Errorf("encrypt connection to %v:%v@%v: %w", rPK, rPort, tcpAddr, err)
 	}
+
+	conn = wrappedConn
 
 	c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, tcpAddr)
 

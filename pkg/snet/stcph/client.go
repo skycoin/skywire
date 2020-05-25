@@ -24,7 +24,7 @@ const Type = "stcph"
 
 // DialTimeout represents a timeout for dialing.
 // TODO: Find best value.
-const DialTimeout = 5 * time.Second
+const DialTimeout = 30 * time.Second
 
 // ErrTimeout indicates a timeout.
 var ErrTimeout = errors.New("timeout")
@@ -149,10 +149,12 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 		Initiator: false,
 	}
 
-	tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
+	wrappedConn, err := noisewrapper.WrapConn(config, tcpConn)
 	if err != nil {
-		return fmt.Errorf("encrypt connection: %w", err)
+		return fmt.Errorf("encrypt connection to %v: %w", remoteAddr, err)
 	}
+
+	tcpConn = wrappedConn
 
 	c.log.Infof("Connection with %v is encrypted", remoteAddr)
 
@@ -209,10 +211,12 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		Initiator: true,
 	}
 
-	tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
+	wrappedConn, err := noisewrapper.WrapConn(config, tcpConn)
 	if err != nil {
-		return nil, fmt.Errorf("encrypt connection: %w", err)
+		return nil, fmt.Errorf("encrypt connection to %v:%v@%v: %w", rPK, rPort, addr, err)
 	}
+
+	tcpConn = wrappedConn
 
 	c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
 
