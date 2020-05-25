@@ -40,7 +40,7 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "skywire-visor [config-path]",
+	Use:   "skywire-visor",
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
 
