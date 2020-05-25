@@ -8,11 +8,11 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"github.com/songgao/water"
 )
 
 // Server is a VPN server.
 type Server struct {
+	cfg                     ServerConfig
 	lisMx                   sync.Mutex
 	lis                     net.Listener
 	log                     logrus.FieldLogger
@@ -24,7 +24,7 @@ type Server struct {
 }
 
 // NewServer creates VPN server instance.
-func NewServer(l logrus.FieldLogger) (*Server, error) {
+func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 	defaultNetworkIfc, err := DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
@@ -45,6 +45,7 @@ func NewServer(l logrus.FieldLogger) (*Server, error) {
 	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
 	return &Server{
+		cfg:                     cfg,
 		log:                     l,
 		ipGen:                   NewIPGenerator(),
 		defaultNetworkInterface: defaultNetworkIfc,
@@ -140,15 +141,13 @@ func (s *Server) closeConn(conn net.Conn) {
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
-	tunIP, tunGateway, err := s.shakeHands(conn)
+	tunIP, tunGateway, encrypt, err := s.shakeHands(conn)
 	if err != nil {
 		s.log.WithError(err).Errorf("Error negotiating with client %s", conn.RemoteAddr())
 		return
 	}
 
-	tun, err := water.New(water.Config{
-		DeviceType: water.TUN,
-	})
+	tun, err := newTUNDevice()
 	if err != nil {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
 		return
@@ -162,9 +161,24 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	s.log.Infof("Allocated TUN %s", tun.Name())
 
-	if err := SetupTUN(tun.Name(), tunIP.String(), TUNNetmask, tunGateway.String(), TUNMTU); err != nil {
+	if err := SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
 		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
+	}
+
+	rw := io.ReadWriter(conn)
+	if encrypt {
+		s.log.Infoln("Enabling encryption...")
+
+		rw, err = WrapRWWithNoise(conn, false, s.cfg.Credentials.PK, s.cfg.Credentials.SK)
+		if err != nil {
+			s.log.WithError(err).Errorln("Failed to enable encryption")
+			return
+		}
+
+		s.log.Infoln("Encryption enabled")
+	} else {
+		s.log.Infoln("Encryption disabled")
 	}
 
 	connToTunDoneCh := make(chan struct{})
@@ -172,14 +186,14 @@ func (s *Server) serveConn(conn net.Conn) {
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, conn); err != nil {
+		if _, err := io.Copy(tun, rw); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(conn, tun); err != nil {
+		if _, err := io.Copy(rw, tun); err != nil {
 			s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
 		}
 	}()
@@ -191,13 +205,28 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error) {
+func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, encrypt bool, err error) {
 	var cHello ClientHello
 	if err := ReadJSON(conn, &cHello); err != nil {
-		return nil, nil, fmt.Errorf("error reading client hello: %w", err)
+		return nil, nil, false, fmt.Errorf("error reading client hello: %w", err)
 	}
 
-	var sHello ServerHello
+	s.log.Debugf("Got client hello: %v", cHello)
+
+	// enable encryption if credentials are all set and client requested it
+	encrypt = cHello.EnableEncryption && s.cfg.Credentials.IsValid()
+	sHello := ServerHello{
+		EncryptionEnabled: encrypt,
+	}
+
+	if s.cfg.Passcode != "" && cHello.Passcode != s.cfg.Passcode {
+		sHello.Status = HandshakeStatusForbidden
+		if err := WriteJSON(conn, &sHello); err != nil {
+			s.log.WithError(err).Errorln("Error sending server hello")
+		}
+
+		return nil, nil, false, errors.New("got wrong passcode from client")
+	}
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {
@@ -207,7 +236,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 				s.log.WithError(err).Errorln("Error sending server hello")
 			}
 
-			return nil, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
+			return nil, nil, false, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
 		}
 	}
 
@@ -218,7 +247,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
-		return nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
+		return nil, nil, false, fmt.Errorf("error getting free subnet IP: %w", err)
 	}
 
 	subnetOctets, err := fetchIPv4Octets(subnet)
@@ -228,7 +257,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
-		return nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
+		return nil, nil, false, fmt.Errorf("error breaking IP into octets: %w", err)
 	}
 
 	// basically IP address comprised of `subnetOctets` items is the IP address of the subnet,
@@ -249,8 +278,8 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	sHello.TUNGateway = cTUNGateway
 
 	if err := WriteJSON(conn, &sHello); err != nil {
-		return nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
+		return nil, nil, false, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
 	}
 
-	return sTUNIP, sTUNGateway, nil
+	return sTUNIP, sTUNGateway, encrypt, nil
 }

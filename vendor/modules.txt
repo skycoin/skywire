@@ -147,8 +147,12 @@ golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh/terminal
 # golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+golang.org/x/net/bpf
 golang.org/x/net/context
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
 golang.org/x/net/internal/socks
+golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
 # golang.org/x/sys v0.0.0-20200428200454-593003d681fa
@@ -157,6 +161,18 @@ golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc/eventlog
+# golang.org/x/text v0.3.2
+golang.org/x/text/transform
+golang.org/x/text/unicode/norm
+# golang.zx2c4.com/wireguard v0.0.20200320
+golang.zx2c4.com/wireguard/rwcancel
+golang.zx2c4.com/wireguard/tun
+golang.zx2c4.com/wireguard/tun/wintun
+golang.zx2c4.com/wireguard/tun/wintun/iphlpapi
+golang.zx2c4.com/wireguard/tun/wintun/namespaceapi
+golang.zx2c4.com/wireguard/tun/wintun/nci
+golang.zx2c4.com/wireguard/tun/wintun/registry
+golang.zx2c4.com/wireguard/tun/wintun/setupapi
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 gopkg.in/alecthomas/kingpin.v2
 # gopkg.in/yaml.v2 v2.2.4
