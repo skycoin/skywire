@@ -109,12 +109,13 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
 
+	c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalAddr())
+
 	for {
 		select {
 		case <-timer.C:
 			return nil, ErrTimeout
 		default:
-			c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalAddr())
 			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalAddr(), addr)
 			if err == nil {
 				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())

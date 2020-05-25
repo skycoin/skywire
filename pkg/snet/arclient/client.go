@@ -70,7 +70,7 @@ type httpClient struct {
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
-		return nil, fmt.Errorf("httpauth: %w", err)
+		return nil, fmt.Errorf("address resolver httpauth: %w", err)
 	}
 
 	localAddr, err := getFreeAddr()
@@ -310,7 +310,9 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 				continue
 			}
 
-			addrCh <- remote
+			go func(r RemoteVisor) {
+				addrCh <- r
+			}(remote)
 		}
 	}(conn, addrCh)
 

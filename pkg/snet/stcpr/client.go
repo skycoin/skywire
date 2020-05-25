@@ -125,10 +125,10 @@ func (c *Client) acceptTCPConn() error {
 
 		tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
 		if err != nil {
-			return fmt.Errorf("encrypt connection: %w", err)
+			c.log.Errorf("Failed to encrypt connection with %v: %v", remoteAddr, err)
+		} else {
+			c.log.Infof("Connection with %v is encrypted", remoteAddr)
 		}
-
-		c.log.Infof("Connection with %v is encrypted", remoteAddr)
 	} else {
 		c.log.Infof("Connection with %v is not encrypted", remoteAddr)
 	}

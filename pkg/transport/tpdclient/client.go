@@ -40,7 +40,7 @@ type apiClient struct {
 func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey) (transport.DiscoveryClient, error) {
 	client, err := httpauth.NewClient(context.Background(), addr, key, sec)
 	if err != nil {
-		return nil, fmt.Errorf("httpauth: %w", err)
+		return nil, fmt.Errorf("transport discovery httpauth: %w", err)
 	}
 
 	return &apiClient{client: client, key: key, sec: sec}, nil

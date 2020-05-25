@@ -24,7 +24,7 @@ const serveWait = time.Second
 type SessionDialCallback func(network, addr string) (err error)
 
 // SessionDisconnectCallback triggers after a session is closed.
-type SessionDisconnectCallback func(session *SessionCommon)
+type SessionDisconnectCallback func(network, addr string, err error)
 
 // ClientCallbacks contains callbacks which a Client uses.
 type ClientCallbacks struct {
@@ -37,7 +37,7 @@ func (sc *ClientCallbacks) ensure() {
 		sc.OnSessionDial = func(network, addr string) (err error) { return nil }
 	}
 	if sc.OnSessionDisconnect == nil {
-		sc.OnSessionDisconnect = func(session *SessionCommon) {}
+		sc.OnSessionDisconnect = func(network, addr string, err error) {}
 	}
 }
 
@@ -325,15 +325,21 @@ func (ce *Client) ensureSession(ctx context.Context, entry *disc.Entry) error {
 // It is expected that the session is created and served before the context cancels, otherwise an error will be returned.
 // NOTE: This should not be called directly as it may lead to session duplicates.
 // Only `ensureSession` or `EnsureAndObtainSession` should call this function.
-func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Info("Dialing session...")
 
 	const network = "tcp"
 
-	// Trigger callback.
+	// Trigger dial callback.
 	if err := ce.conf.Callbacks.OnSessionDial(network, entry.Server.Address); err != nil {
 		return ClientSession{}, fmt.Errorf("session dial is rejected by callback: %w", err)
 	}
+	defer func() {
+		if err != nil {
+			// Trigger disconnect callback when dial fails.
+			ce.conf.Callbacks.OnSessionDisconnect(network, entry.Server.Address, err)
+		}
+	}()
 
 	conn, err := net.Dial(network, entry.Server.Address)
 	if err != nil {
@@ -352,15 +358,16 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSes
 
 	go func() {
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
-		if err := dSes.serve(); !isClosed(ce.done) {
+		err := dSes.serve()
+		if !isClosed(ce.done) {
 			// We should only report an error when client is not closed.
 			// Also, when the client is closed, it will automatically delete all sessions.
 			ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err)
 			ce.delSession(ctx, dSes.RemotePK())
 		}
 
-		// Trigger callback.
-		ce.conf.Callbacks.OnSessionDisconnect(dSes.SessionCommon)
+		// Trigger disconnect callback.
+		ce.conf.Callbacks.OnSessionDisconnect(network, entry.Server.Address, err)
 	}()
 
 	return dSes, nil

@@ -148,7 +148,7 @@ func New(conf Config) (*Network, error) {
 	if conf.NetworkConfigs.STCPH != nil {
 		// If address resolver is not already created or if stcpr and stcph address resolvers differ
 		if conf.NetworkConfigs.STCPR == nil || conf.NetworkConfigs.STCPR.AddressResolver != conf.NetworkConfigs.STCPH.AddressResolver {
-			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
+			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPH.AddressResolver, conf.PubKey, conf.SecKey)
 			if err != nil {
 				return nil, err
 			}

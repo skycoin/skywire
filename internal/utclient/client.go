@@ -45,7 +45,7 @@ type httpClient struct {
 func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
 	client, err := httpauth.NewClient(context.Background(), addr, pk, sk)
 	if err != nil {
-		return nil, fmt.Errorf("httpauth: %w", err)
+		return nil, fmt.Errorf("uptime tracker httpauth: %w", err)
 	}
 
 	return &httpClient{client: client, pk: pk, sk: sk}, nil
