@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 )
 
@@ -16,7 +17,7 @@ import (
 type Listener struct {
 	log       logrus.FieldLogger
 	id        uint16
-	rpc       RPCClient
+	rpc       appserver.RPCIngressClient
 	addr      appnet.Addr
 	cm        *idmanager.Manager // contains conns associated with their IDs
 	freeLis   func() bool

@@ -1,4 +1,4 @@
-package app
+package appserver
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 )
 
 func TestRPCClient_Dial(t *testing.T) {
@@ -30,7 +29,7 @@ func TestRPCClient_Dial(t *testing.T) {
 		rpcL, closeL := prepListener(t)
 		defer closeL()
 
-		rpcS := prepRPCServer(t, appserver.NewRPCGateway(nil))
+		rpcS := prepRPCServer(t, NewRPCGateway(nil))
 		go rpcS.Accept(rpcL)
 
 		rpcC := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
@@ -56,7 +55,7 @@ func TestRPCClient_Dial(t *testing.T) {
 	})
 
 	t.Run("dial error", func(t *testing.T) {
-		s := prepRPCServer(t, appserver.NewRPCGateway(nil))
+		s := prepRPCServer(t, NewRPCGateway(nil))
 		rpcL, lisCleanup := prepListener(t)
 		defer lisCleanup()
 		go s.Accept(rpcL)
@@ -86,7 +85,7 @@ func TestRPCClient_Dial(t *testing.T) {
 
 func TestRPCClient_Listen(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
-		s := prepRPCServer(t, appserver.NewRPCGateway(nil))
+		s := prepRPCServer(t, NewRPCGateway(nil))
 		rpcL, lisCleanup := prepListener(t)
 		defer lisCleanup()
 		go s.Accept(rpcL)
@@ -112,7 +111,7 @@ func TestRPCClient_Listen(t *testing.T) {
 	})
 
 	t.Run("listen error", func(t *testing.T) {
-		s := prepRPCServer(t, appserver.NewRPCGateway(nil))
+		s := prepRPCServer(t, NewRPCGateway(nil))
 		rpcL, lisCleanup := prepListener(t)
 		defer lisCleanup()
 		go s.Accept(rpcL)
@@ -143,7 +142,7 @@ func TestRPCClient_Accept(t *testing.T) {
 	dmsgLocal, dmsgRemote, local, _ := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		lisConn := &appcommon.MockConn{}
 		lisConn.On("LocalAddr").Return(dmsgLocal)
@@ -178,7 +177,7 @@ func TestRPCClient_Accept(t *testing.T) {
 	})
 
 	t.Run("accept error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		var lisConn net.Conn
 		listenErr := errors.New("accept error")
@@ -211,7 +210,7 @@ func TestRPCClient_Write(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		writeBuf := []byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 		writeN := 10
@@ -224,7 +223,7 @@ func TestRPCClient_Write(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -241,7 +240,7 @@ func TestRPCClient_Write(t *testing.T) {
 	})
 
 	t.Run("write error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		writeBuf := []byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 		writeN := 0
@@ -254,7 +253,7 @@ func TestRPCClient_Write(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -276,7 +275,7 @@ func TestRPCClient_Read(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		readBufLen := 10
 		readBuf := make([]byte, readBufLen)
@@ -290,7 +289,7 @@ func TestRPCClient_Read(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -307,7 +306,7 @@ func TestRPCClient_Read(t *testing.T) {
 	})
 
 	t.Run("read error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		readBufLen := 10
 		readBuf := make([]byte, readBufLen)
@@ -321,7 +320,7 @@ func TestRPCClient_Read(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -343,7 +342,7 @@ func TestRPCClient_CloseConn(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		var noErr error
 
@@ -354,7 +353,7 @@ func TestRPCClient_CloseConn(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -370,7 +369,7 @@ func TestRPCClient_CloseConn(t *testing.T) {
 	})
 
 	t.Run("close error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		closeErr := errors.New("close error")
 
@@ -381,7 +380,7 @@ func TestRPCClient_CloseConn(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -402,7 +401,7 @@ func TestRPCClient_CloseListener(t *testing.T) {
 	_, _, local, _ := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		var noErr error
 
@@ -427,7 +426,7 @@ func TestRPCClient_CloseListener(t *testing.T) {
 	})
 
 	t.Run("close error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		closeErr := errors.New("close error")
 
@@ -459,7 +458,7 @@ func TestRPCClient_SetDeadline(t *testing.T) {
 	deadline := time.Now().Add(1 * time.Hour)
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		conn := &appcommon.MockConn{}
 		conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
@@ -474,7 +473,7 @@ func TestRPCClient_SetDeadline(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -490,7 +489,7 @@ func TestRPCClient_SetDeadline(t *testing.T) {
 	})
 
 	t.Run("set deadline error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		conn := &appcommon.MockConn{}
 		conn.On("SetDeadline", mock.Anything).Return(func(d time.Time) error {
@@ -505,7 +504,7 @@ func TestRPCClient_SetDeadline(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -528,7 +527,7 @@ func TestRPCClient_SetReadDeadline(t *testing.T) {
 	deadline := time.Now().Add(1 * time.Hour)
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		conn := &appcommon.MockConn{}
 		conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
@@ -543,7 +542,7 @@ func TestRPCClient_SetReadDeadline(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -559,7 +558,7 @@ func TestRPCClient_SetReadDeadline(t *testing.T) {
 	})
 
 	t.Run("set deadline error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		conn := &appcommon.MockConn{}
 		conn.On("SetReadDeadline", mock.Anything).Return(func(d time.Time) error {
@@ -574,7 +573,7 @@ func TestRPCClient_SetReadDeadline(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -597,7 +596,7 @@ func TestRPCClient_SetWriteDeadline(t *testing.T) {
 	deadline := time.Now().Add(1 * time.Hour)
 
 	t.Run("ok", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		conn := &appcommon.MockConn{}
 		conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
@@ -612,7 +611,7 @@ func TestRPCClient_SetWriteDeadline(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -628,7 +627,7 @@ func TestRPCClient_SetWriteDeadline(t *testing.T) {
 	})
 
 	t.Run("set deadline error", func(t *testing.T) {
-		gateway := appserver.NewRPCGateway(nil)
+		gateway := NewRPCGateway(nil)
 
 		conn := &appcommon.MockConn{}
 		conn.On("SetWriteDeadline", mock.Anything).Return(func(d time.Time) error {
@@ -643,7 +642,7 @@ func TestRPCClient_SetWriteDeadline(t *testing.T) {
 
 		prepNetworkerWithConn(t, conn, remote)
 
-		var dialResp appserver.DialResp
+		var dialResp DialResp
 		err := gateway.Dial(&remote, &dialResp)
 		require.NoError(t, err)
 
@@ -686,7 +685,7 @@ func prepNetworkerWithConn(t *testing.T, conn *appcommon.MockConn, remote appnet
 // rpcProcKey is shared by prepRPCServer and prepRPCClient
 var rpcProcKey = appcommon.RandProcKey()
 
-func prepRPCServer(t *testing.T, gateway *appserver.RPCGateway) *rpc.Server {
+func prepRPCServer(t *testing.T, gateway *RPCIngressGateway) *rpc.Server {
 	s := rpc.NewServer()
 	err := s.RegisterName(rpcProcKey.String(), gateway)
 	require.NoError(t, err)
@@ -694,11 +693,11 @@ func prepRPCServer(t *testing.T, gateway *appserver.RPCGateway) *rpc.Server {
 	return s
 }
 
-func prepRPCClient(t *testing.T, network, addr string) RPCClient {
+func prepRPCClient(t *testing.T, network, addr string) RPCIngressClient {
 	rpcCl, err := rpc.Dial(network, addr)
 	require.NoError(t, err)
 
-	return NewRPCClient(rpcCl, rpcProcKey)
+	return NewRPCIngressClient(rpcCl, rpcProcKey)
 }
 
 func prepListener(t *testing.T) (lis net.Listener, cleanup func()) {

@@ -14,24 +14,6 @@ import (
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 )
 
-func initStack() []initFunc {
-	return []initFunc{
-		initUpdater,
-		initSNet,
-		initDmsgpty,
-		initTransport,
-		initRouter,
-		initLauncher,
-		initCLI,
-		initHypervisors,
-		initUptimeTracker,
-	}
-}
-
-type pty struct {
-	pty *dmsgpty.Host
-}
-
 func initDmsgpty(v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
@@ -116,6 +98,5 @@ func initDmsgpty(v *Visor) bool {
 		})
 	}
 
-	v.pty.pty = pty
 	return report(nil)
 }
