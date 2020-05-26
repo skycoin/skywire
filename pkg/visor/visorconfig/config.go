@@ -143,11 +143,15 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	if err != nil {
 		return nil, err
 	}
+
 	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	conf.Transport.Discovery = skyenv.TestTpDiscAddr
 	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.Discovery.ProxyDisc = skyenv.TestProxyDiscAddr
+	conf.STCPR.AddressResolver = skyenv.TestAddressResolverAddr
+	conf.STCPH.AddressResolver = skyenv.TestAddressResolverAddr
+
 	return conf, nil
 }
