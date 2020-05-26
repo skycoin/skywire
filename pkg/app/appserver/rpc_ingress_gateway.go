@@ -55,19 +55,19 @@ func (e *RPCIOErr) ToError() error {
 	}
 }
 
-// RPCGateway is a RPC interface for the app server.
-type RPCGateway struct {
+// RPCIngressGateway is a RPC interface for the app server.
+type RPCIngressGateway struct {
 	lm  *idmanager.Manager // contains listeners associated with their IDs
 	cm  *idmanager.Manager // contains connections associated with their IDs
 	log *logging.Logger
 }
 
 // NewRPCGateway constructs new server RPC interface.
-func NewRPCGateway(log *logging.Logger) *RPCGateway {
+func NewRPCGateway(log *logging.Logger) *RPCIngressGateway {
 	if log == nil {
-		log = logging.MustGetLogger("app_rpc_gateway")
+		log = logging.MustGetLogger("app_rpc_ingress_gateway")
 	}
-	return &RPCGateway{
+	return &RPCIngressGateway{
 		lm:  idmanager.New(),
 		cm:  idmanager.New(),
 		log: log,
@@ -81,7 +81,7 @@ type DialResp struct {
 }
 
 // Dial dials to the remote.
-func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error) {
+func (r *RPCIngressGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error) {
 	defer rpcutil.LogCall(r.log, "Dial", remote)(resp, &err)
 
 	reservedConnID, free, err := r.cm.ReserveNextID()
@@ -118,7 +118,7 @@ func (r *RPCGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error) {
 }
 
 // Listen starts listening.
-func (r *RPCGateway) Listen(local *appnet.Addr, lisID *uint16) (err error) {
+func (r *RPCIngressGateway) Listen(local *appnet.Addr, lisID *uint16) (err error) {
 	defer rpcutil.LogCall(r.log, "Listen", local)(lisID, &err)
 
 	nextLisID, free, err := r.lm.ReserveNextID()
@@ -151,7 +151,7 @@ type AcceptResp struct {
 }
 
 // Accept accepts connection from the listener specified by `lisID`.
-func (r *RPCGateway) Accept(lisID *uint16, resp *AcceptResp) (err error) {
+func (r *RPCIngressGateway) Accept(lisID *uint16, resp *AcceptResp) (err error) {
 	defer rpcutil.LogCall(r.log, "Accept", lisID)(resp, &err)
 
 	log := r.log.WithField("func", "Accept")
@@ -211,7 +211,7 @@ type WriteResp struct {
 }
 
 // Write writes to the connection.
-func (r *RPCGateway) Write(req *WriteReq, resp *WriteResp) error {
+func (r *RPCIngressGateway) Write(req *WriteReq, resp *WriteResp) error {
 	conn, err := r.getConn(req.ConnID)
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ type ReadResp struct {
 }
 
 // Read reads data from connection specified by `connID`.
-func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
+func (r *RPCIngressGateway) Read(req *ReadReq, resp *ReadResp) error {
 	conn, err := r.getConn(req.ConnID)
 	if err != nil {
 		return err
@@ -262,7 +262,7 @@ func (r *RPCGateway) Read(req *ReadReq, resp *ReadResp) error {
 }
 
 // CloseConn closes connection specified by `connID`.
-func (r *RPCGateway) CloseConn(connID *uint16, _ *struct{}) (err error) {
+func (r *RPCIngressGateway) CloseConn(connID *uint16, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "CloseConn", connID)(nil, &err)
 
 	conn, err := r.popConn(*connID)
@@ -274,7 +274,7 @@ func (r *RPCGateway) CloseConn(connID *uint16, _ *struct{}) (err error) {
 }
 
 // CloseListener closes listener specified by `lisID`.
-func (r *RPCGateway) CloseListener(lisID *uint16, _ *struct{}) (err error) {
+func (r *RPCIngressGateway) CloseListener(lisID *uint16, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "CloseConn", lisID)(nil, &err)
 
 	lis, err := r.popListener(*lisID)
@@ -292,7 +292,7 @@ type DeadlineReq struct {
 }
 
 // SetDeadline sets deadline for connection specified by `connID`.
-func (r *RPCGateway) SetDeadline(req *DeadlineReq, _ *struct{}) error {
+func (r *RPCIngressGateway) SetDeadline(req *DeadlineReq, _ *struct{}) error {
 	conn, err := r.getConn(req.ConnID)
 	if err != nil {
 		return err
@@ -302,7 +302,7 @@ func (r *RPCGateway) SetDeadline(req *DeadlineReq, _ *struct{}) error {
 }
 
 // SetReadDeadline sets read deadline for connection specified by `connID`.
-func (r *RPCGateway) SetReadDeadline(req *DeadlineReq, _ *struct{}) error {
+func (r *RPCIngressGateway) SetReadDeadline(req *DeadlineReq, _ *struct{}) error {
 	conn, err := r.getConn(req.ConnID)
 	if err != nil {
 		return err
@@ -312,7 +312,7 @@ func (r *RPCGateway) SetReadDeadline(req *DeadlineReq, _ *struct{}) error {
 }
 
 // SetWriteDeadline sets read deadline for connection specified by `connID`.
-func (r *RPCGateway) SetWriteDeadline(req *DeadlineReq, _ *struct{}) error {
+func (r *RPCIngressGateway) SetWriteDeadline(req *DeadlineReq, _ *struct{}) error {
 	conn, err := r.getConn(req.ConnID)
 	if err != nil {
 		return err
@@ -323,7 +323,7 @@ func (r *RPCGateway) SetWriteDeadline(req *DeadlineReq, _ *struct{}) error {
 
 // popListener gets listener from the manager by `lisID` and removes it.
 // Handles type assertion.
-func (r *RPCGateway) popListener(lisID uint16) (net.Listener, error) {
+func (r *RPCIngressGateway) popListener(lisID uint16) (net.Listener, error) {
 	lisIfc, err := r.lm.Pop(lisID)
 	if err != nil {
 		return nil, fmt.Errorf("no listener: %v", err)
@@ -334,7 +334,7 @@ func (r *RPCGateway) popListener(lisID uint16) (net.Listener, error) {
 
 // popConn gets conn from the manager by `connID` and removes it.
 // Handles type assertion.
-func (r *RPCGateway) popConn(connID uint16) (net.Conn, error) {
+func (r *RPCIngressGateway) popConn(connID uint16) (net.Conn, error) {
 	connIfc, err := r.cm.Pop(connID)
 	if err != nil {
 		return nil, fmt.Errorf("no conn: %v", err)
@@ -344,7 +344,7 @@ func (r *RPCGateway) popConn(connID uint16) (net.Conn, error) {
 }
 
 // getListener gets listener from the manager by `lisID`. Handles type assertion.
-func (r *RPCGateway) getListener(lisID uint16) (net.Listener, error) {
+func (r *RPCIngressGateway) getListener(lisID uint16) (net.Listener, error) {
 	lisIfc, ok := r.lm.Get(lisID)
 	if !ok {
 		return nil, fmt.Errorf("no listener with key %d", lisID)
@@ -354,7 +354,7 @@ func (r *RPCGateway) getListener(lisID uint16) (net.Listener, error) {
 }
 
 // getConn gets conn from the manager by `connID`. Handles type assertion.
-func (r *RPCGateway) getConn(connID uint16) (net.Conn, error) {
+func (r *RPCIngressGateway) getConn(connID uint16) (net.Conn, error) {
 	connIfc, ok := r.cm.Get(connID)
 	if !ok {
 		return nil, fmt.Errorf("no conn with key %d", connID)

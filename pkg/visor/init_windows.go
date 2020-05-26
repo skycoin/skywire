@@ -2,18 +2,15 @@
 
 package visor
 
-type pty struct {
-}
+func initDmsgpty(v *Visor) bool {
+	report := v.makeReporter("dmsgpty")
+	conf := v.conf.Dmsgpty
 
-func initStack() []initFunc {
-	return []initFunc{
-		initUpdater,
-		initSNet,
-		initTransport,
-		initRouter,
-		initLauncher,
-		initCLI,
-		initHypervisors,
-		initUptimeTracker,
+	if conf == nil {
+		v.log.Info("'dmsgpty' is not configured, skipping.")
+		return report(nil)
 	}
+
+	v.log.Error("dmsgpty is not supported on windows.")
+	return report(nil)
 }
