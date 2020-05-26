@@ -28,6 +28,7 @@ const (
 	resolvePath          = "/resolve/"
 	resolveHolePunchPath = "/resolve_hole_punch/"
 	wsPath               = "/ws"
+	addrChSize           = 1024
 )
 
 var (
@@ -276,7 +277,7 @@ type RemoteVisor struct {
 }
 
 func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
-	addrCh := make(chan RemoteVisor)
+	addrCh := make(chan RemoteVisor, addrChSize)
 
 	if c.wsConn != nil {
 		if err := c.wsConn.Close(websocket.StatusNormalClosure, "new connection created"); err != nil {
@@ -311,9 +312,7 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 				continue
 			}
 
-			go func(r RemoteVisor) {
-				addrCh <- r
-			}(remote)
+			addrCh <- remote
 		}
 	}(conn, addrCh)
 

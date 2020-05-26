@@ -89,9 +89,11 @@ func (c *Client) Serve() error {
 		for addr := range c.connCh {
 			c.log.Infof("Received signal to dial %v", addr)
 
-			if err := c.acceptTCPConn(addr); err != nil {
-				c.log.Warnf("failed to accept incoming connection: %v", err)
-			}
+			go func(addr arclient.RemoteVisor) {
+				if err := c.acceptTCPConn(addr); err != nil {
+					c.log.Warnf("failed to accept incoming connection: %v", err)
+				}
+			}(addr)
 		}
 	}()
 
