@@ -1026,7 +1026,7 @@ func prepAddr(nType appnet.Type) appnet.Addr {
 	}
 }
 
-func addConn(t *testing.T, rpc *RPCGateway, conn net.Conn) uint16 {
+func addConn(t *testing.T, rpc *RPCIngressGateway, conn net.Conn) uint16 {
 	connID, _, err := rpc.cm.ReserveNextID()
 	require.NoError(t, err)
 
@@ -1036,7 +1036,7 @@ func addConn(t *testing.T, rpc *RPCGateway, conn net.Conn) uint16 {
 	return *connID
 }
 
-func addListener(t *testing.T, rpc *RPCGateway, lis net.Listener) uint16 {
+func addListener(t *testing.T, rpc *RPCIngressGateway, lis net.Listener) uint16 {
 	lisID, _, err := rpc.lm.ReserveNextID()
 	require.NoError(t, err)
 
