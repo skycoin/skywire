@@ -28,7 +28,8 @@ type Conn struct {
 	freePort func()
 }
 
-func newConn(conn net.Conn, deadline time.Time, hs Handshake, freePort func()) (*Conn, error) {
+// TODO: too many args
+func (c *Client) newConn(conn net.Conn, deadline time.Time, hs Handshake, freePort func(), encrypt, initiator bool) (*Conn, error) {
 	lAddr, rAddr, err := hs(conn, deadline)
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
@@ -39,6 +40,28 @@ func newConn(conn net.Conn, deadline time.Time, hs Handshake, freePort func()) (
 
 		return nil, err
 	}
+
+	// TODO: extract from handshake whether encryption needed
+	if encrypt {
+		config := noise.Config{
+			LocalPK:   c.lPK,
+			LocalSK:   c.lSK,
+			RemotePK:  rAddr.PK,
+			Initiator: initiator,
+		}
+
+		wrappedConn, err := noisewrapper.WrapConn(config, conn)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt connection to %v@%v: %w", rAddr, conn.RemoteAddr(), err)
+		}
+
+		conn = wrappedConn
+
+		c.log.Infof("Connection with %v@%v is encrypted", rAddr, conn.RemoteAddr())
+	} else {
+		c.log.Infof("Connection with %v@%v is NOT encrypted", rAddr, conn.RemoteAddr())
+	}
+
 	return &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: freePort}, nil
 }
 
@@ -202,25 +225,6 @@ func (c *Client) acceptTCPConn() error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	appConn, isAppConn := tcpConn.(noisewrapper.PK)
-	if !isAppConn {
-		return fmt.Errorf("encrypt connection to %v: failed to get remote PK", remoteAddr)
-	}
-
-	config := noise.Config{
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		RemotePK:  appConn.PK(),
-		Initiator: false,
-	}
-
-	tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
-	if err != nil {
-		return fmt.Errorf("encrypt connection to %v: %w", appConn.PK(), err)
-	}
-
-	c.log.Infof("Connection with %v is encrypted", remoteAddr)
-
 	var lis *Listener
 	hs := ResponderHandshake(func(f2 Frame2) error {
 		c.mx.Lock()
@@ -234,7 +238,7 @@ func (c *Client) acceptTCPConn() error {
 		return nil
 	})
 
-	conn, err := newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, nil)
+	conn, err := c.newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, nil, true, false)
 	if err != nil {
 		return fmt.Errorf("newConn: %w", err)
 	}
@@ -264,29 +268,13 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, tcpAddr)
 
-	config := noise.Config{
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		RemotePK:  rPK,
-		Initiator: true,
-	}
-
-	wrappedConn, err := noisewrapper.WrapConn(config, conn)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt connection to %v:%v@%v: %w", rPK, rPort, tcpAddr, err)
-	}
-
-	conn = wrappedConn
-
-	c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, tcpAddr)
-
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
-	return newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort)
+	return c.newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort, true, true)
 }
 
 // Listen creates a new listener for stcp.
