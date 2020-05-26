@@ -16,6 +16,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
@@ -31,6 +32,21 @@ import (
 
 type initFunc func(v *Visor) bool
 
+func initStack() []initFunc {
+	return []initFunc{
+		initUpdater,
+		initEventBroadcaster,
+		initSNet,
+		initDmsgpty,
+		initTransport,
+		initRouter,
+		initLauncher,
+		initCLI,
+		initHypervisors,
+		initUptimeTracker,
+	}
+}
+
 func initUpdater(v *Visor) bool {
 	report := v.makeReporter("updater")
 
@@ -45,15 +61,31 @@ func initUpdater(v *Visor) bool {
 	return report(nil)
 }
 
+func initEventBroadcaster(v *Visor) bool {
+	report := v.makeReporter("event_broadcaster")
+
+	log := v.MasterLogger().PackageLogger("event_broadcaster")
+	const ebcTimeout = time.Second
+	ebc := appevent.NewBroadcaster(log, ebcTimeout)
+
+	v.pushCloseStack("event_broadcaster", func() bool {
+		return report(ebc.Close())
+	})
+
+	v.ebc = ebc
+	return report(nil)
+}
+
 func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
-	n := snet.New(snet.Config{
+	conf := snet.Config{
 		PubKey: v.conf.PK,
 		SecKey: v.conf.SK,
 		Dmsg:   v.conf.Dmsg,
 		STCP:   v.conf.STCP,
-	})
+	}
+	n := snet.New(conf, v.ebc)
 	if err := n.Init(); err != nil {
 		return report(err)
 	}
@@ -189,7 +221,7 @@ func initLauncher(v *Visor) bool {
 	}
 
 	// Prepare proc manager.
-	procM, err := appserver.NewProcManager(v.MasterLogger(), &factory, conf.ServerAddr)
+	procM, err := appserver.NewProcManager(v.MasterLogger(), &factory, v.ebc, conf.ServerAddr)
 	if err != nil {
 		return report(fmt.Errorf("failed to start proc_manager: %w", err))
 	}
@@ -232,11 +264,12 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 
 		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
-			envCfg.DmsgServers = n.Dmsg().ConnectedServers()
-			if len(envCfg.DmsgServers) == 0 {
-				return errors.New("no Dmsg servers found")
+			for _, ses := range n.Dmsg().AllSessions() {
+				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.LocalTCPAddr().String())
 			}
-
+			if len(envCfg.DmsgServers) == 0 {
+				return errors.New("no dmsg servers found")
+			}
 			return nil
 		})
 		if err != nil {
@@ -342,7 +375,7 @@ func initUptimeTracker(v *Visor) bool {
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
 	if err != nil {
 		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
-		//return report(err)
+		// return report(err)
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return true
 	}

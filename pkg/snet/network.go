@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -81,16 +82,29 @@ type Network struct {
 }
 
 // New creates a network from a config.
-func New(conf Config) *Network {
+func New(conf Config, eb *appevent.Broadcaster) *Network {
 	var dmsgC *dmsg.Client
 	var stcpC *stcp.Client
 
 	if conf.Dmsg != nil {
-		c := &dmsg.Config{
+		dmsgConf := &dmsg.Config{
 			MinSessions: conf.Dmsg.SessionsCount,
+			Callbacks: &dmsg.ClientCallbacks{
+				OnSessionDial: func(network, addr string) error {
+					data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
+					event := appevent.NewEvent(appevent.TCPDial, data)
+					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+					// @evanlinjin: An error is not returned here as this will cancel the session dial.
+					return nil
+				},
+				OnSessionDisconnect: func(network, addr string, _ error) {
+					data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
+					event := appevent.NewEvent(appevent.TCPClose, data)
+					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+				},
+			},
 		}
-
-		dmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Dmsg.Discovery), c)
+		dmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Dmsg.Discovery), dmsgConf)
 		dmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 	}
 
