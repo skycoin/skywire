@@ -4,8 +4,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -27,17 +25,11 @@ var RootCmd = &cobra.Command{
 }
 
 func rpcClient() visor.RPCClient {
+	const rpcDialTimeout = time.Second * 5
+
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
 		logger.Fatal("RPC connection failed:", err)
 	}
-	if err := conn.SetDeadline(time.Now().Add(rpcConnDuration)); err != nil {
-		logger.Fatal("RPC connection failed:", err)
-	}
-	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout)
+	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0)
 }
-
-const (
-	rpcDialTimeout  = time.Second * 5
-	rpcConnDuration = time.Second * 60
-)
