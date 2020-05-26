@@ -11,12 +11,10 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/libp2p/go-reuseport"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
 )
 
 // Type is stcp hole punch type.
@@ -141,22 +139,6 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 	remoteAddr := tcpConn.RemoteAddr()
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
-
-	config := noise.Config{
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		RemotePK:  remote.PK,
-		Initiator: false,
-	}
-
-	wrappedConn, err := noisewrapper.WrapConn(config, tcpConn)
-	if err != nil {
-		return fmt.Errorf("encrypt connection to %v: %w", remoteAddr, err)
-	}
-
-	tcpConn = wrappedConn
-
-	c.log.Infof("Connection with %v is encrypted", remoteAddr)
 
 	var lis *Listener
 

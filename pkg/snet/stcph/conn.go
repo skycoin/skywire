@@ -51,7 +51,7 @@ func newConn(c connConfig) (*Conn, error) {
 			LocalPK:   c.localPK,
 			LocalSK:   c.localSK,
 			RemotePK:  rAddr.PK,
-			Initiator: true,
+			Initiator: c.initiator,
 		}
 
 		wrappedConn, err := noisewrapper.WrapConn(config, c.conn)
