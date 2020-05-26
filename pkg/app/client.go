@@ -1,7 +1,7 @@
 package app
 
 import (
-	"fmt"
+	"io"
 	"net"
 	"net/rpc"
 	"strings"
@@ -9,29 +9,32 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
 // Client is used by skywire apps.
 type Client struct {
-	log  logrus.FieldLogger
-	conf appcommon.ProcConfig
-	rpc  RPCClient
-	lm   *idmanager.Manager // contains listeners associated with their IDs
-	cm   *idmanager.Manager // contains connections associated with their IDs
+	log     logrus.FieldLogger
+	conf    appcommon.ProcConfig
+	rpcC    appserver.RPCIngressClient
+	lm      *idmanager.Manager // contains listeners associated with their IDs
+	cm      *idmanager.Manager // contains connections associated with their IDs
+	closers []io.Closer        // additional things to close on close
 }
 
 // NewClient creates a new Client, panicking on any error.
-func NewClient() *Client {
+func NewClient(eventSubs *appevent.Subscriber) *Client {
 	log := logrus.New()
 
 	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to obtain proc config.")
 	}
-	client, err := NewClientFromConfig(log, conf)
+	client, err := NewClientFromConfig(log, conf, eventSubs)
 	if err != nil {
 		log.WithError(err).Panic("Failed to create app client.")
 	}
@@ -39,21 +42,19 @@ func NewClient() *Client {
 }
 
 // NewClientFromConfig creates a new client from a given proc config.
-func NewClientFromConfig(log logrus.FieldLogger, conf appcommon.ProcConfig) (*Client, error) {
-	conn, err := net.Dial("tcp", conf.AppSrvAddr)
+func NewClientFromConfig(log logrus.FieldLogger, conf appcommon.ProcConfig, subs *appevent.Subscriber) (*Client, error) {
+	conn, closers, err := appevent.DoReqHandshake(conf, subs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial to app server: %w", err)
-	}
-	if _, err := conn.Write(conf.ProcKey[:]); err != nil {
-		return nil, fmt.Errorf("failed to send proc key back to app server: %w", err)
+		return nil, err
 	}
 
 	return &Client{
-		log:  log,
-		conf: conf,
-		rpc:  NewRPCClient(rpc.NewClient(conn), conf.ProcKey),
-		lm:   idmanager.New(),
-		cm:   idmanager.New(),
+		log:     log,
+		conf:    conf,
+		rpcC:    appserver.NewRPCIngressClient(rpc.NewClient(conn), conf.ProcKey),
+		lm:      idmanager.New(),
+		cm:      idmanager.New(),
+		closers: closers,
 	}, nil
 }
 
@@ -64,14 +65,14 @@ func (c *Client) Config() appcommon.ProcConfig {
 
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
-	connID, localPort, err := c.rpc.Dial(remote)
+	connID, localPort, err := c.rpcC.Dial(remote)
 	if err != nil {
 		return nil, err
 	}
 
 	conn := &Conn{
 		id:  connID,
-		rpc: c.rpc,
+		rpc: c.rpcC,
 		local: appnet.Addr{
 			Net:    remote.Net,
 			PubKey: c.conf.VisorPK,
@@ -109,7 +110,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 		Port:   port,
 	}
 
-	lisID, err := c.rpc.Listen(local)
+	lisID, err := c.rpcC.Listen(local)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +118,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 	listener := &Listener{
 		log:  c.log,
 		id:   lisID,
-		rpc:  c.rpc,
+		rpc:  c.rpcC,
 		addr: local,
 		cm:   idmanager.New(),
 	}
@@ -145,41 +146,45 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 // Close closes client/server communication entirely. It closes all open
 // listeners and connections.
 func (c *Client) Close() {
-	var listeners []net.Listener
+	var (
+		listeners []net.Listener
+		conns     []net.Conn
+	)
 
+	// Fill listeners and connections.
 	c.lm.DoRange(func(_ uint16, v interface{}) bool {
 		lis, err := idmanager.AssertListener(v)
 		if err != nil {
 			c.log.Error(err)
 			return true
 		}
-
 		listeners = append(listeners, lis)
 		return true
 	})
-
-	var conns []net.Conn
-
 	c.cm.DoRange(func(_ uint16, v interface{}) bool {
 		conn, err := idmanager.AssertConn(v)
 		if err != nil {
 			c.log.Error(err)
 			return true
 		}
-
 		conns = append(conns, conn)
 		return true
 	})
 
+	// Close everything.
 	for _, lis := range listeners {
-		if err := lis.Close(); err != nil {
+		if err := lis.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			c.log.WithError(err).Error("Error closing listener.")
 		}
 	}
-
 	for _, conn := range conns {
 		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			c.log.WithError(err).Error("Unexpected error while closing conn.")
+			c.log.WithError(err).Error("Error closing conn.")
+		}
+	}
+	for _, v := range c.closers {
+		if err := v.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			c.log.WithError(err).Error("Error closing closer.")
 		}
 	}
 }
