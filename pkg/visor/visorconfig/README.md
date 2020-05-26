@@ -14,13 +14,17 @@
 - `restart_check_delay` (string)
 
 
-# V1Launcher
+# V1UptimeTracker
 
-- `discovery` (*[V1AppDisc](#V1AppDisc))
-- `apps` ([][AppConfig](#AppConfig))
-- `server_addr` (string)
-- `bin_path` (string)
-- `local_path` (string)
+- `addr` (string)
+
+
+# V1Dmsgpty
+
+- `port` (uint16)
+- `authorization_file` (string)
+- `cli_network` (string)
+- `cli_address` (string)
 
 
 # V1Transport
@@ -30,15 +34,13 @@
 - `trusted_visors` ()
 
 
-# V1AppDisc
+# V1Launcher
 
-- `update_interval` (Duration)
-- `proxy_discovery_addr` (string)
-
-
-# V1UptimeTracker
-
-- `addr` (string)
+- `discovery` (*[V1AppDisc](#V1AppDisc))
+- `apps` ([][AppConfig](#AppConfig))
+- `server_addr` (string)
+- `bin_path` (string)
+- `local_path` (string)
 
 
 # V1Routing
@@ -54,20 +56,16 @@
 - `location` (string)
 
 
-# V1Dmsgpty
+# V1AppDisc
 
-- `port` (uint16)
-- `authorization_file` (string)
-- `cli_network` (string)
-- `cli_address` (string)
+- `update_interval` (Duration)
+- `proxy_discovery_addr` (string)
 
 
-# AppConfig
+# STCPConfig
 
-- `name` (string)
-- `args` ([]string)
-- `auto_start` (bool)
-- `port` (Port)
+- `pk_table` ()
+- `local_address` (string)
 
 
 # DmsgConfig
@@ -76,7 +74,9 @@
 - `sessions_count` (int)
 
 
-# STCPConfig
+# AppConfig
 
-- `pk_table` ()
-- `local_address` (string)
+- `name` (string)
+- `args` ([]string)
+- `auto_start` (bool)
+- `port` (Port)
