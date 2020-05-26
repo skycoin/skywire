@@ -57,13 +57,13 @@ func main() {
 func prepareSubscriptions() *appevent.Subscriber {
 	subs := appevent.NewSubscriber()
 
-	subs.TCPDial(func(data appevent.TCPDialData) {
+	subs.OnTCPDial(func(data appevent.TCPDialData) {
 		log.WithField("event_type", data.Type()).
 			WithField("event_data", data).
 			Info("Received event.")
 	})
 
-	subs.TCPClose(func(data appevent.TCPCloseData) {
+	subs.OnTCPClose(func(data appevent.TCPCloseData) {
 		log.WithField("event_type", data.Type()).
 			WithField("event_data", data).
 			Info("Received event.")
@@ -121,7 +121,6 @@ func handleServerConn(log logrus.FieldLogger, conn net.Conn) {
 }
 
 func runClient(appC *app.Client) {
-
 	var remotePK cipher.PubKey
 	if err := remotePK.UnmarshalText([]byte(*remote)); err != nil {
 		log.WithError(err).Fatal("Invalid remote public key.")
@@ -130,7 +129,6 @@ func runClient(appC *app.Client) {
 	var conn net.Conn
 
 	for i := 0; true; i++ {
-
 		time.Sleep(time.Second * 2)
 
 		if conn != nil {
