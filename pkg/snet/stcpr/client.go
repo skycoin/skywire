@@ -127,7 +127,19 @@ func (c *Client) acceptTCPConn() error {
 		return nil
 	})
 
-	conn, err := c.newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, nil, true, false)
+	connConfig := connConfig{
+		log:       c.log,
+		conn:      tcpConn,
+		localPK:   c.lPK,
+		localSK:   c.lSK,
+		deadline:  time.Now().Add(HandshakeTimeout),
+		hs:        hs,
+		freePort:  nil,
+		encrypt:   true,
+		initiator: false,
+	}
+
+	conn, err := newConn(connConfig)
 	if err != nil {
 		return err
 	}
@@ -160,7 +172,19 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	return c.newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort, true, true)
+	connConfig := connConfig{
+		log:       c.log,
+		conn:      conn,
+		localPK:   c.lPK,
+		localSK:   c.lSK,
+		deadline:  time.Now().Add(HandshakeTimeout),
+		hs:        hs,
+		freePort:  freePort,
+		encrypt:   true,
+		initiator: true,
+	}
+
+	return newConn(connConfig)
 }
 
 // Listen creates a new listener for stcp.

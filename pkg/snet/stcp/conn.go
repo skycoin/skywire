@@ -1,4 +1,4 @@
-package stcpr
+package stcp
 
 import (
 	"fmt"
@@ -84,6 +84,5 @@ func (c *Conn) Close() error {
 	if c.freePort != nil {
 		c.freePort()
 	}
-
 	return c.Conn.Close()
 }

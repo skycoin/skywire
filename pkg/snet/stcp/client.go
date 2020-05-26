@@ -11,142 +11,11 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
 )
 
 // Type is stcp type.
 const Type = "stcp"
-
-// Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
-type Conn struct {
-	net.Conn
-	lAddr    dmsg.Addr
-	rAddr    dmsg.Addr
-	freePort func()
-}
-
-// TODO: too many args
-func (c *Client) newConn(conn net.Conn, deadline time.Time, hs Handshake, freePort func(), encrypt, initiator bool) (*Conn, error) {
-	lAddr, rAddr, err := hs(conn, deadline)
-	if err != nil {
-		_ = conn.Close() //nolint:errcheck
-
-		if freePort != nil {
-			freePort()
-		}
-
-		return nil, err
-	}
-
-	// TODO: extract from handshake whether encryption needed
-	if encrypt {
-		config := noise.Config{
-			LocalPK:   c.lPK,
-			LocalSK:   c.lSK,
-			RemotePK:  rAddr.PK,
-			Initiator: initiator,
-		}
-
-		wrappedConn, err := noisewrapper.WrapConn(config, conn)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt connection to %v@%v: %w", rAddr, conn.RemoteAddr(), err)
-		}
-
-		conn = wrappedConn
-
-		c.log.Infof("Connection with %v@%v is encrypted", rAddr, conn.RemoteAddr())
-	} else {
-		c.log.Infof("Connection with %v@%v is NOT encrypted", rAddr, conn.RemoteAddr())
-	}
-
-	return &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: freePort}, nil
-}
-
-// LocalAddr implements net.Conn
-func (c *Conn) LocalAddr() net.Addr {
-	return c.lAddr
-}
-
-// RemoteAddr implements net.Conn
-func (c *Conn) RemoteAddr() net.Addr {
-	return c.rAddr
-}
-
-// Close implements net.Conn
-func (c *Conn) Close() error {
-	if c.freePort != nil {
-		c.freePort()
-	}
-	return c.Conn.Close()
-}
-
-// Listener implements net.Listener
-type Listener struct {
-	lAddr    dmsg.Addr
-	freePort func()
-	accept   chan *Conn
-	done     chan struct{}
-	once     sync.Once
-	mx       sync.Mutex
-}
-
-func newListener(lAddr dmsg.Addr, freePort func()) *Listener {
-	return &Listener{
-		lAddr:    lAddr,
-		freePort: freePort,
-		accept:   make(chan *Conn),
-		done:     make(chan struct{}),
-	}
-}
-
-// Introduce is used by stcp.Client to introduce stcp.Conn to Listener.
-func (l *Listener) Introduce(conn *Conn) error {
-	select {
-	case <-l.done:
-		return io.ErrClosedPipe
-	default:
-		l.mx.Lock()
-		defer l.mx.Unlock()
-
-		select {
-		case l.accept <- conn:
-			return nil
-		case <-l.done:
-			return io.ErrClosedPipe
-		}
-	}
-}
-
-// Accept implements net.Listener
-func (l *Listener) Accept() (net.Conn, error) {
-	conn, ok := <-l.accept
-	if !ok {
-		return nil, io.ErrClosedPipe
-	}
-	return conn, nil
-}
-
-// Close implements net.Listener
-func (l *Listener) Close() error {
-	l.once.Do(func() {
-		close(l.done)
-
-		l.mx.Lock()
-		close(l.accept)
-		l.mx.Unlock()
-
-		l.freePort()
-	})
-	return nil
-}
-
-// Addr implements net.Listener
-func (l *Listener) Addr() net.Addr {
-	return l.lAddr
-}
 
 // Client is the central control for incoming and outgoing 'stcp.Conn's.
 type Client struct {
@@ -238,7 +107,19 @@ func (c *Client) acceptTCPConn() error {
 		return nil
 	})
 
-	conn, err := c.newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, nil, true, false)
+	connConfig := connConfig{
+		log:       c.log,
+		conn:      tcpConn,
+		localPK:   c.lPK,
+		localSK:   c.lSK,
+		deadline:  time.Now().Add(HandshakeTimeout),
+		hs:        hs,
+		freePort:  nil,
+		encrypt:   true,
+		initiator: false,
+	}
+
+	conn, err := newConn(connConfig)
 	if err != nil {
 		return fmt.Errorf("newConn: %w", err)
 	}
@@ -274,7 +155,20 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	}
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
-	return c.newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort, true, true)
+
+	connConfig := connConfig{
+		log:       c.log,
+		conn:      conn,
+		localPK:   c.lPK,
+		localSK:   c.lSK,
+		deadline:  time.Now().Add(HandshakeTimeout),
+		hs:        hs,
+		freePort:  freePort,
+		encrypt:   true,
+		initiator: true,
+	}
+
+	return newConn(connConfig)
 }
 
 // Listen creates a new listener for stcp.
