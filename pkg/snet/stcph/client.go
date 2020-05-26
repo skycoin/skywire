@@ -91,11 +91,6 @@ func (c *Client) Serve() error {
 
 			if err := c.acceptTCPConn(addr); err != nil {
 				c.log.Warnf("failed to accept incoming connection: %v", err)
-
-				if !IsHandshakeError(err) {
-					c.log.Warnf("stopped serving stcpr")
-					return
-				}
 			}
 		}
 	}()
