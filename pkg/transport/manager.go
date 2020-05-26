@@ -216,45 +216,43 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 		return nil, io.ErrClosedPipe
 	}
 
-	const tries = 2
+TrySaveTp:
+	mTp, err := tm.saveTransport(remote, tpType)
+	if err != nil {
+		return nil, err
+	}
 
-	var err error
-	for i := 0; i < tries; i++ {
-		mTp, err := tm.saveTransport(remote, tpType)
-		if err != nil {
+	if err = mTp.Dial(ctx); err != nil {
+		// This occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was just
+		// deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
+		if err == ErrNotServing {
+			if closeErr := mTp.Close(); closeErr != nil {
+				tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
+			}
+			delete(tm.tps, mTp.Entry.ID)
+			goto TrySaveTp
+		}
+
+		// This occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in the
+		// STCP table. There is no point in retrying as a connection would be impossible, so we just return an error.
+		if isSTCPTableError(remote, err) {
+			if closeErr := mTp.Close(); closeErr != nil {
+				tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
+			}
+			delete(tm.tps, mTp.Entry.ID)
 			return nil, err
 		}
 
-		if err = mTp.Dial(ctx); err != nil {
-			// TODO(nkryuchkov): Check for an error that underlying connection is not established
-			// and try again in this case. Otherwise, return the error.
-			pkTableErr := fmt.Sprintf("pk table: entry of %s does not exist", remote.String())
-
-			if err.Error() == pkTableErr {
-				mTp.wg.Wait()
-				delete(tm.tps, mTp.Entry.ID)
-
-				return nil, err
-			}
-
-			if err == ErrNotServing {
-				mTp.wg.Wait()
-				delete(tm.tps, mTp.Entry.ID)
-				continue
-			}
-
-			tm.Logger.
-				WithError(err).
-				Warn("Underlying connection is not yet established. Will retry later.")
-		}
-		return mTp, nil
+		tm.Logger.WithError(err).Warn("Underlying transport connection is not established, will retry later.")
 	}
 
-	tm.Logger.
-		WithError(err).
-		WithField("tries", tries).
-		Error("Failed to serve managed transport. This is unexpected.")
-	return nil, err
+	return mTp, nil
+}
+
+// isSTCPPKError returns true if the error is a STCP table error.
+// This occurs the requested remote public key does not exist in the STCP table.
+func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
+	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
@@ -263,13 +261,12 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 
 	tpID := tm.tpIDFromPK(remote, netName)
-
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
-	tp, ok := tm.tps[tpID]
+	oldMTp, ok := tm.tps[tpID]
 	if ok {
-		tm.Logger.Debugln("Got TP from map")
-		return tp, nil
+		tm.Logger.Debug("Found an old mTp from internal map.")
+		return oldMTp, nil
 	}
 
 	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
