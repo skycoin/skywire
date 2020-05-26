@@ -1,7 +1,5 @@
 # V1
 
-- `` (*[Common](#Common))
-- `mu` ([RWMutex](#RWMutex))
 - `dmsg` (*[DmsgConfig](#DmsgConfig))
 - `dmsgpty` (*[V1Dmsgpty](#V1Dmsgpty))
 - `stcp` (*[STCPConfig](#STCPConfig))
@@ -18,17 +16,9 @@
 - `restart_check_delay` (string)
 
 
-# V1Transport
+# V1UptimeTracker
 
-- `discovery` (string)
-- `log_store` (*[V1LogStore](#V1LogStore))
-- `trusted_visors` ()
-
-
-# V1LogStore
-
-- `type` (string) - Type defines the log store type. Valid values: file, memory.
-- `location` (string)
+- `addr` (string)
 
 
 # V1Dmsgpty
@@ -39,9 +29,11 @@
 - `cli_address` (string)
 
 
-# V1UptimeTracker
+# V1Transport
 
-- `addr` (string)
+- `discovery` (string)
+- `log_store` (*[V1LogStore](#V1LogStore))
+- `trusted_visors` ()
 
 
 # V1Launcher
@@ -60,32 +52,16 @@
 - `route_finder_timeout` (Duration)
 
 
+# V1LogStore
+
+- `type` (string) - Type defines the log store type. Valid values: file, memory.
+- `location` (string)
+
+
 # V1AppDisc
 
 - `update_interval` (Duration)
 - `proxy_discovery_addr` (string)
-
-
-# Common
-
-- `path` (string)
-- `log` (*[MasterLogger](#MasterLogger))
-- `version` (string)
-- `sk` (SecKey)
-- `pk` (PubKey)
-
-
-# AppConfig
-
-- `name` (string)
-- `args` ([]string)
-- `auto_start` (bool)
-- `port` (Port)
-
-
-# STCPHConfig
-
-- `address_resolver` (string)
 
 
 # STCPConfig
@@ -94,38 +70,15 @@
 - `local_address` (string)
 
 
-# RWMutex
-
-- `w` ([Mutex](#Mutex))
-- `writerSem` (uint32)
-- `readerSem` (uint32)
-- `readerCount` (int32)
-- `readerWait` (int32)
-
-
-# Mutex
-
-- `state` (int32)
-- `sema` (uint32)
-
-
 # DmsgConfig
 
 - `discovery` (string)
 - `sessions_count` (int)
 
 
-# STCPRConfig
+# AppConfig
 
-- `address_resolver` (string)
-- `local_address` (string)
-
-
-# MasterLogger
-
-- `` (*[Logger](#Logger))
-
-
-# Logger
-
-- `` (FieldLogger)
+- `name` (string)
+- `args` ([]string)
+- `auto_start` (bool)
+- `port` (Port)

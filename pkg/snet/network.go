@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
 // Default ports.
@@ -113,18 +113,31 @@ type Network struct {
 }
 
 // New creates a network from a config.
-func New(conf Config) (*Network, error) {
+func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	var (
 		clients         NetworkClients
 		addressResolver arclient.APIClient
 	)
 
 	if conf.NetworkConfigs.Dmsg != nil {
-		c := &dmsg.Config{
+		dmsgConf := &dmsg.Config{
 			MinSessions: conf.NetworkConfigs.Dmsg.SessionsCount,
+			Callbacks: &dmsg.ClientCallbacks{
+				OnSessionDial: func(network, addr string) error {
+					data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
+					event := appevent.NewEvent(appevent.TCPDial, data)
+					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+					// @evanlinjin: An error is not returned here as this will cancel the session dial.
+					return nil
+				},
+				OnSessionDisconnect: func(network, addr string, _ error) {
+					data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
+					event := appevent.NewEvent(appevent.TCPClose, data)
+					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+				},
+			},
 		}
-
-		clients.DmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.NetworkConfigs.Dmsg.Discovery), c)
+		clients.DmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.NetworkConfigs.Dmsg.Discovery), dmsgConf)
 		clients.DmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 	}
 

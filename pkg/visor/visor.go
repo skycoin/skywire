@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -58,8 +59,9 @@ type Visor struct {
 	restartCtx *restart.Context
 	updater    *updater.Updater
 
+	ebc *appevent.Broadcaster // event broadcaster
+
 	net    *snet.Network
-	pty    pty
 	tpM    *transport.Manager
 	router router.Router
 
