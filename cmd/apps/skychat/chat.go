@@ -42,7 +42,7 @@ var (
 )
 
 func main() {
-	appC = app.NewClient()
+	appC = app.NewClient(nil)
 	defer appC.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
