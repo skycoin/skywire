@@ -122,7 +122,7 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 		},
 		{
 			Name:      skyenv.VPNServerName,
-			AutoStart: true,
+			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNServerPort),
 		},
 		{
