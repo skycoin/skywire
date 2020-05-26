@@ -61,8 +61,10 @@ func newConn(c connConfig) (*Conn, error) {
 
 		c.conn = wrappedConn
 
-		c.log.Infof("Connection with %v@%v is encrypted", rAddr, c.conn.RemoteAddr())
-	} else {
+		if c.log != nil {
+			c.log.Infof("Connection with %v@%v is encrypted", rAddr, c.conn.RemoteAddr())
+		}
+	} else if c.log != nil {
 		c.log.Infof("Connection with %v@%v is NOT encrypted", rAddr, c.conn.RemoteAddr())
 	}
 

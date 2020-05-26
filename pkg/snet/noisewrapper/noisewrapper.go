@@ -5,10 +5,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 )
 
+// HSTimeout sets handshake timeout.
 const HSTimeout = 5 * time.Second
 
 // WrapConn wraps `conn` with noise.
@@ -24,8 +24,4 @@ func WrapConn(config noise.Config, conn net.Conn) (net.Conn, error) {
 	}
 
 	return wrappedConn, nil
-}
-
-type PK interface {
-	PK() cipher.PubKey
 }

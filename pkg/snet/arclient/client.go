@@ -269,6 +269,7 @@ func (c *httpClient) ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (st
 	return resolveResp.Addr, nil
 }
 
+// RemoteVisor contains public key and address of remote visor.
 type RemoteVisor struct {
 	PK   cipher.PubKey
 	Addr string

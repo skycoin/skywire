@@ -172,7 +172,19 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 		return nil
 	})
 
-	conn, err := newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, nil)
+	connConfig := connConfig{
+		log:       c.log,
+		conn:      tcpConn,
+		localPK:   c.lPK,
+		localSK:   c.lSK,
+		deadline:  time.Now().Add(HandshakeTimeout),
+		hs:        hs,
+		freePort:  nil,
+		encrypt:   true,
+		initiator: false,
+	}
+
+	conn, err := newConn(connConfig)
 	if err != nil {
 		return err
 	}
@@ -204,22 +216,6 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
 
-	config := noise.Config{
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		RemotePK:  rPK,
-		Initiator: true,
-	}
-
-	wrappedConn, err := noisewrapper.WrapConn(config, tcpConn)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt connection to %v:%v@%v: %w", rPK, rPort, addr, err)
-	}
-
-	tcpConn = wrappedConn
-
-	c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
-
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ReserveEphemeral: %w", err)
@@ -227,7 +223,19 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	stcpConn, err := newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, freePort)
+	connConfig := connConfig{
+		log:       c.log,
+		conn:      tcpConn,
+		localPK:   c.lPK,
+		localSK:   c.lSK,
+		deadline:  time.Now().Add(HandshakeTimeout),
+		hs:        hs,
+		freePort:  freePort,
+		encrypt:   true,
+		initiator: true,
+	}
+
+	stcpConn, err := newConn(connConfig)
 	if err != nil {
 		return nil, fmt.Errorf("newConn: %w", err)
 	}
