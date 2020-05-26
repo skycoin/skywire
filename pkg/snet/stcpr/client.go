@@ -11,11 +11,9 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
 )
 
 // Type is stcp with address resolving type.
@@ -115,25 +113,6 @@ func (c *Client) acceptTCPConn() error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	appConn, isAppConn := tcpConn.(noisewrapper.PK)
-	if !isAppConn {
-		return fmt.Errorf("encrypt connection to %v: failed to get remote PK", remoteAddr)
-	}
-
-	config := noise.Config{
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		RemotePK:  appConn.PK(),
-		Initiator: false,
-	}
-
-	tcpConn, err = noisewrapper.WrapConn(config, tcpConn)
-	if err != nil {
-		return fmt.Errorf("encrypt connection to %v: %w", appConn.PK(), err)
-	}
-
-	c.log.Infof("Connection with %v is encrypted", remoteAddr)
-
 	var lis *Listener
 
 	hs := ResponderHandshake(func(f2 Frame2) error {
@@ -148,7 +127,7 @@ func (c *Client) acceptTCPConn() error {
 		return nil
 	})
 
-	conn, err := newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, nil)
+	conn, err := c.newConn(tcpConn, time.Now().Add(HandshakeTimeout), hs, nil, true, false)
 	if err != nil {
 		return err
 	}
@@ -174,22 +153,6 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
 
-	config := noise.Config{
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		RemotePK:  rPK,
-		Initiator: true,
-	}
-
-	wrappedConn, err := noisewrapper.WrapConn(config, conn)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt connection to %v:%v@%v: %w", rPK, rPort, addr, err)
-	}
-
-	conn = wrappedConn
-
-	c.log.Infof("Connection with %v:%v@%v is encrypted", rPK, rPort, addr)
-
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, err
@@ -197,7 +160,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	return newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort)
+	return c.newConn(conn, time.Now().Add(HandshakeTimeout), hs, freePort, true, true)
 }
 
 // Listen creates a new listener for stcp.
