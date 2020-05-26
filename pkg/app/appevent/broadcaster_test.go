@@ -62,7 +62,6 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 	// - Each of the n(C) RPCClients should receive n(E) event objects.
 	// - Received event objects should be in the order of sent.
 	t.Run("broadcast_events", func(t *testing.T) {
-
 		// Arrange: constants.
 		const nClients = 12
 		const nEvents = 52
@@ -99,7 +98,6 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 	// Assert:
 	// - The RPCClient should have only received events that are of subscribed types.
 	t.Run("broadcast_only_subscribed_events", func(t *testing.T) {
-
 		// Arrange: constants/variables
 		const nEvents = 64
 		subs := map[string]bool{TCPDial: true}

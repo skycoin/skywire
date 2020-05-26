@@ -66,22 +66,18 @@ func (mc *Broadcaster) Broadcast(ctx context.Context, e *Event) error {
 		go notifyClient(ctx, e, client, errCh)
 	}
 
-	// Delete inactive clients and reset error channels.
+	// Delete inactive clients and associated error channels.
 	for client, errCh := range mc.clients {
-		err := <-errCh
-		close(errCh)
-
-		if err != nil {
+		if err := <-errCh; err != nil {
 			mc.log.
 				WithError(err).
 				WithField("close_error", client.Close()).
 				WithField("hello", client.Hello().String()).
 				Warn("Events RPC client closed due to error.")
-			delete(mc.clients, client)
-			continue
-		}
 
-		mc.clients[client] = make(chan error, 1)
+			delete(mc.clients, client)
+			close(errCh)
+		}
 	}
 
 	return nil

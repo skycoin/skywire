@@ -47,7 +47,7 @@ func ReadHello(r io.Reader) (Hello, error) {
 
 	var hello Hello
 	if err := json.Unmarshal(helloRaw, &hello); err != nil {
-		return Hello{}, fmt.Errorf("failed to unmarshal hellp data: %w", err)
+		return Hello{}, fmt.Errorf("failed to unmarshal hello data: %w", err)
 	}
 
 	return hello, nil
