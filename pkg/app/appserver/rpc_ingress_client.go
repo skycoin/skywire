@@ -1,4 +1,4 @@
-package app
+package appserver
 
 import (
 	"fmt"
@@ -7,14 +7,13 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
-//go:generate mockery -name RPCClient -case underscore -inpkg
+//go:generate mockery -name RPCIngressClient -case underscore -inpkg
 
-// RPCClient describes RPC interface to communicate with the server.
-type RPCClient interface {
+// RPCIngressClient describes RPC interface to communicate with the server.
+type RPCIngressClient interface {
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
@@ -27,23 +26,23 @@ type RPCClient interface {
 	SetWriteDeadline(connID uint16, d time.Time) error
 }
 
-// rpcClient implements `RPCClient`.
-type rpcClient struct {
-	rpc    *rpc.Client
-	appKey appcommon.ProcKey
+// rpcIngressClient implements `RPCIngressClient`.
+type rpcIngressClient struct {
+	rpc     *rpc.Client
+	procKey appcommon.ProcKey
 }
 
-// NewRPCClient constructs new `rpcClient`.
-func NewRPCClient(rpc *rpc.Client, appKey appcommon.ProcKey) RPCClient {
-	return &rpcClient{
-		rpc:    rpc,
-		appKey: appKey,
+// NewRPCIngressClient constructs new `rpcIngressClient`.
+func NewRPCIngressClient(rpc *rpc.Client, procKey appcommon.ProcKey) RPCIngressClient {
+	return &rpcIngressClient{
+		rpc:     rpc,
+		procKey: procKey,
 	}
 }
 
 // Dial sends `Dial` command to the server.
-func (c *rpcClient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
-	var resp appserver.DialResp
+func (c *rpcIngressClient) Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error) {
+	var resp DialResp
 	if err := c.rpc.Call(c.formatMethod("Dial"), &remote, &resp); err != nil {
 		return 0, 0, err
 	}
@@ -52,7 +51,7 @@ func (c *rpcClient) Dial(remote appnet.Addr) (connID uint16, localPort routing.P
 }
 
 // Listen sends `Listen` command to the server.
-func (c *rpcClient) Listen(local appnet.Addr) (uint16, error) {
+func (c *rpcIngressClient) Listen(local appnet.Addr) (uint16, error) {
 	var lisID uint16
 	if err := c.rpc.Call(c.formatMethod("Listen"), &local, &lisID); err != nil {
 		return 0, err
@@ -62,8 +61,8 @@ func (c *rpcClient) Listen(local appnet.Addr) (uint16, error) {
 }
 
 // Accept sends `Accept` command to the server.
-func (c *rpcClient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error) {
-	var acceptResp appserver.AcceptResp
+func (c *rpcIngressClient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error) {
+	var acceptResp AcceptResp
 	if err := c.rpc.Call(c.formatMethod("Accept"), &lisID, &acceptResp); err != nil {
 		return 0, appnet.Addr{}, err
 	}
@@ -72,13 +71,13 @@ func (c *rpcClient) Accept(lisID uint16) (connID uint16, remote appnet.Addr, err
 }
 
 // Write sends `Write` command to the server.
-func (c *rpcClient) Write(connID uint16, b []byte) (int, error) {
-	req := appserver.WriteReq{
+func (c *rpcIngressClient) Write(connID uint16, b []byte) (int, error) {
+	req := WriteReq{
 		ConnID: connID,
 		B:      b,
 	}
 
-	var resp appserver.WriteResp
+	var resp WriteResp
 	if err := c.rpc.Call(c.formatMethod("Write"), &req, &resp); err != nil {
 		return 0, err
 	}
@@ -87,13 +86,13 @@ func (c *rpcClient) Write(connID uint16, b []byte) (int, error) {
 }
 
 // Read sends `Read` command to the server.
-func (c *rpcClient) Read(connID uint16, b []byte) (int, error) {
-	req := appserver.ReadReq{
+func (c *rpcIngressClient) Read(connID uint16, b []byte) (int, error) {
+	req := ReadReq{
 		ConnID: connID,
 		BufLen: len(b),
 	}
 
-	var resp appserver.ReadResp
+	var resp ReadResp
 	if err := c.rpc.Call(c.formatMethod("Read"), &req, &resp); err != nil {
 		return 0, err
 	}
@@ -106,18 +105,18 @@ func (c *rpcClient) Read(connID uint16, b []byte) (int, error) {
 }
 
 // CloseConn sends `CloseConn` command to the server.
-func (c *rpcClient) CloseConn(id uint16) error {
+func (c *rpcIngressClient) CloseConn(id uint16) error {
 	return c.rpc.Call(c.formatMethod("CloseConn"), &id, nil)
 }
 
 // CloseListener sends `CloseListener` command to the server.
-func (c *rpcClient) CloseListener(id uint16) error {
+func (c *rpcIngressClient) CloseListener(id uint16) error {
 	return c.rpc.Call(c.formatMethod("CloseListener"), &id, nil)
 }
 
 // SetDeadline sends `SetDeadline` command to the server.
-func (c *rpcClient) SetDeadline(id uint16, t time.Time) error {
-	req := appserver.DeadlineReq{
+func (c *rpcIngressClient) SetDeadline(id uint16, t time.Time) error {
+	req := DeadlineReq{
 		ConnID:   id,
 		Deadline: t,
 	}
@@ -126,8 +125,8 @@ func (c *rpcClient) SetDeadline(id uint16, t time.Time) error {
 }
 
 // SetReadDeadline sends `SetReadDeadline` command to the server.
-func (c *rpcClient) SetReadDeadline(id uint16, t time.Time) error {
-	req := appserver.DeadlineReq{
+func (c *rpcIngressClient) SetReadDeadline(id uint16, t time.Time) error {
+	req := DeadlineReq{
 		ConnID:   id,
 		Deadline: t,
 	}
@@ -136,8 +135,8 @@ func (c *rpcClient) SetReadDeadline(id uint16, t time.Time) error {
 }
 
 // SetWriteDeadline sends `SetWriteDeadline` command to the server.
-func (c *rpcClient) SetWriteDeadline(id uint16, t time.Time) error {
-	req := appserver.DeadlineReq{
+func (c *rpcIngressClient) SetWriteDeadline(id uint16, t time.Time) error {
+	req := DeadlineReq{
 		ConnID:   id,
 		Deadline: t,
 	}
@@ -146,7 +145,7 @@ func (c *rpcClient) SetWriteDeadline(id uint16, t time.Time) error {
 }
 
 // formatMethod formats complete RPC method signature.
-func (c *rpcClient) formatMethod(method string) string {
+func (c *rpcIngressClient) formatMethod(method string) string {
 	const methodFmt = "%s.%s"
-	return fmt.Sprintf(methodFmt, c.appKey.String(), method)
+	return fmt.Sprintf(methodFmt, c.procKey.String(), method)
 }
