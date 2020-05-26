@@ -31,16 +31,13 @@ func NewSubscriber() *Subscriber {
 	}
 }
 
-// TCPDial subscribes to the TCPDial event channel.
-// This should only be called once.
-func (s *Subscriber) TCPDial(action func(data TCPDialData)) {
-	s.mx.Lock()
-	ch := make(chan *Event, s.chanSize)
-	s.m[TCPDial] = ch
-	s.mx.Unlock()
+// OnTCPDial subscribes to the OnTCPDial event channel (if not already).
+// And triggers the contained action func on each subsequent event.
+func (s *Subscriber) OnTCPDial(action func(data TCPDialData)) {
+	evCh := s.ensureEventChan(TCPDial)
 
 	go func() {
-		for ev := range ch {
+		for ev := range evCh {
 			var data TCPDialData
 			ev.Unmarshal(&data)
 			action(data)
@@ -49,22 +46,31 @@ func (s *Subscriber) TCPDial(action func(data TCPDialData)) {
 	}()
 }
 
-// TCPClose subscribes to the TCPClose event channel.
-// This should only be called once.
-func (s *Subscriber) TCPClose(action func(data TCPCloseData)) {
-	s.mx.Lock()
-	ch := make(chan *Event, s.chanSize)
-	s.m[TCPClose] = ch
-	s.mx.Unlock()
+// OnTCPClose subscribes to the OnTCPClose event channel (if not already).
+// And triggers the contained action func on each subsequent event.
+func (s *Subscriber) OnTCPClose(action func(data TCPCloseData)) {
+	evCh := s.ensureEventChan(TCPClose)
 
 	go func() {
-		for ev := range ch {
+		for ev := range evCh {
 			var data TCPCloseData
 			ev.Unmarshal(&data)
 			action(data)
 			ev.Done()
 		}
 	}()
+}
+
+func (s *Subscriber) ensureEventChan(eventType string) chan *Event {
+	s.mx.Lock()
+	ch, ok := s.m[eventType]
+	if !ok {
+		ch = make(chan *Event, s.chanSize)
+		s.m[eventType] = ch
+	}
+	s.mx.Unlock()
+
+	return ch
 }
 
 // Subscriptions returns a map of all subscribed event types.
