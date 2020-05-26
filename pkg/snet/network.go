@@ -94,6 +94,7 @@ func New(conf Config, eb *appevent.Broadcaster) *Network {
 					data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
 					event := appevent.NewEvent(appevent.TCPDial, data)
 					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+					// @evanlinjin: An error is not returned here as this will cancel the session dial.
 					return nil
 				},
 				OnSessionDisconnect: func(network, addr string, _ error) {
