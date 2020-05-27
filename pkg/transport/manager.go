@@ -216,37 +216,39 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 		return nil, io.ErrClosedPipe
 	}
 
-TrySaveTp:
-	mTp, err := tm.saveTransport(remote, tpType)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = mTp.Dial(ctx); err != nil {
-		// This occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was just
-		// deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
-		if err == ErrNotServing {
-			if closeErr := mTp.Close(); closeErr != nil {
-				tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
-			}
-			delete(tm.tps, mTp.Entry.ID)
-			goto TrySaveTp
-		}
-
-		// This occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in the
-		// STCP table. There is no point in retrying as a connection would be impossible, so we just return an error.
-		if isSTCPTableError(remote, err) {
-			if closeErr := mTp.Close(); closeErr != nil {
-				tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
-			}
-			delete(tm.tps, mTp.Entry.ID)
+	for {
+		mTp, err := tm.saveTransport(remote, tpType)
+		if err != nil {
 			return nil, err
 		}
 
-		tm.Logger.WithError(err).Warn("Underlying transport connection is not established, will retry later.")
-	}
+		if err = mTp.Dial(ctx); err != nil {
+			// This occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
+			// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
+			if err == ErrNotServing {
+				if closeErr := mTp.Close(); closeErr != nil {
+					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
+				}
+				delete(tm.tps, mTp.Entry.ID)
+				continue
+			}
 
-	return mTp, nil
+			// This occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in
+			// the STCP table. There is no point in retrying as a connection would be impossible, so we just return an
+			// error.
+			if isSTCPTableError(remote, err) {
+				if closeErr := mTp.Close(); closeErr != nil {
+					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
+				}
+				delete(tm.tps, mTp.Entry.ID)
+				return nil, err
+			}
+
+			tm.Logger.WithError(err).Warn("Underlying transport connection is not established, will retry later.")
+		}
+
+		return mTp, nil
+	}
 }
 
 // isSTCPPKError returns true if the error is a STCP table error.
