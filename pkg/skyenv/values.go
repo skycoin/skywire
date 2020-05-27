@@ -75,13 +75,13 @@ const (
 // RPC constants.
 const (
 	DefaultRPCAddr    = "localhost:3435"
-	DefaultRPCTimeout = time.Second * 5
+	DefaultRPCTimeout = 20 * time.Second
 )
 
 // Default skywire app server and discovery constants
 const (
 	DefaultAppSrvAddr     = "localhost:5505"
-	AppDiscUpdateInterval = time.Second * 30
+	AppDiscUpdateInterval = 30 * time.Second
 	DefaultAppLocalPath   = "./local"
 	DefaultAppBinPath     = "./apps"
 	DefaultLogLevel       = "info"

@@ -74,26 +74,26 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 		return nil, fmt.Errorf("address resolver httpauth: %w", err)
 	}
 
-	localAddr, err := getFreeAddr()
-	if err != nil {
-		return nil, err
+	client := &httpClient{
+		client:    httpAuthClient,
+		pk:        pk,
+		sk:        sk,
+		localAddr: "",
 	}
 
 	transport := &http.Transport{
 		DialContext: func(_ context.Context, network, remoteAddr string) (conn net.Conn, err error) {
-			return reuseport.Dial(network, localAddr, remoteAddr)
+			conn, err = reuseport.Dial(network, client.localAddr, remoteAddr)
+			if err == nil && client.localAddr == "" {
+				client.localAddr = conn.LocalAddr().String()
+			}
+
+			return conn, err
 		},
 		DisableKeepAlives: false,
 	}
 
 	httpAuthClient.SetTransport(transport)
-
-	client := &httpClient{
-		client:    httpAuthClient,
-		pk:        pk,
-		sk:        sk,
-		localAddr: localAddr,
-	}
 
 	return client, nil
 }
@@ -346,17 +346,4 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(apiError.Error)
-}
-
-func getFreeAddr() (addr string, err error) {
-	l, err := net.Listen("tcp", "")
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		err = l.Close()
-	}()
-
-	return l.Addr().String(), nil
 }
