@@ -1,6 +1,6 @@
 module github.com/SkycoinProject/dmsg
 
-go 1.12
+go 1.14
 
 require (
 	github.com/SkycoinProject/skycoin v0.27.0
