@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof" //nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cmdutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
