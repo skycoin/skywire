@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/rakyll/statik/fs"
@@ -13,7 +14,6 @@ import (
 
 	_ "github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/statik" // embedded static files
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
