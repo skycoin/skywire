@@ -3,7 +3,7 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.13
 
 require (
-	github.com/SkycoinProject/dmsg v0.1.1-0.20200523194607-be73f083a729
+	github.com/SkycoinProject/dmsg v0.2.2
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -11,6 +11,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
+	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
@@ -29,4 +30,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-//replace github.com/SkycoinProject/dmsg => ../dmsg
+// replace github.com/SkycoinProject/dmsg => ../dmsg
