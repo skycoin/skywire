@@ -18,12 +18,12 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/mholt/archiver/v3"
 	"github.com/schollz/progressbar/v2"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
 )
 
