@@ -190,6 +190,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				r.Post("/visors/{pk}/exec", hv.exec())
 				r.Post("/visors/{pk}/update", hv.update())
 				r.Get("/visors/{pk}/update/available", hv.updateAvailable())
+				r.Get("/visors/{pk}/update/available/{channel}", hv.updateAvailable())
 			})
 		})
 
@@ -758,12 +759,7 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 func (hv *Hypervisor) update() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		// TODO: consider using visor.UpdateConfig
-		var reqBody struct {
-			ChecksumsURL string          `json:"checksums_url"`
-			ArchiveURL   string          `json:"archive_url"`
-			Channel      updater.Channel `json:"channel"`
-		}
+		var reqBody updater.UpdateConfig
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
@@ -775,13 +771,11 @@ func (hv *Hypervisor) update() http.HandlerFunc {
 			return
 		}
 
-		updateConfig := updater.UpdateConfig{
-			ChecksumsURL: reqBody.ChecksumsURL,
-			ArchiveURL:   reqBody.ArchiveURL,
-			Channel:      reqBody.Channel,
+		if reqBody.Channel == "" {
+			reqBody.Channel = updater.ChannelStable
 		}
 
-		updated, err := ctx.RPC.Update(updateConfig)
+		updated, err := ctx.RPC.Update(reqBody)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -827,7 +821,12 @@ func (hv *Hypervisor) exitAfterDelay(delay time.Duration) {
 
 func (hv *Hypervisor) updateAvailable() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		version, err := ctx.RPC.UpdateAvailable()
+		channel := updater.Channel(chi.URLParam(r, "channel"))
+		if channel == "" {
+			channel = updater.ChannelStable
+		}
+
+		version, err := ctx.RPC.UpdateAvailable(channel)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
