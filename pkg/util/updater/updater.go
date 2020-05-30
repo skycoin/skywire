@@ -500,5 +500,7 @@ func apps() []string {
 		"skychat",
 		"skysocks",
 		"skysocks-client",
+		"vpn-server",
+		"vpn-client",
 	}
 }
