@@ -515,7 +515,7 @@ func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
 
 	select {
 	case <-closeCtx.Done():
-		return fmt.Errorf("close route group timed out: %v", closeCtx.Err())
+		return fmt.Errorf("close route group timed out: %w", closeCtx.Err())
 	case <-closeDoneCh:
 	}
 

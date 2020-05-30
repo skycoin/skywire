@@ -16,6 +16,9 @@ builds:
       - arm
     goarm:
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-visor/
@@ -32,6 +35,9 @@ builds:
       - arm
     goarm:
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
@@ -48,6 +54,9 @@ builds:
       - arm
     goarm:
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
     env:
       - CGO_ENABLED=0
     main: ./cmd/hypervisor/
@@ -64,6 +73,9 @@ builds:
       - arm
     goarm:
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skychat/
@@ -80,6 +92,9 @@ builds:
       - arm
     goarm:
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks/
@@ -96,6 +111,9 @@ builds:
       - arm
     goarm:
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks-client/

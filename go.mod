@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
-	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
+	github.com/libp2p/go-reuseport v0.0.1
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
@@ -21,12 +21,13 @@ require (
 	github.com/sirupsen/logrus v1.5.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v0.0.5
-	github.com/stretchr/testify v1.4.0
+	github.com/stretchr/testify v1.5.1
 	go.etcd.io/bbolt v1.3.4
 	golang.org/x/crypto v0.0.0-20200427165652-729f1e841bcc // indirect
-	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	golang.org/x/sys v0.0.0-20200428200454-593003d681fa // indirect
 	golang.zx2c4.com/wireguard v0.0.20200320
+	nhooyr.io/websocket v1.8.2
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'

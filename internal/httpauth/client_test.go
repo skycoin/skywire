@@ -48,7 +48,7 @@ func TestClient(t *testing.T) {
 	c, err := NewClient(context.TODO(), ts.URL, pk, sk)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts.URL+"/foo", bytes.NewBufferString(payload))
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/foo", bytes.NewBufferString(payload))
 	require.NoError(t, err)
 	res, err := c.Do(req)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestClient_BadNonce(t *testing.T) {
 
 	c.nonce = 999
 
-	req, err := http.NewRequest("GET", ts.URL+"/foo", bytes.NewBufferString(payload))
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/foo", bytes.NewBufferString(payload))
 	require.NoError(t, err)
 	res, err := c.Do(req)
 	require.NoError(t, err)
