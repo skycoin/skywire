@@ -54,6 +54,10 @@ github.com/golang/gddo/httputil/header
 github.com/golang/protobuf/proto
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
+# github.com/google/go-github v17.0.0+incompatible
+github.com/google/go-github/github
+# github.com/google/go-querystring v1.0.0
+github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 github.com/google/uuid
 # github.com/gorilla/handlers v1.4.2
