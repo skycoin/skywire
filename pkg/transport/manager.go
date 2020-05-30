@@ -109,7 +109,7 @@ func (tm *Manager) serve(ctx context.Context) {
 					return
 				default:
 					if err := tm.acceptTransport(ctx, lis); err != nil {
-						tm.Logger.Warnf("Failed to accept connection: %s", err)
+						tm.Logger.Warnf("Failed to accept connection: %v", err)
 						if strings.Contains(err.Error(), "closed") {
 							return
 						}
@@ -219,10 +219,13 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 	for {
 		mTp, err := tm.saveTransport(remote, tpType)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("save transport: %w", err)
 		}
 
+		tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.netName)
+
 		if err = mTp.Dial(ctx); err != nil {
+			tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.netName, err)
 			// This occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
 			// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
 			if err == ErrNotServing {

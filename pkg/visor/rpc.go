@@ -51,7 +51,7 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 	}
 
 	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
-		return nil, fmt.Errorf("failed to create visor RPC server: %v", err)
+		return nil, fmt.Errorf("failed to create visor RPC server: %w", err)
 	}
 
 	return rpcS, nil
@@ -349,10 +349,14 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error
 		defer cancel()
 	}
 
+	r.log.Debugf("Saving transport to %v via %v", in.RemotePK, in.TpType)
+
 	tp, err := r.visor.tpM.SaveTransport(ctx, in.RemotePK, in.TpType)
 	if err != nil {
 		return err
 	}
+
+	r.log.Debugf("Saved transport to %v via %v", in.RemotePK, in.TpType)
 
 	*out = *newTransportSummary(r.visor.tpM, tp, false, r.visor.router.SetupIsTrusted(tp.Remote()))
 	return nil
