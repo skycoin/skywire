@@ -521,7 +521,7 @@ func apps() []string {
 		skyenv.SkychatName,
 		skyenv.SkysocksName,
 		skyenv.SkysocksClientName,
-		// skyenv.VPNServerName,
-		// skyenv.VPNClientName,
+		skyenv.VPNServerName,
+		skyenv.VPNClientName,
 	}
 }
