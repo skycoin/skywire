@@ -522,10 +522,14 @@ func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err err
 }
 
 // UpdateAvailable checks if visor update is available.
-func (r *RPC) UpdateAvailable(_ *struct{}, version *updater.Version) (err error) {
+func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version) (err error) {
 	defer rpcutil.LogCall(r.log, "UpdateAvailable", nil)(version, &err)
 
-	v, err := r.visor.UpdateAvailable()
+	if channel == nil {
+		return updater.ErrUnknownChannel
+	}
+
+	v, err := r.visor.UpdateAvailable(*channel)
 	if err != nil {
 		return err
 	}

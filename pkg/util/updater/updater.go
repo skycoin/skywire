@@ -3,6 +3,7 @@
 package updater
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -20,10 +21,12 @@ import (
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/google/go-github/github"
 	"github.com/mholt/archiver/v3"
 	"github.com/schollz/progressbar/v2"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
 )
 
@@ -32,7 +35,6 @@ const (
 	gitProjectName    = "skywire-mainnet"
 	projectName       = "skywire"
 	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
-	urlText           = "/" + owner + "/" + gitProjectName + "/releases/tag/"
 	checksumsFilename = "checksums.txt"
 	checkSumLength    = 64
 	permRWX           = 0755
@@ -52,6 +54,12 @@ var (
 	ErrMalformedChecksumFile = errors.New("malformed checksum file")
 	// ErrAlreadyStarted is returned when updating is already started.
 	ErrAlreadyStarted = errors.New("updating already started")
+	// ErrTagNameEmpty is returned when tag name is empty.
+	ErrTagNameEmpty = errors.New("tag name is empty")
+	// ErrUnknownChannel is returned when channel is unknown.
+	ErrUnknownChannel = errors.New("channel is unknown")
+	// ErrNoReleases is returned when no releases are found.
+	ErrNoReleases = errors.New("no releases found")
 )
 
 // Updater checks if a new version of skywire is available, downloads its binary files
@@ -72,17 +80,25 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 	}
 }
 
+// UpdateConfig defines a config for updater.
+// If a config field is not empty, a default value is overridden.
+// Version overrides Channel.
+// ArchiveURL/ChecksumURL override Version and channel.
 type UpdateConfig struct {
-	ChecksumsURL string  `json:"checksums_url"`
-	ArchiveURL   string  `json:"archive_url"`
 	Channel      Channel `json:"channel"`
+	Version      string  `json:"version"`
+	ArchiveURL   string  `json:"archive_url"`
+	ChecksumsURL string  `json:"checksums_url"`
 }
 
+// Channel defines channel for updating.
 type Channel string
 
 const (
-	ChannelStable  = "stable"
-	ChannelTesting = "testing"
+	// ChannelStable is the latest release.
+	ChannelStable = Channel("stable")
+	// ChannelTesting is the latest draft, pre-release or release.
+	ChannelTesting = Channel("testing")
 )
 
 // Update performs an update operation.
@@ -93,18 +109,23 @@ func (u *Updater) Update(updateConfig *UpdateConfig) (updated bool, err error) {
 	}
 	defer atomic.StoreInt32(&u.updating, 0)
 
-	latestVersion, err := u.UpdateAvailable()
-	if err != nil {
-		return false, fmt.Errorf("failed to get last Skywire version: %w", err)
+	version := updateConfig.Version
+	if version == "" {
+		latestVersion, err := u.UpdateAvailable(updateConfig.Channel)
+		if err != nil {
+			return false, fmt.Errorf("failed to get last Skywire version: %w", err)
+		}
+
+		if latestVersion == nil {
+			return false, nil
+		}
+
+		version = latestVersion.String()
 	}
 
-	if latestVersion == nil {
-		return false, nil
-	}
+	u.log.Infof("Update found, version: %q", version)
 
-	u.log.Infof("Update found, version: %q", latestVersion.String())
-
-	downloadedBinariesPath, err := u.download(updateConfig, latestVersion.String())
+	downloadedBinariesPath, err := u.download(updateConfig, version)
 	if err != nil {
 		return false, err
 	}
@@ -138,10 +159,10 @@ func (u *Updater) Update(updateConfig *UpdateConfig) (updated bool, err error) {
 // UpdateAvailable checks if an update is available.
 // If it is, the method returns the last available version.
 // Otherwise, it returns nil.
-func (u *Updater) UpdateAvailable() (*Version, error) {
+func (u *Updater) UpdateAvailable(channel Channel) (*Version, error) {
 	u.log.Infof("Looking for updates")
 
-	latestVersion, err := latestVersion()
+	latestVersion, err := latestVersion(channel)
 	if err != nil {
 		return nil, err
 	}
@@ -450,57 +471,57 @@ func needUpdate(last *Version) bool {
 	return last.Cmp(current) > 0
 }
 
-func latestVersion() (*Version, error) {
-	html, err := latestVersionHTML()
-	if err != nil {
-		return nil, err
-	}
+func latestVersion(channel Channel) (*Version, error) {
+	ctx := context.Background()
+	client := github.NewClient(nil)
 
-	return VersionFromString(extractLatestVersion(string(html)))
+	switch channel {
+	case ChannelStable:
+		release, _, err := client.Repositories.GetLatestRelease(ctx, owner, gitProjectName)
+		if err != nil {
+			return nil, err
+		}
+
+		if release.TagName == nil {
+			return nil, ErrTagNameEmpty
+		}
+
+		return VersionFromString(*release.TagName)
+
+	case ChannelTesting:
+		releases, _, err := client.Repositories.ListReleases(ctx, owner, gitProjectName, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(releases) == 0 {
+			return nil, ErrNoReleases
+		}
+
+		// Latest release should be the first one.
+		release := releases[0]
+
+		if release.TagName == nil {
+			return nil, ErrTagNameEmpty
+		}
+
+		return VersionFromString(*release.TagName)
+
+	default:
+		return nil, ErrUnknownChannel
+	}
 }
 
 func currentVersion() (*Version, error) {
 	return VersionFromString(buildinfo.Version())
 }
 
-func latestVersionHTML() (data []byte, err error) {
-	resp, err := http.Get(releaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	return ioutil.ReadAll(resp.Body)
-}
-
-func extractLatestVersion(buffer string) string {
-	// First occurrence is the latest version.
-	idx := strings.Index(buffer, urlText)
-	if idx == -1 {
-		return ""
-	}
-
-	versionWithRest := buffer[idx+len(urlText):]
-
-	idx = strings.Index(versionWithRest, `"`)
-	if idx == -1 {
-		return versionWithRest
-	}
-
-	return versionWithRest[:idx]
-}
-
 func apps() []string {
 	return []string{
-		"skychat",
-		"skysocks",
-		"skysocks-client",
-		"vpn-server",
-		"vpn-client",
+		skyenv.SkychatName,
+		skyenv.SkysocksName,
+		skyenv.SkysocksClientName,
+		// skyenv.VPNServerName,
+		// skyenv.VPNClientName,
 	}
 }
