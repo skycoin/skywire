@@ -44,6 +44,7 @@ type HTTPError struct {
 }
 
 // Client implements Client for auth services.
+// As Client needs to dial both with reusing address and without it, it uses two http clients: reuseClient and client.
 type Client struct {
 	nonce       uint64 // has to be handled with the atomic package at all time, needs to be 8 byte aligned
 	mu          sync.Mutex
