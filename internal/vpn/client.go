@@ -58,8 +58,18 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
 	}
 
-	directIPs := make([]net.IP, 0, 3+len(dmsgSrvAddrs)+len(stcpEntities))
-	directIPs = append(directIPs, dmsgDiscIP, tpDiscIP, rfIP)
+	stcprARip, err := stcprAddressResolverIPFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("error getting stcpr AR IP: %w", err)
+	}
+
+	stcphARip, err := stcphAddressResolverIPFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("error getting stcph AR IP: %w", err)
+	}
+
+	directIPs := make([]net.IP, 0, 5+len(dmsgSrvAddrs)+len(stcpEntities))
+	directIPs = append(directIPs, dmsgDiscIP, tpDiscIP, rfIP, stcprARip, stcphARip)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
 
@@ -286,6 +296,14 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	}
 
 	return stcpEntities, nil
+}
+
+func stcprAddressResolverIPFromEnv() (net.IP, error) {
+	return ipFromEnv(STCPRAddressResolverAddrEnvKey)
+}
+
+func stcphAddressResolverIPFromEnv() (net.IP, error) {
+	return ipFromEnv(STCPHAddressResolverAddrEnvKey)
 }
 
 func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {

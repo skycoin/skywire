@@ -144,7 +144,7 @@ func (sn *Node) handleDialRouteGroup(ctx context.Context, route routing.Bidirect
 	// Confirm routes with responding visor.
 	ok, err := routerclient.AddEdgeRules(ctx, sn.logger, sn.dmsgC, route.Desc.DstPK(), respRouteRules)
 	if err != nil || !ok {
-		return routing.EdgeRules{}, fmt.Errorf("failed to confirm route group with destination visor: %v", err)
+		return routing.EdgeRules{}, fmt.Errorf("failed to confirm route group with destination visor: %w", err)
 	}
 
 	sn.logger.Infof("Returning route rules to initiating visor: %v", initRouteRules)
