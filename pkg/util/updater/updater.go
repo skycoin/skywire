@@ -41,6 +41,7 @@ const (
 	appsSubfolder     = "apps"
 	archiveFormat     = ".tar.gz"
 	visorBinary       = "skywire-visor"
+	hypervisorBinary  = "hypervisor"
 	cliBinary         = "skywire-cli"
 )
 
@@ -71,9 +72,22 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 	}
 }
 
+type UpdateConfig struct {
+	ChecksumsURL string  `json:"checksums_url"`
+	ArchiveURL   string  `json:"archive_url"`
+	Channel      Channel `json:"channel"`
+}
+
+type Channel string
+
+const (
+	ChannelStable  = "stable"
+	ChannelTesting = "testing"
+)
+
 // Update performs an update operation.
 // NOTE: Update may call os.Exit.
-func (u *Updater) Update() (updated bool, err error) {
+func (u *Updater) Update(updateConfig *UpdateConfig) (updated bool, err error) {
 	if !atomic.CompareAndSwapInt32(&u.updating, 0, 1) {
 		return false, ErrAlreadyStarted
 	}
@@ -90,7 +104,7 @@ func (u *Updater) Update() (updated bool, err error) {
 
 	u.log.Infof("Update found, version: %q", latestVersion.String())
 
-	downloadedBinariesPath, err := u.download(latestVersion.String())
+	downloadedBinariesPath, err := u.download(updateConfig, latestVersion.String())
 	if err != nil {
 		return false, err
 	}
@@ -163,6 +177,10 @@ func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath 
 		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
 	}
 
+	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, hypervisorBinary); err != nil {
+		return fmt.Errorf("failed to update %s binary: %w", hypervisorBinary, err)
+	}
+
 	return nil
 }
 
@@ -207,8 +225,12 @@ func (u *Updater) restore(currentBinaryPath string, toBeRemoved string) {
 	}
 }
 
-func (u *Updater) download(version string) (string, error) {
+func (u *Updater) download(updateConfig *UpdateConfig, version string) (string, error) {
 	checksumsURL := fileURL(version, checksumsFilename)
+	if updateConfig.ChecksumsURL != "" {
+		checksumsURL = updateConfig.ChecksumsURL
+	}
+
 	u.log.Infof("Checksums file URL: %q", checksumsURL)
 
 	checksums, err := downloadChecksums(checksumsURL)
@@ -229,6 +251,10 @@ func (u *Updater) download(version string) (string, error) {
 	u.log.Infof("Archive checksum should be %q", checksum)
 
 	archiveURL := fileURL(version, archiveFilename)
+	if updateConfig.ArchiveURL != "" {
+		archiveURL = updateConfig.ArchiveURL
+	}
+
 	u.log.Infof("Downloading archive from %q", archiveURL)
 
 	archivePath, err := downloadFile(archiveURL, archiveFilename)
