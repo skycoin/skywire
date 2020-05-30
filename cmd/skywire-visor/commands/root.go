@@ -17,11 +17,14 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
 
 var restartCtx = restart.CaptureContext()
+
+const configEnv = "SW_VISOR_CONFIG"
 
 var (
 	tag        string
@@ -53,7 +56,7 @@ var rootCmd = &cobra.Command{
 		stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
 		defer stopPProf()
 
-		conf := initConfig(log, confPath)
+		conf := initConfig(log, args, confPath)
 
 		v, ok := visor.NewVisor(conf, restartCtx)
 		if !ok {
@@ -131,7 +134,7 @@ func initPProf(log *logging.MasterLogger, tag string, profMode string, profAddr 
 	return stop
 }
 
-func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 {
+func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *visorconfig.V1 {
 	log := mLog.PackageLogger("visor:config")
 
 	var r io.Reader
@@ -140,6 +143,9 @@ func initConfig(mLog *logging.MasterLogger, confPath string) *visorconfig.V1 {
 	case visorconfig.StdinName:
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
+	case "":
+		confPath = pathutil.FindConfigPath(args, -1, configEnv, pathutil.VisorDefaults())
+		fallthrough
 	default:
 		log.WithField("filepath", confPath).Info("Reading config from file.")
 		f, err := os.Open(confPath) //nolint:gosec
