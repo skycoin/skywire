@@ -1,5 +1,8 @@
 # This is an example goreleaser.yaml file with some sane defaults.
 # Make sure to check the documentation at http://goreleaser.com
+
+# TODO: uncomment commented targets
+
 before:
   hooks:
     - go mod tidy
@@ -12,7 +15,7 @@ builds:
     goarch:
       - amd64
       #- 386
-      ##- arm64
+      #- arm64
       #- arm
     goarm:
       - 7
@@ -31,7 +34,7 @@ builds:
     goarch:
       - amd64
       #- 386
-      ##- arm64
+      #- arm64
       #- arm
     goarm:
       - 7
@@ -50,7 +53,7 @@ builds:
     goarch:
       - amd64
       #- 386
-      ##- arm64
+      #- arm64
       #- arm
     goarm:
       - 7
@@ -69,7 +72,7 @@ builds:
     goarch:
       - amd64
       #- 386
-      ##- arm64
+      #- arm64
       #- arm
     goarm:
       - 7
@@ -88,7 +91,7 @@ builds:
     goarch:
       - amd64
       #- 386
-      ##- arm64
+      #- arm64
       #- arm
     goarm:
       - 7
@@ -107,7 +110,7 @@ builds:
     goarch:
       - amd64
       #- 386
-      ##- arm64
+      #- arm64
       #- arm
     goarm:
       - 7
@@ -117,6 +120,44 @@ builds:
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks-client/
+    ldflags: -s -w -X github.com/SkycoinProject/dmsg/buildinfo.version={{.Version}} -X github.com/SkycoinProject/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/dmsg/buildinfo.date={{.Date}}
+  - id: vpn-server
+    binary: apps/vpn-server
+    goos:
+      #- linux
+      - darwin
+    goarch:
+      - amd64
+      #- 386
+      #- arm64
+      #- arm
+    goarm:
+      - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/vpn-server/
+    ldflags: -s -w -X github.com/SkycoinProject/dmsg/buildinfo.version={{.Version}} -X github.com/SkycoinProject/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/dmsg/buildinfo.date={{.Date}}
+  - id: vpn-client
+    binary: apps/vpn-client
+    goos:
+      #- linux
+      - darwin
+    goarch:
+      - amd64
+      #- 386
+      #- arm64
+      #- arm
+    goarm:
+      - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/SkycoinProject/dmsg/buildinfo.version={{.Version}} -X github.com/SkycoinProject/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/dmsg/buildinfo.date={{.Date}}
 archives:
   - format: tar.gz
