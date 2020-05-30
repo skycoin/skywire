@@ -1,6 +1,7 @@
 package visor
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
@@ -22,7 +24,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
@@ -98,17 +99,21 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
-	timer := time.NewTimer(rc.timeout)
-	defer timer.Stop()
+	ctx := context.Background()
+	if rc.timeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, time.Now().Add(rc.timeout))
+		defer cancel()
+	}
 
 	select {
 	case call := <-rc.client.Go(rc.prefix+"."+method, args, reply, nil).Done:
 		return call.Error
-	case <-timer.C:
+	case <-ctx.Done():
 		if err := rc.conn.Close(); err != nil {
-			rc.log.WithError(err).Warn("failed to close underlying rpc connection after timeout error")
+			rc.log.WithError(err).Warn("Failed to close rpc client after timeout error.")
 		}
-		return ErrTimeout
+		return ctx.Err()
 	}
 }
 

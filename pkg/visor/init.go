@@ -105,6 +105,18 @@ func initSNet(v *Visor) bool {
 		return report(n.Close())
 	})
 
+	if dmsgC := n.Dmsg(); dmsgC != nil {
+		const dmsgTimeout = time.Second * 20
+		log := dmsgC.Logger().WithField("timeout", dmsgTimeout)
+		log.Info("Connecting to the dmsg network...")
+		select {
+		case <-time.After(dmsgTimeout):
+			log.Warn("Failed to connect to the dmsg network, will try again later.")
+		case <-n.Dmsg().Ready():
+			log.Info("Connected to the dmsg network.")
+		}
+	}
+
 	v.net = n
 	return report(nil)
 }
