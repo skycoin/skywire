@@ -7,13 +7,13 @@ builds:
   - id: skywire-visor
     binary: skywire-visor
     goos:
-      - linux
+      #- linux
       - darwin
     goarch:
       - amd64
-      - 386
-      - arm64
-      - arm
+      #- 386
+      ##- arm64
+      #- arm
     goarm:
       - 7
     ignore:
@@ -26,13 +26,13 @@ builds:
   - id: skywire-cli
     binary: skywire-cli
     goos:
-      - linux
+      #- linux
       - darwin
     goarch:
       - amd64
-      - 386
-      - arm64
-      - arm
+      #- 386
+      ##- arm64
+      #- arm
     goarm:
       - 7
     ignore:
@@ -45,13 +45,13 @@ builds:
   - id: hypervisor
     binary: hypervisor
     goos:
-      - linux
+      #- linux
       - darwin
     goarch:
       - amd64
-      - 386
-      - arm64
-      - arm
+      #- 386
+      ##- arm64
+      #- arm
     goarm:
       - 7
     ignore:
@@ -64,13 +64,13 @@ builds:
   - id: skychat
     binary: apps/skychat
     goos:
-      - linux
+      #- linux
       - darwin
     goarch:
       - amd64
-      - 386
-      - arm64
-      - arm
+      #- 386
+      ##- arm64
+      #- arm
     goarm:
       - 7
     ignore:
@@ -83,13 +83,13 @@ builds:
   - id: skysocks
     binary: apps/skysocks
     goos:
-      - linux
+      #- linux
       - darwin
     goarch:
       - amd64
-      - 386
-      - arm64
-      - arm
+      #- 386
+      ##- arm64
+      #- arm
     goarm:
       - 7
     ignore:
@@ -102,13 +102,13 @@ builds:
   - id: skysocks-client
     binary: apps/skysocks-client
     goos:
-      - linux
+      #- linux
       - darwin
     goarch:
       - amd64
-      - 386
-      - arm64
-      - arm
+      #- 386
+      ##- arm64
+      #- arm
     goarm:
       - 7
     ignore:
