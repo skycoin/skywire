@@ -10,10 +10,13 @@ import (
 	"time"
 
 	cipher2 "github.com/SkycoinProject/skycoin/src/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 )
+
+var log = logging.MustGetLogger("stcpr")
 
 const (
 	// HandshakeTimeout is the default timeout for a handshake.
@@ -49,7 +52,7 @@ func handshakeMiddleware(origin Handshake) Handshake {
 		}
 
 		// reset deadline
-		_ = conn.SetDeadline(time.Time{}) //nolint:errcheck
+		err = conn.SetDeadline(time.Time{})
 
 		return
 	}
@@ -65,23 +68,29 @@ func InitiatorHandshake(lSK cipher.SecKey, localAddr, remoteAddr dmsg.Addr) Hand
 		if f1, err = readFrame1(conn); err != nil {
 			return
 		}
+
 		f2 := Frame2{SrcAddr: localAddr, DstAddr: remoteAddr, Nonce: f1.Nonce}
 		if err = f2.Sign(lSK); err != nil {
 			return
 		}
+
 		if err = writeFrame2(conn, f2); err != nil {
 			return
 		}
+
 		var f3 Frame3
 		if f3, err = readFrame3(conn); err != nil {
 			return
 		}
+
 		if !f3.OK {
 			err = fmt.Errorf("handshake rejected: %s", f3.ErrMsg)
 			return
 		}
+
 		lAddr = localAddr
 		rAddr = remoteAddr
+
 		return
 	})
 }
@@ -91,23 +100,29 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		var nonce [HandshakeNonceSize]byte
 		copy(nonce[:], cipher.RandByte(HandshakeNonceSize))
+
 		if err = writeFrame1(conn, nonce); err != nil {
 			return
 		}
+
 		var f2 Frame2
 		if f2, err = readFrame2(conn); err != nil {
 			return
 		}
+
 		if err = f2.Verify(nonce); err != nil {
 			return
 		}
+
 		if err = checkF2(f2); err != nil {
 			_ = writeFrame3(conn, err) // nolint:errcheck
 			return
 		}
+
 		lAddr = f2.DstAddr
 		rAddr = f2.SrcAddr
 		err = writeFrame3(conn, nil)
+
 		return
 	})
 }
@@ -147,7 +162,7 @@ func (f2 *Frame2) Sign(srcSK cipher.SecKey) error {
 
 	f2.Sig = sig
 
-	fmt.Println("SIGN! len(b.Bytes)", len(b.Bytes()), cipher2.SumSHA256(b.Bytes()).Hex())
+	log.Debug("SIGN! len(b.Bytes)", len(b.Bytes()), cipher2.SumSHA256(b.Bytes()).Hex())
 
 	return nil
 }
@@ -161,8 +176,6 @@ func (f2 Frame2) Verify(nonce [HandshakeNonceSize]byte) error {
 	sig := f2.Sig
 	f2.Sig = cipher.Sig{}
 
-	//cipher2.PubKeyFromSig(cipher2.Sig(sig))
-
 	var b bytes.Buffer
 	if err := json.NewEncoder(&b).Encode(f2); err != nil {
 		return err
@@ -171,7 +184,7 @@ func (f2 Frame2) Verify(nonce [HandshakeNonceSize]byte) error {
 	hash := cipher.SumSHA256(b.Bytes())
 	rPK, err := cipher2.PubKeyFromSig(cipher2.Sig(sig), cipher2.SHA256(hash))
 
-	fmt.Println("VERIFY! len(b.Bytes)", len(b.Bytes()), cipher2.SHA256(hash).Hex(),
+	log.Debug("VERIFY! len(b.Bytes)", len(b.Bytes()), cipher2.SHA256(hash).Hex(),
 		"recovered:", rPK, err, "expected:", f2.SrcAddr.PK)
 
 	return cipher.VerifyPubKeySignedPayload(f2.SrcAddr.PK, sig, b.Bytes())

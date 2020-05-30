@@ -256,8 +256,9 @@ func (c *Client) Close() error {
 		c.mx.Lock()
 		defer c.mx.Unlock()
 
-		// TODO: log error
-		_ = c.addressResolver.Close() // nolint:errcheck
+		if err := c.addressResolver.Close(); err != nil {
+			c.log.WithError(err).Warnf("Failed to close address resolver client")
+		}
 
 		for _, lis := range c.lMap {
 			_ = lis.Close() // nolint:errcheck

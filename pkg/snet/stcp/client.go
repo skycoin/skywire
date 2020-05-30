@@ -204,11 +204,15 @@ func (c *Client) Close() error {
 		defer c.mx.Unlock()
 
 		if c.lTCP != nil {
-			_ = c.lTCP.Close() //nolint:errcheck
+			if err := c.lTCP.Close(); err != nil {
+				c.log.WithError(err).Warnf("Failed to close TCP listener")
+			}
 		}
 
 		for _, lis := range c.lMap {
-			_ = lis.Close() // nolint:errcheck
+			if err := lis.Close(); err != nil {
+				c.log.WithError(err).Warnf("Failed to close stcp listener")
+			}
 		}
 	})
 	return nil

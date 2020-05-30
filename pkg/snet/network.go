@@ -21,6 +21,8 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
+var log = logging.MustGetLogger("snet")
+
 // Default ports.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
@@ -217,7 +219,7 @@ func (n *Network) Init() error {
 				return fmt.Errorf("failed to initiate 'stcp': %w", err)
 			}
 		} else {
-			fmt.Println("No config found for stcp")
+			log.Infof("No config found for stcp")
 		}
 	}
 
@@ -227,7 +229,7 @@ func (n *Network) Init() error {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
 		} else {
-			fmt.Println("No config found for stcpr")
+			log.Infof("No config found for stcpr")
 		}
 	}
 
@@ -237,7 +239,7 @@ func (n *Network) Init() error {
 				return fmt.Errorf("failed to initiate 'stcph': %w", err)
 			}
 		} else {
-			fmt.Println("No config found for stcph")
+			log.Infof("No config found for stcph")
 		}
 	}
 

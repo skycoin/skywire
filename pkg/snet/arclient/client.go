@@ -281,7 +281,7 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 
 	if c.wsConn != nil {
 		if err := c.wsConn.Close(websocket.StatusNormalClosure, "new connection created"); err != nil {
-			_ = err // TODO: log error
+			log.WithError(err).Warnf("Failed to close WebSocket connection")
 		}
 	}
 

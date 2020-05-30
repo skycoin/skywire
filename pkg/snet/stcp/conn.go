@@ -36,7 +36,9 @@ type connConfig struct {
 func newConn(c connConfig) (*Conn, error) {
 	lAddr, rAddr, err := c.hs(c.conn, c.deadline)
 	if err != nil {
-		_ = c.conn.Close() //nolint:errcheck
+		if err := c.conn.Close(); err != nil && c.log != nil {
+			c.log.WithError(err).Warnf("Failed to close stcp connection")
+		}
 
 		if c.freePort != nil {
 			c.freePort()
@@ -45,7 +47,7 @@ func newConn(c connConfig) (*Conn, error) {
 		return nil, err
 	}
 
-	// TODO: extract from handshake whether encryption needed
+	// TODO: extract from handshake whether encryption is needed
 	if c.encrypt {
 		config := noise.Config{
 			LocalPK:   c.localPK,
