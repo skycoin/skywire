@@ -116,6 +116,7 @@ func (u *Updater) Update(updateConfig *UpdateConfig) (updated bool, err error) {
 			return false, fmt.Errorf("failed to get last Skywire version: %w", err)
 		}
 
+		// No update is available.
 		if latestVersion == nil {
 			return false, nil
 		}
@@ -220,14 +221,20 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 		}
 	}
 
-	if err := rename.Rename(currentBinaryPath, oldBinaryPath); err != nil {
-		return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
+	currentBinaryExists := false
+	if _, err := os.Stat(currentBinaryPath); err == nil {
+		currentBinaryExists = true
+		if err := rename.Rename(currentBinaryPath, oldBinaryPath); err != nil {
+			return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
+		}
 	}
 
 	if err := rename.Rename(downloadedBinaryPath, currentBinaryPath); err != nil {
 		// Try to revert previous rename.
-		if err := rename.Rename(oldBinaryPath, currentBinaryPath); err != nil {
-			u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
+		if currentBinaryExists {
+			if err := rename.Rename(oldBinaryPath, currentBinaryPath); err != nil {
+				u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
+			}
 		}
 
 		return fmt.Errorf("rename %s to %s: %w", downloadedBinaryPath, currentBinaryPath, err)
@@ -240,6 +247,10 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 // restore restores old binary file.
 func (u *Updater) restore(currentBinaryPath string, toBeRemoved string) {
 	u.removeFiles(currentBinaryPath)
+
+	if _, err := os.Stat(toBeRemoved); err != nil {
+		return
+	}
 
 	if err := rename.Rename(toBeRemoved, currentBinaryPath); err != nil {
 		u.log.Errorf("Failed to rename file %q to %q: %v", toBeRemoved, currentBinaryPath, err)
