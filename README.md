@@ -64,21 +64,24 @@ With `stcp`, you can establish *skywire transports* to other skywire visors with
 
 As visors are identified with public keys and not IP addresses, 
 we need to directly define the associations between IP address and public keys. 
-This is done via `address_resolver` server.
+This is done via the configuration file for `skywire-visor`.
 
 ```json
 {
   "stcp": {
-    "address_resolver": "http://localhost:9093",
-    "local_address": "localhost:7033"
+    "pk_table": {
+      "024a2dd77de324d543561a6d9e62791723be26ddf6b9587060a10b9ba498e096f1": "127.0.0.1:7031",
+      "0327396b1241a650163d5bc72a7970f6dfbcca3f3d67ab3b15be9fa5c8da532c08": "127.0.0.1:7032"
+    },
+    "local_address": "127.0.0.1:7033"
   }
 }
 ```
 
 In the above example, we have two other visors running on localhost (that we wish to connect to via `stcp`).
-- The field `stcp.address_resolver` contains address of address resolver server.
-- The field `stcp.local_address` should only be specified 
-if you want the visor in question to listen for incoming `stcp` connection.
+- The field `stcp.pk_table` holds the associations of `<public_key>` to `<ip_address>:<port>`.
+- The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming 
+`stcp` connection.
 
 #### `hypervisor` setup
 
