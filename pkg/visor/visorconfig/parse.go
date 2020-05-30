@@ -68,10 +68,12 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	if sk.Null() {
 		return nil, fmt.Errorf("old config of version '%s' has no secret key defined", cc.Version)
 	}
+
 	pk, err := sk.PubKey()
 	if err != nil {
 		return nil, fmt.Errorf("old config of version '%s' has invalid secret key: %w", cc.Version, err)
 	}
+
 	cc.SK = sk
 	cc.PK = pk
 
@@ -85,23 +87,37 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	if old.Dmsg != nil {
 		conf.Dmsg = old.Dmsg
 	}
+
 	if old.DmsgPty != nil {
 		conf.Dmsgpty = old.DmsgPty
 	}
+
 	if old.STCP != nil {
 		conf.STCP = old.STCP
 	}
+
+	if old.STCPR != nil {
+		conf.STCPR = old.STCPR
+	}
+
+	if old.STCPH != nil {
+		conf.STCPH = old.STCPH
+	}
+
 	if old.Transport != nil {
 		conf.Transport.Discovery = old.Transport.Discovery
 		conf.Transport.LogStore = old.Transport.LogStore
 	}
+
 	conf.Transport.TrustedVisors = old.TrustedVisors
 	if old.Routing != nil {
 		conf.Routing = old.Routing
 	}
+
 	if old.UptimeTracker != nil {
 		conf.UptimeTracker = old.UptimeTracker
 	}
+
 	conf.Launcher.Apps = make([]launcher.AppConfig, len(old.Apps))
 	for i, oa := range old.Apps {
 		conf.Launcher.Apps[i] = launcher.AppConfig{
@@ -111,14 +127,22 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 			Port:      oa.Port,
 		}
 	}
+
 	conf.Launcher.BinPath = old.AppsPath
 	conf.Launcher.LocalPath = old.LocalPath
 	conf.Launcher.ServerAddr = old.AppServerAddr
+
+	for _, hv := range old.Hypervisors {
+		conf.Hypervisors = append(conf.Hypervisors, hv.PubKey)
+	}
+
 	if old.Interfaces != nil {
 		conf.CLIAddr = old.Interfaces.RPCAddress
 	}
+
 	conf.LogLevel = old.LogLevel
 	conf.ShutdownTimeout = old.ShutdownTimeout
 	conf.RestartCheckDelay = old.RestartCheckDelay
+
 	return conf, conf.flush(conf)
 }

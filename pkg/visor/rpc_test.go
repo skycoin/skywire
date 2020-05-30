@@ -236,7 +236,7 @@ These tests have been commented out for the following reasons:
 //		require.NoError(t, <-errCh)
 //	}()
 //
-//	_, err = tm2.SaveTransport(context.TODO(), pk1, snet.DmsgType)
+//	_, err = tm2.SaveTransport(context.TODO(), pk1, dmsg.Type)
 //	require.NoError(t, err)
 //
 //	apps := []AppConfig{

@@ -25,6 +25,10 @@ const (
 	RFAddrEnvKey = "ADDR_RF"
 	// UptimeTrackerAddrEnvKey is env arg holding uptime tracker address.
 	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
+	// STCPRAddressResolverAddrEnvKey is env arg holding stcpr address resolver address.
+	STCPRAddressResolverAddrEnvKey = "ADDR_STCPR_ADDRESS_RESOLVER"
+	// STCPHAddressResolverAddrEnvKey is env arg holding stcph address resolver address.
+	STCPHAddressResolverAddrEnvKey = "ADDR_STCPH_ADDRESS_RESOLVER"
 
 	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
@@ -37,12 +41,14 @@ const (
 // DirectRoutesEnvConfig contains all the addresses which need to be communicated directly,
 // not through the VPN service.
 type DirectRoutesEnvConfig struct {
-	DmsgDiscovery string
-	DmsgServers   []string
-	TPDiscovery   string
-	RF            string
-	UptimeTracker string
-	STCPTable     map[cipher.PubKey]string
+	DmsgDiscovery        string
+	DmsgServers          []string
+	TPDiscovery          string
+	RF                   string
+	UptimeTracker        string
+	STCPRAddressResolver string
+	STCPHAddressResolver string
+	STCPTable            map[cipher.PubKey]string
 }
 
 // AppEnvArgs forms env args to pass to the app process.
@@ -63,6 +69,14 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 
 	if config.UptimeTracker != "" {
 		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker
+	}
+
+	if config.STCPRAddressResolver != "" {
+		envs[STCPRAddressResolverAddrEnvKey] = config.STCPRAddressResolver
+	}
+
+	if config.STCPHAddressResolver != "" {
+		envs[STCPHAddressResolverAddrEnvKey] = config.STCPHAddressResolver
 	}
 
 	if len(config.STCPTable) != 0 {
