@@ -75,7 +75,7 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	return nil

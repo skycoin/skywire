@@ -214,7 +214,7 @@ func (n *Network) Init() error {
 	if n.conf.NetworkConfigs.STCP != nil {
 		if n.clients.StcpC != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
 			if err := n.clients.StcpC.Serve(n.conf.NetworkConfigs.STCP.LocalAddr); err != nil {
-				return fmt.Errorf("failed to initiate 'stcp': %v", err)
+				return fmt.Errorf("failed to initiate 'stcp': %w", err)
 			}
 		} else {
 			fmt.Println("No config found for stcp")
@@ -410,7 +410,7 @@ func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
 
 	if strs[1] != "~" {
 		if _, err := fmt.Sscanf(strs[1], "%d", &port); err != nil {
-			panic(fmt.Errorf("network.disassembleAddr: %v", err))
+			panic(fmt.Errorf("network.disassembleAddr: %w", err))
 		}
 	}
 

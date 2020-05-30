@@ -532,7 +532,7 @@ func (r *router) GetRule(routeID routing.RouteID) (routing.Rule, error) {
 func (r *router) UpdateRuleActivity(routeID routing.RouteID) error {
 	err := r.rt.UpdateActivity(routeID)
 	if err != nil {
-		return fmt.Errorf("error updating activity for route ID %d: %v", routeID, err)
+		return fmt.Errorf("error updating activity for route ID %d: %w", routeID, err)
 	}
 
 	return nil

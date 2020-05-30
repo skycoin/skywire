@@ -191,7 +191,7 @@ func (c *httpClient) Bind(ctx context.Context, port string) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	return nil
@@ -219,7 +219,7 @@ func (c *httpClient) Resolve(ctx context.Context, pk cipher.PubKey) (string, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
@@ -253,7 +253,7 @@ func (c *httpClient) ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (st
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
