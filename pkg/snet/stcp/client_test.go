@@ -21,7 +21,7 @@ func TestConn(t *testing.T) {
 
 func prepareConns(t *testing.T) (*Conn, *Conn, func()) {
 	aPK, aSK := cipher.GenerateKeyPair()
-	bPK, _ := cipher.GenerateKeyPair()
+	bPK, bSK := cipher.GenerateKeyPair()
 
 	aConn, bConn := net.Pipe()
 
@@ -36,11 +36,34 @@ func prepareConns(t *testing.T) (*Conn, *Conn, func()) {
 	done := make(chan struct{})
 
 	go func() {
-		b, respErr = newConn(bConn, time.Now().Add(HandshakeTimeout), rhs, nil)
+		bConnConfig := connConfig{
+			conn:      bConn,
+			localPK:   bPK,
+			localSK:   bSK,
+			deadline:  time.Now().Add(HandshakeTimeout),
+			hs:        rhs,
+			freePort:  nil,
+			encrypt:   false,
+			initiator: false,
+		}
+
+		b, respErr = newConn(bConnConfig)
+
 		close(done)
 	}()
 
-	a, err := newConn(aConn, time.Now().Add(HandshakeTimeout), ihs, nil)
+	aConnConfig := connConfig{
+		conn:      aConn,
+		localPK:   aPK,
+		localSK:   aSK,
+		deadline:  time.Now().Add(HandshakeTimeout),
+		hs:        ihs,
+		freePort:  nil,
+		encrypt:   false,
+		initiator: true,
+	}
+
+	a, err := newConn(aConnConfig)
 	require.NoError(t, err)
 
 	<-done
