@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -25,14 +26,17 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
 const (
 	healthTimeout = 5 * time.Second
 	httpTimeout   = 30 * time.Second
+	exitDelay     = 100 * time.Millisecond
 )
 
 const (
@@ -53,15 +57,16 @@ type VisorConn struct {
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c      Config
-	assets http.FileSystem             // Web UI.
-	visors map[cipher.PubKey]VisorConn // connected remote visors.
-	users  *UserManager
-	mu     *sync.RWMutex
+	c          Config
+	assets     http.FileSystem             // Web UI.
+	visors     map[cipher.PubKey]VisorConn // connected remote visors.
+	users      *UserManager
+	restartCtx *restart.Context
+	mu         *sync.RWMutex
 }
 
 // New creates a new Hypervisor.
-func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
+func New(assets http.FileSystem, config Config, restartCtx *restart.Context) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
@@ -72,11 +77,12 @@ func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
 	singleUserDB := NewSingleUserStore("admin", boltUserDB)
 
 	return &Hypervisor{
-		c:      config,
-		assets: assets,
-		visors: make(map[cipher.PubKey]VisorConn),
-		users:  NewUserManager(singleUserDB, config.Cookies),
-		mu:     new(sync.RWMutex),
+		c:          config,
+		assets:     assets,
+		visors:     make(map[cipher.PubKey]VisorConn),
+		users:      NewUserManager(singleUserDB, config.Cookies),
+		restartCtx: restartCtx,
+		mu:         new(sync.RWMutex),
 	}, nil
 }
 
@@ -752,10 +758,45 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 func (hv *Hypervisor) update() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		updated, err := ctx.RPC.Update()
+		// TODO: consider using visor.UpdateConfig
+		var reqBody struct {
+			ChecksumsURL string          `json:"checksums_url"`
+			ArchiveURL   string          `json:"archive_url"`
+			Channel      updater.Channel `json:"channel"`
+		}
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				log.Warnf("update request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
+			return
+		}
+
+		updateConfig := updater.UpdateConfig{
+			ChecksumsURL: reqBody.ChecksumsURL,
+			ArchiveURL:   reqBody.ArchiveURL,
+			Channel:      reqBody.Channel,
+		}
+
+		updated, err := ctx.RPC.Update(updateConfig)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
+		}
+
+		if updated {
+			if err := hv.restartCurrentProcess(); err != nil {
+				log.WithError(err).Errorf("Failed to restart current process")
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+
+			defer func() {
+				go hv.exitAfterDelay(exitDelay)
+			}()
 		}
 
 		output := struct {
@@ -763,7 +804,25 @@ func (hv *Hypervisor) update() http.HandlerFunc {
 		}{updated}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
+
 	})
+}
+
+func (hv *Hypervisor) restartCurrentProcess() error {
+	log.Infof("Starting new file instance")
+
+	if err := hv.restartCtx.Start(); err != nil {
+		log.Errorf("Failed to start binary: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (hv *Hypervisor) exitAfterDelay(delay time.Duration) {
+	time.Sleep(delay)
+	log.Infof("Exiting")
+	os.Exit(0)
 }
 
 func (hv *Hypervisor) updateAvailable() http.HandlerFunc {

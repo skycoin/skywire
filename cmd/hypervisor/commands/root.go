@@ -14,6 +14,7 @@ import (
 
 	_ "github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/statik" // embedded static files
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
@@ -50,6 +51,8 @@ var rootCmd = &cobra.Command{
 			log.Printf("Failed to output build info: %v", err)
 		}
 
+		restartCtx := restart.CaptureContext()
+
 		conf := prepareConfig(args)
 
 		assets, err := fs.New()
@@ -58,7 +61,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Prepare hypervisor.
-		hv, err := hypervisor.New(assets, conf)
+		hv, err := hypervisor.New(assets, conf, restartCtx)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
