@@ -26,9 +26,9 @@ const (
 	// UptimeTrackerAddrEnvKey is env arg holding uptime tracker address.
 	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
 	// STCPRAddressResolverAddrEnvKey is env arg holding stcpr address resolver address.
-	STCPRAddressResolverAddrEnvKey = "STCPR_ADDR_ADDRESS_RESOLVER"
+	STCPRAddressResolverAddrEnvKey = "ADDR_STCPR_ADDRESS_RESOLVER"
 	// STCPHAddressResolverAddrEnvKey is env arg holding stcph address resolver address.
-	STCPHAddressResolverAddrEnvKey = "STCPH_ADDR_ADDRESS_RESOLVER"
+	STCPHAddressResolverAddrEnvKey = "ADDR_STCPH_ADDRESS_RESOLVER"
 
 	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
