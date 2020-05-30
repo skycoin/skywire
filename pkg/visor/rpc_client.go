@@ -70,7 +70,7 @@ type RPCClient interface {
 	Restart() error
 	Exec(command string) ([]byte, error)
 	Update(config updater.UpdateConfig) (bool, error)
-	UpdateAvailable() (*updater.Version, error)
+	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -299,9 +299,9 @@ func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 }
 
 // UpdateAvailable calls UpdateAvailable.
-func (rc *rpcClient) UpdateAvailable() (*updater.Version, error) {
+func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
 	var version, empty updater.Version
-	err := rc.Call("UpdateAvailable", &struct{}{}, &version)
+	err := rc.Call("UpdateAvailable", &channel, &version)
 	if err != nil {
 		return nil, err
 	}
@@ -682,6 +682,6 @@ func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
 }
 
 // UpdateAvailable implements RPCClient.
-func (mc *mockRPCClient) UpdateAvailable() (*updater.Version, error) {
+func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, error) {
 	return nil, nil
 }
