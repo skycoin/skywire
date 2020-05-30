@@ -69,7 +69,7 @@ type RPCClient interface {
 
 	Restart() error
 	Exec(command string) ([]byte, error)
-	Update() (bool, error)
+	Update(config updater.UpdateConfig) (bool, error)
 	UpdateAvailable() (*updater.Version, error)
 }
 
@@ -292,9 +292,9 @@ func (rc *rpcClient) Exec(command string) ([]byte, error) {
 }
 
 // Update calls Update.
-func (rc *rpcClient) Update() (bool, error) {
+func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	var updated bool
-	err := rc.Call("Update", &struct{}{}, &updated)
+	err := rc.Call("Update", &config, &updated)
 	return updated, err
 }
 
@@ -677,7 +677,7 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 }
 
 // Update implements RPCClient.
-func (mc *mockRPCClient) Update() (bool, error) {
+func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
 	return false, nil
 }
 
