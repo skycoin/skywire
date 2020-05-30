@@ -514,10 +514,10 @@ func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 }
 
 // Update updates visor.
-func (r *RPC) Update(_ *struct{}, updated *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "Update", nil)(updated, &err)
+func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "Update", updateConfig)(updated, &err)
 
-	*updated, err = r.visor.Update()
+	*updated, err = r.visor.Update(updateConfig)
 	return
 }
 
