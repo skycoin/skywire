@@ -238,8 +238,8 @@ func (v *Visor) Update(updateConfig *updater.UpdateConfig) (bool, error) {
 }
 
 // UpdateAvailable checks if visor update is available.
-func (v *Visor) UpdateAvailable() (*updater.Version, error) {
-	version, err := v.updater.UpdateAvailable()
+func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
+	version, err := v.updater.UpdateAvailable(channel)
 	if err != nil {
 		v.log.Errorf("Failed to check if visor update is available: %v", err)
 		return nil, err
