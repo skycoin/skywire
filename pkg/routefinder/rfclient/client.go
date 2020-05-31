@@ -46,7 +46,7 @@ type HTTPError struct {
 
 // Client implements route finding operations.
 type Client interface {
-	FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][]routing.Path, error)
+	FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][][]routing.Hop, error)
 }
 
 // APIClient implements Client interface
@@ -71,7 +71,7 @@ func NewHTTP(addr string, apiTimeout time.Duration) Client {
 
 // FindRoutes returns routes from source skywire visor to destiny, that has at least the given minHops and as much
 // the given maxHops as well as the reverse routes from destiny to source.
-func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][]routing.Path, error) {
+func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][][]routing.Hop, error) {
 	requestBody := &FindRoutesRequest{
 		Edges: rts,
 		Opts:  opts,
@@ -113,7 +113,7 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 		return nil, errors.New(apiErr.Error.Message)
 	}
 
-	var paths map[routing.PathEdges][]routing.Path
+	var paths map[routing.PathEdges][][]routing.Hop
 	err = json.NewDecoder(res.Body).Decode(&paths)
 	if err != nil {
 		return nil, err

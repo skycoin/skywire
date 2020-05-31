@@ -1,276 +1,147 @@
-// +build !no_ci
-
 package setup
 
 import (
 	"context"
 	"fmt"
-	"log"
-	"net"
-	"net/rpc"
-	"os"
+	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
-
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-
-	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/mock"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 )
 
-func TestMain(m *testing.M) {
-	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
-	if ok {
-		lvl, err := logging.LevelFromString(loggingLevel)
-		if err != nil {
-			log.Fatal(err)
-		}
+func TestGenerateRules(t *testing.T) {
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+	pkC, _ := cipher.GenerateKeyPair()
+	pkD, _ := cipher.GenerateKeyPair()
 
-		logging.SetLevel(lvl)
-	} else {
-		logging.Disable()
+	type testCase struct {
+		fwd routing.Route
+		rev routing.Route
 	}
 
-	os.Exit(m.Run())
-}
-
-type clientWithDMSGAddrAndListener struct {
-	*dmsg.Client
-	Addr                     dmsg.Addr
-	Listener                 *dmsg.Listener
-	AppliedIntermediaryRules []routing.Rule
-	AppliedEdgeRules         routing.EdgeRules
-}
-
-func TestNode(t *testing.T) {
-	// We are generating five key pairs - one for the `Router` of setup node,
-	// the other ones - for the clients along the desired route.
-	keys := snettest.GenKeyPairs(5)
-
-	// create test env
-	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
-	defer nEnv.Teardown()
-
-	reservedIDs := []routing.RouteID{1, 2}
-
-	// TEST: Emulates the communication between 4 visors and a setup node,
-	// where the first client visor initiates a route to the last.
-	t.Run("DialRouteGroup", func(t *testing.T) {
-		testDialRouteGroup(t, keys, nEnv, reservedIDs)
-	})
-}
-
-func testDialRouteGroup(t *testing.T, keys []snettest.KeyPair, nEnv *snettest.Env, reservedIDs []routing.RouteID) {
-	// client index 0 is for setup node.
-	// clients index 1 to 4 are for visors.
-	clients, closeClients := prepClients(t, keys, nEnv, reservedIDs, 5)
-	defer closeClients()
-
-	// prepare and serve setup node (using client 0).
-	_, closeSetup := prepSetupNode(t, clients[0].Client, clients[0].Listener)
-	defer closeSetup()
-
-	route := prepBidirectionalRoute(clients)
-
-	forwardRules, consumeRules, intermediaryRules := generateRules(t, route, reservedIDs)
-
-	forwardRoute, reverseRoute := route.ForwardAndReverse()
-
-	wantEdgeRules := routing.EdgeRules{
-		Desc:    reverseRoute.Desc,
-		Forward: forwardRules[route.Desc.SrcPK()],
-		Reverse: consumeRules[route.Desc.SrcPK()],
-	}
-
-	testLogger := logging.MustGetLogger("setupclient_test")
-	pks := []cipher.PubKey{clients[0].Addr.PK}
-	gotEdgeRules, err := setupclient.NewSetupNodeDialer().Dial(context.TODO(), testLogger, nEnv.Nets[1], pks, route)
-	require.NoError(t, err)
-	require.Equal(t, wantEdgeRules, gotEdgeRules)
-
-	for pk, rules := range intermediaryRules {
-		for _, cl := range clients {
-			if cl.Addr.PK == pk {
-				require.Equal(t, cl.AppliedIntermediaryRules, rules)
-				break
-			}
-		}
-	}
-
-	respRouteRules := routing.EdgeRules{
-		Desc:    forwardRoute.Desc,
-		Forward: forwardRules[route.Desc.DstPK()],
-		Reverse: consumeRules[route.Desc.DstPK()],
-	}
-
-	require.Equal(t, respRouteRules, clients[4].AppliedEdgeRules)
-}
-
-func prepBidirectionalRoute(clients []clientWithDMSGAddrAndListener) routing.BidirectionalRoute {
-	// prepare route group creation (client_1 will use this to request a route group creation with setup node).
-	desc := routing.NewRouteDescriptor(clients[1].Addr.PK, clients[4].Addr.PK, 1, 1)
-
-	forwardHops := []routing.Hop{
-		{From: clients[1].Addr.PK, To: clients[2].Addr.PK, TpID: uuid.New()},
-		{From: clients[2].Addr.PK, To: clients[3].Addr.PK, TpID: uuid.New()},
-		{From: clients[3].Addr.PK, To: clients[4].Addr.PK, TpID: uuid.New()},
-	}
-
-	reverseHops := []routing.Hop{
-		{From: clients[4].Addr.PK, To: clients[3].Addr.PK, TpID: uuid.New()},
-		{From: clients[3].Addr.PK, To: clients[2].Addr.PK, TpID: uuid.New()},
-		{From: clients[2].Addr.PK, To: clients[1].Addr.PK, TpID: uuid.New()},
-	}
-
-	route := routing.BidirectionalRoute{
-		Desc:      desc,
-		KeepAlive: 1 * time.Hour,
-		Forward:   forwardHops,
-		Reverse:   reverseHops,
-	}
-
-	return route
-}
-
-func generateRules(
-	t *testing.T,
-	route routing.BidirectionalRoute,
-	reservedIDs []routing.RouteID,
-) (
-	forwardRules map[cipher.PubKey]routing.Rule,
-	consumeRules map[cipher.PubKey]routing.Rule,
-	intermediaryRules RulesMap,
-) {
-	wantIDR, _ := newIDReservoir(route.Forward, route.Reverse)
-	for pk := range wantIDR.rec {
-		wantIDR.ids[pk] = reservedIDs
-	}
-
-	forwardRoute, reverseRoute := route.ForwardAndReverse()
-
-	forwardRules, consumeRules, intermediaryRules, err := wantIDR.GenerateRules(forwardRoute, reverseRoute)
-	require.NoError(t, err)
-
-	return forwardRules, consumeRules, intermediaryRules
-}
-
-func prepClients(
-	t *testing.T,
-	keys []snettest.KeyPair,
-	nEnv *snettest.Env,
-	reservedIDs []routing.RouteID,
-	n int,
-) ([]clientWithDMSGAddrAndListener, func()) {
-	clients := make([]clientWithDMSGAddrAndListener, n)
-
-	for i := 0; i < n; i++ {
-		var port uint16
-		// setup node
-		if i == 0 {
-			port = skyenv.DmsgSetupPort
-		} else {
-			port = skyenv.DmsgAwaitSetupPort
-		}
-
-		pk, sk := keys[i].PK, keys[i].SK
-		t.Logf("client[%d] PK: %s\n", i, pk)
-
-		clientLogger := logging.MustGetLogger(fmt.Sprintf("client_%d:%s:%d", i, pk, port))
-		c := dmsg.NewClient(pk, sk, nEnv.DmsgD, &dmsg.Config{MinSessions: 1})
-		c.SetLogger(clientLogger)
-
-		go c.Serve()
-
-		listener, err := c.Listen(port)
-		require.NoError(t, err)
-
-		clients[i] = clientWithDMSGAddrAndListener{
-			Client: c,
-			Addr: dmsg.Addr{
-				PK:   pk,
-				Port: port,
+	testCases := []testCase{
+		{
+			fwd: routing.Route{
+				Desc: routing.NewRouteDescriptor(pkA, pkC, 1, 0),
+				Hops: []routing.Hop{
+					{TpID: uuid.New(), From: pkA, To: pkB},
+					{TpID: uuid.New(), From: pkB, To: pkD},
+					{TpID: uuid.New(), From: pkD, To: pkC},
+				},
 			},
-			Listener: listener,
-		}
-
-		fmt.Printf("Client %d PK: %s\n", i, clients[i].Addr.PK)
-
-		// exclude setup node
-		if i == 0 {
-			continue
-		}
-
-		r := prepRouter(&clients[i], reservedIDs, i == n-1)
-
-		startRPC(t, r, listener)
+			rev: routing.Route{
+				Desc: routing.NewRouteDescriptor(pkC, pkA, 0, 1),
+				Hops: []routing.Hop{
+					{TpID: uuid.New(), From: pkC, To: pkB},
+					{TpID: uuid.New(), From: pkB, To: pkA},
+				},
+			},
+		},
 	}
 
-	return clients, func() {
-		for _, c := range clients {
-			require.NoError(t, c.Close())
-		}
-	}
-}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			// arrange
+			rtIDR := newMockReserver(t, nil)
 
-func prepRouter(client *clientWithDMSGAddrAndListener, reservedIDs []routing.RouteID, last bool) *router.MockRouter {
-	r := &router.MockRouter{}
-	// passing two rules to each visor (forward and reverse routes). Simulate
-	// applying intermediary rules.
-	r.On("SaveRoutingRules", mock.Anything, mock.Anything).
-		Return(func(rules ...routing.Rule) error {
-			client.AppliedIntermediaryRules = append(client.AppliedIntermediaryRules, rules...)
-			return nil
-		})
+			// act
+			fwd, rev, inter, err1 := GenerateRules(rtIDR, []routing.Route{tc.fwd, tc.rev})
+			t.Log("FORWARD:", fwd)
+			t.Log("REVERSE:", rev)
+			t.Log("INTERMEDIARY:", inter)
 
-	// simulate reserving IDs.
-	r.On("ReserveKeys", 2).Return(reservedIDs, testhelpers.NoErr)
-
-	// destination visor. Simulate applying edge rules.
-	if last {
-		r.On("IntroduceRules", mock.Anything).Return(func(rules routing.EdgeRules) error {
-			client.AppliedEdgeRules = rules
-			return nil
+			// assert
+			// TODO: We need more checks here
+			require.NoError(t, err1)
+			require.Len(t, fwd, 2)
+			require.Len(t, rev, 2)
 		})
 	}
-
-	return r
 }
 
-func startRPC(t *testing.T, r router.Router, listener net.Listener) {
-	rpcServer := rpc.NewServer()
-	require.NoError(t, rpcServer.Register(router.NewRPCGateway(r)))
+func TestBroadcastIntermediaryRules(t *testing.T) {
+	const ctxTimeout = time.Second
+	const failingTimeout = time.Second * 5
 
-	go rpcServer.Accept(listener)
+	type testCase struct {
+		workingRouters int // number of working routers
+		failingRouters int // number of failing routers
+	}
+
+	testCases := []testCase{
+		{workingRouters: 4, failingRouters: 0},
+		{workingRouters: 12, failingRouters: 1},
+		{workingRouters: 9, failingRouters: 2},
+		{workingRouters: 0, failingRouters: 3},
+	}
+
+	for _, tc := range testCases {
+		name := fmt.Sprintf("%d_normal_%d_failing", tc.workingRouters, tc.failingRouters)
+
+		t.Run(name, func(t *testing.T) {
+			// arrange
+			workingPKs := randPKs(tc.workingRouters)
+			failingPKs := randPKs(tc.failingRouters)
+
+			gateways := make(map[cipher.PubKey]*mockGatewayForReserver, tc.workingRouters+tc.failingRouters)
+			for _, pk := range workingPKs {
+				gateways[pk] = &mockGatewayForReserver{}
+			}
+			for _, pk := range failingPKs {
+				gateways[pk] = &mockGatewayForReserver{hangDuration: failingTimeout}
+			}
+
+			rtIDR := newMockReserver(t, gateways)
+			rules := randRulesMap(append(workingPKs, failingPKs...))
+
+			ctx, cancel := context.WithDeadline(context.TODO(), time.Now().Add(ctxTimeout))
+			defer cancel()
+
+			// act
+			err := BroadcastIntermediaryRules(ctx, logrus.New(), rtIDR, rules)
+
+			// assert
+			if tc.failingRouters > 0 {
+				assert.EqualError(t, err, context.DeadlineExceeded.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
-func prepSetupNode(t *testing.T, c *dmsg.Client, listener *dmsg.Listener) (*Node, func()) {
-	sn := &Node{
-		logger:  logging.MustGetLogger("setup_node"),
-		dmsgC:   c,
-		dmsgL:   listener,
-		metrics: metrics.NewDummy(),
+func randPKs(n int) []cipher.PubKey {
+	out := make([]cipher.PubKey, n)
+	for i := range out {
+		out[i], _ = cipher.GenerateKeyPair()
 	}
+	return out
+}
 
-	go func() {
-		if err := sn.Serve(); err != nil {
-			sn.logger.WithError(err).Error("Failed to serve")
-		}
-	}()
-
-	return sn, func() {
-		require.NoError(t, sn.Close())
+func randRulesMap(pks []cipher.PubKey) RulesMap {
+	rules := make(RulesMap, len(pks))
+	for _, pk := range pks {
+		rules[pk] = randIntermediaryRules(2)
 	}
+	return rules
+}
+
+func randIntermediaryRules(n int) []routing.Rule {
+	const keepAlive = time.Second
+	randRtID := func() routing.RouteID { return routing.RouteID(rand.Uint32()) }
+
+	out := make([]routing.Rule, n)
+	for i := range out {
+		out[i] = routing.IntermediaryForwardRule(keepAlive, randRtID(), randRtID(), uuid.New())
+	}
+	return out
 }
