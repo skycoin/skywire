@@ -14,9 +14,26 @@
 - `restart_check_delay` (string)
 
 
-# V1UptimeTracker
+# V1Launcher
 
-- `addr` (string)
+- `discovery` (*[V1AppDisc](#V1AppDisc))
+- `apps` ([][AppConfig](#AppConfig))
+- `server_addr` (string)
+- `bin_path` (string)
+- `local_path` (string)
+
+
+# V1Transport
+
+- `discovery` (string)
+- `log_store` (*[V1LogStore](#V1LogStore))
+- `trusted_visors` ()
+
+
+# V1LogStore
+
+- `type` (string) - Type defines the log store type. Valid values: file, memory.
+- `location` (string)
 
 
 # V1Dmsgpty
@@ -27,22 +44,6 @@
 - `cli_address` (string)
 
 
-# V1Transport
-
-- `discovery` (string)
-- `log_store` (*[V1LogStore](#V1LogStore))
-- `trusted_visors` ()
-
-
-# V1Launcher
-
-- `discovery` (*[V1AppDisc](#V1AppDisc))
-- `apps` ([][AppConfig](#AppConfig))
-- `server_addr` (string)
-- `bin_path` (string)
-- `local_path` (string)
-
-
 # V1Routing
 
 - `setup_nodes` ()
@@ -50,16 +51,23 @@
 - `route_finder_timeout` (Duration)
 
 
-# V1LogStore
-
-- `type` (string) - Type defines the log store type. Valid values: file, memory.
-- `location` (string)
-
-
 # V1AppDisc
 
 - `update_interval` (Duration)
 - `proxy_discovery_addr` (string)
+
+
+# V1UptimeTracker
+
+- `addr` (string)
+
+
+# AppConfig
+
+- `name` (string)
+- `args` ([]string)
+- `auto_start` (bool)
+- `port` (Port)
 
 
 # STCPConfig
@@ -72,11 +80,3 @@
 
 - `discovery` (string)
 - `sessions_count` (int)
-
-
-# AppConfig
-
-- `name` (string)
-- `args` ([]string)
-- `auto_start` (bool)
-- `port` (Port)

@@ -200,6 +200,8 @@ func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
 // STcp returns the underlying stcp.Client.
 func (n *Network) STcp() *stcp.Client { return n.stcpC }
 
+//go:generate mockery -name Dialer -case underscore -inpkg
+
 // Dialer is an entity that can be dialed and asked for its type.
 type Dialer interface {
 	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)

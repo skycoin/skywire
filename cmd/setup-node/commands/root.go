@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"os"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
+	"github.com/SkycoinProject/dmsg/cmdutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
@@ -87,7 +89,10 @@ var rootCmd = &cobra.Command{
 			}
 		}()
 
-		logger.Fatal(sn.Serve())
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
+		defer cancel()
+
+		logger.Fatal(sn.Serve(ctx))
 	},
 }
 
