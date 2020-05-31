@@ -454,7 +454,7 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 
 	rules := r.visor.router.Rules()
 	for _, rule := range rules {
-		if rule.Type() != routing.RuleConsume {
+		if rule.Type() != routing.RuleReverse {
 			continue
 		}
 
