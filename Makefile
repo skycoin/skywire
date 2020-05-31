@@ -171,7 +171,7 @@ package-amd64: ## Build the debian package. USE ROOT FOR THIS.
 	echo "Description: Skywire Mainnet Node implementation" >> ${PACKAGEDIR}/DEBIAN/control
 	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/skywire-cli  ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/hypervisor ./cmd/hypervisor
+	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/skywire-hypervisor ./cmd/hypervisor
 	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/apps/skychat ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./${PACKAGEDIR}/usr/bin/apps/skysocks-client  ./cmd/apps/skysocks-client
@@ -190,7 +190,7 @@ package-arm64: ## Build the debian package. USE ROOT FOR THIS.
 	echo "Description: Skywire Mainnet Node implementation" >> ${PACKAGEDIRARM64}/DEBIAN/control
 	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/skywire-visor ./cmd/skywire-visor
 	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/skywire-cli  ./cmd/skywire-cli
-	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/hypervisor ./cmd/hypervisor
+	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/skywire-hypervisor ./cmd/hypervisor
 	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/apps/skychat ./cmd/apps/skychat
 	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} env GOOS=linux GOARCH=arm64 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARM64}/usr/bin/apps/skysocks-client  ./cmd/apps/skysocks-client
@@ -209,7 +209,7 @@ package-armhf: ## Build the debian package. USE ROOT FOR THIS.
 	echo "Description: Skywire Mainnet Node implementation" >> ${PACKAGEDIRARMHF}/DEBIAN/control
 	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/skywire-visor ./cmd/skywire-visor
 	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/skywire-cli  ./cmd/skywire-cli
-	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/hypervisor ./cmd/hypervisor
+	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/skywire-hypervisor ./cmd/hypervisor
 	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/apps/skychat ./cmd/apps/skychat
 	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} env GOOS=linux GOARCH=arm GOARM=6 go build ${BUILD_OPTS} -o ./${PACKAGEDIRARMHF}/usr/bin/apps/skysocks-client  ./cmd/apps/skysocks-client
