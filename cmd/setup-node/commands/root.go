@@ -57,7 +57,7 @@ var rootCmd = &cobra.Command{
 			}
 			rdr, err = os.Open(configFile)
 			if err != nil {
-				log.Fatalf("Failed to open config: %s", err)
+				log.Fatalf("Failed to open config: %v", err)
 			}
 		} else {
 			logger.Info("Reading config from STDIN")

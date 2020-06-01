@@ -79,16 +79,28 @@ func initEventBroadcaster(v *Visor) bool {
 func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
-	conf := snet.Config{
-		PubKey: v.conf.PK,
-		SecKey: v.conf.SK,
-		Dmsg:   v.conf.Dmsg,
-		STCP:   v.conf.STCP,
+	nc := snet.NetworkConfigs{
+		Dmsg:  v.conf.Dmsg,
+		STCP:  v.conf.STCP,
+		STCPR: v.conf.STCPR,
+		STCPH: v.conf.STCPH,
 	}
-	n := snet.New(conf, v.ebc)
+
+	conf := snet.Config{
+		PubKey:         v.conf.PK,
+		SecKey:         v.conf.SK,
+		NetworkConfigs: nc,
+	}
+
+	n, err := snet.New(conf, v.ebc)
+	if err != nil {
+		return report(err)
+	}
+
 	if err := n.Init(); err != nil {
 		return report(err)
 	}
+
 	v.pushCloseStack("snet", func() bool {
 		return report(n.Close())
 	})
@@ -267,11 +279,14 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 			for _, ses := range n.Dmsg().AllSessions() {
 				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.LocalTCPAddr().String())
 			}
+
 			if len(envCfg.DmsgServers) == 0 {
 				return errors.New("no dmsg servers found")
 			}
+
 			return nil
 		})
+
 		if err != nil {
 			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
@@ -287,6 +302,12 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	}
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
+	}
+	if conf.STCPR != nil {
+		envCfg.STCPRAddressResolver = conf.STCPR.AddressResolver
+	}
+	if conf.STCPH != nil {
+		envCfg.STCPHAddressResolver = conf.STCPH.AddressResolver
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)

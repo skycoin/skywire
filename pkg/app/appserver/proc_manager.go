@@ -238,7 +238,7 @@ func (m *procManager) Wait(name string) error {
 	// so we cannot pop it before p.Wait().
 	if err := p.Wait(); err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
-			err = fmt.Errorf("failed to run app executable %s: %v", name, err)
+			err = fmt.Errorf("failed to run app executable %s: %w", name, err)
 		}
 
 		if _, err := m.pop(name); err != nil {
