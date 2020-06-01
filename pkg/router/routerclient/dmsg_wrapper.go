@@ -24,5 +24,5 @@ func (w *dmsgClientDialer) Dial(ctx context.Context, remote cipher.PubKey, port 
 }
 
 func (w *dmsgClientDialer) Type() string {
-	return snet.DmsgType
+	return dmsg.Type
 }

@@ -38,6 +38,11 @@ func (a Addr) String() string {
 	return fmt.Sprintf("%s:%d", a.PubKey, a.Port)
 }
 
+// PK returns public key of visor.
+func (a Addr) PK() cipher.PubKey {
+	return a.PubKey
+}
+
 // ConvertAddr asserts type of the passed `net.Addr` and converts it
 // to `Addr` if possible.
 func ConvertAddr(addr net.Addr) (Addr, error) {
