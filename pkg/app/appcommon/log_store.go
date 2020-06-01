@@ -70,7 +70,7 @@ func NewBBoltLogStore(path, appName string) (_ LogStore, err error) {
 	b := []byte(appName)
 	err = db.Update(func(tx *bbolt.Tx) error {
 		if _, err := tx.CreateBucketIfNotExists(b); err != nil {
-			return fmt.Errorf("failed to create bucket: %s", err)
+			return fmt.Errorf("failed to create bucket: %w", err)
 		}
 
 		return nil

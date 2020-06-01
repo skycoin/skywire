@@ -3,6 +3,8 @@
 - `dmsg` (*[DmsgConfig](#DmsgConfig))
 - `dmsgpty` (*[V1Dmsgpty](#V1Dmsgpty))
 - `stcp` (*[STCPConfig](#STCPConfig))
+- `stcpr` (*[STCPRConfig](#STCPRConfig))
+- `stcph` (*[STCPHConfig](#STCPHConfig))
 - `transport` (*[V1Transport](#V1Transport))
 - `routing` (*[V1Routing](#V1Routing))
 - `uptime_tracker` (*[V1UptimeTracker](#V1UptimeTracker))
