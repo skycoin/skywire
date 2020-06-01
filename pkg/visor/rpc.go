@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/rpc"
-	"os"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
@@ -482,27 +481,16 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	<<< VISOR MANAGEMENT >>>
 */
 
-const exitDelay = 100 * time.Millisecond
-
 // Restart restarts visor.
 func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
 	rpcutil.LogCall(r.log, "Restart", nil)(nil, nil)
 
-	defer func() {
-		if err == nil {
-			go func() {
-				time.Sleep(exitDelay)
-				os.Exit(0)
-			}()
-		}
-	}()
-
 	if r.visor.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
 
-	return r.visor.restartCtx.Start()
+	return r.visor.restartCtx.Restart()
 }
 
 // Exec executes a given command in cmd and writes its output to out.

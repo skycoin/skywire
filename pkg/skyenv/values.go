@@ -75,7 +75,8 @@ const (
 // RPC constants.
 const (
 	DefaultRPCAddr    = "localhost:3435"
-	DefaultRPCTimeout = 2 * time.Minute // update requires huge timeout, TODO: separate timeout for long RPC calls
+	DefaultRPCTimeout = 20 * time.Second
+	LongRPCTimeout    = 5 * time.Minute // update requires huge timeout
 )
 
 // Default skywire app server and discovery constants

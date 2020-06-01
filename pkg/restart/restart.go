@@ -22,9 +22,13 @@ const (
 	// DefaultCheckDelay is a default delay for checking if a new instance is started successfully.
 	DefaultCheckDelay = 1 * time.Second
 	extraWaitingTime  = 1 * time.Second
+	exitDelay         = 100 * time.Millisecond
 	shellCommand      = "/bin/sh"
 	sleepCommand      = "sleep"
 	commandFlag       = "-c"
+	systemdPPID       = 1
+	exitCodeSuccess   = 0
+	exitCodeFailure   = 1
 )
 
 // Context describes data required for restarting visor.
@@ -32,6 +36,7 @@ type Context struct {
 	log        logrus.FieldLogger
 	cmd        *exec.Cmd
 	path       string
+	ppid       int
 	checkDelay time.Duration
 	isStarted  int32
 }
@@ -40,11 +45,10 @@ type Context struct {
 // Data used by CaptureContext must not be modified before,
 // therefore calling CaptureContext immediately after starting executable is recommended.
 func CaptureContext() *Context {
-	path := os.Args[0]
-
 	delay := DefaultCheckDelay + extraWaitingTime
 	delaySeconds := int(delay.Seconds())
 	args := strings.Join(os.Args, " ")
+	// TODO: Instead of sleeping, wait until process ID exists.
 	shellCmd := fmt.Sprintf("%s %d; %s", sleepCommand, delaySeconds, args)
 	shellArgs := []string{commandFlag, shellCmd}
 
@@ -54,9 +58,13 @@ func CaptureContext() *Context {
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
+	path := os.Args[0]
+	ppid := os.Getppid()
+
 	return &Context{
 		cmd:        cmd,
 		path:       path,
+		ppid:       ppid,
 		checkDelay: DefaultCheckDelay,
 	}
 }
@@ -80,8 +88,30 @@ func (c *Context) CmdPath() string {
 	return c.path
 }
 
-// Start starts a new executable using Context.
-func (c *Context) Start() (err error) {
+// Systemd returns whether process is supervised by systemd.
+func (c *Context) Systemd() bool {
+	return c.ppid == systemdPPID
+}
+
+// Restart restarts an executable using Context.
+// If the process is supervised by systemd, it lets systemd restart the process.
+func (c *Context) Restart() (err error) {
+	if err := c.start(); err != nil {
+		return err
+	}
+
+	// Let RPC calls complete and then exit.
+	go c.exitAfterDelay(exitDelay)
+
+	return nil
+}
+
+func (c *Context) start() (err error) {
+	if c.Systemd() {
+		// No need to restart process if it's supervised by systemd.
+		return nil
+	}
+
 	if !atomic.CompareAndSwapInt32(&c.isStarted, 0, 1) {
 		return ErrAlreadyStarted
 	}
@@ -102,7 +132,24 @@ func (c *Context) Start() (err error) {
 	}
 
 	ticker.Stop()
+
 	return err
+}
+
+func (c *Context) exitAfterDelay(delay time.Duration) {
+	time.Sleep(delay)
+
+	if c.log != nil {
+		c.log.Infof("Exiting")
+	}
+
+	exitCode := exitCodeSuccess
+	if c.Systemd() {
+		// Make systemd restart process if Restart=on-failure.
+		exitCode = exitCodeFailure
+	}
+
+	os.Exit(exitCode)
 }
 
 func copyCmd(oldCmd *exec.Cmd) *exec.Cmd {

@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"strings"
 	"sync/atomic"
-	"time"
 	"unicode"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
@@ -38,7 +37,6 @@ const (
 	checksumsFilename = "checksums.txt"
 	checkSumLength    = 64
 	permRWX           = 0755
-	exitDelay         = 100 * time.Millisecond
 	oldSuffix         = ".old"
 	appsSubfolder     = "apps"
 	archiveFormat     = ".tar.gz"
@@ -160,13 +158,6 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 
 	u.removeFiles(downloadedBinariesPath)
 
-	// Let RPC call complete and then exit.
-	defer func() {
-		if err == nil {
-			go u.exitAfterDelay(exitDelay)
-		}
-	}()
-
 	return true, nil
 }
 
@@ -189,12 +180,6 @@ func (u *Updater) UpdateAvailable(channel Channel) (*Version, error) {
 	}
 
 	return latestVersion, nil
-}
-
-func (u *Updater) exitAfterDelay(delay time.Duration) {
-	time.Sleep(delay)
-	u.log.Infof("Exiting")
-	os.Exit(0)
 }
 
 func (u *Updater) updateBinaries(target Target, downloadedBinariesPath string, currentBasePath string) error {
@@ -344,7 +329,7 @@ func (u *Updater) download(updateConfig UpdateConfig, version string) (string, e
 func (u *Updater) restartCurrentProcess() error {
 	u.log.Infof("Starting new file instance")
 
-	if err := u.restartCtx.Start(); err != nil {
+	if err := u.restartCtx.Restart(); err != nil {
 		u.log.Errorf("Failed to start binary: %v", err)
 		return err
 	}
