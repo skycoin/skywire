@@ -64,6 +64,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
+
 		if mock {
 			prepareMockData(hv)
 		} else {
@@ -74,15 +75,19 @@ var rootCmd = &cobra.Command{
 		log := log.
 			WithField("addr", conf.HTTPAddr).
 			WithField("tls", conf.EnableTLS)
+
 		log.Info("Serving hypervisor...")
+
 		if conf.EnableTLS {
 			err = http.ListenAndServeTLS(conf.HTTPAddr, conf.TLSCertFile, conf.TLSKeyFile, hv)
 		} else {
 			err = http.ListenAndServe(conf.HTTPAddr, hv)
 		}
+
 		if err != nil {
 			log.WithError(err).Fatal("Hypervisor exited with error.")
 		}
+
 		log.Info("Good bye!")
 	},
 }

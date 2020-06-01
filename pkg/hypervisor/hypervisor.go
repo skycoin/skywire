@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -62,6 +61,7 @@ type Hypervisor struct {
 	visors     map[cipher.PubKey]VisorConn // connected remote visors.
 	users      *UserManager
 	restartCtx *restart.Context
+	updater    *updater.Updater
 	mu         *sync.RWMutex
 }
 
@@ -76,14 +76,19 @@ func New(assets http.FileSystem, config Config, restartCtx *restart.Context) (*H
 
 	singleUserDB := NewSingleUserStore("admin", boltUserDB)
 
-	return &Hypervisor{
+	u := updater.New(log, restartCtx, "")
+
+	hv := &Hypervisor{
 		c:          config,
 		assets:     assets,
 		visors:     make(map[cipher.PubKey]VisorConn),
 		users:      NewUserManager(singleUserDB, config.Cookies),
 		restartCtx: restartCtx,
+		updater:    u,
 		mu:         new(sync.RWMutex),
-	}, nil
+	}
+
+	return hv, nil
 }
 
 // ServeRPC serves RPC of a Hypervisor.
@@ -93,14 +98,18 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 		if err != nil {
 			return err
 		}
+
 		addr := conn.RawRemoteAddr()
 		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
+
 		visorConn := &VisorConn{
 			Addr:  addr,
 			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
 			PtyUI: setupDmsgPtyUI(dmsgC, addr.PK),
 		}
+
 		log.WithField("remote_addr", addr).Info("Accepted.")
+
 		hv.mu.Lock()
 		hv.visors[addr.PK] = *visorConn
 		hv.mu.Unlock()
@@ -164,9 +173,14 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
+
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
 				r.Get("/about", hv.getAbout())
+				r.Post("/update", hv.updateHypervisor())
+				r.Post("/update/available", hv.hypervisorUpdateAvailable())
+				r.Post("/update/available/{channel}", hv.hypervisorUpdateAvailable())
+
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -188,9 +202,9 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
-				r.Post("/visors/{pk}/update", hv.update())
-				r.Get("/visors/{pk}/update/available", hv.updateAvailable())
-				r.Get("/visors/{pk}/update/available/{channel}", hv.updateAvailable())
+				r.Post("/visors/{pk}/update", hv.updateVisor())
+				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
+				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 			})
 		})
 
@@ -200,6 +214,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
+
 				r.Get("/{pk}", hv.getPty())
 			})
 		}
@@ -230,6 +245,72 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 			PubKey: hv.c.PK,
 			Build:  buildinfo.Get(),
 		})
+	}
+}
+
+func (hv *Hypervisor) updateHypervisor() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var updateConfig updater.UpdateConfig
+
+		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
+			if err != io.EOF {
+				log.Warnf("update visor request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetHypervisor
+
+		updated, err := hv.updater.Update(updateConfig)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		output := struct {
+			Updated bool `json:"updated"`
+		}{updated}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
+	}
+}
+
+func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channel := updater.Channel(chi.URLParam(r, "channel"))
+		if channel == "" {
+			channel = updater.ChannelStable
+		}
+
+		version, err := hv.updater.UpdateAvailable(channel)
+		if err != nil {
+			log.Errorf("Failed to check if hypervisor update is available: %v", err)
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+
+			return
+		}
+
+		output := struct {
+			Available        bool   `json:"available"`
+			CurrentVersion   string `json:"current_version"`
+			AvailableVersion string `json:"available_version,omitempty"`
+		}{
+			Available:      version != nil,
+			CurrentVersion: buildinfo.Version(),
+		}
+
+		if version != nil {
+			output.AvailableVersion = version.String()
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
 	}
 }
 
@@ -757,40 +838,27 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) update() http.HandlerFunc {
+func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody updater.UpdateConfig
+		var updateConfig updater.UpdateConfig
 
-		if err := httputil.ReadJSON(r, &reqBody); err != nil {
-			if err != io.EOF {
-				log.Warnf("update request: %v", err)
-			}
-
+		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
+			log.Warnf("update visor request: %v", err)
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
 
 			return
 		}
 
-		if reqBody.Channel == "" {
-			reqBody.Channel = updater.ChannelStable
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
 		}
 
-		updated, err := ctx.RPC.Update(reqBody)
+		updateConfig.Target = updater.TargetVisor
+
+		updated, err := ctx.RPC.Update(updateConfig)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
-		}
-
-		if updated {
-			if err := hv.restartCurrentProcess(); err != nil {
-				log.WithError(err).Errorf("Failed to restart current process")
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
-			}
-
-			defer func() {
-				go hv.exitAfterDelay(exitDelay)
-			}()
 		}
 
 		output := struct {
@@ -798,28 +866,10 @@ func (hv *Hypervisor) update() http.HandlerFunc {
 		}{updated}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
-
 	})
 }
 
-func (hv *Hypervisor) restartCurrentProcess() error {
-	log.Infof("Starting new file instance")
-
-	if err := hv.restartCtx.Start(); err != nil {
-		log.Errorf("Failed to start binary: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (hv *Hypervisor) exitAfterDelay(delay time.Duration) {
-	time.Sleep(delay)
-	log.Infof("Exiting")
-	os.Exit(0)
-}
-
-func (hv *Hypervisor) updateAvailable() http.HandlerFunc {
+func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		channel := updater.Channel(chi.URLParam(r, "channel"))
 		if channel == "" {
@@ -895,7 +945,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		return nil, false
 	}
 
-	visor, ok := hv.visorConn(pk)
+	v, ok := hv.visorConn(pk)
 
 	if !ok {
 		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
@@ -903,7 +953,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	}
 
 	return &httpCtx{
-		VisorConn: visor,
+		VisorConn: v,
 	}, true
 }
 

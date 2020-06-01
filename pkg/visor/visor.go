@@ -227,7 +227,7 @@ func (v *Visor) Exec(command string) ([]byte, error) {
 // Update updates visor.
 // It checks if visor update is available.
 // If it is, the method downloads a new visor versions, starts it and kills the current process.
-func (v *Visor) Update(updateConfig *updater.UpdateConfig) (bool, error) {
+func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
 	updated, err := v.updater.Update(updateConfig)
 	if err != nil {
 		v.log.Errorf("Failed to update visor: %v", err)
