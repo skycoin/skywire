@@ -6,9 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	_ "net/http/pprof" //nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
+	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"time"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cmdutil"
@@ -33,7 +32,6 @@ var (
 	pprofMode  string
 	pprofAddr  string
 	confPath   string
-	startDelay string
 )
 
 func init() {
@@ -42,7 +40,6 @@ func init() {
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "skywire-config.json", "config file location. If the value is 'STDIN', config file will be read from stdin.")
-	rootCmd.Flags().StringVarP(&startDelay, "delay", "", "0ns", "delay before visor start")
 }
 
 var rootCmd = &cobra.Command{
@@ -61,18 +58,6 @@ var rootCmd = &cobra.Command{
 
 		conf := initConfig(log, args, confPath)
 
-		delay, err := time.ParseDuration(startDelay)
-		if err != nil {
-			log.WithError(err).Warnf("Using no visor start delay due to parsing failure")
-			delay = time.Duration(0)
-		}
-
-		if delay != 0 {
-			log.Infof("Visor start delay is %v, waiting...", delay)
-		}
-
-		time.Sleep(delay)
-
 		v, ok := visor.NewVisor(conf, restartCtx)
 		if !ok {
 			log.Fatal("Failed to start visor.")
@@ -88,7 +73,7 @@ var rootCmd = &cobra.Command{
 			log.WithError(err).Error("Visor closed with error.")
 		}
 	},
-	Version: buildinfo.Get().Version,
+	Version: buildinfo.Version(),
 }
 
 // Execute executes root CLI command.
