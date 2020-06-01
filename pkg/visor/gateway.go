@@ -88,10 +88,10 @@ package visor
 //		}
 //		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 //			if err != io.EOF {
-//				log.Warnf("handlePutApp request: %v", err)
+//				log.Warnf("handlePutApp request: %w", err)
 //			}
 //			httputil.WriteJSON(w, r, http.StatusBadRequest,
-//				fmt.Errorf("failed to read JSON from http request body: %v", err))
+//				fmt.Errorf("failed to read JSON from http request body: %w", err))
 //			return
 //		}
 //
@@ -251,10 +251,10 @@ package visor
 //		var reqB PostTransportReq
 //		if err := httputil.ReadJSON(r, &reqB); err != nil {
 //			if err != io.EOF {
-//				log.Warnf("handlePostTransport request: %v", err)
+//				log.Warnf("handlePostTransport request: %w", err)
 //			}
 //			httputil.WriteJSON(w, r, http.StatusBadRequest,
-//				fmt.Errorf("failed to read JSON from http request body: %v", err))
+//				fmt.Errorf("failed to read JSON from http request body: %w", err))
 //			return
 //		}
 //		mTp, err := v.tpM.SaveTransport(r.Context(), reqB.Remote, reqB.TpType)

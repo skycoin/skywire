@@ -45,7 +45,7 @@ type httpClient struct {
 func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
 	client, err := httpauth.NewClient(context.Background(), addr, pk, sk)
 	if err != nil {
-		return nil, fmt.Errorf("httpauth: %s", err)
+		return nil, fmt.Errorf("uptime tracker httpauth: %w", err)
 	}
 
 	return &httpClient{client: client, pk: pk, sk: sk}, nil
@@ -53,7 +53,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error)
 
 // Get performs a new GET request.
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", c.client.Addr()+path, new(bytes.Buffer))
+	req, err := http.NewRequest(http.MethodGet, c.client.Addr()+path, new(bytes.Buffer))
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	return nil
