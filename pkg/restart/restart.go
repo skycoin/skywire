@@ -2,9 +2,11 @@ package restart
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -20,32 +22,42 @@ const (
 	// DefaultCheckDelay is a default delay for checking if a new instance is started successfully.
 	DefaultCheckDelay = 1 * time.Second
 	extraWaitingTime  = 1 * time.Second
-	delayArgName      = "--delay"
+	shellCommand      = "/bin/sh"
+	sleepCommand      = "sleep"
+	commandFlag       = "-c"
 )
 
 // Context describes data required for restarting visor.
 type Context struct {
-	log         logrus.FieldLogger
-	cmd         *exec.Cmd
-	checkDelay  time.Duration
-	isStarted   int32
-	appendDelay bool // disabled in tests
+	log        logrus.FieldLogger
+	cmd        *exec.Cmd
+	path       string
+	checkDelay time.Duration
+	isStarted  int32
 }
 
 // CaptureContext captures data required for restarting visor.
 // Data used by CaptureContext must not be modified before,
 // therefore calling CaptureContext immediately after starting executable is recommended.
 func CaptureContext() *Context {
-	cmd := exec.Command(os.Args[0], os.Args[1:]...) // nolint:gosec
+	path := os.Args[0]
+
+	delay := DefaultCheckDelay + extraWaitingTime
+	delaySeconds := int(delay.Seconds())
+	args := strings.Join(os.Args, " ")
+	shellCmd := fmt.Sprintf("%s %d; %s", sleepCommand, delaySeconds, args)
+	shellArgs := []string{commandFlag, shellCmd}
+
+	cmd := exec.Command(shellCommand, shellArgs...) // nolint:gosec
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
 	return &Context{
-		cmd:         cmd,
-		checkDelay:  DefaultCheckDelay,
-		appendDelay: true,
+		cmd:        cmd,
+		path:       path,
+		checkDelay: DefaultCheckDelay,
 	}
 }
 
@@ -65,7 +77,7 @@ func (c *Context) SetCheckDelay(delay time.Duration) {
 
 // CmdPath returns path of cmd to be run.
 func (c *Context) CmdPath() string {
-	return c.cmd.Path
+	return c.path
 }
 
 // Start starts a new executable using Context.
@@ -109,9 +121,7 @@ func (c *Context) startExec() chan error {
 	go func() {
 		defer close(errCh)
 
-		c.adjustArgs()
-
-		c.infoLogger()("Starting new instance of executable (args: %q)", c.cmd.Args)
+		c.infoLogger()("Starting new instance of executable (cmd: %q)", c.cmd.String())
 
 		if err := c.cmd.Start(); err != nil {
 			errCh <- err
@@ -125,29 +135,6 @@ func (c *Context) startExec() chan error {
 	}()
 
 	return errCh
-}
-
-func (c *Context) adjustArgs() {
-	args := c.cmd.Args
-
-	i := 0
-	l := len(args)
-
-	for i < l {
-		if args[i] == delayArgName && i < len(args)-1 {
-			args = append(args[:i], args[i+2:]...)
-			l -= 2
-		} else {
-			i++
-		}
-	}
-
-	if c.appendDelay {
-		delay := c.checkDelay + extraWaitingTime
-		args = append(args, delayArgName, delay.String())
-	}
-
-	c.cmd.Args = args
 }
 
 func (c *Context) infoLogger() func(string, ...interface{}) {
