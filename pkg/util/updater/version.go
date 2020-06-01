@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+const (
+	semverLen = 3
+)
+
 var (
 	// ErrMalformedVersion is returned when version is malformed.
 	ErrMalformedVersion = errors.New("version malformed")
@@ -73,7 +77,7 @@ func VersionFromString(s string) (*Version, error) {
 	}
 
 	strs = strings.Split(strs[0], ".")
-	if len(strs) != 3 {
+	if len(strs) != semverLen {
 		return nil, ErrMalformedVersion
 	}
 
