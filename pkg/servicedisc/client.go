@@ -16,6 +16,7 @@ import (
 
 // Config configures the HTTPClient.
 type Config struct {
+	Type     string
 	PK       cipher.PubKey
 	SK       cipher.SecKey
 	Port     uint16
@@ -33,14 +34,14 @@ type HTTPClient struct {
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, conf Config, sType string) *HTTPClient {
+func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		conf: conf,
 		entry: Service{
 			Addr:  NewSWAddr(conf.PK, conf.Port),
 			Stats: &Stats{ConnectedClients: 0},
-			Type:  sType,
+			Type:  conf.Type,
 		},
 		client: http.Client{},
 	}
