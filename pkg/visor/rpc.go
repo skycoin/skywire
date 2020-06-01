@@ -517,7 +517,13 @@ func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "Update", updateConfig)(updated, &err)
 
-	*updated, err = r.visor.Update(updateConfig)
+	config := updater.UpdateConfig{}
+
+	if updateConfig != nil {
+		config = *updateConfig
+	}
+
+	*updated, err = r.visor.Update(config)
 	return
 }
 
