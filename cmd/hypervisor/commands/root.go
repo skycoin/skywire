@@ -52,6 +52,8 @@ var rootCmd = &cobra.Command{
 		}
 
 		restartCtx := restart.CaptureContext()
+		restartCtx.RegisterLogger(log)
+
 		conf := prepareConfig(args)
 
 		assets, err := fs.New()
