@@ -169,7 +169,6 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 
 		return
 	}
-
 }
 
 func sseHandler(w http.ResponseWriter, req *http.Request) {
