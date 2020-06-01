@@ -48,7 +48,7 @@ func TestContext_Start(t *testing.T) {
 		path := "/tmp/test_start"
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
 
-		assert.NoError(t, cc.Start())
+		assert.NoError(t, cc.start())
 		assert.NoError(t, os.Remove(path))
 	})
 
@@ -63,7 +63,7 @@ func TestContext_Start(t *testing.T) {
 		possibleErrors := []string{
 			`exec: "bad_command": executable file not found in $PATH`,
 		}
-		err := cc.Start()
+		err := cc.start()
 		require.NotNil(t, err)
 		assert.Contains(t, possibleErrors, err.Error())
 	})
@@ -78,10 +78,10 @@ func TestContext_Start(t *testing.T) {
 
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- cc.Start()
+			errCh <- cc.start()
 		}()
 
-		err1 := cc.Start()
+		err1 := cc.start()
 		err2 := <-errCh
 		errors := []error{err1, err2}
 

@@ -22,6 +22,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -100,9 +101,16 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	ctx := context.Background()
-	if rc.timeout != 0 {
+	timeout := rc.timeout
+
+	switch method {
+	case "Update", "AddTransport":
+		timeout = skyenv.LongRPCTimeout
+	}
+
+	if timeout != 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithDeadline(ctx, time.Now().Add(rc.timeout))
+		ctx, cancel = context.WithDeadline(ctx, time.Now().Add(timeout))
 		defer cancel()
 	}
 
