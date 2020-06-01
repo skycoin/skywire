@@ -224,6 +224,7 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 	currentBinaryExists := false
 	if _, err := os.Stat(currentBinaryPath); err == nil {
 		currentBinaryExists = true
+
 		if err := rename.Rename(currentBinaryPath, oldBinaryPath); err != nil {
 			return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
 		}
