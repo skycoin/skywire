@@ -58,6 +58,8 @@ var (
 	ErrTagNameEmpty = errors.New("tag name is empty")
 	// ErrUnknownChannel is returned when channel is unknown.
 	ErrUnknownChannel = errors.New("channel is unknown")
+	// ErrUnknownTarget is returned when target is unknown.
+	ErrUnknownTarget = errors.New("target is unknown")
 	// ErrNoReleases is returned when no releases are found.
 	ErrNoReleases = errors.New("no releases found")
 )
@@ -85,25 +87,36 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 // Version overrides Channel.
 // ArchiveURL/ChecksumURL override Version and channel.
 type UpdateConfig struct {
+	Target       Target
 	Channel      Channel `json:"channel"`
 	Version      string  `json:"version"`
 	ArchiveURL   string  `json:"archive_url"`
 	ChecksumsURL string  `json:"checksums_url"`
 }
 
+// Target defines what binary target to update.
+type Target int
+
+const (
+	// TargetVisor updates visor.
+	TargetVisor Target = iota
+	// TargetHypervisor updates hypervisor.
+	TargetHypervisor
+)
+
 // Channel defines channel for updating.
 type Channel string
 
 const (
 	// ChannelStable is the latest release.
-	ChannelStable = Channel("stable")
+	ChannelStable Channel = "stable"
 	// ChannelTesting is the latest draft, pre-release or release.
-	ChannelTesting = Channel("testing")
+	ChannelTesting Channel = "testing"
 )
 
 // Update performs an update operation.
 // NOTE: Update may call os.Exit.
-func (u *Updater) Update(updateConfig *UpdateConfig) (updated bool, err error) {
+func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	if !atomic.CompareAndSwapInt32(&u.updating, 0, 1) {
 		return false, ErrAlreadyStarted
 	}
@@ -132,7 +145,7 @@ func (u *Updater) Update(updateConfig *UpdateConfig) (updated bool, err error) {
 	}
 
 	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
-	if err := u.updateBinaries(downloadedBinariesPath, currentBasePath); err != nil {
+	if err := u.updateBinaries(updateConfig.Target, downloadedBinariesPath, currentBasePath); err != nil {
 		return false, err
 	}
 
@@ -184,26 +197,33 @@ func (u *Updater) exitAfterDelay(delay time.Duration) {
 	os.Exit(0)
 }
 
-func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath string) error {
-	for _, app := range apps() {
-		if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", app, err)
+func (u *Updater) updateBinaries(target Target, downloadedBinariesPath string, currentBasePath string) error {
+	switch target {
+	case TargetHypervisor:
+		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, hypervisorBinary); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", hypervisorBinary, err)
 		}
-	}
 
-	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
-	}
+		return nil
+	case TargetVisor:
+		for _, app := range apps() {
+			if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
+				return fmt.Errorf("failed to update %s binary: %w", app, err)
+			}
+		}
 
-	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
-	}
+		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
+		}
 
-	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, hypervisorBinary); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", hypervisorBinary, err)
-	}
+		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
+		}
 
-	return nil
+		return nil
+	default:
+		return ErrUnknownTarget
+	}
 }
 
 func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) error {
@@ -258,7 +278,7 @@ func (u *Updater) restore(currentBinaryPath string, toBeRemoved string) {
 	}
 }
 
-func (u *Updater) download(updateConfig *UpdateConfig, version string) (string, error) {
+func (u *Updater) download(updateConfig UpdateConfig, version string) (string, error) {
 	checksumsURL := fileURL(version, checksumsFilename)
 	if updateConfig.ChecksumsURL != "" {
 		checksumsURL = updateConfig.ChecksumsURL
