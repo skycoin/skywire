@@ -67,27 +67,42 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 
 	// Actual config generation.
 	conf := MakeBaseConfig(cc)
+
 	conf.Dmsgpty = &V1Dmsgpty{
 		Port:     skyenv.DmsgPtyPort,
 		AuthFile: skyenv.DefaultDmsgPtyWhitelist,
 		CLINet:   skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
+
 	conf.STCP = &snet.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
 		PKTable:   nil,
 	}
+
+	conf.STCPR = &snet.STCPRConfig{
+		LocalAddr:       skyenv.DefaultSTCPRAddr,
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
+	}
+
+	conf.STCPH = &snet.STCPHConfig{
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
+	}
+
 	conf.Transport.LogStore = &V1LogStore{
 		Type:     "file",
 		Location: skyenv.DefaultTpLogStore,
 	}
+
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
+
 	conf.Launcher.Discovery = &V1AppDisc{
 		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
 		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
 	}
+
 	conf.Launcher.Apps = []launcher.AppConfig{
 		{
 			Name:      skyenv.SkychatName,
@@ -107,7 +122,7 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 		},
 		{
 			Name:      skyenv.VPNServerName,
-			AutoStart: true,
+			AutoStart: false,
 			Port:      routing.Port(skyenv.VPNServerPort),
 		},
 		{
@@ -116,6 +131,9 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 			Port:      routing.Port(skyenv.VPNClientPort),
 		},
 	}
+
+	conf.Hypervisors = make([]cipher.PubKey, 0)
+
 	return conf, nil
 }
 
@@ -125,11 +143,15 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	if err != nil {
 		return nil, err
 	}
+
 	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	conf.Transport.Discovery = skyenv.TestTpDiscAddr
 	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.Discovery.ProxyDisc = skyenv.TestProxyDiscAddr
+	conf.STCPR.AddressResolver = skyenv.TestAddressResolverAddr
+	conf.STCPH.AddressResolver = skyenv.TestAddressResolverAddr
+
 	return conf, nil
 }

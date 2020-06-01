@@ -165,7 +165,7 @@ func WriteJSONConfig(conf interface{}, output string, replace bool) {
 		log.WithError(err).Fatalln("failed to create output directory")
 	}
 
-	//nolint:gosec
+	// nolint:gosec
 	if err := ioutil.WriteFile(output, raw, 0744); err != nil {
 		log.WithError(err).Fatalln("failed to write file")
 	}

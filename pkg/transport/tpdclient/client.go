@@ -40,7 +40,7 @@ type apiClient struct {
 func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey) (transport.DiscoveryClient, error) {
 	client, err := httpauth.NewClient(context.Background(), addr, key, sec)
 	if err != nil {
-		return nil, fmt.Errorf("httpauth: %s", err)
+		return nil, fmt.Errorf("transport discovery httpauth: %w", err)
 	}
 
 	return &apiClient{client: client, key: key, sec: sec}, nil
@@ -53,7 +53,7 @@ func (c *apiClient) Post(ctx context.Context, path string, payload interface{}) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", c.client.Addr()+path, body)
+	req, err := http.NewRequest(http.MethodPost, c.client.Addr()+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (c *apiClient) Post(ctx context.Context, path string, payload interface{}) 
 
 // Get performs a new GET request.
 func (c *apiClient) Get(ctx context.Context, path string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", c.client.Addr()+path, new(bytes.Buffer))
+	req, err := http.NewRequest(http.MethodGet, c.client.Addr()+path, new(bytes.Buffer))
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 
 	entry := &transport.EntryWithStatus{}
 	if err := json.NewDecoder(resp.Body).Decode(entry); err != nil {
-		return nil, fmt.Errorf("json: %s", err)
+		return nil, fmt.Errorf("json: %w", err)
 	}
 
 	return entry, nil
@@ -145,7 +145,7 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 
 	var entries []*transport.EntryWithStatus
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		return nil, fmt.Errorf("json: %s", err)
+		return nil, fmt.Errorf("json: %w", err)
 	}
 
 	return entries, nil
@@ -190,7 +190,7 @@ func (c *apiClient) UpdateStatuses(ctx context.Context, statuses ...*transport.S
 
 	var entries []*transport.EntryWithStatus
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		return nil, fmt.Errorf("json: %s", err)
+		return nil, fmt.Errorf("json: %w", err)
 	}
 
 	return entries, nil
