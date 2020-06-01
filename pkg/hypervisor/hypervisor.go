@@ -35,7 +35,6 @@ import (
 const (
 	healthTimeout = 5 * time.Second
 	httpTimeout   = 30 * time.Second
-	exitDelay     = 100 * time.Millisecond
 )
 
 const (
