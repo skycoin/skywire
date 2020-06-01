@@ -48,25 +48,25 @@ func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
 		return &emptyUpdater{}, false
 	}
 
+	getServiceDiscConf := func(conf appcommon.ProcConfig, sType string) servicedisc.Config {
+		return servicedisc.Config{
+			Type:     sType,
+			PK:       f.PK,
+			SK:       f.SK,
+			Port:     uint16(conf.RoutingPort),
+			DiscAddr: f.ProxyDisc,
+		}
+	}
+
 	switch conf.AppName {
 	case skyenv.SkysocksName:
 		return &proxyUpdater{
-			client: servicedisc.NewClient(log, servicedisc.Config{
-				PK:       f.PK,
-				SK:       f.SK,
-				Port:     uint16(conf.RoutingPort),
-				DiscAddr: f.ProxyDisc,
-			}, servicedisc.ServiceTypeProxy),
+			client:   servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeProxy)),
 			interval: f.UpdateInterval,
 		}, true
 	case skyenv.VPNServerName:
 		return &proxyUpdater{
-			client: servicedisc.NewClient(log, servicedisc.Config{
-				PK:       f.PK,
-				SK:       f.SK,
-				Port:     uint16(conf.RoutingPort),
-				DiscAddr: f.ProxyDisc,
-			}, servicedisc.ServiceTypeVPN),
+			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
 		}, true
 	default:
 		return &emptyUpdater{}, false
