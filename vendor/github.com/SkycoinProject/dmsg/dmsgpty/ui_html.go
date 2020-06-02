@@ -2875,5 +2875,7 @@ func writeTermHTML(w io.Writer) (int64, error) {
 	}
 	defer func() { _ = gz.Close() }() //nolint:errcheck
 
+	// TODO: We should consider how best to present this.
+	//nolint:gosec
 	return io.Copy(w, gz)
 }

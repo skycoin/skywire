@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -127,26 +128,6 @@ func (ui *UI) Handler() http.HandlerFunc {
 		log.Info("Serving terminal websocket...")
 		defer func() { log.Infof("Terminal closed: %d terminals left open.", atomic.AddInt32(&sc, -1)+1) }()
 
-		// open pty
-		ptyConn, err := ui.dialer.Dial()
-		if err != nil {
-			writeError(log, w, r, err, http.StatusServiceUnavailable)
-			return
-		}
-		defer func() { log.WithError(ptyConn.Close()).Debug("Closed ptyConn.") }()
-
-		ptyC, err := NewPtyClient(ptyConn)
-		if err != nil {
-			writeError(log, w, r, err, http.StatusServiceUnavailable)
-			return
-		}
-		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
-
-		if err := ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, &pty.Winsize{Rows: wsRows, Cols: wsCols}); err != nil {
-			writeError(log, w, r, err, http.StatusServiceUnavailable)
-			return
-		}
-
 		// open websocket
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -157,9 +138,32 @@ func (ui *UI) Handler() http.HandlerFunc {
 
 		wsConn := websocket.NetConn(r.Context(), ws, websocket.MessageText)
 
+		// open pty
+		logWS(wsConn, "Dialing...")
+		ptyConn, err := ui.dialer.Dial()
+		if err != nil {
+			writeWSError(log, wsConn, err)
+			return
+		}
+		defer func() { log.WithError(ptyConn.Close()).Debug("Closed ptyConn.") }()
+
+		logWS(wsConn, "Opening pty...")
+		ptyC, err := NewPtyClient(ptyConn)
+		if err != nil {
+			writeWSError(log, wsConn, err)
+			return
+		}
+		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
+
+		if err := ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, &pty.Winsize{Rows: wsRows, Cols: wsCols}); err != nil {
+			writeWSError(log, wsConn, err)
+			return
+		}
+
 		uiAddr := fmt.Sprintf("(%s) %s%s", r.Proto, r.Host, r.URL.Path)
 		if err := ui.writeBanner(wsConn, uiAddr, sID); err != nil {
-			log.WithError(err).Warn("Failed to write banner.")
+			err := fmt.Errorf("failed to write banner: %w", err)
+			writeWSError(log, wsConn, err)
 			return
 		}
 
@@ -196,6 +200,27 @@ func isWebsocket(h http.Header) bool {
 type ErrorJSON struct {
 	ErrorCode int    `json:"error_code"`
 	ErrorMsg  string `json:"error_msg"`
+}
+
+func logWS(conn net.Conn, msg string) {
+	_, _ = fmt.Fprintf(conn, "[dmsgpty-ui] Status: %s\r", msg) //nolint:errcheck
+}
+
+func writeWSError(log logrus.FieldLogger, wsConn net.Conn, err error) {
+	log.WithError(err).
+		WithField("remote_addr", wsConn.RemoteAddr()).
+		Error()
+	errB := append([]byte("[dmsgpty-ui] Error: "+err.Error()), '\n', '\r')
+	if _, err := wsConn.Write(errB); err != nil {
+		log.WithError(err).Error("Failed to write error msg to ws conn.")
+	}
+	logWS(wsConn, "Stopped!")
+	for {
+		if _, err := wsConn.Write([]byte("\x00")); err != nil {
+			return
+		}
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func writeError(log logrus.FieldLogger, w http.ResponseWriter, r *http.Request, err error, code int) {
