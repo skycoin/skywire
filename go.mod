@@ -12,6 +12,7 @@ require (
 	github.com/gorilla/securecookie v1.1.1
 	github.com/libp2p/go-reuseport v0.0.1
 	github.com/mholt/archiver/v3 v3.3.0
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.7.0
