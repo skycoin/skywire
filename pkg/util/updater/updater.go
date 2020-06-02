@@ -217,6 +217,11 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 		downloadedBinaryPath = filepath.Join(downloadedBinariesPath, appsSubfolder, binary)
 	}
 
+	if _, err := os.Stat(downloadedBinaryPath); os.IsNotExist(err) {
+		u.log.Warnf("%v is not found in update, skipping", binary)
+		return nil
+	}
+
 	currentBinaryPath := filepath.Join(basePath, binary)
 	oldBinaryPath := downloadedBinaryPath + oldSuffix
 
