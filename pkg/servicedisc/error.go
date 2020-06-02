@@ -1,4 +1,4 @@
-package proxydisc
+package servicedisc
 
 import (
 	"fmt"
