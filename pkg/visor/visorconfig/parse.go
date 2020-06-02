@@ -34,7 +34,7 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 	switch cc.Version {
 	case V1Name: // Current version.
 		return parseV1(cc, raw)
-	case V0Name, "":
+	case V0Name, V0NameOldFormat, "":
 		return parseV0(cc, raw)
 	default:
 		return nil, ErrUnsupportedConfigVersion
