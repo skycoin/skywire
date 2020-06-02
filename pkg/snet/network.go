@@ -317,14 +317,6 @@ func (n *Network) STcpr() *stcpr.Client { return n.clients.StcprC }
 // STcpH returns the underlying stcph.Client.
 func (n *Network) STcpH() *stcph.Client { return n.clients.StcphC }
 
-//go:generate mockery -name Dialer -case underscore -inpkg
-
-// Dialer is an entity that can be dialed and asked for its type.
-type Dialer interface {
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
-	Type() string
-}
-
 // Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
 	switch network {
