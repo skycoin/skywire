@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -36,7 +34,7 @@ func (w *dmsgClientWrapper) Dial(ctx context.Context, remote cipher.PubKey, port
 }
 
 func (w *dmsgClientWrapper) Type() string {
-	return snet.DmsgType
+	return dmsg.Type
 }
 
 // AddEdgeRules is a wrapper for (*Client).AddEdgeRules.
@@ -49,14 +47,14 @@ func AddEdgeRules(
 ) (bool, error) {
 	client, err := NewClient(ctx, wrapDmsgC(dmsgC), pk)
 	if err != nil {
-		return false, fmt.Errorf("failed to dial remote: %v", err)
+		return false, fmt.Errorf("failed to dial remote: %w", err)
 	}
 
 	defer closeClient(log, client)
 
 	ok, err := client.AddEdgeRules(ctx, rules)
 	if err != nil {
-		return false, fmt.Errorf("failed to add rules: %v", err)
+		return false, fmt.Errorf("failed to add rules: %w", err)
 	}
 
 	return ok, nil
@@ -72,14 +70,14 @@ func AddIntermediaryRules(
 ) (bool, error) {
 	client, err := NewClient(ctx, wrapDmsgC(dmsgC), pk)
 	if err != nil {
-		return false, fmt.Errorf("failed to dial remote: %v", err)
+		return false, fmt.Errorf("failed to dial remote: %w", err)
 	}
 
 	defer closeClient(log, client)
 
 	routeIDs, err := client.AddIntermediaryRules(ctx, rules)
 	if err != nil {
-		return false, fmt.Errorf("failed to add rules: %v", err)
+		return false, fmt.Errorf("failed to add rules: %w", err)
 	}
 
 	return routeIDs, nil
@@ -95,14 +93,14 @@ func ReserveIDs(
 ) ([]routing.RouteID, error) {
 	client, err := NewClient(ctx, wrapDmsgC(dmsgC), pk)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial remote: %v", err)
+		return nil, fmt.Errorf("failed to dial remote: %w", err)
 	}
 
 	defer closeClient(log, client)
 
 	routeIDs, err := client.ReserveIDs(ctx, n)
 	if err != nil {
-		return nil, fmt.Errorf("failed to add rules: %v", err)
+		return nil, fmt.Errorf("failed to add rules: %w", err)
 	}
 
 	return routeIDs, nil

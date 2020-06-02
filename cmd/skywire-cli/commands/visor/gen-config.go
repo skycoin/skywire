@@ -2,21 +2,17 @@ package visor
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	"path"
+	"os"
 	"path/filepath"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
 func init() {
@@ -24,183 +20,86 @@ func init() {
 }
 
 var (
-	sk            cipher.SecKey
-	output        string
-	replace       bool
-	retainKeys    bool
-	configLocType = pathutil.WorkingDirLoc
-	testenv       bool
+	sk      cipher.SecKey
+	output  string
+	replace bool
+	testEnv bool
 )
 
 func init() {
-	genConfigCmd.Flags().VarP(&sk, "secret-key", "s", "if unspecified, a random key pair will be generated.")
-	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "path of output config file. Uses default of 'type' flag if unspecified.")
-	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists.")
-	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
-	genConfigCmd.Flags().VarP(&configLocType, "type", "m", fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes()))
-	genConfigCmd.Flags().BoolVarP(&testenv, "testing-environment", "t", false, "whether to use production or test deployment service.")
+	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.")
+	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
+	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists (this retains the keys).")
+	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
 }
 
 var genConfigCmd = &cobra.Command{
 	Use:   "gen-config",
 	Short: "Generates a config file",
 	PreRun: func(_ *cobra.Command, _ []string) {
-		if output == "" {
-			output = pathutil.VisorDefaults().Get(configLocType)
-			logger.Infof("No 'output' set; using default path: %s", output)
-		}
 		var err error
 		if output, err = filepath.Abs(output); err != nil {
-			logger.WithError(err).Fatalln("invalid output provided")
+			logger.WithError(err).Fatal("Invalid output provided.")
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		var conf *visor.Config
-		switch configLocType {
-		case pathutil.WorkingDirLoc:
-			conf = defaultConfig()
-		case pathutil.HomeLoc:
-			conf = homeConfig()
-		case pathutil.LocalLoc:
-			conf = localConfig()
-		default:
-			logger.Fatalln("invalid config type:", configLocType)
+		mLog := logging.NewMasterLogger()
+		mLog.SetLevel(logrus.InfoLevel)
+
+		// Read in old config (if any) and obtain old secret key.
+		// Otherwise, we generate a new random secret key.
+		var sk cipher.SecKey
+		if oldConf, ok := readOldConfig(mLog, output, replace); !ok {
+			_, sk = cipher.GenerateKeyPair()
+		} else {
+			sk = oldConf.SK
 		}
-		if replace && retainKeys && pathutil.Exists(output) {
-			if err := fillInOldKeys(output, conf); err != nil {
-				logger.WithError(err).Fatalln("Error retaining old keys")
-			}
+
+		// Determine config type to generate.
+		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*visorconfig.V1, error)
+		if testEnv {
+			genConf = visorconfig.MakeTestConfig
+		} else {
+			genConf = visorconfig.MakeDefaultConfig
 		}
-		pathutil.WriteJSONConfig(conf, output, replace)
+
+		// Generate config.
+		conf, err := genConf(mLog, output, &sk)
+		if err != nil {
+			logger.WithError(err).Fatal("Failed to create config.")
+		}
+
+		// Save config to file.
+		if err := conf.Flush(); err != nil {
+			logger.WithError(err).Fatal("Failed to flush config to file.")
+		}
+
+		// Print results.
+		j, err := json.MarshalIndent(conf, "", "\t")
+		if err != nil {
+			logger.WithError(err).Fatal("An unexpected error occurred. Please contact a developer.")
+		}
+		logger.Infof("Updated file '%s' to: %s", output, j)
 	},
 }
 
-func fillInOldKeys(confPath string, conf *visor.Config) error {
-	oldConfBytes, err := ioutil.ReadFile(path.Clean(confPath))
+func readOldConfig(log *logging.MasterLogger, confPath string, replace bool) (*visorconfig.V1, bool) {
+	raw, err := ioutil.ReadFile(confPath) //nolint:gosec
 	if err != nil {
-		return fmt.Errorf("error reading old config file: %w", err)
+		if os.IsNotExist(err) {
+			return nil, false
+		}
+		logger.WithError(err).Fatal("Unexpected error occurred when attempting to read old config.")
 	}
 
-	var oldConf visor.Config
-	if err := json.Unmarshal(oldConfBytes, &oldConf); err != nil {
-		return fmt.Errorf("invalid old configuration file: %w", err)
+	if !replace {
+		logger.Fatal("Config file already exists. Specify the 'replace,r' flag to replace this.")
 	}
 
-	conf.KeyPair = oldConf.KeyPair
-
-	return nil
-}
-
-func homeConfig() *visor.Config {
-	c := defaultConfig()
-	c.AppsPath = filepath.Join(pathutil.HomeDir(), ".skycoin/skywire/apps")
-	c.Transport.LogStore.Location = filepath.Join(pathutil.HomeDir(), ".skycoin/skywire/transport_logs")
-	return c
-}
-
-func localConfig() *visor.Config {
-	c := defaultConfig()
-	c.AppsPath = "/usr/local/skycoin/skywire/apps"
-	c.Transport.LogStore.Location = "/usr/local/skycoin/skywire/transport_logs"
-	return c
-}
-
-func defaultConfig() *visor.Config {
-	conf := &visor.Config{}
-
-	if sk.Null() {
-		conf.KeyPair = visor.NewKeyPair()
-	} else {
-		conf.KeyPair = visor.RestoreKeyPair(sk)
-	}
-
-	stcp, err := visor.DefaultSTCPConfig()
+	conf, err := visorconfig.Parse(log, confPath, raw)
 	if err != nil {
-		logger.Warn(err)
-	} else {
-		conf.STCP = stcp
+		logger.WithError(err).Fatal("Failed to parse old config file.")
 	}
 
-	conf.Dmsg = visor.DefaultDmsgConfig()
-
-	ptyConf := defaultDmsgPtyConfig()
-	conf.DmsgPty = &ptyConf
-
-	// TODO(evanlinjin): We have disabled skysocks passcode by default for now - We should make a cli arg for this.
-	//passcode := base64.StdEncoding.Strict().EncodeToString(cipher.RandByte(8))
-	conf.Apps = []visor.AppConfig{
-		defaultSkychatConfig(),
-		defaultSkysocksConfig(""),
-		defaultSkysocksClientConfig(),
-	}
-
-	conf.TrustedVisors = []cipher.PubKey{}
-
-	conf.Transport = visor.DefaultTransportConfig()
-	conf.Routing = visor.DefaultRoutingConfig()
-
-	if testenv {
-		conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
-		conf.Transport.Discovery = skyenv.TestTpDiscAddr
-		conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-		conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
-	}
-
-	conf.Hypervisors = []visor.HypervisorConfig{}
-
-	conf.UptimeTracker = visor.DefaultUptimeTrackerConfig()
-
-	conf.AppsPath = visor.DefaultAppsPath
-	conf.LocalPath = visor.DefaultLocalPath
-
-	conf.LogLevel = visor.DefaultLogLevel
-	conf.ShutdownTimeout = visor.DefaultTimeout
-
-	conf.Interfaces = &visor.InterfaceConfig{
-		RPCAddress: "localhost:3435",
-	}
-
-	conf.AppServerAddr = appcommon.DefaultServerAddr
-	conf.RestartCheckDelay = restart.DefaultCheckDelay.String()
-
-	return conf
-}
-
-func defaultDmsgPtyConfig() visor.DmsgPtyConfig {
-	return visor.DmsgPtyConfig{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: "./skywire/dmsgpty/whitelist.json",
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
-	}
-}
-
-func defaultSkychatConfig() visor.AppConfig {
-	return visor.AppConfig{
-		App:       skyenv.SkychatName,
-		AutoStart: true,
-		Port:      routing.Port(skyenv.SkychatPort),
-		Args:      []string{"-addr", skyenv.SkychatAddr},
-	}
-}
-
-func defaultSkysocksConfig(passcode string) visor.AppConfig {
-	var args []string
-	if passcode != "" {
-		args = []string{"-passcode", passcode}
-	}
-	return visor.AppConfig{
-		App:       skyenv.SkysocksName,
-		AutoStart: true,
-		Port:      routing.Port(skyenv.SkysocksPort),
-		Args:      args,
-	}
-}
-
-func defaultSkysocksClientConfig() visor.AppConfig {
-	return visor.AppConfig{
-		App:       skyenv.SkysocksClientName,
-		AutoStart: false,
-		Port:      routing.Port(skyenv.SkysocksClientPort),
-	}
+	return conf, true
 }

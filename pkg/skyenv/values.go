@@ -1,24 +1,31 @@
 package skyenv
 
 import (
+	"time"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 // Constants for default services.
 const (
-	DefaultTpDiscAddr        = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr      = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultRouteFinderAddr   = "http://routefinder.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr = "http://uptime-tracker.skywire.skycoin.com"
-	DefaultSetupPK           = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
+	DefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
+	DefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
+	DefaultProxyDiscAddr       = "http://proxy.discovery.skywire.skycoin.com"
+	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
+	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
+	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
 // Constants for testing deployment.
 const (
-	TestTpDiscAddr      = "http://transport.discovery.skywire.cc"
-	TestDmsgDiscAddr    = "http://dmsg.discovery.skywire.cc"
-	TestRouteFinderAddr = "http://routefinder.skywire.cc"
-	TestSetupPK         = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
+	TestTpDiscAddr          = "http://transport.discovery.skywire.cc"
+	TestDmsgDiscAddr        = "http://dmsg.discovery.skywire.cc"
+	TestProxyDiscAddr       = "http://proxy.discovery.skywire.cc"
+	TestRouteFinderAddr     = "http://routefinder.skywire.cc"
+	TestUptimeTrackerAddr   = "http://uptime-tracker.skywire.cc"
+	TestAddressResolverAddr = "http://address-resolver.skywire.cc"
+	TestSetupPK             = "026c5a07de617c5c488195b76e8671bf9e7ee654d0633933e202af9e111ffa358d"
 )
 
 // Dmsg port constants.
@@ -33,8 +40,15 @@ const (
 const (
 	DmsgPtyPort = uint16(22)
 
-	DefaultDmsgPtyCLINet  = "unix"
-	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
+	DefaultDmsgPtyCLINet    = "unix"
+	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
+	DefaultDmsgPtyWhitelist = "./dmsgpty/whitelist.json"
+)
+
+// Default STCP constants.
+const (
+	DefaultSTCPAddr  = ":7777"
+	DefaultSTCPRAddr = ":7778"
 )
 
 // Default skywire app constants.
@@ -49,6 +63,33 @@ const (
 	SkysocksClientName = "skysocks-client"
 	SkysocksClientPort = uint16(13)
 	SkysocksClientAddr = ":1080"
+
+	VPNServerName = "vpn-server"
+	VPNServerPort = uint16(44)
+
+	VPNClientName = "vpn-client"
+	// TODO: this one's not needed for the app to run but lack of it causes errors
+	VPNClientPort = uint16(43)
+)
+
+// RPC constants.
+const (
+	DefaultRPCAddr    = "localhost:3435"
+	DefaultRPCTimeout = 20 * time.Second
+)
+
+// Default skywire app server and discovery constants
+const (
+	DefaultAppSrvAddr     = "localhost:5505"
+	AppDiscUpdateInterval = 30 * time.Second
+	DefaultAppLocalPath   = "./local"
+	DefaultAppBinPath     = "./apps"
+	DefaultLogLevel       = "info"
+)
+
+// Default routing constants
+const (
+	DefaultTpLogStore = "./transport_logs"
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.

@@ -14,6 +14,7 @@ DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/SkycoinProject/skywire-mainnet
+DMSG_BASE := github.com/SkycoinProject/dmsg
 OPTS?=GO111MODULE=on
 MANAGER_UI_DIR = static/skywire-manager-src
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
@@ -33,7 +34,7 @@ endif
 TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
 TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
 
-BUILDINFO_PATH := $(PROJECT_BASE)/pkg/util/buildinfo
+BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
@@ -55,6 +56,18 @@ stop: ## Stop running skywire-visor on host
 
 config: ## Generate skywire.json
 	-./skywire-cli visor gen-config -o  ./skywire.json -r
+
+install-generate: ## Installs required execs for go generate.
+	${OPTS} go install github.com/mjibson/esc
+	${OPTS} go install github.com/vektra/mockery/cmd/mockery
+	# If the following does not work, you may need to run:
+	# 	git config --global url.git@github.com:.insteadOf https://github.com/
+	# Source: https://stackoverflow.com/questions/27500861/whats-the-proper-way-to-go-get-a-private-repository
+	# We are using 'go get' instead of 'go install' here, because we don't have a git tag in which 'readmegen' is already implemented.
+	${OPTS} go get -u github.com/SkycoinPro/skywire-services/cmd/readmegen
+
+generate: ## Generate mocks and config README's
+	go generate ./...
 
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
@@ -101,7 +114,11 @@ install-linters: ## Install linters
 	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
 
-format: ## Formats the code. Must have goimports installed (use make install-linters).
+tidy: ## Tidies and vendors dependencies.
+	${OPTS} go mod tidy -v
+	${OPTS} go mod vendor -v
+
+format: tidy ## Formats the code. Must have goimports installed (use make install-linters).
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
@@ -115,6 +132,8 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 # Bin 
 bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
@@ -132,6 +151,8 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
