@@ -9,18 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 )
 
 func TestRPCClient_Dial(t *testing.T) {
