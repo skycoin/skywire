@@ -1,11 +1,12 @@
 .DEFAULT_GOAL := help
+
 .PHONY : check lint lint-extra install-linters dep test
-.PHONY : build  clean install  format  bin
-.PHONY : host-apps bin 
+.PHONY : build clean install format  bin
+.PHONY : host-apps bin
 .PHONY : run stop config
-.PHONY : docker-image  docker-clean docker-network  
-.PHONY : docker-apps docker-bin docker-volume 
-.PHONY : docker-run docker-stop     
+.PHONY : docker-image docker-clean docker-network
+.PHONY : docker-apps docker-bin docker-volume
+.PHONY : docker-run docker-stop
 
 VERSION := $(shell git describe)
 
@@ -22,7 +23,7 @@ DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 
-TEST_OPTS_BASE:=-cover -timeout=5m
+TEST_OPTS_BASE:=-cover -timeout=5m -mod=vendor
 
 RACE_FLAG:=-race
 GOARCH:=$(shell go env GOARCH)
@@ -116,15 +117,17 @@ install-linters: ## Install linters
 	# However, they suggest `curl ... | bash` which we should not do
 	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
+	${OPTS} go get -u github.com/incu6us/goimports-reviser
 
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
 	${OPTS} go mod vendor -v
 
-format: tidy ## Formats the code. Must have goimports installed (use make install-linters).
+format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
+	find . -type f -name '*.go' -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
 
 dep: ## Sorts dependencies
 	${OPTS} go mod vendor -v
