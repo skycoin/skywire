@@ -1,4 +1,4 @@
-package proxydisc
+package servicedisc
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ func TestProxy_MarshalBinary(t *testing.T) {
 	addr := NewSWAddr(pk, 23)
 	fmt.Println("ADDR:", addr.String())
 
-	ps := Proxy{
+	ps := Service{
 		Addr: addr,
 	}
 
