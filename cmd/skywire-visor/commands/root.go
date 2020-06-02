@@ -8,6 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
+	"strings"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cmdutil"
@@ -148,8 +149,11 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		r = os.Stdin
 	case "":
 		// TODO: More robust solution.
-		if len(args) != 0 {
-			confPath = args[0]
+		for _, arg := range args {
+			if strings.HasSuffix(arg, ".json") {
+				confPath = arg
+				break
+			}
 		}
 
 		if confPath == "" {
