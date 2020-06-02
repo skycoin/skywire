@@ -76,6 +76,21 @@ func (br *BidirectionalRoute) Check() error {
 	return nil
 }
 
+// String implements fmt.Stringer
+func (br *BidirectionalRoute) String() string {
+	m := map[string]interface{}{
+		"descriptor": br.Desc.String(),
+		"keep_alive": br.KeepAlive.String(),
+		"fwd_hops":   br.Forward,
+		"rev_hops":   br.Reverse,
+	}
+	j, err := json.MarshalIndent(m, "", "\t")
+	if err != nil {
+		panic(err) // should never happen
+	}
+	return string(j)
+}
+
 // EdgeRules represents edge forward and reverse rules. Edge rules are forward and consume rules.
 type EdgeRules struct {
 	Desc    RouteDescriptor
