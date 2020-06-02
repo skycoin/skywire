@@ -4,10 +4,10 @@ import (
 	"context"
 	"net"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
 
 // WrapDmsgClient wraps a dmsg client to implement snet.Dialer
