@@ -1,12 +1,15 @@
 package setup
 
 import (
+	"context"
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -18,10 +21,8 @@ import (
 )
 
 // creates a mock dialer
-func newMockDialer(t *testing.T, gateways map[cipher.PubKey]*mockGatewayForDialer) snet.Dialer {
-	dialer := new(snet.MockDialer)
-
-	handlePK := func(pk, gw interface{}) {
+func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) snet.Dialer {
+	newRPCConn := func(gw interface{}) net.Conn {
 		connC, connS := net.Pipe()
 		t.Cleanup(func() {
 			assert.NoError(t, connC.Close())
@@ -32,21 +33,40 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]*mockGatewayForDiale
 		require.NoError(t, rpcS.RegisterName(routerclient.RPCName, gw))
 		go rpcS.ServeConn(connS)
 
-		dialer.On("Dial", mock.Anything, pk, mock.Anything).Return(connC, nil)
+		return connC
 	}
 
 	if gateways == nil {
-		handlePK(mock.Anything, new(mockGatewayForDialer))
-	} else {
-		for pk, gw := range gateways {
-			handlePK(pk, gw)
-		}
+		conn := newRPCConn(new(mockGatewayForDialer))
+		dialer := new(snet.MockDialer)
+		dialer.On("Dial", mock.Anything, mock.Anything, mock.Anything).Return(conn, nil)
+		return dialer
+	}
+
+	dialer := make(mockDialer, len(gateways))
+	for pk, gw := range gateways {
+		dialer[pk] = newRPCConn(gw)
 	}
 	return dialer
 }
 
+type mockDialer map[cipher.PubKey]net.Conn
+
+func (d mockDialer) Type() string { return dmsg.Type }
+
+func (d mockDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (net.Conn, error) {
+	conn, ok := d[remote]
+	if !ok {
+		return nil, fmt.Errorf("cannot dial to given pk %s", remote)
+	}
+	return conn, nil
+}
+
+// mockGatewayForDialer is the default mock router.RPCGateway for newMockDialer.
+// It reserves route IDs sequentially for each .ReserveIDs call.
+// If hangDuration is > 0, calling .ReserveIDS would hang for the given duration before returning.
 type mockGatewayForDialer struct {
-	hangDuration time.Duration // if set, calling .ReserveIDs should hang for given duration before returning
+	hangDuration time.Duration
 	nextID       uint32
 }
 
@@ -64,7 +84,7 @@ func (gw *mockGatewayForDialer) ReserveIDs(n uint8, routeIDs *[]routing.RouteID)
 }
 
 // create a mock id reserver
-func newMockReserver(t *testing.T, gateways map[cipher.PubKey]*mockGatewayForReserver) IDReserver {
+func newMockReserver(t *testing.T, gateways map[cipher.PubKey]interface{}) IDReserver {
 	rtIDR := new(MockIDReserver)
 
 	handlePK := func(pk, gw interface{}) {
@@ -95,8 +115,11 @@ func newMockReserver(t *testing.T, gateways map[cipher.PubKey]*mockGatewayForRes
 	return rtIDR
 }
 
+// mockGatewayForReserver is the default mock router.RPCGateway for newMockReserver.
+// It pretends to successfully trigger .AddIntermediaryRules.
+// If handDuration is set, calling .ReserveIDs should hang for given duration before returning
 type mockGatewayForReserver struct {
-	hangDuration time.Duration // if set, calling .ReserveIDs should hang for given duration before returning
+	hangDuration time.Duration
 }
 
 func (gw *mockGatewayForReserver) AddIntermediaryRules(_ []routing.Rule, ok *bool) error {

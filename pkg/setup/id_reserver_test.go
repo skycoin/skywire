@@ -80,10 +80,10 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 	timeout := time.Second
 
 	type testCase struct {
-		testName string                                  // test name
-		routers  map[cipher.PubKey]*mockGatewayForDialer // arrange: map of mock router gateways
-		paths    [][]routing.Hop                         // arrange: idReserver input
-		expErr   error                                   // assert: expected error
+		testName string                        // test name
+		routers  map[cipher.PubKey]interface{} // arrange: map of mock router gateways
+		paths    [][]routing.Hop               // arrange: idReserver input
+		expErr   error                         // assert: expected error
 	}
 
 	makeRun := func(tc testCase) func(t *testing.T) {
@@ -116,29 +116,29 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 		testCases := []testCase{
 			{
 				testName: "fwd1_rev1",
-				routers: map[cipher.PubKey]*mockGatewayForDialer{
-					pkA: {},
-					pkC: {},
+				routers: map[cipher.PubKey]interface{}{
+					pkA: &mockGatewayForDialer{},
+					pkC: &mockGatewayForDialer{},
 				},
 				paths:  [][]routing.Hop{makeHops(pkA, pkC), makeHops(pkC, pkA)},
 				expErr: nil,
 			},
 			{
 				testName: "fwd2_rev2",
-				routers: map[cipher.PubKey]*mockGatewayForDialer{
-					pkA: {},
-					pkB: {},
-					pkC: {},
+				routers: map[cipher.PubKey]interface{}{
+					pkA: &mockGatewayForDialer{},
+					pkB: &mockGatewayForDialer{},
+					pkC: &mockGatewayForDialer{},
 				},
 				paths:  [][]routing.Hop{makeHops(pkA, pkB, pkC), makeHops(pkC, pkB, pkA)},
 				expErr: nil,
 			},
 			{
 				testName: "fwd1_rev2",
-				routers: map[cipher.PubKey]*mockGatewayForDialer{
-					pkA: {},
-					pkB: {},
-					pkC: {},
+				routers: map[cipher.PubKey]interface{}{
+					pkA: &mockGatewayForDialer{},
+					pkB: &mockGatewayForDialer{},
+					pkC: &mockGatewayForDialer{},
 				},
 				paths:  [][]routing.Hop{makeHops(pkA, pkC), makeHops(pkC, pkB, pkA)},
 				expErr: nil,
@@ -158,39 +158,39 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 		testCases := []testCase{
 			{
 				testName: "all_routers_hang",
-				routers: map[cipher.PubKey]*mockGatewayForDialer{
-					pkA: {hangDuration: time.Second * 5},
-					pkC: {hangDuration: time.Second * 5},
+				routers: map[cipher.PubKey]interface{}{
+					pkA: &mockGatewayForDialer{hangDuration: time.Second * 5},
+					pkC: &mockGatewayForDialer{hangDuration: time.Second * 5},
 				},
 				paths:  [][]routing.Hop{makeHops(pkA, pkC), makeHops(pkC, pkA)},
 				expErr: context.DeadlineExceeded,
 			},
 			{
 				testName: "intermediary_router_hangs",
-				routers: map[cipher.PubKey]*mockGatewayForDialer{
-					pkA: {},
-					pkB: {hangDuration: time.Second * 5},
-					pkC: {},
+				routers: map[cipher.PubKey]interface{}{
+					pkA: &mockGatewayForDialer{},
+					pkB: &mockGatewayForDialer{hangDuration: time.Second * 5},
+					pkC: &mockGatewayForDialer{},
 				},
 				paths:  [][]routing.Hop{makeHops(pkA, pkB, pkC), makeHops(pkC, pkB, pkA)},
 				expErr: context.DeadlineExceeded,
 			},
 			{
 				testName: "initiating_router_hangs",
-				routers: map[cipher.PubKey]*mockGatewayForDialer{
-					pkA: {hangDuration: time.Second * 5},
-					pkB: {},
-					pkC: {},
+				routers: map[cipher.PubKey]interface{}{
+					pkA: &mockGatewayForDialer{hangDuration: time.Second * 5},
+					pkB: &mockGatewayForDialer{},
+					pkC: &mockGatewayForDialer{},
 				},
 				paths:  [][]routing.Hop{makeHops(pkA, pkC), makeHops(pkC, pkB, pkA)},
 				expErr: context.DeadlineExceeded,
 			},
 			{
 				testName: "responding_router_hangs",
-				routers: map[cipher.PubKey]*mockGatewayForDialer{
-					pkA: {},
-					pkB: {},
-					pkC: {hangDuration: time.Second * 5},
+				routers: map[cipher.PubKey]interface{}{
+					pkA: &mockGatewayForDialer{},
+					pkB: &mockGatewayForDialer{},
+					pkC: &mockGatewayForDialer{hangDuration: time.Second * 5},
 				},
 				paths:  [][]routing.Hop{makeHops(pkA, pkB, pkC), makeHops(pkC, pkB, pkA)},
 				expErr: context.DeadlineExceeded,
