@@ -6,13 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
-
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/spf13/cobra"
 )
 
 func init() {
