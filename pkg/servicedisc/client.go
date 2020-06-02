@@ -1,4 +1,4 @@
-package proxydisc
+package servicedisc
 
 import (
 	"bytes"
@@ -16,17 +16,18 @@ import (
 
 // Config configures the HTTPClient.
 type Config struct {
+	Type     string
 	PK       cipher.PubKey
 	SK       cipher.SecKey
 	Port     uint16
 	DiscAddr string
 }
 
-// HTTPClient is responsible for interacting with the proxy-discovery
+// HTTPClient is responsible for interacting with the service-discovery
 type HTTPClient struct {
 	log     logrus.FieldLogger
 	conf    Config
-	entry   Proxy
+	entry   Service
 	entryMx sync.Mutex // only used if UpdateLoop && UpdateStats functions are used.
 	auth    *httpauth.Client
 	client  http.Client
@@ -37,16 +38,23 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		conf: conf,
-		entry: Proxy{
+		entry: Service{
 			Addr:  NewSWAddr(conf.PK, conf.Port),
 			Stats: &Stats{ConnectedClients: 0},
+			Type:  conf.Type,
 		},
 		client: http.Client{},
 	}
 }
 
-func (c *HTTPClient) addr(path string) string {
-	return c.conf.DiscAddr + path
+func (c *HTTPClient) addr(path string, sType string) string {
+	addr := c.conf.DiscAddr + path
+
+	if sType != "" {
+		addr += "?type=" + sType
+	}
+
+	return addr
 }
 
 // Auth returns the internal httpauth.Client
@@ -62,9 +70,9 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 	return auth, nil
 }
 
-// Proxies calls 'GET /api/proxies'.
-func (c *HTTPClient) Proxies(ctx context.Context) (out []Proxy, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr("/api/proxies"), nil)
+// Services calls 'GET /api/services'.
+func (c *HTTPClient) Services(ctx context.Context) (out []Service, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr("/api/services", c.entry.Type), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +100,8 @@ func (c *HTTPClient) Proxies(ctx context.Context) (out []Proxy, err error) {
 	return
 }
 
-// UpdateEntry calls 'POST /api/proxies'.
-func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Proxy, error) {
+// UpdateEntry calls 'POST /api/services'.
+func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return nil, err
@@ -105,7 +113,7 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/proxies"), bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/services", ""), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
@@ -134,14 +142,14 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Proxy, error) {
 	return &c.entry, err
 }
 
-// DeleteEntry calls 'DELETE /api/proxies/{entry_addr}'.
+// DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
 func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/proxies/"+c.entry.Addr.String()), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type), nil)
 	if err != nil {
 		return err
 	}
@@ -168,7 +176,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 	return nil
 }
 
-// UpdateLoop repetitively calls 'POST /api/proxies' to update entry.
+// UpdateLoop repetitively calls 'POST /api/services' to update entry.
 func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duration) {
 	defer func() { _ = c.DeleteEntry(context.Background()) }() //nolint:errcheck
 
@@ -179,7 +187,7 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 			c.entryMx.Unlock()
 
 			if err != nil {
-				c.log.WithError(err).Warn("Failed to update proxy entry in discovery. Retrying...")
+				c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
 				time.Sleep(time.Second * 10) // TODO(evanlinjin): Exponential backoff.
 				continue
 			}
@@ -212,7 +220,7 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 	}
 }
 
-// UpdateStats updates the stats field of the internal proxy entry state.
+// UpdateStats updates the stats field of the internal service entry state.
 func (c *HTTPClient) UpdateStats(stats Stats) {
 	c.entryMx.Lock()
 	c.entry.Stats = &stats
