@@ -64,7 +64,6 @@ func TestCreateRouteGroup(t *testing.T) {
 			routerPKs := append(tc.fwdPKs, tc.revPKs...)
 			routerCount := countUniquePKs(append(tc.fwdPKs, tc.revPKs...))
 			initPK := routerPKs[0]
-			// respPK := routerPKs[routerCount-1]
 
 			// arrange: routers
 			routers := make(map[cipher.PubKey]interface{}, routerCount)
@@ -77,7 +76,6 @@ func TestCreateRouteGroup(t *testing.T) {
 
 			// arrange: bidirectional route input
 			biRt := biRouteFromKeys(tc.fwdPKs, tc.revPKs, tc.SrcPort, tc.DstPort)
-			// fmt.Println(biRt.String())
 
 			// act
 			resp, err := CreateRouteGroup(context.TODO(), dialer, biRt)
