@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/proxydisc"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/servicedisc"
 )
 
 // Updater updates the associated app discovery
@@ -31,7 +31,7 @@ func (emptyUpdater) ChangeValue(name string, v []byte) error { return nil }
 
 // proxyUpdater updates proxy-discovery entry of locally running skysocks App.
 type proxyUpdater struct {
-	client   *proxydisc.HTTPClient
+	client   *servicedisc.HTTPClient
 	interval time.Duration
 
 	cancel context.CancelFunc
@@ -77,7 +77,7 @@ func (u *proxyUpdater) ChangeValue(name string, v []byte) error {
 		if err != nil {
 			return err
 		}
-		go u.client.UpdateStats(proxydisc.Stats{ConnectedClients: n})
+		go u.client.UpdateStats(servicedisc.Stats{ConnectedClients: n})
 	}
 	return nil
 }

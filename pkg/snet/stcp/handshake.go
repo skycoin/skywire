@@ -9,11 +9,10 @@ import (
 	"net"
 	"time"
 
-	cipher2 "github.com/SkycoinProject/skycoin/src/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	cipher2 "github.com/SkycoinProject/skycoin/src/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
 var log = logging.MustGetLogger("stcp")
