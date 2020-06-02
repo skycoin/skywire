@@ -32,6 +32,7 @@ var (
 	pprofMode  string
 	pprofAddr  string
 	confPath   string
+	delay      string
 )
 
 func init() {
@@ -40,6 +41,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "skywire-config.json", "config file location. If the value is 'STDIN', config file will be read from stdin.")
+	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated, not used)") // deprecated, not used
 }
 
 var rootCmd = &cobra.Command{
