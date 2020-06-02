@@ -6,14 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
 
 func baseConfig(t *testing.T) *visorconfig.V1 {

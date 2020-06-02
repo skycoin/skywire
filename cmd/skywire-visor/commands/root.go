@@ -6,7 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	_ "net/http/pprof" //nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
+	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
