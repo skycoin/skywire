@@ -9,16 +9,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
-
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
 var log = logging.MustGetLogger("snet")
