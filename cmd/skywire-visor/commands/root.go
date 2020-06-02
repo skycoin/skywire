@@ -17,14 +17,16 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
 
 var restartCtx = restart.CaptureContext()
 
-const configEnv = "SW_VISOR_CONFIG"
+const (
+	configEnv         = "SW_VISOR_CONFIG"
+	defaultConfigName = "skywire-config.json"
+)
 
 var (
 	tag        string
@@ -40,7 +42,7 @@ func init() {
 	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "skywire-config.json", "config file location. If the value is 'STDIN', config file will be read from stdin.")
+	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated, not used)") // deprecated, not used
 }
 
@@ -48,7 +50,6 @@ var rootCmd = &cobra.Command{
 	Use:   "skywire-visor",
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
-
 		log := initLogger(tag, syslogAddr)
 
 		if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
@@ -146,7 +147,15 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		log.Info("Reading config from STDIN.")
 		r = os.Stdin
 	case "":
-		confPath = pathutil.FindConfigPath(args, -1, configEnv, pathutil.VisorDefaults())
+		// TODO: More robust solution.
+		if len(args) != 0 {
+			confPath = args[0]
+		}
+
+		if confPath == "" {
+			confPath = defaultConfigName
+		}
+
 		fallthrough
 	default:
 		log.WithField("filepath", confPath).Info("Reading config from file.")
