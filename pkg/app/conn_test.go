@@ -45,7 +45,7 @@ func TestConn_Read(t *testing.T) {
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			rpc := &MockRPCClient{}
+			rpc := &appserver.MockRPCIngressClient{}
 			rpc.On("Read", connID, tc.readBuff).Return(tc.readN, tc.readErr)
 
 			conn := &Conn{
@@ -84,7 +84,7 @@ func TestConn_Write(t *testing.T) {
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			rpc := &MockRPCClient{}
+			rpc := &appserver.MockRPCIngressClient{}
 			rpc.On("Write", connID, tc.writeBuff).Return(tc.writeN, tc.writeErr)
 
 			conn := &Conn{
@@ -105,7 +105,7 @@ func TestConn_Close(t *testing.T) {
 	var noErr error
 
 	t.Run("ok", func(t *testing.T) {
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("CloseConn", connID).Return(noErr)
 
 		conn := &Conn{
@@ -121,7 +121,7 @@ func TestConn_Close(t *testing.T) {
 	t.Run("close error", func(t *testing.T) {
 		closeErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("CloseConn", connID).Return(closeErr)
 
 		conn := &Conn{
@@ -135,7 +135,7 @@ func TestConn_Close(t *testing.T) {
 	})
 
 	t.Run("already closed", func(t *testing.T) {
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("CloseConn", connID).Return(noErr)
 
 		conn := &Conn{
@@ -252,9 +252,9 @@ func TestConn_TestConn(t *testing.T) {
 			conf: appcommon.ProcConfig{
 				VisorPK: keys[0].PK,
 			},
-			rpc: NewRPCClient(rpcCl1, procKey1),
-			lm:  idmanager.New(),
-			cm:  idmanager.New(),
+			rpcC: appserver.NewRPCIngressClient(rpcCl1, procKey1),
+			lm:   idmanager.New(),
+			cm:   idmanager.New(),
 		}
 
 		rpcCl2, err := rpc.Dial(rpcL.Addr().Network(), rpcL.Addr().String())
@@ -267,9 +267,9 @@ func TestConn_TestConn(t *testing.T) {
 			conf: appcommon.ProcConfig{
 				VisorPK: keys[1].PK,
 			},
-			rpc: NewRPCClient(rpcCl2, procKey2),
-			lm:  idmanager.New(),
-			cm:  idmanager.New(),
+			rpcC: appserver.NewRPCIngressClient(rpcCl2, procKey2),
+			lm:   idmanager.New(),
+			cm:   idmanager.New(),
 		}
 
 		c1, err := cl1.Dial(a2)

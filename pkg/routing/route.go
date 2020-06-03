@@ -59,6 +59,14 @@ type EdgeRules struct {
 	Reverse Rule
 }
 
+func (er *EdgeRules) String() string {
+	if er == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("desc: %v, fwd: %v, rvs: %v", er.Desc, er.Forward, er.Reverse)
+}
+
 // Hop defines a route hop between 2 nodes.
 type Hop struct {
 	TpID uuid.UUID

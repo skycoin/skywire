@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/google/uuid"
+
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/google/uuid"
 )
 
 // ManagerConfig configures a Manager.
@@ -47,13 +47,16 @@ type Manager struct {
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(n *snet.Network, config *ManagerConfig) (*Manager, error) {
+func NewManager(log *logging.Logger, n *snet.Network, config *ManagerConfig) (*Manager, error) {
+	if log == nil {
+		log = logging.MustGetLogger("tp_manager")
+	}
 	nets := make(map[string]struct{})
 	for _, netType := range n.TransportNetworks() {
 		nets[netType] = struct{}{}
 	}
 	tm := &Manager{
-		Logger: logging.MustGetLogger("tp_manager"),
+		Logger: log,
 		Conf:   config,
 		nets:   nets,
 		tps:    make(map[uuid.UUID]*ManagedTransport),
@@ -106,7 +109,7 @@ func (tm *Manager) serve(ctx context.Context) {
 					return
 				default:
 					if err := tm.acceptTransport(ctx, lis); err != nil {
-						tm.Logger.Warnf("Failed to accept connection: %s", err)
+						tm.Logger.Warnf("Failed to accept connection: %v", err)
 						if strings.Contains(err.Error(), "closed") {
 							return
 						}
@@ -213,45 +216,48 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 		return nil, io.ErrClosedPipe
 	}
 
-	const tries = 2
-
-	var err error
-	for i := 0; i < tries; i++ {
+	for {
 		mTp, err := tm.saveTransport(remote, tpType)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("save transport: %w", err)
 		}
 
+		tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.netName)
+
 		if err = mTp.Dial(ctx); err != nil {
-			// TODO(nkryuchkov): Check for an error that underlying connection is not established
-			// and try again in this case. Otherwise, return the error.
-			pkTableErr := fmt.Sprintf("pk table: entry of %s does not exist", remote.String())
-
-			if err.Error() == pkTableErr {
-				mTp.wg.Wait()
-				delete(tm.tps, mTp.Entry.ID)
-
-				return nil, err
-			}
-
+			tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.netName, err)
+			// This occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
+			// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
 			if err == ErrNotServing {
-				mTp.wg.Wait()
+				if closeErr := mTp.Close(); closeErr != nil {
+					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
+				}
 				delete(tm.tps, mTp.Entry.ID)
 				continue
 			}
 
-			tm.Logger.
-				WithError(err).
-				Warn("Underlying connection is not yet established. Will retry later.")
+			// This occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in
+			// the STCP table. There is no point in retrying as a connection would be impossible, so we just return an
+			// error.
+			if isSTCPTableError(remote, err) {
+				if closeErr := mTp.Close(); closeErr != nil {
+					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
+				}
+				delete(tm.tps, mTp.Entry.ID)
+				return nil, err
+			}
+
+			tm.Logger.WithError(err).Warn("Underlying transport connection is not established, will retry later.")
 		}
+
 		return mTp, nil
 	}
+}
 
-	tm.Logger.
-		WithError(err).
-		WithField("tries", tries).
-		Error("Failed to serve managed transport. This is unexpected.")
-	return nil, err
+// isSTCPPKError returns true if the error is a STCP table error.
+// This occurs the requested remote public key does not exist in the STCP table.
+func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
+	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
@@ -260,13 +266,12 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 
 	tpID := tm.tpIDFromPK(remote, netName)
-
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
-	tp, ok := tm.tps[tpID]
+	oldMTp, ok := tm.tps[tpID]
 	if ok {
-		tm.Logger.Debugln("Got TP from map")
-		return tp, nil
+		tm.Logger.Debug("Found an old mTp from internal map.")
+		return oldMTp, nil
 	}
 
 	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
@@ -407,7 +412,7 @@ func CreateTransportPair(
 	// Prepare tp manager 0.
 	pk0, sk0 := keys[0].PK, keys[0].SK
 	ls0 := InMemoryTransportLogStore()
-	m0, err = NewManager(nEnv.Nets[0], &ManagerConfig{
+	m0, err = NewManager(nil, nEnv.Nets[0], &ManagerConfig{
 		PubKey:          pk0,
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
@@ -422,7 +427,7 @@ func CreateTransportPair(
 	// Prepare tp manager 1.
 	pk1, sk1 := keys[1].PK, keys[1].SK
 	ls1 := InMemoryTransportLogStore()
-	m1, err = NewManager(nEnv.Nets[1], &ManagerConfig{
+	m1, err = NewManager(nil, nEnv.Nets[1], &ManagerConfig{
 		PubKey:          pk1,
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,

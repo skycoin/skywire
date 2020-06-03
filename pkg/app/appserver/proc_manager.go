@@ -14,6 +14,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 )
 
 //go:generate mockery -name ProcManager -case underscore -inpkg
@@ -45,7 +46,8 @@ type ProcManager interface {
 
 // procManager manages skywire applications. It implements `ProcManager`.
 type procManager struct {
-	log *logging.Logger
+	mLog *logging.MasterLogger
+	log  *logging.Logger
 
 	lis     net.Listener
 	conns   map[string]net.Conn
@@ -55,17 +57,23 @@ type procManager struct {
 	procs      map[string]*Proc
 	procsByKey map[appcommon.ProcKey]*Proc
 
+	// event broadcaster: broadcasts events to apps
+	eb *appevent.Broadcaster
+
 	mx   sync.RWMutex
 	done chan struct{}
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(log *logging.Logger, discF *appdisc.Factory, addr string) (ProcManager, error) {
-	if log == nil {
-		log = logging.MustGetLogger("proc_manager")
+func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr string) (ProcManager, error) {
+	if mLog == nil {
+		mLog = logging.NewMasterLogger()
 	}
 	if discF == nil {
 		discF = new(appdisc.Factory)
+	}
+	if eb == nil {
+		eb = appevent.NewBroadcaster(mLog.PackageLogger("event_broadcaster"), time.Second)
 	}
 
 	lis, err := net.Listen("tcp", addr)
@@ -74,12 +82,14 @@ func NewProcManager(log *logging.Logger, discF *appdisc.Factory, addr string) (P
 	}
 
 	procM := &procManager{
-		log:        log,
+		mLog:       mLog,
+		log:        mLog.PackageLogger("proc_manager"),
 		lis:        lis,
 		conns:      make(map[string]net.Conn),
 		discF:      discF,
 		procs:      make(map[string]*Proc),
 		procsByKey: make(map[appcommon.ProcKey]*Proc),
+		eb:         eb,
 		done:       make(chan struct{}),
 	}
 
@@ -128,21 +138,18 @@ func (m *procManager) handleConn(conn net.Conn) bool {
 	log := m.log.WithField("remote", conn.RemoteAddr())
 	log.Debug("Accepting proc conn...")
 
-	// Read in and check key.
-	var key appcommon.ProcKey
-	if n, err := io.ReadFull(conn, key[:]); err != nil {
-		log.WithError(err).
-			WithField("n", n).
-			Warn("Failed to read proc key.")
+	hello, err := appevent.DoRespHandshake(m.eb, conn)
+	if err != nil {
+		log.WithError(err).Error("Failed to do handshake with proc.")
 		return false
 	}
 
-	log = log.WithField("proc_key", key.String())
-	log.Debug("Read proc key.")
+	log = log.WithField("hello", hello.String())
+	log.Debug("Read hello from proc.")
 
 	// Push conn to Proc.
 	m.mx.RLock()
-	proc, ok := m.procsByKey[key]
+	proc, ok := m.procsByKey[hello.ProcKey]
 	m.mx.RUnlock()
 	if !ok {
 		log.Error("Failed to find proc of given key.")
@@ -161,7 +168,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
-	log := logging.MustGetLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
+	log := m.mLog.PackageLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
 
 	// isDone should be called within the protection of a mutex.
 	// Otherwise we may be able to start an app after calling Close.
@@ -188,11 +195,14 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(conf, disc)
+	proc := NewProc(m.mLog, conf, disc)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
 	if err := proc.Start(); err != nil {
+		delete(m.procs, conf.AppName)
+		delete(m.procsByKey, conf.ProcKey)
+
 		return 0, err
 	}
 
@@ -228,7 +238,7 @@ func (m *procManager) Wait(name string) error {
 	// so we cannot pop it before p.Wait().
 	if err := p.Wait(); err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
-			err = fmt.Errorf("failed to run app executable %s: %v", name, err)
+			err = fmt.Errorf("failed to run app executable %s: %w", name, err)
 		}
 
 		if _, err := m.pop(name); err != nil {
