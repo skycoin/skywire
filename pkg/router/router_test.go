@@ -10,12 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -695,7 +694,7 @@ func NewTestEnv(t *testing.T, nets []*snet.Network) *TestEnv {
 			LogStore:        transport.InMemoryTransportLogStore(),
 		}
 
-		ms[i], err = transport.NewManager(n, mConfs[i])
+		ms[i], err = transport.NewManager(nil, n, mConfs[i])
 		require.NoError(t, err)
 
 		go ms[i].Serve(context.TODO())

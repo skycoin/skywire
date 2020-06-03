@@ -8,14 +8,15 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
@@ -26,7 +27,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -48,7 +48,7 @@ var (
 type VisorConn struct {
 	Addr  dmsg.Addr
 	RPC   visor.RPCClient
-	PtyUI *dmsgpty.UI
+	PtyUI *dmsgPtyUI
 }
 
 // Hypervisor manages visors.
@@ -88,16 +88,15 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 			return err
 		}
 		addr := conn.RawRemoteAddr()
-		ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: addr.PK, Port: skyenv.DmsgPtyPort})
 		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
-		visorConn := VisorConn{
+		visorConn := &VisorConn{
 			Addr:  addr,
 			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
-			PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+			PtyUI: setupDmsgPtyUI(dmsgC, addr.PK),
 		}
 		log.WithField("remote_addr", addr).Info("Accepted.")
 		hv.mu.Lock()
-		hv.visors[addr.PK] = visorConn
+		hv.visors[addr.PK] = *visorConn
 		hv.mu.Unlock()
 	}
 }
@@ -188,12 +187,15 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			})
 		})
 
-		r.Route("/pty", func(r chi.Router) {
-			if hv.c.EnableAuth {
-				r.Use(hv.users.Authorize)
-			}
-			r.Get("/{pk}", hv.getPty())
-		})
+		// we don't enable `dmsgpty` endpoints for Windows
+		if runtime.GOOS != "windows" {
+			r.Route("/pty", func(r chi.Router) {
+				if hv.c.EnableAuth {
+					r.Use(hv.users.Authorize)
+				}
+				r.Get("/{pk}", hv.getPty())
+			})
+		}
 
 		r.Handle("/*", http.FileServer(hv.assets))
 	})
@@ -340,12 +342,6 @@ func (hv *Hypervisor) getVisor() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) getPty() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ctx.PtyUI.Handler()(w, r)
-	})
-}
-
 // returns app summaries of a given node of pk
 func (hv *Hypervisor) getApps() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
@@ -396,22 +392,15 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		const (
-			skysocksName       = "skysocks"
-			skysocksClientName = "skysocks-client"
-		)
-
-		if reqBody.Passcode != nil && ctx.App.Name == skysocksName {
-			if err := ctx.RPC.SetSocksPassword(*reqBody.Passcode); err != nil {
+		if reqBody.Passcode != nil {
+			if err := ctx.RPC.SetAppPassword(ctx.App.Name, *reqBody.Passcode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
 
-		if reqBody.PK != nil && ctx.App.Name == skysocksClientName {
-			log.Errorf("SETTING PK: %s", *reqBody.PK)
-			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
-				log.Errorf("ERROR SETTING PK")
+		if reqBody.PK != nil {
+			if err := ctx.RPC.SetAppPK(ctx.App.Name, *reqBody.PK); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -426,7 +415,6 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 				}
 			case statusStart:
 				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
-					log.Errorf("ERROR STARTING APP")
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}

@@ -35,7 +35,7 @@ func NewClient(conn net.Conn) (*Client, error) {
 	sessionCfg.EnableKeepAlive = false
 	session, err := yamux.Client(conn, sessionCfg)
 	if err != nil {
-		return nil, fmt.Errorf("error creating client: yamux: %s", err)
+		return nil, fmt.Errorf("error creating client: yamux: %w", err)
 	}
 
 	c.session = session
@@ -50,7 +50,7 @@ func NewClient(conn net.Conn) (*Client, error) {
 func (c *Client) ListenAndServe(addr string) error {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("listen: %s", err)
+		return fmt.Errorf("listen: %w", err)
 	}
 
 	Log.Printf("Listening skysocks client on %s", addr)
@@ -67,7 +67,7 @@ func (c *Client) ListenAndServe(addr string) error {
 		conn, err := l.Accept()
 		if err != nil {
 			Log.Printf("Error accepting: %v\n", err)
-			return fmt.Errorf("accept: %s", err)
+			return fmt.Errorf("accept: %w", err)
 		}
 
 		Log.Println("Accepted skysocks client")

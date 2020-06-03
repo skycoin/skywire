@@ -72,7 +72,7 @@ func (idr *idReservoir) ReserveIDs(
 		go func(pk cipher.PubKey, n uint8) {
 			ids, err := reserve(ctx, log, dmsgC, pk, n)
 			if err != nil {
-				errCh <- fmt.Errorf("reserve routeID from %s failed: %v", pk, err)
+				errCh <- fmt.Errorf("reserve routeID from %s failed: %w", pk, err)
 				return
 			}
 			idr.mx.Lock()
