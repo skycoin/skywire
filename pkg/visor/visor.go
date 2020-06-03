@@ -13,17 +13,19 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
 
 var (
@@ -49,15 +51,16 @@ type Visor struct {
 	reportCh   chan vReport
 	closeStack []closeElem
 
-	conf *Config
+	conf *visorconfig.V1
 	log  *logging.Logger
 
 	startedAt  time.Time
 	restartCtx *restart.Context
 	updater    *updater.Updater
 
+	ebc *appevent.Broadcaster // event broadcaster
+
 	net    *snet.Network
-	pty    *dmsgpty.Host
 	tpM    *transport.Manager
 	router router.Router
 
@@ -110,26 +113,30 @@ func (v *Visor) pushCloseStack(src string, fn func() bool) {
 
 // MasterLogger returns the underlying master logger (currently contained in visor config).
 func (v *Visor) MasterLogger() *logging.MasterLogger {
-	return v.conf.log
+	return v.conf.MasterLogger()
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(conf *Config, restartCtx *restart.Context) (v *Visor, ok bool) {
+func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok bool) {
 	ok = true
 
 	v = &Visor{
 		reportCh:   make(chan vReport, 100),
-		log:        conf.log.PackageLogger("visor"),
+		log:        conf.MasterLogger().PackageLogger("visor"),
 		conf:       conf,
 		restartCtx: restartCtx,
 	}
 
-	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
-		v.conf.log.SetLevel(lvl)
+	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
+		v.log.WithError(err).Warn("Failed to read log level from config.")
+	} else {
+		v.conf.MasterLogger().SetLevel(logLvl)
+		logging.SetLevel(logLvl)
 	}
 
 	log := v.MasterLogger().PackageLogger("visor:startup")
-	log.WithField("public_key", conf.KeyPair.PubKey).Info("Begin startup.")
+	log.WithField("public_key", conf.PK).
+		Info("Begin startup.")
 	v.startedAt = time.Now()
 
 	for i, startFn := range initStack() {
@@ -167,7 +174,8 @@ func (v *Visor) Close() error {
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
 
-	for i, ce := range v.closeStack {
+	for i := len(v.closeStack) - 1; i >= 0; i-- {
+		ce := v.closeStack[i]
 
 		start := time.Now()
 		done := make(chan bool, 1)
@@ -248,46 +256,73 @@ func (v *Visor) setAutoStart(appName string, autoStart bool) error {
 	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
 }
 
-func (v *Visor) setSocksPassword(password string) error {
-	v.log.Infof("Changing skysocks password to %q", password)
+func (v *Visor) setAppPassword(appName, password string) error {
+	allowedToChangePassword := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.SkysocksName:  {},
+			skyenv.VPNClientName: {},
+			skyenv.VPNServerName: {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePassword(appName) {
+		return fmt.Errorf("app %s is not allowed to change password", appName)
+	}
+
+	v.log.Infof("Changing %s password to %q", appName, password)
 
 	const (
-		socksName       = "skysocks"
 		passcodeArgName = "-passcode"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, socksName, passcodeArgName, password); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(socksName); ok {
-		v.log.Infof("Updated %v password, restarting it", socksName)
-		return v.appL.RestartApp(socksName)
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v password, restarting it", appName)
+		return v.appL.RestartApp(appName)
 	}
 
-	v.log.Infof("Updated %v password", socksName)
+	v.log.Infof("Updated %v password", appName)
 
 	return nil
 }
 
-func (v *Visor) setSocksClientPK(pk cipher.PubKey) error {
-	v.log.Infof("Changing skysocks-client PK to %q", pk)
+func (v *Visor) setAppPK(appName string, pk cipher.PubKey) error {
+	allowedToChangePK := func(appName string) bool {
+		allowedApps := map[string]struct{}{
+			skyenv.SkysocksClientName: {},
+			skyenv.VPNClientName:      {},
+		}
+
+		_, ok := allowedApps[appName]
+		return ok
+	}
+
+	if !allowedToChangePK(appName) {
+		return fmt.Errorf("app %s is not allowed to change PK", appName)
+	}
+
+	v.log.Infof("Changing %s PK to %q", appName, pk)
 
 	const (
-		socksClientName = "skysocks-client"
-		pkArgName       = "-srv"
+		pkArgName = "-srv"
 	)
 
-	if err := v.conf.UpdateAppArg(v.appL, socksClientName, pkArgName, pk.String()); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(socksClientName); ok {
-		v.log.Infof("Updated %v PK, restarting it", socksClientName)
-		return v.appL.RestartApp(socksClientName)
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v PK, restarting it", appName)
+		return v.appL.RestartApp(appName)
 	}
 
-	v.log.Infof("Updated %v PK", socksClientName)
+	v.log.Infof("Updated %v PK", appName)
 
 	return nil
 }

@@ -8,13 +8,13 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 var log = logrus.New()
 
 func main() {
-	appC := app.NewClient()
+	appC := app.NewClient(nil)
 	defer appC.Close()
 
 	skysocks.Log = log

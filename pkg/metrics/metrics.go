@@ -1,6 +1,9 @@
 package metrics
 
 import (
+	"bufio"
+	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -71,10 +74,20 @@ func Handler(m Recorder, next http.Handler) http.Handler {
 
 type wrapResponseWriter struct {
 	http.ResponseWriter
+	http.Hijacker
 	statusCode int
 }
 
 func (w *wrapResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *wrapResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("http.ResponseWriter does not implement http.Hijacker")
+	}
+
+	return hijacker.Hijack()
 }
