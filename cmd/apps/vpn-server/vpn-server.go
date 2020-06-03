@@ -1,10 +1,12 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
@@ -23,8 +25,41 @@ var (
 	log = logrus.New()
 )
 
+var (
+	localPKStr = flag.String("pk", "", "Local PubKey")
+	localSKStr = flag.String("sk", "", "Local SecKey")
+	passcode   = flag.String("passcode", "", "Passcode to authenticate connecting users")
+)
+
 func main() {
-	appClient := app.NewClient()
+	flag.Parse()
+
+	localPK := cipher.PubKey{}
+	if *localPKStr != "" {
+		if err := localPK.UnmarshalText([]byte(*localPKStr)); err != nil {
+			log.WithError(err).Fatalln("Invalid local PK")
+		}
+	}
+
+	localSK := cipher.SecKey{}
+	if *localSKStr != "" {
+		if err := localSK.UnmarshalText([]byte(*localSKStr)); err != nil {
+			log.WithError(err).Fatalln("Invalid local SK")
+		}
+	}
+
+	var noiseCreds vpn.NoiseCredentials
+	if localPK.Null() && !localSK.Null() {
+		var err error
+		noiseCreds, err = vpn.NewNoiseCredentialsFromSK(localSK)
+		if err != nil {
+			log.WithError(err).Fatalln("error creating noise credentials")
+		}
+	} else {
+		noiseCreds = vpn.NewNoiseCredentials(localSK, localPK)
+	}
+
+	appClient := app.NewClient(nil)
 	defer appClient.Close()
 
 	osSigs := make(chan os.Signal, 2)
@@ -42,7 +77,11 @@ func main() {
 
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
-	srv, err := vpn.NewServer(log)
+	srvCfg := vpn.ServerConfig{
+		Passcode:    *passcode,
+		Credentials: noiseCreds,
+	}
+	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {
 		log.WithError(err).Fatalln("Error creating VPN server")
 	}

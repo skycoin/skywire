@@ -53,7 +53,7 @@ func (d *setupNodeDialer) Dial(
 
 	resp, err := client.DialRouteGroup(ctx, req)
 	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("route setup: %s", err)
+		return routing.EdgeRules{}, fmt.Errorf("route setup: %w", err)
 	}
 
 	return resp, nil

@@ -135,7 +135,7 @@ func TestRegisterTransportResponses(t *testing.T) {
 		{
 			"Request",
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, "POST", r.Method)
+				assert.Equal(t, http.MethodPost, r.Method)
 				assert.Equal(t, "/transports/", r.URL.String())
 			},
 			nil,

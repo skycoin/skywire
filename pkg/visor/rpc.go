@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -16,7 +17,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rpcutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
@@ -51,7 +51,7 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 	}
 
 	if err := rpcS.RegisterName(RPCPrefix, rpcG); err != nil {
-		return nil, fmt.Errorf("failed to create visor RPC server: %v", err)
+		return nil, fmt.Errorf("failed to create visor RPC server: %w", err)
 	}
 
 	return rpcS, nil
@@ -76,7 +76,7 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	out.RouteFinder = http.StatusOK
 	out.SetupNode = http.StatusOK
 
-	_, err = r.visor.TpDiscClient().GetTransportsByEdge(context.Background(), r.visor.conf.KeyPair.PubKey)
+	_, err = r.visor.TpDiscClient().GetTransportsByEdge(context.Background(), r.visor.conf.PK)
 	if err != nil {
 		out.TransportDiscovery = http.StatusNotFound
 	}
@@ -187,7 +187,7 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 		return true
 	})
 	*out = Summary{
-		PubKey:          r.visor.conf.Keys().PubKey,
+		PubKey:          r.visor.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            r.visor.appL.AppStates(),
@@ -237,18 +237,30 @@ func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) (err error) {
 	return r.visor.setAutoStart(in.AppName, in.AutoStart)
 }
 
-// SetSocksPassword sets password for skysocks.
-func (r *RPC) SetSocksPassword(in *string, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetSocksPassword", in)(nil, &err)
-
-	return r.visor.setSocksPassword(*in)
+// SetAppPasswordIn is input for SetAppPassword.
+type SetAppPasswordIn struct {
+	AppName  string
+	Password string
 }
 
-// SetSocksClientPK sets PK for skysocks-client.
-func (r *RPC) SetSocksClientPK(in *cipher.PubKey, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetSocksClientPK", in)(nil, &err)
+// SetAppPassword sets password for the app.
+func (r *RPC) SetAppPassword(in *SetAppPasswordIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppPassword", in)(nil, &err)
 
-	return r.visor.setSocksClientPK(*in)
+	return r.visor.setAppPassword(in.AppName, in.Password)
+}
+
+// SetAppPKIn is input for SetAppPK.
+type SetAppPKIn struct {
+	AppName string
+	PK      cipher.PubKey
+}
+
+// SetAppPK sets PK for the app.
+func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
+
+	return r.visor.setAppPK(in.AppName, in.PK)
 }
 
 /*
@@ -337,10 +349,14 @@ func (r *RPC) AddTransport(in *AddTransportIn, out *TransportSummary) (err error
 		defer cancel()
 	}
 
+	r.log.Debugf("Saving transport to %v via %v", in.RemotePK, in.TpType)
+
 	tp, err := r.visor.tpM.SaveTransport(ctx, in.RemotePK, in.TpType)
 	if err != nil {
 		return err
 	}
+
+	r.log.Debugf("Saved transport to %v via %v", in.RemotePK, in.TpType)
 
 	*out = *newTransportSummary(r.visor.tpM, tp, false, r.visor.router.SetupIsTrusted(tp.Remote()))
 	return nil
