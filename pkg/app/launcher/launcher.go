@@ -117,9 +117,9 @@ func (l *Launcher) ResetConfig(conf Config) {
 }
 
 // AutoStart auto-starts marked apps.
-func (l *Launcher) AutoStart(envMap map[string]func() []string) {
+func (l *Launcher) AutoStart(envMap map[string]func() ([]string, error)) error {
 	if envMap == nil {
-		envMap = make(map[string]func() []string)
+		envMap = make(map[string]func() ([]string, error))
 	}
 	log := l.log.WithField("func", "AutoStart")
 
@@ -132,7 +132,11 @@ func (l *Launcher) AutoStart(envMap map[string]func() []string) {
 		}
 		var envs []string
 		if makeEnvs, ok := envMap[name]; ok {
-			envs = makeEnvs()
+			var err error
+			envs, err = makeEnvs()
+			if err != nil {
+				return fmt.Errorf("error running %s: %w", name, err)
+			}
 		}
 		if err := l.startApp(name, ac.Args, envs); err != nil {
 			log.WithError(err).
@@ -142,6 +146,8 @@ func (l *Launcher) AutoStart(envMap map[string]func() []string) {
 				Warn("Failed to start app.")
 		}
 	}
+
+	return nil
 }
 
 // AppState returns a single app state of given name.

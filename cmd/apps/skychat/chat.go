@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 const (
@@ -42,7 +42,7 @@ var (
 )
 
 func main() {
-	appC = app.NewClient()
+	appC = app.NewClient(nil)
 	defer appC.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
