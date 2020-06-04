@@ -81,7 +81,6 @@ var rootCmd = &cobra.Command{
 				log.WithError(err).Errorf("Failed to restart skywire-visor service")
 			} else {
 				log.WithError(err).Infof("Restarted skywire-visor service")
-				os.Exit(1)
 			}
 		}
 
