@@ -9,12 +9,6 @@
 
 VERSION := $(shell git describe)
 
-PACKAGEVERSION := $(shell git describe --abbrev=0 | tr --delete v)
-PACKAGEARCH := $(shell dpkg --print-architecture)
-PACKAGEDIR := $(shell echo "skywire-${PACKAGEVERSION}-${PACKAGEARCH}")
-PACKAGEDIRARM64 := $(shell echo "skywire-${PACKAGEVERSION}-arm64")
-PACKAGEDIRARMHF := $(shell echo "skywire-${PACKAGEVERSION}-armhf")
-
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
