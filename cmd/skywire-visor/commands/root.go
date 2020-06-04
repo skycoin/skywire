@@ -8,8 +8,8 @@ import (
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
-	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
@@ -76,11 +76,16 @@ var rootCmd = &cobra.Command{
 
 		if delayDuration != 0 && !restartCtx.Systemd() && wd == "/" && path == "/usr/local/bin/skywire-visor" {
 			// from v0.2.3 / parent is run by systemd
-			cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
-			if err := cmd.Run(); err != nil {
-				log.WithError(err).Errorf("Failed to restart skywire-visor service")
-			} else {
-				log.WithError(err).Infof("Restarted skywire-visor service")
+
+			// cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
+			// if err := cmd.Run(); err != nil {
+			// 	log.WithError(err).Errorf("Failed to restart skywire-visor service")
+			// } else {
+			// 	log.WithError(err).Infof("Restarted skywire-visor service")
+			// }
+
+			if _, err := syscall.Setsid(); err != nil {
+				log.WithError(err).Errorf("Failed to call setsid()")
 			}
 		}
 
