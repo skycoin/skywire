@@ -256,15 +256,15 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 }
 
 // restore restores old binary file.
-func (u *Updater) restore(currentBinaryPath string, toBeRemoved string) {
-	u.removeFiles(currentBinaryPath)
-
-	if _, err := os.Stat(toBeRemoved); err != nil {
+func (u *Updater) restore(currentPath, oldPath string) {
+	if _, err := os.Stat(oldPath); err != nil {
 		return
 	}
 
-	if err := rename.Rename(toBeRemoved, currentBinaryPath); err != nil {
-		u.log.Errorf("Failed to rename file %q to %q: %v", toBeRemoved, currentBinaryPath, err)
+	u.removeFiles(currentPath)
+
+	if err := rename.Rename(oldPath, currentPath); err != nil {
+		u.log.Errorf("Failed to rename file %q to %q: %v", oldPath, currentPath, err)
 	}
 }
 
