@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"strings"
+	"time"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cmdutil"
@@ -44,7 +45,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
-	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated, not used)") // deprecated, not used
+	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
 }
 
 var rootCmd = &cobra.Command{
@@ -52,6 +53,14 @@ var rootCmd = &cobra.Command{
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
 		log := initLogger(tag, syslogAddr)
+
+		delayDuration, err := time.ParseDuration(delay)
+		if err != nil {
+			log.WithError(err).Error("Failed to parse delay duration.")
+			delayDuration = time.Duration(0)
+		}
+
+		time.Sleep(delayDuration)
 
 		if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
 			log.WithError(err).Error("Failed to output build info.")

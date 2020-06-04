@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/buildinfo"
@@ -30,6 +31,7 @@ var (
 	mockVisors     int
 	mockMaxTps     int
 	mockMaxRoutes  int
+	delay          string
 )
 
 // nolint:gochecknoinits
@@ -40,6 +42,7 @@ func init() {
 	rootCmd.Flags().IntVar(&mockVisors, "mock-visors", 5, "number of visors to have in mock mode")
 	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock visor")
 	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per visor")
+	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
 }
 
 // nolint:gochecknoglobals
@@ -50,6 +53,14 @@ var rootCmd = &cobra.Command{
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
+
+		delayDuration, err := time.ParseDuration(delay)
+		if err != nil {
+			log.WithError(err).Error("Failed to parse delay duration.")
+			delayDuration = time.Duration(0)
+		}
+
+		time.Sleep(delayDuration)
 
 		restartCtx := restart.CaptureContext()
 		restartCtx.RegisterLogger(log)
