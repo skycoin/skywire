@@ -66,12 +66,15 @@ var rootCmd = &cobra.Command{
 			log.WithError(err).Fatalf("Failed to get working directory")
 		}
 
+		path := os.Args[0]
+
 		log.WithField("wd", wd).
 			WithField("systemd", restartCtx.Systemd()).
 			WithField("delay", delayDuration).
+			WithField("path", path).
 			Infof("Start info")
 
-		if delayDuration != 0 && !restartCtx.Systemd() && wd == "/usr/local/bin" {
+		if delayDuration != 0 && !restartCtx.Systemd() && wd == "/" && path == "/usr/local/bin/skywire-visor" {
 			// from v0.2.3 / parent is run by systemd
 			cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
 			if err := cmd.Run(); err != nil {
