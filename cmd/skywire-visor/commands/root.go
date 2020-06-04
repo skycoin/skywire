@@ -30,6 +30,8 @@ var restartCtx = restart.CaptureContext()
 const (
 	configEnv         = "SW_VISOR_CONFIG"
 	defaultConfigName = "skywire-config.json"
+	visorPathSystemd  = "/usr/local/bin/skywire-visor"
+	workDirSystemd    = "/"
 )
 
 var (
@@ -75,11 +77,23 @@ var rootCmd = &cobra.Command{
 			WithField("path", path).
 			Infof("Start info")
 
-		if delayDuration != 0 && !restartCtx.Systemd() && wd == "/" && path == "/usr/local/bin/skywire-visor" {
-			// from v0.2.3 / parent is run by systemd
+		// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
+		// and therefore do not support restart via systemd.
+		// If --delay flag is passed, version is v0.2.3 or below.
+		// If PPID != 1 && WorkDir == "/" && os.Args[0] == "/usr/local/bin/skywire-visor",
+		// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
+		// TODO: Rewrite or improve robustness and readability of this workaround.
+		if delayDuration != 0 && !restartCtx.Systemd() && wd == workDirSystemd && path == visorPathSystemd {
+			// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
+			// new process should be alive after `restart.DefaultCheckDelay`.
+			time.Sleep(restart.DefaultCheckDelay)
 
-			time.Sleep(1 * time.Second)
-
+			// When a parent process exits, systemd kills child processes as well,
+			// so a child process can ask systemd to restart service between after restart.DefaultCheckDelay
+			// but before (restart.DefaultCheckDelay + restart.extraWaitingTime),
+			// because after that time a parent process would exit and then systemd would kill its children.
+			// In this case, systemd would kill both parent and child processes,
+			// then restart service using an updated binary.
 			cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
 			if err := cmd.Run(); err != nil {
 				log.WithError(err).Errorf("Failed to restart skywire-visor service")
@@ -87,6 +101,7 @@ var rootCmd = &cobra.Command{
 				log.WithError(err).Infof("Restarted skywire-visor service")
 			}
 
+			// Detach child from parent. TODO: This may be unnecessary.
 			if _, err := syscall.Setsid(); err != nil {
 				log.WithError(err).Errorf("Failed to call setsid()")
 			}
