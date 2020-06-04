@@ -82,7 +82,7 @@ var rootCmd = &cobra.Command{
 		// If --delay flag is passed, version is v0.2.3 or below.
 		// If PPID != 1 && WorkDir == "/" && os.Args[0] == "/usr/local/bin/skywire-visor",
 		// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
-		// TODO: Rewrite or improve robustness and readability of§ this workaround.
+		// TODO: Rewrite this workaround or improve its robustness and readability.
 		if delayDuration != 0 && !restartCtx.Systemd() && wd == workDirSystemd && path == visorPathSystemd {
 			// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
 			// new process should be alive after `restart.DefaultCheckDelay`.
