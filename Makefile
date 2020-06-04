@@ -162,13 +162,16 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
-package-amd64: ## Build the debian package. USE ROOT FOR THIS.
+package-amd64: ## Build the debian package.
+	ln -f scripts/dPKGBUILD.sh dPKGBUILD.sh
 	./dPKGBUILD.sh amd64
 
-package-arm64: ## Build the debian package. USE ROOT FOR THIS.
+package-arm64: ## Build the debian package.
+	ln -f scripts/dPKGBUILD.sh dPKGBUILD.sh
 	./dPKGBUILD.sh arm64
 
-package-armhf: ## Build the debian package. USE ROOT FOR THIS.
+package-armhf: ## Build the debian package.
+	ln -f scripts/dPKGBUILD.sh dPKGBUILD.sh
 	./dPKGBUILD.sh armhf
 
 all-packages: package-amd64 package-arm64 package-armhf
