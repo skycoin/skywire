@@ -22,7 +22,7 @@ import (
 
 const (
 	trustedVisorsTransportType = stcpr.Type
-	TrustedVisorsDelay         = 10 * time.Second
+	TrustedVisorsDelay         = 5 * time.Second
 )
 
 // ManagerConfig configures a Manager.
