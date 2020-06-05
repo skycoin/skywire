@@ -22,7 +22,8 @@ import (
 
 const (
 	trustedVisorsTransportType = stcpr.Type
-	TrustedVisorsDelay         = 5 * time.Second
+	// TrustedVisorsDelay defines a delay before adding transports to trusted visors.
+	TrustedVisorsDelay = 5 * time.Second
 )
 
 // ManagerConfig configures a Manager.
@@ -142,6 +143,7 @@ func (tm *Manager) serve(ctx context.Context) {
 	}
 }
 
+// AddTrustedVisors adds transports to trusted visors from config.
 func (tm *Manager) AddTrustedVisors(ctx context.Context) {
 	for _, pk := range tm.Conf.DefaultVisors {
 		tm.Logger.WithField("pk", pk).Infof("Adding trusted visor")
