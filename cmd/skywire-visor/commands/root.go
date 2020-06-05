@@ -64,18 +64,10 @@ var rootCmd = &cobra.Command{
 			delayDuration = time.Duration(0)
 		}
 
-		wd, err := os.Getwd()
-		if err != nil {
-			log.WithError(err).Fatalf("Failed to get working directory")
-		}
-
-		path := os.Args[0]
-
-		log.WithField("wd", wd).
+		log.WithField("delay", delayDuration).
 			WithField("systemd", restartCtx.Systemd()).
-			WithField("delay", delayDuration).
-			WithField("path", path).
-			Infof("Start info")
+			WithField("parent_systemd", restartCtx.ParentSystemd()).
+			Debugf("Process info")
 
 		// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
 		// and therefore do not support restart via systemd.
