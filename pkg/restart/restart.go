@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/shirou/gopsutil/process"
 	"github.com/sirupsen/logrus"
 )
 
@@ -37,6 +38,7 @@ type Context struct {
 	cmd        *exec.Cmd
 	path       string
 	ppid       int
+	parentPPID int
 	checkDelay time.Duration
 	isStarted  int32
 }
@@ -61,10 +63,20 @@ func CaptureContext() *Context {
 	path := os.Args[0]
 	ppid := os.Getppid()
 
+	parentPPID := -1
+
+	parentProcess, err := process.NewProcess(int32(ppid))
+	if err == nil {
+		if parPPID, err := parentProcess.Ppid(); err == nil {
+			parentPPID = int(parPPID)
+		}
+	}
+
 	return &Context{
 		cmd:        cmd,
 		path:       path,
 		ppid:       ppid,
+		parentPPID: parentPPID,
 		checkDelay: DefaultCheckDelay,
 	}
 }
@@ -86,6 +98,11 @@ func (c *Context) SetCheckDelay(delay time.Duration) {
 // CmdPath returns path of cmd to be run.
 func (c *Context) CmdPath() string {
 	return c.path
+}
+
+// ParentSystemd returns whether parent process is supervised by systemd.
+func (c *Context) ParentSystemd() bool {
+	return c.parentPPID == systemdPPID
 }
 
 // Systemd returns whether process is supervised by systemd.
