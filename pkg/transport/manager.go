@@ -17,6 +17,12 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
+)
+
+const (
+	trustedVisorsTransportType = stcpr.Type
+	TrustedVisorsDelay         = 10 * time.Second
 )
 
 // ManagerConfig configures a Manager.
@@ -132,6 +138,25 @@ func (tm *Manager) serve(ctx context.Context) {
 	for i, lis := range listeners {
 		if err := lis.Close(); err != nil {
 			tm.Logger.Warnf("listener %d of network '%s' closed with error: %v", i, lis.Network(), err)
+		}
+	}
+}
+
+func (tm *Manager) AddTrustedVisors(ctx context.Context) {
+	for _, pk := range tm.Conf.DefaultVisors {
+		tm.Logger.WithField("pk", pk).Infof("Adding trusted visor")
+
+		if _, err := tm.SaveTransport(ctx, pk, trustedVisorsTransportType); err != nil {
+			tm.Logger.
+				WithError(err).
+				WithField("pk", pk).
+				WithField("type", trustedVisorsTransportType).
+				Warnf("Failed to add transport to trusted visor via")
+		} else {
+			tm.Logger.
+				WithField("pk", pk).
+				WithField("type", trustedVisorsTransportType).
+				Infof("Added transport to trusted visor")
 		}
 	}
 }
