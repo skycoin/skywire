@@ -18,6 +18,8 @@ github.com/SkycoinProject/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/SkycoinProject/skycoin/src/util/logging
 # github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 github.com/SkycoinProject/yamux
+# github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
+github.com/StackExchange/wmi
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 github.com/alecthomas/template
 github.com/alecthomas/template/parse
@@ -47,6 +49,9 @@ github.com/flynn/noise
 # github.com/go-chi/chi v4.0.2+incompatible
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
+# github.com/go-ole/go-ole v1.2.4
+github.com/go-ole/go-ole
+github.com/go-ole/go-ole/oleutil
 # github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
 github.com/golang/gddo/httputil
 github.com/golang/gddo/httputil/header
@@ -123,7 +128,11 @@ github.com/rakyll/statik/fs
 # github.com/schollz/progressbar/v2 v2.15.0
 github.com/schollz/progressbar/v2
 # github.com/shirou/gopsutil v2.20.5+incompatible
-github.com/shirou/gopsutil
+github.com/shirou/gopsutil/cpu
+github.com/shirou/gopsutil/internal/common
+github.com/shirou/gopsutil/mem
+github.com/shirou/gopsutil/net
+github.com/shirou/gopsutil/process
 # github.com/sirupsen/logrus v1.5.0
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
