@@ -80,10 +80,9 @@ var rootCmd = &cobra.Command{
 		// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
 		// and therefore do not support restart via systemd.
 		// If --delay flag is passed, version is v0.2.3 or below.
-		// If PPID != 1 && WorkDir == "/" && os.Args[0] == "/usr/local/bin/skywire-visor",
+		// Systemd has PID 1. If PPID is not 1 and PPID of parent process is 1, then
 		// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
-		// TODO: Rewrite this workaround or improve its robustness and readability.
-		if delayDuration != 0 && !restartCtx.Systemd() && wd == workDirSystemd && path == visorPathSystemd {
+		if delayDuration != 0 && !restartCtx.Systemd() && restartCtx.ParentSystemd() {
 			// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
 			// new process should be alive after `restart.DefaultCheckDelay`.
 			time.Sleep(restart.DefaultCheckDelay)
