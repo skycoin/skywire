@@ -66,7 +66,8 @@ func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
 		}, true
 	case skyenv.VPNServerName:
 		return &proxyUpdater{
-			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
+			client:   servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
+			interval: f.UpdateInterval,
 		}, true
 	default:
 		return &emptyUpdater{}, false
