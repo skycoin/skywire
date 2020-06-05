@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -160,6 +161,12 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		log.Error("Failed to startup visor.")
 		return v, ok
 	}
+
+	ctx := context.Background()
+	go func(tpM *transport.Manager) {
+		time.Sleep(transport.TrustedVisorsDelay)
+		tpM.AddTrustedVisors(ctx)
+	}(v.tpM)
 
 	log.Info("Startup complete!")
 	return v, ok
