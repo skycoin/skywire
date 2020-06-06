@@ -10,7 +10,7 @@ import (
 const (
 	DefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
 	DefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultProxyDiscAddr       = "http://proxy.discovery.skywire.skycoin.com"
+	DefaultServiceDiscAddr     = "http://service.discovery.skywire.skycoin.com"
 	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
 	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
 	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
@@ -21,7 +21,7 @@ const (
 const (
 	TestTpDiscAddr          = "http://transport.discovery.skywire.cc"
 	TestDmsgDiscAddr        = "http://dmsg.discovery.skywire.cc"
-	TestProxyDiscAddr       = "http://proxy.discovery.skywire.cc"
+	TestServiceDiscAddr     = "http://service.discovery.skywire.cc"
 	TestRouteFinderAddr     = "http://routefinder.skywire.cc"
 	TestUptimeTrackerAddr   = "http://uptime-tracker.skywire.cc"
 	TestAddressResolverAddr = "http://address-resolver.skywire.cc"

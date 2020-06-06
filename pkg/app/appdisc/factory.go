@@ -30,7 +30,7 @@ func (f *Factory) setDefaults() {
 		f.UpdateInterval = skyenv.AppDiscUpdateInterval
 	}
 	if f.ProxyDisc == "" {
-		f.ProxyDisc = skyenv.DefaultProxyDiscAddr
+		f.ProxyDisc = skyenv.DefaultServiceDiscAddr
 	}
 }
 
