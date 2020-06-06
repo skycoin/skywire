@@ -16,7 +16,7 @@ else
 fi
 #support non-native builds for additional architectures here
 [ $pkgarch == "amd64" ] && buildwith=(env GOOS=linux GOARCH=amd64)
-[ $pkgarch == "arm64" ] && buildwith=(env GOOS=linux GOARCH=amd64)
+[ $pkgarch == "arm64" ] && buildwith=(env GOOS=linux GOARCH=arm64)
 [ $pkgarch == "armhf" ] && buildwith=(env GOOS=linux GOARCH=arm GOARM=6)
 
 pkggopath="github.com/${githuborg}/skywire-mainnet"
