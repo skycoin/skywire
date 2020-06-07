@@ -151,11 +151,13 @@ func biRouteFromKeys(fwdPKs, revPKs []cipher.PubKey, srcPort, dstPort routing.Po
 		dstPK := fwdPKs[i+1]
 		fwdHops[i] = routing.Hop{TpID: determineTpID(srcPK, dstPK), From: srcPK, To: dstPK}
 	}
+
 	revHops := make([]routing.Hop, len(revPKs)-1)
 	for i, srcPK := range revPKs[:len(revPKs)-1] {
 		dstPK := revPKs[i+1]
 		revHops[i] = routing.Hop{TpID: determineTpID(srcPK, dstPK), From: srcPK, To: dstPK}
 	}
+
 	// TODO: This should also return a map of format: map[uuid.UUID][]cipher.PubKey
 	// This way, we can associate transport IDs to the two transport edges, allowing for more checks.
 	return routing.BidirectionalRoute{
@@ -170,12 +172,14 @@ func biRouteFromKeys(fwdPKs, revPKs []cipher.PubKey, srcPort, dstPort routing.Po
 // hence, we can derive the tpID from any pk pair
 func determineTpID(pk1, pk2 cipher.PubKey) (tpID uuid.UUID) {
 	v1, v2 := pk1.Big(), pk2.Big()
+
 	var hash cipher.SHA256
 	if v1.Cmp(v2) > 0 {
 		hash = cipher.SumSHA256(append(pk1[:], pk2[:]...))
 	} else {
 		hash = cipher.SumSHA256(append(pk2[:], pk1[:]...))
 	}
+
 	copy(tpID[:], hash[:])
 	return tpID
 }
