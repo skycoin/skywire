@@ -51,11 +51,13 @@ func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse Route) {
 		Hops:      br.Forward,
 		KeepAlive: br.KeepAlive,
 	}
+
 	reverseRoute := Route{
 		Desc:      br.Desc.Invert(),
 		Hops:      br.Reverse,
 		KeepAlive: br.KeepAlive,
 	}
+
 	return forwardRoute, reverseRoute
 }
 
@@ -64,15 +66,19 @@ func (br *BidirectionalRoute) Check() error {
 	if len(br.Forward) == 0 {
 		return ErrBiRouteHasNoForwardHops
 	}
+
 	if len(br.Reverse) == 0 {
 		return ErrBiRouteHasNoReverseHops
 	}
+
 	if srcPK := br.Desc.SrcPK(); br.Forward[0].From != srcPK || br.Reverse[len(br.Reverse)-1].To != srcPK {
 		return ErrBiRouteHasInvalidDesc
 	}
+
 	if dstPK := br.Desc.DstPK(); br.Reverse[0].From != dstPK || br.Forward[len(br.Forward)-1].To != dstPK {
 		return ErrBiRouteHasInvalidDesc
 	}
+
 	return nil
 }
 
@@ -84,10 +90,12 @@ func (br *BidirectionalRoute) String() string {
 		"fwd_hops":   br.Forward,
 		"rev_hops":   br.Reverse,
 	}
+
 	j, err := json.MarshalIndent(m, "", "\t")
 	if err != nil {
 		panic(err) // should never happen
 	}
+
 	return string(j)
 }
 
@@ -107,10 +115,12 @@ func (er EdgeRules) String() string {
 			er.Reverse.String(),
 		},
 	}
+
 	j, err := json.MarshalIndent(m, "", "\t")
 	if err != nil {
 		panic(err)
 	}
+
 	return string(j)
 }
 
