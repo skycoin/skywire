@@ -258,8 +258,8 @@ func initLauncher(v *Visor) bool {
 		return report(fmt.Errorf("failed to start launcher: %w", err))
 	}
 	err = launch.AutoStart(map[string]func() ([]string, error){
-		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
-		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
+		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, launchLog) },
+		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, launchLog) },
 	})
 	if err != nil {
 		return report(fmt.Errorf("failed to autostart apps: %w", err))
