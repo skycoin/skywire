@@ -33,8 +33,6 @@ type Client struct {
 
 // NewClient creates VPN client instance.
 func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, error) {
-	l.Infof("DMSG DISC ENV: %s", os.Getenv(DmsgDiscAddrEnvKey))
-
 	dmsgDiscIP, err := dmsgDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)

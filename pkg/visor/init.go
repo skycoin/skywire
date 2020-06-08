@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/netutil"
@@ -258,8 +256,8 @@ func initLauncher(v *Visor) bool {
 		return report(fmt.Errorf("failed to start launcher: %w", err))
 	}
 	err = launch.AutoStart(map[string]func() ([]string, error){
-		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, launchLog) },
-		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, launchLog) },
+		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
+		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 	})
 	if err != nil {
 		return report(fmt.Errorf("failed to autostart apps: %w", err))
@@ -270,13 +268,11 @@ func initLauncher(v *Visor) bool {
 	return report(nil)
 }
 
-func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, l *logging.Logger) ([]string, error) {
+func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	var envCfg vpn.DirectRoutesEnvConfig
 
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
-
-		l.Infof("VISOR CONF DMSG DISC: %v", conf.Dmsg.Discovery)
 
 		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
@@ -294,8 +290,6 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, l *logging.Logger) ([]st
 		if err != nil {
 			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
-	} else {
-		l.Infoln("DMSG IS NIL IN VISOR CONF")
 	}
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
@@ -317,8 +311,6 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, l *logging.Logger) ([]st
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)
-
-	l.Infof("DMSG DISC IN ENV MAP: %v", envMap[vpn.DmsgDiscAddrEnvKey])
 
 	envs := make([]string, 0, len(envMap))
 	for k, v := range envMap {
