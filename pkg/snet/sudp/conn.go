@@ -47,8 +47,6 @@ func newConn(c connConfig) (*Conn, error) {
 		return nil, err
 	}
 
-	c.log.Infof("Handshake returned laddr %v raddr %v", lAddr, rAddr)
-
 	// TODO(nkryuchkov): extract from handshake whether encryption is needed
 	if c.encrypt {
 		config := noise.Config{
