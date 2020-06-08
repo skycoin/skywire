@@ -92,5 +92,5 @@ func (rd *RouteDescriptor) Invert() RouteDescriptor {
 }
 
 func (rd *RouteDescriptor) String() string {
-	return fmt.Sprintf("rPK:%s, lPK:%s, rPort:%d, lPort:%d", rd.DstPK(), rd.SrcPK(), rd.DstPort(), rd.SrcPort())
+	return fmt.Sprintf("rAddr:%s, lAddr:%s", rd.Dst().String(), rd.Src().String())
 }
