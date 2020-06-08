@@ -65,6 +65,7 @@ func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
 			interval: f.UpdateInterval,
 		}, true
 	case skyenv.VPNServerName:
+		// TODO: rename
 		return &proxyUpdater{
 			client:   servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
 			interval: f.UpdateInterval,
