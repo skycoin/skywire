@@ -274,6 +274,8 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
+		fmt.Printf("VISOR CONF DMSG DISC: %v\n", conf.Dmsg.Discovery)
+
 		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
 			for _, ses := range n.Dmsg().AllSessions() {
@@ -290,6 +292,8 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
+	} else {
+		fmt.Println("DMSG IS NIL IN VISOR CONF")
 	}
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
@@ -311,6 +315,8 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)
+
+	fmt.Printf("DMSG DISC IN ENV MAP: %v\n", envMap[vpn.DmsgDiscAddrEnvKey])
 
 	envs := make([]string, 0, len(envMap))
 	for k, v := range vpn.AppEnvArgs(envCfg) {
