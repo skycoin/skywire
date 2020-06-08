@@ -92,12 +92,8 @@ func prepRPCServerAndClient(t *testing.T, r router.Router) (s *rpc.Server, cl *C
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
 
-	gateway := router.NewRPCGateway(r)
-
 	s = rpc.NewServer()
-	err = s.Register(gateway)
-	require.NoError(t, err)
-
+	require.NoError(t, s.Register(router.NewRPCGateway(r)))
 	go s.Accept(l)
 
 	conn, err := net.Dial("tcp", l.Addr().String())
