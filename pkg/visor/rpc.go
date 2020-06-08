@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+
 	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
@@ -213,7 +215,15 @@ func (r *RPC) Apps(_ *struct{}, reply *[]*launcher.AppState) (err error) {
 func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", name)(nil, &err)
 
-	return r.visor.appL.StartApp(*name, nil, nil)
+	var envs []string
+	if *name == skyenv.VPNClientName {
+		envs, err = makeVPNEnvs(r.visor.conf, r.visor.net)
+		if err != nil {
+			return err
+		}
+	}
+
+	return r.visor.appL.StartApp(*name, nil, envs)
 }
 
 // StopApp stops App with provided name.
