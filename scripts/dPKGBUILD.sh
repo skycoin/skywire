@@ -28,7 +28,7 @@ srcdir=${sourcedir}/src
 pkgdir=${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}
 
 #add build deps here
-makedepends=(go npm install)
+makedepends=(go install npm python python2)
 #add any runtime deps here
 depends=()
 
