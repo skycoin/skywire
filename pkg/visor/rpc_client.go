@@ -648,7 +648,7 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 
 	rules := mc.rt.AllRules()
 	for _, rule := range rules {
-		if rule.Type() != routing.RuleConsume {
+		if rule.Type() != routing.RuleReverse {
 			continue
 		}
 

@@ -364,12 +364,6 @@ func (n *Network) STcpH() *stcph.Client { return n.clients.StcphC }
 // SUdp returns the underlying sudp.Client.
 func (n *Network) SUdp() *sudp.Client { return n.clients.SudpC }
 
-// Dialer is an entity that can be dialed and asked for its type.
-type Dialer interface {
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
-	Type() string
-}
-
 // Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
 	switch network {
