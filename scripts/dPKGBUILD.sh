@@ -19,6 +19,7 @@ fi
 [ $pkgarch == "arm64" ] && buildwith=(env GOOS=linux GOARCH=arm64)
 [ $pkgarch == "armhf" ] && buildwith=(env GOOS=linux GOARCH=arm GOARM=6)
 
+githuborg=SkycoinProject
 pkggopath="github.com/${githuborg}/skywire-mainnet"
 
 #srcdir and pkgdir are understood by makepkg on Arch
