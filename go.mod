@@ -1,6 +1,6 @@
 module github.com/SkycoinProject/skywire-mainnet
 
-go 1.13
+go 1.14
 
 require (
 	github.com/SkycoinProject/dmsg v0.2.2
@@ -15,6 +15,7 @@ require (
 	github.com/libp2p/go-reuseport v0.0.1
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.7.0
@@ -29,9 +30,7 @@ require (
 	github.com/tjfoc/gmsm v1.3.1 // indirect
 	github.com/xtaci/kcp-go v4.3.4+incompatible
 	go.etcd.io/bbolt v1.3.4
-	golang.org/x/crypto v0.0.0-20200427165652-729f1e841bcc // indirect
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
-	golang.org/x/sys v0.0.0-20200428200454-593003d681fa // indirect
 	golang.zx2c4.com/wireguard v0.0.20200320
 	nhooyr.io/websocket v1.8.2
 )
