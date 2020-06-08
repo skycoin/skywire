@@ -13,7 +13,6 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
@@ -98,23 +97,25 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			go clients.DmsgC.Serve()
 		}
 
-		addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
-
-		addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
-		if err != nil {
-			panic(err)
-		}
+		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
+		//
+		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
+		// if err != nil {
+		// 	panic(err)
+		// }
 
 		if hasStcp {
 			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
 		}
 
 		if hasStcpr {
-			clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+			// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+			// clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
 		}
-
+		//
 		if hasStcph {
-			clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
+			// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
 		}
 
 		if hasSudp {
