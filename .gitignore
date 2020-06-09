@@ -11,7 +11,7 @@
 .idea/
 
 /skywire.json
-#/apps/
+/apps/
 /skywire/
 /local*
 
@@ -24,7 +24,7 @@ pkg/visor/foo/
 /users.db
 /hypervisor
 /*-node
-#/*-visor
+/*-visor
 /*-cli
 /*-server
 /*.json
