@@ -74,8 +74,9 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		}
 	}
 
-	directIPs := make([]net.IP, 0, 3+len(dmsgSrvAddrs)+len(stcpEntities))
-	directIPs = append(directIPs, dmsgDiscIP, tpDiscIP, rfIP)
+	requiredDirectIPs := []net.IP{dmsgDiscIP, tpDiscIP, rfIP}
+	directIPs := make([]net.IP, 0, len(requiredDirectIPs)+len(dmsgSrvAddrs)+len(stcpEntities))
+	directIPs = append(directIPs, requiredDirectIPs...)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
 
