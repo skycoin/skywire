@@ -3,14 +3,14 @@
     "save": "Speichern",
     "edit": "Ändern",
     "cancel": "Abbrechen",
-    "node-key": "Node Schlüssel",
+    "node-key": "Visor Schlüssel",
     "app-key": "App Schlüssel",
     "discovery": "Discovery",
     "downloaded": "Heruntergeladen",
     "uploaded": "Hochgeladen",
     "delete": "Löschen",
     "none": "Nichts",
-    "loading-error": "Beim Laden der Daten ist ein Fehler aufgetreten. Versuche erneut...",
+    "loading-error": "Beim Laden der Daten ist ein Fehler aufgetreten. Versuche es erneut...",
     "operation-error": "Beim Ausführen der Aktion ist ein Fehler aufgetreten.",
     "no-connection-error": "Es ist keine Internetverbindung oder Verbindung zum Hypervisor vorhanden.",
     "error": "Fehler:",
@@ -53,7 +53,7 @@
         "label": "Bezeichnung:",
         "public-key": "Öffentlicher Schlüssel:",
         "port": "Port:",
-        "node-version": "Node Version:",
+        "node-version": "Visor Version:",
         "app-protocol-version": "App Protocol Version:",
         "time": {
           "title": "Dauer online:",
@@ -69,11 +69,11 @@
         }
       },
       "node-health": {
-        "title": "Health Info",
+        "title": "Zustand Info",
         "status": "Status:",
         "transport-discovery": "Transport Entdeckung:",
         "route-finder": "Route Finder:",
-        "setup-node": "Setup Node:",
+        "setup-node": "Setup Visor:",
         "element-offline": "offline"
       },
       "node-traffic-data": "Datenverkehr"
@@ -120,8 +120,8 @@
         "title": "Erstes Passwort festlegen",
         "password": "Passwort",
         "repeat-password": "Passwort wiederholen",
-        "set-password": "Passwort sichern",
-        "done": "Passwort wurde gesichert.",
+        "set-password": "Passwort ändern",
+        "done": "Passwort wurde geändert.",
         "error": "Fehler. Es scheint ein erstes Passwort wurde schon gewählt."
       },
       "errors": {
@@ -171,14 +171,14 @@
     "terminal": {
       "title": "Terminal",
       "input-start": "Skywire Terminal für {{address}}",
-      "error": "Beim Ausführung des Befehls ist ein unerwarteter Fehler aufgetreten."
+      "error": "Beim Ausführung des Befehls ist ein Fehler aufgetreten."
     },
     "update": {
       "title": "Update",
       "processing": "Suche nach Updates...",
       "processing-button": "Bitte warten",
-      "no-update": "Kein Update vorhanden. Installierter Version: {{ version }}.",
-      "update-available": "Es ist ein Update möglich.<br> Installierte Version: {{ currentVersion }}<br> Neue Version: {{ newVersion }}.",
+      "no-update": "Kein Update vorhanden.<br>Installierte Version: {{ version }}.",
+      "update-available": "Es ist ein Update möglich.<br>Installierte Version: {{ currentVersion }} <br>Neue Version: {{ newVersion }}.",
       "done": "Ein Update für den Visor wird installiert.",
       "update-error": "Update konnte nicht installiert werden.",
       "install": "Update installieren"
@@ -187,16 +187,16 @@
 
   "apps": {
     "socksc": {
-      "title": "Mit Node verbinden",
+      "title": "Mit Visor verbinden",
       "connect-keypair": "Schlüsselpaar eingeben",
-      "connect-search": "Node suchen",
+      "connect-search": "Visor suchen",
       "connect-history": "Verlauf",
       "versions": "Versionen",
       "location": "Standort",
       "connect": "Verbinden",
       "next-page": "Nächste Seite",
       "prev-page": "Vorherige Seite",
-      "auto-startup": "Automatisch mit Node verbinden"
+      "auto-startup": "Automatisch mit Visor verbinden"
     },
     "sshc": {
       "title": "SSH Client",
@@ -206,9 +206,9 @@
       "connect-history": "Verlauf"
     },
     "sshs": {
-      "title": "SSH Server",
+      "title": "SSH-Server",
       "whitelist": {
-        "title": "SSH Server Whitelist",
+        "title": "SSH-Server Whitelist",
         "header": "Schlüssel",
         "add": "Zu Liste hinzufügen",
         "remove": "Schlüssel entfernen",
@@ -218,7 +218,7 @@
         },
         "saved-correctly": "Änderungen an der Whitelist gespeichert"
       },
-      "auto-startup": "Starte SSH server automatisch"
+      "auto-startup": "Starte SSH-Server automatisch"
     },
     "log": {
       "title": "Log",
@@ -244,13 +244,13 @@
       "whitelist": "Whitelist"
     },
     "apps-list": {
-      "title": "Anwendungen",
-      "list-title": "Anwendungsliste",
+      "title": "Apps",
+      "list-title": "App-Liste",
       "app-name": "Name",
       "port": "Port",
       "status": "Status",
       "auto-start": "Auto-Start",
-      "empty": "Visor hat keine Anwendungen.",
+      "empty": "Visor hat keine Apps.",
       "disable-autostart": "Autostart ausschalten",
       "enable-autostart": "Autostart einschalten",
       "autostart-disabled": "Autostart aus",
@@ -283,20 +283,20 @@
     "view-logs": "Zeige Logs",
     "settings": "Einstellungen",
     "error": "Ein Fehler ist aufgetreten.",
-    "stop-confirmation": "Anwendung wirklich anhalten?",
-    "stop-selected-confirmation": "Ausgewählte Anwendungen wirklich anhalten?",
-    "disable-autostart-confirmation": "Auto-Start für diese Anwendung wirklich ausschalten?",
-    "enable-autostart-confirmation": "Auto-Start für diese Anwendung wirklich einschalten?",
-    "disable-autostart-selected-confirmation": "Auto-Start für ausgewählte Anwendungen wirklich ausschalten?",
-    "enable-autostart-selected-confirmation": "Auto-Start für ausgewählte Anwendungen wirklich einschalten",
+    "stop-confirmation": "App wirklich anhalten?",
+    "stop-selected-confirmation": "Ausgewählte App wirklich anhalten?",
+    "disable-autostart-confirmation": "Auto-Start für diese App wirklich ausschalten?",
+    "enable-autostart-confirmation": "Auto-Start für diese App wirklich einschalten?",
+    "disable-autostart-selected-confirmation": "Auto-Start für ausgewählte Apps wirklich ausschalten?",
+    "enable-autostart-selected-confirmation": "Auto-Start für ausgewählte Apps wirklich einschalten",
     "operation-completed": "Operation ausgeführt",
     "operation-unnecessary": "Gewünschte Einstellungen schon aktiv.",
     "status-running": "Läuft",
     "status-stopped": "Gestoppt",
     "status-failed": "Fehler",
-    "status-running-tooltip": "Anwendung läuft",
-    "status-stopped-tooltip": "Anwendung gestoppt",
-    "status-failed-tooltip": "Ein Fehler ist aufgetreten. Log der Anwendung überprüfen."
+    "status-running-tooltip": "App läuft",
+    "status-stopped-tooltip": "App gestoppt",
+    "status-failed-tooltip": "Ein Fehler ist aufgetreten. Log der App überprüfen."
   },
 
   "transports": {
@@ -328,12 +328,12 @@
     },
     "dialog": {
       "remote-key": "Remote öffentlicher Schlüssel:",
-      "transport-type": "Transport Typ",
+      "transport-type": "Transport-Typ",
       "success": "Transport erstellt.",
       "errors": {
         "remote-key-length-error": "Der remote öffentliche Schlüssel muss 66 Zeichen lang sein.",
         "remote-key-chars-error": "Der remote öffentliche Schlüssel darf nur hexadezimale Zeichen enthalten.",
-        "transport-type-error": "Ein Transport Typ wird benötigt."
+        "transport-type-error": "Ein Transport-Typ wird benötigt."
       }
     }
   },
@@ -385,12 +385,12 @@
 
   "selection": {
     "select-all": "Alle auswählen",
-    "unselect-all": "Alle nicht-auswählen",
-    "delete-all": "Alle ausgewählte Elemente entfernen",
-    "start-all": "Starte ausgewählte Anwendungen",
-    "stop-all": "Stoppe ausgewählte Anwendungen",
-    "enable-autostart-all": "Auto-Start für ausgewählte Anwendungen einschalten",
-    "disable-autostart-all": "Auto-Start für ausgewählte Anwendungen ausschalten"
+    "unselect-all": "Alle abwählen",
+    "delete-all": "Alle ausgewählten Elemente entfernen",
+    "start-all": "Starte ausgewählte App",
+    "stop-all": "Stoppe ausgewählte App",
+    "enable-autostart-all": "Auto-Start für ausgewählte Apps einschalten",
+    "disable-autostart-all": "Auto-Start für ausgewählte Apps ausschalten"
   },
 
   "refresh-button": {
