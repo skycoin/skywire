@@ -79,8 +79,8 @@ func (c *Client) Serve() error {
 		port = ""
 	}
 
-	if err := c.addressResolver.Bind(context.Background(), port); err != nil {
-		return fmt.Errorf("bind PK: %w", err)
+	if err := c.addressResolver.BindSTCPR(context.Background(), port); err != nil {
+		return fmt.Errorf("bind STCPR: %w", err)
 	}
 
 	go func() {
@@ -153,7 +153,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		return nil, io.ErrClosedPipe
 	}
 
-	addr, err := c.addressResolver.Resolve(ctx, rPK)
+	addr, err := c.addressResolver.ResolveSTCPR(ctx, rPK)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
@@ -229,7 +229,7 @@ func (c *Client) Close() error {
 
 		for _, lis := range c.lMap {
 			if err := lis.Close(); err != nil {
-				c.log.WithError(err).Warnf("Failed to close stcp listener")
+				c.log.WithError(err).Warnf("Failed to close stcpr listener")
 			}
 		}
 	})
