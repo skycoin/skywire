@@ -94,6 +94,15 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 		LocalAddr: skyenv.DefaultSUDPAddr,
 	}
 
+	conf.SUDPR = &snet.SUDPRConfig{
+		LocalAddr:       skyenv.DefaultSUDPRAddr,
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
+	}
+
+	conf.SUDPH = &snet.SUDPHConfig{
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
+	}
+
 	conf.Transport.LogStore = &V1LogStore{
 		Type:     "file",
 		Location: skyenv.DefaultTpLogStore,
@@ -157,6 +166,8 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
 	conf.STCPR.AddressResolver = skyenv.TestAddressResolverAddr
 	conf.STCPH.AddressResolver = skyenv.TestAddressResolverAddr
+	conf.SUDPR.AddressResolver = skyenv.TestAddressResolverAddr
+	conf.SUDPH.AddressResolver = skyenv.TestAddressResolverAddr
 
 	return conf, nil
 }
