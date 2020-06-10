@@ -58,20 +58,35 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
 	}
 
-	stcprARip, err := stcprAddressResolverIPFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("error getting stcpr AR IP: %w", err)
+	var stcprARip net.IP
+	if _, ok := os.LookupEnv(STCPRAddressResolverAddrEnvKey); ok {
+		stcprARip, err = stcprAddressResolverIPFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("error getting stcpr AR IP: %w", err)
+		}
 	}
 
-	stcphARip, err := stcphAddressResolverIPFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("error getting stcph AR IP: %w", err)
+	var stcphARip net.IP
+	if _, ok := os.LookupEnv(STCPHAddressResolverAddrEnvKey); ok {
+		stcphARip, err = stcphAddressResolverIPFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("error getting stcph AR IP: %w", err)
+		}
 	}
 
-	directIPs := make([]net.IP, 0, 5+len(dmsgSrvAddrs)+len(stcpEntities))
-	directIPs = append(directIPs, dmsgDiscIP, tpDiscIP, rfIP, stcprARip, stcphARip)
+	requiredDirectIPs := []net.IP{dmsgDiscIP, tpDiscIP, rfIP}
+	directIPs := make([]net.IP, 0, len(requiredDirectIPs)+len(dmsgSrvAddrs)+len(stcpEntities))
+	directIPs = append(directIPs, requiredDirectIPs...)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
+
+	if stcprARip != nil {
+		directIPs = append(directIPs, stcprARip)
+	}
+
+	if stcphARip != nil {
+		directIPs = append(directIPs, stcphARip)
+	}
 
 	defaultGateway, err := DefaultNetworkGateway()
 	if err != nil {
