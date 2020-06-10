@@ -24,11 +24,14 @@ import (
 var log = logging.MustGetLogger("arclient")
 
 const (
-	bindPath             = "/bind"
-	resolvePath          = "/resolve/"
-	resolveHolePunchPath = "/resolve_hole_punch/"
-	wsPath               = "/ws"
-	addrChSize           = 1024
+	bindSTCPRPath    = "/bind/stcpr"
+	bindSUDPRPath    = "/bind/sudpr"
+	resolveSTCPRPath = "/resolve/"
+	resolveSTCPHPath = "/resolve_hole_punch/"
+	resolveSUDPRPath = "/resolve_sudpr/"
+	resolveSUDPHPath = "/resolve_sudph/"
+	wsPath           = "/ws"
+	addrChSize       = 1024
 )
 
 var (
@@ -47,11 +50,22 @@ type Error struct {
 type APIClient interface {
 	io.Closer
 	LocalAddr() string
-	Bind(ctx context.Context, port string) error
-	Resolve(ctx context.Context, pk cipher.PubKey) (string, error)
-	ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error)
+	BindSTCPR(ctx context.Context, port string) error
+	BindSUDPR(ctx context.Context, port string) error
+	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error)
+	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error)
+	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
+	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
 }
+
+type key struct {
+	remoteAddr string
+	pk         cipher.PubKey
+	sk         cipher.SecKey
+}
+
+var clients = make(map[key]*httpClient)
 
 // httpClient implements Client for uptime tracker API.
 type httpClient struct {
@@ -60,6 +74,7 @@ type httpClient struct {
 	pk        cipher.PubKey
 	sk        cipher.SecKey
 	wsConn    *websocket.Conn
+	addrCh    <-chan RemoteVisor
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -69,6 +84,19 @@ type httpClient struct {
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
+	key := key{
+		remoteAddr: remoteAddr,
+		pk:         pk,
+		sk:         sk,
+	}
+
+	// Same clients would have nonce collisions. Client should be reused in this case.
+	if client, ok := clients[key]; ok {
+		return client, nil
+	}
+
+	log.Infof("Creating arclient, key = %v", key)
+
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
 		return nil, fmt.Errorf("address resolver httpauth: %w", err)
@@ -94,6 +122,8 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 	}
 
 	httpAuthClient.SetTransport(transport)
+
+	clients[key] = client
 
 	return client, nil
 }
@@ -173,13 +203,37 @@ type BindRequest struct {
 	Port string `json:"port"`
 }
 
-// Bind binds client PK to IP:port on address resolver.
-func (c *httpClient) Bind(ctx context.Context, port string) error {
+// BindSTCPR binds client PK to IP:port on address resolver.
+func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	req := BindRequest{
 		Port: port,
 	}
 
-	resp, err := c.Post(ctx, bindPath, req)
+	resp, err := c.Post(ctx, bindSTCPRPath, req)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+	}
+
+	return nil
+}
+
+// BindSTCPR binds client PK to IP:port on address resolver.
+func (c *httpClient) BindSUDPR(ctx context.Context, port string) error {
+	req := BindRequest{
+		Port: port,
+	}
+
+	resp, err := c.Post(ctx, bindSUDPRPath, req)
 	if err != nil {
 		return err
 	}
@@ -202,8 +256,8 @@ type ResolveResponse struct {
 	Addr string `json:"addr"`
 }
 
-func (c *httpClient) Resolve(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Get(ctx, resolvePath+pk.String())
+func (c *httpClient) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error) {
+	resp, err := c.Get(ctx, resolveSTCPRPath+pk.String())
 	if err != nil {
 		return "", err
 	}
@@ -236,8 +290,76 @@ func (c *httpClient) Resolve(ctx context.Context, pk cipher.PubKey) (string, err
 	return resolveResp.Addr, nil
 }
 
-func (c *httpClient) ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Get(ctx, resolveHolePunchPath+pk.String())
+func (c *httpClient) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error) {
+	resp, err := c.Get(ctx, resolveSTCPHPath+pk.String())
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", ErrNoEntry
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+	}
+
+	rawBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var resolveResp ResolveResponse
+
+	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
+		return "", err
+	}
+
+	return resolveResp.Addr, nil
+}
+
+func (c *httpClient) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error) {
+	resp, err := c.Get(ctx, resolveSUDPRPath+pk.String())
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", ErrNoEntry
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+	}
+
+	rawBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var resolveResp ResolveResponse
+
+	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
+		return "", err
+	}
+
+	return resolveResp.Addr, nil
+}
+
+func (c *httpClient) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error) {
+	resp, err := c.Get(ctx, resolveSUDPHPath+pk.String())
 	if err != nil {
 		return "", err
 	}
@@ -277,17 +399,22 @@ type RemoteVisor struct {
 }
 
 func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
-	addrCh := make(chan RemoteVisor, addrChSize)
-
-	if c.wsConn != nil {
-		if err := c.wsConn.Close(websocket.StatusNormalClosure, "new connection created"); err != nil {
-			log.WithError(err).Warnf("Failed to close WebSocket connection")
+	if c.addrCh == nil {
+		if err := c.initWS(ctx, dialCh); err != nil {
+			return nil, err
 		}
 	}
 
+	return c.addrCh, nil
+}
+
+func (c *httpClient) initWS(ctx context.Context, dialCh <-chan cipher.PubKey) error {
+	// TODO(nkryuchkov): Ensure this works correctly with closed channels and connections.
+	addrCh := make(chan RemoteVisor, addrChSize)
+
 	conn, err := c.Websocket(ctx, wsPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	c.wsConn = conn
@@ -325,10 +452,16 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 		}
 	}(conn, dialCh)
 
-	return addrCh, nil
+	c.addrCh = addrCh
+
+	return nil
 }
 
 func (c *httpClient) Close() error {
+	defer func() {
+		c.wsConn = nil
+	}()
+
 	return c.wsConn.Close(websocket.StatusNormalClosure, "client closed")
 }
 

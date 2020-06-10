@@ -1,4 +1,4 @@
-package stcph
+package sudph
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
 
-// Type is stcp hole punch type.
-const Type = "stcph"
+// Type is sudp hole punch type.
+const Type = "sudph"
 
 // DialTimeout represents a timeout for dialing.
 // TODO: Find best value.
