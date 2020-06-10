@@ -229,7 +229,7 @@ func initLauncher(v *Visor) bool {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ProxyDisc = conf.Discovery.ProxyDisc
+		factory.ProxyDisc = conf.Discovery.ServiceDisc
 	}
 
 	// Prepare proc manager.
