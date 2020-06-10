@@ -75,9 +75,10 @@ func (c *Client) Serve() error {
 
 	dialCh := make(chan cipher.PubKey)
 
+	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
 	connCh, err := c.addressResolver.WS(ctx, dialCh)
 	if err != nil {
-		return err
+		return fmt.Errorf("ws: %w", err)
 	}
 
 	c.connCh = connCh
@@ -171,7 +172,7 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 	return lis.Introduce(conn)
 }
 
-// Dial dials a new stcp.Conn to specified remote public key and port.
+// Dial dials a new stcph.Conn to specified remote public key and port.
 func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
@@ -183,7 +184,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	addr, err := c.addressResolver.ResolveHolePunch(ctx, rPK)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
 	}
 
 	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, addr)
