@@ -313,7 +313,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	envMap := vpn.AppEnvArgs(envCfg)
 
 	envs := make([]string, 0, len(envMap))
-	for k, v := range vpn.AppEnvArgs(envCfg) {
+	for k, v := range envMap {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
 
