@@ -49,6 +49,7 @@ const (
 const (
 	DefaultSTCPAddr  = ":7777"
 	DefaultSTCPRAddr = ":7778"
+	DefaultSUDPAddr  = ":7787"
 )
 
 // Default skywire app constants.
