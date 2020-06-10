@@ -60,13 +60,14 @@ func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	switch conf.AppName {
 	case skyenv.SkysocksName:
-		return &proxyUpdater{
+		return &serviceUpdater{
 			client:   servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeProxy)),
 			interval: f.UpdateInterval,
 		}, true
 	case skyenv.VPNServerName:
-		return &proxyUpdater{
-			client: servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
+		return &serviceUpdater{
+			client:   servicedisc.NewClient(log, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN)),
+			interval: f.UpdateInterval,
 		}, true
 	default:
 		return &emptyUpdater{}, false
