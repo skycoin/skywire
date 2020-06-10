@@ -19,6 +19,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -84,6 +85,17 @@ func (c *STCPHConfig) Type() string {
 	return stcph.Type
 }
 
+// SUDPConfig defines config for SUDP network.
+type SUDPConfig struct {
+	PKTable   map[cipher.PubKey]string `json:"pk_table"`
+	LocalAddr string                   `json:"local_address"`
+}
+
+// Type returns STCPType.
+func (c *SUDPConfig) Type() string {
+	return sudp.Type
+}
+
 // Config represents a network configuration.
 type Config struct {
 	PubKey         cipher.PubKey
@@ -97,6 +109,7 @@ type NetworkConfigs struct {
 	STCP  *STCPConfig  // The stcp service will not be started if nil.
 	STCPR *STCPRConfig // The stcpr service will not be started if nil.
 	STCPH *STCPHConfig // The stcph service will not be started if nil.
+	SUDP  *SUDPConfig  // The sudp service will not be started if nil.
 }
 
 // NetworkClients represents all network clients.
@@ -105,6 +118,7 @@ type NetworkClients struct {
 	StcpC  *stcp.Client
 	StcprC *stcpr.Client
 	StcphC *stcph.Client
+	SudpC  *sudp.Client
 }
 
 // Network represents a network between nodes in Skywire.
@@ -143,6 +157,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		clients.DmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 	}
 
+	// TODO(nkryuchkov): Generic code for clients below.
 	if conf.NetworkConfigs.STCP != nil {
 		clients.StcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.NetworkConfigs.STCP.PKTable))
 		clients.StcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
@@ -175,6 +190,11 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		clients.StcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
 	}
 
+	if conf.NetworkConfigs.SUDP != nil {
+		clients.SudpC = sudp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.NetworkConfigs.SUDP.PKTable))
+		clients.SudpC.SetLogger(logging.MustGetLogger("snet.sudpC"))
+	}
+
 	return NewRaw(conf, clients), nil
 }
 
@@ -196,6 +216,10 @@ func NewRaw(conf Config, clients NetworkClients) *Network {
 
 	if clients.StcphC != nil {
 		networks = append(networks, stcph.Type)
+	}
+
+	if clients.SudpC != nil {
+		networks = append(networks, sudp.Type)
 	}
 
 	return &Network{
@@ -243,37 +267,63 @@ func (n *Network) Init() error {
 		}
 	}
 
+	if n.conf.NetworkConfigs.SUDP != nil {
+		if n.clients.SudpC != nil && n.conf.NetworkConfigs.SUDP.LocalAddr != "" {
+			if err := n.clients.SudpC.Serve(n.conf.NetworkConfigs.SUDP.LocalAddr); err != nil {
+				return fmt.Errorf("failed to initiate 'sudp': %w", err)
+			}
+		} else {
+			log.Infof("No config found for sudp")
+		}
+	}
+
 	return nil
 }
 
 // Close closes underlying connections.
 func (n *Network) Close() error {
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
+	wg.Add(len(n.networks))
 
 	var dmsgErr error
-	go func() {
-		dmsgErr = n.clients.DmsgC.Close()
-		wg.Done()
-	}()
+	if n.clients.DmsgC != nil {
+		go func() {
+			dmsgErr = n.clients.DmsgC.Close()
+			wg.Done()
+		}()
+	}
 
 	var stcpErr error
-	go func() {
-		stcpErr = n.clients.StcpC.Close()
-		wg.Done()
-	}()
+	if n.clients.StcpC != nil {
+		go func() {
+			stcpErr = n.clients.StcpC.Close()
+			wg.Done()
+		}()
+	}
 
 	var stcprErr error
-	go func() {
-		stcprErr = n.clients.StcprC.Close()
-		wg.Done()
-	}()
+	if n.clients.StcprC != nil {
+		go func() {
+			stcprErr = n.clients.StcprC.Close()
+			wg.Done()
+		}()
+	}
 
 	var stcphErr error
-	go func() {
-		stcphErr = n.clients.StcphC.Close()
-		wg.Done()
-	}()
+	if n.clients.StcphC != nil {
+		go func() {
+			stcphErr = n.clients.StcphC.Close()
+			wg.Done()
+		}()
+	}
+
+	var sudpErr error
+	if n.clients.SudpC != nil {
+		go func() {
+			sudpErr = n.clients.SudpC.Close()
+			wg.Done()
+		}()
+	}
 
 	wg.Wait()
 
@@ -291,6 +341,10 @@ func (n *Network) Close() error {
 
 	if stcphErr != nil {
 		return stcphErr
+	}
+
+	if sudpErr != nil {
+		return sudpErr
 	}
 
 	return nil
@@ -316,6 +370,9 @@ func (n *Network) STcpr() *stcpr.Client { return n.clients.StcprC }
 
 // STcpH returns the underlying stcph.Client.
 func (n *Network) STcpH() *stcph.Client { return n.clients.StcphC }
+
+// SUdp returns the underlying sudp.Client.
+func (n *Network) SUdp() *sudp.Client { return n.clients.SudpC }
 
 // Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
@@ -353,6 +410,13 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 		}
 
 		return makeConn(conn, network), nil
+	case sudp.Type:
+		conn, err := n.clients.SudpC.Dial(ctx, pk, port)
+		if err != nil {
+			return nil, fmt.Errorf("sudpr client: %w", err)
+		}
+
+		return makeConn(conn, network), nil
 	default:
 		return nil, ErrUnknownNetwork
 	}
@@ -384,6 +448,13 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		return makeListener(lis, network), nil
 	case stcph.Type:
 		lis, err := n.clients.StcphC.Listen(port)
+		if err != nil {
+			return nil, err
+		}
+
+		return makeListener(lis, network), nil
+	case sudp.Type:
+		lis, err := n.clients.SudpC.Listen(port)
 		if err != nil {
 			return nil, err
 		}
