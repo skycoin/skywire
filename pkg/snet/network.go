@@ -286,34 +286,44 @@ func (n *Network) Close() error {
 	wg.Add(len(n.networks))
 
 	var dmsgErr error
-	go func() {
-		dmsgErr = n.clients.DmsgC.Close()
-		wg.Done()
-	}()
+	if n.clients.DmsgC != nil {
+		go func() {
+			dmsgErr = n.clients.DmsgC.Close()
+			wg.Done()
+		}()
+	}
 
 	var stcpErr error
-	go func() {
-		stcpErr = n.clients.StcpC.Close()
-		wg.Done()
-	}()
+	if n.clients.StcpC != nil {
+		go func() {
+			stcpErr = n.clients.StcpC.Close()
+			wg.Done()
+		}()
+	}
 
 	var stcprErr error
-	go func() {
-		stcprErr = n.clients.StcprC.Close()
-		wg.Done()
-	}()
+	if n.clients.StcprC != nil {
+		go func() {
+			stcprErr = n.clients.StcprC.Close()
+			wg.Done()
+		}()
+	}
 
 	var stcphErr error
-	go func() {
-		stcphErr = n.clients.StcphC.Close()
-		wg.Done()
-	}()
+	if n.clients.StcphC != nil {
+		go func() {
+			stcphErr = n.clients.StcphC.Close()
+			wg.Done()
+		}()
+	}
 
 	var sudpErr error
-	go func() {
-		sudpErr = n.clients.SudpC.Close()
-		wg.Done()
-	}()
+	if n.clients.SudpC != nil {
+		go func() {
+			sudpErr = n.clients.SudpC.Close()
+			wg.Done()
+		}()
+	}
 
 	wg.Wait()
 
