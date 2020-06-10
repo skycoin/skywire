@@ -85,6 +85,8 @@ func initSNet(v *Visor) bool {
 		STCPR: v.conf.STCPR,
 		STCPH: v.conf.STCPH,
 		SUDP:  v.conf.SUDP,
+		SUDPR: v.conf.SUDPR,
+		SUDPH: v.conf.SUDPH,
 	}
 
 	conf := snet.Config{

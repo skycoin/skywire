@@ -1,4 +1,4 @@
-package stcph
+package sudpr
 
 import (
 	"context"
@@ -12,22 +12,15 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/libp2p/go-reuseport"
+	"github.com/xtaci/kcp-go"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
 
-// Type is stcp hole punch type.
-const Type = "stcph"
+// Type is sudpr type.
+const Type = "sudpr"
 
-// DialTimeout represents a timeout for dialing.
-// TODO: Find best value.
-const DialTimeout = 30 * time.Second
-
-// ErrTimeout indicates a timeout.
-var ErrTimeout = errors.New("timeout")
-
-// Client is the central control for incoming and outgoing 'stcp.Conn's.
+// Client is the central control for incoming and outgoing 'sudp.Conn's.
 type Client struct {
 	log *logging.Logger
 
@@ -35,29 +28,28 @@ type Client struct {
 	lSK             cipher.SecKey
 	p               *Porter
 	addressResolver arclient.APIClient
+	localAddr       string
 
-	connCh <-chan arclient.RemoteVisor
-	dialCh chan cipher.PubKey
-	lMap   map[uint16]*Listener // key: lPort
-	mx     sync.Mutex
+	lUDP net.Listener
+	lMap map[uint16]*Listener // key: lPort
+	mx   sync.Mutex
 
 	done chan struct{}
 	once sync.Once
 }
 
 // NewClient creates a net Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient) *Client {
-	c := &Client{
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient, localAddr string) *Client {
+	return &Client{
 		log:             logging.MustGetLogger(Type),
 		lPK:             pk,
 		lSK:             sk,
-		addressResolver: addressResolver,
 		p:               newPorter(PorterMinEphemeral),
+		addressResolver: addressResolver,
+		localAddr:       localAddr,
 		lMap:            make(map[uint16]*Listener),
 		done:            make(chan struct{}),
 	}
-
-	return c
 }
 
 // SetLogger sets a logger for Client.
@@ -67,79 +59,59 @@ func (c *Client) SetLogger(log *logging.Logger) {
 
 // Serve serves the listening portion of the client.
 func (c *Client) Serve() error {
-	if c.connCh != nil {
+	if c.lUDP != nil {
 		return errors.New("already listening")
 	}
 
-	ctx := context.Background()
-
-	dialCh := make(chan cipher.PubKey)
-
-	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	connCh, err := c.addressResolver.WS(ctx, dialCh)
+	lUDP, err := kcp.Listen(c.localAddr)
 	if err != nil {
-		return fmt.Errorf("ws: %w", err)
+		return err
 	}
 
-	c.connCh = connCh
-	c.dialCh = dialCh
+	c.lUDP = lUDP
+	addr := lUDP.Addr()
+	c.log.Infof("listening on udp addr: %v", addr)
 
-	c.log.Infof("listening websocket events on %v", c.addressResolver.LocalAddr())
+	_, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		port = ""
+	}
+
+	if err := c.addressResolver.BindSUDPR(context.Background(), port); err != nil {
+		return fmt.Errorf("bind SUDPR: %w", err)
+	}
 
 	go func() {
-		for addr := range c.connCh {
-			c.log.Infof("Received signal to dial %v", addr)
+		for {
+			if err := c.acceptUDPConn(); err != nil {
+				c.log.Warnf("failed to accept incoming connection: %v", err)
 
-			go func(addr arclient.RemoteVisor) {
-				if err := c.acceptTCPConn(addr); err != nil {
-					c.log.Warnf("failed to accept incoming connection: %v", err)
+				if !IsHandshakeError(err) {
+					c.log.Warnf("stopped serving sudpr")
+					return
 				}
-			}(addr)
+			}
 		}
 	}()
 
 	return nil
 }
 
-func (c *Client) dialTimeout(addr string) (net.Conn, error) {
-	timer := time.NewTimer(DialTimeout)
-	defer timer.Stop()
-
-	c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalAddr())
-
-	for {
-		select {
-		case <-timer.C:
-			return nil, ErrTimeout
-		default:
-			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalAddr(), addr)
-			if err == nil {
-				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())
-				return conn, nil
-			}
-
-			c.log.WithError(err).
-				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalAddr(), err)
-		}
-	}
-}
-
-func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
+func (c *Client) acceptUDPConn() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	tcpConn, err := c.dialTimeout(remote.Addr)
+	udpConn, err := c.lUDP.Accept()
 	if err != nil {
 		return err
 	}
 
-	remoteAddr := tcpConn.RemoteAddr()
+	remoteAddr := udpConn.RemoteAddr()
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
 	var lis *Listener
-
 	hs := ResponderHandshake(func(f2 Frame2) error {
 		c.mx.Lock()
 		defer c.mx.Unlock()
@@ -154,7 +126,7 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 
 	connConfig := connConfig{
 		log:       c.log,
-		conn:      tcpConn,
+		conn:      udpConn,
 		localPK:   c.lPK,
 		localSK:   c.lSK,
 		deadline:  time.Now().Add(HandshakeTimeout),
@@ -166,30 +138,28 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 
 	conn, err := newConn(connConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("newConn: %w", err)
 	}
 
-	return lis.Introduce(conn)
+	if err := lis.Introduce(conn); err != nil {
+		return fmt.Errorf("introduce: %w", err)
+	}
+
+	return nil
 }
 
-// Dial dials a new stcph.Conn to specified remote public key and port.
+// Dial dials a new sudp.Conn to specified remote public key and port.
 func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
 
-	c.log.Infof("Dialing PK %v", rPK)
-
-	c.dialCh <- rPK
-
-	addr, err := c.addressResolver.ResolveSTCPH(ctx, rPK)
+	addr, err := c.addressResolver.ResolveSUDPR(ctx, rPK)
 	if err != nil {
-		return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
+		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
 
-	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, addr)
-
-	tcpConn, err := c.dialTimeout(addr)
+	conn, err := kcp.Dial(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -198,14 +168,14 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("ReserveEphemeral: %w", err)
+		return nil, err
 	}
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
 	connConfig := connConfig{
 		log:       c.log,
-		conn:      tcpConn,
+		conn:      conn,
 		localPK:   c.lPK,
 		localSK:   c.lSK,
 		deadline:  time.Now().Add(HandshakeTimeout),
@@ -215,15 +185,10 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		initiator: true,
 	}
 
-	stcpConn, err := newConn(connConfig)
-	if err != nil {
-		return nil, fmt.Errorf("newConn: %w", err)
-	}
-
-	return stcpConn, nil
+	return newConn(connConfig)
 }
 
-// Listen creates a new listener for stcp hole punch.
+// Listen creates a new listener for sudp.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
 func (c *Client) Listen(lPort uint16) (*Listener, error) {
 	if c.isClosed() {
@@ -241,7 +206,6 @@ func (c *Client) Listen(lPort uint16) (*Listener, error) {
 	lAddr := dmsg.Addr{PK: c.lPK, Port: lPort}
 	lis := newListener(lAddr, freePort)
 	c.lMap[lPort] = lis
-
 	return lis, nil
 }
 
@@ -250,22 +214,24 @@ func (c *Client) Close() error {
 	if c == nil {
 		return nil
 	}
-
 	c.once.Do(func() {
 		close(c.done)
 
 		c.mx.Lock()
 		defer c.mx.Unlock()
 
-		if err := c.addressResolver.Close(); err != nil {
-			c.log.WithError(err).Warnf("Failed to close address resolver client")
+		if c.lUDP != nil {
+			if err := c.lUDP.Close(); err != nil {
+				c.log.WithError(err).Warnf("Failed to close UDP listener")
+			}
 		}
 
 		for _, lis := range c.lMap {
-			_ = lis.Close() // nolint:errcheck
+			if err := lis.Close(); err != nil {
+				c.log.WithError(err).Warnf("Failed to close sudp listener")
+			}
 		}
 	})
-
 	return nil
 }
 

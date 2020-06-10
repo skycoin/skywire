@@ -67,7 +67,7 @@ func TestBind(t *testing.T) {
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	err = c.Bind(context.TODO(), "1234")
+	err = c.BindSTCPR(context.TODO(), "1234")
 	require.NoError(t, err)
 
 	assert.Equal(t, "/bind", <-urlCh)

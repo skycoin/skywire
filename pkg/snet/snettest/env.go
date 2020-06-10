@@ -17,6 +17,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudpr"
 )
 
 // KeyPair holds a public/private key pair.
@@ -66,7 +68,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	table := stcp.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp bool
+	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp, hasSudpr, hasSudph bool
 
 	for _, network := range networks {
 		switch network {
@@ -80,6 +82,10 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			hasStcph = true
 		case sudp.Type:
 			hasSudp = true
+		case sudpr.Type:
+			hasSudpr = true
+		case sudph.Type:
+			hasSudph = true
 		}
 	}
 
@@ -122,6 +128,15 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table)
 		}
 
+		if hasSudpr {
+			// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+			// clients.SudprC = sudpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+		}
+		//
+		if hasSudph {
+			// 	clients.SudphC = sudph.NewClient(pairs.PK, pairs.SK, addressResolver)
+		}
+
 		networkConfigs := snet.NetworkConfigs{
 			Dmsg: &snet.DmsgConfig{
 				SessionsCount: 1,
@@ -138,6 +153,13 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			},
 			SUDP: &snet.SUDPConfig{
 				LocalAddr: "127.0.0.1:" + strconv.Itoa(sudpBasePort+i),
+			},
+			SUDPR: &snet.SUDPRConfig{
+				LocalAddr:       "127.0.0.1:" + strconv.Itoa(sudpBasePort+i+1000),
+				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
+			SUDPH: &snet.SUDPHConfig{
+				AddressResolver: skyenv.TestAddressResolverAddr,
 			},
 		}
 
@@ -178,14 +200,19 @@ func (e *Env) Teardown() { e.teardown() }
 func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-chan error) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("s"))
 	require.NoError(t, err)
+
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
+
 	srv = dmsg.NewServer(pk, sk, dc, 100)
 	errCh := make(chan error, 1)
+
 	go func() {
 		errCh <- srv.Serve(l, "")
 		close(errCh)
 	}()
+
 	<-srv.Ready()
+
 	return srv, errCh
 }
