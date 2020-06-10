@@ -283,7 +283,7 @@ func (n *Network) Init() error {
 // Close closes underlying connections.
 func (n *Network) Close() error {
 	wg := new(sync.WaitGroup)
-	wg.Add(5)
+	wg.Add(len(n.networks))
 
 	var dmsgErr error
 	go func() {
