@@ -14,6 +14,9 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
 )
 
 // KeyPair holds a public/private key pair.
@@ -63,10 +66,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	table := stcp.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp bool
-
-	// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-	// var hasStcpr, hasStcph bool
+	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp bool
 
 	for _, network := range networks {
 		switch network {
@@ -74,12 +74,12 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			hasDmsg = true
 		case stcp.Type:
 			hasStcp = true
-
-			// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-			// case stcpr.Type:
-			// 	hasStcpr = true
-			// case stcph.Type:
-			// 	hasStcph = true
+		case stcpr.Type:
+			hasStcpr = true
+		case stcph.Type:
+			hasStcph = true
+		case sudp.Type:
+			hasSudp = true
 		}
 	}
 
@@ -87,6 +87,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	ns := make([]*snet.Network, len(keys))
 
 	const stcpBasePort = 7033
+	const sudpBasePort = 7533
 
 	for i, pairs := range keys {
 		var clients snet.NetworkClients
@@ -108,14 +109,18 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
 		}
 
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// if hasStcpr {
-		// 	clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		// }
+		if hasStcpr {
+			// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+			// clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+		}
 		//
-		// if hasStcph {
-		// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		// }
+		if hasStcph {
+			// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
+		}
+
+		if hasSudp {
+			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table)
+		}
 
 		networkConfigs := snet.NetworkConfigs{
 			Dmsg: &snet.DmsgConfig{
@@ -130,6 +135,9 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			},
 			STCPH: &snet.STCPHConfig{
 				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
+			SUDP: &snet.SUDPConfig{
+				LocalAddr: "127.0.0.1:" + strconv.Itoa(sudpBasePort+i),
 			},
 		}
 
