@@ -193,7 +193,6 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 		}()
 
 		tm.tps[tpID] = mTp
-
 	} else {
 		tm.Logger.Debugln("TP found, accepting...")
 	}

@@ -166,13 +166,13 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	if conf.NetworkConfigs.STCPR != nil {
 		ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
 		if err != nil {
-			return nil, err
+			log.WithError(err).Warnf("Failed to connect to address-resolver, STCPR will be disabled")
+		} else {
+			addressResolver = ar
+
+			clients.StcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.NetworkConfigs.STCPR.LocalAddr)
+			clients.StcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
 		}
-
-		addressResolver = ar
-
-		clients.StcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.NetworkConfigs.STCPR.LocalAddr)
-		clients.StcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
 	}
 
 	if conf.NetworkConfigs.STCPH != nil {
@@ -180,14 +180,16 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		if conf.NetworkConfigs.STCPR == nil || conf.NetworkConfigs.STCPR.AddressResolver != conf.NetworkConfigs.STCPH.AddressResolver {
 			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPH.AddressResolver, conf.PubKey, conf.SecKey)
 			if err != nil {
-				return nil, err
+				log.WithError(err).Warnf("Failed to connect to address-resolver, STCPH will be disabled")
+			} else {
+				addressResolver = ar
 			}
-
-			addressResolver = ar
 		}
 
-		clients.StcphC = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver)
-		clients.StcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+		if addressResolver != nil {
+			clients.StcphC = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver)
+			clients.StcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+		}
 	}
 
 	if conf.NetworkConfigs.SUDP != nil {
