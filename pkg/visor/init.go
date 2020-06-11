@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/netutil"
@@ -25,7 +27,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
@@ -126,7 +127,7 @@ func initTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
-	tpdC, err := tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+	tpdC, err := connectToTpDisc(v)
 	if err != nil {
 		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
 	}
@@ -420,4 +421,36 @@ func initUptimeTracker(v *Visor) bool {
 	})
 
 	return true
+}
+
+func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
+	const (
+		initBO = 1 * time.Second
+		maxBO  = 10 * time.Second
+		// trying till success
+		tries  = 0
+		factor = 1
+	)
+
+	conf := v.conf.Transport
+
+	tpdCRetrier := netutil.NewRetrier(v.MasterLogger().PackageLogger("tp_disc_retrier"),
+		initBO, maxBO, tries, factor)
+
+	var tpdC transport.DiscoveryClient
+	retryFunc := func() error {
+		var err error
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	if err := tpdCRetrier.Do(context.Background(), retryFunc); err != nil {
+		return nil, err
+	}
+
+	return tpdC, nil
 }
