@@ -21,6 +21,8 @@ github.com/SkycoinProject/skycoin/src/util/logging
 # github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 ## explicit
 github.com/SkycoinProject/yamux
+# github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
+github.com/StackExchange/wmi
 # github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 github.com/alecthomas/template
 github.com/alecthomas/template/parse
@@ -52,6 +54,9 @@ github.com/flynn/noise
 ## explicit
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
+# github.com/go-ole/go-ole v1.2.4
+github.com/go-ole/go-ole
+github.com/go-ole/go-ole/oleutil
 # github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
 github.com/golang/gddo/httputil
 github.com/golang/gddo/httputil/header
@@ -59,6 +64,10 @@ github.com/golang/gddo/httputil/header
 github.com/golang/protobuf/proto
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
+# github.com/google/go-github v17.0.0+incompatible
+github.com/google/go-github/github
+# github.com/google/go-querystring v1.0.0
+github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 ## explicit
 github.com/google/uuid
@@ -154,6 +163,12 @@ github.com/rakyll/statik/fs
 # github.com/schollz/progressbar/v2 v2.15.0
 ## explicit
 github.com/schollz/progressbar/v2
+# github.com/shirou/gopsutil v2.20.5+incompatible
+github.com/shirou/gopsutil/cpu
+github.com/shirou/gopsutil/internal/common
+github.com/shirou/gopsutil/mem
+github.com/shirou/gopsutil/net
+github.com/shirou/gopsutil/process
 # github.com/sirupsen/logrus v1.5.0
 ## explicit
 github.com/sirupsen/logrus
