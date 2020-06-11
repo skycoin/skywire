@@ -120,11 +120,13 @@ type NetworkClients struct {
 	StcpC *stcp.Client
 	SudpC *sudp.Client
 
-	stcprCMu sync.Mutex
-	stcprC   *stcpr.Client
+	stcprCMu      sync.Mutex
+	stcprCReadyCh chan struct{}
+	stcprC        *stcpr.Client
 
-	stcphCMu sync.Mutex
-	stcphC   *stcph.Client
+	stcphCMu      sync.Mutex
+	stcphCReadyCh chan struct{}
+	stcphC        *stcph.Client
 }
 
 func (nc *NetworkClients) StcprC() *stcpr.Client {
@@ -143,14 +145,18 @@ func (nc *NetworkClients) StcphC() *stcph.Client {
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf     Config
-	networks []string // networks to be used with transports
-	clients  *NetworkClients
+	conf       Config
+	networksMu sync.Mutex
+	networks   []string // networks to be used with transports
+	clients    *NetworkClients
 }
 
 // New creates a network from a config.
 func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
-	var clients NetworkClients
+	clients := NetworkClients{
+		stcprCReadyCh: make(chan struct{}),
+		stcphCReadyCh: make(chan struct{}),
+	}
 
 	if conf.NetworkConfigs.Dmsg != nil {
 		dmsgConf := &dmsg.Config{
@@ -184,6 +190,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		var addressResolver arclient.APIClient
 		var addressResolverMu sync.Mutex
 
+		// this one will be released as soon as address resolver is ready
 		addressResolverMu.Lock()
 		// goroutine to setup AR
 		go func() {
@@ -218,6 +225,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 				clients.stcprCMu.Lock()
 				clients.stcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.STCPR.LocalAddr)
 				clients.stcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
+				close(clients.stcprCReadyCh)
 				clients.stcprCMu.Unlock()
 			}()
 		}
@@ -232,6 +240,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 				clients.stcphCMu.Lock()
 				clients.stcphC = stcph.NewClient(conf.PubKey, conf.SecKey, ar)
 				clients.stcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+				close(clients.stcphCReadyCh)
 				clients.stcphCMu.Unlock()
 			}()
 		}
@@ -247,34 +256,49 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 // NewRaw creates a network from a config and a dmsg client.
 func NewRaw(conf Config, clients *NetworkClients) *Network {
-	networks := make([]string, 0)
+	n := &Network{
+		conf:     conf,
+		networks: make([]string, 0),
+		clients:  clients,
+	}
 
 	if clients.DmsgC != nil {
-		networks = append(networks, dmsg.Type)
+		n.networks = append(n.networks, dmsg.Type)
 	}
 
 	if clients.StcpC != nil {
-		networks = append(networks, stcp.Type)
+		n.networks = append(n.networks, stcp.Type)
 	}
 
-	// TODO (darkren): it may not be YET ready
 	if clients.StcprC() != nil {
-		networks = append(networks, stcpr.Type)
+		n.networks = append(n.networks, stcpr.Type)
+	} else {
+		go func() {
+			<-clients.stcprCReadyCh
+
+			if clients.StcprC() != nil {
+				n.appendNetworkType(stcpr.Type)
+			}
+		}()
 	}
 
 	if clients.StcphC() != nil {
-		networks = append(networks, stcph.Type)
+		n.networks = append(n.networks, stcph.Type)
+	} else {
+		go func() {
+			<-clients.stcphCReadyCh
+
+			if clients.StcphC() != nil {
+				n.appendNetworkType(stcph.Type)
+			}
+		}()
 	}
 
 	if clients.SudpC != nil {
-		networks = append(networks, sudp.Type)
+		n.networks = append(n.networks, sudp.Type)
 	}
 
-	return &Network{
-		conf:     conf,
-		networks: networks,
-		clients:  clients,
-	}
+	return n
 }
 
 // Init initiates server connections.
@@ -296,26 +320,33 @@ func (n *Network) Init() error {
 	}
 
 	if n.conf.NetworkConfigs.STCPR != nil {
-		stcprC := n.clients.StcprC()
-		// TODO (darkren): init this later, once stcprc is ready
-		if stcprC != nil && n.conf.NetworkConfigs.STCPR.LocalAddr != "" {
-			if err := stcprC.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
+		go func() {
+			<-n.clients.stcprCReadyCh
+
+			stcprC := n.clients.StcprC()
+			if stcprC != nil && n.conf.NetworkConfigs.STCPR.LocalAddr != "" {
+				if err := stcprC.Serve(); err != nil {
+					log.WithError(err).Error("failed to initiate 'stcpr'")
+				}
+			} else {
+				log.Infof("No config found for stcpr")
 			}
-		} else {
-			log.Infof("No config found for stcpr")
-		}
+		}()
 	}
 
 	if n.conf.NetworkConfigs.STCPH != nil {
-		stcphC := n.clients.StcphC()
-		if stcphC != nil {
-			if err := stcphC.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcph': %w", err)
+		go func() {
+			<-n.clients.stcphCReadyCh
+
+			stcphC := n.clients.StcphC()
+			if stcphC != nil {
+				if err := stcphC.Serve(); err != nil {
+					log.WithError(err).Error("failed to initiate 'stcph'")
+				}
+			} else {
+				log.Infof("No config found for stcph")
 			}
-		} else {
-			log.Infof("No config found for stcph")
-		}
+		}()
 	}
 
 	if n.conf.NetworkConfigs.SUDP != nil {
@@ -333,6 +364,9 @@ func (n *Network) Init() error {
 
 // Close closes underlying connections.
 func (n *Network) Close() error {
+	n.networksMu.Lock()
+	defer n.networksMu.Unlock()
+
 	wg := new(sync.WaitGroup)
 	wg.Add(len(n.networks))
 
@@ -420,7 +454,14 @@ func (n *Network) LocalPK() cipher.PubKey { return n.conf.PubKey }
 func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 
 // TransportNetworks returns network types that are used for transports.
-func (n *Network) TransportNetworks() []string { return n.networks }
+func (n *Network) TransportNetworks() []string {
+	n.networksMu.Lock()
+	networks := make([]string, len(n.networks))
+	copy(networks, n.networks)
+	n.networksMu.Unlock()
+
+	return networks
+}
 
 // Dmsg returns underlying dmsg client.
 func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
@@ -546,6 +587,13 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 	default:
 		return nil, ErrUnknownNetwork
 	}
+}
+
+func (n *Network) appendNetworkType(netType string) {
+	n.networksMu.Lock()
+	defer n.networksMu.Unlock()
+
+	n.networks = append(n.networks, netType)
 }
 
 func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
