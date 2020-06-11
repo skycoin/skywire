@@ -120,33 +120,33 @@ type NetworkClients struct {
 	StcpC *stcp.Client
 	SudpC *sudp.Client
 
-	stcprCMu      sync.Mutex
+	stcprCMu      sync.RWMutex
 	stcprCReadyCh chan struct{}
 	stcprC        *stcpr.Client
 
-	stcphCMu      sync.Mutex
+	stcphCMu      sync.RWMutex
 	stcphCReadyCh chan struct{}
 	stcphC        *stcph.Client
 }
 
 func (nc *NetworkClients) StcprC() *stcpr.Client {
-	nc.stcprCMu.Lock()
+	nc.stcprCMu.RLock()
 	c := nc.stcprC
-	nc.stcprCMu.Unlock()
+	nc.stcprCMu.RUnlock()
 	return c
 }
 
 func (nc *NetworkClients) StcphC() *stcph.Client {
-	nc.stcphCMu.Lock()
+	nc.stcphCMu.RLock()
 	c := nc.stcphC
-	nc.stcphCMu.Unlock()
+	nc.stcphCMu.RUnlock()
 	return c
 }
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
 	conf       Config
-	networksMu sync.Mutex
+	networksMu sync.RWMutex
 	networks   []string // networks to be used with transports
 	clients    *NetworkClients
 }
@@ -455,10 +455,10 @@ func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 
 // TransportNetworks returns network types that are used for transports.
 func (n *Network) TransportNetworks() []string {
-	n.networksMu.Lock()
+	n.networksMu.RLock()
 	networks := make([]string, len(n.networks))
 	copy(networks, n.networks)
-	n.networksMu.Unlock()
+	n.networksMu.RUnlock()
 
 	return networks
 }
