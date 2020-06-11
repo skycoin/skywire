@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/netutil"
@@ -27,6 +25,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
