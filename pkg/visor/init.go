@@ -433,7 +433,8 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 
 	conf := v.conf.Transport
 
-	tpdCRetrier := netutil.NewRetrier(v.MasterLogger().PackageLogger("tp_disc_retrier"),
+	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
+	tpdCRetrier := netutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient
@@ -441,6 +442,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 		var err error
 		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
 		if err != nil {
+			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
 		}
 
