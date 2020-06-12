@@ -19,9 +19,32 @@ import (
 // TODO(evanlinjin): We should implement exponential backoff at some point.
 const serveWait = time.Second
 
+// SessionDialCallback is triggered BEFORE a session is dialed to.
+// If a non-nil error is returned, the session dial is instantly terminated.
+type SessionDialCallback func(network, addr string) (err error)
+
+// SessionDisconnectCallback triggers after a session is closed.
+type SessionDisconnectCallback func(network, addr string, err error)
+
+// ClientCallbacks contains callbacks which a Client uses.
+type ClientCallbacks struct {
+	OnSessionDial       SessionDialCallback
+	OnSessionDisconnect SessionDisconnectCallback
+}
+
+func (sc *ClientCallbacks) ensure() {
+	if sc.OnSessionDial == nil {
+		sc.OnSessionDial = func(network, addr string) (err error) { return nil }
+	}
+	if sc.OnSessionDisconnect == nil {
+		sc.OnSessionDisconnect = func(network, addr string, err error) {}
+	}
+}
+
 // Config configures a dmsg client entity.
 type Config struct {
 	MinSessions int
+	Callbacks   *ClientCallbacks
 }
 
 // PrintWarnings prints warnings with config.
@@ -51,7 +74,6 @@ type Client struct {
 	errCh chan error
 	done  chan struct{}
 	once  sync.Once
-
 	sesMx sync.Mutex
 }
 
@@ -79,6 +101,10 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	if conf == nil {
 		conf = DefaultConfig()
 	}
+	if conf.Callbacks == nil {
+		conf.Callbacks = new(ClientCallbacks)
+	}
+	conf.Callbacks.ensure()
 	c.conf = conf
 	c.conf.PrintWarnings(c.log)
 
@@ -249,6 +275,18 @@ func (ce *Client) AllSessions() []ClientSession {
 	return ce.allClientSessions(ce.porter)
 }
 
+// ConnectedServers obtains all the servers client is connected to.
+//
+// Deprecated: we can now obtain the remote TCP address of a session from the ClientSession struct directly.
+func (ce *Client) ConnectedServers() []string {
+	sessions := ce.allClientSessions(ce.porter)
+	addrs := make([]string, len(sessions))
+	for i, s := range sessions {
+		addrs[i] = s.RemoteTCPAddr().String()
+	}
+	return addrs
+}
+
 // EnsureAndObtainSession attempts to obtain a session.
 // If the session does not exist, we will attempt to establish one.
 // It returns an error if the session does not exist AND cannot be established.
@@ -287,13 +325,27 @@ func (ce *Client) ensureSession(ctx context.Context, entry *disc.Entry) error {
 // It is expected that the session is created and served before the context cancels, otherwise an error will be returned.
 // NOTE: This should not be called directly as it may lead to session duplicates.
 // Only `ensureSession` or `EnsureAndObtainSession` should call this function.
-func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Info("Dialing session...")
 
-	conn, err := net.Dial("tcp", entry.Server.Address)
+	const network = "tcp"
+
+	// Trigger dial callback.
+	if err := ce.conf.Callbacks.OnSessionDial(network, entry.Server.Address); err != nil {
+		return ClientSession{}, fmt.Errorf("session dial is rejected by callback: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			// Trigger disconnect callback when dial fails.
+			ce.conf.Callbacks.OnSessionDisconnect(network, entry.Server.Address, err)
+		}
+	}()
+
+	conn, err := net.Dial(network, entry.Server.Address)
 	if err != nil {
 		return ClientSession{}, err
 	}
+
 	dSes, err := makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static)
 	if err != nil {
 		return ClientSession{}, err
@@ -303,12 +355,19 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (ClientSes
 		_ = dSes.Close() //nolint:errcheck
 		return ClientSession{}, errors.New("session already exists")
 	}
+
 	go func() {
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Info("Serving session.")
-		if err := dSes.serve(); !isClosed(ce.done) {
+		err := dSes.serve()
+		if !isClosed(ce.done) {
+			// We should only report an error when client is not closed.
+			// Also, when the client is closed, it will automatically delete all sessions.
 			ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err)
 			ce.delSession(ctx, dSes.RemotePK())
 		}
+
+		// Trigger disconnect callback.
+		ce.conf.Callbacks.OnSessionDisconnect(network, entry.Server.Address, err)
 	}()
 
 	return dSes, nil

@@ -21,6 +21,7 @@ import { OperationError } from 'src/app/utils/operation-error';
  * List of the columns that can be used to sort the data.
  */
 enum SortableColumns {
+  State = 'transports.state',
   Id = 'transports.id',
   RemotePk = 'transports.remote',
   Type = 'transports.type',
@@ -107,6 +108,34 @@ export class TransportListComponent implements OnDestroy {
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
+  }
+
+  /**
+   * Returns the scss class to be used to show the current status of the transport.
+   * @param forDot If true, returns a class for creating a colored dot. If false,
+   * returns a class for a colored text.
+   */
+  transportStatusClass(transport: Transport, forDot: boolean): string {
+    switch (transport.is_up) {
+      case true:
+        return forDot ? 'dot-green' : 'green-text';
+      default:
+        return forDot ? 'dot-red' : 'red-text';
+    }
+  }
+
+  /**
+   * Returns the text to be used to indicate the current status of a transport.
+   * @param forTooltip If true, returns a text for a tooltip. If false, returns a
+   * text for the transport list shown on small screens.
+   */
+  transportStatusText(transport: Transport, forTooltip: boolean): string {
+    switch (transport.is_up) {
+      case true:
+        return 'transports.statuses.online' + (forTooltip ? '-tooltip' : '');
+      default:
+        return 'transports.statuses.offline' + (forTooltip ? '-tooltip' : '');
+    }
   }
 
   /**
@@ -284,6 +313,13 @@ export class TransportListComponent implements OnDestroy {
         let response: number;
         if (this.sortBy === SortableColumns.Id) {
           response = !this.sortReverse ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+        } else if (this.sortBy === SortableColumns.State) {
+          if (a.is_up && !b.is_up) {
+            response = -1;
+          } else if (!a.is_up && b.is_up) {
+            response = 1;
+          }
+          response = response * (this.sortReverse ? -1 : 1);
         } else if (this.sortBy === SortableColumns.RemotePk) {
           response = !this.sortReverse ? a.remote_pk.localeCompare(b.remote_pk) : b.remote_pk.localeCompare(a.remote_pk);
         } else if (this.sortBy === SortableColumns.Type) {

@@ -23,7 +23,6 @@ export class StartupConfigComponent implements OnInit {
 
   public constructor(
     public dialogRef: MatDialogRef<StartupConfigComponent>,
-    private nodeService: NodeService,
   ) {}
 
   save() {

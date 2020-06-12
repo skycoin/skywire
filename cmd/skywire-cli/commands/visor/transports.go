@@ -13,6 +13,8 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -80,7 +82,9 @@ var (
 
 func init() {
 	const (
-		typeFlagUsage    = "type of transport to add; if unspecified, cli will attempt to establish a transport in the following order: stcp, dmsg"
+		// TODO: add stcpr implementation
+		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
+			"in the following order: stcp, stcpr, stcph, dmsg"
 		publicFlagUsage  = "whether to make the transport public"
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
@@ -108,22 +112,22 @@ var addTpCmd = &cobra.Command{
 
 			logger.Infof("Established %v transport to %v", transportType, pk)
 		} else {
-			transportType = stcp.Type
-
-			tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
-			if err != nil {
-				logger.WithError(err).
-					Warnf("Failed to establish stcp transport. Trying to establish dmsg transport")
-
-				transportType = dmsg.Type
-
-				tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
-				if err != nil {
-					logger.WithError(err).Fatalf("Failed to establish dmsg transport")
-				}
+			transportTypes := []string{
+				stcp.Type,
+				stcpr.Type,
+				stcph.Type,
+				dmsg.Type,
 			}
 
-			logger.Infof("Established %v transport to %v", transportType, pk)
+			for _, transportType := range transportTypes {
+				tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
+				if err == nil {
+					logger.Infof("Established %v transport to %v", transportType, pk)
+					break
+				}
+
+				logger.WithError(err).Warnf("Failed to establish %v transport", transportType)
+			}
 		}
 
 		printTransports(tp)
@@ -144,7 +148,7 @@ var rmTpCmd = &cobra.Command{
 func printTransports(tps ...*visor.TransportSummary) {
 	sortTransports(tps...)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode")
+	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode\tis_up")
 	internal.Catch(err)
 	for _, tp := range tps {
 		tpMode := "regular"
@@ -152,7 +156,7 @@ func printTransports(tps ...*visor.TransportSummary) {
 			tpMode = "setup"
 		}
 
-		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode)
+		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%v\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.IsUp)
 		internal.Catch(err)
 	}
 	internal.Catch(w.Flush())
