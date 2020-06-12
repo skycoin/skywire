@@ -80,7 +80,7 @@ func (c *Client) Serve() error {
 	}
 
 	if err := c.addressResolver.Bind(context.Background(), port); err != nil {
-		return fmt.Errorf("bind PK")
+		return fmt.Errorf("bind PK: %w", err)
 	}
 
 	go func() {
@@ -155,7 +155,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	addr, err := c.addressResolver.Resolve(ctx, rPK)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
 
 	conn, err := net.Dial("tcp", addr)

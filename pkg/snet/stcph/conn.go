@@ -47,7 +47,7 @@ func newConn(c connConfig) (*Conn, error) {
 		return nil, err
 	}
 
-	// TODO: extract from handshake whether encryption is needed
+	// TODO(nkryuchkov): extract from handshake whether encryption is needed
 	if c.encrypt {
 		config := noise.Config{
 			LocalPK:   c.localPK,

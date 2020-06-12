@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
-.PHONY : check lint install-linters dep test
-.PHONY : build  clean install format bin
+
+.PHONY : check lint lint-extra install-linters dep test
+.PHONY : build clean install format  bin
 .PHONY : host-apps bin
 .PHONY : run stop config
 .PHONY : docker-image docker-clean docker-network
@@ -82,9 +83,12 @@ rerun: stop
 	perl -pi -e 's/localhost//g' ./skywire.json
 	./skywire-visor skywire.json
 
-
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
+	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
+
+lint-extra: ## Run linters with extra checks.
+	${OPTS} golangci-lint run --no-config --enable-all ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 	${OPTS} go vet -all ./...
 
