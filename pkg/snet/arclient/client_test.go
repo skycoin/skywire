@@ -43,7 +43,7 @@ func TestClientAuth(t *testing.T) {
 
 	client, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
-	c := client.(*httpClient)
+	c := client.(*client)
 
 	wg.Add(1)
 	_, err = c.Get(context.TODO(), "/")

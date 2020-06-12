@@ -12,7 +12,6 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/libp2p/go-reuseport"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
@@ -27,7 +26,7 @@ const DialTimeout = 30 * time.Second
 // ErrTimeout indicates a timeout.
 var ErrTimeout = errors.New("timeout")
 
-// Client is the central control for incoming and outgoing 'stcp.Conn's.
+// Client is the central control for incoming and outgoing 'sudp.Conn's.
 type Client struct {
 	log *logging.Logger
 
@@ -71,27 +70,29 @@ func (c *Client) Serve() error {
 		return errors.New("already listening")
 	}
 
+	c.log.Infof("Serving SUDPH client")
+
 	ctx := context.Background()
 
 	dialCh := make(chan cipher.PubKey)
 
 	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	connCh, err := c.addressResolver.WS(ctx, dialCh)
+	connCh, err := c.addressResolver.BindSUDPH(ctx, dialCh)
 	if err != nil {
-		return fmt.Errorf("ws: %w", err)
+		return fmt.Errorf("BindSUDPH: %w", err)
 	}
 
 	c.connCh = connCh
 	c.dialCh = dialCh
 
-	c.log.Infof("listening websocket events on %v", c.addressResolver.LocalAddr())
+	c.log.Infof("bound BindSUDPH to %v", c.addressResolver.LocalAddr())
 
 	go func() {
 		for addr := range c.connCh {
 			c.log.Infof("Received signal to dial %v", addr)
 
 			go func(addr arclient.RemoteVisor) {
-				if err := c.acceptTCPConn(addr); err != nil {
+				if err := c.acceptUDPConn(addr); err != nil {
 					c.log.Warnf("failed to accept incoming connection: %v", err)
 				}
 			}(addr)
@@ -105,14 +106,14 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
 
-	c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalAddr())
+	c.log.Infof("Dialing %v from %v via udp", addr, c.addressResolver.LocalAddr())
 
 	for {
 		select {
 		case <-timer.C:
 			return nil, ErrTimeout
 		default:
-			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalAddr(), addr)
+			conn, err := c.addressResolver.DialUDP(addr)
 			if err == nil {
 				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())
 				return conn, nil
@@ -124,17 +125,17 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	}
 }
 
-func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
+func (c *Client) acceptUDPConn(remote arclient.RemoteVisor) error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	tcpConn, err := c.dialTimeout(remote.Addr)
+	udpConn, err := c.dialTimeout(remote.Addr)
 	if err != nil {
 		return err
 	}
 
-	remoteAddr := tcpConn.RemoteAddr()
+	remoteAddr := udpConn.RemoteAddr()
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
@@ -154,13 +155,13 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 
 	connConfig := connConfig{
 		log:       c.log,
-		conn:      tcpConn,
+		conn:      udpConn,
 		localPK:   c.lPK,
 		localSK:   c.lSK,
 		deadline:  time.Now().Add(HandshakeTimeout),
 		hs:        hs,
 		freePort:  nil,
-		encrypt:   true,
+		encrypt:   false, // TODO: enable
 		initiator: false,
 	}
 
@@ -172,7 +173,7 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 	return lis.Introduce(conn)
 }
 
-// Dial dials a new stcph.Conn to specified remote public key and port.
+// Dial dials a new sudph.Conn to specified remote public key and port.
 func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
@@ -182,14 +183,14 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.dialCh <- rPK
 
-	addr, err := c.addressResolver.ResolveSTCPH(ctx, rPK)
+	addr, err := c.addressResolver.ResolveSUDPH(ctx, rPK)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
 	}
 
 	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, addr)
 
-	tcpConn, err := c.dialTimeout(addr)
+	udpConn, err := c.dialTimeout(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -205,25 +206,25 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	connConfig := connConfig{
 		log:       c.log,
-		conn:      tcpConn,
+		conn:      udpConn,
 		localPK:   c.lPK,
 		localSK:   c.lSK,
 		deadline:  time.Now().Add(HandshakeTimeout),
 		hs:        hs,
 		freePort:  freePort,
-		encrypt:   true,
+		encrypt:   false, // TODO: enable
 		initiator: true,
 	}
 
-	stcpConn, err := newConn(connConfig)
+	sudpConn, err := newConn(connConfig)
 	if err != nil {
 		return nil, fmt.Errorf("newConn: %w", err)
 	}
 
-	return stcpConn, nil
+	return sudpConn, nil
 }
 
-// Listen creates a new listener for stcp hole punch.
+// Listen creates a new listener for sudp hole punch.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
 func (c *Client) Listen(lPort uint16) (*Listener, error) {
 	if c.isClosed() {
