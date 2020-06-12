@@ -4,7 +4,11 @@ import (
 	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
+
+//go:generate readmegen -n Config -o ./README.md ./config.go
 
 // Various timeouts for setup node.
 const (
@@ -14,15 +18,9 @@ const (
 
 // Config defines configuration parameters for setup Node.
 type Config struct {
-	PubKey cipher.PubKey `json:"public_key"`
-	SecKey cipher.SecKey `json:"secret_key"`
-
-	Dmsg struct {
-		Discovery     string `json:"discovery"`
-		SessionsCount int    `json:"sessions_count"`
-	}
-
-	TransportDiscovery string `json:"transport_discovery"`
-
-	LogLevel string `json:"log_level"`
+	PK                 cipher.PubKey   `json:"public_key"`
+	SK                 cipher.SecKey   `json:"secret_key"`
+	Dmsg               snet.DmsgConfig `json:"dmsg"`
+	TransportDiscovery string          `json:"transport_discovery"`
+	LogLevel           string          `json:"log_level"`
 }

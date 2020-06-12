@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/SkycoinProject/yamux"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/dmsg/noise"
@@ -52,15 +53,19 @@ func (ss *ServerSession) Serve() {
 			return
 		}
 
-		ss.log.Info("Serving stream.")
+		var log logrus.FieldLogger = ss.log.
+			WithField("yamux_id", yStr.StreamID())
+
+		log.Info("Initiating stream.")
+
 		go func(yStr *yamux.Stream) {
-			err := ss.serveStream(yStr)
-			ss.log.WithError(err).Info("Stopped stream.")
+			err := ss.serveStream(log, yStr)
+			log.WithError(err).Info("Stopped stream.")
 		}(yStr)
 	}
 }
 
-func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
+func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr *yamux.Stream) error {
 	readRequest := func() (StreamRequest, error) {
 		obj, err := ss.readObject(yStr)
 		if err != nil {
@@ -86,24 +91,34 @@ func (ss *ServerSession) serveStream(yStr *yamux.Stream) error {
 		return err
 	}
 
+	log = log.
+		WithField("src_addr", req.SrcAddr).
+		WithField("dst_addr", req.DstAddr)
+
+	log.Debug("Read stream request from initiating side.")
+
 	// Obtain next session.
 	ss2, ok := ss.entity.serverSession(req.DstAddr.PK)
 	if !ok {
 		return ErrReqNoNextSession
 	}
+	log.Debug("Obtained next session.")
 
 	// Forward request and obtain/check response.
 	yStr2, resp, err := ss2.forwardRequest(req)
 	if err != nil {
 		return err
 	}
+	log.Debug("Forwarded stream request.")
 
 	// Forward response.
 	if err := ss.writeObject(yStr, resp); err != nil {
 		return err
 	}
+	log.Debug("Forwarded stream response.")
 
 	// Serve stream.
+	log.Info("Serving stream.")
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
 }
 

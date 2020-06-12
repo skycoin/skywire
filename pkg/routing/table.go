@@ -123,7 +123,7 @@ func (mt *memTable) Rule(key RouteID) (Rule, error) {
 	// crucial, we do this when we have nowhere in the network to forward packet to.
 	// In this case we update activity immediately not to acquire the lock for the second time
 	ruleType := rule.Type()
-	if ruleType == RuleConsume {
+	if ruleType == RuleReverse {
 		mt.activity[key] = time.Now()
 	}
 

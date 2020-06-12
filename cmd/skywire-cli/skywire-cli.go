@@ -1,6 +1,3 @@
-/*
-CLI for skywire visor
-*/
 package main
 
 import (

@@ -51,7 +51,7 @@ func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey)
 	var recvSE SignedEntry
 
 	if err := json.NewDecoder(r).Decode(&recvSE); err != nil {
-		return nil, fmt.Errorf("failed to read entry: %s", err)
+		return nil, fmt.Errorf("failed to read entry: %w", err)
 	}
 
 	if err := compareEntries(expected, recvSE.Entry); err != nil {
@@ -111,13 +111,13 @@ func MakeSettlementHS(init bool) SettlementHS {
 			return fmt.Errorf("failed to sign entry: %w", err)
 		}
 		if err := json.NewEncoder(conn).Encode(se); err != nil {
-			return fmt.Errorf("failed to write entry: %v", err)
+			return fmt.Errorf("failed to write entry: %w", err)
 		}
 
 		// await okay signal.
 		accepted := make([]byte, 1)
 		if _, err := io.ReadFull(conn, accepted); err != nil {
-			return fmt.Errorf("failed to read response: %v", err)
+			return fmt.Errorf("failed to read response: %w", err)
 		}
 		if accepted[0] == 0 {
 			return fmt.Errorf("transport settlement rejected by remote")
@@ -153,7 +153,7 @@ func MakeSettlementHS(init bool) SettlementHS {
 
 		// inform initiating visor.
 		if _, err := conn.Write([]byte{1}); err != nil {
-			return fmt.Errorf("failed to accept transport settlement: write failed: %v", err)
+			return fmt.Errorf("failed to accept transport settlement: write failed: %w", err)
 		}
 		return nil
 	}

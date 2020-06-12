@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 )
 
 var frAddr string

@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -11,93 +10,10 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
-
-func TestClientConfigFromEnv(t *testing.T) {
-	resetEnv := func(t *testing.T) {
-		err := os.Setenv(appcommon.EnvAppKey, "")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, "")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvVisorPK, "")
-		require.NoError(t, err)
-	}
-
-	t.Run("ok", func(t *testing.T) {
-		resetEnv(t)
-
-		visorPK, _ := cipher.GenerateKeyPair()
-
-		wantCfg := ClientConfig{
-			VisorPK:    visorPK,
-			ServerAddr: appcommon.DefaultServerAddr,
-			AppKey:     "key",
-		}
-
-		err := os.Setenv(appcommon.EnvAppKey, string(wantCfg.AppKey))
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, wantCfg.ServerAddr)
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvVisorPK, wantCfg.VisorPK.Hex())
-		require.NoError(t, err)
-
-		gotCfg, err := ClientConfigFromEnv()
-		require.NoError(t, err)
-		require.Equal(t, wantCfg, gotCfg)
-	})
-
-	t.Run("no app key", func(t *testing.T) {
-		resetEnv(t)
-
-		_, err := ClientConfigFromEnv()
-		require.Equal(t, err, ErrAppKeyNotProvided)
-	})
-
-	t.Run("no app server address", func(t *testing.T) {
-		resetEnv(t)
-
-		err := os.Setenv(appcommon.EnvAppKey, "val")
-		require.NoError(t, err)
-
-		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrServerAddrNotProvided)
-	})
-
-	t.Run("no visor PK", func(t *testing.T) {
-		resetEnv(t)
-
-		err := os.Setenv(appcommon.EnvAppKey, "val")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
-		require.NoError(t, err)
-
-		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrVisorPKNotProvided)
-	})
-
-	t.Run("invalid visor PK", func(t *testing.T) {
-		resetEnv(t)
-
-		err := os.Setenv(appcommon.EnvAppKey, "val")
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvServerAddr, appcommon.DefaultServerAddr)
-		require.NoError(t, err)
-
-		err = os.Setenv(appcommon.EnvVisorPK, "val")
-		require.NoError(t, err)
-
-		_, err = ClientConfigFromEnv()
-		require.Equal(t, err, ErrVisorPKInvalid)
-	})
-}
 
 func TestClient_Dial(t *testing.T) {
 	l := logging.MustGetLogger("app2_client")
@@ -116,7 +32,7 @@ func TestClient_Dial(t *testing.T) {
 		dialLocalPort := routing.Port(1)
 		var dialErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -160,7 +76,7 @@ func TestClient_Dial(t *testing.T) {
 
 		var closeErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 		rpc.On("CloseConn", dialConnID).Return(closeErr)
 
@@ -181,7 +97,7 @@ func TestClient_Dial(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(dialConnID, dialLocalPort, dialErr)
 		rpc.On("CloseConn", dialConnID).Return(closeErr)
 
@@ -198,7 +114,7 @@ func TestClient_Dial(t *testing.T) {
 	t.Run("dial error", func(t *testing.T) {
 		dialErr := errors.New("dial error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Dial", remote).Return(uint16(0), routing.Port(0), dialErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -224,7 +140,7 @@ func TestClient_Listen(t *testing.T) {
 		listenLisID := uint16(1)
 		var listenErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -253,7 +169,7 @@ func TestClient_Listen(t *testing.T) {
 
 		var closeErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 		rpc.On("CloseListener", listenLisID).Return(closeErr)
 
@@ -273,7 +189,7 @@ func TestClient_Listen(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(listenLisID, listenErr)
 		rpc.On("CloseListener", listenLisID).Return(closeErr)
 
@@ -290,7 +206,7 @@ func TestClient_Listen(t *testing.T) {
 	t.Run("listen error", func(t *testing.T) {
 		listenErr := errors.New("listen error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Listen", local).Return(uint16(0), listenErr)
 
 		cl := prepClient(l, visorPK, rpc)
@@ -310,7 +226,7 @@ func TestClient_Close(t *testing.T) {
 		closeErr   = errors.New("close error")
 	)
 
-	rpc := &MockRPCClient{}
+	rpc := &appserver.MockRPCIngressClient{}
 
 	lisID1 := uint16(1)
 	lisID2 := uint16(2)
@@ -369,12 +285,24 @@ func TestClient_Close(t *testing.T) {
 	require.False(t, ok)
 }
 
-func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc RPCClient) *Client {
+func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc appserver.RPCIngressClient) *Client {
+	var procKey appcommon.ProcKey
+	copy(procKey[:], visorPK[:])
 	return &Client{
-		log:     l,
-		visorPK: visorPK,
-		rpc:     rpc,
-		lm:      idmanager.New(),
-		cm:      idmanager.New(),
+		log: l,
+		conf: appcommon.ProcConfig{
+			AppName:     "",
+			AppSrvAddr:  "",
+			ProcKey:     procKey,
+			ProcArgs:    nil,
+			ProcWorkDir: "",
+			VisorPK:     visorPK,
+			RoutingPort: 0,
+			BinaryLoc:   "",
+			LogDBLoc:    "",
+		},
+		rpcC: rpc,
+		lm:   idmanager.New(),
+		cm:   idmanager.New(),
 	}
 }
