@@ -9,16 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var masterLogger *logging.MasterLogger
@@ -50,7 +49,7 @@ func TestNewManager(t *testing.T) {
 	// Prepare tp manager 0.
 	pk0, sk0 := keys[0].PK, keys[0].SK
 	ls0 := transport.InMemoryTransportLogStore()
-	m0, err := transport.NewManager(nEnv.Nets[0], &transport.ManagerConfig{
+	m0, err := transport.NewManager(nil, nEnv.Nets[0], &transport.ManagerConfig{
 		PubKey:          pk0,
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
@@ -63,7 +62,7 @@ func TestNewManager(t *testing.T) {
 	// Prepare tp manager 1.
 	pk1, sk1 := keys[1].PK, keys[1].SK
 	ls1 := transport.InMemoryTransportLogStore()
-	m2, err := transport.NewManager(nEnv.Nets[1], &transport.ManagerConfig{
+	m2, err := transport.NewManager(nil, nEnv.Nets[1], &transport.ManagerConfig{
 		PubKey:          pk1,
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,

@@ -83,13 +83,13 @@ func (e *Entry) HasEdge(edge cipher.PubKey) bool {
 func (e *Entry) String() string {
 	res := ""
 	if e.Public {
-		res += fmt.Sprintf("visibility: public\n")
+		res += "visibility: public\n"
 	} else {
-		res += fmt.Sprintf("visibility: private\n")
+		res += "visibility: private\n"
 	}
 	res += fmt.Sprintf("\ttype: %s\n", e.Type)
 	res += fmt.Sprintf("\tid: %s\n", e.ID)
-	res += fmt.Sprintf("\tedges:\n")
+	res += "\tedges:\n"
 	res += fmt.Sprintf("\t\tedge 1: %s\n", e.Edges[0])
 	res += fmt.Sprintf("\t\tedge 2: %s\n", e.Edges[1])
 	return res
@@ -186,9 +186,9 @@ func (e *EntryWithStatus) String() string {
 	res += fmt.Sprintf("\tstatus returned by edge 1: %t\n", e.Statuses[0])
 	res += fmt.Sprintf("\tstatus returned by edge 2: %t\n", e.Statuses[1])
 	if e.IsUp {
-		res += fmt.Sprintf("\ttransport: up\n")
+		res += "\ttransport: up\n"
 	} else {
-		res += fmt.Sprintf("\ttransport: down\n")
+		res += "\ttransport: down\n"
 	}
 	indentedStr := strings.Replace(e.Entry.String(), "\n\t", "\n\t\t", -1)
 	res += fmt.Sprintf("\ttransport info: \n\t\t%s", indentedStr)

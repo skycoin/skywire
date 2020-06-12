@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/SkycoinProject/dmsg"
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/rakyll/statik/fs"
@@ -13,7 +15,7 @@ import (
 
 	_ "github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/statik" // embedded static files
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 )
 
@@ -29,6 +31,7 @@ var (
 	mockVisors     int
 	mockMaxTps     int
 	mockMaxRoutes  int
+	delay          string
 )
 
 // nolint:gochecknoinits
@@ -39,6 +42,7 @@ func init() {
 	rootCmd.Flags().IntVar(&mockVisors, "mock-visors", 5, "number of visors to have in mock mode")
 	rootCmd.Flags().IntVar(&mockMaxTps, "mock-max-tps", 10, "max number of transports per mock visor")
 	rootCmd.Flags().IntVar(&mockMaxRoutes, "mock-max-routes", 30, "max number of routes per visor")
+	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
 }
 
 // nolint:gochecknoglobals
@@ -50,6 +54,17 @@ var rootCmd = &cobra.Command{
 			log.Printf("Failed to output build info: %v", err)
 		}
 
+		delayDuration, err := time.ParseDuration(delay)
+		if err != nil {
+			log.WithError(err).Error("Failed to parse delay duration.")
+			delayDuration = time.Duration(0)
+		}
+
+		time.Sleep(delayDuration)
+
+		restartCtx := restart.CaptureContext()
+		restartCtx.RegisterLogger(log)
+
 		conf := prepareConfig(args)
 
 		assets, err := fs.New()
@@ -58,10 +73,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Prepare hypervisor.
-		hv, err := hypervisor.New(assets, conf)
+		hv, err := hypervisor.New(assets, conf, restartCtx)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
+
 		if mock {
 			prepareMockData(hv)
 		} else {
@@ -72,15 +88,19 @@ var rootCmd = &cobra.Command{
 		log := log.
 			WithField("addr", conf.HTTPAddr).
 			WithField("tls", conf.EnableTLS)
+
 		log.Info("Serving hypervisor...")
+
 		if conf.EnableTLS {
 			err = http.ListenAndServeTLS(conf.HTTPAddr, conf.TLSCertFile, conf.TLSKeyFile, hv)
 		} else {
 			err = http.ListenAndServe(conf.HTTPAddr, hv)
 		}
+
 		if err != nil {
 			log.WithError(err).Fatal("Hypervisor exited with error.")
 		}
+
 		log.Info("Good bye!")
 	},
 }

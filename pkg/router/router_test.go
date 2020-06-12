@@ -10,12 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -142,10 +141,12 @@ func Test_router_Introduce_AcceptRoutes(t *testing.T) {
 	rg, err := r0.AcceptRoutes(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, rg)
+	rg.mu.Lock()
 	require.Equal(t, desc, rg.desc)
 	require.Equal(t, []routing.Rule{fwdRule}, rg.fwd)
 	require.Equal(t, []routing.Rule{cnsmRule}, rg.rvs)
 	require.Len(t, rg.tps, 1)
+	rg.mu.Unlock()
 
 	allRules := rg.rt.AllRules()
 	require.Len(t, allRules, 2)
@@ -693,7 +694,7 @@ func NewTestEnv(t *testing.T, nets []*snet.Network) *TestEnv {
 			LogStore:        transport.InMemoryTransportLogStore(),
 		}
 
-		ms[i], err = transport.NewManager(n, mConfs[i])
+		ms[i], err = transport.NewManager(nil, n, mConfs[i])
 		require.NoError(t, err)
 
 		go ms[i].Serve(context.TODO())
