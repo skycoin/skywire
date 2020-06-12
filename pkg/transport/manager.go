@@ -181,14 +181,16 @@ func (tm *Manager) initTransports(ctx context.Context) {
 						var (
 							tpType = entry.Entry.Type
 							remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
-							tpID   = entry.Entry.ID
 						)
 
 						if _, err := tm.saveTransport(remote, tpType); err != nil {
 							if err == errNetworkNotReady {
-								tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s), retrying...", tpType, remote, tpID)
 								return err
+							} else {
+								tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 							}
+						} else {
+							tm.Logger.Infof("Successfully initialized TP %v", *entry.Entry)
 						}
 
 						return nil
