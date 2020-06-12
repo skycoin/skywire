@@ -37,7 +37,20 @@ const (
 var (
 	// ErrUnknownNetwork occurs on attempt to dial an unknown network type.
 	ErrUnknownNetwork = errors.New("unknown network type")
+	knownNetworks     = map[string]struct{}{
+		dmsg.Type:  {},
+		stcp.Type:  {},
+		stcpr.Type: {},
+		stcph.Type: {},
+		sudp.Type:  {},
+	}
 )
+
+// TODO (darkren) move this below
+func IsKnownNetwork(netType string) bool {
+	_, ok := knownNetworks[netType]
+	return ok
+}
 
 // NetworkConfig is a common interface for network configs.
 type NetworkConfig interface {
@@ -147,8 +160,25 @@ func (nc *NetworkClients) StcphC() *stcph.Client {
 type Network struct {
 	conf       Config
 	networksMu sync.RWMutex
-	networks   []string // networks to be used with transports
+	networks   map[string]struct{} // networks to be used with transports
 	clients    *NetworkClients
+
+	onNewNetworkTypeMu sync.Mutex
+	onNewNetworkType   func(netType string)
+}
+
+// TODO (darkren): move it below
+func (n *Network) OnNewNetworkType(callback func(netType string)) {
+	n.onNewNetworkTypeMu.Lock()
+	n.onNewNetworkType = callback
+	n.onNewNetworkTypeMu.Unlock()
+}
+
+func (n *Network) IsNetworkReady(netType string) bool {
+	n.networksMu.Lock()
+	_, ok := n.networks[netType]
+	n.networksMu.Unlock()
+	return ok
 }
 
 // New creates a network from a config.
@@ -258,44 +288,44 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 func NewRaw(conf Config, clients *NetworkClients) *Network {
 	n := &Network{
 		conf:     conf,
-		networks: make([]string, 0),
+		networks: make(map[string]struct{}),
 		clients:  clients,
 	}
 
 	if clients.DmsgC != nil {
-		n.networks = append(n.networks, dmsg.Type)
+		n.addNetworkType(dmsg.Type)
 	}
 
 	if clients.StcpC != nil {
-		n.networks = append(n.networks, stcp.Type)
+		n.addNetworkType(stcp.Type)
 	}
 
 	if clients.StcprC() != nil {
-		n.networks = append(n.networks, stcpr.Type)
+		n.addNetworkType(stcpr.Type)
 	} else {
 		go func() {
 			<-clients.stcprCReadyCh
 
 			if clients.StcprC() != nil {
-				n.appendNetworkType(stcpr.Type)
+				n.addNetworkType(stcpr.Type)
 			}
 		}()
 	}
 
 	if clients.StcphC() != nil {
-		n.networks = append(n.networks, stcph.Type)
+		n.addNetworkType(stcph.Type)
 	} else {
 		go func() {
 			<-clients.stcphCReadyCh
 
 			if clients.StcphC() != nil {
-				n.appendNetworkType(stcph.Type)
+				n.addNetworkType(stcph.Type)
 			}
 		}()
 	}
 
 	if clients.SudpC != nil {
-		n.networks = append(n.networks, sudp.Type)
+		n.addNetworkType(sudp.Type)
 	}
 
 	return n
@@ -457,7 +487,9 @@ func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 func (n *Network) TransportNetworks() []string {
 	n.networksMu.RLock()
 	networks := make([]string, len(n.networks))
-	copy(networks, n.networks)
+	for network := range n.networks {
+		networks = append(networks, network)
+	}
 	n.networksMu.RUnlock()
 
 	return networks
@@ -589,11 +621,18 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 	}
 }
 
-func (n *Network) appendNetworkType(netType string) {
+func (n *Network) addNetworkType(netType string) {
 	n.networksMu.Lock()
 	defer n.networksMu.Unlock()
 
-	n.networks = append(n.networks, netType)
+	if _, ok := n.networks[netType]; !ok {
+		n.networks[netType] = struct{}{}
+		n.onNewNetworkTypeMu.Lock()
+		if n.onNewNetworkType != nil {
+			n.onNewNetworkType(netType)
+		}
+		n.onNewNetworkTypeMu.Unlock()
+	}
 }
 
 func disassembleAddr(addr net.Addr) (pk cipher.PubKey, port uint16) {
