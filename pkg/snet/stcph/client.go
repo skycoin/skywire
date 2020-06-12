@@ -76,7 +76,7 @@ func (c *Client) Serve() error {
 	dialCh := make(chan cipher.PubKey)
 
 	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	connCh, err := c.addressResolver.WS(ctx, dialCh)
+	connCh, err := c.addressResolver.BindSTCPH(ctx, dialCh)
 	if err != nil {
 		return fmt.Errorf("ws: %w", err)
 	}
