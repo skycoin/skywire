@@ -133,6 +133,8 @@ func (tm *Manager) serve(ctx context.Context) {
 		tm.serveNetwork(ctx, netType)
 	})
 
+	networks := tm.n.TransportNetworks()
+	tm.Logger.Infof("GOT NETWORKS: %v", networks)
 	for _, netType := range tm.n.TransportNetworks() {
 		tm.serveNetwork(ctx, netType)
 	}
