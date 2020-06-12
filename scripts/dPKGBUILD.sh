@@ -29,7 +29,7 @@ srcdir=${sourcedir}/src
 pkgdir=${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}
 
 #add build deps here
-makedepends=(go install npm python python2)
+makedepends=(go install npm python python2 sudo)
 #add any runtime deps here
 depends=()
 
@@ -63,13 +63,9 @@ build() {
   export GOAPPS=${GOPATH}/apps
   export PATH=${GOPATH}/bin:${PATH}
   cd ${srcdir}/go/src/${pkggopath}
-  #build hypervisor UI
-  make install-deps-ui
-  make lint-ui
-  make build-ui
   info 'building binaries'
 	cmddir=${srcdir}/go/src/${pkggopath}/cmd
-  #using go build like this results in determinism
+  #using go build like this results in determinism - but `-trimpath` is unsupported in older versions!
 	cd ${cmddir}/apps/skychat
   info 'building skychat binary'
   ${buildwith} go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOAPPS/ .
@@ -92,11 +88,10 @@ build() {
   info 'building hypervisor binary'
   ${buildwith} go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOBIN/ .
   #binary transparency
-  #cd $GOBIN
-  #info 'binary sha256sums'
-  #sha256sum $(ls)
-  #cd $GOAPPS
-  #sha256sum $(ls)
+  cd $GOBIN
+  sha256sum $(ls) > ${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}-checksums.txt
+  cd $GOAPPS
+  sha256sum $(ls) >> ${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}-checksums.txt
 }
 
 package() {
