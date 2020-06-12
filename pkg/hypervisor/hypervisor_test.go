@@ -86,7 +86,7 @@ func makeStartNode(t *testing.T, config Config) (string, *http.Client, func()) {
 		EnableAuth:        true,
 	}
 
-	visor, err := New(nil, config)
+	visor, err := New(nil, config, nil)
 	require.NoError(t, err)
 	require.NoError(t, visor.AddMockData(defaultMockConfig))
 

@@ -19,8 +19,8 @@ ifneq (,$(findstring 64,$(GOARCH)))
     TEST_OPTS:=$(TEST_OPTS) $(RACE_FLAG)
 endif
 
-SKYWIRE_MAINNET := github.com/SkycoinProject/skywire-mainnet
-BUILDINFO_PATH := $(SKYWIRE_MAINNET)/pkg/util/buildinfo
+DMSG_REPO := github.com/SkycoinProject/dmsg
+BUILDINFO_PATH := $(DMSG_REPO)/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
@@ -53,7 +53,7 @@ install-linters: ## Install linters
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
 
 format: ## Formats the code. Must have goimports installed (use make install-linters).
-	${OPTS} goimports -w -local github.com/SkycoinProject/dmsg .
+	${OPTS} goimports -w -local ${DMSG_REPO} .
 
 dep: ## Sorts dependencies
 	${OPTS} go mod download

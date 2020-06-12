@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
@@ -34,7 +35,7 @@ func TestListener_Accept(t *testing.T) {
 		}
 		var acceptErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Accept", acceptConnID).Return(acceptConnID, acceptRemote, acceptErr)
 
 		lis := &Listener{
@@ -83,7 +84,7 @@ func TestListener_Accept(t *testing.T) {
 
 		var closeErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Accept", acceptConnID).Return(acceptConnID, acceptRemote, acceptErr)
 		rpc.On("CloseConn", acceptConnID).Return(closeErr)
 
@@ -115,7 +116,7 @@ func TestListener_Accept(t *testing.T) {
 
 		closeErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Accept", acceptConnID).Return(acceptConnID, acceptRemote, acceptErr)
 		rpc.On("CloseConn", acceptConnID).Return(closeErr)
 
@@ -140,7 +141,7 @@ func TestListener_Accept(t *testing.T) {
 		acceptRemote := appnet.Addr{}
 		acceptErr := errors.New("accept error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("Accept", lisID).Return(acceptConnID, acceptRemote, acceptErr)
 
 		lis := &Listener{
@@ -172,7 +173,7 @@ func TestListener_Close(t *testing.T) {
 		var closeNoErr error
 		closeErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("CloseListener", lisID).Return(closeNoErr)
 
 		cm := idmanager.New()
@@ -225,7 +226,7 @@ func TestListener_Close(t *testing.T) {
 	t.Run("close error", func(t *testing.T) {
 		lisCloseErr := errors.New("close error")
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("CloseListener", lisID).Return(lisCloseErr)
 
 		lis := &Listener{
@@ -244,7 +245,7 @@ func TestListener_Close(t *testing.T) {
 	t.Run("already closed", func(t *testing.T) {
 		var noErr error
 
-		rpc := &MockRPCClient{}
+		rpc := &appserver.MockRPCIngressClient{}
 		rpc.On("CloseListener", lisID).Return(noErr)
 
 		lis := &Listener{

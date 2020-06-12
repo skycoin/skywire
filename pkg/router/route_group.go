@@ -457,6 +457,9 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 	switch packet.Type() {
 	case routing.ClosePacket:
+		rg.mu.Lock()
+		defer rg.mu.Unlock()
+
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
 		return rg.handleDataPacket(packet)
@@ -512,7 +515,7 @@ func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
 
 	select {
 	case <-closeCtx.Done():
-		return fmt.Errorf("close route group timed out: %v", closeCtx.Err())
+		return fmt.Errorf("close route group timed out: %w", closeCtx.Err())
 	case <-closeDoneCh:
 	}
 
@@ -535,6 +538,16 @@ func (rg *RouteGroup) isRemoteClosed() bool {
 
 func (rg *RouteGroup) isClosed() bool {
 	return chanClosed(rg.closed)
+}
+
+func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.ManagedTransport) {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	rg.fwd = append(rg.fwd, forward)
+	rg.rvs = append(rg.rvs, reverse)
+
+	rg.tps = append(rg.tps, tp)
 }
 
 func chanClosed(ch chan struct{}) bool {

@@ -88,16 +88,16 @@ package visor
 //		}
 //		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 //			if err != io.EOF {
-//				log.Warnf("handlePutApp request: %v", err)
+//				log.Warnf("handlePutApp request: %w", err)
 //			}
 //			httputil.WriteJSON(w, r, http.StatusBadRequest,
-//				fmt.Errorf("failed to read JSON from http request body: %v", err))
+//				fmt.Errorf("failed to read JSON from http request body: %w", err))
 //			return
 //		}
 //
 //		if reqBody.AutoStart != nil {
 //			if *reqBody.AutoStart != appS.AutoStart {
-//				if err := v.setAutoStart(appS.Name, *reqBody.AutoStart); err != nil {
+//				if err := v.setAutoStart(appS.AppName, *reqBody.AutoStart); err != nil {
 //					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //					return
 //				}
@@ -107,12 +107,12 @@ package visor
 //		if reqBody.Status != nil {
 //			switch *reqBody.Status {
 //			case statusStop:
-//				if err := v.StopApp(appS.Name); err != nil {
+//				if err := v.StopApp(appS.AppName); err != nil {
 //					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //					return
 //				}
 //			case statusStart:
-//				if err := v.StartApp(appS.Name); err != nil {
+//				if err := v.StartApp(appS.AppName); err != nil {
 //					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //					return
 //				}
@@ -128,21 +128,21 @@ package visor
 //			skysocksClientName = "skysocks-client"
 //		)
 //
-//		if reqBody.Passcode != nil && appS.Name == skysocksName {
+//		if reqBody.Passcode != nil && appS.AppName == skysocksName {
 //			if err := v.setSocksPassword(*reqBody.Passcode); err != nil {
 //				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //				return
 //			}
 //		}
 //
-//		if reqBody.PK != nil && appS.Name == skysocksClientName {
+//		if reqBody.PK != nil && appS.AppName == skysocksClientName {
 //			if err := v.setSocksClientPK(*reqBody.PK); err != nil {
 //				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //				return
 //			}
 //		}
 //
-//		appS, _ = v.App(appS.Name)
+//		appS, _ = v.App(appS.AppName)
 //		httputil.WriteJSON(w, r, http.StatusOK, appS)
 //	}
 //}
@@ -169,7 +169,7 @@ package visor
 //			t = time.Unix(0, 0)
 //		}
 //
-//		ls, err := app.NewLogStore(filepath.Join(v.dir(), appS.Name), appS.Name, "bbolt")
+//		ls, err := app.NewLogStore(filepath.Join(v.dir(), appS.AppName), appS.AppName, "bbolt")
 //		if err != nil {
 //			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //			return
@@ -196,7 +196,7 @@ package visor
 //
 //func handleTransportTypes(v *Visor) http.HandlerFunc {
 //	return func(w http.ResponseWriter, r *http.Request) {
-//		httputil.WriteJSON(w, r, http.StatusOK, v.tm.Networks())
+//		httputil.WriteJSON(w, r, http.StatusOK, v.tpM.Networks())
 //	}
 //}
 //
@@ -207,7 +207,7 @@ package visor
 //			return
 //		}
 //		httputil.WriteJSON(w, r, http.StatusOK,
-//			newTransportSummary(v.tm, tp, true, v.router.SetupIsTrusted(tp.Remote())))
+//			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 //	}
 //}
 //
@@ -251,19 +251,19 @@ package visor
 //		var reqB PostTransportReq
 //		if err := httputil.ReadJSON(r, &reqB); err != nil {
 //			if err != io.EOF {
-//				log.Warnf("handlePostTransport request: %v", err)
+//				log.Warnf("handlePostTransport request: %w", err)
 //			}
 //			httputil.WriteJSON(w, r, http.StatusBadRequest,
-//				fmt.Errorf("failed to read JSON from http request body: %v", err))
+//				fmt.Errorf("failed to read JSON from http request body: %w", err))
 //			return
 //		}
-//		mTp, err := v.tm.SaveTransport(r.Context(), reqB.Remote, reqB.TpType)
+//		mTp, err := v.tpM.SaveTransport(r.Context(), reqB.Remote, reqB.TpType)
 //		if err != nil {
 //			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 //			return
 //		}
 //		httputil.WriteJSON(w, r, http.StatusOK,
-//			newTransportSummary(v.tm, mTp, false, v.router.SetupIsTrusted(mTp.Remote())))
+//			newTransportSummary(v.tpM, mTp, false, v.router.SetupIsTrusted(mTp.Remote())))
 //	}
 //}
 //
@@ -273,7 +273,7 @@ package visor
 //		if !ok {
 //			return
 //		}
-//		v.tm.DeleteTransport(tp.Entry.ID)
+//		v.tpM.DeleteTransport(tp.Entry.ID)
 //	}
 //}
 //
@@ -304,7 +304,7 @@ package visor
 //		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 //		return nil, false
 //	}
-//	tp := v.tm.Transport(tid)
+//	tp := v.tpM.Transport(tid)
 //	if tp == nil {
 //		httputil.WriteJSON(w, r, http.StatusNotFound,
 //			fmt.Errorf("transport of ID %v is not found", tid))
@@ -324,9 +324,9 @@ package visor
 //
 //func makeVisorSummary(v *Visor) *Summary {
 //	var tpSums []*TransportSummary
-//	v.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+//	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 //		isSetup := v.router.SetupIsTrusted(tp.Remote())
-//		tpSums = append(tpSums, newTransportSummary(v.tm, tp, true, isSetup))
+//		tpSums = append(tpSums, newTransportSummary(v.tpM, tp, true, isSetup))
 //		return true
 //	})
 //	return &Summary{
@@ -404,9 +404,9 @@ package visor
 //		return true
 //	}
 //	var tps []*TransportSummary
-//	v.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-//		if typeIncluded(tp.Type()) && pkIncluded(v.tm.Local(), tp.Remote()) {
-//			tps = append(tps, newTransportSummary(v.tm, tp, in.ShowLogs, v.router.SetupIsTrusted(tp.Remote())))
+//	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+//		if typeIncluded(tp.Type()) && pkIncluded(v.tpM.Local(), tp.Remote()) {
+//			tps = append(tps, newTransportSummary(v.tpM, tp, in.ShowLogs, v.router.SetupIsTrusted(tp.Remote())))
 //		}
 //		return true
 //	})

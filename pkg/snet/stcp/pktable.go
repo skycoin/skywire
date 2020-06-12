@@ -64,7 +64,7 @@ func NewTableFromFile(path string) (PKTable, error) {
 		}
 		var pk cipher.PubKey
 		if err := pk.UnmarshalText([]byte(fields[0])); err != nil {
-			return nil, fmt.Errorf("pk file is invalid: each line should have two fields: %v", err)
+			return nil, fmt.Errorf("pk file is invalid: each line should have two fields: %w", err)
 		}
 		entries[pk] = fields[1]
 	}
