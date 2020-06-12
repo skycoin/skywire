@@ -29,8 +29,8 @@ func (emptyUpdater) Start()                                  {}
 func (emptyUpdater) Stop()                                   {}
 func (emptyUpdater) ChangeValue(name string, v []byte) error { return nil }
 
-// proxyUpdater updates proxy-discovery entry of locally running skysocks App.
-type proxyUpdater struct {
+// serviceUpdater updates service-discovery entry of locally running App.
+type serviceUpdater struct {
 	client   *servicedisc.HTTPClient
 	interval time.Duration
 
@@ -39,7 +39,7 @@ type proxyUpdater struct {
 	mu     sync.Mutex
 }
 
-func (u *proxyUpdater) Start() {
+func (u *serviceUpdater) Start() {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -57,7 +57,7 @@ func (u *proxyUpdater) Start() {
 	}()
 }
 
-func (u *proxyUpdater) Stop() {
+func (u *serviceUpdater) Stop() {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -70,7 +70,7 @@ func (u *proxyUpdater) Stop() {
 	u.wg.Wait()
 }
 
-func (u *proxyUpdater) ChangeValue(name string, v []byte) error {
+func (u *serviceUpdater) ChangeValue(name string, v []byte) error {
 	switch name {
 	case ConnCountValue:
 		n, err := strconv.Atoi(string(v))

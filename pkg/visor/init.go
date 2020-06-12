@@ -84,6 +84,7 @@ func initSNet(v *Visor) bool {
 		STCP:  v.conf.STCP,
 		STCPR: v.conf.STCPR,
 		STCPH: v.conf.STCPH,
+		SUDP:  v.conf.SUDP,
 	}
 
 	conf := snet.Config{
@@ -229,7 +230,7 @@ func initLauncher(v *Visor) bool {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ProxyDisc = conf.Discovery.ProxyDisc
+		factory.ProxyDisc = conf.Discovery.ServiceDisc
 	}
 
 	// Prepare proc manager.
@@ -313,7 +314,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	envMap := vpn.AppEnvArgs(envCfg)
 
 	envs := make([]string, 0, len(envMap))
-	for k, v := range vpn.AppEnvArgs(envCfg) {
+	for k, v := range envMap {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
 
