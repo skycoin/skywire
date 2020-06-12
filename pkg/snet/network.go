@@ -488,7 +488,6 @@ func (n *Network) TransportNetworks() []string {
 	n.networksMu.RLock()
 	networks := make([]string, 0, len(n.networks))
 	for network := range n.networks {
-		log.Infof("APPENDING TO NETWORKS: %s", network)
 		networks = append(networks, network)
 	}
 	n.networksMu.RUnlock()

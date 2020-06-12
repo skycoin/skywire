@@ -129,12 +129,9 @@ func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
 
 func (tm *Manager) serve(ctx context.Context) {
 	tm.n.OnNewNetworkType(func(netType string) {
-		tm.Logger.Infoln("IN ON NEW NETWORK TYPE")
 		tm.serveNetwork(ctx, netType)
 	})
 
-	networks := tm.n.TransportNetworks()
-	tm.Logger.Infof("GOT NETWORKS: %v", networks)
 	for _, netType := range tm.n.TransportNetworks() {
 		tm.serveNetwork(ctx, netType)
 	}
