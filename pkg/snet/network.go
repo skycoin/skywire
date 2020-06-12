@@ -226,23 +226,32 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		go func() {
 			defer addressResolverMu.Unlock()
 
-			stcprRetrier := netutil.NewRetrier(logging.MustGetLogger("snet.stcpr.retrier"), 1*time.Second, 10*time.Second, 0, 1)
-
-			var ar arclient.APIClient
-			err := stcprRetrier.Do(context.Background(), func() error {
-				var err error
-				ar, err = arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
-				if err != nil {
-					return err
-				}
-
-				addressResolver = ar
-
-				return nil
-			})
-
 			log := logging.MustGetLogger("snet")
-			log.WithError(err).Error("failed to connect to address resolver")
+
+			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
+			if err != nil {
+				log.WithError(err).Error("failed to connect to address resolver, retrying...")
+
+				stcprRetrier := netutil.NewRetrier(logging.MustGetLogger("snet.stcpr.retrier"), 1*time.Second, 10*time.Second, 0, 1)
+				err := stcprRetrier.Do(context.Background(), func() error {
+					var err error
+					ar, err = arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
+					if err != nil {
+						return err
+					}
+
+					addressResolver = ar
+
+					return nil
+				})
+				if err != nil {
+					log.WithError(err).Error("failed to connect to address resolver")
+				} else {
+					log.Infoln("successfully connected to address resolver")
+				}
+			} else {
+				log.Infoln("successfully connected to address resolver")
+			}
 		}()
 
 		// setup stcpr
