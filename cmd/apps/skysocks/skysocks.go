@@ -5,57 +5,44 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/SkycoinProject/dmsg/buildinfo"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 )
 
 const (
-	appName              = "skysocks"
 	netType              = appnet.TypeSkynet
 	port    routing.Port = 3
 )
 
+var log = logrus.New()
+
 func main() {
-	log := app.NewLogger(appName)
-	skysocks.Log = log.PackageLogger("skysocks")
+	appC := app.NewClient(nil)
+	defer appC.Close()
+
+	skysocks.Log = log
 
 	if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
 		log.Printf("Failed to output build info: %v", err)
 	}
 
 	var passcode = flag.String("passcode", "", "Authorize user against this passcode")
-
 	flag.Parse()
-
-	config, err := app.ClientConfigFromEnv()
-	if err != nil {
-		log.Fatalf("Error getting client config: %v\n", err)
-	}
-
-	socksApp, err := app.NewClient(logging.MustGetLogger(fmt.Sprintf("app_%s", appName)), config)
-	if err != nil {
-		log.Fatal("Setup failure: ", err)
-	}
-
-	defer func() {
-		socksApp.Close()
-	}()
 
 	srv, err := skysocks.NewServer(*passcode, log)
 	if err != nil {
 		log.Fatal("Failed to create a new server: ", err)
 	}
 
-	l, err := socksApp.Listen(netType, port)
+	l, err := appC.Listen(netType, port)
 	if err != nil {
 		log.Fatalf("Error listening network %v on port %d: %v\n", netType, port, err)
 	}

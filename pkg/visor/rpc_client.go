@@ -1,25 +1,30 @@
 package visor
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/rpc"
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
@@ -27,6 +32,9 @@ var (
 	// ErrAlreadyServing is returned when an operation fails due to an operation
 	// that is currently running.
 	ErrAlreadyServing = errors.New("already serving")
+
+	// ErrTimeout represents a timed-out call.
+	ErrTimeout = errors.New("rpc client timeout")
 )
 
 // RPCClient represents a RPC Client implementation.
@@ -36,12 +44,12 @@ type RPCClient interface {
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
 
-	Apps() ([]*AppState, error)
+	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
-	SetSocksPassword(password string) error
-	SetSocksClientPK(pk cipher.PubKey) error
+	SetAppPassword(appName, password string) error
+	SetAppPK(appName string, pk cipher.PubKey) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 
 	TransportTypes() ([]string, error)
@@ -62,25 +70,59 @@ type RPCClient interface {
 
 	Restart() error
 	Exec(command string) ([]byte, error)
-	Update() (bool, error)
-	UpdateAvailable() (*updater.Version, error)
+	Update(config updater.UpdateConfig) (bool, error)
+	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 }
 
 // RPCClient provides methods to call an RPC Server.
 // It implements RPCClient
 type rpcClient struct {
-	client *rpc.Client
-	prefix string
+	log     logrus.FieldLogger
+	timeout time.Duration
+	conn    io.ReadWriteCloser
+	client  *rpc.Client
+	prefix  string
 }
 
 // NewRPCClient creates a new RPCClient.
-func NewRPCClient(rc *rpc.Client, prefix string) RPCClient {
-	return &rpcClient{client: rc, prefix: prefix}
+func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) RPCClient {
+	if log == nil {
+		log = logging.MustGetLogger("visor_rpc_client")
+	}
+	return &rpcClient{
+		log:     log,
+		timeout: timeout,
+		conn:    conn,
+		client:  rpc.NewClient(conn),
+		prefix:  prefix,
+	}
 }
 
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
-	return rc.client.Call(rc.prefix+"."+method, args, reply)
+	ctx := context.Background()
+	timeout := rc.timeout
+
+	switch method {
+	case "Update", "AddTransport":
+		timeout = skyenv.LongRPCTimeout
+	}
+
+	if timeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, time.Now().Add(timeout))
+		defer cancel()
+	}
+
+	select {
+	case call := <-rc.client.Go(rc.prefix+"."+method, args, reply, nil).Done:
+		return call.Error
+	case <-ctx.Done():
+		if err := rc.conn.Close(); err != nil {
+			rc.log.WithError(err).Warn("Failed to close rpc client after timeout error.")
+		}
+		return ctx.Err()
+	}
 }
 
 // Summary calls Summary.
@@ -105,8 +147,8 @@ func (rc *rpcClient) Uptime() (float64, error) {
 }
 
 // Apps calls Apps.
-func (rc *rpcClient) Apps() ([]*AppState, error) {
-	states := make([]*AppState, 0)
+func (rc *rpcClient) Apps() ([]*launcher.AppState, error) {
+	states := make([]*launcher.AppState, 0)
 	err := rc.Call("Apps", &struct{}{}, &states)
 	return states, err
 }
@@ -129,14 +171,20 @@ func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 	}, &struct{}{})
 }
 
-// SetSocksPassword calls SetSocksPassword.
-func (rc *rpcClient) SetSocksPassword(password string) error {
-	return rc.Call("SetSocksPassword", &password, &struct{}{})
+// SetAppPassword calls SetAppPassword.
+func (rc *rpcClient) SetAppPassword(appName, password string) error {
+	return rc.Call("SetAppPassword", &SetAppPasswordIn{
+		AppName:  appName,
+		Password: password,
+	}, &struct{}{})
 }
 
-// SetSocksClientPK calls SetSocksClientPK.
-func (rc *rpcClient) SetSocksClientPK(pk cipher.PubKey) error {
-	return rc.Call("SetSocksClientPK", &pk, &struct{}{})
+// SetAppPK calls SetAppPK.
+func (rc *rpcClient) SetAppPK(appName string, pk cipher.PubKey) error {
+	return rc.Call("SetSocksClientPK", &SetAppPKIn{
+		AppName: appName,
+		PK:      pk,
+	}, &struct{}{})
 }
 
 // LogsSince calls LogsSince
@@ -252,16 +300,16 @@ func (rc *rpcClient) Exec(command string) ([]byte, error) {
 }
 
 // Update calls Update.
-func (rc *rpcClient) Update() (bool, error) {
+func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	var updated bool
-	err := rc.Call("Update", &struct{}{}, &updated)
+	err := rc.Call("Update", &config, &updated)
 	return updated, err
 }
 
 // UpdateAvailable calls UpdateAvailable.
-func (rc *rpcClient) UpdateAvailable() (*updater.Version, error) {
+func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
 	var version, empty updater.Version
-	err := rc.Call("UpdateAvailable", &struct{}{}, &version)
+	err := rc.Call("UpdateAvailable", &channel, &version)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +327,7 @@ type mockRPCClient struct {
 	s         *Summary
 	tpTypes   []string
 	rt        routing.Table
-	appls     app.LogStore
+	logS      appcommon.LogStore
 	sync.RWMutex
 }
 
@@ -356,9 +404,9 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RP
 			PubKey:          localPK,
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: supportedProtocolVersion,
-			Apps: []*AppState{
-				{Name: "foo.v1.0", AutoStart: false, Port: 10},
-				{Name: "bar.v2.0", AutoStart: false, Port: 20},
+			Apps: []*launcher.AppState{
+				{AppConfig: launcher.AppConfig{Name: "foo.v1.0", AutoStart: false, Port: 10}},
+				{AppConfig: launcher.AppConfig{Name: "bar.v2.0", AutoStart: false, Port: 20}},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),
@@ -388,10 +436,12 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 	err := mc.do(false, func() error {
 		out = *mc.s
 		for _, a := range mc.s.Apps {
-			out.Apps = append(out.Apps, &(*a))
+			a := a
+			out.Apps = append(out.Apps, a)
 		}
 		for _, tp := range mc.s.Transports {
-			out.Transports = append(out.Transports, &(*tp))
+			tp := tp
+			out.Transports = append(out.Transports, tp)
 		}
 		out.RoutesCount = mc.s.RoutesCount
 		return nil
@@ -416,11 +466,12 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 }
 
 // Apps implements RPCClient.
-func (mc *mockRPCClient) Apps() ([]*AppState, error) {
-	var apps []*AppState
+func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
+	var apps []*launcher.AppState
 	err := mc.do(false, func() error {
 		for _, a := range mc.s.Apps {
-			apps = append(apps, &(*a))
+			a := a
+			apps = append(apps, a)
 		}
 		return nil
 	})
@@ -450,8 +501,8 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	})
 }
 
-// SetSocksPassword implements RPCClient.
-func (mc *mockRPCClient) SetSocksPassword(string) error {
+// SetAppPassword implements RPCClient.
+func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -465,8 +516,8 @@ func (mc *mockRPCClient) SetSocksPassword(string) error {
 	})
 }
 
-// SetSocksClientPK implements RPCClient.
-func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
+// SetAppPK implements RPCClient.
+func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
 
@@ -480,9 +531,9 @@ func (mc *mockRPCClient) SetSocksClientPK(cipher.PubKey) error {
 	})
 }
 
-// LogsSince implements RPCClient. Manually set (*mockRPPClient).appls before calling this function
+// LogsSince implements RPCClient. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
-	return mc.appls.LogsSince(timestamp)
+	return mc.logS.LogsSince(timestamp)
 }
 
 // TransportTypes implements RPCClient.
@@ -495,6 +546,7 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 	var summaries []*TransportSummary
 	err := mc.do(false, func() error {
 		for _, tp := range mc.s.Transports {
+			tp := tp
 			if types != nil {
 				for _, reqT := range types {
 					if tp.Type == reqT {
@@ -518,7 +570,7 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 				temp.Log = nil
 				summaries = append(summaries, &temp)
 			} else {
-				summaries = append(summaries, &(*tp))
+				summaries = append(summaries, tp)
 			}
 		}
 		return nil
@@ -604,7 +656,7 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 
 	rules := mc.rt.AllRules()
 	for _, rule := range rules {
-		if rule.Type() != routing.RuleConsume {
+		if rule.Type() != routing.RuleReverse {
 			continue
 		}
 
@@ -633,11 +685,11 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 }
 
 // Update implements RPCClient.
-func (mc *mockRPCClient) Update() (bool, error) {
+func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
 	return false, nil
 }
 
 // UpdateAvailable implements RPCClient.
-func (mc *mockRPCClient) UpdateAvailable() (*updater.Version, error) {
+func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, error) {
 	return nil, nil
 }

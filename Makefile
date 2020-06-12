@@ -1,11 +1,12 @@
 .DEFAULT_GOAL := help
-.PHONY : check lint install-linters dep test 
-.PHONY : build  clean install  format  bin
-.PHONY : host-apps bin 
+
+.PHONY : check lint lint-extra install-linters dep test
+.PHONY : build clean install format  bin
+.PHONY : host-apps bin
 .PHONY : run stop config
-.PHONY : docker-image  docker-clean docker-network  
-.PHONY : docker-apps docker-bin docker-volume 
-.PHONY : docker-run docker-stop     
+.PHONY : docker-image docker-clean docker-network
+.PHONY : docker-apps docker-bin docker-volume
+.PHONY : docker-run docker-stop
 
 VERSION := $(shell git describe)
 
@@ -14,6 +15,7 @@ DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/SkycoinProject/skywire-mainnet
+DMSG_BASE := github.com/SkycoinProject/dmsg
 OPTS?=GO111MODULE=on
 MANAGER_UI_DIR = static/skywire-manager-src
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
@@ -21,7 +23,7 @@ DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 
-TEST_OPTS_BASE:=-cover -timeout=5m
+TEST_OPTS_BASE:=-cover -timeout=5m -mod=vendor
 
 RACE_FLAG:=-race
 GOARCH:=$(shell go env GOARCH)
@@ -33,7 +35,7 @@ endif
 TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
 TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
 
-BUILDINFO_PATH := $(PROJECT_BASE)/pkg/util/buildinfo
+BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
@@ -56,6 +58,18 @@ stop: ## Stop running skywire-visor on host
 config: ## Generate skywire.json
 	-./skywire-cli visor gen-config -o  ./skywire.json -r
 
+install-generate: ## Installs required execs for go generate.
+	${OPTS} go install github.com/mjibson/esc
+	${OPTS} go install github.com/vektra/mockery/cmd/mockery
+	# If the following does not work, you may need to run:
+	# 	git config --global url.git@github.com:.insteadOf https://github.com/
+	# Source: https://stackoverflow.com/questions/27500861/whats-the-proper-way-to-go-get-a-private-repository
+	# We are using 'go get' instead of 'go install' here, because we don't have a git tag in which 'readmegen' is already implemented.
+	${OPTS} go get -u github.com/SkycoinPro/skywire-services/cmd/readmegen
+
+generate: ## Generate mocks and config README's
+	go generate ./...
+
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
@@ -69,9 +83,12 @@ rerun: stop
 	perl -pi -e 's/localhost//g' ./skywire.json
 	./skywire-visor skywire.json
 
-
 lint: ## Run linters. Use make install-linters first	
 	${OPTS} golangci-lint run -c .golangci.yml ./...
+	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
+
+lint-extra: ## Run linters with extra checks.
+	${OPTS} golangci-lint run --no-config --enable-all ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 	${OPTS} go vet -all ./...
 
@@ -94,17 +111,23 @@ test-no-ci: ## Run no_ci tests
 	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
 
 install-linters: ## Install linters
-	- VERSION=1.23.1 ./ci_scripts/install-golangci-lint.sh
+	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
 	# GO111MODULE=off go get -u github.com/FiloSottile/vendorcheck
 	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
 	# However, they suggest `curl ... | bash` which we should not do
 	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
+	${OPTS} go get -u github.com/incu6us/goimports-reviser
 
-format: ## Formats the code. Must have goimports installed (use make install-linters).
+tidy: ## Tidies and vendors dependencies.
+	${OPTS} go mod tidy -v
+	${OPTS} go mod vendor -v
+
+format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./cmd
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
+	find . -type f -name '*.go' -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
 
 dep: ## Sorts dependencies
 	${OPTS} go mod vendor -v
@@ -115,6 +138,8 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 # Bin 
 bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
@@ -132,6 +157,8 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist

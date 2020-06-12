@@ -2,22 +2,23 @@ package commands
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
 	"log"
-	"log/syslog"
 	"net/http"
 	"os"
 
+	"github.com/SkycoinProject/dmsg/buildinfo"
+	"github.com/SkycoinProject/dmsg/cmdutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
 )
 
 var (
@@ -37,10 +38,11 @@ var rootCmd = &cobra.Command{
 
 		logger := logging.MustGetLogger(tag)
 		if syslogAddr != "" {
-			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
+			hook, err := syslog.SetupHook(syslogAddr, tag)
 			if err != nil {
-				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
+				log.Fatalf("Error setting up syslog: %v", err)
 			}
+
 			logging.AddHook(hook)
 		}
 
@@ -55,7 +57,7 @@ var rootCmd = &cobra.Command{
 			}
 			rdr, err = os.Open(configFile)
 			if err != nil {
-				log.Fatalf("Failed to open config: %s", err)
+				log.Fatalf("Failed to open config: %v", err)
 			}
 		} else {
 			logger.Info("Reading config from STDIN")
@@ -87,7 +89,10 @@ var rootCmd = &cobra.Command{
 			}
 		}()
 
-		logger.Fatal(sn.Serve())
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
+		defer cancel()
+
+		logger.Fatal(sn.Serve(ctx))
 	},
 }
 

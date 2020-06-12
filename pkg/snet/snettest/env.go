@@ -1,7 +1,6 @@
 package snettest
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -12,8 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
 )
 
 // KeyPair holds a public/private key pair.
@@ -63,7 +66,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	table := stcp.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp bool
+	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp bool
 
 	for _, network := range networks {
 		switch network {
@@ -71,41 +74,81 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			hasDmsg = true
 		case stcp.Type:
 			hasStcp = true
+		case stcpr.Type:
+			hasStcpr = true
+		case stcph.Type:
+			hasStcph = true
+		case sudp.Type:
+			hasSudp = true
 		}
 	}
 
 	// Prepare `snets`.
 	ns := make([]*snet.Network, len(keys))
 
+	const stcpBasePort = 7033
+	const sudpBasePort = 7533
+
 	for i, pairs := range keys {
-		var dmsgClient *dmsg.Client
-		var stcpClient *stcp.Client
+		var clients snet.NetworkClients
 
 		if hasDmsg {
-			dmsgClient = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go dmsgClient.Serve()
+			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go clients.DmsgC.Serve()
 		}
+
+		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
+		//
+		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
+		// if err != nil {
+		// 	panic(err)
+		// }
 
 		if hasStcp {
-			stcpClient = stcp.NewClient(pairs.PK, pairs.SK, table)
+			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
 		}
 
-		port := 7033
-		n := snet.NewRaw(
-			snet.Config{
-				PubKey: pairs.PK,
-				SecKey: pairs.SK,
-				Dmsg: &snet.DmsgConfig{
-					SessionsCount: 1,
-				},
-				STCP: &snet.STCPConfig{
-					LocalAddr: "127.0.0.1:" + strconv.Itoa(port+i),
-				},
+		if hasStcpr {
+			// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+			// clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+		}
+		//
+		if hasStcph {
+			// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
+		}
+
+		if hasSudp {
+			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table)
+		}
+
+		networkConfigs := snet.NetworkConfigs{
+			Dmsg: &snet.DmsgConfig{
+				SessionsCount: 1,
 			},
-			dmsgClient,
-			stcpClient,
-		)
-		require.NoError(t, n.Init(context.TODO()))
+			STCP: &snet.STCPConfig{
+				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
+			},
+			STCPR: &snet.STCPRConfig{
+				LocalAddr:       "127.0.0.1:" + strconv.Itoa(stcpBasePort+i+1000),
+				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
+			STCPH: &snet.STCPHConfig{
+				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
+			SUDP: &snet.SUDPConfig{
+				LocalAddr: "127.0.0.1:" + strconv.Itoa(sudpBasePort+i),
+			},
+		}
+
+		snetConfig := snet.Config{
+			PubKey:         pairs.PK,
+			SecKey:         pairs.SK,
+			NetworkConfigs: networkConfigs,
+		}
+
+		n := snet.NewRaw(snetConfig, clients)
+		require.NoError(t, n.Init())
 		ns[i] = n
 	}
 
