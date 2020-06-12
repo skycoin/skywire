@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/netutil"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
@@ -32,17 +34,20 @@ type ManagerConfig struct {
 type Manager struct {
 	Logger *logging.Logger
 	Conf   *ManagerConfig
-	nets   map[string]struct{}
 	tps    map[uuid.UUID]*ManagedTransport
 	n      *snet.Network
 
-	readCh    chan routing.Packet
-	mx        sync.RWMutex
-	wgMu      sync.Mutex
-	wg        sync.WaitGroup
-	serveOnce sync.Once // ensure we only serve once.
-	closeOnce sync.Once // ensure we only close once.
-	done      chan struct{}
+	listenersMu   sync.Mutex
+	listeners     []*snet.Listener
+	servingNetsMu sync.Mutex
+	servingNets   map[string]struct{}
+	readCh        chan routing.Packet
+	mx            sync.RWMutex
+	wgMu          sync.Mutex
+	wg            sync.WaitGroup
+	serveOnce     sync.Once // ensure we only serve once.
+	closeOnce     sync.Once // ensure we only close once.
+	done          chan struct{}
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -51,18 +56,14 @@ func NewManager(log *logging.Logger, n *snet.Network, config *ManagerConfig) (*M
 	if log == nil {
 		log = logging.MustGetLogger("tp_manager")
 	}
-	nets := make(map[string]struct{})
-	for _, netType := range n.TransportNetworks() {
-		nets[netType] = struct{}{}
-	}
 	tm := &Manager{
-		Logger: log,
-		Conf:   config,
-		nets:   nets,
-		tps:    make(map[uuid.UUID]*ManagedTransport),
-		n:      n,
-		readCh: make(chan routing.Packet, 20),
-		done:   make(chan struct{}),
+		Logger:      log,
+		Conf:        config,
+		servingNets: make(map[string]struct{}),
+		tps:         make(map[uuid.UUID]*ManagedTransport),
+		n:           n,
+		readCh:      make(chan routing.Packet, 20),
+		done:        make(chan struct{}),
 	}
 	return tm, nil
 }
@@ -74,49 +75,65 @@ func (tm *Manager) Serve(ctx context.Context) {
 	})
 }
 
-func (tm *Manager) serve(ctx context.Context) {
-	var listeners []*snet.Listener
+func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
+	if tm.isClosing() {
+		return
+	}
 
-	for _, netType := range tm.n.TransportNetworks() {
-		if tm.isClosing() {
-			return
-		}
+	tm.servingNetsMu.Lock()
+	if _, ok := tm.servingNets[netType]; ok {
+		tm.servingNetsMu.Unlock()
+		return
+	}
+	tm.servingNets[netType] = struct{}{}
+	tm.servingNetsMu.Unlock()
 
-		lis, err := tm.n.Listen(netType, skyenv.DmsgTransportPort)
-		if err != nil {
-			tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
-				netType, skyenv.DmsgTransportPort)
-			continue
-		}
-		tm.Logger.Infof("listening on network: %s", netType)
-		listeners = append(listeners, lis)
+	lis, err := tm.n.Listen(netType, skyenv.DmsgTransportPort)
+	if err != nil {
+		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
+			netType, skyenv.DmsgTransportPort)
+		return
+	}
+	tm.Logger.Infof("listening on network: %s", netType)
+	tm.listenersMu.Lock()
+	tm.listeners = append(tm.listeners, lis)
+	tm.listenersMu.Unlock()
 
-		if tm.isClosing() {
-			return
-		}
+	if tm.isClosing() {
+		return
+	}
 
-		tm.wgMu.Lock()
-		tm.wg.Add(1)
-		tm.wgMu.Unlock()
+	tm.wgMu.Lock()
+	tm.wg.Add(1)
+	tm.wgMu.Unlock()
 
-		go func() {
-			defer tm.wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-tm.done:
-					return
-				default:
-					if err := tm.acceptTransport(ctx, lis); err != nil {
-						tm.Logger.Warnf("Failed to accept connection: %v", err)
-						if strings.Contains(err.Error(), "closed") {
-							return
-						}
+	go func() {
+		defer tm.wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tm.done:
+				return
+			default:
+				if err := tm.acceptTransport(ctx, lis); err != nil {
+					tm.Logger.Warnf("Failed to accept connection: %v", err)
+					if strings.Contains(err.Error(), "closed") {
+						return
 					}
 				}
 			}
-		}()
+		}
+	}()
+}
+
+func (tm *Manager) serve(ctx context.Context) {
+	tm.n.OnNewNetworkType(func(netType string) {
+		tm.serveNetwork(ctx, netType)
+	})
+
+	for _, netType := range tm.n.TransportNetworks() {
+		tm.serveNetwork(ctx, netType)
 	}
 
 	tm.initTransports(ctx)
@@ -129,11 +146,13 @@ func (tm *Manager) serve(ctx context.Context) {
 	defer tm.Logger.Info("transport manager closed.")
 
 	// Close all listeners.
-	for i, lis := range listeners {
+	tm.listenersMu.Lock()
+	for i, lis := range tm.listeners {
 		if err := lis.Close(); err != nil {
 			tm.Logger.Warnf("listener %d of network '%s' closed with error: %v", i, lis.Network(), err)
 		}
 	}
+	tm.listenersMu.Unlock()
 }
 
 func (tm *Manager) initTransports(ctx context.Context) {
@@ -153,7 +172,34 @@ func (tm *Manager) initTransports(ctx context.Context) {
 			tpID   = entry.Entry.ID
 		)
 		if _, err := tm.saveTransport(remote, tpType); err != nil {
-			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
+			if err == errNetworkNotReady {
+				tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s), retrying...", tpType, remote, tpID)
+
+				go func(entry *EntryWithStatus) {
+					retrier := netutil.NewRetrier(tm.Logger, 1*time.Second, 10*time.Second, 0, 1)
+					err := retrier.Do(ctx, func() error {
+						var (
+							tpType = entry.Entry.Type
+							remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
+							tpID   = entry.Entry.ID
+						)
+
+						if _, err := tm.saveTransport(remote, tpType); err != nil {
+							if err == errNetworkNotReady {
+								tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s), retrying...", tpType, remote, tpID)
+								return err
+							}
+						}
+
+						return nil
+					})
+					if err != nil {
+						tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
+					}
+				}(entry)
+			} else {
+				tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
+			}
 		}
 		tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
 	}
@@ -260,9 +306,17 @@ func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
 
+var (
+	errNetworkNotReady = errors.New("network is not ready")
+)
+
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
-	if _, ok := tm.nets[netName]; !ok {
+	if !snet.IsKnownNetwork(netName) {
 		return nil, errors.New("unknown transport type")
+	}
+
+	if !tm.n.IsNetworkReady(netName) {
+		return nil, errNetworkNotReady
 	}
 
 	tpID := tm.tpIDFromPK(remote, netName)
