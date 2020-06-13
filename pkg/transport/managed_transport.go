@@ -304,7 +304,6 @@ func (mt *ManagedTransport) redial(ctx context.Context) error {
 	}
 
 	if _, err := mt.dc.GetTransportByID(ctx, mt.Entry.ID); err != nil {
-
 		// If the error is a temporary network error, we should retry at a later stage.
 		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
 
