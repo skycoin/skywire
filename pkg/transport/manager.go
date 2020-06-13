@@ -80,6 +80,8 @@ func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
 		return
 	}
 
+	// this func may be called by either initiating routing or a callback,
+	// so we should check whether this type of network is already being served
 	tm.servingNetsMu.Lock()
 	if _, ok := tm.servingNets[netType]; ok {
 		tm.servingNetsMu.Unlock()
@@ -128,10 +130,12 @@ func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
 }
 
 func (tm *Manager) serve(ctx context.Context) {
+	// some networks may not be ready yet, so we're setting a callback first
 	tm.n.OnNewNetworkType(func(netType string) {
 		tm.serveNetwork(ctx, netType)
 	})
 
+	// here we may start serving all the networks which are ready at this point
 	for _, netType := range tm.n.TransportNetworks() {
 		tm.serveNetwork(ctx, netType)
 	}
@@ -172,38 +176,42 @@ func (tm *Manager) initTransports(ctx context.Context) {
 			tpID   = entry.Entry.ID
 		)
 		if _, err := tm.saveTransport(remote, tpType); err != nil {
-			if err == errNetworkNotReady {
-				tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s), retrying...", tpType, remote, tpID)
-
-				go func(entry *EntryWithStatus) {
-					retrier := netutil.NewRetrier(tm.Logger, 1*time.Second, 10*time.Second, 0, 1)
-					err := retrier.Do(ctx, func() error {
-						var (
-							tpType = entry.Entry.Type
-							remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
-						)
-
-						if _, err := tm.saveTransport(remote, tpType); err != nil {
-							if err == errNetworkNotReady {
-								return err
-							} else {
-								tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
-							}
-						} else {
-							tm.Logger.Infof("Successfully initialized TP %v", *entry.Entry)
-						}
-
-						return nil
-					})
-					if err != nil {
-						tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
-					}
-				}(entry)
-			} else {
+			if err != snet.ErrNetworkNotReady {
 				tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 			}
+
+			// in this case network of `tpType` is not ready which is not permanent, so we're
+			// setting up a goroutine which will try to establish this transport
+			// TODO (nkryuchkov): once transport is generalized we could set up some kind of channel to wait for the network to come up and try to reestablish transport after that. for now we're just retrying to establish transport which is not really efficient
+			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s), retrying...", tpType, remote, tpID)
+
+			go func(entry *EntryWithStatus) {
+				retrier := netutil.NewRetrier(tm.Logger, 1*time.Second, 10*time.Second, 0, 1)
+				err := retrier.Do(ctx, func() error {
+					var (
+						tpType = entry.Entry.Type
+						remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
+					)
+
+					if _, err := tm.saveTransport(remote, tpType); err != nil {
+						if err == snet.ErrNetworkNotReady {
+							// keep on retrying only if the network is not ready.
+							// otherwise transport is either established or considered dead
+							return err
+						}
+					} else {
+						tm.Logger.Infof("Successfully initialized TP %v", *entry.Entry)
+					}
+
+					return nil
+				})
+				if err != nil {
+					tm.Logger.WithError(err).Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
+				}
+			}(entry)
+		} else {
+			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
 		}
-		tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
 	}
 }
 
@@ -308,17 +316,15 @@ func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
 
-var (
-	errNetworkNotReady = errors.New("network is not ready")
-)
+var ()
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
 	if !snet.IsKnownNetwork(netName) {
-		return nil, errors.New("unknown transport type")
+		return nil, snet.ErrUnknownNetwork
 	}
 
 	if !tm.n.IsNetworkReady(netName) {
-		return nil, errNetworkNotReady
+		return nil, snet.ErrNetworkNotReady
 	}
 
 	tpID := tm.tpIDFromPK(remote, netName)
