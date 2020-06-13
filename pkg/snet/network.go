@@ -37,7 +37,9 @@ const (
 var (
 	// ErrUnknownNetwork occurs on attempt to dial an unknown network type.
 	ErrUnknownNetwork = errors.New("unknown network type")
-	knownNetworks     = map[string]struct{}{
+	// ErrNetworkNotReady occurs on attempt to dial network which is not yet ready.
+	ErrNetworkNotReady = errors.New("network is not ready")
+	knownNetworks      = map[string]struct{}{
 		dmsg.Type:  {},
 		stcp.Type:  {},
 		stcpr.Type: {},
@@ -46,7 +48,7 @@ var (
 	}
 )
 
-// TODO (darkren) move this below
+// IsKnownNetwork tells whether network type `netType` is known.
 func IsKnownNetwork(netType string) bool {
 	_, ok := knownNetworks[netType]
 	return ok
@@ -167,20 +169,6 @@ type Network struct {
 	onNewNetworkType   func(netType string)
 }
 
-// TODO (darkren): move it below
-func (n *Network) OnNewNetworkType(callback func(netType string)) {
-	n.onNewNetworkTypeMu.Lock()
-	n.onNewNetworkType = callback
-	n.onNewNetworkTypeMu.Unlock()
-}
-
-func (n *Network) IsNetworkReady(netType string) bool {
-	n.networksMu.Lock()
-	_, ok := n.networks[netType]
-	n.networksMu.Unlock()
-	return ok
-}
-
 // New creates a network from a config.
 func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	clients := NetworkClients{
@@ -217,8 +205,10 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	}
 
 	if conf.NetworkConfigs.STCPR != nil || conf.NetworkConfigs.STCPH != nil {
-		var addressResolver arclient.APIClient
-		var addressResolverMu sync.Mutex
+		var (
+			addressResolver   arclient.APIClient
+			addressResolverMu sync.Mutex
+		)
 
 		// this one will be released as soon as address resolver is ready
 		addressResolverMu.Lock()
@@ -228,12 +218,15 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 			log := logging.MustGetLogger("snet")
 
+			// we're doing this first try outside of retrier, because we need to log the error,
+			// to log this exactly once. without the error at all, it would be unclear for the
+			// user what's going on. also spamming it on each try won't do any good
 			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
 			if err != nil {
 				log.WithError(err).Error("failed to connect to address resolver, retrying...")
 
-				stcprRetrier := netutil.NewRetrier(logging.MustGetLogger("snet.stcpr.retrier"), 1*time.Second, 10*time.Second, 0, 1)
-				err := stcprRetrier.Do(context.Background(), func() error {
+				arRetrier := netutil.NewRetrier(logging.MustGetLogger("snet.stcpr.retrier"), 1*time.Second, 10*time.Second, 0, 1)
+				err := arRetrier.Do(context.Background(), func() error {
 					var err error
 					ar, err = arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
 					if err != nil {
@@ -257,6 +250,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		// setup stcpr
 		if conf.NetworkConfigs.STCPR != nil {
 			go func() {
+				// waiting here till we connect to address resolver
 				addressResolverMu.Lock()
 				ar := addressResolver
 				addressResolverMu.Unlock()
@@ -264,6 +258,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 				clients.stcprCMu.Lock()
 				clients.stcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.STCPR.LocalAddr)
 				clients.stcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
+				// signal that network client is ready
 				close(clients.stcprCReadyCh)
 				clients.stcprCMu.Unlock()
 			}()
@@ -272,6 +267,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		// setup stcph
 		if conf.NetworkConfigs.STCPH != nil {
 			go func() {
+				// waiting here till we connect to address resolver
 				addressResolverMu.Lock()
 				ar := addressResolver
 				addressResolverMu.Unlock()
@@ -279,6 +275,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 				clients.stcphCMu.Lock()
 				clients.stcphC = stcph.NewClient(conf.PubKey, conf.SecKey, ar)
 				clients.stcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+				// signal that network client is ready
 				close(clients.stcphCReadyCh)
 				clients.stcphCMu.Unlock()
 			}()
@@ -309,29 +306,25 @@ func NewRaw(conf Config, clients *NetworkClients) *Network {
 		n.addNetworkType(stcp.Type)
 	}
 
-	if clients.StcprC() != nil {
-		n.addNetworkType(stcpr.Type)
-	} else {
-		go func() {
-			<-clients.stcprCReadyCh
+	go func() {
+		// since we're creating network client in the background,
+		// we need to wait till it gets ready
+		<-clients.stcprCReadyCh
 
-			if clients.StcprC() != nil {
-				n.addNetworkType(stcpr.Type)
-			}
-		}()
-	}
+		if clients.StcprC() != nil {
+			n.addNetworkType(stcpr.Type)
+		}
+	}()
 
-	if clients.StcphC() != nil {
-		n.addNetworkType(stcph.Type)
-	} else {
-		go func() {
-			<-clients.stcphCReadyCh
+	go func() {
+		// since we're creating network client in the background,
+		// we need to wait till it gets ready
+		<-clients.stcphCReadyCh
 
-			if clients.StcphC() != nil {
-				n.addNetworkType(stcph.Type)
-			}
-		}()
-	}
+		if clients.StcphC() != nil {
+			n.addNetworkType(stcph.Type)
+		}
+	}()
 
 	if clients.SudpC != nil {
 		n.addNetworkType(sudp.Type)
@@ -360,6 +353,8 @@ func (n *Network) Init() error {
 
 	if n.conf.NetworkConfigs.STCPR != nil {
 		go func() {
+			// since we're creating network client in the background,
+			// we need to wait till it gets ready
 			<-n.clients.stcprCReadyCh
 
 			stcprC := n.clients.StcprC()
@@ -375,6 +370,8 @@ func (n *Network) Init() error {
 
 	if n.conf.NetworkConfigs.STCPH != nil {
 		go func() {
+			// since we're creating network client in the background,
+			// we need to wait till it gets ready
 			<-n.clients.stcphCReadyCh
 
 			stcphC := n.clients.StcphC()
@@ -399,6 +396,21 @@ func (n *Network) Init() error {
 	}
 
 	return nil
+}
+
+// OnNewNetworkType sets callback to be called when new network type is ready.
+func (n *Network) OnNewNetworkType(callback func(netType string)) {
+	n.onNewNetworkTypeMu.Lock()
+	n.onNewNetworkType = callback
+	n.onNewNetworkTypeMu.Unlock()
+}
+
+// IsNetworkReady checks whether network of type `netType` is ready.
+func (n *Network) IsNetworkReady(netType string) bool {
+	n.networksMu.Lock()
+	_, ok := n.networks[netType]
+	n.networksMu.Unlock()
+	return ok
 }
 
 // Close closes underlying connections.
@@ -427,8 +439,6 @@ func (n *Network) Close() error {
 
 	var stcprErr error
 	n.clients.stcprCMu.Lock()
-	// TODO (darkren): we're maybe currently setting up the client at this point.
-	// so in this case, we should stop trying to set it up. or probably just forget about it
 	if n.clients.stcprC != nil {
 		go func() {
 			defer n.clients.stcprCMu.Unlock()
