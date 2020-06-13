@@ -223,7 +223,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			// user what's going on. also spamming it on each try won't do any good
 			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
 			if err != nil {
-				log.WithError(err).Error("failed to connect to address resolver, retrying...")
+				log.WithError(err).Error("failed to connect to address resolver - STCPR/STCPH are temporarily disabled, retrying...")
 
 				arRetrier := netutil.NewRetrier(logging.MustGetLogger("snet.stcpr.retrier"), 1*time.Second, 10*time.Second, 0, 1)
 				err := arRetrier.Do(context.Background(), func() error {
