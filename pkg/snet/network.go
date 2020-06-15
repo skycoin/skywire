@@ -9,11 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/netutil"
-
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
@@ -129,41 +128,12 @@ type NetworkConfigs struct {
 	SUDP  *SUDPConfig  // The sudp service will not be started if nil.
 }
 
-// NetworkClients represents all network clients.
-type NetworkClients struct {
-	DmsgC *dmsg.Client
-	StcpC *stcp.Client
-	SudpC *sudp.Client
-
-	stcprCMu      sync.RWMutex
-	stcprCReadyCh chan struct{}
-	stcprC        *stcpr.Client
-
-	stcphCMu      sync.RWMutex
-	stcphCReadyCh chan struct{}
-	stcphC        *stcph.Client
-}
-
-func (nc *NetworkClients) StcprC() *stcpr.Client {
-	nc.stcprCMu.RLock()
-	c := nc.stcprC
-	nc.stcprCMu.RUnlock()
-	return c
-}
-
-func (nc *NetworkClients) StcphC() *stcph.Client {
-	nc.stcphCMu.RLock()
-	c := nc.stcphC
-	nc.stcphCMu.RUnlock()
-	return c
-}
-
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf       Config
-	networksMu sync.RWMutex
-	networks   map[string]struct{} // networks to be used with transports
-	clients    *NetworkClients
+	conf    Config
+	netsMu  sync.RWMutex
+	nets    map[string]struct{} // networks to be used with transports
+	clients *NetworkClients
 
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
@@ -216,6 +186,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		go func() {
 			defer addressResolverMu.Unlock()
 
+			// TODO(nkryuchkov): encapsulate reconnection logic within AR client
 			log := logging.MustGetLogger("snet")
 
 			// we're doing this first try outside of retrier, because we need to log the error,
@@ -293,9 +264,9 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 // NewRaw creates a network from a config and a dmsg client.
 func NewRaw(conf Config, clients *NetworkClients) *Network {
 	n := &Network{
-		conf:     conf,
-		networks: make(map[string]struct{}),
-		clients:  clients,
+		conf:    conf,
+		nets:    make(map[string]struct{}),
+		clients: clients,
 	}
 
 	if clients.DmsgC != nil {
@@ -407,19 +378,19 @@ func (n *Network) OnNewNetworkType(callback func(netType string)) {
 
 // IsNetworkReady checks whether network of type `netType` is ready.
 func (n *Network) IsNetworkReady(netType string) bool {
-	n.networksMu.Lock()
-	_, ok := n.networks[netType]
-	n.networksMu.Unlock()
+	n.netsMu.Lock()
+	_, ok := n.nets[netType]
+	n.netsMu.Unlock()
 	return ok
 }
 
 // Close closes underlying connections.
 func (n *Network) Close() error {
-	n.networksMu.Lock()
-	defer n.networksMu.Unlock()
+	n.netsMu.Lock()
+	defer n.netsMu.Unlock()
 
 	wg := new(sync.WaitGroup)
-	wg.Add(len(n.networks))
+	wg.Add(len(n.nets))
 
 	var dmsgErr error
 	if n.clients.DmsgC != nil {
@@ -504,12 +475,12 @@ func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 
 // TransportNetworks returns network types that are used for transports.
 func (n *Network) TransportNetworks() []string {
-	n.networksMu.RLock()
-	networks := make([]string, 0, len(n.networks))
-	for network := range n.networks {
+	n.netsMu.RLock()
+	networks := make([]string, 0, len(n.nets))
+	for network := range n.nets {
 		networks = append(networks, network)
 	}
-	n.networksMu.RUnlock()
+	n.netsMu.RUnlock()
 
 	return networks
 }
@@ -607,7 +578,7 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 	case stcpr.Type:
 		stcprC := n.clients.StcprC()
 		if stcprC == nil {
-			return nil, errors.New("stcpr client is not ready")
+			return nil, ErrNetworkNotReady
 		}
 
 		lis, err := stcprC.Listen(port)
@@ -619,7 +590,7 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 	case stcph.Type:
 		stcphC := n.clients.StcphC()
 		if stcphC == nil {
-			return nil, errors.New("stcph client is not ready")
+			return nil, ErrNetworkNotReady
 		}
 
 		lis, err := stcphC.Listen(port)
@@ -641,11 +612,11 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 }
 
 func (n *Network) addNetworkType(netType string) {
-	n.networksMu.Lock()
-	defer n.networksMu.Unlock()
+	n.netsMu.Lock()
+	defer n.netsMu.Unlock()
 
-	if _, ok := n.networks[netType]; !ok {
-		n.networks[netType] = struct{}{}
+	if _, ok := n.nets[netType]; !ok {
+		n.nets[netType] = struct{}{}
 		n.onNewNetworkTypeMu.Lock()
 		if n.onNewNetworkType != nil {
 			n.onNewNetworkType(netType)
