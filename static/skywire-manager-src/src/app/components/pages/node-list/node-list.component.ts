@@ -16,6 +16,7 @@ import { SelectColumnComponent, SelectedColumn } from '../../layout/select-colum
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
 import { processServiceError } from 'src/app/utils/errors';
+import { ClipboardService } from 'src/app/services/clipboard.service';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -71,6 +72,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
     private sidenavService: SidenavService,
+    private clipboardService: ClipboardService
   ) {
     // Data for populating the tab bar.
     this.tabsData = [
@@ -306,22 +308,40 @@ export class NodeListComponent implements OnInit, OnDestroy {
   showOptionsDialog(node: Node) {
     const options: SelectableOption[] = [
       {
-        icon: 'short_text',
-        label: 'edit-label.title',
+        icon: 'filter_none',
+        label: 'nodes.copy-key',
       },
       {
-        icon: 'close',
-        label: 'nodes.delete-node',
+        icon: 'short_text',
+        label: 'edit-label.title',
       }
     ];
 
+    if (!node.online) {
+      options.push({
+        icon: 'close',
+        label: 'nodes.delete-node',
+      });
+    }
+
     SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
-        this.showEditLabelDialog(node);
+        if (this.clipboardService.copy(node.local_pk)) {
+          this.onCopyToClipboardClicked();
+        }
       } else if (selectedOption === 2) {
+        this.showEditLabelDialog(node);
+      } else if (selectedOption === 3) {
         this.deleteNode(node);
       }
     });
+  }
+
+  /**
+   * Called after copying the public key of a node.
+   */
+  onCopyToClipboardClicked() {
+    this.snackbarService.showDone('copy.copied');
   }
 
   /**
