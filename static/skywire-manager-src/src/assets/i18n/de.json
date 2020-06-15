@@ -54,9 +54,9 @@
         "public-key": "Öffentlicher Schlüssel:",
         "port": "Port:",
         "node-version": "Visor Version:",
-        "app-protocol-version": "App Protocol Version:",
+        "app-protocol-version": "Anwendungsprotokollversion:",
         "time": {
-          "title": "Dauer online:",
+          "title": "Online seit:",
           "seconds": "ein paar Sekunden",
           "minute": "1 Minute",
           "minutes": "{{ time }} Minuten",
@@ -87,7 +87,7 @@
   },
 
   "nodes": {
-    "title": "Visor liste",
+    "title": "Visor Liste",
     "state": "Status",
     "label": "Bezeichnung",
     "key": "Schlüssel",
@@ -149,7 +149,7 @@
     "menu": {
       "terminal": "Terminal",
       "config": "Konfiguration",
-      "update": "Update",
+      "update": "Aktualisieren",
       "reboot": "Neustart"
     },
     "reboot": {
@@ -171,7 +171,7 @@
     "terminal": {
       "title": "Terminal",
       "input-start": "Skywire Terminal für {{address}}",
-      "error": "Beim Ausführung des Befehls ist ein Fehler aufgetreten."
+      "error": "Bei der Ausführung des Befehls ist ein Fehler aufgetreten."
     },
     "update": {
       "title": "Update",
@@ -226,12 +226,12 @@
       "filter-button": "Log-Intervall:",
       "filter": {
         "title": "Filter",
-        "filter": "Zeige Logs die generiert wurden seit",
-        "7-days": "den letzten 7 Tagen",
-        "1-month": "den letzten 30 Tagen",
-        "3-months": "den letzten 3 Monaten",
-        "6-months": "den letzten 6 Monaten",
-        "1-year": "dem letzten Jahr",
+        "filter": "Zeige generierte Logs",
+        "7-days": "der letzten 7 Tagen",
+        "1-month": "der letzten 30 Tagen",
+        "3-months": "der letzten 3 Monaten",
+        "6-months": "der letzten 6 Monaten",
+        "1-year": "des letzten Jahres",
         "all": "Zeige alle"
       }
     },
@@ -269,7 +269,7 @@
     "skysocks-client-settings": {
       "title": "Skysocks-Client Einstellungen",
       "remote-visor-tab": "Remote Visor",
-      "history-tab": "Veraluf",
+      "history-tab": "Verlauf",
       "public-key": "Remote Visor öffentlicher Schlüssel",
       "remote-key-length-error": "Der öffentliche Schlüssel muss 66 Zeichen lang sein.",
       "remote-key-chars-error": "Der öffentliche Schlüssel darf nur hexadezimale Zeichen enthalten.",
@@ -394,9 +394,9 @@
   },
 
   "refresh-button": {
-    "seconds": "Kürzliche aktualisiert",
+    "seconds": "Kürzlich aktualisiert",
     "minute": "Vor einer Minute aktualisiert",
-    "minutes": "Vor {{ time }} Minuten aktualisert",
+    "minutes": "Vor {{ time }} Minuten aktualisiert",
     "hour": "Vor einer Stunde aktualisiert",
     "hours": "Vor {{ time }} Stunden aktualisert",
     "day": "Vor einem Tag aktualisiert",
