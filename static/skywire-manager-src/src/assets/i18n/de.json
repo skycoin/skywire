@@ -4,7 +4,7 @@
     "edit": "Ändern",
     "cancel": "Abbrechen",
     "node-key": "Visor Schlüssel",
-    "app-key": "App Schlüssel",
+    "app-key": "Anwendungs-Schlüssel",
     "discovery": "Discovery",
     "downloaded": "Heruntergeladen",
     "uploaded": "Hochgeladen",
@@ -80,7 +80,7 @@
     },
     "tabs": {
       "info": "Info",
-      "apps": "Apps",
+      "apps": "Anwendungen",
       "routing": "Routing"
     },
     "error-load": "Beim Aktualisieren der Visordaten ist ein Fehler aufgetreten."
@@ -244,13 +244,13 @@
       "whitelist": "Whitelist"
     },
     "apps-list": {
-      "title": "Apps",
-      "list-title": "App-Liste",
+      "title": "Anwendungen",
+      "list-title": "Anwendungsliste",
       "app-name": "Name",
       "port": "Port",
       "status": "Status",
       "auto-start": "Auto-Start",
-      "empty": "Visor hat keine Apps.",
+      "empty": "Visor hat keine Anwendungen.",
       "disable-autostart": "Autostart ausschalten",
       "enable-autostart": "Autostart einschalten",
       "autostart-disabled": "Autostart aus",
@@ -283,20 +283,20 @@
     "view-logs": "Zeige Logs",
     "settings": "Einstellungen",
     "error": "Ein Fehler ist aufgetreten.",
-    "stop-confirmation": "App wirklich anhalten?",
-    "stop-selected-confirmation": "Ausgewählte App wirklich anhalten?",
-    "disable-autostart-confirmation": "Auto-Start für diese App wirklich ausschalten?",
-    "enable-autostart-confirmation": "Auto-Start für diese App wirklich einschalten?",
-    "disable-autostart-selected-confirmation": "Auto-Start für ausgewählte Apps wirklich ausschalten?",
-    "enable-autostart-selected-confirmation": "Auto-Start für ausgewählte Apps wirklich einschalten",
+    "stop-confirmation": "Anwendung wirklich anhalten?",
+    "stop-selected-confirmation": "Ausgewählte Anwendung wirklich anhalten?",
+    "disable-autostart-confirmation": "Auto-Start für diese Anwendung wirklich ausschalten?",
+    "enable-autostart-confirmation": "Auto-Start für diese Anwendung wirklich einschalten?",
+    "disable-autostart-selected-confirmation": "Auto-Start für ausgewählte Anwendungen wirklich ausschalten?",
+    "enable-autostart-selected-confirmation": "Auto-Start für ausgewählte Anwendungen wirklich einschalten",
     "operation-completed": "Operation ausgeführt",
     "operation-unnecessary": "Gewünschte Einstellungen schon aktiv.",
     "status-running": "Läuft",
     "status-stopped": "Gestoppt",
     "status-failed": "Fehler",
-    "status-running-tooltip": "App läuft",
-    "status-stopped-tooltip": "App gestoppt",
-    "status-failed-tooltip": "Ein Fehler ist aufgetreten. Log der App überprüfen."
+    "status-running-tooltip": "Anwendung läuft",
+    "status-stopped-tooltip": "Anwendung gestoppt",
+    "status-failed-tooltip": "Ein Fehler ist aufgetreten. Log der Anwendung überprüfen."
   },
 
   "transports": {
@@ -387,10 +387,10 @@
     "select-all": "Alle auswählen",
     "unselect-all": "Alle abwählen",
     "delete-all": "Alle ausgewählten Elemente entfernen",
-    "start-all": "Starte ausgewählte App",
-    "stop-all": "Stoppe ausgewählte App",
-    "enable-autostart-all": "Auto-Start für ausgewählte Apps einschalten",
-    "disable-autostart-all": "Auto-Start für ausgewählte Apps ausschalten"
+    "start-all": "Starte ausgewählte Anwendung",
+    "stop-all": "Stoppe ausgewählte Anwendung",
+    "enable-autostart-all": "Auto-Start für ausgewählte Anwendungen einschalten",
+    "disable-autostart-all": "Auto-Start für ausgewählte Anwendungen ausschalten"
   },
 
   "refresh-button": {
