@@ -92,6 +92,7 @@
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
+    "copy-key": "Copy key",
     "view-node": "View visor",
     "delete-node": "Remove visor",
     "error-load": "An error occurred while refreshing the list. Retrying...",
