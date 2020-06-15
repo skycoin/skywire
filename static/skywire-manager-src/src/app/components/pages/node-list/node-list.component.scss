@@ -37,15 +37,16 @@
 
   .actions {
     text-align: right;
-    width: 110px;
+    width: 150px;
   
     button {
       width: 32px;
       height: 32px;
       line-height: 24px;
-  
-      &:last-child {
-        margin-left: 15px;
+      margin-left: 5px;
+
+      .small-icon {
+        font-size: 15px;
       }
     }
   }
