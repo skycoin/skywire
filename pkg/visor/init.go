@@ -126,7 +126,7 @@ func initTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
-	tpdC, err := tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+	tpdC, err := connectToTpDisc(v)
 	if err != nil {
 		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
 	}
@@ -420,4 +420,38 @@ func initUptimeTracker(v *Visor) bool {
 	})
 
 	return true
+}
+
+func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
+	const (
+		initBO = 1 * time.Second
+		maxBO  = 10 * time.Second
+		// trying till success
+		tries  = 0
+		factor = 1
+	)
+
+	conf := v.conf.Transport
+
+	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
+	tpdCRetrier := netutil.NewRetrier(log,
+		initBO, maxBO, tries, factor)
+
+	var tpdC transport.DiscoveryClient
+	retryFunc := func() error {
+		var err error
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+		if err != nil {
+			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
+			return err
+		}
+
+		return nil
+	}
+
+	if err := tpdCRetrier.Do(context.Background(), retryFunc); err != nil {
+		return nil, err
+	}
+
+	return tpdC, nil
 }
