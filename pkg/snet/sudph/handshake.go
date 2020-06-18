@@ -48,6 +48,7 @@ func handshakeMiddleware(origin Handshake) Handshake {
 
 		if lAddr, rAddr, err = origin(conn, deadline); err != nil {
 			err = HandshakeError(err.Error())
+			return
 		}
 
 		// reset deadline
@@ -63,66 +64,89 @@ type Handshake func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, 
 // InitiatorHandshake creates the handshake logic on the initiator's side.
 func InitiatorHandshake(lSK cipher.SecKey, localAddr, remoteAddr dmsg.Addr) Handshake {
 	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
+		if err = writeFrame0(conn); err != nil {
+			log.WithError(err).Errorf("SUDPH InitiatorHandshake writeFrame0 failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
+		}
+
 		var f1 Frame1
 		if f1, err = readFrame1(conn); err != nil {
-			return
+			log.WithError(err).Errorf("SUDPH InitiatorHandshake readFrame1 failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		f2 := Frame2{SrcAddr: localAddr, DstAddr: remoteAddr, Nonce: f1.Nonce}
 		if err = f2.Sign(lSK); err != nil {
-			return
+			log.WithError(err).Errorf("SUDPH InitiatorHandshake Sign failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		if err = writeFrame2(conn, f2); err != nil {
-			return
+			log.WithError(err).Errorf("SUDPH InitiatorHandshake writeFrame2 failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		var f3 Frame3
 		if f3, err = readFrame3(conn); err != nil {
-			return
+			log.WithError(err).Errorf("SUDPH InitiatorHandshake readFrame3 failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		if !f3.OK {
 			err = fmt.Errorf("handshake rejected: %s", f3.ErrMsg)
-			return
+			log.WithError(err).Errorf("SUDPH InitiatorHandshake frame3 not ok")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		lAddr = localAddr
 		rAddr = remoteAddr
 
-		return
+		log.Infof("SUDPH InitiatorHandshake err == nil")
+		return lAddr, rAddr, nil
 	})
 }
 
 // ResponderHandshake creates the handshake logic on the responder's side.
 func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
+		if err = readFrame0(conn); err != nil {
+			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame0 failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
+		}
+
 		var nonce [HandshakeNonceSize]byte
 		copy(nonce[:], cipher.RandByte(HandshakeNonceSize))
 
 		if err = writeFrame1(conn, nonce); err != nil {
-			return
+			log.WithError(err).Errorf("SUDPH ResponderHandshake writeFrame1 failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		var f2 Frame2
 		if f2, err = readFrame2(conn); err != nil {
-			return
+			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame2 failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		if err = f2.Verify(nonce); err != nil {
-			return
+			log.WithError(err).Errorf("SUDPH ResponderHandshake Verify failed")
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		if err = checkF2(f2); err != nil {
+			log.WithError(err).Errorf("SUDPH ResponderHandshake checkF2 failed")
 			_ = writeFrame3(conn, err) // nolint:errcheck
-			return
+			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
 		lAddr = f2.DstAddr
 		rAddr = f2.SrcAddr
-		err = writeFrame3(conn, nil)
+		if err = writeFrame3(conn, nil); err != nil {
+			return dmsg.Addr{}, dmsg.Addr{}, err
+		}
 
-		return
+		log.Infof("SUDPH ResponderHandshake err == nil")
+		return lAddr, rAddr, nil
 	})
 }
 
@@ -193,6 +217,36 @@ func (f2 Frame2) Verify(nonce [HandshakeNonceSize]byte) error {
 type Frame3 struct {
 	OK     bool
 	ErrMsg string
+}
+
+const frame0Message = "handshake"
+
+func writeFrame0(w io.Writer) error {
+	n, err := w.Write([]byte(frame0Message))
+	if err != nil {
+		return err
+	}
+
+	if n != len(frame0Message) {
+		return fmt.Errorf("not enough bytes written")
+	}
+
+	return nil
+}
+
+func readFrame0(r io.Reader) error {
+	buf := make([]byte, len(frame0Message))
+
+	n, err := r.Read(buf)
+	if err != nil {
+		return err
+	}
+
+	if n != len(frame0Message) {
+		return fmt.Errorf("not enough bytes read")
+	}
+
+	return nil
 }
 
 func writeFrame1(w io.Writer, nonce [HandshakeNonceSize]byte) error {
