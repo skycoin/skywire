@@ -12,9 +12,9 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router/routerclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupmetrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
@@ -23,12 +23,11 @@ var log = logging.MustGetLogger("setup_node")
 
 // Node performs routes setup operations over messaging channel.
 type Node struct {
-	dmsgC   *dmsg.Client
-	metrics metrics.Recorder
+	dmsgC *dmsg.Client
 }
 
 // NewNode constructs a new SetupNode.
-func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
+func NewNode(conf *Config) (*Node, error) {
 	if lvl, err := logging.LevelFromString(conf.LogLevel); err == nil {
 		logging.SetLevel(lvl)
 	}
@@ -45,8 +44,7 @@ func NewNode(conf *Config, metrics metrics.Recorder) (*Node, error) {
 	log.Info("Connected!")
 
 	node := &Node{
-		dmsgC:   dmsgC,
-		metrics: metrics,
+		dmsgC: dmsgC,
 	}
 	return node, nil
 }
@@ -60,7 +58,7 @@ func (sn *Node) Close() error {
 }
 
 // Serve starts transport listening loop.
-func (sn *Node) Serve(ctx context.Context) error {
+func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -85,7 +83,7 @@ func (sn *Node) Serve(ctx context.Context) error {
 			return err
 		}
 		gw := &RPCGateway{
-			Metrics: sn.metrics,
+			Metrics: m,
 			Ctx:     ctx,
 			Conn:    conn,
 			ReqPK:   conn.RemoteAddr().(dmsg.Addr).PK,
