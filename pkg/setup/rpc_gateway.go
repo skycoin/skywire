@@ -8,15 +8,14 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupmetrics"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 )
 
 // RPCGateway is a RPC interface for setup node.
 type RPCGateway struct {
-	Metrics metrics.Recorder
-
+	Metrics setupmetrics.Metrics
 	Ctx     context.Context
 	Conn    net.Conn
 	ReqPK   cipher.PubKey
@@ -27,9 +26,7 @@ type RPCGateway struct {
 // DialRouteGroup dials RouteGroups for route and rules.
 func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *routing.EdgeRules) (err error) {
 	log := logging.MustGetLogger("request:" + g.ReqPK.String())
-
-	startTime := time.Now()
-	defer func() { g.Metrics.Record(time.Since(startTime), err != nil) }()
+	defer g.Metrics.RecordRequest(route)(rules, &err)
 
 	ctx, cancel := context.WithTimeout(g.Ctx, g.Timeout)
 	defer cancel()
