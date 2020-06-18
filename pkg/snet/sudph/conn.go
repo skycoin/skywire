@@ -34,10 +34,13 @@ type connConfig struct {
 }
 
 func newConn(c connConfig) (*Conn, error) {
+	log.Infof("Performing handshake with %v", c.conn.RemoteAddr())
 	lAddr, rAddr, err := c.hs(c.conn, c.deadline)
-	if err != nil {
+	log.Infof("c.hs result laddr=%v raddr=%v err=%v", lAddr, rAddr, err)
+
+	if err != nil { // TODO: errors are not caught here
 		if err := c.conn.Close(); err != nil && c.log != nil {
-			c.log.WithError(err).Warnf("Failed to close stcp connection")
+			c.log.WithError(err).Warnf("Failed to close sudph connection")
 		}
 
 		if c.freePort != nil {
@@ -46,6 +49,7 @@ func newConn(c connConfig) (*Conn, error) {
 
 		return nil, err
 	}
+	log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.conn.RemoteAddr(), lAddr, rAddr)
 
 	// TODO(nkryuchkov): extract from handshake whether encryption is needed
 	if c.encrypt {

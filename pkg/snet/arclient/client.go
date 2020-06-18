@@ -62,6 +62,7 @@ type APIClient interface {
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	DialUDP(addr string) (net.Conn, error)
+	SudphConn() *net.UDPConn
 }
 
 type key struct {
@@ -82,8 +83,12 @@ type client struct {
 	sk           cipher.SecKey
 	stcphConn    *websocket.Conn
 	stcphAddrCh  <-chan RemoteVisor
-	sudphConn    net.Conn
+	sudphConn    *net.UDPConn
 	sudphAddrCh  <-chan RemoteVisor
+}
+
+func (c *client) SudphConn() *net.UDPConn {
+	return c.sudphConn
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -140,7 +145,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 }
 
 func (c *client) LocalAddr() string {
-	return c.localTCPAddr
+	return c.localUDPAddr
 }
 
 // Get performs a new GET request.
@@ -217,6 +222,8 @@ func (c *client) ConnectToUDPServer(_ context.Context) (net.Conn, error) {
 	remoteAddr = strings.TrimPrefix(remoteAddr, "http://")
 	remoteAddr = strings.TrimPrefix(remoteAddr, "https://")
 
+	// log.Infof("SUDPH remote addr before trim %q, after %q", c.remoteAddr, remoteAddr)
+
 	remoteAddr = "127.0.0.1:9099"
 
 	conn, err := c.DialUDP(remoteAddr)
@@ -232,16 +239,22 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 
 	var lAddr *net.UDPAddr
 	if c.localUDPAddr != "" {
-		la, err := net.ResolveUDPAddr("udp", c.localTCPAddr)
+		la, err := net.ResolveUDPAddr("udp", c.localUDPAddr)
 		if err != nil {
 			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
 		}
 
 		lAddr = la
-		log.Infof("SUDPH: Resolved local addr to %v", lAddr)
-	}
+		log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
+	} else {
+		la, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+		if err != nil {
+			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
+		}
 
-	log.Infof("SUDPH remote addr before trim %q, after %q", c.remoteAddr, remoteAddr)
+		lAddr = la
+		log.Infof("SUDPH: Resolved local addr from %v to %v", "127.0.0.1:0", lAddr)
+	}
 
 	// rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 	// if err != nil {
@@ -260,8 +273,6 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 	// 	return nil, fmt.Errorf("kcp.NewConn: %w", err)
 	// }
 
-	log.Infof("SUDPH dialing udp from %v to %v", lAddr, remoteAddr)
-
 	rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 	if err != nil {
 		return nil, err
@@ -272,12 +283,23 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 		network = "udp"
 	}
 
-	conn, err := net.ListenUDP(network, lAddr)
-	if err != nil {
-		return nil, err
+	log.Infof("SUDPH dialing udp from %v to %v", lAddr, remoteAddr)
+
+	if c.sudphConn == nil {
+		uc, err := net.ListenUDP(network, lAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		c.sudphConn = uc
 	}
 
-	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, conn)
+	// conn, err := net.DialUDP(network, lAddr, rAddr)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, c.sudphConn)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +312,8 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 	// log.Infof("test stacktrace: %v", string(debug.Stack()))
 
 	if c.localUDPAddr == "" {
-		c.localTCPAddr = conn2.LocalAddr().String()
+		log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, conn2.LocalAddr().String())
+		c.localUDPAddr = conn2.LocalAddr().String()
 	}
 
 	return conn2, nil
@@ -578,8 +601,6 @@ func (c *client) initSUDPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 		return err
 	}
 
-	c.sudphConn = conn
-
 	// log.Infof("Sending handshake")
 	// if _, err := conn.Write([]byte(handshakeMessage)); err != nil {
 	// 	return err
@@ -640,16 +661,18 @@ func (c *client) initSUDPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 func (c *client) Close() error {
 	defer func() {
 		c.stcphConn = nil
-		c.sudphConn = nil
+		// TODO: uncomment
+		// c.sudphConn = nil
 	}()
 
 	if err := c.stcphConn.Close(websocket.StatusNormalClosure, "client closed"); err != nil {
 		log.WithError(err).Errorf("Failed to close STCPH")
 	}
 
-	if err := c.sudphConn.Close(); err != nil {
-		log.WithError(err).Errorf("Failed to close SUDPH")
-	}
+	// TODO: uncomment
+	// if err := c.sudphConn.Close(); err != nil {
+	// 	log.WithError(err).Errorf("Failed to close SUDPH")
+	// }
 
 	return nil
 }
