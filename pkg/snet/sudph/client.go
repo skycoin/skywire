@@ -12,6 +12,7 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/xtaci/kcp-go"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
@@ -102,6 +103,27 @@ func (c *Client) Serve() error {
 	return nil
 }
 
+func (c *Client) listen(remoteAddr string) (net.Conn, error) {
+	c.log.Infof("Listening on %v from %v via udp", c.addressResolver.LocalAddr(), remoteAddr)
+
+	conn, err := kcp.NewConn(remoteAddr, nil, 0, 0, c.addressResolver.SudphConn())
+	if err != nil {
+		return nil, err
+	}
+
+	// lis, err := kcp.Listen(c.addressResolver.LocalAddr())
+	// if err != nil {
+	// 	return nil, err
+	// }
+	//
+	// conn, err := lis.Accept()
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	return conn, nil
+}
+
 func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
@@ -130,7 +152,7 @@ func (c *Client) acceptUDPConn(remote arclient.RemoteVisor) error {
 		return io.ErrClosedPipe
 	}
 
-	udpConn, err := c.dialTimeout(remote.Addr)
+	udpConn, err := c.listen(remote.Addr)
 	if err != nil {
 		return err
 	}
@@ -181,7 +203,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialing PK %v", rPK)
 
-	c.dialCh <- rPK
+	// c.dialCh <- rPK
 
 	addr, err := c.addressResolver.ResolveSUDPH(ctx, rPK)
 	if err != nil {

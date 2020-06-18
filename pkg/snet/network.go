@@ -525,6 +525,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 			return nil, fmt.Errorf("sudph client: %w", err)
 		}
 
+		log.Infof("Dialed %v, conn local address %q, remote address %q", network, conn.LocalAddr(), conn.RemoteAddr())
 		return makeConn(conn, network), nil
 	default:
 		return nil, ErrUnknownNetwork
