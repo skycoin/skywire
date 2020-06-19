@@ -1,4 +1,5 @@
 // Package arclient implements address resolver client
+// TODO(nkryuchkov): move to internal
 package arclient
 
 import (
@@ -14,6 +15,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/AudriusButkevicius/pfilter"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/libp2p/go-reuseport"
@@ -21,6 +23,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 )
 
 var log = logging.MustGetLogger("arclient")
@@ -62,7 +65,7 @@ type APIClient interface {
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	DialUDP(addr string) (net.Conn, error)
-	SudphConn() *net.UDPConn
+	VisorConn() net.PacketConn
 }
 
 type key struct {
@@ -84,11 +87,14 @@ type client struct {
 	stcphConn    *websocket.Conn
 	stcphAddrCh  <-chan RemoteVisor
 	sudphConn    *net.UDPConn
+	filterConn   *pfilter.PacketFilter
+	visorConn    net.PacketConn
+	arConn       net.PacketConn
 	sudphAddrCh  <-chan RemoteVisor
 }
 
-func (c *client) SudphConn() *net.UDPConn {
-	return c.sudphConn
+func (c *client) VisorConn() net.PacketConn {
+	return c.visorConn
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -234,6 +240,7 @@ func (c *client) ConnectToUDPServer(_ context.Context) (net.Conn, error) {
 	return conn, nil
 }
 
+// TODO(nkryuchkov): remove from arclient
 func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
 
@@ -292,6 +299,12 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 		}
 
 		c.sudphConn = uc
+
+		c.filterConn = pfilter.NewPacketFilter(uc)
+		c.visorConn = c.filterConn.NewConn(100, packetfilter.NewAddressFilter(rAddr, false))
+		c.arConn = c.filterConn.NewConn(10, packetfilter.NewAddressFilter(rAddr, true))
+
+		c.filterConn.Start()
 	}
 
 	// conn, err := net.DialUDP(network, lAddr, rAddr)
@@ -299,7 +312,7 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 	// 	return nil, err
 	// }
 
-	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, c.sudphConn)
+	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, c.arConn)
 	if err != nil {
 		return nil, err
 	}
