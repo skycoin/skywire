@@ -38,6 +38,7 @@ type Client struct {
 
 	connCh <-chan arclient.RemoteVisor
 	dialCh chan cipher.PubKey
+	lUDP   net.Listener
 	lMap   map[uint16]*Listener // key: lPort
 	mx     sync.Mutex
 
@@ -86,43 +87,66 @@ func (c *Client) Serve() error {
 	c.connCh = connCh
 	c.dialCh = dialCh
 
+	lUDP, err := kcp.ServeConn(nil, 0, 0, c.addressResolver.VisorConn())
+	if err != nil {
+		return err
+	}
+
+	c.lUDP = lUDP
+	addr := lUDP.Addr()
+	c.log.Infof("listening on udp addr: %v", addr)
+
 	c.log.Infof("bound BindSUDPH to %v", c.addressResolver.LocalAddr())
 
-	go func() {
-		for addr := range c.connCh {
-			c.log.Infof("Received signal to dial %v", addr)
+	// go func() {
+	// 	for addr := range c.connCh {
+	// 		c.log.Infof("Received signal to dial %v", addr)
+	//
+	// 		go func(addr arclient.RemoteVisor) {
+	// 			if err := c.acceptUDPConn(addr); err != nil {
+	// 				c.log.Warnf("failed to accept incoming connection: %v", err)
+	// 			}
+	// 		}(addr)
+	// 	}
+	// }()
 
-			go func(addr arclient.RemoteVisor) {
-				if err := c.acceptUDPConn(addr); err != nil {
-					c.log.Warnf("failed to accept incoming connection: %v", err)
+	go func() {
+		for {
+			if err := c.acceptUDPConn(); err != nil {
+				c.log.Warnf("failed to accept incoming connection: %v", err)
+
+				if !IsHandshakeError(err) {
+					c.log.Warnf("stopped serving sudpr")
+					return
 				}
-			}(addr)
+			}
 		}
 	}()
 
 	return nil
 }
 
-func (c *Client) listen(remoteAddr string) (net.Conn, error) {
-	c.log.Infof("Listening on %v from %v via udp", c.addressResolver.LocalAddr(), remoteAddr)
-
-	conn, err := kcp.NewConn(remoteAddr, nil, 0, 0, c.addressResolver.SudphConn())
-	if err != nil {
-		return nil, err
-	}
-
-	// lis, err := kcp.Listen(c.addressResolver.LocalAddr())
-	// if err != nil {
-	// 	return nil, err
-	// }
-	//
-	// conn, err := lis.Accept()
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	return conn, nil
-}
+//
+// func (c *Client) listen(remoteAddr string) (net.Conn, error) {
+// 	c.log.Infof("Listening on %v from %v via udp", c.addressResolver.LocalAddr(), remoteAddr)
+//
+// 	conn, err := kcp.ServeConn(nil, 0, 0, c.addressResolver.VisorConn())
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	// lis, err := kcp.Listen(c.addressResolver.LocalAddr())
+// 	// if err != nil {
+// 	// 	return nil, err
+// 	// }
+// 	//
+// 	// conn, err := lis.Accept()
+// 	// if err != nil {
+// 	// 	return nil, err
+// 	// }
+//
+// 	return conn, nil
+// }
 
 func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
@@ -147,12 +171,12 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	}
 }
 
-func (c *Client) acceptUDPConn(remote arclient.RemoteVisor) error {
+func (c *Client) acceptUDPConn() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	udpConn, err := c.listen(remote.Addr)
+	udpConn, err := c.lUDP.Accept()
 	if err != nil {
 		return err
 	}
