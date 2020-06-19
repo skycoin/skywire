@@ -70,7 +70,8 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on dmsg port %d: %v", skyenv.DmsgSetupPort, lis)
 	}
-	defer func() {
+	go func() {
+		<-ctx.Done()
 		if err := lis.Close(); err != nil {
 			log.WithError(err).Warn("Dmsg listener closed with non-nil error.")
 		}
