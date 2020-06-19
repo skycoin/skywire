@@ -30,7 +30,7 @@ type HandshakeError string
 
 // Error implements error.
 func (err HandshakeError) Error() string {
-	return fmt.Sprintln("stcph handshake failed:", string(err))
+	return fmt.Sprintln("sudph handshake failed:", string(err))
 }
 
 // IsHandshakeError determines whether the error occurred during the handshake.
@@ -68,35 +68,41 @@ func InitiatorHandshake(lSK cipher.SecKey, localAddr, remoteAddr dmsg.Addr) Hand
 			log.WithError(err).Errorf("SUDPH InitiatorHandshake writeFrame0 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake writeFrame0 finished")
 
 		var f1 Frame1
 		if f1, err = readFrame1(conn); err != nil {
 			log.WithError(err).Errorf("SUDPH InitiatorHandshake readFrame1 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake readFrame1 finished")
 
 		f2 := Frame2{SrcAddr: localAddr, DstAddr: remoteAddr, Nonce: f1.Nonce}
 		if err = f2.Sign(lSK); err != nil {
 			log.WithError(err).Errorf("SUDPH InitiatorHandshake Sign failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake Sign finished")
 
 		if err = writeFrame2(conn, f2); err != nil {
 			log.WithError(err).Errorf("SUDPH InitiatorHandshake writeFrame2 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake writeFrame2 finished")
 
 		var f3 Frame3
 		if f3, err = readFrame3(conn); err != nil {
 			log.WithError(err).Errorf("SUDPH InitiatorHandshake readFrame3 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake readFrame3 finished")
 
 		if !f3.OK {
 			err = fmt.Errorf("handshake rejected: %s", f3.ErrMsg)
 			log.WithError(err).Errorf("SUDPH InitiatorHandshake frame3 not ok")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake frame3 ok")
 
 		lAddr = localAddr
 		rAddr = remoteAddr
@@ -113,6 +119,7 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame0 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake readFrame0 finished")
 
 		var nonce [HandshakeNonceSize]byte
 		copy(nonce[:], cipher.RandByte(HandshakeNonceSize))
@@ -121,29 +128,35 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake writeFrame1 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake writeFrame1 finished")
 
 		var f2 Frame2
 		if f2, err = readFrame2(conn); err != nil {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame2 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake readFrame2 finished")
 
 		if err = f2.Verify(nonce); err != nil {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake Verify failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake Verify finished")
 
 		if err = checkF2(f2); err != nil {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake checkF2 failed")
 			_ = writeFrame3(conn, err) // nolint:errcheck
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake checkF2 finished")
 
 		lAddr = f2.DstAddr
 		rAddr = f2.SrcAddr
 		if err = writeFrame3(conn, nil); err != nil {
+			log.WithError(err).Errorf("SUDPH ResponderHandshake writeFrame3 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
+		log.Infof("SUDPH InitiatorHandshake writeFrame3 finished")
 
 		log.Infof("SUDPH ResponderHandshake err == nil")
 		return lAddr, rAddr, nil
