@@ -32,7 +32,7 @@ var (
 func init() {
 	rootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", ":2121", "address to bind metrics API to")
 	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVar(&tag, "tag", "setup-node", "logging tag")
+	rootCmd.Flags().StringVar(&tag, "tag", "setup_node", "logging tag")
 	rootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
 }
 
