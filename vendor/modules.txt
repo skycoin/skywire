@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.2.2
+# github.com/SkycoinProject/dmsg v0.2.2 => ../dmsg
 ## explicit
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/buildinfo
@@ -10,6 +10,7 @@ github.com/SkycoinProject/dmsg/httputil
 github.com/SkycoinProject/dmsg/ioutil
 github.com/SkycoinProject/dmsg/netutil
 github.com/SkycoinProject/dmsg/noise
+github.com/SkycoinProject/dmsg/servermetrics
 # github.com/SkycoinProject/skycoin v0.27.0
 ## explicit
 github.com/SkycoinProject/skycoin/src/cipher
@@ -287,3 +288,4 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# github.com/SkycoinProject/dmsg => ../dmsg
