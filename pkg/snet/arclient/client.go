@@ -65,6 +65,7 @@ type APIClient interface {
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	DialUDP(addr string) (net.Conn, error)
+	DialUDP2(addr string) (net.Conn, error)
 	VisorConn() net.PacketConn
 }
 
@@ -301,7 +302,8 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 		c.sudphConn = uc
 
 		c.filterConn = pfilter.NewPacketFilter(uc)
-		c.visorConn = c.filterConn.NewConn(100, packetfilter.NewAddressFilter(rAddr, false))
+		// c.visorConn = c.filterConn.NewConn(100, packetfilter.NewAddressFilter(rAddr, false))
+		c.visorConn = c.filterConn.NewConn(100, nil)
 		c.arConn = c.filterConn.NewConn(10, packetfilter.NewAddressFilter(rAddr, true))
 
 		c.filterConn.Start()
@@ -313,6 +315,74 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 	// }
 
 	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, c.arConn)
+	if err != nil {
+		return nil, err
+	}
+
+	// _, err = conn.Write([]byte("test"))
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// log.Infof("test stacktrace: %v", string(debug.Stack()))
+
+	if c.localUDPAddr == "" {
+		log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, conn2.LocalAddr().String())
+		c.localUDPAddr = conn2.LocalAddr().String()
+	}
+
+	return conn2, nil
+}
+
+func (c *client) DialUDP2(remoteAddr string) (net.Conn, error) {
+	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
+
+	var lAddr *net.UDPAddr
+	if c.localUDPAddr != "" {
+		la, err := net.ResolveUDPAddr("udp", c.localUDPAddr)
+		if err != nil {
+			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
+		}
+
+		lAddr = la
+		log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
+	} else {
+		la, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+		if err != nil {
+			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
+		}
+
+		lAddr = la
+		log.Infof("SUDPH: Resolved local addr from %v to %v", "127.0.0.1:0", lAddr)
+	}
+
+	// rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
+	// }
+
+	// udpConn, err := net.DialUDP("udp", lAddr, rAddr)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("net.DialUDP: %w", err)
+	// }
+	//
+	// log.Infof("SUDPH local addr: %q", udpConn.LocalAddr())
+	//
+	// conn, err := kcp.NewConn(remoteAddr, nil, 0, 0, udpConn)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("kcp.NewConn: %w", err)
+	// }
+
+	log.Infof("SUDPH dialing2 udp from %v to %v", lAddr, remoteAddr)
+
+	dialConn := c.filterConn.NewConn(20, packetfilter.NewKCPConversationFilter())
+
+	// conn, err := net.DialUDP(network, lAddr, rAddr)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, dialConn)
 	if err != nil {
 		return nil, err
 	}
