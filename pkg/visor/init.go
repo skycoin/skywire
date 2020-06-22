@@ -10,6 +10,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/dmsgctrl"
 	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
 
@@ -116,6 +117,17 @@ func initSNet(v *Visor) bool {
 		case <-n.Dmsg().Ready():
 			log.Info("Connected to the dmsg network.")
 		}
+
+		// dmsgctrl setup
+		cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
+		if err != nil {
+			return report(err)
+		}
+		v.pushCloseStack("snet.dmsgctrl", func() bool {
+			return report(cl.Close())
+		})
+
+		dmsgctrl.ServeListener(cl, 0)
 	}
 
 	v.net = n
