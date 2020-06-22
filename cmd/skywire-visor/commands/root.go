@@ -28,10 +28,10 @@ import (
 var restartCtx = restart.CaptureContext()
 
 const (
-	configEnv         = "SW_VISOR_CONFIG"
+	// configEnv         = "SW_VISOR_CONFIG"
 	defaultConfigName = "skywire-config.json"
-	visorPathSystemd  = "/usr/local/bin/skywire-visor"
-	workDirSystemd    = "/"
+	// visorPathSystemd  = "/usr/local/bin/skywire-visor"
+	// workDirSystemd    = "/"
 )
 
 var (
