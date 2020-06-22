@@ -5,6 +5,7 @@ github.com/SkycoinProject/dmsg/buildinfo
 github.com/SkycoinProject/dmsg/cipher
 github.com/SkycoinProject/dmsg/cmdutil
 github.com/SkycoinProject/dmsg/disc
+github.com/SkycoinProject/dmsg/dmsgctrl
 github.com/SkycoinProject/dmsg/dmsgpty
 github.com/SkycoinProject/dmsg/httputil
 github.com/SkycoinProject/dmsg/ioutil

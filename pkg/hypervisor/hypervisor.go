@@ -49,6 +49,7 @@ var (
 // VisorConn represents a visor connection.
 type VisorConn struct {
 	Addr  dmsg.Addr
+	SrvPK cipher.PubKey
 	RPC   visor.RPCClient
 	PtyUI *dmsgPtyUI
 }
@@ -103,6 +104,7 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 
 		visorConn := &VisorConn{
 			Addr:  addr,
+			SrvPK: conn.ServerPK(),
 			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
 			PtyUI: setupDmsgPtyUI(dmsgC, addr.PK),
 		}
@@ -179,6 +181,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				r.Post("/update", hv.updateHypervisor())
 				r.Post("/update/available", hv.hypervisorUpdateAvailable())
 				r.Post("/update/available/{channel}", hv.hypervisorUpdateAvailable())
+				r.Get("/dmsg", hv.getDmsg())
 
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors/{pk}", hv.getVisor())
@@ -310,6 +313,32 @@ func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
+	}
+}
+
+// DmsgClientSummary represents a dmsg client summary.
+type DmsgClientSummary struct {
+	PK        cipher.PubKey `json:"public_key"`
+	ServerPK  cipher.PubKey `json:"server_public_key"`
+	RoundTrip time.Duration `json:"round_trip"`
+}
+
+func (hv *Hypervisor) getDmsg() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hv.mu.RLock()
+		defer hv.mu.RUnlock()
+
+		out := make([]DmsgClientSummary, 0, len(hv.visors))
+
+		for pk, v := range hv.visors {
+			out = append(out, DmsgClientSummary{
+				PK:        pk,
+				ServerPK:  v.SrvPK,
+				RoundTrip: 0, // TODO
+			})
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
 }
 
