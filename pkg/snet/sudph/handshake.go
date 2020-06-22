@@ -119,7 +119,7 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame0 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake readFrame0 finished")
+		log.Infof("SUDPH ResponderHandshake readFrame0 finished")
 
 		var nonce [HandshakeNonceSize]byte
 		copy(nonce[:], cipher.RandByte(HandshakeNonceSize))
@@ -128,27 +128,27 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake writeFrame1 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake writeFrame1 finished")
+		log.Infof("SUDPH ResponderHandshake writeFrame1 finished")
 
 		var f2 Frame2
 		if f2, err = readFrame2(conn); err != nil {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame2 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake readFrame2 finished")
+		log.Infof("SUDPH ResponderHandshake readFrame2 finished")
 
 		if err = f2.Verify(nonce); err != nil {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake Verify failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake Verify finished")
+		log.Infof("SUDPH ResponderHandshake Verify finished")
 
 		if err = checkF2(f2); err != nil {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake checkF2 failed")
 			_ = writeFrame3(conn, err) // nolint:errcheck
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake checkF2 finished")
+		log.Infof("SUDPH ResponderHandshake checkF2 finished")
 
 		lAddr = f2.DstAddr
 		rAddr = f2.SrcAddr
@@ -156,7 +156,7 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 			log.WithError(err).Errorf("SUDPH ResponderHandshake writeFrame3 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake writeFrame3 finished")
+		log.Infof("SUDPH ResponderHandshake writeFrame3 finished")
 
 		log.Infof("SUDPH ResponderHandshake err == nil")
 		return lAddr, rAddr, nil

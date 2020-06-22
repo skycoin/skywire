@@ -159,7 +159,7 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 		case <-timer.C:
 			return nil, ErrTimeout
 		default:
-			conn, err := c.addressResolver.DialUDP(addr)
+			conn, err := c.addressResolver.DialUDP2(addr)
 			if err == nil {
 				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())
 				return conn, nil
