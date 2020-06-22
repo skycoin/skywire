@@ -229,9 +229,9 @@ func (c *client) ConnectToUDPServer(_ context.Context) (net.Conn, error) {
 	remoteAddr = strings.TrimPrefix(remoteAddr, "http://")
 	remoteAddr = strings.TrimPrefix(remoteAddr, "https://")
 
-	// log.Infof("SUDPH remote addr before trim %q, after %q", c.remoteAddr, remoteAddr)
+	log.Infof("SUDPH remote addr before trim %q, after %q", c.remoteAddr, remoteAddr)
 
-	remoteAddr = "127.0.0.1:9099"
+	remoteAddr = strings.Replace(remoteAddr, "9093", "9099", -1)
 
 	conn, err := c.DialUDP(remoteAddr)
 	if err != nil {
@@ -255,13 +255,13 @@ func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
 		lAddr = la
 		log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
 	} else {
-		la, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+		la, err := net.ResolveUDPAddr("udp", ":0")
 		if err != nil {
 			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
 		}
 
 		lAddr = la
-		log.Infof("SUDPH: Resolved local addr from %v to %v", "127.0.0.1:0", lAddr)
+		log.Infof("SUDPH: Resolved local addr from %v to %v", ":0", lAddr)
 	}
 
 	// rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
@@ -347,13 +347,13 @@ func (c *client) DialUDP2(remoteAddr string) (net.Conn, error) {
 		lAddr = la
 		log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
 	} else {
-		la, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+		la, err := net.ResolveUDPAddr("udp", ":0")
 		if err != nil {
 			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
 		}
 
 		lAddr = la
-		log.Infof("SUDPH: Resolved local addr from %v to %v", "127.0.0.1:0", lAddr)
+		log.Infof("SUDPH: Resolved local addr from %v to %v", ":0", lAddr)
 	}
 
 	// rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
