@@ -347,8 +347,10 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.updateSubscription.unsubscribe();
     }
 
+    const nodesToCheck = this.dataSource.filter(node => node.online).map(node => node.local_pk);
+
     // Check if there are updates available.
-    this.updateSubscription = forkJoin(this.dataSource.map(node => this.nodeService.checkUpdate(node.local_pk))).subscribe(response => {
+    this.updateSubscription = forkJoin(nodesToCheck.map(pk => this.nodeService.checkUpdate(pk))).subscribe(response => {
       // Check how many visors have to be updated.
       let visorsWithUpdate = 0;
       let currentVersion = '';
@@ -367,7 +369,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         }
       });
 
-      if (visorsWithUpdate > 1) {
+      if (visorsWithUpdate > 0) {
         // Text for asking for confirmation before updating.
         let newText: string;
         if (!differentCurrentVersions) {
