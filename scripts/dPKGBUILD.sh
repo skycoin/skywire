@@ -3,6 +3,7 @@
 #create the debian package
 #adapted from https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h=skywire-git
 #usage: ./dPKGBUILD.sh architecture
+set -e
 pkgname=skywire
 pkgdesc="Skywire Mainnet Node implementation. Skycoin.com"
 pkgver=$(git describe --abbrev=0 | tr --delete v)
@@ -31,7 +32,7 @@ pkgdir=${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}
 #add build deps here
 makedepends=(go install npm python python2 sudo)
 #add any runtime deps here
-depends=()
+depends=(reprepro)
 
 #check for make dependancies
 for t in ${makedepends} ; do
@@ -92,6 +93,13 @@ build() {
   sha256sum $(ls) > ${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}-checksums.txt
   cd $GOAPPS
   sha256sum $(ls) >> ${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}-checksums.txt
+  #generate ssl key and cert
+  cd ${srcdir}/go/src/${pkggopath}/static/skywire-manager-src/ssl/
+  chmod +x *.sh
+  sudo ./generate.sh
+  #build the readonly-cache binary
+  cd ${srcdir}/go/src/${pkggopath}/scripts/
+  go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOBIN/ readonlycache.go
 }
 
 package() {
@@ -105,10 +113,12 @@ package() {
   echo "Priority: optional" >> ${srcdir}/control
   echo "Section: web" >> ${srcdir}/control
   echo "Architecture: ${pkgarch}" >> ${srcdir}/control
+  echo "Depends: ${depends}" >> ${srcdir}/control
   echo "Maintainer: SkycoinProject" >> ${srcdir}/control
   echo "Description: ${pkgdesc}" >> ${srcdir}/control
   info 'installing binaries'
-  sudo mv ${srcdir}/control ${pkgdir}/DEBIAN/control
+  sudo install -Dm755 ${srcdir}/control ${pkgdir}/DEBIAN/control
+  sudo install -Dm755 ${srcdir}/go/src/${pkggopath}/scripts/postinst.sh ${pkgdir}/DEBIAN/postinst
   #install binaries
   sudo install -Dm755 ${srcdir}/go/bin/hypervisor ${pkgdir}/usr/bin/skywire-hypervisor
   sudo install -Dm755 ${srcdir}/go/bin/skywire-visor ${pkgdir}/usr/bin/skywire-visor
@@ -116,9 +126,13 @@ package() {
   sudo install -Dm755 ${srcdir}/go/apps/skychat ${pkgdir}/usr/bin/apps/skychat
   sudo install -Dm755 ${srcdir}/go/apps/skysocks ${pkgdir}/usr/bin/apps/skysocks
   sudo install -Dm755 ${srcdir}/go/apps/skysocks-client ${pkgdir}/usr/bin/apps/skysocks-client
+  sudo install -Dm755 ${srcdir}/go/bin/readonlycache ${pkgdir}/usr/bin/readonlycache
   #install the system.d services
   sudo install -Dm644 ${srcdir}/skywire-mainnet/init/skywire-hypervisor.service ${pkgdir}/etc/systemd/system/skywire-hypervisor.service
   sudo install -Dm644 ${srcdir}/skywire-mainnet/init/skywire-visor.service ${pkgdir}/etc/systemd/system/skywire-visor.service
+  #install the tls key & cert
+  sudo install -Dm644 ${srcdir}/go/src/${pkggopath}/static/skywire-manager-src/ssl/server.crt ${pkgdir}/etc/skywire-hypervisor/cert.pem
+  sudo install -Dm644 ${srcdir}/go/src/${pkggopath}/static/skywire-manager-src/ssl/server.key ${pkgdir}/etc/skywire-hypervisor/key.pem
   #create the debian package
   dpkg-deb --build ${pkgdir}
 }
