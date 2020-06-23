@@ -36,11 +36,9 @@ type Client struct {
 	p               *Porter
 	addressResolver arclient.APIClient
 
-	connCh <-chan arclient.RemoteVisor
-	dialCh chan cipher.PubKey
-	lUDP   net.Listener
-	lMap   map[uint16]*Listener // key: lPort
-	mx     sync.Mutex
+	lUDP net.Listener
+	lMap map[uint16]*Listener // key: lPort
+	mx   sync.Mutex
 
 	done chan struct{}
 	once sync.Once
@@ -68,24 +66,15 @@ func (c *Client) SetLogger(log *logging.Logger) {
 
 // Serve serves the listening portion of the client.
 func (c *Client) Serve() error {
-	if c.connCh != nil {
-		return errors.New("already listening")
-	}
-
 	c.log.Infof("Serving SUDPH client")
 
 	ctx := context.Background()
 
-	dialCh := make(chan cipher.PubKey)
-
 	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	connCh, err := c.addressResolver.BindSUDPH(ctx, dialCh)
-	if err != nil {
+
+	if err := c.addressResolver.BindSUDPH(ctx); err != nil {
 		return fmt.Errorf("BindSUDPH: %w", err)
 	}
-
-	c.connCh = connCh
-	c.dialCh = dialCh
 
 	lUDP, err := kcp.ServeConn(nil, 0, 0, c.addressResolver.VisorConn())
 	if err != nil {
@@ -97,18 +86,6 @@ func (c *Client) Serve() error {
 	c.log.Infof("listening on udp addr: %v", addr)
 
 	c.log.Infof("bound BindSUDPH to %v", c.addressResolver.LocalAddr())
-
-	// go func() {
-	// 	for addr := range c.connCh {
-	// 		c.log.Infof("Received signal to dial %v", addr)
-	//
-	// 		go func(addr arclient.RemoteVisor) {
-	// 			if err := c.acceptUDPConn(addr); err != nil {
-	// 				c.log.Warnf("failed to accept incoming connection: %v", err)
-	// 			}
-	// 		}(addr)
-	// 	}
-	// }()
 
 	go func() {
 		for {
@@ -125,28 +102,6 @@ func (c *Client) Serve() error {
 
 	return nil
 }
-
-//
-// func (c *Client) listen(remoteAddr string) (net.Conn, error) {
-// 	c.log.Infof("Listening on %v from %v via udp", c.addressResolver.LocalAddr(), remoteAddr)
-//
-// 	conn, err := kcp.ServeConn(nil, 0, 0, c.addressResolver.VisorConn())
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	// lis, err := kcp.Listen(c.addressResolver.LocalAddr())
-// 	// if err != nil {
-// 	// 	return nil, err
-// 	// }
-// 	//
-// 	// conn, err := lis.Accept()
-// 	// if err != nil {
-// 	// 	return nil, err
-// 	// }
-//
-// 	return conn, nil
-// }
 
 func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
@@ -207,7 +162,7 @@ func (c *Client) acceptUDPConn() error {
 		deadline:  time.Now().Add(HandshakeTimeout),
 		hs:        hs,
 		freePort:  nil,
-		encrypt:   false, // TODO: enable
+		encrypt:   true,
 		initiator: false,
 	}
 
@@ -226,8 +181,6 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	}
 
 	c.log.Infof("Dialing PK %v", rPK)
-
-	// c.dialCh <- rPK
 
 	addr, err := c.addressResolver.ResolveSUDPH(ctx, rPK)
 	if err != nil {
@@ -258,7 +211,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		deadline:  time.Now().Add(HandshakeTimeout),
 		hs:        hs,
 		freePort:  freePort,
-		encrypt:   false, // TODO: enable
+		encrypt:   true,
 		initiator: true,
 	}
 
