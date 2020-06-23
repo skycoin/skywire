@@ -18,11 +18,9 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/libp2p/go-reuseport"
-	"github.com/xtaci/kcp-go"
 	"nhooyr.io/websocket"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
-	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 )
 
 var log = logging.MustGetLogger("arclient")
@@ -54,18 +52,18 @@ type Error struct {
 // APIClient implements DMSG discovery API client.
 type APIClient interface {
 	io.Closer
-	LocalAddr() string
+	LocalTCPAddr() string
+	LocalUDPAddr() string
+	RemoteHTTPAddr() string
+	RemoteUDPAddr() string
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPR(ctx context.Context, port string) error
 	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
-	BindSUDPH(ctx context.Context) error
+	BindSUDPH(ctx context.Context, conn net.Conn) error
 	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error)
-	DialUDP(addr string) (net.Conn, error)
-	DialUDP2(addr string) (net.Conn, error)
-	VisorConn() net.PacketConn
 }
 
 type key struct {
@@ -78,22 +76,27 @@ var clients = make(map[key]*client)
 
 // client implements Client for address resolver API.
 type client struct {
-	client       *httpauth.Client
-	localTCPAddr string
-	localUDPAddr string
-	remoteAddr   string
-	pk           cipher.PubKey
-	sk           cipher.SecKey
-	stcphConn    *websocket.Conn
-	stcphAddrCh  <-chan RemoteVisor
-	sudphConn    *net.UDPConn
-	filterConn   *pfilter.PacketFilter
-	visorConn    net.PacketConn
-	arConn       net.PacketConn
+	client         *httpauth.Client
+	localTCPAddr   string
+	localUDPAddr   string
+	remoteHTTPAddr string
+	remoteUDPAddr  string
+	pk             cipher.PubKey
+	sk             cipher.SecKey
+	stcphConn      *websocket.Conn
+	stcphAddrCh    <-chan RemoteVisor
+	sudphConn      *net.UDPConn
+	filterConn     *pfilter.PacketFilter
+	visorConn      net.PacketConn
+	arConn         net.PacketConn
 }
 
-func (c *client) VisorConn() net.PacketConn {
-	return c.visorConn
+func (c *client) RemoteHTTPAddr() string {
+	return c.remoteHTTPAddr
+}
+
+func (c *client) RemoteUDPAddr() string {
+	return c.remoteUDPAddr
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -121,13 +124,17 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 		return nil, fmt.Errorf("address resolver httpauth: %w", err)
 	}
 
+	remoteURL, err := url.Parse(remoteAddr)
+	if err != nil {
+		return nil, fmt.Errorf("parse URL: %w", err)
+	}
+
 	client := &client{
-		client:       httpAuthClient,
-		pk:           pk,
-		sk:           sk,
-		localTCPAddr: "",
-		localUDPAddr: "",
-		remoteAddr:   remoteAddr,
+		client:         httpAuthClient,
+		pk:             pk,
+		sk:             sk,
+		remoteHTTPAddr: remoteAddr,
+		remoteUDPAddr:  remoteURL.Host,
 	}
 
 	transport := &http.Transport{
@@ -149,7 +156,11 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 	return client, nil
 }
 
-func (c *client) LocalAddr() string {
+func (c *client) LocalTCPAddr() string {
+	return c.localTCPAddr
+}
+
+func (c *client) LocalUDPAddr() string {
 	return c.localUDPAddr
 }
 
@@ -217,127 +228,6 @@ func (c *client) Websocket(ctx context.Context, path string) (*websocket.Conn, e
 	}
 
 	return conn, nil
-}
-
-// UDP performs a new UDP request.
-func (c *client) connectToUDPServer(_ context.Context) (net.Conn, error) {
-	u, err := url.Parse(c.remoteAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	remoteAddr := u.Host
-
-	log.Infof("SUDPH remote addr before trim %q, after %q", c.remoteAddr, remoteAddr)
-
-	conn, err := c.DialUDP(remoteAddr)
-	if err != nil {
-		return nil, fmt.Errorf("DialUDP: %w", err)
-	}
-
-	return conn, nil
-}
-
-// TODO(nkryuchkov): remove from arclient
-func (c *client) DialUDP(remoteAddr string) (net.Conn, error) {
-	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
-
-	var lAddr *net.UDPAddr
-	if c.localUDPAddr != "" {
-		la, err := net.ResolveUDPAddr("udp", c.localUDPAddr)
-		if err != nil {
-			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
-		}
-
-		lAddr = la
-		log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
-	} else {
-		la, err := net.ResolveUDPAddr("udp", ":0")
-		if err != nil {
-			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
-		}
-
-		lAddr = la
-		log.Infof("SUDPH: Resolved local addr from %v to %v", ":0", lAddr)
-	}
-
-	rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	network := "udp4"
-	if rAddr.IP.To4() == nil {
-		network = "udp"
-	}
-
-	log.Infof("SUDPH dialing udp from %v to %v", lAddr, remoteAddr)
-
-	if c.sudphConn == nil {
-		uc, err := net.ListenUDP(network, lAddr)
-		if err != nil {
-			return nil, err
-		}
-
-		c.sudphConn = uc
-
-		c.filterConn = pfilter.NewPacketFilter(uc)
-		c.visorConn = c.filterConn.NewConn(100, nil)
-		c.arConn = c.filterConn.NewConn(10, packetfilter.NewAddressFilter(rAddr, true))
-
-		c.filterConn.Start()
-	}
-
-	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, c.arConn)
-	if err != nil {
-		return nil, err
-	}
-
-	if c.localUDPAddr == "" {
-		log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, conn2.LocalAddr().String())
-		c.localUDPAddr = conn2.LocalAddr().String()
-	}
-
-	return conn2, nil
-}
-
-func (c *client) DialUDP2(remoteAddr string) (net.Conn, error) {
-	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
-
-	var lAddr *net.UDPAddr
-	if c.localUDPAddr != "" {
-		la, err := net.ResolveUDPAddr("udp", c.localUDPAddr)
-		if err != nil {
-			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
-		}
-
-		lAddr = la
-		log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
-	} else {
-		la, err := net.ResolveUDPAddr("udp", ":0")
-		if err != nil {
-			return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
-		}
-
-		lAddr = la
-		log.Infof("SUDPH: Resolved local addr from %v to %v", ":0", lAddr)
-	}
-
-	log.Infof("SUDPH dialing2 udp from %v to %v", lAddr, remoteAddr)
-
-	dialConn := c.filterConn.NewConn(20, packetfilter.NewKCPConversationFilter())
-
-	conn2, err := kcp.NewConn(remoteAddr, nil, 0, 0, dialConn)
-	if err != nil {
-		return nil, err
-	}
-
-	if c.localUDPAddr == "" {
-		log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, conn2.LocalAddr().String())
-		c.localUDPAddr = conn2.LocalAddr().String()
-	}
-
-	return conn2, nil
 }
 
 // BindRequest stores bind request values.
@@ -551,12 +441,7 @@ func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-
 }
 
 // TODO(nkryuchkov): keep NAT mapping alive
-func (c *client) BindSUDPH(ctx context.Context) error {
-	conn, err := c.connectToUDPServer(ctx)
-	if err != nil {
-		return err
-	}
-
+func (c *client) BindSUDPH(ctx context.Context, conn net.Conn) error {
 	// TODO(nkryuchkov): auth
 	log.Infof("Sending PK")
 	if _, err := conn.Write([]byte(c.pk.String())); err != nil {

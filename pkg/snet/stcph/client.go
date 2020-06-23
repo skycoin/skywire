@@ -84,7 +84,7 @@ func (c *Client) Serve() error {
 	c.connCh = connCh
 	c.dialCh = dialCh
 
-	c.log.Infof("listening websocket events on %v", c.addressResolver.LocalAddr())
+	c.log.Infof("listening websocket events on %v", c.addressResolver.LocalTCPAddr())
 
 	go func() {
 		for addr := range c.connCh {
@@ -105,21 +105,21 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
 
-	c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalAddr())
+	c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalTCPAddr())
 
 	for {
 		select {
 		case <-timer.C:
 			return nil, ErrTimeout
 		default:
-			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalAddr(), addr)
+			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalTCPAddr(), addr)
 			if err == nil {
-				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())
+				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalTCPAddr())
 				return conn, nil
 			}
 
 			c.log.WithError(err).
-				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalAddr(), err)
+				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalTCPAddr(), err)
 		}
 	}
 }
