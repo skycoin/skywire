@@ -46,8 +46,7 @@ BUILD_OPTS?=$(BUILDINFO)
 
 check: lint test ## Run linters and tests
 
-## TODO: build: dep host-apps bin
-build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json

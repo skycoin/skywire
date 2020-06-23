@@ -9,11 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AudriusButkevicius/pfilter"
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 )
 
@@ -35,6 +37,12 @@ type Client struct {
 	lSK             cipher.SecKey
 	p               *Porter
 	addressResolver arclient.APIClient
+
+	localUDPAddr        string
+	listenerConn        net.PacketConn
+	visorConn           net.PacketConn
+	addressResolverConn net.PacketConn
+	packetFilter        *pfilter.PacketFilter
 
 	lUDP net.Listener
 	lMap map[uint16]*Listener // key: lPort
@@ -69,14 +77,51 @@ func (c *Client) Serve() error {
 	c.log.Infof("Serving SUDPH client")
 
 	ctx := context.Background()
+	network := "udp"
+
+	lAddr, err := net.ResolveUDPAddr(network, "")
+	if err != nil {
+		return fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
+	}
+
+	c.localUDPAddr = lAddr.String()
+
+	log.Infof("SUDPH: Resolved local addr from %v to %v", "", lAddr)
+
+	rAddr, err := net.ResolveUDPAddr(network, c.addressResolver.RemoteUDPAddr())
+	if err != nil {
+		return err
+	}
+
+	log.Infof("SUDPH dialing udp from %v to %v", lAddr, rAddr)
+
+	listenerConn, err := net.ListenUDP(network, lAddr)
+	if err != nil {
+		return err
+	}
+
+	c.listenerConn = listenerConn
+
+	c.packetFilter = pfilter.NewPacketFilter(listenerConn)
+	c.visorConn = c.packetFilter.NewConn(100, nil)
+	c.addressResolverConn = c.packetFilter.NewConn(10, packetfilter.NewAddressFilter(rAddr, true))
+
+	c.packetFilter.Start()
+
+	arKCPConn, err := kcp.NewConn(c.addressResolver.RemoteUDPAddr(), nil, 0, 0, c.addressResolverConn)
+	if err != nil {
+		return err
+	}
+
+	log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, arKCPConn.LocalAddr().String())
+	// c.localUDPAddr = c.addressResolverConn.LocalAddr().String()
 
 	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-
-	if err := c.addressResolver.BindSUDPH(ctx); err != nil {
+	if err := c.addressResolver.BindSUDPH(ctx, arKCPConn); err != nil {
 		return fmt.Errorf("BindSUDPH: %w", err)
 	}
 
-	lUDP, err := kcp.ServeConn(nil, 0, 0, c.addressResolver.VisorConn())
+	lUDP, err := kcp.ServeConn(nil, 0, 0, c.visorConn)
 	if err != nil {
 		return err
 	}
@@ -85,7 +130,7 @@ func (c *Client) Serve() error {
 	addr := lUDP.Addr()
 	c.log.Infof("listening on udp addr: %v", addr)
 
-	c.log.Infof("bound BindSUDPH to %v", c.addressResolver.LocalAddr())
+	c.log.Infof("bound BindSUDPH to %v", c.addressResolver.LocalTCPAddr())
 
 	go func() {
 		for {
@@ -107,23 +152,45 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
 
-	c.log.Infof("Dialing %v from %v via udp", addr, c.addressResolver.LocalAddr())
+	c.log.Infof("Dialing %v from %v via udp", addr, c.addressResolver.LocalTCPAddr())
 
 	for {
 		select {
 		case <-timer.C:
 			return nil, ErrTimeout
 		default:
-			conn, err := c.addressResolver.DialUDP2(addr)
+			conn, err := c.dialUDP(addr)
 			if err == nil {
-				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())
+				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalTCPAddr())
 				return conn, nil
 			}
 
 			c.log.WithError(err).
-				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalAddr(), err)
+				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalTCPAddr(), err)
 		}
 	}
+}
+
+func (c *Client) dialUDP(remoteAddr string) (net.Conn, error) {
+	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
+
+	lAddr, err := net.ResolveUDPAddr("udp", c.localUDPAddr)
+	if err != nil {
+		return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
+	}
+
+	log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
+
+	log.Infof("SUDPH dialing2 udp from %v to %v", lAddr, remoteAddr)
+
+	dialConn := c.packetFilter.NewConn(20, packetfilter.NewKCPConversationFilter())
+
+	kcpConn, err := kcp.NewConn(remoteAddr, nil, 0, 0, dialConn)
+	if err != nil {
+		return nil, err
+	}
+
+	return kcpConn, nil
 }
 
 func (c *Client) acceptUDPConn() error {
