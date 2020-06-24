@@ -259,8 +259,8 @@ func readFrame0(r io.Reader) error {
 		return fmt.Errorf("not enough bytes read")
 	}
 
-	if string(buf) != HandshakeMessage {
-		return fmt.Errorf("bad handshake message")
+	if string(buf[:n]) != HandshakeMessage {
+		return fmt.Errorf("bad handshake message: %v", string(buf[:n]))
 	}
 
 	return nil
