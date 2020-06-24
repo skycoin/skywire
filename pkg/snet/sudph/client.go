@@ -128,7 +128,7 @@ func (c *Client) Serve() error {
 		LocalSK:   c.lSK,
 		Deadline:  time.Now().Add(HandshakeTimeout),
 		Handshake: hs,
-		Encrypt:   false, // TODO: enable?
+		Encrypt:   false,
 		Initiator: true,
 	}
 
@@ -138,9 +138,7 @@ func (c *Client) Serve() error {
 	}
 
 	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	if err := c.addressResolver.BindSUDPH(ctx, arConn); err != nil {
-		return fmt.Errorf("BindSUDPH: %w", err)
-	}
+	c.addressResolver.BindSUDPH(ctx, arConn)
 
 	lUDP, err := kcp.ServeConn(nil, 0, 0, c.visorConn)
 	if err != nil {
