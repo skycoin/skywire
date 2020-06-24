@@ -23,6 +23,8 @@ const (
 
 	// HandshakeNonceSize is the size of the nonce for the handshake.
 	HandshakeNonceSize = 16
+
+	HandshakeMessage = "handshake"
 )
 
 // HandshakeError occurs when the handshake fails.
@@ -232,15 +234,13 @@ type Frame3 struct {
 	ErrMsg string
 }
 
-const frame0Message = "handshake"
-
 func writeFrame0(w io.Writer) error {
-	n, err := w.Write([]byte(frame0Message))
+	n, err := w.Write([]byte(HandshakeMessage))
 	if err != nil {
 		return err
 	}
 
-	if n != len(frame0Message) {
+	if n != len(HandshakeMessage) {
 		return fmt.Errorf("not enough bytes written")
 	}
 
@@ -248,15 +248,19 @@ func writeFrame0(w io.Writer) error {
 }
 
 func readFrame0(r io.Reader) error {
-	buf := make([]byte, len(frame0Message))
+	buf := make([]byte, len(HandshakeMessage))
 
 	n, err := r.Read(buf)
 	if err != nil {
 		return err
 	}
 
-	if n != len(frame0Message) {
+	if n != len(HandshakeMessage) {
 		return fmt.Errorf("not enough bytes read")
+	}
+
+	if string(buf) != HandshakeMessage {
+		return fmt.Errorf("bad handshake message")
 	}
 
 	return nil
