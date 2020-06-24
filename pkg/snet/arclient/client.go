@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -26,14 +27,16 @@ import (
 var log = logging.MustGetLogger("arclient")
 
 const (
-	bindSTCPRPath    = "/bind/stcpr"
-	bindSUDPRPath    = "/bind/sudpr"
-	resolveSTCPRPath = "/resolve/"
-	resolveSTCPHPath = "/resolve_hole_punch/"
-	resolveSUDPRPath = "/resolve_sudpr/"
-	resolveSUDPHPath = "/resolve_sudph/"
-	wsPath           = "/ws"
-	addrChSize       = 1024
+	bindSTCPRPath        = "/bind/stcpr"
+	bindSUDPRPath        = "/bind/sudpr"
+	resolveSTCPRPath     = "/resolve/"
+	resolveSTCPHPath     = "/resolve_hole_punch/"
+	resolveSUDPRPath     = "/resolve_sudpr/"
+	resolveSUDPHPath     = "/resolve_sudph/"
+	wsPath               = "/ws"
+	addrChSize           = 1024
+	udpKeepAliveInterval = 10 * time.Second
+	udpKeepAliveMessage  = "keepalive"
 )
 
 var (
@@ -58,7 +61,7 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPR(ctx context.Context, port string) error
 	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
-	BindSUDPH(ctx context.Context, conn net.Conn) error
+	BindSUDPH(ctx context.Context, conn net.Conn)
 	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
@@ -440,15 +443,12 @@ func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-
 }
 
 // TODO(nkryuchkov): keep NAT mapping alive
-func (c *client) BindSUDPH(ctx context.Context, conn net.Conn) error {
-	// TODO(nkryuchkov): auth via handshake
-	// log.Infof("Sending PK")
-	// if _, err := conn.Write([]byte(c.pk.String())); err != nil {
-	// 	return err
-	// }
-	// log.Infof("Sent PK")
-
-	return nil
+func (c *client) BindSUDPH(ctx context.Context, conn net.Conn) {
+	go func() {
+		if err := c.keepAliveLoop(ctx, conn); err != nil {
+			log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
+		}
+	}()
 }
 
 func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
@@ -517,6 +517,22 @@ func (c *client) Close() error {
 	// }
 
 	return nil
+}
+
+// keep NAT mapping alive
+func (c *client) keepAliveLoop(ctx context.Context, conn net.Conn) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if _, err := conn.Write([]byte(udpKeepAliveMessage)); err != nil {
+				return err
+			}
+
+			time.Sleep(udpKeepAliveInterval)
+		}
+	}
 }
 
 // extractError returns the decoded error message from Body.
