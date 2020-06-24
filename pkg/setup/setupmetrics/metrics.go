@@ -50,10 +50,8 @@ func (m *metrics) RecordRequest(_ routing.BidirectionalRoute) func(rules *routin
 	m.activeRequests.Inc()
 
 	return func(rules *routing.EdgeRules, err *error) {
-		var successStr string
-		if *err == nil {
-			successStr = "true"
-		} else {
+		successStr := "true"
+		if *err != nil {
 			successStr = "false"
 		}
 		labels := prometheus.Labels{
