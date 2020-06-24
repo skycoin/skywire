@@ -24,7 +24,7 @@ const (
 	// HandshakeNonceSize is the size of the nonce for the handshake.
 	HandshakeNonceSize = 16
 
-	HandshakeMessage = "handshake"
+	HandshakeMessage = "get_nonce"
 )
 
 // HandshakeError occurs when the handshake fails.
