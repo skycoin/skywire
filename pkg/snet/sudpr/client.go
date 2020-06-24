@@ -44,7 +44,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIC
 		log:             logging.MustGetLogger(Type),
 		lPK:             pk,
 		lSK:             sk,
-		p:               newPorter(PorterMinEphemeral),
+		p:               NewPorter(PorterMinEphemeral),
 		addressResolver: addressResolver,
 		localAddr:       localAddr,
 		lMap:            make(map[uint16]*Listener),
