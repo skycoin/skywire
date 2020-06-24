@@ -21,60 +21,60 @@ type Conn struct {
 	freePort func()
 }
 
-type connConfig struct {
-	log       *logging.Logger
-	conn      net.Conn
-	localPK   cipher.PubKey
-	localSK   cipher.SecKey
-	deadline  time.Time
-	hs        Handshake
-	freePort  func()
-	encrypt   bool
-	initiator bool
+type ConnConfig struct {
+	Log       *logging.Logger
+	Conn      net.Conn
+	LocalPK   cipher.PubKey
+	LocalSK   cipher.SecKey
+	Deadline  time.Time
+	Handshake Handshake
+	FreePort  func()
+	Encrypt   bool
+	Initiator bool
 }
 
-func newConn(c connConfig) (*Conn, error) {
-	log.Infof("Performing handshake with %v", c.conn.RemoteAddr())
-	lAddr, rAddr, err := c.hs(c.conn, c.deadline)
+func NewConn(c ConnConfig) (*Conn, error) {
+	log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
+	lAddr, rAddr, err := c.Handshake(c.Conn, c.Deadline)
 	log.Infof("c.hs result laddr=%v raddr=%v err=%v", lAddr, rAddr, err)
 
 	if err != nil { // TODO: errors are not caught here
-		if err := c.conn.Close(); err != nil && c.log != nil {
-			c.log.WithError(err).Warnf("Failed to close sudph connection")
+		if err := c.Conn.Close(); err != nil && c.Log != nil {
+			c.Log.WithError(err).Warnf("Failed to close sudph connection")
 		}
 
-		if c.freePort != nil {
-			c.freePort()
+		if c.FreePort != nil {
+			c.FreePort()
 		}
 
 		return nil, err
 	}
-	log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.conn.RemoteAddr(), lAddr, rAddr)
+	log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
 
 	// TODO(nkryuchkov): extract from handshake whether encryption is needed
-	if c.encrypt {
+	if c.Encrypt {
 		config := noise.Config{
-			LocalPK:   c.localPK,
-			LocalSK:   c.localSK,
+			LocalPK:   c.LocalPK,
+			LocalSK:   c.LocalSK,
 			RemotePK:  rAddr.PK,
-			Initiator: c.initiator,
+			Initiator: c.Initiator,
 		}
 
-		wrappedConn, err := noisewrapper.WrapConn(config, c.conn)
+		wrappedConn, err := noisewrapper.WrapConn(config, c.Conn)
 		if err != nil {
-			return nil, fmt.Errorf("encrypt connection to %v@%v: %w", rAddr, c.conn.RemoteAddr(), err)
+			return nil, fmt.Errorf("encrypt connection to %v@%v: %w", rAddr, c.Conn.RemoteAddr(), err)
 		}
 
-		c.conn = wrappedConn
+		c.Conn = wrappedConn
 
-		if c.log != nil {
-			c.log.Infof("Connection with %v@%v is encrypted", rAddr, c.conn.RemoteAddr())
+		if c.Log != nil {
+			c.Log.Infof("Connection with %v@%v is encrypted", rAddr, c.Conn.RemoteAddr())
 		}
-	} else if c.log != nil {
-		c.log.Infof("Connection with %v@%v is NOT encrypted", rAddr, c.conn.RemoteAddr())
+	} else if c.Log != nil {
+		c.Log.Infof("Connection with %v@%v is NOT encrypted", rAddr, c.Conn.RemoteAddr())
 	}
 
-	return &Conn{Conn: c.conn, lAddr: lAddr, rAddr: rAddr, freePort: c.freePort}, nil
+	return &Conn{Conn: c.Conn, lAddr: lAddr, rAddr: rAddr, freePort: c.FreePort}, nil
 }
 
 // LocalAddr implements net.Conn
