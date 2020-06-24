@@ -8,8 +8,6 @@ import (
 	"net/rpc"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-
 	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
@@ -17,6 +15,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rpcutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
