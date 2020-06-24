@@ -41,34 +41,34 @@ func prepareConns(t *testing.T) (*Conn, *Conn, func()) {
 	done := make(chan struct{})
 
 	go func() {
-		bConnConfig := connConfig{
-			conn:      bConn,
-			localPK:   bPK,
-			localSK:   bSK,
-			deadline:  time.Now().Add(HandshakeTimeout),
-			hs:        rhs,
-			freePort:  nil,
-			encrypt:   false,
-			initiator: false,
+		bConnConfig := ConnConfig{
+			Conn:      bConn,
+			LocalPK:   bPK,
+			LocalSK:   bSK,
+			Deadline:  time.Now().Add(HandshakeTimeout),
+			Handshake: rhs,
+			FreePort:  nil,
+			Encrypt:   false,
+			Initiator: false,
 		}
 
-		b, respErr = newConn(bConnConfig)
+		b, respErr = NewConn(bConnConfig)
 
 		close(done)
 	}()
 
-	aConnConfig := connConfig{
-		conn:      aConn,
-		localPK:   aPK,
-		localSK:   aSK,
-		deadline:  time.Now().Add(HandshakeTimeout),
-		hs:        ihs,
-		freePort:  nil,
-		encrypt:   false,
-		initiator: true,
+	aConnConfig := ConnConfig{
+		Conn:      aConn,
+		LocalPK:   aPK,
+		LocalSK:   aSK,
+		Deadline:  time.Now().Add(HandshakeTimeout),
+		Handshake: ihs,
+		FreePort:  nil,
+		Encrypt:   false,
+		Initiator: true,
 	}
 
-	a, err := newConn(aConnConfig)
+	a, err := NewConn(aConnConfig)
 	require.NoError(t, err)
 
 	<-done

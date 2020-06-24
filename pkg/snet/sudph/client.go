@@ -74,6 +74,7 @@ func (c *Client) SetLogger(log *logging.Logger) {
 
 // Serve serves the listening portion of the client.
 func (c *Client) Serve() error {
+	// TODO(nkryuchkov): check if already serving
 	c.log.Infof("Serving SUDPH client")
 
 	ctx := context.Background()
@@ -114,10 +115,30 @@ func (c *Client) Serve() error {
 	}
 
 	log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, arKCPConn.LocalAddr().String())
-	// c.localUDPAddr = c.addressResolverConn.LocalAddr().String()
+
+	// TODO(nkryuchkov): consider moving some parts to address-resolver client
+
+	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
+	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: 0}, emptyAddr)
+
+	connConfig := ConnConfig{
+		Log:       c.log,
+		Conn:      arKCPConn,
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		Deadline:  time.Now().Add(HandshakeTimeout),
+		Handshake: hs,
+		Encrypt:   false, // TODO: enable?
+		Initiator: true,
+	}
+
+	arConn, err := NewConn(connConfig)
+	if err != nil {
+		return fmt.Errorf("newConn: %w", err)
+	}
 
 	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	if err := c.addressResolver.BindSUDPH(ctx, arKCPConn); err != nil {
+	if err := c.addressResolver.BindSUDPH(ctx, arConn); err != nil {
 		return fmt.Errorf("BindSUDPH: %w", err)
 	}
 
@@ -221,19 +242,19 @@ func (c *Client) acceptUDPConn() error {
 		return nil
 	})
 
-	connConfig := connConfig{
-		log:       c.log,
-		conn:      udpConn,
-		localPK:   c.lPK,
-		localSK:   c.lSK,
-		deadline:  time.Now().Add(HandshakeTimeout),
-		hs:        hs,
-		freePort:  nil,
-		encrypt:   true,
-		initiator: false,
+	connConfig := ConnConfig{
+		Log:       c.log,
+		Conn:      udpConn,
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		Deadline:  time.Now().Add(HandshakeTimeout),
+		Handshake: hs,
+		FreePort:  nil,
+		Encrypt:   true,
+		Initiator: false,
 	}
 
-	conn, err := newConn(connConfig)
+	conn, err := NewConn(connConfig)
 	if err != nil {
 		return err
 	}
@@ -270,19 +291,19 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	connConfig := connConfig{
-		log:       c.log,
-		conn:      udpConn,
-		localPK:   c.lPK,
-		localSK:   c.lSK,
-		deadline:  time.Now().Add(HandshakeTimeout),
-		hs:        hs,
-		freePort:  freePort,
-		encrypt:   true,
-		initiator: true,
+	connConfig := ConnConfig{
+		Log:       c.log,
+		Conn:      udpConn,
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		Deadline:  time.Now().Add(HandshakeTimeout),
+		Handshake: hs,
+		FreePort:  freePort,
+		Encrypt:   true,
+		Initiator: true,
 	}
 
-	sudpConn, err := newConn(connConfig)
+	sudpConn, err := NewConn(connConfig)
 	if err != nil {
 		return nil, fmt.Errorf("newConn: %w", err)
 	}
