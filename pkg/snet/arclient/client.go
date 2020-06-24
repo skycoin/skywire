@@ -22,6 +22,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 )
 
 var log = logging.MustGetLogger("arclient")
@@ -61,11 +62,11 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPR(ctx context.Context, port string) error
 	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
-	BindSUDPH(ctx context.Context, conn net.Conn)
+	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (err error)
 	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
-	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error)
+	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 }
 
 type key struct {
@@ -285,9 +286,11 @@ func (c *client) BindSUDPR(ctx context.Context, port string) error {
 	return nil
 }
 
-// ResolveResponse stores response response values.
-type ResolveResponse struct {
-	Addr string `json:"addr"`
+// VisorData stores visor data.
+type VisorData struct {
+	RemoteAddr string `json:"remote_addr"`
+	IsLocal    bool   `json:"is_local,omitempty"`
+	LocalAddresses
 }
 
 func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error) {
@@ -315,13 +318,13 @@ func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, er
 		return "", err
 	}
 
-	var resolveResp ResolveResponse
+	var resolveResp VisorData
 
 	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
 		return "", err
 	}
 
-	return resolveResp.Addr, nil
+	return resolveResp.RemoteAddr, nil
 }
 
 func (c *client) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error) {
@@ -349,13 +352,13 @@ func (c *client) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, er
 		return "", err
 	}
 
-	var resolveResp ResolveResponse
+	var resolveResp VisorData
 
 	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
 		return "", err
 	}
 
-	return resolveResp.Addr, nil
+	return resolveResp.RemoteAddr, nil
 }
 
 func (c *client) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error) {
@@ -383,19 +386,19 @@ func (c *client) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, er
 		return "", err
 	}
 
-	var resolveResp ResolveResponse
+	var resolveResp VisorData
 
 	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
 		return "", err
 	}
 
-	return resolveResp.Addr, nil
+	return resolveResp.RemoteAddr, nil
 }
 
-func (c *client) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, error) {
+func (c *client) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
 	resp, err := c.Get(ctx, resolveSUDPHPath+pk.String())
 	if err != nil {
-		return "", err
+		return VisorData{}, err
 	}
 
 	defer func() {
@@ -405,25 +408,25 @@ func (c *client) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (string, er
 	}()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNoEntry
+		return VisorData{}, ErrNoEntry
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return VisorData{}, err
 	}
 
-	var resolveResp ResolveResponse
+	var resolveResp VisorData
 
 	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return "", err
+		return VisorData{}, err
 	}
 
-	return resolveResp.Addr, nil
+	return resolveResp, nil
 }
 
 // RemoteVisor contains public key and address of remote visor.
@@ -442,13 +445,39 @@ func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-
 	return c.stcphAddrCh, nil
 }
 
+type LocalAddresses struct {
+	Port      string   `json:"port"`
+	Addresses []string `json:"addresses"`
+}
+
 // TODO(nkryuchkov): keep NAT mapping alive
-func (c *client) BindSUDPH(ctx context.Context, conn net.Conn) {
+func (c *client) BindSUDPH(ctx context.Context, conn net.Conn, localPort string) error {
+	addresses, err := netutil.LocalAddresses()
+	if err != nil {
+		return err
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+		Port:      localPort,
+	}
+
+	laData, err := json.Marshal(localAddresses)
+	if err != nil {
+		return err
+	}
+
+	if _, err := conn.Write(laData); err != nil {
+		return err
+	}
+
 	go func() {
 		if err := c.keepAliveLoop(ctx, conn); err != nil {
 			log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
 		}
 	}()
+
+	return nil
 }
 
 func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
