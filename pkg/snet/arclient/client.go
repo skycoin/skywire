@@ -34,7 +34,6 @@ const (
 	resolveSUDPHPath = "/resolve_sudph/"
 	wsPath           = "/ws"
 	addrChSize       = 1024
-	handshakeMessage = "handshake"
 )
 
 var (
@@ -442,12 +441,12 @@ func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-
 
 // TODO(nkryuchkov): keep NAT mapping alive
 func (c *client) BindSUDPH(ctx context.Context, conn net.Conn) error {
-	// TODO(nkryuchkov): auth
-	log.Infof("Sending PK")
-	if _, err := conn.Write([]byte(c.pk.String())); err != nil {
-		return err
-	}
-	log.Infof("Sent PK")
+	// TODO(nkryuchkov): auth via handshake
+	// log.Infof("Sending PK")
+	// if _, err := conn.Write([]byte(c.pk.String())); err != nil {
+	// 	return err
+	// }
+	// log.Infof("Sent PK")
 
 	return nil
 }
