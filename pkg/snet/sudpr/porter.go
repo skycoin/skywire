@@ -1,3 +1,4 @@
+// TODO(nkryuchkov): Share one porter instance between all direct transports.
 package sudpr
 
 import (
@@ -18,7 +19,7 @@ type Porter struct {
 	mx     sync.Mutex
 }
 
-func newPorter(minEph uint16) *Porter {
+func NewPorter(minEph uint16) *Porter {
 	ports := make(map[uint16]struct{})
 	ports[0] = struct{}{} // port 0 is invalid
 
