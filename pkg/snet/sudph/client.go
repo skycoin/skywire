@@ -85,7 +85,7 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
 	}
 
-	c.localUDPAddr = lAddr.String()
+	c.localUDPAddr = lAddr.String() // TODO: remove?
 
 	log.Infof("SUDPH: Resolved local addr from %v to %v", "", lAddr)
 
@@ -108,6 +108,13 @@ func (c *Client) Serve() error {
 	c.addressResolverConn = c.packetFilter.NewConn(10, packetfilter.NewAddressFilter(rAddr, true))
 
 	c.packetFilter.Start()
+
+	_, localPort, err := net.SplitHostPort(c.addressResolverConn.LocalAddr().String())
+	if err != nil {
+		return err
+	}
+
+	log.Infof("SUDPH Local port: %v", localPort)
 
 	arKCPConn, err := kcp.NewConn(c.addressResolver.RemoteUDPAddr(), nil, 0, 0, c.addressResolverConn)
 	if err != nil {
@@ -137,8 +144,9 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("newConn: %w", err)
 	}
 
-	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	c.addressResolver.BindSUDPH(ctx, arConn)
+	if err := c.addressResolver.BindSUDPH(ctx, arConn, localPort); err != nil {
+		return err
+	}
 
 	lUDP, err := kcp.ServeConn(nil, 0, 0, c.visorConn)
 	if err != nil {
@@ -190,6 +198,20 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	}
 }
 
+func (c *Client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
+	if visorData.IsLocal {
+		for _, host := range visorData.Addresses {
+			addr := net.JoinHostPort(host, visorData.Port)
+			conn, err := c.dialTimeout(addr)
+			if err == nil {
+				return conn, nil
+			}
+		}
+	}
+
+	return c.dialTimeout(visorData.RemoteAddr)
+}
+
 func (c *Client) dialUDP(remoteAddr string) (net.Conn, error) {
 	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
 
@@ -199,8 +221,6 @@ func (c *Client) dialUDP(remoteAddr string) (net.Conn, error) {
 	}
 
 	log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
-
-	log.Infof("SUDPH dialing2 udp from %v to %v", lAddr, remoteAddr)
 
 	dialConn := c.packetFilter.NewConn(20, packetfilter.NewKCPConversationFilter())
 
@@ -268,19 +288,19 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.log.Infof("Dialing PK %v", rPK)
 
-	addr, err := c.addressResolver.ResolveSUDPH(ctx, rPK)
+	visorData, err := c.addressResolver.ResolveSUDPH(ctx, rPK)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
 	}
 
-	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, addr)
+	c.log.Infof("Resolved PK %v to visor data %v, dialing", rPK, visorData)
 
-	udpConn, err := c.dialTimeout(addr)
+	udpConn, err := c.dialVisor(visorData)
 	if err != nil {
 		return nil, err
 	}
 
-	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
+	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, udpConn.RemoteAddr())
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
