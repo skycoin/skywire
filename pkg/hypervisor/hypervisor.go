@@ -316,13 +316,6 @@ func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
 	}
 }
 
-// DmsgClientSummary represents a dmsg client summary.
-type DmsgClientSummary struct {
-	PK        cipher.PubKey `json:"public_key"`
-	ServerPK  cipher.PubKey `json:"server_public_key"`
-	RoundTrip time.Duration `json:"round_trip"`
-}
-
 func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hv.mu.RLock()
