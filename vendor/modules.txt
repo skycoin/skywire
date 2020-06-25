@@ -7,6 +7,7 @@ github.com/SkycoinProject/dmsg/cmdutil
 github.com/SkycoinProject/dmsg/disc
 github.com/SkycoinProject/dmsg/dmsgctrl
 github.com/SkycoinProject/dmsg/dmsgpty
+github.com/SkycoinProject/dmsg/dmsgtest
 github.com/SkycoinProject/dmsg/httputil
 github.com/SkycoinProject/dmsg/ioutil
 github.com/SkycoinProject/dmsg/netutil
