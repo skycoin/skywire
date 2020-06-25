@@ -532,15 +532,17 @@ func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 func (c *client) Close() error {
 	defer func() {
 		c.stcphConn = nil
-		// TODO: uncomment
+		// TODO(nkryuchkov): uncomment
 		// c.sudphConn = nil
 	}()
 
-	if err := c.stcphConn.Close(websocket.StatusNormalClosure, "client closed"); err != nil {
-		log.WithError(err).Errorf("Failed to close STCPH")
+	if c.stcphConn != nil {
+		if err := c.stcphConn.Close(websocket.StatusNormalClosure, "client closed"); err != nil {
+			log.WithError(err).Errorf("Failed to close STCPH")
+		}
 	}
 
-	// TODO: uncomment
+	// TODO(nkryuchkov): uncomment, check if nil
 	// if err := c.sudphConn.Close(); err != nil {
 	// 	log.WithError(err).Errorf("Failed to close SUDPH")
 	// }
