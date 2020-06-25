@@ -15,7 +15,7 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
-var log = logging.MustGetLogger("stcph")
+var log = logging.MustGetLogger("sudph")
 
 const (
 	// HandshakeTimeout is the default timeout for a handshake.
