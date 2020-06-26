@@ -141,12 +141,12 @@ type NetworkConfigs struct {
 // NetworkClients represents all network clients.
 type NetworkClients struct {
 	DmsgC  *dmsg.Client
-	StcpC  *stcp.Client
-	StcprC *stcpr.Client
-	StcphC *stcph.Client
-	SudpC  *sudp.Client
-	SudprC *sudpr.Client
-	SudphC *sudph.Client
+	StcpC  directtransport.Client
+	StcprC directtransport.Client
+	StcphC directtransport.Client
+	SudpC  directtransport.Client
+	SudprC directtransport.Client
+	SudphC directtransport.Client
 }
 
 // Network represents a network between nodes in Skywire.
@@ -184,7 +184,8 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 	// TODO(nkryuchkov): Generic code for clients below.
 	if conf.NetworkConfigs.STCP != nil {
-		clients.StcpC = stcp.NewClient(conf.PubKey, conf.SecKey, directtransport.NewTable(conf.NetworkConfigs.STCP.PKTable))
+		table := directtransport.NewTable(conf.NetworkConfigs.STCP.PKTable)
+		clients.StcpC = stcp.NewClient(conf.PubKey, conf.SecKey, table, conf.NetworkConfigs.STCP.LocalAddr)
 		clients.StcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 	}
 
@@ -209,7 +210,8 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	}
 
 	if conf.NetworkConfigs.SUDP != nil {
-		clients.SudpC = sudp.NewClient(conf.PubKey, conf.SecKey, directtransport.NewTable(conf.NetworkConfigs.SUDP.PKTable))
+		table := directtransport.NewTable(conf.NetworkConfigs.SUDP.PKTable)
+		clients.SudpC = sudp.NewClient(conf.PubKey, conf.SecKey, table, conf.NetworkConfigs.SUDP.LocalAddr)
 		clients.SudpC.SetLogger(logging.MustGetLogger("snet.sudpC"))
 	}
 
@@ -285,7 +287,7 @@ func (n *Network) Init() error {
 
 	if n.conf.NetworkConfigs.STCP != nil {
 		if n.clients.StcpC != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
-			if err := n.clients.StcpC.Serve(n.conf.NetworkConfigs.STCP.LocalAddr); err != nil {
+			if err := n.clients.StcpC.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcp': %w", err)
 			}
 		} else {
@@ -315,7 +317,7 @@ func (n *Network) Init() error {
 
 	if n.conf.NetworkConfigs.SUDP != nil {
 		if n.clients.SudpC != nil && n.conf.NetworkConfigs.SUDP.LocalAddr != "" {
-			if err := n.clients.SudpC.Serve(n.conf.NetworkConfigs.SUDP.LocalAddr); err != nil {
+			if err := n.clients.SudpC.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'sudp': %w", err)
 			}
 		} else {
@@ -453,22 +455,22 @@ func (n *Network) TransportNetworks() []string { return n.networks }
 func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
 
 // STcp returns the underlying stcp.Client.
-func (n *Network) STcp() *stcp.Client { return n.clients.StcpC }
+func (n *Network) STcp() directtransport.Client { return n.clients.StcpC }
 
 // STcpr returns the underlying stcpr.Client.
-func (n *Network) STcpr() *stcpr.Client { return n.clients.StcprC }
+func (n *Network) STcpr() directtransport.Client { return n.clients.StcprC }
 
 // STcpH returns the underlying stcph.Client.
-func (n *Network) STcpH() *stcph.Client { return n.clients.StcphC }
+func (n *Network) STcpH() directtransport.Client { return n.clients.StcphC }
 
 // SUdp returns the underlying sudp.Client.
-func (n *Network) SUdp() *sudp.Client { return n.clients.SudpC }
+func (n *Network) SUdp() directtransport.Client { return n.clients.SudpC }
 
 // SUdpr returns the underlying sudpr.Client.
-func (n *Network) SUdpr() *sudpr.Client { return n.clients.SudprC }
+func (n *Network) SUdpr() directtransport.Client { return n.clients.SudprC }
 
 // SUdpH returns the underlying sudph.Client.
-func (n *Network) SUdpH() *sudph.Client { return n.clients.SudphC }
+func (n *Network) SUdpH() directtransport.Client { return n.clients.SudphC }
 
 // Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {

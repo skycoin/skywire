@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/AudriusButkevicius/pfilter"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/libp2p/go-reuseport"
@@ -94,11 +93,7 @@ type client struct {
 	sk             cipher.SecKey
 	stcphConn      *websocket.Conn
 	stcphAddrCh    <-chan RemoteVisor
-	sudphConn      *net.UDPConn
 	sudphAddrCh    <-chan RemoteVisor
-	filterConn     *pfilter.PacketFilter
-	visorConn      net.PacketConn
-	arConn         net.PacketConn
 }
 
 func (c *client) RemoteHTTPAddr() string {
@@ -420,6 +415,7 @@ func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 	return nil
 }
 
+// LocalAddresses contains outbound port and all network addresses of visor.
 type LocalAddresses struct {
 	Port      string   `json:"port"`
 	Addresses []string `json:"addresses"`
