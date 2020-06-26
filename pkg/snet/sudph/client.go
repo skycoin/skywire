@@ -17,6 +17,8 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport/porter"
 )
 
 // Type is sudp hole punch type.
@@ -37,7 +39,7 @@ type Client struct {
 
 	lPK             cipher.PubKey
 	lSK             cipher.SecKey
-	p               *Porter
+	p               *porter.Porter
 	addressResolver arclient.APIClient
 
 	localUDPAddr        string
@@ -47,7 +49,7 @@ type Client struct {
 	packetFilter        *pfilter.PacketFilter
 
 	lUDP net.Listener
-	lMap map[uint16]*Listener // key: lPort
+	lMap map[uint16]*directtransport.Listener // key: lPort
 	mx   sync.Mutex
 
 	done chan struct{}
@@ -61,8 +63,8 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIC
 		lPK:             pk,
 		lSK:             sk,
 		addressResolver: addressResolver,
-		p:               newPorter(PorterMinEphemeral),
-		lMap:            make(map[uint16]*Listener),
+		p:               porter.New(porter.PorterMinEphemeral),
+		lMap:            make(map[uint16]*directtransport.Listener),
 		done:            make(chan struct{}),
 	}
 
@@ -76,7 +78,10 @@ func (c *Client) SetLogger(log *logging.Logger) {
 
 // Serve serves the listening portion of the client.
 func (c *Client) Serve() error {
-	// TODO(nkryuchkov): check if already serving
+	if c.listenerConn != nil {
+		return errors.New("already listening")
+	}
+
 	c.log.Infof("Serving SUDPH client")
 
 	ctx := context.Background()
@@ -87,16 +92,16 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
 	}
 
-	c.localUDPAddr = lAddr.String() // TODO: remove?
+	c.localUDPAddr = lAddr.String() // TODO(nkryuchkov): remove?
 
-	log.Infof("SUDPH: Resolved local addr from %v to %v", "", lAddr)
+	c.log.Infof("SUDPH: Resolved local addr from %v to %v", "", lAddr)
 
 	rAddr, err := net.ResolveUDPAddr(network, c.addressResolver.RemoteUDPAddr())
 	if err != nil {
 		return err
 	}
 
-	log.Infof("SUDPH dialing udp from %v to %v", lAddr, rAddr)
+	c.log.Infof("SUDPH dialing udp from %v to %v", lAddr, rAddr)
 
 	listenerConn, err := net.ListenUDP(network, lAddr)
 	if err != nil {
@@ -107,7 +112,7 @@ func (c *Client) Serve() error {
 
 	c.packetFilter = pfilter.NewPacketFilter(listenerConn)
 	c.visorConn = c.packetFilter.NewConn(100, nil)
-	c.addressResolverConn = c.packetFilter.NewConn(10, packetfilter.NewAddressFilter(rAddr, true))
+	c.addressResolverConn = c.packetFilter.NewConn(10, packetfilter.NewAddressFilter(rAddr))
 
 	c.packetFilter.Start()
 
@@ -116,32 +121,31 @@ func (c *Client) Serve() error {
 		return err
 	}
 
-	log.Infof("SUDPH Local port: %v", localPort)
+	c.log.Infof("SUDPH Local port: %v", localPort)
 
 	arKCPConn, err := kcp.NewConn(c.addressResolver.RemoteUDPAddr(), nil, 0, 0, c.addressResolverConn)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, arKCPConn.LocalAddr().String())
+	c.log.Infof("SUDPH updating local UDP addr from %v to %v", c.localUDPAddr, arKCPConn.LocalAddr().String())
 
 	// TODO(nkryuchkov): consider moving some parts to address-resolver client
-
 	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
-	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: 0}, emptyAddr)
+	hs := directtransport.InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: 0}, emptyAddr)
 
-	connConfig := ConnConfig{
+	connConfig := directtransport.ConnConfig{
 		Log:       c.log,
 		Conn:      arKCPConn,
 		LocalPK:   c.lPK,
 		LocalSK:   c.lSK,
-		Deadline:  time.Now().Add(HandshakeTimeout),
+		Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
 		Handshake: hs,
 		Encrypt:   false,
 		Initiator: true,
 	}
 
-	arConn, err := NewConn(connConfig)
+	arConn, err := directtransport.NewConn(connConfig)
 	if err != nil {
 		return fmt.Errorf("newConn: %w", err)
 	}
@@ -155,18 +159,18 @@ func (c *Client) Serve() error {
 		for addr := range addrCh {
 			udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
 			if err != nil {
-				log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
+				c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
 				continue
 			}
 
 			// TODO(nkryuchkov): More robust solution
-			log.Infof("Sending hole punch packet to %v", addr)
+			c.log.Infof("Sending hole punch packet to %v", addr)
 			if _, err := c.visorConn.WriteTo([]byte(HolePunchMessage), udpAddr); err != nil {
-				log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
+				c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
 				continue
 			}
 
-			log.Infof("Sent hole punch packet to %v", addr)
+			c.log.Infof("Sent hole punch packet to %v", addr)
 		}
 	}()
 
@@ -186,7 +190,7 @@ func (c *Client) Serve() error {
 			if err := c.acceptUDPConn(); err != nil {
 				c.log.Warnf("failed to accept incoming connection: %v", err)
 
-				if !IsHandshakeError(err) {
+				if !directtransport.IsHandshakeError(err) {
 					c.log.Warnf("stopped serving sudpr")
 					return
 				}
@@ -195,6 +199,20 @@ func (c *Client) Serve() error {
 	}()
 
 	return nil
+}
+
+func (c *Client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
+	if visorData.IsLocal {
+		for _, host := range visorData.Addresses {
+			addr := net.JoinHostPort(host, visorData.Port)
+			conn, err := c.dialTimeout(addr)
+			if err == nil {
+				return conn, nil
+			}
+		}
+	}
+
+	return c.dialTimeout(visorData.RemoteAddr)
 }
 
 func (c *Client) dialTimeout(addr string) (net.Conn, error) {
@@ -220,22 +238,8 @@ func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	}
 }
 
-func (c *Client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
-	if visorData.IsLocal {
-		for _, host := range visorData.Addresses {
-			addr := net.JoinHostPort(host, visorData.Port)
-			conn, err := c.dialTimeout(addr)
-			if err == nil {
-				return conn, nil
-			}
-		}
-	}
-
-	return c.dialTimeout(visorData.RemoteAddr)
-}
-
 func (c *Client) dialUDP(remoteAddr string) (net.Conn, error) {
-	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
+	c.log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
 
 	// TODO(nkryuchkov): Dial using listener conn?
 	lAddr, err := net.ResolveUDPAddr("udp", c.localUDPAddr)
@@ -248,7 +252,7 @@ func (c *Client) dialUDP(remoteAddr string) (net.Conn, error) {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
 	}
 
-	log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
+	c.log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
 
 	dialConn := c.packetFilter.NewConn(20, packetfilter.NewKCPConversationFilter())
 
@@ -279,9 +283,9 @@ func (c *Client) acceptUDPConn() error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	var lis *Listener
+	var lis *directtransport.Listener
 
-	hs := ResponderHandshake(func(f2 Frame2) error {
+	hs := directtransport.ResponderHandshake(func(f2 directtransport.Frame2) error {
 		c.mx.Lock()
 		defer c.mx.Unlock()
 
@@ -293,19 +297,19 @@ func (c *Client) acceptUDPConn() error {
 		return nil
 	})
 
-	connConfig := ConnConfig{
+	connConfig := directtransport.ConnConfig{
 		Log:       c.log,
 		Conn:      udpConn,
 		LocalPK:   c.lPK,
 		LocalSK:   c.lSK,
-		Deadline:  time.Now().Add(HandshakeTimeout),
+		Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
 		Handshake: hs,
 		FreePort:  nil,
 		Encrypt:   true,
 		Initiator: false,
 	}
 
-	conn, err := NewConn(connConfig)
+	conn, err := directtransport.NewConn(connConfig)
 	if err != nil {
 		return err
 	}
@@ -314,7 +318,7 @@ func (c *Client) acceptUDPConn() error {
 }
 
 // Dial dials a new sudph.Conn to specified remote public key and port.
-func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*directtransport.Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -340,21 +344,21 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		return nil, fmt.Errorf("ReserveEphemeral: %w", err)
 	}
 
-	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
+	hs := directtransport.InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	connConfig := ConnConfig{
+	connConfig := directtransport.ConnConfig{
 		Log:       c.log,
 		Conn:      udpConn,
 		LocalPK:   c.lPK,
 		LocalSK:   c.lSK,
-		Deadline:  time.Now().Add(HandshakeTimeout),
+		Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
 		Handshake: hs,
 		FreePort:  freePort,
 		Encrypt:   true,
 		Initiator: true,
 	}
 
-	sudpConn, err := NewConn(connConfig)
+	sudpConn, err := directtransport.NewConn(connConfig)
 	if err != nil {
 		return nil, fmt.Errorf("newConn: %w", err)
 	}
@@ -364,7 +368,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 // Listen creates a new listener for sudp hole punch.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
-func (c *Client) Listen(lPort uint16) (*Listener, error) {
+func (c *Client) Listen(lPort uint16) (*directtransport.Listener, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -378,7 +382,7 @@ func (c *Client) Listen(lPort uint16) (*Listener, error) {
 	defer c.mx.Unlock()
 
 	lAddr := dmsg.Addr{PK: c.lPK, Port: lPort}
-	lis := newListener(lAddr, freePort)
+	lis := directtransport.NewListener(lAddr, freePort)
 	c.lMap[lPort] = lis
 
 	return lis, nil
