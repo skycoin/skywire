@@ -9,7 +9,10 @@ import (
 
 // TODO(nkryuchkov): use
 type Client interface {
-	Serve() error
+	SetLogger(log *logging.Logger) // TODO(nkryuchkov): remove
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error)
-	SetLogger(log *logging.Logger) // TODO: remove
+	Listen(lPort uint16) (*Listener, error)
+	Serve() error
+	Close() error
+	Type() string
 }
