@@ -27,7 +27,7 @@ func NewListener(lAddr dmsg.Addr, freePort func()) *Listener {
 	}
 }
 
-// Introduce is used by stcp.Client to introduce stcp.Conn to Listener.
+// Introduce is used by Client to introduce Conn to Listener.
 func (l *Listener) Introduce(conn *Conn) error {
 	select {
 	case <-l.done:

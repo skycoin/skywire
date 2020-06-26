@@ -59,13 +59,20 @@ type APIClient interface {
 	RemoteHTTPAddr() string
 	RemoteUDPAddr() string
 	BindSTCPR(ctx context.Context, port string) error
-	BindSUDPR(ctx context.Context, port string) error
 	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
+	BindSUDPR(ctx context.Context, port string) error
 	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error)
-	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error)
-	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error)
-	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
+	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
+	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
+	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
+}
+
+// VisorData stores visor data.
+type VisorData struct {
+	RemoteAddr string `json:"remote_addr"`
+	IsLocal    bool   `json:"is_local,omitempty"`
+	LocalAddresses
 }
 
 type key struct {
@@ -119,8 +126,6 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 	if client, ok := clients[key]; ok {
 		return client, nil
 	}
-
-	log.Infof("Creating arclient, key = %v", key)
 
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
@@ -240,35 +245,26 @@ type BindRequest struct {
 
 // BindSTCPR binds client PK to IP:port on address resolver.
 func (c *client) BindSTCPR(ctx context.Context, port string) error {
-	req := BindRequest{
-		Port: port,
-	}
-
-	resp, err := c.Post(ctx, bindSTCPRPath, req)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
-	}
-
-	return nil
+	return c.bind(ctx, bindSTCPRPath, port)
 }
 
 // BindSTCPR binds client PK to IP:port on address resolver.
 func (c *client) BindSUDPR(ctx context.Context, port string) error {
-	req := BindRequest{
-		Port: port,
+	return c.bind(ctx, bindSUDPRPath, port)
+}
+
+func (c *client) bind(ctx context.Context, path string, port string) error {
+	addresses, err := localAddresses()
+	if err != nil {
+		return err
 	}
 
-	resp, err := c.Post(ctx, bindSUDPRPath, req)
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+		Port:      port,
+	}
+
+	resp, err := c.Post(ctx, path, localAddresses)
 	if err != nil {
 		return err
 	}
@@ -286,117 +282,24 @@ func (c *client) BindSUDPR(ctx context.Context, port string) error {
 	return nil
 }
 
-// VisorData stores visor data.
-type VisorData struct {
-	RemoteAddr string `json:"remote_addr"`
-	IsLocal    bool   `json:"is_local,omitempty"`
-	LocalAddresses
+func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
+	return c.resolve(ctx, resolveSTCPRPath, pk)
 }
 
-func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Get(ctx, resolveSTCPRPath+pk.String())
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNoEntry
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
-	}
-
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var resolveResp VisorData
-
-	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return "", err
-	}
-
-	return resolveResp.RemoteAddr, nil
+func (c *client) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
+	return c.resolve(ctx, resolveSTCPHPath, pk)
 }
 
-func (c *client) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Get(ctx, resolveSTCPHPath+pk.String())
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNoEntry
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
-	}
-
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var resolveResp VisorData
-
-	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return "", err
-	}
-
-	return resolveResp.RemoteAddr, nil
-}
-
-func (c *client) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Get(ctx, resolveSUDPRPath+pk.String())
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNoEntry
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
-	}
-
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var resolveResp VisorData
-
-	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return "", err
-	}
-
-	return resolveResp.RemoteAddr, nil
+func (c *client) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
+	return c.resolve(ctx, resolveSUDPRPath, pk)
 }
 
 func (c *client) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	resp, err := c.Get(ctx, resolveSUDPHPath+pk.String())
+	return c.resolve(ctx, resolveSUDPHPath, pk)
+}
+
+func (c *client) resolve(ctx context.Context, path string, pk cipher.PubKey) (VisorData, error) {
+	resp, err := c.Get(ctx, path+pk.String())
 	if err != nil {
 		return VisorData{}, err
 	}
@@ -445,16 +348,39 @@ func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-
 	return c.stcphAddrCh, nil
 }
 
+// TODO(nkryuchkov): Ensure this works correctly with closed channels and connections.
 func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
-	// TODO(nkryuchkov): Ensure this works correctly with closed channels and connections.
-	addrCh := make(chan RemoteVisor, addrChSize)
-
 	conn, err := c.Websocket(ctx, wsPath)
 	if err != nil {
 		return err
 	}
 
+	_, localPort, err := net.SplitHostPort(c.LocalTCPAddr())
+	if err != nil {
+		return err
+	}
+
+	addresses, err := localAddresses()
+	if err != nil {
+		return err
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+		Port:      localPort,
+	}
+
+	laData, err := json.Marshal(localAddresses)
+	if err != nil {
+		return err
+	}
+
+	if err := conn.Write(ctx, websocket.MessageText, laData); err != nil {
+		return err
+	}
+
 	c.stcphConn = conn
+	addrCh := make(chan RemoteVisor, addrChSize)
 
 	go func(conn *websocket.Conn, addrCh chan<- RemoteVisor) {
 		defer func() {

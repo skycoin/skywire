@@ -28,7 +28,7 @@ type HandshakeError string
 
 // Error implements error.
 func (err HandshakeError) Error() string {
-	return fmt.Sprintln("sudph handshake failed:", string(err))
+	return fmt.Sprintln("handshake failed:", string(err))
 }
 
 // IsHandshakeError determines whether the error occurred during the handshake.
