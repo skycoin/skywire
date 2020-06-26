@@ -3,7 +3,7 @@ module github.com/SkycoinProject/skywire-mainnet
 go 1.14
 
 require (
-	github.com/SkycoinProject/dmsg v0.2.2
+	github.com/SkycoinProject/dmsg v0.2.3-0.20200626050336-ed5aa457d4be
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -41,4 +41,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-replace github.com/SkycoinProject/dmsg => ../dmsg
+//replace github.com/SkycoinProject/dmsg => ../dmsg
