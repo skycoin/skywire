@@ -28,6 +28,11 @@ const (
 	sudphType = "sudph"
 )
 
+var (
+	// ErrUnknownTransportType is returned when transport type is unknown.
+	ErrUnknownTransportType = errors.New("unknown transport type")
+)
+
 type ClientInterface interface { // TODO: rename
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error)
 	Listen(lPort uint16) (*Listener, error)
@@ -37,11 +42,12 @@ type ClientInterface interface { // TODO: rename
 }
 
 type ClientConfig struct {
-	Type      string
-	PK        cipher.PubKey
-	SK        cipher.SecKey
-	Table     PKTable
-	LocalAddr string
+	Type            string
+	PK              cipher.PubKey
+	SK              cipher.SecKey
+	LocalAddr       string
+	Table           PKTable
+	AddressResolver arclient.APIClient
 }
 
 // Client is the central control for incoming and outgoing 'Conn's.
@@ -52,7 +58,6 @@ type Client struct {
 	once                sync.Once
 	log                 *logging.Logger
 	porter              *porter.Porter
-	addressResolver     arclient.APIClient
 	packetFilter        *pfilter.PacketFilter
 	listenerConn        net.PacketConn
 	visorConn           net.PacketConn
@@ -79,7 +84,7 @@ func (c *Client) Serve() error {
 	}
 
 	switch c.conf.Type {
-	case stcpType:
+	case stcpType, stcprType:
 		listener, err := net.Listen("tcp", c.conf.LocalAddr)
 		if err != nil {
 			return err
@@ -87,7 +92,7 @@ func (c *Client) Serve() error {
 
 		c.listener = listener
 
-	case sudpType:
+	case sudpType, sudprType:
 		listener, err := kcp.Listen(c.conf.LocalAddr)
 		if err != nil {
 			return err
@@ -97,6 +102,19 @@ func (c *Client) Serve() error {
 	}
 
 	c.log.Infof("listening on addr: %v", c.listener.Addr())
+
+	// TODO(nkryuchkov): put to getDialer
+	switch c.conf.Type {
+	case stcprType, sudprType:
+		_, port, err := net.SplitHostPort(c.listener.Addr().String())
+		if err != nil {
+			return err
+		}
+
+		if err := c.conf.AddressResolver.Bind(context.Background(), c.conf.Type, port); err != nil {
+			return fmt.Errorf("bind %v: %w", c.conf.Type, err)
+		}
+	}
 
 	go func() {
 		for {
@@ -170,32 +188,41 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		return nil, io.ErrClosedPipe
 	}
 
-	addr, ok := c.conf.Table.Addr(rPK)
-	if !ok {
-		return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
-	}
+	dial := getDialer(c.conf.Type)
 
-	var conn net.Conn
+	var visorConn net.Conn
 
 	switch c.conf.Type {
-	case stcpType:
-		tcpConn, err := net.Dial("tcp", addr)
+	case stcpType, sudpType:
+		addr, ok := c.conf.Table.Addr(rPK)
+		if !ok {
+			return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
+		}
+
+		conn, err := dial(addr)
 		if err != nil {
 			return nil, err
 		}
 
-		conn = tcpConn
+		visorConn = conn
 
-	case sudpType:
-		kcpConn, err := kcp.Dial(addr)
+	case stcprType, sudprType:
+		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.conf.Type, rPK)
+		if err != nil {
+			return nil, fmt.Errorf("resolve PK: %w", err)
+		}
+
+		conn, err := c.dialVisor(dial, visorData)
 		if err != nil {
 			return nil, err
 		}
 
-		conn = kcpConn
+		visorConn = conn
+	default:
+		return nil, ErrUnknownTransportType
 	}
 
-	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
+	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, visorConn.RemoteAddr())
 
 	lPort, freePort, err := c.porter.ReserveEphemeral(ctx)
 	if err != nil {
@@ -206,7 +233,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	connConfig := ConnConfig{
 		Log:       c.log,
-		Conn:      conn,
+		Conn:      visorConn,
 		LocalPK:   c.conf.PK,
 		LocalSK:   c.conf.SK,
 		Deadline:  time.Now().Add(HandshakeTimeout),
@@ -217,6 +244,37 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	}
 
 	return NewConn(connConfig)
+}
+
+// TODO: same for listener
+type dialFunc func(addr string) (net.Conn, error)
+
+func getDialer(tType string) dialFunc {
+	switch tType {
+	case "stcp", "stcpr", "stcph":
+		return func(addr string) (net.Conn, error) {
+			return net.Dial("tcp", addr)
+		}
+	case "sudp", "sudpr", "sudph":
+		return kcp.Dial
+	default:
+		return nil // should not happen
+	}
+}
+
+func (c *Client) dialVisor(dial dialFunc, visorData arclient.VisorData) (net.Conn, error) {
+	if visorData.IsLocal {
+		for _, host := range visorData.Addresses {
+			addr := net.JoinHostPort(host, visorData.Port)
+
+			conn, err := dial(addr)
+			if err == nil {
+				return conn, nil
+			}
+		}
+	}
+
+	return dial(visorData.RemoteAddr)
 }
 
 // Listen creates a new listener for sudp.
