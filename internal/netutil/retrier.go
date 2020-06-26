@@ -4,13 +4,15 @@ import (
 	"errors"
 	"time"
 
-	"github.com/prometheus/common/log"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
 
 // Package errors
 var (
 	ErrMaximumRetriesReached = errors.New("maximum retries attempted without success")
 )
+
+var log = logging.MustGetLogger("retrier")
 
 // RetryFunc is a function used as argument of (*Retrier).Do(), which will retry on error unless it is whitelisted
 type RetryFunc func() error

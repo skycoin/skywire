@@ -16,6 +16,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
@@ -183,7 +184,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 	// TODO(nkryuchkov): Generic code for clients below.
 	if conf.NetworkConfigs.STCP != nil {
-		clients.StcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.NetworkConfigs.STCP.PKTable))
+		clients.StcpC = stcp.NewClient(conf.PubKey, conf.SecKey, directtransport.NewTable(conf.NetworkConfigs.STCP.PKTable))
 		clients.StcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 	}
 
@@ -208,7 +209,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	}
 
 	if conf.NetworkConfigs.SUDP != nil {
-		clients.SudpC = sudp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.NetworkConfigs.SUDP.PKTable))
+		clients.SudpC = sudp.NewClient(conf.PubKey, conf.SecKey, directtransport.NewTable(conf.NetworkConfigs.SUDP.PKTable))
 		clients.SudpC.SetLogger(logging.MustGetLogger("snet.sudpC"))
 	}
 
