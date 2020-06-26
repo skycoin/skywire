@@ -9,7 +9,6 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/prometheus/common/log"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
 )
@@ -35,13 +34,13 @@ type ConnConfig struct {
 }
 
 func NewConn(c ConnConfig) (*Conn, error) {
-	log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
+	c.Log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
 	lAddr, rAddr, err := c.Handshake(c.Conn, c.Deadline)
-	log.Infof("c.hs result laddr=%v raddr=%v err=%v", lAddr, rAddr, err)
+	c.Log.Infof("c.hs result laddr=%v raddr=%v err=%v", lAddr, rAddr, err)
 
 	if err != nil { // TODO: errors are not caught here
 		if err := c.Conn.Close(); err != nil && c.Log != nil {
-			c.Log.WithError(err).Warnf("Failed to close sudph connection")
+			c.Log.WithError(err).Warnf("Failed to close connection")
 		}
 
 		if c.FreePort != nil {
@@ -50,7 +49,7 @@ func NewConn(c ConnConfig) (*Conn, error) {
 
 		return nil, err
 	}
-	log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
+	c.Log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
 
 	// TODO(nkryuchkov): extract from handshake whether encryption is needed
 	if c.Encrypt {

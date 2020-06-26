@@ -19,7 +19,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.3.0
 	github.com/prometheus/client_golang v1.3.0
-	github.com/prometheus/common v0.7.0
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/sirupsen/logrus v1.5.0
@@ -30,6 +29,7 @@ require (
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tjfoc/gmsm v1.3.1 // indirect
 	github.com/xtaci/kcp-go v5.4.20+incompatible
+	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.4
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	golang.zx2c4.com/wireguard v0.0.20200320
