@@ -26,6 +26,7 @@ import (
 var log = logging.MustGetLogger("arclient")
 
 const (
+	bindPath             = "/bind/"
 	bindSTCPRPath        = "/bind/stcpr"
 	bindSUDPRPath        = "/bind/sudpr"
 	resolveSTCPRPath     = "/resolve/"
@@ -43,6 +44,8 @@ var (
 	ErrNoEntry = errors.New("no entry for this PK")
 	// ErrNotConnected is returned when PK is not connected.
 	ErrNotConnected = errors.New("this PK is not connected")
+	// ErrUnknownTransportType is returned when transport type is unknown.
+	ErrUnknownTransportType = errors.New("unknown transport type")
 )
 
 // Error is the object returned to the client when there's an error.
@@ -57,10 +60,12 @@ type APIClient interface {
 	LocalUDPAddr() string
 	RemoteHTTPAddr() string
 	RemoteUDPAddr() string
+	Bind(ctx context.Context, tType, port string) error
 	BindSTCPR(ctx context.Context, port string) error
 	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
 	BindSUDPR(ctx context.Context, port string) error
 	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error)
+	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
 	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
@@ -238,6 +243,11 @@ type BindRequest struct {
 	Port string `json:"port"`
 }
 
+// Bind binds client PK to IP:port on address resolver.
+func (c *client) Bind(ctx context.Context, tType, port string) error {
+	return c.bind(ctx, bindPath+tType, port)
+}
+
 // BindSTCPR binds client PK to IP:port on address resolver.
 func (c *client) BindSTCPR(ctx context.Context, port string) error {
 	return c.bind(ctx, bindSTCPRPath, port)
@@ -275,6 +285,22 @@ func (c *client) bind(ctx context.Context, path string, port string) error {
 	}
 
 	return nil
+}
+
+func (c *client) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
+	switch tType {
+	// TODO(nkryuchkov): constants instead of literals
+	case "stcpr":
+		return c.resolve(ctx, resolveSTCPRPath, pk)
+	case "stcph":
+		return c.resolve(ctx, resolveSTCPHPath, pk)
+	case "sudpr":
+		return c.resolve(ctx, resolveSUDPRPath, pk)
+	case "sudph":
+		return c.resolve(ctx, resolveSUDPHPath, pk)
+	default:
+		return VisorData{}, ErrUnknownTransportType
+	}
 }
 
 func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
