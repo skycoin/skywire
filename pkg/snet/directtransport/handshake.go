@@ -1,4 +1,4 @@
-package sudph
+package directtransport
 
 import (
 	"bytes"
@@ -11,11 +11,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	cipher2 "github.com/SkycoinProject/skycoin/src/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 )
-
-var log = logging.MustGetLogger("sudph")
 
 const (
 	// HandshakeTimeout is the default timeout for a handshake.
@@ -67,49 +63,36 @@ type Handshake func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, 
 func InitiatorHandshake(lSK cipher.SecKey, localAddr, remoteAddr dmsg.Addr) Handshake {
 	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		if err = writeFrame0(conn); err != nil {
-			log.WithError(err).Errorf("SUDPH InitiatorHandshake writeFrame0 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake writeFrame0 finished")
 
 		var f1 Frame1
 		if f1, err = readFrame1(conn); err != nil {
-			log.WithError(err).Errorf("SUDPH InitiatorHandshake readFrame1 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake readFrame1 finished")
 
 		f2 := Frame2{SrcAddr: localAddr, DstAddr: remoteAddr, Nonce: f1.Nonce}
 		if err = f2.Sign(lSK); err != nil {
-			log.WithError(err).Errorf("SUDPH InitiatorHandshake Sign failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake Sign finished")
 
 		if err = writeFrame2(conn, f2); err != nil {
-			log.WithError(err).Errorf("SUDPH InitiatorHandshake writeFrame2 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake writeFrame2 finished")
 
 		var f3 Frame3
 		if f3, err = readFrame3(conn); err != nil {
-			log.WithError(err).Errorf("SUDPH InitiatorHandshake readFrame3 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake readFrame3 finished")
 
 		if !f3.OK {
 			err = fmt.Errorf("handshake rejected: %s", f3.ErrMsg)
-			log.WithError(err).Errorf("SUDPH InitiatorHandshake frame3 not ok")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH InitiatorHandshake frame3 ok")
 
 		lAddr = localAddr
 		rAddr = remoteAddr
 
-		log.Infof("SUDPH InitiatorHandshake err == nil")
 		return lAddr, rAddr, nil
 	})
 }
@@ -118,49 +101,36 @@ func InitiatorHandshake(lSK cipher.SecKey, localAddr, remoteAddr dmsg.Addr) Hand
 func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		if err = readFrame0(conn); err != nil {
-			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame0 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH ResponderHandshake readFrame0 finished")
 
 		var nonce [HandshakeNonceSize]byte
 		copy(nonce[:], cipher.RandByte(HandshakeNonceSize))
 
 		if err = writeFrame1(conn, nonce); err != nil {
-			log.WithError(err).Errorf("SUDPH ResponderHandshake writeFrame1 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH ResponderHandshake writeFrame1 finished")
 
 		var f2 Frame2
 		if f2, err = readFrame2(conn); err != nil {
-			log.WithError(err).Errorf("SUDPH ResponderHandshake readFrame2 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH ResponderHandshake readFrame2 finished")
 
 		if err = f2.Verify(nonce); err != nil {
-			log.WithError(err).Errorf("SUDPH ResponderHandshake Verify failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH ResponderHandshake Verify finished")
 
 		if err = checkF2(f2); err != nil {
-			log.WithError(err).Errorf("SUDPH ResponderHandshake checkF2 failed")
 			_ = writeFrame3(conn, err) // nolint:errcheck
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH ResponderHandshake checkF2 finished")
 
 		lAddr = f2.DstAddr
 		rAddr = f2.SrcAddr
 		if err = writeFrame3(conn, nil); err != nil {
-			log.WithError(err).Errorf("SUDPH ResponderHandshake writeFrame3 failed")
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
-		log.Infof("SUDPH ResponderHandshake writeFrame3 finished")
 
-		log.Infof("SUDPH ResponderHandshake err == nil")
 		return lAddr, rAddr, nil
 	})
 }
@@ -200,8 +170,6 @@ func (f2 *Frame2) Sign(srcSK cipher.SecKey) error {
 
 	f2.Sig = sig
 
-	log.Debug("SIGN! len(b.Bytes)", len(b.Bytes()), cipher2.SumSHA256(b.Bytes()).Hex())
-
 	return nil
 }
 
@@ -218,12 +186,6 @@ func (f2 Frame2) Verify(nonce [HandshakeNonceSize]byte) error {
 	if err := json.NewEncoder(&b).Encode(f2); err != nil {
 		return err
 	}
-
-	hash := cipher.SumSHA256(b.Bytes())
-	rPK, err := cipher2.PubKeyFromSig(cipher2.Sig(sig), cipher2.SHA256(hash))
-
-	log.Debug("VERIFY! len(b.Bytes)", len(b.Bytes()), cipher2.SHA256(hash).Hex(),
-		"recovered:", rPK, err, "expected:", f2.SrcAddr.PK)
 
 	return cipher.VerifyPubKeySignedPayload(f2.SrcAddr.PK, sig, b.Bytes())
 }
