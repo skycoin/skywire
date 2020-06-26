@@ -197,7 +197,15 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			return nil, err
 		}
 
-		clients.Direct[stcpr.Type] = stcpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.STCPR.LocalAddr)
+		conf := directtransport.ClientConfig{
+			Type:            stcpr.Type,
+			PK:              conf.PubKey,
+			SK:              conf.SecKey,
+			LocalAddr:       conf.NetworkConfigs.STCPR.LocalAddr,
+			AddressResolver: ar,
+		}
+
+		clients.Direct[stcpr.Type] = directtransport.NewClient(conf)
 	}
 
 	if conf.NetworkConfigs.STCPH != nil {
@@ -226,7 +234,15 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			return nil, err
 		}
 
-		clients.Direct[sudpr.Type] = sudpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.SUDPR.LocalAddr)
+		conf := directtransport.ClientConfig{
+			Type:            sudpr.Type,
+			PK:              conf.PubKey,
+			SK:              conf.SecKey,
+			LocalAddr:       conf.NetworkConfigs.SUDPR.LocalAddr,
+			AddressResolver: ar,
+		}
+
+		clients.Direct[sudpr.Type] = directtransport.NewClient(conf)
 	}
 
 	if conf.NetworkConfigs.SUDPH != nil {
