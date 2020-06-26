@@ -1,4 +1,4 @@
-# github.com/SkycoinProject/dmsg v0.2.2 => ../dmsg
+# github.com/SkycoinProject/dmsg v0.2.3-0.20200626050336-ed5aa457d4be
 ## explicit
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/buildinfo
@@ -290,4 +290,3 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
-# github.com/SkycoinProject/dmsg => ../dmsg
