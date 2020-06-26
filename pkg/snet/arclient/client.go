@@ -22,7 +22,6 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
-	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 )
 
 var log = logging.MustGetLogger("arclient")
@@ -511,7 +510,7 @@ func (c *client) BindSUDPH(ctx context.Context, conn net.Conn, localPort string)
 }
 
 func (c *client) initSUDPH(ctx context.Context, conn net.Conn, localPort string) error {
-	addresses, err := netutil.LocalAddresses()
+	addresses, err := localAddresses()
 	if err != nil {
 		return err
 	}
@@ -620,4 +619,28 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(apiError.Error)
+}
+
+func localAddresses() ([]string, error) {
+	result := make([]string, 0)
+
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, addr := range addresses {
+		switch v := addr.(type) {
+		case *net.IPNet:
+			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
+				result = append(result, v.IP.String())
+			}
+		case *net.IPAddr:
+			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
+				result = append(result, v.IP.String())
+			}
+		}
+	}
+
+	return result, nil
 }

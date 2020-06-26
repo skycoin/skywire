@@ -1,4 +1,4 @@
-package sudph
+package directtransport
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/prometheus/common/log"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
 )
