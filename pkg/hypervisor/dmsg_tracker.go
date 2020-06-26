@@ -2,6 +2,7 @@ package hypervisor
 
 import (
 	"context"
+	"io"
 	"sync"
 	"time"
 
@@ -78,12 +79,15 @@ type DmsgTrackerManager struct {
 	dc  *dmsg.Client
 	dm  map[cipher.PubKey]*DmsgTracker
 	mx  sync.Mutex
+
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 // NewDmsgTrackerManager creates a new dmsg tracker manager.
 func NewDmsgTrackerManager(log logrus.FieldLogger, dc *dmsg.Client, updateInterval, updateTimeout time.Duration) *DmsgTrackerManager {
 	if log == nil {
-		log = logging.MustGetLogger("dmsg_tracker_manager")
+		log = logging.MustGetLogger("dmsg_trackers")
 	}
 	if updateInterval == 0 {
 		updateInterval = time.Second * 30
@@ -91,30 +95,46 @@ func NewDmsgTrackerManager(log logrus.FieldLogger, dc *dmsg.Client, updateInterv
 	if updateTimeout == 0 {
 		updateTimeout = time.Second * 10
 	}
-	return &DmsgTrackerManager{
+
+	dtm := &DmsgTrackerManager{
 		updateInterval: updateInterval,
 		updateTimeout:  updateTimeout,
 		log:            log,
 		dc:             dc,
 		dm:             make(map[cipher.PubKey]*DmsgTracker),
+		done:           make(chan struct{}),
 	}
+
+	if dc != nil {
+		go dtm.serve()
+	}
+
+	return dtm
 }
 
 // Serve serves the dmsg tracker manager.
-func (dtm *DmsgTrackerManager) Serve(ctx context.Context) {
+func (dtm *DmsgTrackerManager) serve() {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-dtm.done
+		cancel()
+	}()
+
 	t := time.NewTicker(dtm.updateInterval)
 	defer t.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-dtm.done:
 			return
 
 		case <-t.C:
 			ctx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
+
 			dtm.mx.Lock()
 			updateAllTrackers(ctx, dtm.dm)
 			dtm.mx.Unlock()
+
 			cancel()
 		}
 	}
@@ -151,27 +171,30 @@ func updateAllTrackers(ctx context.Context, dts map[cipher.PubKey]*DmsgTracker) 
 	}
 }
 
-// Add adds a dmsg tracker to track client at pk.
-func (dtm *DmsgTrackerManager) Add(ctx context.Context, pk cipher.PubKey) (err error) {
-	log := dtm.log.
-		WithField("func", "DmsgTrackerManager.Add").
-		WithField("pk", pk)
+// MustGet obtains a DmsgClientSummary of the client of given pk.
+// If one is not found internally, a new tracker stream is to be established, returning error on failure.
+func (dtm *DmsgTrackerManager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, error) {
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
+	defer cancel()
 
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
+	if isDone(dtm.done) {
+		return DmsgClientSummary{}, io.ErrClosedPipe
+	}
+
 	if e, ok := dtm.dm[pk]; ok && !isDone(e.ctrl.Done()) {
-		err := e.ctrl.Close()
-		log.WithError(err).Warn("Closed old control stream.")
+		return e.sum, nil
 	}
 
 	dt, err := NewDmsgTracker(ctx, dtm.dc, pk)
 	if err != nil {
-		return err
+		return DmsgClientSummary{}, err
 	}
 
 	dtm.dm[pk] = dt
-	return nil
+	return dt.sum, nil
 }
 
 // Get obtains a DmsgClientSummary of the client with given public key.
@@ -179,12 +202,68 @@ func (dtm *DmsgTrackerManager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
+	if isDone(dtm.done) {
+		return DmsgClientSummary{}, false
+	}
+
+	return dtm.get(pk)
+}
+
+// GetBulk obtains bulk dmsg client summaries.
+func (dtm *DmsgTrackerManager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
+	dtm.mx.Lock()
+	defer dtm.mx.Unlock()
+
+	out := make([]DmsgClientSummary, len(pks))
+
+	for i, pk := range pks {
+		dt, ok := dtm.dm[pk]
+		if !ok {
+			out[i] = DmsgClientSummary{PK: pk}
+			continue
+		}
+		out[i] = dt.sum
+	}
+
+	return out
+}
+
+func (dtm *DmsgTrackerManager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dt, ok := dtm.dm[pk]
 	if !ok {
 		return DmsgClientSummary{}, false
 	}
 
 	return dt.sum, true
+}
+
+// Close implements io.Closer
+func (dtm *DmsgTrackerManager) Close() error {
+	log := dtm.log.WithField("func", "DmsgTrackerManager.Close")
+
+	dtm.mx.Lock()
+	defer dtm.mx.Unlock()
+
+	closed := false
+
+	dtm.doneOnce.Do(func() {
+		closed = true
+		close(dtm.done)
+
+		for pk, dt := range dtm.dm {
+			if err := dt.ctrl.Close(); err != nil {
+				log.WithError(err).
+					WithField("client_pk", pk).
+					Warn("Dmsg client closed with error.")
+			}
+		}
+	})
+
+	if !closed {
+		return io.ErrClosedPipe
+	}
+
+	return nil
 }
 
 func isDone(done <-chan struct{}) bool {

@@ -47,7 +47,7 @@ func TestDmsgTracker_Update(t *testing.T) {
 	assert.NotZero(t, dt.sum.RoundTrip)
 }
 
-func TestDmsgTrackerManager_Add(t *testing.T) {
+func TestDmsgTrackerManager_MustGet(t *testing.T) {
 	const timeout = time.Second * 5
 	const nServers = 1
 	conf := dmsg.Config{MinSessions: 1}
@@ -63,7 +63,7 @@ func TestDmsgTrackerManager_Add(t *testing.T) {
 	tmC, err := env.NewClient(&conf)
 	require.NoError(t, err)
 	tm := NewDmsgTrackerManager(nil, tmC, 0, 0)
-	// go tm.Serve(ctx)
+	t.Cleanup(func() { assert.NoError(t, tm.Close()) })
 
 	type testCase struct {
 		add bool          // true:add_client false:close_client
@@ -101,12 +101,11 @@ func TestDmsgTrackerManager_Add(t *testing.T) {
 				dmsgctrl.ServeListener(l, 0)
 
 				// act
-				assert.NoError(t, tm.Add(ctx, pk))
+				sum, err := tm.MustGet(ctx, pk)
+				require.NoError(t, err)
 				updateAllTrackers(ctx, tm.dm)
 
 				// assert
-				sum, ok := tm.Get(pk)
-				require.True(t, ok)
 				assert.Equal(t, pk, sum.PK)
 				assert.NotZero(t, sum.RoundTrip)
 			})

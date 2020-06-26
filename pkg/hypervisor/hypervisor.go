@@ -2,6 +2,7 @@
 package hypervisor
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -57,8 +58,10 @@ type VisorConn struct {
 // Hypervisor manages visors.
 type Hypervisor struct {
 	c          Config
-	assets     http.FileSystem             // Web UI.
-	visors     map[cipher.PubKey]VisorConn // connected remote visors.
+	dmsgC      *dmsg.Client
+	assets     http.FileSystem             // web UI
+	visors     map[cipher.PubKey]VisorConn // connected remote visors
+	trackers   *DmsgTrackerManager         // dmsg trackers
 	users      *UserManager
 	restartCtx *restart.Context
 	updater    *updater.Updater
@@ -66,7 +69,7 @@ type Hypervisor struct {
 }
 
 // New creates a new Hypervisor.
-func New(assets http.FileSystem, config Config, restartCtx *restart.Context) (*Hypervisor, error) {
+func New(config Config, assets http.FileSystem, restartCtx *restart.Context, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
@@ -80,8 +83,10 @@ func New(assets http.FileSystem, config Config, restartCtx *restart.Context) (*H
 
 	hv := &Hypervisor{
 		c:          config,
+		dmsgC:      dmsgC,
 		assets:     assets,
 		visors:     make(map[cipher.PubKey]VisorConn),
+		trackers:   NewDmsgTrackerManager(nil, dmsgC, 0, 0),
 		users:      NewUserManager(singleUserDB, config.Cookies),
 		restartCtx: restartCtx,
 		updater:    u,
@@ -92,7 +97,12 @@ func New(assets http.FileSystem, config Config, restartCtx *restart.Context) (*H
 }
 
 // ServeRPC serves RPC of a Hypervisor.
-func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
+func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
+	lis, err := hv.dmsgC.Listen(dmsgPort)
+	if err != nil {
+		return err
+	}
+
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
@@ -106,10 +116,14 @@ func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
 			Addr:  addr,
 			SrvPK: conn.ServerPK(),
 			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
-			PtyUI: setupDmsgPtyUI(dmsgC, addr.PK),
+			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
 
-		log.WithField("remote_addr", addr).Info("Accepted.")
+		if _, err := hv.trackers.MustGet(ctx, addr.PK); err != nil {
+			log.WithError(err).Warn("Failed to dial tracker stream.")
+		}
+
+		log.Info("Accepted.")
 
 		hv.mu.Lock()
 		hv.visors[addr.PK] = *visorConn
@@ -151,8 +165,12 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 	return nil
 }
 
-// ServeHTTP implements http.Handler
-func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+// HTTPHandler returns a http handler.
+func (hv *Hypervisor) HTTPHandler() http.Handler {
+	return hv.makeMux()
+}
+
+func (hv *Hypervisor) makeMux() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
@@ -224,7 +242,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.Handle("/*", http.FileServer(hv.assets))
 	})
 
-	r.ServeHTTP(w, req)
+	return r
 }
 
 func (hv *Hypervisor) getPong() http.HandlerFunc {
@@ -321,16 +339,12 @@ func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 		hv.mu.RLock()
 		defer hv.mu.RUnlock()
 
-		out := make([]DmsgClientSummary, 0, len(hv.visors))
-
-		for pk, v := range hv.visors {
-			out = append(out, DmsgClientSummary{
-				PK:        pk,
-				ServerPK:  v.SrvPK,
-				RoundTrip: 0, // TODO
-			})
+		pks := make([]cipher.PubKey, 0, len(hv.visors))
+		for pk := range hv.visors {
+			pks = append(pks, pk)
 		}
 
+		out := hv.trackers.GetBulk(pks)
 		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
 }
