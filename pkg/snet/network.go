@@ -141,7 +141,7 @@ type NetworkConfigs struct {
 // NetworkClients represents all network clients.
 type NetworkClients struct {
 	DmsgC  *dmsg.Client
-	Direct map[string]directtransport.Client
+	Direct map[string]directtransport.ClientInterface
 }
 
 // Network represents a network between nodes in Skywire.
@@ -154,7 +154,7 @@ type Network struct {
 // New creates a network from a config.
 func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	clients := NetworkClients{
-		Direct: make(map[string]directtransport.Client),
+		Direct: make(map[string]directtransport.ClientInterface),
 	}
 
 	if conf.NetworkConfigs.Dmsg != nil {
@@ -181,8 +181,14 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 	// TODO(nkryuchkov): Generic code for clients below.
 	if conf.NetworkConfigs.STCP != nil {
-		table := directtransport.NewTable(conf.NetworkConfigs.STCP.PKTable)
-		clients.Direct[stcp.Type] = stcp.NewClient(conf.PubKey, conf.SecKey, table, conf.NetworkConfigs.STCP.LocalAddr)
+		conf := directtransport.ClientConfig{
+			Type:      stcp.Type,
+			PK:        conf.PubKey,
+			SK:        conf.SecKey,
+			Table:     directtransport.NewTable(conf.NetworkConfigs.STCP.PKTable),
+			LocalAddr: conf.NetworkConfigs.STCP.LocalAddr,
+		}
+		clients.Direct[stcp.Type] = directtransport.NewClient(conf)
 	}
 
 	if conf.NetworkConfigs.STCPR != nil {
@@ -204,8 +210,14 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	}
 
 	if conf.NetworkConfigs.SUDP != nil {
-		table := directtransport.NewTable(conf.NetworkConfigs.SUDP.PKTable)
-		clients.Direct[sudp.Type] = sudp.NewClient(conf.PubKey, conf.SecKey, table, conf.NetworkConfigs.SUDP.LocalAddr)
+		conf := directtransport.ClientConfig{
+			Type:      sudp.Type,
+			PK:        conf.PubKey,
+			SK:        conf.SecKey,
+			Table:     directtransport.NewTable(conf.NetworkConfigs.SUDP.PKTable),
+			LocalAddr: conf.NetworkConfigs.SUDP.LocalAddr,
+		}
+		clients.Direct[sudp.Type] = directtransport.NewClient(conf)
 	}
 
 	if conf.NetworkConfigs.SUDPR != nil {
@@ -373,22 +385,22 @@ func (n *Network) TransportNetworks() []string { return n.networks }
 func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
 
 // STcp returns the underlying stcp.Client.
-func (n *Network) STcp() directtransport.Client { return n.clients.Direct[stcp.Type] }
+func (n *Network) STcp() directtransport.ClientInterface { return n.clients.Direct[stcp.Type] }
 
 // STcpr returns the underlying stcpr.Client.
-func (n *Network) STcpr() directtransport.Client { return n.clients.Direct[stcpr.Type] }
+func (n *Network) STcpr() directtransport.ClientInterface { return n.clients.Direct[stcpr.Type] }
 
 // STcpH returns the underlying stcph.Client.
-func (n *Network) STcpH() directtransport.Client { return n.clients.Direct[stcph.Type] }
+func (n *Network) STcpH() directtransport.ClientInterface { return n.clients.Direct[stcph.Type] }
 
 // SUdp returns the underlying sudp.Client.
-func (n *Network) SUdp() directtransport.Client { return n.clients.Direct[sudp.Type] }
+func (n *Network) SUdp() directtransport.ClientInterface { return n.clients.Direct[sudp.Type] }
 
 // SUdpr returns the underlying sudpr.Client.
-func (n *Network) SUdpr() directtransport.Client { return n.clients.Direct[sudpr.Type] }
+func (n *Network) SUdpr() directtransport.ClientInterface { return n.clients.Direct[sudpr.Type] }
 
 // SUdpH returns the underlying sudph.Client.
-func (n *Network) SUdpH() directtransport.Client { return n.clients.Direct[sudph.Type] }
+func (n *Network) SUdpH() directtransport.ClientInterface { return n.clients.Direct[sudph.Type] }
 
 // Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
