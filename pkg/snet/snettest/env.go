@@ -126,6 +126,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			go clients.DmsgC.Serve()
 		}
 
+		// TODO(nkryuchkov): address-resolver mock
 		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
 		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
 		//
