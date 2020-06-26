@@ -62,7 +62,7 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPR(ctx context.Context, port string) error
 	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
-	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (err error)
+	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error)
 	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (string, error)
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (string, error)
@@ -89,6 +89,7 @@ type client struct {
 	stcphConn      *websocket.Conn
 	stcphAddrCh    <-chan RemoteVisor
 	sudphConn      *net.UDPConn
+	sudphAddrCh    <-chan RemoteVisor
 	filterConn     *pfilter.PacketFilter
 	visorConn      net.PacketConn
 	arConn         net.PacketConn
@@ -445,41 +446,6 @@ func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-
 	return c.stcphAddrCh, nil
 }
 
-type LocalAddresses struct {
-	Port      string   `json:"port"`
-	Addresses []string `json:"addresses"`
-}
-
-// TODO(nkryuchkov): keep NAT mapping alive
-func (c *client) BindSUDPH(ctx context.Context, conn net.Conn, localPort string) error {
-	addresses, err := netutil.LocalAddresses()
-	if err != nil {
-		return err
-	}
-
-	localAddresses := LocalAddresses{
-		Addresses: addresses,
-		Port:      localPort,
-	}
-
-	laData, err := json.Marshal(localAddresses)
-	if err != nil {
-		return err
-	}
-
-	if _, err := conn.Write(laData); err != nil {
-		return err
-	}
-
-	go func() {
-		if err := c.keepAliveLoop(ctx, conn); err != nil {
-			log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
-		}
-	}()
-
-	return nil
-}
-
 func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
 	// TODO(nkryuchkov): Ensure this works correctly with closed channels and connections.
 	addrCh := make(chan RemoteVisor, addrChSize)
@@ -525,6 +491,80 @@ func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 	}(conn, dialCh)
 
 	c.stcphAddrCh = addrCh
+
+	return nil
+}
+
+type LocalAddresses struct {
+	Port      string   `json:"port"`
+	Addresses []string `json:"addresses"`
+}
+
+func (c *client) BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error) {
+	if c.sudphAddrCh == nil {
+		if err := c.initSUDPH(ctx, conn, localPort); err != nil {
+			return nil, err
+		}
+	}
+
+	return c.sudphAddrCh, nil
+}
+
+func (c *client) initSUDPH(ctx context.Context, conn net.Conn, localPort string) error {
+	addresses, err := netutil.LocalAddresses()
+	if err != nil {
+		return err
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+		Port:      localPort,
+	}
+
+	laData, err := json.Marshal(localAddresses)
+	if err != nil {
+		return err
+	}
+
+	if _, err := conn.Write(laData); err != nil {
+		return err
+	}
+
+	addrCh := make(chan RemoteVisor, addrChSize)
+
+	go func(conn net.Conn, addrCh chan<- RemoteVisor) {
+		defer func() {
+			close(addrCh)
+		}()
+
+		buf := make([]byte, 4096)
+
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				log.Errorf("Failed to read SUDPH message: %v", err)
+				return
+			}
+
+			log.Infof("New SUDPH message: %v", string(buf[:n]))
+
+			var remote RemoteVisor
+			if err := json.Unmarshal(buf[:n], &remote); err != nil {
+				log.Errorf("Failed to read unmarshal message: %v", err)
+				continue
+			}
+
+			addrCh <- remote
+		}
+	}(conn, addrCh)
+
+	go func() {
+		if err := c.keepAliveLoop(ctx, conn); err != nil {
+			log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
+		}
+	}()
+
+	c.sudphAddrCh = addrCh
 
 	return nil
 }
