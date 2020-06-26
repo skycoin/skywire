@@ -73,7 +73,7 @@ func (c *Client) Serve() error {
 
 	_, port, err := net.SplitHostPort(addr.String())
 	if err != nil {
-		port = ""
+		return err
 	}
 
 	if err := c.addressResolver.BindSTCPR(context.Background(), port); err != nil {
