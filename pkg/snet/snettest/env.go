@@ -79,10 +79,10 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		// 	hasStcph = true
 		case sudp.Type:
 			hasSudp = true
-		// case sudpr.Type:
-		// 	hasSudpr = true
-		// case sudph.Type:
-		// 	hasSudph = true
+			// case sudpr.Type:
+			// 	hasSudpr = true
+			// case sudph.Type:
+			// 	hasSudph = true
 		}
 	}
 
