@@ -18,6 +18,7 @@ type Porter struct {
 	mx     sync.Mutex
 }
 
+// New returns a new Porter.
 func New(minEph uint16) *Porter {
 	ports := make(map[uint16]struct{})
 	ports[0] = struct{}{} // port 0 is invalid

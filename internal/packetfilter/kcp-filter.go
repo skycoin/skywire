@@ -14,17 +14,20 @@ const (
 	packetTypeOffset = 4
 )
 
+// KCPConversationFilter filters KCP conversations with specified ID.
 type KCPConversationFilter struct {
 	log *logging.Logger
 	id  uint32
 }
 
+// NewKCPConversationFilter returns a new KCPConversationFilter.
 func NewKCPConversationFilter() *KCPConversationFilter {
 	return &KCPConversationFilter{
 		log: logging.MustGetLogger("kcp-filter"),
 	}
 }
 
+// ClaimIncoming implements pfilter.Filter.
 func (f *KCPConversationFilter) ClaimIncoming(in []byte, _ net.Addr) bool {
 	if !f.isKCPConversation(in) {
 		return false
@@ -35,6 +38,7 @@ func (f *KCPConversationFilter) ClaimIncoming(in []byte, _ net.Addr) bool {
 	return expectedID != 0 && expectedID == receivedID
 }
 
+// Outgoing implements pfilter.Filter.
 func (f *KCPConversationFilter) Outgoing(out []byte, _ net.Addr) {
 	if f.isKCPConversation(out) && len(out) >= minPacketLen {
 		id := binary.LittleEndian.Uint32(out[:packetTypeOffset])

@@ -30,24 +30,26 @@ type Client struct {
 	t   directtransport.PKTable
 	p   *porter.Porter
 
-	lUDP net.Listener
-	lMap map[uint16]*directtransport.Listener // key: lPort
-	mx   sync.Mutex
+	localAddr string
+	lUDP      net.Listener
+	lMap      map[uint16]*directtransport.Listener // key: lPort
+	mx        sync.Mutex
 
 	done chan struct{}
 	once sync.Once
 }
 
 // NewClient creates a net Client.
-func NewClient(pk cipher.PubKey, sk cipher.SecKey, t directtransport.PKTable) *Client {
+func NewClient(pk cipher.PubKey, sk cipher.SecKey, t directtransport.PKTable, localAddr string) *Client {
 	return &Client{
-		log:  logging.MustGetLogger(Type),
-		lPK:  pk,
-		lSK:  sk,
-		t:    t,
-		p:    porter.New(porter.PorterMinEphemeral),
-		lMap: make(map[uint16]*directtransport.Listener),
-		done: make(chan struct{}),
+		log:       logging.MustGetLogger(Type),
+		lPK:       pk,
+		lSK:       sk,
+		t:         t,
+		p:         porter.New(porter.PorterMinEphemeral),
+		localAddr: localAddr,
+		lMap:      make(map[uint16]*directtransport.Listener),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -57,12 +59,12 @@ func (c *Client) SetLogger(log *logging.Logger) {
 }
 
 // Serve serves the listening portion of the client.
-func (c *Client) Serve(udpAddr string) error {
+func (c *Client) Serve() error {
 	if c.lUDP != nil {
 		return errors.New("already listening")
 	}
 
-	lUDP, err := kcp.Listen(udpAddr)
+	lUDP, err := kcp.Listen(c.localAddr)
 	if err != nil {
 		return err
 	}
