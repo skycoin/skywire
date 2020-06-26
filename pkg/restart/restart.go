@@ -2,12 +2,15 @@ package restart
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/shirou/gopsutil/process"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,32 +23,61 @@ const (
 	// DefaultCheckDelay is a default delay for checking if a new instance is started successfully.
 	DefaultCheckDelay = 1 * time.Second
 	extraWaitingTime  = 1 * time.Second
-	delayArgName      = "--delay"
+	exitDelay         = 100 * time.Millisecond
+	shellCommand      = "/bin/sh"
+	sleepCommand      = "sleep"
+	commandFlag       = "-c"
+	systemdPPID       = 1
+	exitCodeSuccess   = 0
+	exitCodeFailure   = 1
 )
 
 // Context describes data required for restarting visor.
 type Context struct {
-	log         logrus.FieldLogger
-	cmd         *exec.Cmd
-	checkDelay  time.Duration
-	isStarted   int32
-	appendDelay bool // disabled in tests
+	log        logrus.FieldLogger
+	cmd        *exec.Cmd
+	path       string
+	ppid       int
+	parentPPID int
+	checkDelay time.Duration
+	isStarted  int32
 }
 
 // CaptureContext captures data required for restarting visor.
 // Data used by CaptureContext must not be modified before,
 // therefore calling CaptureContext immediately after starting executable is recommended.
 func CaptureContext() *Context {
-	cmd := exec.Command(os.Args[0], os.Args[1:]...) // nolint:gosec
+	delay := DefaultCheckDelay + extraWaitingTime
+	delaySeconds := int(delay.Seconds())
+	args := strings.Join(os.Args, " ")
+	// TODO: Instead of sleeping, wait until process ID exists.
+	shellCmd := fmt.Sprintf("%s %d; %s", sleepCommand, delaySeconds, args)
+	shellArgs := []string{commandFlag, shellCmd}
+
+	cmd := exec.Command(shellCommand, shellArgs...) // nolint:gosec
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
+	path := os.Args[0]
+	ppid := os.Getppid()
+
+	parentPPID := -1
+
+	parentProcess, err := process.NewProcess(int32(ppid))
+	if err == nil {
+		if parPPID, err := parentProcess.Ppid(); err == nil {
+			parentPPID = int(parPPID)
+		}
+	}
+
 	return &Context{
-		cmd:         cmd,
-		checkDelay:  DefaultCheckDelay,
-		appendDelay: true,
+		cmd:        cmd,
+		path:       path,
+		ppid:       ppid,
+		parentPPID: parentPPID,
+		checkDelay: DefaultCheckDelay,
 	}
 }
 
@@ -65,11 +97,38 @@ func (c *Context) SetCheckDelay(delay time.Duration) {
 
 // CmdPath returns path of cmd to be run.
 func (c *Context) CmdPath() string {
-	return c.cmd.Path
+	return c.path
 }
 
-// Start starts a new executable using Context.
-func (c *Context) Start() (err error) {
+// ParentSystemd returns whether parent process is supervised by systemd.
+func (c *Context) ParentSystemd() bool {
+	return c.parentPPID == systemdPPID
+}
+
+// Systemd returns whether process is supervised by systemd.
+func (c *Context) Systemd() bool {
+	return c.ppid == systemdPPID
+}
+
+// Restart restarts an executable using Context.
+// If the process is supervised by systemd, it lets systemd restart the process.
+func (c *Context) Restart() (err error) {
+	if err := c.start(); err != nil {
+		return err
+	}
+
+	// Let RPC calls complete and then exit.
+	go c.exitAfterDelay(exitDelay)
+
+	return nil
+}
+
+func (c *Context) start() (err error) {
+	if c.Systemd() {
+		// No need to restart process if it's supervised by systemd.
+		return nil
+	}
+
 	if !atomic.CompareAndSwapInt32(&c.isStarted, 0, 1) {
 		return ErrAlreadyStarted
 	}
@@ -90,7 +149,24 @@ func (c *Context) Start() (err error) {
 	}
 
 	ticker.Stop()
+
 	return err
+}
+
+func (c *Context) exitAfterDelay(delay time.Duration) {
+	time.Sleep(delay)
+
+	if c.log != nil {
+		c.log.Infof("Exiting")
+	}
+
+	exitCode := exitCodeSuccess
+	if c.Systemd() {
+		// Make systemd restart process if Restart=on-failure.
+		exitCode = exitCodeFailure
+	}
+
+	os.Exit(exitCode)
 }
 
 func copyCmd(oldCmd *exec.Cmd) *exec.Cmd {
@@ -109,9 +185,7 @@ func (c *Context) startExec() chan error {
 	go func() {
 		defer close(errCh)
 
-		c.adjustArgs()
-
-		c.infoLogger()("Starting new instance of executable (args: %q)", c.cmd.Args)
+		c.infoLogger()("Starting new instance of executable (cmd: %q)", c.cmd.String())
 
 		if err := c.cmd.Start(); err != nil {
 			errCh <- err
@@ -125,29 +199,6 @@ func (c *Context) startExec() chan error {
 	}()
 
 	return errCh
-}
-
-func (c *Context) adjustArgs() {
-	args := c.cmd.Args
-
-	i := 0
-	l := len(args)
-
-	for i < l {
-		if args[i] == delayArgName && i < len(args)-1 {
-			args = append(args[:i], args[i+2:]...)
-			l -= 2
-		} else {
-			i++
-		}
-	}
-
-	if c.appendDelay {
-		delay := c.checkDelay + extraWaitingTime
-		args = append(args, delayArgName, delay.String())
-	}
-
-	c.cmd.Args = args
 }
 
 func (c *Context) infoLogger() func(string, ...interface{}) {

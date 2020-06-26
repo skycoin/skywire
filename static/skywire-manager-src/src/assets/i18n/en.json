@@ -88,16 +88,34 @@
 
   "nodes": {
     "title": "Visor list",
+    "update-all": "Update all",
     "state": "State",
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
+    "copy-key": "Copy key",
     "view-node": "View visor",
     "delete-node": "Remove visor",
     "error-load": "An error occurred while refreshing the list. Retrying...",
     "empty": "There aren't any visors connected to this hypervisor.",
     "delete-node-confirmation": "Are you sure you want to remove the visor from the list?",
-    "deleted": "Visor removed."
+    "deleted": "Visor removed.",
+
+    "update": {
+      "no-visors": "There are no visors to update. Please wait.",
+      "title": "Update visors",
+      "processing": "Looking for updates...",
+      "processing-button": "Please wait",
+      "no-update": "Currently, there are no new updates for the visors.",
+      "update-available": "There is an update available for {{ number }} visors. Click the 'Install update' button to continue. The currently installed version is {{ currentVersion }} and the new version is {{ newVersion }}.",
+      "update-available-different": "There is an update available for {{ number }} visors. Click the 'Install update' button to continue. There are different versions installed in the visors and the new version is {{ newVersion }}.",
+      "done": "The visor {{ name }} is being updated.",
+      "done-all": "Operation completed. All visors are being updated.",
+      "update-error": "Could not install the update in visor {{ name }}. Please, try again later.",
+      "all-failed-error": "Could not update any of the visors. Please, try again later.",
+      "some-updated-error": "{{ updatedNumber }} visors were updated and there were problems for updating {{ failedNumber }}. Please, try again later.",
+      "install": "Install updates"
+    }
   },
 
   "edit-label": {
@@ -433,7 +451,8 @@
     "confirm-button": "Yes",
     "cancel-button": "No",
     "close": "Close",
-    "error-header-text": "Error"
+    "error-header-text": "Error",
+    "done-header-text": "Done"
   },
 
   "language" : {

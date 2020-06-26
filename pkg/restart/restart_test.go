@@ -1,8 +1,10 @@
 package restart
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,11 +17,16 @@ func TestCaptureContext(t *testing.T) {
 	cc := CaptureContext()
 
 	require.Equal(t, DefaultCheckDelay, cc.checkDelay)
-	require.Equal(t, os.Args, cc.cmd.Args)
+	require.Equal(t, shellCommand, cc.cmd.Path)
+
+	args := fmt.Sprintf("sleep 2; %s", strings.Join(os.Args, " "))
+	expectedArgs := []string{shellCommand, commandFlag, args}
+	require.Equal(t, expectedArgs, cc.cmd.Args)
 	require.Equal(t, os.Stdout, cc.cmd.Stdout)
 	require.Equal(t, os.Stdin, cc.cmd.Stdin)
 	require.Equal(t, os.Stderr, cc.cmd.Stderr)
 	require.Equal(t, os.Environ(), cc.cmd.Env)
+
 	require.Nil(t, cc.log)
 }
 
@@ -40,9 +47,8 @@ func TestContext_Start(t *testing.T) {
 		cmd := "touch"
 		path := "/tmp/test_start"
 		cc.cmd = exec.Command(cmd, path) // nolint:gosec
-		cc.appendDelay = false
 
-		assert.NoError(t, cc.Start())
+		assert.NoError(t, cc.start())
 		assert.NoError(t, os.Remove(path))
 	})
 
@@ -57,7 +63,7 @@ func TestContext_Start(t *testing.T) {
 		possibleErrors := []string{
 			`exec: "bad_command": executable file not found in $PATH`,
 		}
-		err := cc.Start()
+		err := cc.start()
 		require.NotNil(t, err)
 		assert.Contains(t, possibleErrors, err.Error())
 	})
@@ -69,14 +75,13 @@ func TestContext_Start(t *testing.T) {
 		cmd := "sleep"
 		duration := "5"
 		cc.cmd = exec.Command(cmd, duration) // nolint:gosec
-		cc.appendDelay = false
 
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- cc.Start()
+			errCh <- cc.start()
 		}()
 
-		err1 := cc.Start()
+		err1 := cc.start()
 		err2 := <-errCh
 		errors := []error{err1, err2}
 
