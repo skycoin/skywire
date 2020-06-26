@@ -135,7 +135,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		// }
 
 		if hasStcp {
-			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.STCP.LocalAddr)
+			clients.Direct[stcp.Type] = stcp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.STCP.LocalAddr)
 		}
 
 		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
@@ -148,7 +148,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		// }
 
 		if hasSudp {
-			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.SUDP.LocalAddr)
+			clients.Direct[sudp.Type] = sudp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.SUDP.LocalAddr)
 		}
 
 		// if hasSudpr {
