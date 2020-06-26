@@ -103,12 +103,12 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
 		}
 
-		// if hasStcpr {
+		// if hasStcpr { //nolint:staticcheck
 		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
 		// clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
 		// }
 		//
-		// if hasStcph {
+		// if hasStcph { //nolint:staticcheck
 		// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
 		// }
 
