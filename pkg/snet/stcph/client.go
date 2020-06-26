@@ -62,11 +62,6 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIC
 	return c
 }
 
-// SetLogger sets a logger for Client.
-func (c *Client) SetLogger(log *logging.Logger) {
-	c.log = log
-}
-
 // Serve serves the listening portion of the client.
 func (c *Client) Serve() error {
 	if c.connCh != nil {
