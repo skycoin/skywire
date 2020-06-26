@@ -9,6 +9,8 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
 )
 
 func TestConn(t *testing.T) {
@@ -19,56 +21,51 @@ func TestConn(t *testing.T) {
 	nettest.TestConn(t, mp)
 }
 
-func prepareConns(t *testing.T) (*Conn, *Conn, func()) {
+func prepareConns(t *testing.T) (*directtransport.Conn, *directtransport.Conn, func()) {
 	aPK, aSK := cipher.GenerateKeyPair()
 	bPK, bSK := cipher.GenerateKeyPair()
 
 	aConn, bConn := net.Pipe()
 
-	const port = 1
+	ihs := directtransport.InitiatorHandshake(aSK, dmsg.Addr{PK: aPK, Port: 1}, dmsg.Addr{PK: bPK, Port: 1})
 
-	ihs := InitiatorHandshake(aSK, dmsg.Addr{PK: aPK, Port: port}, dmsg.Addr{PK: bPK, Port: port})
-
-	rhs := ResponderHandshake(func(f2 Frame2) error {
+	rhs := directtransport.ResponderHandshake(func(f2 directtransport.Frame2) error {
 		return nil
 	})
 
-	var (
-		b       *Conn
-		respErr error
-	)
-
+	var b *directtransport.Conn
+	var respErr error
 	done := make(chan struct{})
 
 	go func() {
-		bConnConfig := ConnConfig{
+		bConnConfig := directtransport.ConnConfig{
 			Conn:      bConn,
 			LocalPK:   bPK,
 			LocalSK:   bSK,
-			Deadline:  time.Now().Add(HandshakeTimeout),
+			Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
 			Handshake: rhs,
 			FreePort:  nil,
 			Encrypt:   false,
 			Initiator: false,
 		}
 
-		b, respErr = NewConn(bConnConfig)
+		b, respErr = directtransport.NewConn(bConnConfig)
 
 		close(done)
 	}()
 
-	aConnConfig := ConnConfig{
+	aConnConfig := directtransport.ConnConfig{
 		Conn:      aConn,
 		LocalPK:   aPK,
 		LocalSK:   aSK,
-		Deadline:  time.Now().Add(HandshakeTimeout),
+		Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
 		Handshake: ihs,
 		FreePort:  nil,
 		Encrypt:   false,
 		Initiator: true,
 	}
 
-	a, err := NewConn(aConnConfig)
+	a, err := directtransport.NewConn(aConnConfig)
 	require.NoError(t, err)
 
 	<-done

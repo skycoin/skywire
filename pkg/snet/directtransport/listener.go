@@ -18,6 +18,7 @@ type Listener struct {
 	done     chan struct{}
 }
 
+// NewListener returns a new Listener.
 func NewListener(lAddr dmsg.Addr, freePort func()) *Listener {
 	return &Listener{
 		lAddr:    lAddr,

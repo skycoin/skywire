@@ -28,6 +28,7 @@ const Type = "sudph"
 // TODO: Find best value.
 const DialTimeout = 30 * time.Second
 
+// HolePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
 const HolePunchMessage = "holepunch"
 
 // ErrTimeout indicates a timeout.

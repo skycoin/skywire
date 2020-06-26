@@ -20,6 +20,7 @@ const (
 	// HandshakeNonceSize is the size of the nonce for the handshake.
 	HandshakeNonceSize = 16
 
+	// HandshakeMessage is sent by initiator to start a handshake.
 	HandshakeMessage = "get_nonce"
 )
 

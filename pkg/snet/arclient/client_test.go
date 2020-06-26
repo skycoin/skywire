@@ -41,9 +41,9 @@ func TestClientAuth(t *testing.T) {
 	))
 	defer srv.Close()
 
-	client, err := NewHTTP(srv.URL, testPubKey, testSecKey)
+	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
-	c := client.(*client)
+	c := apiClient.(*client)
 
 	wg.Add(1)
 	_, err = c.Get(context.TODO(), "/")
@@ -70,7 +70,7 @@ func TestBind(t *testing.T) {
 	err = c.BindSTCPR(context.TODO(), "1234")
 	require.NoError(t, err)
 
-	assert.Equal(t, "/bind", <-urlCh)
+	assert.Equal(t, "/bind/stcpr", <-urlCh)
 }
 
 func authHandler(next http.Handler) http.Handler {
