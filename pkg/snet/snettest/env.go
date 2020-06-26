@@ -79,10 +79,10 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		// 	hasStcph = true
 		case sudp.Type:
 			hasSudp = true
-			// case sudpr.Type:
-			// 	hasSudpr = true
-			// case sudph.Type:
-			// 	hasSudph = true
+		// case sudpr.Type:
+		// 	hasSudpr = true
+		// case sudph.Type:
+		// 	hasSudph = true
 		}
 	}
 
@@ -166,7 +166,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			NetworkConfigs: networkConfigs,
 		}
 
-		n := snet.NewRaw(snetConfig, clients)
+		n := snet.NewRaw(snetConfig, &clients)
 		require.NoError(t, n.Init())
 		ns[i] = n
 	}

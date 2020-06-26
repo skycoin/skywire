@@ -30,15 +30,15 @@ const (
 
 // Dmsg port constants.
 const (
-	DmsgSetupPort      = uint16(36)  // Listening port of a setup node.
-	DmsgAwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
-	DmsgTransportPort  = uint16(45)  // Listening port of a visor for incoming transports.
-	DmsgHypervisorPort = uint16(46)  // Listening port of a visor for incoming hypervisor connections.
+	DmsgSetupPort      uint16 = 36  // Listening port of a setup node.
+	DmsgAwaitSetupPort uint16 = 136 // Listening port of a visor for setup operations.
+	DmsgTransportPort  uint16 = 45  // Listening port of a visor for incoming transports.
+	DmsgHypervisorPort uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
 )
 
 // Default dmsgpty constants.
 const (
-	DmsgPtyPort = uint16(22)
+	DmsgPtyPort uint16 = 22
 
 	DefaultDmsgPtyCLINet    = "unix"
 	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
@@ -55,29 +55,30 @@ const (
 
 // Default skywire app constants.
 const (
-	SkychatName = "skychat"
-	SkychatPort = uint16(1)
-	SkychatAddr = ":8001"
+	SkychatName        = "skychat"
+	SkychatPort uint16 = 1
+	SkychatAddr        = ":8001"
 
-	SkysocksName = "skysocks"
-	SkysocksPort = uint16(3)
+	SkysocksName        = "skysocks"
+	SkysocksPort uint16 = 3
 
-	SkysocksClientName = "skysocks-client"
-	SkysocksClientPort = uint16(13)
-	SkysocksClientAddr = ":1080"
+	SkysocksClientName        = "skysocks-client"
+	SkysocksClientPort uint16 = 13
+	SkysocksClientAddr        = ":1080"
 
-	VPNServerName = "vpn-server"
-	VPNServerPort = uint16(44)
+	VPNServerName        = "vpn-server"
+	VPNServerPort uint16 = 44
 
 	VPNClientName = "vpn-client"
 	// TODO: this one's not needed for the app to run but lack of it causes errors
-	VPNClientPort = uint16(43)
+	VPNClientPort uint16 = 43
 )
 
 // RPC constants.
 const (
 	DefaultRPCAddr    = "localhost:3435"
 	DefaultRPCTimeout = 20 * time.Second
+	LongRPCTimeout    = 5 * time.Minute // update requires huge timeout
 )
 
 // Default skywire app server and discovery constants
