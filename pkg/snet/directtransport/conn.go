@@ -21,6 +21,7 @@ type Conn struct {
 	freePort func()
 }
 
+// ConnConfig describes a config for Conn.
 type ConnConfig struct {
 	Log       *logging.Logger
 	Conn      net.Conn
@@ -33,12 +34,14 @@ type ConnConfig struct {
 	Initiator bool
 }
 
+// NewConn creates a new Conn.
 func NewConn(c ConnConfig) (*Conn, error) {
-	c.Log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
-	lAddr, rAddr, err := c.Handshake(c.Conn, c.Deadline)
-	c.Log.Infof("c.hs result laddr=%v raddr=%v err=%v", lAddr, rAddr, err)
+	if c.Log != nil {
+		c.Log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
+	}
 
-	if err != nil { // TODO: errors are not caught here
+	lAddr, rAddr, err := c.Handshake(c.Conn, c.Deadline)
+	if err != nil {
 		if err := c.Conn.Close(); err != nil && c.Log != nil {
 			c.Log.WithError(err).Warnf("Failed to close connection")
 		}
@@ -49,7 +52,10 @@ func NewConn(c ConnConfig) (*Conn, error) {
 
 		return nil, err
 	}
-	c.Log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
+
+	if c.Log != nil {
+		c.Log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
+	}
 
 	// TODO(nkryuchkov): extract from handshake whether encryption is needed
 	if c.Encrypt {

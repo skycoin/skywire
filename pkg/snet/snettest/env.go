@@ -15,11 +15,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudph"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudpr"
 )
 
 // KeyPair holds a public/private key pair.
@@ -69,7 +65,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	table := directtransport.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp, hasSudpr, hasSudph bool
+	var hasDmsg, hasStcp /*, hasStcpr, hasStcph*/, hasSudp /*, hasSudpr, hasSudph*/ bool
 
 	for _, network := range networks {
 		switch network {
@@ -77,16 +73,16 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			hasDmsg = true
 		case stcp.Type:
 			hasStcp = true
-		case stcpr.Type:
-			hasStcpr = true
-		case stcph.Type:
-			hasStcph = true
+		// case stcpr.Type:
+		// 	hasStcpr = true
+		// case stcph.Type:
+		// 	hasStcph = true
 		case sudp.Type:
 			hasSudp = true
-		case sudpr.Type:
-			hasSudpr = true
-		case sudph.Type:
-			hasSudph = true
+			// case sudpr.Type:
+			// 	hasSudpr = true
+			// case sudph.Type:
+			// 	hasSudph = true
 		}
 	}
 
@@ -97,47 +93,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	const sudpBasePort = 7533
 
 	for i, pairs := range keys {
-		var clients snet.NetworkClients
-
-		if hasDmsg {
-			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go clients.DmsgC.Serve()
-		}
-
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
-		//
-		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		if hasStcp {
-			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
-		}
-
-		if hasStcpr {
-			// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-			// clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		}
-		//
-		if hasStcph {
-			// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		}
-
-		if hasSudp {
-			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table)
-		}
-
-		if hasSudpr {
-			// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-			// clients.SudprC = sudpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		}
-		//
-		if hasSudph {
-			// 	clients.SudphC = sudph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		}
-
 		networkConfigs := snet.NetworkConfigs{
 			Dmsg: &snet.DmsgConfig{
 				SessionsCount: 1,
@@ -163,6 +118,47 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				AddressResolver: skyenv.TestAddressResolverAddr,
 			},
 		}
+
+		var clients snet.NetworkClients
+
+		if hasDmsg {
+			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go clients.DmsgC.Serve()
+		}
+
+		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
+		//
+		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
+		// if err != nil {
+		// 	panic(err)
+		// }
+
+		if hasStcp {
+			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.STCP.LocalAddr)
+		}
+
+		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+		// if hasStcpr {
+		// 	clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+		// }
+		//
+		// if hasStcph {
+		// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
+		// }
+
+		if hasSudp {
+			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.SUDP.LocalAddr)
+		}
+
+		// if hasSudpr {
+		// TODO: https: //github.com/SkycoinProject/skywire-mainnet/issues/395
+		// clients.SudprC = sudpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+		// }
+
+		// if hasSudph {
+		// 	clients.SudphC = sudph.NewClient(pairs.PK, pairs.SK, addressResolver)
+		// }
 
 		snetConfig := snet.Config{
 			PubKey:         pairs.PK,
