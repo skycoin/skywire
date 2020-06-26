@@ -26,6 +26,8 @@ const Type = "sudph"
 // TODO: Find best value.
 const DialTimeout = 30 * time.Second
 
+const HolePunchMessage = "holepunch"
+
 // ErrTimeout indicates a timeout.
 var ErrTimeout = errors.New("timeout")
 
@@ -144,9 +146,29 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("newConn: %w", err)
 	}
 
-	if err := c.addressResolver.BindSUDPH(ctx, arConn, localPort); err != nil {
+	addrCh, err := c.addressResolver.BindSUDPH(ctx, arConn, localPort)
+	if err != nil {
 		return err
 	}
+
+	go func() {
+		for addr := range addrCh {
+			udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
+			if err != nil {
+				log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
+				continue
+			}
+
+			// TODO(nkryuchkov): More robust solution
+			log.Infof("Sending hole punch packet to %v", addr)
+			if _, err := c.visorConn.WriteTo([]byte(HolePunchMessage), udpAddr); err != nil {
+				log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
+				continue
+			}
+
+			log.Infof("Sent hole punch packet to %v", addr)
+		}
+	}()
 
 	lUDP, err := kcp.ServeConn(nil, 0, 0, c.visorConn)
 	if err != nil {
@@ -215,14 +237,25 @@ func (c *Client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 func (c *Client) dialUDP(remoteAddr string) (net.Conn, error) {
 	log.Infof("SUDPH c.localUDPAddr: %q", c.localUDPAddr)
 
+	// TODO(nkryuchkov): Dial using listener conn?
 	lAddr, err := net.ResolveUDPAddr("udp", c.localUDPAddr)
 	if err != nil {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
 	}
 
+	rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
+	if err != nil {
+		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
+	}
+
 	log.Infof("SUDPH: Resolved local addr from %v to %v", c.localUDPAddr, lAddr)
 
 	dialConn := c.packetFilter.NewConn(20, packetfilter.NewKCPConversationFilter())
+
+	// TODO(nkryuchkov): More robust solution
+	if _, err := dialConn.WriteTo([]byte(HolePunchMessage), rAddr); err != nil {
+		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)
+	}
 
 	kcpConn, err := kcp.NewConn(remoteAddr, nil, 0, 0, dialConn)
 	if err != nil {
