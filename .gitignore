@@ -36,3 +36,6 @@ go.mod-e
 
 # goreleaser
 dist
+
+# release
+*.deb
