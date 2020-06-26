@@ -1,4 +1,4 @@
-package sudph
+package porter
 
 import (
 	"context"
@@ -10,7 +10,7 @@ const (
 	PorterMinEphemeral uint16 = 49152
 )
 
-// Porter reserves stcp ports.
+// Porter reserves ports.
 type Porter struct {
 	eph    uint16 // current ephemeral value
 	minEph uint16 // minimal ephemeral port value
@@ -18,7 +18,7 @@ type Porter struct {
 	mx     sync.Mutex
 }
 
-func newPorter(minEph uint16) *Porter {
+func New(minEph uint16) *Porter {
 	ports := make(map[uint16]struct{})
 	ports[0] = struct{}{} // port 0 is invalid
 

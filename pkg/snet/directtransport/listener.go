@@ -1,4 +1,4 @@
-package sudph
+package directtransport
 
 import (
 	"io"
@@ -18,7 +18,7 @@ type Listener struct {
 	done     chan struct{}
 }
 
-func newListener(lAddr dmsg.Addr, freePort func()) *Listener {
+func NewListener(lAddr dmsg.Addr, freePort func()) *Listener {
 	return &Listener{
 		lAddr:    lAddr,
 		freePort: freePort,
