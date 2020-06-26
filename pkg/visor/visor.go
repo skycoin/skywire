@@ -226,8 +226,8 @@ func (v *Visor) Exec(command string) ([]byte, error) {
 // Update updates visor.
 // It checks if visor update is available.
 // If it is, the method downloads a new visor versions, starts it and kills the current process.
-func (v *Visor) Update() (bool, error) {
-	updated, err := v.updater.Update()
+func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
+	updated, err := v.updater.Update(updateConfig)
 	if err != nil {
 		v.log.Errorf("Failed to update visor: %v", err)
 		return false, err
@@ -237,8 +237,8 @@ func (v *Visor) Update() (bool, error) {
 }
 
 // UpdateAvailable checks if visor update is available.
-func (v *Visor) UpdateAvailable() (*updater.Version, error) {
-	version, err := v.updater.UpdateAvailable()
+func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
+	version, err := v.updater.UpdateAvailable(channel)
 	if err != nil {
 		v.log.Errorf("Failed to check if visor update is available: %v", err)
 		return nil, err
