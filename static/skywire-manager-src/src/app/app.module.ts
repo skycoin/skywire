@@ -104,6 +104,7 @@ import { SkysocksSettingsComponent } from './components/pages/node/apps/node-app
 import {
   SkysocksClientSettingsComponent
 } from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
+import { MenuButtonComponent } from './components/layout/sidenav/menu-button/menu-button.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -185,6 +186,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     TerminalComponent,
     SkysocksSettingsComponent,
     SkysocksClientSettingsComponent,
+    MenuButtonComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
