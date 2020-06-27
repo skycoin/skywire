@@ -1,4 +1,5 @@
 @import "variables";
+@import "bootstrap_overrides";
 
 .not-found-label {
   align-items: center;
@@ -11,5 +12,28 @@
     font-size: 22px;
     opacity: 0.5;
     margin-right: 3px;
+  }
+}
+
+.main-area {
+  width: 100%;
+  padding: 0 $additional-margin;
+
+  @media (min-width: map-get($grid-breakpoints, lg)) {
+    width: 71%;
+    float: left;
+  }
+}
+
+.right-bar {
+  width: 27%;
+  float: right;
+  padding-right: $additional-margin;
+  display: none;
+
+  @media (min-width: map-get($grid-breakpoints, lg)) {
+    display: block;
+    width: 27%;
+    float: right;
   }
 }

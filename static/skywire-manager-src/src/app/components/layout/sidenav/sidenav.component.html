@@ -8,6 +8,7 @@
     <button
       mat-icon-button
       [matMenuTriggerFor]="menu"
+      class="transparent-button"
     >
       <mat-icon>menu</mat-icon>
     </button>
@@ -48,7 +49,7 @@
   <!-- Left options bar shown on big screens. -->
   <div class="left-bar-container d-none d-lg-block">
     <div class="left-bar-internal-container">
-      <nav>
+      <nav class="elevated-box">
         <div class="header">
           <img src="/assets/img/logo-h.png" />
         </div>
@@ -59,11 +60,12 @@
             <div class="button-group">
               <ng-container *ngIf="sidenavService.upperContents">
                 <ng-container *ngFor="let content of sidenavService.upperContents">
-                  <app-button
+                  <app-menu-button
                     (action)="requestAction(content.actionName)"
                     [icon]="content.icon"
                     [disabled]="content.disabled"
-                  >{{ content.name | translate }}</app-button>
+                    [text]="content.name"
+                  ></app-menu-button>
                 </ng-container>
               </ng-container>
             </div>
@@ -73,11 +75,13 @@
           <div>
             <ng-container *ngIf="sidenavService.lowerContents">
               <ng-container *ngFor="let content of sidenavService.lowerContents">
-                <app-button
+                <app-menu-button
                   (action)="requestAction(content.actionName)"
                   [icon]="content.icon"
                   [disabled]="content.disabled"
-                >{{ content.name | translate }}</app-button>
+                  [text]="content.name"
+                  [showUpperSeparator]="true"
+                ></app-menu-button>
               </ng-container>
             </ng-container>
           </div>
