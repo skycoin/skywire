@@ -111,12 +111,12 @@ var addTpCmd = &cobra.Command{
 			logger.Infof("Established %v transport to %v", transportType, pk)
 		} else {
 			transportTypes := []string{
-				directtransport.StcpType,
-				directtransport.StcprType,
-				directtransport.StcphType,
-				directtransport.SudpType,
-				directtransport.SudprType,
-				directtransport.SudphType,
+				directtransport.STCPType,
+				directtransport.STCPRType,
+				directtransport.STCPHType,
+				directtransport.SUDPType,
+				directtransport.SUDPRType,
+				directtransport.SUDPHType,
 				dmsg.Type,
 			}
 
