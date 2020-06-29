@@ -57,19 +57,11 @@ type Error struct {
 type APIClient interface {
 	io.Closer
 	LocalTCPAddr() string
-	LocalUDPAddr() string
-	RemoteHTTPAddr() string
 	RemoteUDPAddr() string
 	Bind(ctx context.Context, tType, port string) error
-	BindSTCPR(ctx context.Context, port string) error
 	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
-	BindSUDPR(ctx context.Context, port string) error
 	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
-	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
-	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
-	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
-	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 }
 
 // VisorData stores visor data.
@@ -89,20 +81,14 @@ var clients = make(map[key]*client)
 
 // client implements Client for address resolver API.
 type client struct {
-	client         *httpauth.Client
-	localTCPAddr   string
-	localUDPAddr   string
-	remoteHTTPAddr string
-	remoteUDPAddr  string
-	pk             cipher.PubKey
-	sk             cipher.SecKey
-	stcphConn      *websocket.Conn
-	stcphAddrCh    <-chan RemoteVisor
-	sudphAddrCh    <-chan RemoteVisor
-}
-
-func (c *client) RemoteHTTPAddr() string {
-	return c.remoteHTTPAddr
+	client        *httpauth.Client
+	localTCPAddr  string
+	remoteUDPAddr string
+	pk            cipher.PubKey
+	sk            cipher.SecKey
+	stcphConn     *websocket.Conn
+	stcphAddrCh   <-chan RemoteVisor
+	sudphAddrCh   <-chan RemoteVisor
 }
 
 func (c *client) RemoteUDPAddr() string {
@@ -138,11 +124,10 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 	}
 
 	client := &client{
-		client:         httpAuthClient,
-		pk:             pk,
-		sk:             sk,
-		remoteHTTPAddr: remoteAddr,
-		remoteUDPAddr:  remoteURL.Host,
+		client:        httpAuthClient,
+		pk:            pk,
+		sk:            sk,
+		remoteUDPAddr: remoteURL.Host,
 	}
 
 	transport := &http.Transport{
@@ -166,10 +151,6 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 
 func (c *client) LocalTCPAddr() string {
 	return c.localTCPAddr
-}
-
-func (c *client) LocalUDPAddr() string {
-	return c.localUDPAddr
 }
 
 // Get performs a new GET request.
@@ -248,16 +229,6 @@ func (c *client) Bind(ctx context.Context, tType, port string) error {
 	return c.bind(ctx, bindPath+tType, port)
 }
 
-// BindSTCPR binds client PK to IP:port on address resolver.
-func (c *client) BindSTCPR(ctx context.Context, port string) error {
-	return c.bind(ctx, bindSTCPRPath, port)
-}
-
-// BindSTCPR binds client PK to IP:port on address resolver.
-func (c *client) BindSUDPR(ctx context.Context, port string) error {
-	return c.bind(ctx, bindSUDPRPath, port)
-}
-
 func (c *client) bind(ctx context.Context, path string, port string) error {
 	addresses, err := localAddresses()
 	if err != nil {
@@ -301,22 +272,6 @@ func (c *client) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (V
 	default:
 		return VisorData{}, ErrUnknownTransportType
 	}
-}
-
-func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSTCPRPath, pk)
-}
-
-func (c *client) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSTCPHPath, pk)
-}
-
-func (c *client) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSUDPRPath, pk)
-}
-
-func (c *client) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSUDPHPath, pk)
 }
 
 func (c *client) resolve(ctx context.Context, path string, pk cipher.PubKey) (VisorData, error) {
