@@ -225,11 +225,6 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			arDone = make(chan struct{}) // unblocks when address resolver is ready
 		)
 
-		var (
-			addressResolver   arclient.APIClient
-			addressResolverMu sync.Mutex
-		)
-
 		// go routine to await address resolver
 		// TODO(nkryuchkov): encapsulate reconnection logic within AR client
 		go func() {
@@ -296,10 +291,8 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		// setup sudpr
 		if conf.NetworkConfigs.SUDPR != nil {
 			go func() {
-				// waiting here till we connect to address resolver
-				addressResolverMu.Lock()
-				ar := addressResolver
-				addressResolverMu.Unlock()
+				<-arDone // wait for address resolver to be ready
+				ar := ar
 
 				clients.sudprCMu.Lock()
 				clients.sudprC = sudpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.SUDPR.LocalAddr)
@@ -313,10 +306,8 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		// setup sudph
 		if conf.NetworkConfigs.SUDPH != nil {
 			go func() {
-				// waiting here till we connect to address resolver
-				addressResolverMu.Lock()
-				ar := addressResolver
-				addressResolverMu.Unlock()
+				<-arDone // wait for address resolver to be ready
+				ar := ar
 
 				clients.sudphCMu.Lock()
 				clients.sudphC = sudph.NewClient(conf.PubKey, conf.SecKey, ar)
