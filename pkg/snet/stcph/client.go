@@ -191,6 +191,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*di
 
 	c.log.Infof("Dialing PK %v", rPK)
 
+	// TODO(nkryuchkov): timeout
 	c.dialCh <- rPK
 
 	visorData, err := c.addressResolver.ResolveSTCPH(ctx, rPK)
