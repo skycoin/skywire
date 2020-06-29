@@ -175,56 +175,52 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	}
 
 	if conf.NetworkConfigs.STCPR != nil || conf.NetworkConfigs.STCPH != nil {
+		arAddr := conf.NetworkConfigs.STCPR.AddressResolver
+
 		var (
-			addressResolver   arclient.APIClient
-			addressResolverMu sync.Mutex
+			err  error
+			ar   arclient.APIClient
+			arWG = new(sync.WaitGroup) // waits until address resolver is ready
 		)
 
-		// this one will be released as soon as address resolver is ready
-		addressResolverMu.Lock()
-		// goroutine to setup AR
+		// go routine to await address resolver
+		// TODO(nkryuchkov): encapsulate reconnection logic within AR client
+		arWG.Add(1)
 		go func() {
-			defer addressResolverMu.Unlock()
+			defer arWG.Done()
 
-			// TODO(nkryuchkov): encapsulate reconnection logic within AR client
 			log := logging.MustGetLogger("snet")
 
 			// we're doing this first try outside of retrier, because we need to log the error,
 			// to log this exactly once. without the error at all, it would be unclear for the
 			// user what's going on. also spamming it on each try won't do any good
-			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
+			ar, err = arclient.NewHTTP(arAddr, conf.PubKey, conf.SecKey)
 			if err != nil {
-				log.WithError(err).Error("failed to connect to address resolver - STCPR/STCPH are temporarily disabled, retrying...")
+				log.WithError(err).
+					Error("Failed to connect to address resolver. STCPR/STCPH services are temporarily unavailable. Retrying...")
 
-				arRetrier := netutil.NewRetrier(logging.MustGetLogger("snet.stcpr.retrier"), 1*time.Second, 10*time.Second, 0, 1)
-				err := arRetrier.Do(context.Background(), func() error {
-					var err error
-					ar, err = arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
-					if err != nil {
-						return err
-					}
+				retryLog := logging.MustGetLogger("snet.stcpr.retrier")
+				retry := netutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
 
-					addressResolver = ar
-
-					return nil
+				err := retry.Do(context.Background(), func() error {
+					ar, err = arclient.NewHTTP(arAddr, conf.PubKey, conf.SecKey)
+					return err
 				})
+
 				if err != nil {
-					log.WithError(err).Error("failed to connect to address resolver")
-				} else {
-					log.Infoln("successfully connected to address resolver")
+					log.WithError(err).Error("Permanently failed to connect to address resolver.")
+					return
 				}
-			} else {
-				log.Infoln("successfully connected to address resolver")
 			}
+
+			log.Infoln("Successfully connected to address resolver.")
 		}()
 
 		// setup stcpr
 		if conf.NetworkConfigs.STCPR != nil {
 			go func() {
-				// waiting here till we connect to address resolver
-				addressResolverMu.Lock()
-				ar := addressResolver
-				addressResolverMu.Unlock()
+				arWG.Wait() // wait for address resolver to be ready
+				ar := ar
 
 				clients.stcprCMu.Lock()
 				clients.stcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.STCPR.LocalAddr)
@@ -238,10 +234,8 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		// setup stcph
 		if conf.NetworkConfigs.STCPH != nil {
 			go func() {
-				// waiting here till we connect to address resolver
-				addressResolverMu.Lock()
-				ar := addressResolver
-				addressResolverMu.Unlock()
+				arWG.Wait() // wait for address resolver to be ready
+				ar := ar
 
 				clients.stcphCMu.Lock()
 				clients.stcphC = stcph.NewClient(conf.PubKey, conf.SecKey, ar)
