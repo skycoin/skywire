@@ -22,20 +22,20 @@ import (
 )
 
 const (
-	// StcpType is a type of a transport that works via TCP and resolves addresses using PK table.
-	StcpType = "stcp"
-	// StcpType is a type of a transport that works via TCP and resolves addresses using address-resolver service.
-	StcprType = "stcpr"
-	// StcpType is a type of a transport that works via TCP, resolves addresses using address-resolver service,
+	// STCPType is a type of a transport that works via TCP and resolves addresses using PK table.
+	STCPType = "stcp"
+	// STCPType is a type of a transport that works via TCP and resolves addresses using address-resolver service.
+	STCPRType = "stcpr"
+	// STCPType is a type of a transport that works via TCP, resolves addresses using address-resolver service,
 	// and uses TCP hole punching.
-	StcphType = "stcph"
-	// SudpType is a type of a transport that works via UDP and resolves addresses using PK table.
-	SudpType = "sudp"
-	// SudprType is a type of a transport that works via UDP and resolves addresses using address-resolver service.
-	SudprType = "sudpr"
-	// SudphType is a type of a transport that works via UDP, resolves addresses using address-resolver service,
+	STCPHType = "stcph"
+	// SUDPType is a type of a transport that works via UDP and resolves addresses using PK table.
+	SUDPType = "sudp"
+	// SUDPRType is a type of a transport that works via UDP and resolves addresses using address-resolver service.
+	SUDPRType = "sudpr"
+	// SUDPHType is a type of a transport that works via UDP, resolves addresses using address-resolver service,
 	// and uses TCP hole punching.
-	SudphType = "sudph"
+	SUDPHType = "sudph"
 
 	// HolePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
 	HolePunchMessage = "holepunch"
@@ -105,22 +105,22 @@ func NewClient(conf ClientConfig) *client {
 // Serve serves the listening portion of the client.
 func (c *client) Serve() error {
 	switch c.conf.Type {
-	case StcpType, StcprType, SudpType, SudprType:
+	case STCPType, STCPRType, SUDPType, SUDPRType:
 		if c.listener != nil {
 			return ErrAlreadyListening
 		}
-	case SudphType:
+	case SUDPHType:
 		if c.listenerConn != nil {
 			return ErrAlreadyListening
 		}
-	case StcphType:
+	case STCPHType:
 		if c.connCh != nil {
 			return ErrAlreadyListening
 		}
 	}
 
 	switch c.conf.Type {
-	case StcpType, StcprType:
+	case STCPType, STCPRType:
 		listener, err := net.Listen("tcp", c.conf.LocalAddr)
 		if err != nil {
 			return err
@@ -128,7 +128,7 @@ func (c *client) Serve() error {
 
 		c.listener = listener
 
-	case SudpType, SudprType:
+	case SUDPType, SUDPRType:
 		listener, err := kcp.Listen(c.conf.LocalAddr)
 		if err != nil {
 			return err
@@ -136,7 +136,7 @@ func (c *client) Serve() error {
 
 		c.listener = listener
 
-	case SudphType:
+	case SUDPHType:
 		ctx := context.Background()
 		network := "udp"
 
@@ -233,7 +233,7 @@ func (c *client) Serve() error {
 		}
 
 		c.listener = listener
-	case StcphType:
+	case STCPHType:
 		ctx := context.Background()
 
 		dialCh := make(chan cipher.PubKey)
@@ -250,13 +250,13 @@ func (c *client) Serve() error {
 		c.log.Infof("listening websocket events on %v", c.conf.AddressResolver.LocalTCPAddr())
 	}
 
-	if c.conf.Type != StcphType {
+	if c.conf.Type != STCPHType {
 		c.log.Infof("listening on addr: %v", c.listener.Addr())
 	}
 
 	// TODO(nkryuchkov): put to getDialer
 	switch c.conf.Type {
-	case StcprType, SudprType:
+	case STCPRType, SUDPRType:
 		_, port, err := net.SplitHostPort(c.listener.Addr().String())
 		if err != nil {
 			return err
@@ -269,7 +269,7 @@ func (c *client) Serve() error {
 
 	go func() {
 		switch c.Type() {
-		case StcphType:
+		case STCPHType:
 			for addr := range c.connCh {
 				c.log.Infof("Received signal to dial %v", addr)
 
@@ -406,7 +406,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 	var visorConn net.Conn
 
 	switch c.conf.Type {
-	case StcpType, SudpType:
+	case STCPType, SUDPType:
 		addr, ok := c.conf.Table.Addr(rPK)
 		if !ok {
 			return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
@@ -419,7 +419,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 		visorConn = conn
 
-	case StcprType, SudprType:
+	case STCPRType, SUDPRType:
 		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.conf.Type, rPK)
 		if err != nil {
 			return nil, fmt.Errorf("resolve PK: %w", err)
@@ -432,7 +432,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 		visorConn = conn
 
-	case SudphType:
+	case SUDPHType:
 		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.Type(), rPK)
 		if err != nil {
 			return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
@@ -447,7 +447,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 		visorConn = conn
 
-	case StcphType:
+	case STCPHType:
 		// TODO(nkryuchkov): timeout
 		c.dialCh <- rPK
 

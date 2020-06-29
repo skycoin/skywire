@@ -13,6 +13,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
 )
 
@@ -49,7 +50,6 @@ type Env struct {
 // NewEnv creates a `network.Network` test environment.
 // `nPairs` is the public/private key pairs of all the `network.Network`s to be created.
 func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
-
 	// Prepare `dmsg`.
 	dmsgD := disc.NewMock()
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
@@ -63,24 +63,24 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	table := directtransport.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp /*, hasStcpr, hasStcph*/, hasSudp /*, hasSudpr, hasSudph*/ bool
+	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp, hasSudpr, hasSudph bool
 
 	for _, network := range networks {
 		switch network {
 		case dmsg.Type:
 			hasDmsg = true
-		case directtransport.StcpType:
+		case directtransport.STCPType:
 			hasStcp = true
-		// case directtransport.StcprType:
-		// 	hasStcpr = true
-		// case directtransport.StcphType:
-		// 	hasStcph = true
-		case directtransport.SudpType:
+		case directtransport.STCPRType:
+			hasStcpr = true
+		case directtransport.STCPHType:
+			hasStcph = true
+		case directtransport.SUDPType:
 			hasSudp = true
-			// case directtransport.SudprType:
-			// 	hasSudpr = true
-			// case directtransport.SudphType:
-			// 	hasSudph = true
+		case directtransport.SUDPRType:
+			hasSudpr = true
+		case directtransport.SUDPHType:
+			hasSudph = true
 		}
 	}
 
@@ -117,61 +117,85 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			},
 		}
 
-		var clients snet.NetworkClients
+		clients := snet.NetworkClients{
+			Direct: make(map[string]directtransport.Client),
+		}
 
 		if hasDmsg {
 			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
 			go clients.DmsgC.Serve()
 		}
 
-		// TODO(nkryuchkov): address-resolver mock
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
-		//
-		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
-		// if err != nil {
-		// 	panic(err)
-		// }
+		addressResolver := new(arclient.MockAPIClient)
 
 		if hasStcp {
 			conf := directtransport.ClientConfig{
-				Type:      directtransport.StcpType,
+				Type:      directtransport.STCPType,
 				PK:        pairs.PK,
 				SK:        pairs.SK,
 				Table:     table,
 				LocalAddr: networkConfigs.STCP.LocalAddr,
 			}
-			clients.Direct[directtransport.StcpType] = directtransport.NewClient(conf)
+
+			clients.Direct[directtransport.STCPType] = directtransport.NewClient(conf)
 		}
 
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// if hasStcpr {
-		// 	clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		// }
-		//
-		// if hasStcph {
-		// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		// }
+		if hasStcpr {
+			conf := directtransport.ClientConfig{
+				Type:            directtransport.STCPRType,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+				LocalAddr:       networkConfigs.STCPR.LocalAddr,
+			}
+
+			clients.Direct[directtransport.STCPRType] = directtransport.NewClient(conf)
+		}
+
+		if hasStcph {
+			conf := directtransport.ClientConfig{
+				Type:            directtransport.STCPHType,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
+
+			clients.Direct[directtransport.STCPHType] = directtransport.NewClient(conf)
+		}
 
 		if hasSudp {
 			conf := directtransport.ClientConfig{
-				Type:      directtransport.SudpType,
+				Type:      directtransport.SUDPType,
 				PK:        pairs.PK,
 				SK:        pairs.SK,
 				Table:     table,
 				LocalAddr: networkConfigs.SUDP.LocalAddr,
 			}
-			clients.Direct[directtransport.SudpType] = directtransport.NewClient(conf)
+			clients.Direct[directtransport.SUDPType] = directtransport.NewClient(conf)
 		}
 
-		// if hasSudpr {
-		// TODO: https: //github.com/SkycoinProject/skywire-mainnet/issues/395
-		// clients.SudprC = sudpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		// }
+		if hasSudpr {
+			conf := directtransport.ClientConfig{
+				Type:            directtransport.SUDPRType,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+				LocalAddr:       networkConfigs.SUDPR.LocalAddr,
+			}
 
-		// if hasSudph {
-		// 	clients.SudphC = sudph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		// }
+			clients.Direct[directtransport.SUDPRType] = directtransport.NewClient(conf)
+		}
+
+		if hasSudph {
+			conf := directtransport.ClientConfig{
+				Type:            directtransport.SUDPHType,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
+
+			clients.Direct[directtransport.SUDPHType] = directtransport.NewClient(conf)
+		}
 
 		snetConfig := snet.Config{
 			PubKey:         pairs.PK,
