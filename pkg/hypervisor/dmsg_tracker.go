@@ -214,15 +214,14 @@ func (dtm *DmsgTrackerManager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary 
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
-	out := make([]DmsgClientSummary, len(pks))
+	out := make([]DmsgClientSummary, 0, len(pks))
 
-	for i, pk := range pks {
+	for _, pk := range pks {
 		dt, ok := dtm.dm[pk]
 		if !ok {
-			out[i] = DmsgClientSummary{PK: pk}
 			continue
 		}
-		out[i] = dt.sum
+		out = append(out, dt.sum)
 	}
 
 	return out
