@@ -73,8 +73,8 @@ type ClientConfig struct {
 	AddressResolver arclient.APIClient // TODO(nkryuchkov): close it properly
 }
 
-// DirectClient is the central control for incoming and outgoing 'Conn's.
-type DirectClient struct {
+// client is the central control for incoming and outgoing 'Conn's.
+type client struct {
 	conf                ClientConfig
 	mu                  sync.Mutex
 	done                chan struct{}
@@ -92,8 +92,8 @@ type DirectClient struct {
 }
 
 // NewClient creates a net Client.
-func NewClient(conf ClientConfig) *DirectClient {
-	return &DirectClient{
+func NewClient(conf ClientConfig) *client {
+	return &client{
 		conf:   conf,
 		log:    logging.MustGetLogger(conf.Type),
 		porter: porter.New(porter.PorterMinEphemeral),
@@ -103,7 +103,7 @@ func NewClient(conf ClientConfig) *DirectClient {
 }
 
 // Serve serves the listening portion of the client.
-func (c *DirectClient) Serve() error {
+func (c *client) Serve() error {
 	switch c.conf.Type {
 	case StcpType, StcprType, SudpType, SudprType:
 		if c.listener != nil {
@@ -296,7 +296,7 @@ func (c *DirectClient) Serve() error {
 	return nil
 }
 
-func (c *DirectClient) acceptConn() error {
+func (c *client) acceptConn() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
@@ -347,7 +347,7 @@ func (c *DirectClient) acceptConn() error {
 	return nil
 }
 
-func (c *DirectClient) acceptSTCPHConn(remote arclient.RemoteVisor) error {
+func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
@@ -396,7 +396,7 @@ func (c *DirectClient) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 }
 
 // Dial dials a new sudp.Conn to specified remote public key and port.
-func (c *DirectClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -433,7 +433,7 @@ func (c *DirectClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 		visorConn = conn
 
 	case SudphType:
-		visorData, err := c.conf.AddressResolver.ResolveSUDPH(ctx, rPK)
+		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.Type(), rPK)
 		if err != nil {
 			return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
 		}
@@ -451,7 +451,7 @@ func (c *DirectClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 		// TODO(nkryuchkov): timeout
 		c.dialCh <- rPK
 
-		visorData, err := c.conf.AddressResolver.ResolveSTCPH(ctx, rPK)
+		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.Type(), rPK)
 		if err != nil {
 			return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
 		}
@@ -496,7 +496,7 @@ func (c *DirectClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 // TODO: same for listener
 type dialFunc func(addr string) (net.Conn, error)
 
-func (c *DirectClient) getDialer() dialFunc {
+func (c *client) getDialer() dialFunc {
 	switch c.conf.Type {
 	case "stcp", "stcpr":
 		return func(addr string) (net.Conn, error) {
@@ -523,7 +523,7 @@ func (c *DirectClient) getDialer() dialFunc {
 	}
 }
 
-func (c *DirectClient) dialUDP(remoteAddr string) (net.Conn, error) {
+func (c *client) dialUDP(remoteAddr string) (net.Conn, error) {
 	c.log.Infof("SUDPH c.localUDPAddr: %q", c.conf.LocalAddr)
 
 	// TODO(nkryuchkov): Dial using listener conn?
@@ -554,7 +554,7 @@ func (c *DirectClient) dialUDP(remoteAddr string) (net.Conn, error) {
 	return kcpConn, nil
 }
 
-func (c *DirectClient) dialTimeout(dialer dialFunc, addr string) (net.Conn, error) {
+func (c *client) dialTimeout(dialer dialFunc, addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
 
@@ -577,7 +577,7 @@ func (c *DirectClient) dialTimeout(dialer dialFunc, addr string) (net.Conn, erro
 	}
 }
 
-func (c *DirectClient) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
+func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
@@ -594,7 +594,7 @@ func (c *DirectClient) dialVisor(visorData arclient.VisorData) (net.Conn, error)
 
 // Listen creates a new listener for sudp.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
-func (c *DirectClient) Listen(lPort uint16) (*Listener, error) {
+func (c *client) Listen(lPort uint16) (*Listener, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -614,7 +614,7 @@ func (c *DirectClient) Listen(lPort uint16) (*Listener, error) {
 }
 
 // Close closes the Client.
-func (c *DirectClient) Close() error {
+func (c *client) Close() error {
 	if c == nil {
 		return nil
 	}
@@ -639,7 +639,7 @@ func (c *DirectClient) Close() error {
 	return nil
 }
 
-func (c *DirectClient) isClosed() bool {
+func (c *client) isClosed() bool {
 	select {
 	case <-c.done:
 		return true
@@ -649,6 +649,6 @@ func (c *DirectClient) isClosed() bool {
 }
 
 // Type returns the stream type.
-func (c *DirectClient) Type() string {
+func (c *client) Type() string {
 	return c.conf.Type
 }
