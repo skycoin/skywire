@@ -8,7 +8,7 @@ import (
 )
 
 // Client is a direct transport client.
-type Client interface { // TODO(nkryuchkov): use
+type Client interface {
 	SetLogger(log *logging.Logger) // TODO(nkryuchkov): remove
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error)
 	Listen(lPort uint16) (*Listener, error)
