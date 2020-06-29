@@ -214,7 +214,14 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			return nil, err
 		}
 
-		clients.Direct[stcph.Type] = stcph.NewClient(conf.PubKey, conf.SecKey, ar)
+		conf := directtransport.ClientConfig{
+			Type:            stcph.Type,
+			PK:              conf.PubKey,
+			SK:              conf.SecKey,
+			AddressResolver: ar,
+		}
+
+		clients.Direct[stcph.Type] = directtransport.NewClient(conf)
 	}
 
 	if conf.NetworkConfigs.SUDP != nil {
