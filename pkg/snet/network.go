@@ -251,7 +251,14 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			return nil, err
 		}
 
-		clients.Direct[sudph.Type] = sudph.NewClient(conf.PubKey, conf.SecKey, ar)
+		conf := directtransport.ClientConfig{
+			Type:            sudph.Type,
+			PK:              conf.PubKey,
+			SK:              conf.SecKey,
+			AddressResolver: ar,
+		}
+
+		clients.Direct[sudph.Type] = directtransport.NewClient(conf)
 	}
 
 	return NewRaw(conf, clients), nil
