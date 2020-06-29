@@ -178,17 +178,15 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		arAddr := conf.NetworkConfigs.STCPR.AddressResolver
 
 		var (
-			err  error
-			ar   arclient.APIClient
-			arWG = new(sync.WaitGroup) // waits until address resolver is ready
+			err    error
+			ar     arclient.APIClient
+			arDone = make(chan struct{}) // unblocks when address resolver is ready
 		)
 
 		// go routine to await address resolver
 		// TODO(nkryuchkov): encapsulate reconnection logic within AR client
-		arWG.Add(1)
 		go func() {
-			defer arWG.Done()
-
+			defer close(arDone)
 			log := logging.MustGetLogger("snet")
 
 			// we're doing this first try outside of retrier, because we need to log the error,
@@ -208,8 +206,9 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 				})
 
 				if err != nil {
-					log.WithError(err).Error("Permanently failed to connect to address resolver.")
-					return
+					// This should not happen as retries is set to try indefinitely.
+					// If address resolver cannot be contacted indefinitely, 'arDone' will be blocked indefinitely.
+					log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
 				}
 			}
 
@@ -219,7 +218,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		// setup stcpr
 		if conf.NetworkConfigs.STCPR != nil {
 			go func() {
-				arWG.Wait() // wait for address resolver to be ready
+				<-arDone // wait for address resolver to be ready
 				ar := ar
 
 				clients.stcprCMu.Lock()
@@ -234,7 +233,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		// setup stcph
 		if conf.NetworkConfigs.STCPH != nil {
 			go func() {
-				arWG.Wait() // wait for address resolver to be ready
+				<-arDone // wait for address resolver to be ready
 				ar := ar
 
 				clients.stcphCMu.Lock()
