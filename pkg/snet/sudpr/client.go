@@ -1,4 +1,4 @@
-package stcpr
+package sudpr
 
 import (
 	"context"
@@ -12,16 +12,17 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/xtaci/kcp-go"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport/porter"
 )
 
-// Type is stcp with address resolving type.
-const Type = "stcpr"
+// Type is sudpr type.
+const Type = "sudpr"
 
-// Client is the central control for incoming and outgoing 'stcp.Conn's.
+// Client is the central control for incoming and outgoing 'sudp.Conn's.
 type Client struct {
 	log *logging.Logger
 
@@ -31,7 +32,7 @@ type Client struct {
 	addressResolver arclient.APIClient
 	localAddr       string
 
-	lTCP net.Listener
+	lUDP net.Listener
 	lMap map[uint16]*directtransport.Listener // key: lPort
 	mx   sync.Mutex
 
@@ -41,18 +42,16 @@ type Client struct {
 
 // NewClient creates a net Client.
 func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIClient, localAddr string) *Client {
-	c := &Client{
+	return &Client{
 		log:             logging.MustGetLogger(Type),
 		lPK:             pk,
 		lSK:             sk,
+		p:               porter.New(porter.PorterMinEphemeral),
 		addressResolver: addressResolver,
 		localAddr:       localAddr,
-		p:               porter.New(porter.PorterMinEphemeral),
 		lMap:            make(map[uint16]*directtransport.Listener),
 		done:            make(chan struct{}),
 	}
-
-	return c
 }
 
 // SetLogger sets a logger for Client.
@@ -62,36 +61,35 @@ func (c *Client) SetLogger(log *logging.Logger) {
 
 // Serve serves the listening portion of the client.
 func (c *Client) Serve() error {
-	if c.lTCP != nil {
+	if c.lUDP != nil {
 		return errors.New("already listening")
 	}
 
-	lTCP, err := net.Listen("tcp", c.localAddr)
+	lUDP, err := kcp.Listen(c.localAddr)
 	if err != nil {
 		return err
 	}
 
-	c.lTCP = lTCP
-
-	addr := lTCP.Addr()
-	c.log.Infof("listening on tcp addr: %v", addr)
+	c.lUDP = lUDP
+	addr := lUDP.Addr()
+	c.log.Infof("listening on udp addr: %v", addr)
 
 	_, port, err := net.SplitHostPort(addr.String())
 	if err != nil {
 		port = ""
 	}
 
-	if err := c.addressResolver.BindSTCPR(context.Background(), port); err != nil {
-		return fmt.Errorf("bind STCPR: %w", err)
+	if err := c.addressResolver.BindSUDPR(context.Background(), port); err != nil {
+		return fmt.Errorf("bind SUDPR: %w", err)
 	}
 
 	go func() {
 		for {
-			if err := c.acceptTCPConn(); err != nil {
+			if err := c.acceptUDPConn(); err != nil {
 				c.log.Warnf("failed to accept incoming connection: %v", err)
 
 				if !directtransport.IsHandshakeError(err) {
-					c.log.Warnf("stopped serving stcpr")
+					c.log.Warnf("stopped serving sudpr")
 					return
 				}
 			}
@@ -101,22 +99,21 @@ func (c *Client) Serve() error {
 	return nil
 }
 
-func (c *Client) acceptTCPConn() error {
+func (c *Client) acceptUDPConn() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	tcpConn, err := c.lTCP.Accept()
+	udpConn, err := c.lUDP.Accept()
 	if err != nil {
 		return err
 	}
 
-	remoteAddr := tcpConn.RemoteAddr()
+	remoteAddr := udpConn.RemoteAddr()
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
 	var lis *directtransport.Listener
-
 	hs := directtransport.ResponderHandshake(func(f2 directtransport.Frame2) error {
 		c.mx.Lock()
 		defer c.mx.Unlock()
@@ -131,7 +128,7 @@ func (c *Client) acceptTCPConn() error {
 
 	connConfig := directtransport.ConnConfig{
 		Log:       c.log,
-		Conn:      tcpConn,
+		Conn:      udpConn,
 		LocalPK:   c.lPK,
 		LocalSK:   c.lSK,
 		Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
@@ -143,19 +140,23 @@ func (c *Client) acceptTCPConn() error {
 
 	conn, err := directtransport.NewConn(connConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("newConn: %w", err)
 	}
 
-	return lis.Introduce(conn)
+	if err := lis.Introduce(conn); err != nil {
+		return fmt.Errorf("introduce: %w", err)
+	}
+
+	return nil
 }
 
-// Dial dials a new stcp.Conn to specified remote public key and port.
+// Dial dials a new sudpr.Conn to specified remote public key and port.
 func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*directtransport.Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
 
-	visorData, err := c.addressResolver.ResolveSTCPR(ctx, rPK)
+	visorData, err := c.addressResolver.ResolveSUDPR(ctx, rPK)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK: %w", err)
 	}
@@ -193,17 +194,17 @@ func (c *Client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
-			conn, err := net.Dial("tcp", addr)
+			conn, err := kcp.Dial(addr)
 			if err == nil {
 				return conn, nil
 			}
 		}
 	}
 
-	return net.Dial("tcp", visorData.RemoteAddr)
+	return kcp.Dial(visorData.RemoteAddr)
 }
 
-// Listen creates a new listener for stcp.
+// Listen creates a new listener for sudp.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
 func (c *Client) Listen(lPort uint16) (*directtransport.Listener, error) {
 	if c.isClosed() {
@@ -221,7 +222,6 @@ func (c *Client) Listen(lPort uint16) (*directtransport.Listener, error) {
 	lAddr := dmsg.Addr{PK: c.lPK, Port: lPort}
 	lis := directtransport.NewListener(lAddr, freePort)
 	c.lMap[lPort] = lis
-
 	return lis, nil
 }
 
@@ -230,26 +230,24 @@ func (c *Client) Close() error {
 	if c == nil {
 		return nil
 	}
-
 	c.once.Do(func() {
 		close(c.done)
 
 		c.mx.Lock()
 		defer c.mx.Unlock()
 
-		if c.lTCP != nil {
-			if err := c.lTCP.Close(); err != nil {
-				c.log.WithError(err).Warnf("Failed to close TCP listener")
+		if c.lUDP != nil {
+			if err := c.lUDP.Close(); err != nil {
+				c.log.WithError(err).Warnf("Failed to close UDP listener")
 			}
 		}
 
 		for _, lis := range c.lMap {
 			if err := lis.Close(); err != nil {
-				c.log.WithError(err).Warnf("Failed to close stcpr listener")
+				c.log.WithError(err).Warnf("Failed to close sudp listener")
 			}
 		}
 	})
-
 	return nil
 }
 
