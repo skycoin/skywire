@@ -16,6 +16,12 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 )
 
+// Default values for DmsgTrackerManager
+const (
+	DefaultDTMUpdateInterval = time.Second * 30
+	DefaultDTMUpdateTimeout  = time.Second * 10
+)
+
 // DmsgClientSummary summaries a dmsg client.
 type DmsgClientSummary struct {
 	PK        cipher.PubKey `json:"public_key"`
@@ -91,10 +97,10 @@ func NewDmsgTrackerManager(log logrus.FieldLogger, dc *dmsg.Client, updateInterv
 		log = logging.MustGetLogger("dmsg_trackers")
 	}
 	if updateInterval == 0 {
-		updateInterval = time.Second * 30
+		updateInterval = DefaultDTMUpdateInterval
 	}
 	if updateTimeout == 0 {
-		updateTimeout = time.Second * 10
+		updateTimeout = DefaultDTMUpdateTimeout
 	}
 
 	dtm := &DmsgTrackerManager{
