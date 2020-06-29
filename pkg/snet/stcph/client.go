@@ -15,6 +15,8 @@ import (
 	"github.com/libp2p/go-reuseport"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport/porter"
 )
 
 // Type is stcp hole punch type.
@@ -33,12 +35,12 @@ type Client struct {
 
 	lPK             cipher.PubKey
 	lSK             cipher.SecKey
-	p               *Porter
+	p               *porter.Porter
 	addressResolver arclient.APIClient
 
 	connCh <-chan arclient.RemoteVisor
 	dialCh chan cipher.PubKey
-	lMap   map[uint16]*Listener // key: lPort
+	lMap   map[uint16]*directtransport.Listener // key: lPort
 	mx     sync.Mutex
 
 	done chan struct{}
@@ -52,8 +54,8 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, addressResolver arclient.APIC
 		lPK:             pk,
 		lSK:             sk,
 		addressResolver: addressResolver,
-		p:               newPorter(PorterMinEphemeral),
-		lMap:            make(map[uint16]*Listener),
+		p:               porter.New(porter.PorterMinEphemeral),
+		lMap:            make(map[uint16]*directtransport.Listener),
 		done:            make(chan struct{}),
 	}
 
@@ -76,7 +78,7 @@ func (c *Client) Serve() error {
 	dialCh := make(chan cipher.PubKey)
 
 	// TODO(nkryuchkov): Try to connect visors in the same local network locally.
-	connCh, err := c.addressResolver.WS(ctx, dialCh)
+	connCh, err := c.addressResolver.BindSTCPH(ctx, dialCh)
 	if err != nil {
 		return fmt.Errorf("ws: %w", err)
 	}
@@ -84,7 +86,7 @@ func (c *Client) Serve() error {
 	c.connCh = connCh
 	c.dialCh = dialCh
 
-	c.log.Infof("listening websocket events on %v", c.addressResolver.LocalAddr())
+	c.log.Infof("listening websocket events on %v", c.addressResolver.LocalTCPAddr())
 
 	go func() {
 		for addr := range c.connCh {
@@ -101,25 +103,39 @@ func (c *Client) Serve() error {
 	return nil
 }
 
+func (c *Client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
+	if visorData.IsLocal {
+		for _, host := range visorData.Addresses {
+			addr := net.JoinHostPort(host, visorData.Port)
+			conn, err := c.dialTimeout(addr)
+			if err == nil {
+				return conn, nil
+			}
+		}
+	}
+
+	return c.dialTimeout(visorData.RemoteAddr)
+}
+
 func (c *Client) dialTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
 
-	c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalAddr())
+	c.log.Infof("Dialing %v from %v via tcp", addr, c.addressResolver.LocalTCPAddr())
 
 	for {
 		select {
 		case <-timer.C:
 			return nil, ErrTimeout
 		default:
-			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalAddr(), addr)
+			conn, err := reuseport.Dial("tcp", c.addressResolver.LocalTCPAddr(), addr)
 			if err == nil {
-				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalAddr())
+				c.log.Infof("Dialed %v from %v", addr, c.addressResolver.LocalTCPAddr())
 				return conn, nil
 			}
 
 			c.log.WithError(err).
-				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalAddr(), err)
+				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.addressResolver.LocalTCPAddr(), err)
 		}
 	}
 }
@@ -138,9 +154,9 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	var lis *Listener
+	var lis *directtransport.Listener
 
-	hs := ResponderHandshake(func(f2 Frame2) error {
+	hs := directtransport.ResponderHandshake(func(f2 directtransport.Frame2) error {
 		c.mx.Lock()
 		defer c.mx.Unlock()
 
@@ -152,19 +168,19 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 		return nil
 	})
 
-	connConfig := connConfig{
-		log:       c.log,
-		conn:      tcpConn,
-		localPK:   c.lPK,
-		localSK:   c.lSK,
-		deadline:  time.Now().Add(HandshakeTimeout),
-		hs:        hs,
-		freePort:  nil,
-		encrypt:   true,
-		initiator: false,
+	connConfig := directtransport.ConnConfig{
+		Log:       c.log,
+		Conn:      tcpConn,
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
+		Handshake: hs,
+		FreePort:  nil,
+		Encrypt:   true,
+		Initiator: false,
 	}
 
-	conn, err := newConn(connConfig)
+	conn, err := directtransport.NewConn(connConfig)
 	if err != nil {
 		return err
 	}
@@ -173,7 +189,7 @@ func (c *Client) acceptTCPConn(remote arclient.RemoteVisor) error {
 }
 
 // Dial dials a new stcph.Conn to specified remote public key and port.
-func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*directtransport.Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -182,40 +198,40 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 	c.dialCh <- rPK
 
-	addr, err := c.addressResolver.ResolveHolePunch(ctx, rPK)
+	visorData, err := c.addressResolver.ResolveSTCPH(ctx, rPK)
 	if err != nil {
 		return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
 	}
 
-	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, addr)
+	c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, visorData)
 
-	tcpConn, err := c.dialTimeout(addr)
+	tcpConn, err := c.dialVisor(visorData)
 	if err != nil {
 		return nil, err
 	}
 
-	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, addr)
+	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, tcpConn.RemoteAddr())
 
 	lPort, freePort, err := c.p.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ReserveEphemeral: %w", err)
 	}
 
-	hs := InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
+	hs := directtransport.InitiatorHandshake(c.lSK, dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	connConfig := connConfig{
-		log:       c.log,
-		conn:      tcpConn,
-		localPK:   c.lPK,
-		localSK:   c.lSK,
-		deadline:  time.Now().Add(HandshakeTimeout),
-		hs:        hs,
-		freePort:  freePort,
-		encrypt:   true,
-		initiator: true,
+	connConfig := directtransport.ConnConfig{
+		Log:       c.log,
+		Conn:      tcpConn,
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
+		Deadline:  time.Now().Add(directtransport.HandshakeTimeout),
+		Handshake: hs,
+		FreePort:  freePort,
+		Encrypt:   true,
+		Initiator: true,
 	}
 
-	stcpConn, err := newConn(connConfig)
+	stcpConn, err := directtransport.NewConn(connConfig)
 	if err != nil {
 		return nil, fmt.Errorf("newConn: %w", err)
 	}
@@ -225,7 +241,7 @@ func (c *Client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 
 // Listen creates a new listener for stcp hole punch.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
-func (c *Client) Listen(lPort uint16) (*Listener, error) {
+func (c *Client) Listen(lPort uint16) (*directtransport.Listener, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -239,7 +255,7 @@ func (c *Client) Listen(lPort uint16) (*Listener, error) {
 	defer c.mx.Unlock()
 
 	lAddr := dmsg.Addr{PK: c.lPK, Port: lPort}
-	lis := newListener(lAddr, freePort)
+	lis := directtransport.NewListener(lAddr, freePort)
 	c.lMap[lPort] = lis
 
 	return lis, nil
