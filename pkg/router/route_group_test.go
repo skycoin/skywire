@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
@@ -625,12 +625,12 @@ func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager, te
 	pk2 := keys[1].PK
 
 	// create test env
-	nEnv := snettest.NewEnv(t, keys, []string{stcp.Type})
+	nEnv := snettest.NewEnv(t, keys, []string{directtransport.StcpType})
 
 	tpDisc := transport.NewDiscoveryMock()
 	tpKeys := snettest.GenKeyPairs(2)
 
-	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, stcp.Type)
+	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, directtransport.StcpType)
 	require.NoError(t, err)
 	require.NotNil(t, tp1)
 	require.NotNil(t, tp2)
