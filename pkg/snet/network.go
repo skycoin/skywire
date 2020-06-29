@@ -12,7 +12,6 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
@@ -205,118 +204,50 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		clients.StcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
 	}
 
+	if conf.NetworkConfigs.STCPR != nil {
+		ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
+		if err != nil {
+			return nil, err
+		}
+
+		clients.stcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.STCPR.LocalAddr)
+		clients.stcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
+	}
+
+	if conf.NetworkConfigs.STCPH != nil {
+		ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPH.AddressResolver, conf.PubKey, conf.SecKey)
+		if err != nil {
+			return nil, err
+		}
+
+		clients.stcphC = stcph.NewClient(conf.PubKey, conf.SecKey, ar)
+		clients.stcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+	}
+
 	if conf.NetworkConfigs.SUDP != nil {
 		table := directtransport.NewTable(conf.NetworkConfigs.SUDP.PKTable)
 		clients.SudpC = sudp.NewClient(conf.PubKey, conf.SecKey, table, conf.NetworkConfigs.SUDP.LocalAddr)
 		clients.SudpC.SetLogger(logging.MustGetLogger("snet.sudpC"))
 	}
 
-	usingAddressResolver := conf.NetworkConfigs.STCPR != nil ||
-		conf.NetworkConfigs.STCPH != nil ||
-		conf.NetworkConfigs.SUDPR != nil ||
-		conf.NetworkConfigs.SUDPH != nil
-
-	if usingAddressResolver {
-		arAddr := conf.NetworkConfigs.STCPR.AddressResolver
-
-		var (
-			err    error
-			ar     arclient.APIClient
-			arDone = make(chan struct{}) // unblocks when address resolver is ready
-		)
-
-		// go routine to await address resolver
-		// TODO(nkryuchkov): encapsulate reconnection logic within AR client
-		go func() {
-			defer close(arDone)
-
-			log := logging.MustGetLogger("snet")
-
-			// we're doing this first try outside of retrier, because we need to log the error,
-			// to log this exactly once. without the error at all, it would be unclear for the
-			// user what's going on. also spamming it on each try won't do any good
-			ar, err = arclient.NewHTTP(arAddr, conf.PubKey, conf.SecKey)
-			if err != nil {
-				log.WithError(err).
-					Error("Failed to connect to address resolver. STCPR/STCPH services are temporarily unavailable. Retrying...")
-
-				retryLog := logging.MustGetLogger("snet.stcpr.retrier")
-				retry := netutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
-
-				err := retry.Do(context.Background(), func() error {
-					ar, err = arclient.NewHTTP(arAddr, conf.PubKey, conf.SecKey)
-					return err
-				})
-
-				if err != nil {
-					// This should not happen as retries is set to try indefinitely.
-					// If address resolver cannot be contacted indefinitely, 'arDone' will be blocked indefinitely.
-					log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
-				}
-
-			}
-			log.Infoln("Successfully connected to address resolver.")
-		}()
-
-		// setup stcpr
-		if conf.NetworkConfigs.STCPR != nil {
-			go func() {
-				<-arDone // wait for address resolver to be ready
-				ar := ar
-
-				clients.stcprCMu.Lock()
-				clients.stcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.STCPR.LocalAddr)
-				clients.stcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
-				// signal that network client is ready
-				close(clients.stcprCReadyCh)
-				clients.stcprCMu.Unlock()
-			}()
+	if conf.NetworkConfigs.SUDPR != nil {
+		ar, err := arclient.NewHTTP(conf.NetworkConfigs.SUDPR.AddressResolver, conf.PubKey, conf.SecKey)
+		if err != nil {
+			return nil, err
 		}
 
-		// setup stcph
-		if conf.NetworkConfigs.STCPH != nil {
-			go func() {
-				<-arDone // wait for address resolver to be ready
-				ar := ar
+		clients.sudprC = sudpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.SUDPR.LocalAddr)
+		clients.sudprC.SetLogger(logging.MustGetLogger("snet.sudprC"))
+	}
 
-				clients.stcphCMu.Lock()
-				clients.stcphC = stcph.NewClient(conf.PubKey, conf.SecKey, ar)
-				clients.stcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
-				// signal that network client is ready
-				close(clients.stcphCReadyCh)
-				clients.stcphCMu.Unlock()
-			}()
+	if conf.NetworkConfigs.SUDPH != nil {
+		ar, err := arclient.NewHTTP(conf.NetworkConfigs.SUDPH.AddressResolver, conf.PubKey, conf.SecKey)
+		if err != nil {
+			return nil, err
 		}
 
-		// setup sudpr
-		if conf.NetworkConfigs.SUDPR != nil {
-			go func() {
-				<-arDone // wait for address resolver to be ready
-				ar := ar
-
-				clients.sudprCMu.Lock()
-				clients.sudprC = sudpr.NewClient(conf.PubKey, conf.SecKey, ar, conf.NetworkConfigs.SUDPR.LocalAddr)
-				clients.sudprC.SetLogger(logging.MustGetLogger("snet.sudprC"))
-				// signal that network client is ready
-				close(clients.sudprCReadyCh)
-				clients.sudprCMu.Unlock()
-			}()
-		}
-
-		// setup sudph
-		if conf.NetworkConfigs.SUDPH != nil {
-			go func() {
-				<-arDone // wait for address resolver to be ready
-				ar := ar
-
-				clients.sudphCMu.Lock()
-				clients.sudphC = sudph.NewClient(conf.PubKey, conf.SecKey, ar)
-				clients.sudphC.SetLogger(logging.MustGetLogger("snet.sudphC"))
-				// signal that network client is ready
-				close(clients.sudphCReadyCh)
-				clients.sudphCMu.Unlock()
-			}()
-		}
+		clients.sudphC = sudph.NewClient(conf.PubKey, conf.SecKey, ar)
+		clients.sudphC.SetLogger(logging.MustGetLogger("snet.sudphC"))
 	}
 
 	return NewRaw(conf, &clients), nil
@@ -505,10 +436,10 @@ func (n *Network) Close() error {
 	defer n.netsMu.Unlock()
 
 	wg := new(sync.WaitGroup)
-	wg.Add(len(n.nets))
 
 	var dmsgErr error
 	if n.clients.DmsgC != nil {
+		wg.Add(1)
 		go func() {
 			dmsgErr = n.clients.DmsgC.Close()
 			wg.Done()
@@ -517,6 +448,7 @@ func (n *Network) Close() error {
 
 	var stcpErr error
 	if n.clients.StcpC != nil {
+		wg.Add(1)
 		go func() {
 			stcpErr = n.clients.StcpC.Close()
 			wg.Done()
@@ -526,6 +458,7 @@ func (n *Network) Close() error {
 	var stcprErr error
 	n.clients.stcprCMu.Lock()
 	if n.clients.stcprC != nil {
+		wg.Add(1)
 		go func() {
 			defer n.clients.stcprCMu.Unlock()
 
@@ -539,6 +472,7 @@ func (n *Network) Close() error {
 	var stcphErr error
 	n.clients.stcphCMu.Lock()
 	if n.clients.stcphC != nil {
+		wg.Add(1)
 		go func() {
 			defer n.clients.stcphCMu.Unlock()
 
@@ -551,6 +485,7 @@ func (n *Network) Close() error {
 
 	var sudpErr error
 	if n.clients.SudpC != nil {
+		wg.Add(1)
 		go func() {
 			sudpErr = n.clients.SudpC.Close()
 			wg.Done()
@@ -560,6 +495,7 @@ func (n *Network) Close() error {
 	var sudprErr error
 	n.clients.sudprCMu.Lock()
 	if n.clients.sudprC != nil {
+		wg.Add(1)
 		go func() {
 			defer n.clients.sudprCMu.Unlock()
 
@@ -573,6 +509,7 @@ func (n *Network) Close() error {
 	var sudphErr error
 	n.clients.sudphCMu.Lock()
 	if n.clients.sudphC != nil {
+		wg.Add(1)
 		go func() {
 			defer n.clients.sudphCMu.Unlock()
 
