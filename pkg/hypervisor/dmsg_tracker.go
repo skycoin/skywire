@@ -3,6 +3,7 @@ package hypervisor
 import (
 	"context"
 	"io"
+	"sort"
 	"sync"
 	"time"
 
@@ -223,6 +224,12 @@ func (dtm *DmsgTrackerManager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary 
 		}
 		out = append(out, dt.sum)
 	}
+
+	sort.Slice(out, func(i, j int) bool {
+		outI := out[i].PK.Big()
+		outJ := out[j].PK.Big()
+		return outI.Cmp(outJ) < 0
+	})
 
 	return out
 }
