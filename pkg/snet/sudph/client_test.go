@@ -1,4 +1,4 @@
-package stcph
+package sudph
 
 import (
 	"net"
