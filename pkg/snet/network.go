@@ -720,6 +720,10 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 		return makeConn(conn, network), nil
 	case sudpr.Type:
 		sudprC := n.clients.SudprC()
+		if sudprC == nil {
+			return nil, errors.New("sudpr client is not ready")
+		}
+
 		conn, err := sudprC.Dial(ctx, pk, port)
 		if err != nil {
 			return nil, fmt.Errorf("sudpr client: %w", err)
@@ -728,6 +732,10 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 		return makeConn(conn, network), nil
 	case sudph.Type:
 		sudphC := n.clients.SudphC()
+		if sudphC == nil {
+			return nil, errors.New("sudph client is not ready")
+		}
+
 		conn, err := sudphC.Dial(ctx, pk, port)
 		if err != nil {
 			return nil, fmt.Errorf("sudph client: %w", err)
