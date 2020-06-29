@@ -14,8 +14,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
 )
 
 // KeyPair holds a public/private key pair.
@@ -71,17 +69,17 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		switch network {
 		case dmsg.Type:
 			hasDmsg = true
-		case stcp.Type:
+		case directtransport.StcpType:
 			hasStcp = true
-		// case stcpr.Type:
+		// case directtransport.StcprType:
 		// 	hasStcpr = true
-		// case stcph.Type:
+		// case directtransport.StcphType:
 		// 	hasStcph = true
-		case sudp.Type:
+		case directtransport.SudpType:
 			hasSudp = true
-			// case sudpr.Type:
+			// case directtransport.SudprType:
 			// 	hasSudpr = true
-			// case sudph.Type:
+			// case directtransport.SudphType:
 			// 	hasSudph = true
 		}
 	}
@@ -137,13 +135,13 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 		if hasStcp {
 			conf := directtransport.ClientConfig{
-				Type:      stcp.Type,
+				Type:      directtransport.StcpType,
 				PK:        pairs.PK,
 				SK:        pairs.SK,
 				Table:     table,
 				LocalAddr: networkConfigs.STCP.LocalAddr,
 			}
-			clients.Direct[stcp.Type] = directtransport.NewClient(conf)
+			clients.Direct[directtransport.StcpType] = directtransport.NewClient(conf)
 		}
 
 		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
@@ -157,13 +155,13 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 		if hasSudp {
 			conf := directtransport.ClientConfig{
-				Type:      sudp.Type,
+				Type:      directtransport.SudpType,
 				PK:        pairs.PK,
 				SK:        pairs.SK,
 				Table:     table,
 				LocalAddr: networkConfigs.SUDP.LocalAddr,
 			}
-			clients.Direct[sudp.Type] = directtransport.NewClient(conf)
+			clients.Direct[directtransport.SudpType] = directtransport.NewClient(conf)
 		}
 
 		// if hasSudpr {
