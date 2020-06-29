@@ -625,12 +625,12 @@ func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager, te
 	pk2 := keys[1].PK
 
 	// create test env
-	nEnv := snettest.NewEnv(t, keys, []string{directtransport.StcpType})
+	nEnv := snettest.NewEnv(t, keys, []string{directtransport.STCPType})
 
 	tpDisc := transport.NewDiscoveryMock()
 	tpKeys := snettest.GenKeyPairs(2)
 
-	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, directtransport.StcpType)
+	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, directtransport.STCPType)
 	require.NoError(t, err)
 	require.NotNil(t, tp1)
 	require.NotNil(t, tp2)
