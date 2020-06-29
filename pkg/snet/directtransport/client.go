@@ -88,17 +88,17 @@ type client struct {
 	connCh              <-chan arclient.RemoteVisor
 	dialCh              chan cipher.PubKey
 	listener            net.Listener
-	lMap                map[uint16]*Listener // key: lPort
+	listeners           map[uint16]*Listener // key: lPort
 }
 
 // NewClient creates a net Client.
 func NewClient(conf ClientConfig) *client {
 	return &client{
-		conf:   conf,
-		log:    logging.MustGetLogger(conf.Type),
-		porter: porter.New(porter.PorterMinEphemeral),
-		lMap:   make(map[uint16]*Listener),
-		done:   make(chan struct{}),
+		conf:      conf,
+		log:       logging.MustGetLogger(conf.Type),
+		porter:    porter.New(porter.PorterMinEphemeral),
+		listeners: make(map[uint16]*Listener),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -316,7 +316,7 @@ func (c *client) acceptConn() error {
 		defer c.mu.Unlock()
 
 		var ok bool
-		if lis, ok = c.lMap[f2.DstAddr.Port]; !ok {
+		if lis, ok = c.listeners[f2.DstAddr.Port]; !ok {
 			return errors.New("not listening on given port")
 		}
 
@@ -368,7 +368,7 @@ func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 		defer c.mu.Unlock()
 
 		var ok bool
-		if lis, ok = c.lMap[f2.DstAddr.Port]; !ok {
+		if lis, ok = c.listeners[f2.DstAddr.Port]; !ok {
 			return errors.New("not listening on given port")
 		}
 
@@ -515,7 +515,6 @@ func (c *client) getDialer() dialFunc {
 		return kcp.Dial
 	case "sudph":
 		return func(addr string) (net.Conn, error) {
-			// TODO(nkryuchkov): Consider using c.dialTimeout for all transport types.
 			return c.dialTimeout(c.dialUDP, addr)
 		}
 	default:
@@ -609,7 +608,8 @@ func (c *client) Listen(lPort uint16) (*Listener, error) {
 
 	lAddr := dmsg.Addr{PK: c.conf.PK, Port: lPort}
 	lis := NewListener(lAddr, freePort)
-	c.lMap[lPort] = lis
+	c.listeners[lPort] = lis
+
 	return lis, nil
 }
 
@@ -618,6 +618,7 @@ func (c *client) Close() error {
 	if c == nil {
 		return nil
 	}
+
 	c.once.Do(func() {
 		close(c.done)
 
@@ -626,13 +627,13 @@ func (c *client) Close() error {
 
 		if c.listener != nil {
 			if err := c.listener.Close(); err != nil {
-				c.log.WithError(err).Warnf("Failed to close UDP listener")
+				c.log.WithError(err).Warnf("Failed to close listener")
 			}
 		}
 
-		for _, lis := range c.lMap {
+		for _, lis := range c.listeners {
 			if err := lis.Close(); err != nil {
-				c.log.WithError(err).Warnf("Failed to close sudp listener")
+				c.log.WithError(err).Warnf("Failed to close listener")
 			}
 		}
 	})
