@@ -53,6 +53,8 @@ type Error struct {
 	Error string `json:"error"`
 }
 
+//go:generate mockery -name APIClient -case underscore -inpkg
+
 // APIClient implements DMSG discovery API client.
 type APIClient interface {
 	io.Closer
