@@ -28,8 +28,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tphandshake"
 )
 
-var log = logging.MustGetLogger("arclient") // TODO(nkryuchkov): move to client
-
 const (
 	bindPath             = "/bind/"
 	bindSTCPRPath        = "/bind/stcpr"
@@ -87,6 +85,7 @@ var clients = make(map[key]*client)
 
 // client implements Client for address resolver API.
 type client struct {
+	log           *logging.Logger
 	httpClient    *httpauth.Client
 	pk            cipher.PubKey
 	sk            cipher.SecKey
@@ -127,6 +126,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 	}
 
 	client := &client{
+		log:           logging.MustGetLogger("arclient"),
 		httpClient:    httpAuthClient,
 		pk:            pk,
 		sk:            sk,
@@ -250,7 +250,7 @@ func (c *client) bind(ctx context.Context, path string, port string) error {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
+			c.log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
@@ -285,7 +285,7 @@ func (c *client) resolve(ctx context.Context, path string, pk cipher.PubKey) (Vi
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
+			c.log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
@@ -369,15 +369,15 @@ func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 		for {
 			kind, rawMsg, err := conn.Read(context.TODO())
 			if err != nil {
-				log.Errorf("Failed to read WS message: %v", err)
+				c.log.Errorf("Failed to read WS message: %v", err)
 				return
 			}
 
-			log.Infof("New WS message of type %v: %v", kind.String(), string(rawMsg))
+			c.log.Infof("New WS message of type %v: %v", kind.String(), string(rawMsg))
 
 			var remote RemoteVisor
 			if err := json.Unmarshal(rawMsg, &remote); err != nil {
-				log.Errorf("Failed to read unmarshal message: %v", err)
+				c.log.Errorf("Failed to read unmarshal message: %v", err)
 				continue
 			}
 
@@ -388,7 +388,7 @@ func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 	go func(conn *websocket.Conn, dialCh <-chan cipher.PubKey) {
 		for pk := range dialCh {
 			if err := conn.Write(ctx, websocket.MessageText, []byte(pk.String())); err != nil {
-				log.Errorf("Failed to write to %v: %v", pk, err)
+				c.log.Errorf("Failed to write to %v: %v", pk, err)
 				return
 			}
 		}
@@ -428,7 +428,7 @@ func (c *client) initSUDPH(ctx context.Context, filter *pfilter.PacketFilter) er
 		return err
 	}
 
-	log.Infof("SUDPH Local port: %v", localPort)
+	c.log.Infof("SUDPH Local port: %v", localPort)
 
 	arKCPConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, c.sudphConn)
 	if err != nil {
@@ -439,7 +439,7 @@ func (c *client) initSUDPH(ctx context.Context, filter *pfilter.PacketFilter) er
 	hs := tphandshake.InitiatorHandshake(c.sk, dmsg.Addr{PK: c.pk, Port: 0}, emptyAddr)
 
 	connConfig := tpconn.Config{
-		Log:       log,
+		Log:       c.log,
 		Conn:      arKCPConn,
 		LocalPK:   c.pk,
 		LocalSK:   c.sk,
@@ -485,15 +485,15 @@ func (c *client) initSUDPH(ctx context.Context, filter *pfilter.PacketFilter) er
 		for {
 			n, err := conn.Read(buf)
 			if err != nil {
-				log.Errorf("Failed to read SUDPH message: %v", err)
+				c.log.Errorf("Failed to read SUDPH message: %v", err)
 				return
 			}
 
-			log.Infof("New SUDPH message: %v", string(buf[:n]))
+			c.log.Infof("New SUDPH message: %v", string(buf[:n]))
 
 			var remote RemoteVisor
 			if err := json.Unmarshal(buf[:n], &remote); err != nil {
-				log.Errorf("Failed to read unmarshal message: %v", err)
+				c.log.Errorf("Failed to read unmarshal message: %v", err)
 				continue
 			}
 
@@ -503,7 +503,7 @@ func (c *client) initSUDPH(ctx context.Context, filter *pfilter.PacketFilter) er
 
 	go func() {
 		if err := c.keepAliveLoop(ctx, arConn); err != nil {
-			log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
+			c.log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
 		}
 	}()
 
@@ -519,11 +519,11 @@ func (c *client) Close() error {
 
 	if c.stcphConn != nil {
 		if err := c.stcphConn.Close(websocket.StatusNormalClosure, "client closed"); err != nil {
-			log.WithError(err).Errorf("Failed to close STCPH")
+			c.log.WithError(err).Errorf("Failed to close STCPH")
 		}
 	}
 
-	// TODO(nkryuchkov): use
+	// TODO(nkryuchkov): uncomment
 	// close(c.stcphAddrCh)
 	// close(c.sudphAddrCh)
 
