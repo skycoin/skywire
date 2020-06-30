@@ -135,7 +135,7 @@ func serveDmsg(ctx context.Context, hv *hypervisor.Hypervisor, conf hypervisor.C
 			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
 		}
 	}()
-	log.WithField("addr", fmt.Sprintf("dmsg://%s:%d", conf.PK, conf.DmsgPort)).
+	log.WithField("addr", dmsg.Addr{PK: conf.PK, Port: conf.DmsgPort}).
 		Info("Serving RPC client over dmsg.")
 }
 
