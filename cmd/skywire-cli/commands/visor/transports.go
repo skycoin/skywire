@@ -15,6 +15,9 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudph"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudpr"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -116,6 +119,9 @@ var addTpCmd = &cobra.Command{
 				stcp.Type,
 				stcpr.Type,
 				stcph.Type,
+				sudp.Type,
+				sudpr.Type,
+				sudph.Type,
 				dmsg.Type,
 			}
 
