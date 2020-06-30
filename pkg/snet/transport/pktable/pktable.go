@@ -1,4 +1,4 @@
-package directtransport
+package pktable
 
 import (
 	"bufio"

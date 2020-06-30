@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	// PorterMinEphemeral is the minimum ephemeral port.
-	PorterMinEphemeral uint16 = 49152
+	// MinEphemeral is the minimum ephemeral port.
+	MinEphemeral uint16 = 49152
 )
 
 // Porter reserves ports.
