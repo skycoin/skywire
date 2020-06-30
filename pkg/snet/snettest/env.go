@@ -13,6 +13,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
 )
@@ -62,9 +63,9 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
 	}
 
-	table := stcp.NewTable(tableEntries)
+	table := directtransport.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp, hasSudp bool
+	var hasDmsg, hasStcp /*, hasStcpr, hasStcph*/, hasSudp /*, hasSudpr, hasSudph*/ bool
 
 	for _, network := range networks {
 		switch network {
@@ -72,8 +73,16 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			hasDmsg = true
 		case stcp.Type:
 			hasStcp = true
+		// case stcpr.Type:
+		// 	hasStcpr = true
+		// case stcph.Type:
+		// 	hasStcph = true
 		case sudp.Type:
 			hasSudp = true
+			// case sudpr.Type:
+			// 	hasSudpr = true
+			// case sudph.Type:
+			// 	hasSudph = true
 		}
 	}
 
@@ -84,38 +93,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	const sudpBasePort = 7533
 
 	for i, pairs := range keys {
-		var clients snet.NetworkClients
-
-		if hasDmsg {
-			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go clients.DmsgC.Serve()
-		}
-
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
-		//
-		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		if hasStcp {
-			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
-		}
-
-		// if hasStcpr { //nolint:staticcheck
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		// }
-		//
-		// if hasStcph { //nolint:staticcheck
-		// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		// }
-
-		if hasSudp {
-			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table)
-		}
-
 		networkConfigs := snet.NetworkConfigs{
 			Dmsg: &snet.DmsgConfig{
 				SessionsCount: 1,
@@ -133,7 +110,55 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			SUDP: &snet.SUDPConfig{
 				LocalAddr: "127.0.0.1:" + strconv.Itoa(sudpBasePort+i),
 			},
+			SUDPR: &snet.SUDPRConfig{
+				LocalAddr:       "127.0.0.1:" + strconv.Itoa(sudpBasePort+i+1000),
+				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
+			SUDPH: &snet.SUDPHConfig{
+				AddressResolver: skyenv.TestAddressResolverAddr,
+			},
 		}
+
+		var clients snet.NetworkClients
+
+		if hasDmsg {
+			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go clients.DmsgC.Serve()
+		}
+
+		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
+		//
+		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
+		// if err != nil {
+		// 	panic(err)
+		// }
+
+		if hasStcp {
+			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.STCP.LocalAddr)
+		}
+
+		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
+		// if hasStcpr {
+		// 	clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+		// }
+		//
+		// if hasStcph {
+		// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
+		// }
+
+		if hasSudp {
+			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.SUDP.LocalAddr)
+		}
+
+		// if hasSudpr {
+		// TODO: https: //github.com/SkycoinProject/skywire-mainnet/issues/395
+		// clients.SudprC = sudpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
+		// }
+
+		// if hasSudph {
+		// 	clients.SudphC = sudph.NewClient(pairs.PK, pairs.SK, addressResolver)
+		// }
 
 		snetConfig := snet.Config{
 			PubKey:         pairs.PK,
@@ -172,15 +197,20 @@ func (e *Env) Teardown() { e.teardown() }
 func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-chan error) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("s"))
 	require.NoError(t, err)
+
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
 
 	srv = dmsg.NewServer(pk, sk, dc, &dmsg.ServerConfig{MaxSessions: 100}, nil)
+
 	errCh := make(chan error, 1)
+
 	go func() {
 		errCh <- srv.Serve(l, "")
 		close(errCh)
 	}()
+
 	<-srv.Ready()
+
 	return srv, errCh
 }
