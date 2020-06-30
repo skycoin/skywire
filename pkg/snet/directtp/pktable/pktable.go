@@ -11,6 +11,8 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
+const expectedFieldsLen = 2
+
 // PKTable associates public keys to udp addresses.
 type PKTable interface {
 	Addr(pk cipher.PubKey) (string, bool)
@@ -29,6 +31,7 @@ func NewTable(entries map[cipher.PubKey]string) PKTable {
 	for pk, addr := range entries {
 		reverse[addr] = pk
 	}
+
 	return &memoryTable{
 		entries: entries,
 		reverse: reverse,
@@ -42,10 +45,12 @@ func NewTableFromFile(path string) (PKTable, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		if err := f.Close(); err != nil {
 			fmt.Println("udp_factory: failed to close table file:", err)
@@ -59,15 +64,19 @@ func NewTableFromFile(path string) (PKTable, error) {
 
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
-		if len(fields) != 2 {
+
+		if len(fields) != expectedFieldsLen {
 			return nil, errors.New("pk file is invalid: each line should have two fields")
 		}
+
 		var pk cipher.PubKey
 		if err := pk.UnmarshalText([]byte(fields[0])); err != nil {
 			return nil, fmt.Errorf("pk file is invalid: each line should have two fields: %w", err)
 		}
+
 		entries[pk] = fields[1]
 	}
+
 	return NewTable(entries), nil
 }
 

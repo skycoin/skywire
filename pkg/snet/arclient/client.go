@@ -17,6 +17,7 @@ import (
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
@@ -103,9 +104,27 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 		return client, nil
 	}
 
+	log := logging.MustGetLogger("arclient")
+
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
-		return nil, fmt.Errorf("address resolver httpauth: %w", err)
+
+		log.WithError(err).
+			Error("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
+
+		retryLog := logging.MustGetLogger("snet.arclient.retrier")
+		retry := netutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
+
+		err := retry.Do(context.Background(), func() error {
+			httpAuthClient, err = httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
+			return err
+		})
+
+		if err != nil {
+			// This should not happen as retries is set to try indefinitely.
+			// If address resolver cannot be contacted indefinitely, 'arDone' will be blocked indefinitely.
+			log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
+		}
 	}
 
 	remoteURL, err := url.Parse(remoteAddr)
@@ -115,7 +134,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 
 	client := &client{
 		closed:        make(chan struct{}),
-		log:           logging.MustGetLogger("arclient"),
+		log:           log,
 		httpClient:    httpAuthClient,
 		pk:            pk,
 		sk:            sk,

@@ -38,7 +38,7 @@ func IsHandshakeError(err error) bool {
 	return ok
 }
 
-// middleware to add deadline and Error to handshakes
+// middleware to add deadline and Error to handshakes.
 func handshakeMiddleware(origin Handshake) Handshake {
 	return func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		if err = conn.SetDeadline(deadline); err != nil {
@@ -136,12 +136,12 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 	})
 }
 
-// Frame1 is the first frame of the handshake. (Resp -> Init)
+// Frame1 is the first frame of the handshake (Resp -> Init).
 type Frame1 struct {
 	Nonce [NonceSize]byte
 }
 
-// Frame2 is the second frame of the handshake. (Init -> Resp)
+// Frame2 is the second frame of the handshake (Init -> Resp).
 type Frame2 struct {
 	SrcAddr dmsg.Addr
 	DstAddr dmsg.Addr
