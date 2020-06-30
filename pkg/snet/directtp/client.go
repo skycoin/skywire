@@ -26,11 +26,11 @@ import (
 )
 
 const (
-	// HolePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
-	HolePunchMessage = "holepunch"
-
-	// DialTimeout represents a timeout for dialing.
-	DialTimeout = 30 * time.Second
+	// holePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
+	holePunchMessage   = "holepunch"
+	dialTimeout        = 30 * time.Second
+	dialConnPriority   = 20
+	visorsConnPriority = 100
 )
 
 var (
@@ -42,6 +42,9 @@ var (
 
 	// ErrAlreadyListening is returned when transport is already listening.
 	ErrAlreadyListening = errors.New("already listening")
+
+	// ErrPortOccupied is returned when port is occupied.
+	ErrPortOccupied = errors.New("port is already occupied")
 )
 
 // Client is the central control for incoming and outgoing 'Conn's.
@@ -108,8 +111,7 @@ func (c *client) Serve() error {
 
 	c.listener = l
 
-	switch c.conf.Type {
-	case tptypes.STCPR:
+	if c.conf.Type == tptypes.STCPR {
 		_, port, err := net.SplitHostPort(c.listener.Addr().String())
 		if err != nil {
 			return err
@@ -126,6 +128,7 @@ func (c *client) Serve() error {
 		for {
 			if err := c.acceptConn(); err != nil {
 				c.log.Warnf("failed to accept incoming connection: %v", err)
+
 				if !tphandshake.IsHandshakeError(err) {
 					c.log.Warnf("stopped serving")
 					return
@@ -152,6 +155,7 @@ func (c *client) acceptConn() error {
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
 	var lis *tplistener.Listener
+
 	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -218,7 +222,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 			return nil, fmt.Errorf("resolve PK: %w", err)
 		}
 
-		c.log.Infof("Resolved PK %v to visor data %v, dialing", rPK, visorData)
+		c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
 
 		conn, err := c.dialVisor(visorData)
 		if err != nil {
@@ -292,7 +296,7 @@ func (c *client) getListener() listenFunc {
 			c.packetListener = packetListener
 
 			c.packetFilter = pfilter.NewPacketFilter(packetListener)
-			c.visorsConn = c.packetFilter.NewConn(100, nil)
+			c.visorsConn = c.packetFilter.NewConn(visorsConnPriority, nil)
 
 			c.packetFilter.Start()
 
@@ -310,7 +314,8 @@ func (c *client) getListener() listenFunc {
 					}
 
 					c.log.Infof("Sending hole punch packet to %v", addr)
-					if _, err := c.visorsConn.WriteTo([]byte(HolePunchMessage), udpAddr); err != nil {
+
+					if _, err := c.visorsConn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
 						c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
 						continue
 					}
@@ -333,9 +338,9 @@ func (c *client) dialUDP(remoteAddr string) (net.Conn, error) {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
 	}
 
-	dialConn := c.packetFilter.NewConn(20, packetfilter.NewKCPConversationFilter())
+	dialConn := c.packetFilter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter())
 
-	if _, err := dialConn.WriteTo([]byte(HolePunchMessage), rAddr); err != nil {
+	if _, err := dialConn.WriteTo([]byte(holePunchMessage), rAddr); err != nil {
 		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)
 	}
 
@@ -348,7 +353,7 @@ func (c *client) dialUDP(remoteAddr string) (net.Conn, error) {
 }
 
 func (c *client) dialTimeout(dialer dialFunc, addr string) (net.Conn, error) {
-	timer := time.NewTimer(DialTimeout)
+	timer := time.NewTimer(dialTimeout)
 	defer timer.Stop()
 
 	c.log.Infof("Dialing %v", addr)
@@ -394,7 +399,7 @@ func (c *client) Listen(lPort uint16) (*tplistener.Listener, error) {
 
 	ok, freePort := c.porter.Reserve(lPort)
 	if !ok {
-		return nil, errors.New("port is already occupied")
+		return nil, ErrPortOccupied
 	}
 
 	c.mu.Lock()
@@ -444,6 +449,7 @@ func (c *client) Close() error {
 			}
 		}
 	})
+
 	return nil
 }
 
