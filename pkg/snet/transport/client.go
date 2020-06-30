@@ -18,7 +18,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/listener"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/tplistener"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/pktable"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/porter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tpconn"
@@ -62,7 +62,7 @@ var (
 
 type Client interface { // TODO: rename
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error)
-	Listen(lPort uint16) (*listener.Listener, error)
+	Listen(lPort uint16) (*tplistener.Listener, error)
 	Serve() error
 	Close() error
 	Type() string
@@ -91,7 +91,7 @@ type client struct {
 	stcphConnCh    <-chan arclient.RemoteVisor
 	dialCh         chan cipher.PubKey
 	listener       net.Listener
-	listeners      map[uint16]*listener.Listener // key: lPort
+	listeners      map[uint16]*tplistener.Listener // key: lPort
 }
 
 // NewClient creates a net Client.
@@ -100,7 +100,7 @@ func NewClient(conf ClientConfig) *client {
 		conf:      conf,
 		log:       logging.MustGetLogger(conf.Type),
 		porter:    porter.New(porter.MinEphemeral),
-		listeners: make(map[uint16]*listener.Listener),
+		listeners: make(map[uint16]*tplistener.Listener),
 		done:      make(chan struct{}),
 	}
 }
@@ -264,7 +264,7 @@ func (c *client) acceptConn() error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	var lis *listener.Listener
+	var lis *tplistener.Listener
 	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -315,7 +315,7 @@ func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	var lis *listener.Listener
+	var lis *tplistener.Listener
 
 	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
 		c.mu.Lock()
@@ -537,7 +537,7 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 
 // Listen creates a new listener for sudp.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
-func (c *client) Listen(lPort uint16) (*listener.Listener, error) {
+func (c *client) Listen(lPort uint16) (*tplistener.Listener, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -551,7 +551,7 @@ func (c *client) Listen(lPort uint16) (*listener.Listener, error) {
 	defer c.mu.Unlock()
 
 	lAddr := dmsg.Addr{PK: c.conf.PK, Port: lPort}
-	lis := listener.NewListener(lAddr, freePort)
+	lis := tplistener.NewListener(lAddr, freePort)
 	c.listeners[lPort] = lis
 
 	return lis, nil
