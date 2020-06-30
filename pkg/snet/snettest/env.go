@@ -65,7 +65,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	table := pktable.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp, hasSudpr, hasSudph bool
+	var hasDmsg, hasStcp, hasStcpr, hasSudph bool
 
 	for _, network := range networks {
 		switch network {
@@ -75,12 +75,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			hasStcp = true
 		case tptypes.STCPR:
 			hasStcpr = true
-		case tptypes.STCPH:
-			hasStcph = true
-		case tptypes.SUDP:
-			hasSudp = true
-		case tptypes.SUDPR:
-			hasSudpr = true
 		case tptypes.SUDPH:
 			hasSudph = true
 		}
@@ -90,7 +84,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	ns := make([]*snet.Network, len(keys))
 
 	const stcpBasePort = 7033
-	const sudpBasePort = 7533
 
 	for i, pairs := range keys {
 		networkConfigs := snet.NetworkConfigs{
@@ -104,16 +97,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				LocalAddr:       "127.0.0.1:" + strconv.Itoa(stcpBasePort+i+1000),
 				AddressResolver: skyenv.TestAddressResolverAddr,
 			},
-			STCPH: &snet.STCPHConfig{
-				AddressResolver: skyenv.TestAddressResolverAddr,
-			},
-			SUDP: &snet.SUDPConfig{
-				LocalAddr: "127.0.0.1:" + strconv.Itoa(sudpBasePort+i),
-			},
-			SUDPR: &snet.SUDPRConfig{
-				LocalAddr:       "127.0.0.1:" + strconv.Itoa(sudpBasePort+i+1000),
-				AddressResolver: skyenv.TestAddressResolverAddr,
-			},
+
 			SUDPH: &snet.SUDPHConfig{
 				AddressResolver: skyenv.TestAddressResolverAddr,
 			},
@@ -152,40 +136,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			}
 
 			clients.Direct[tptypes.STCPR] = transport.NewClient(conf)
-		}
-
-		if hasStcph {
-			conf := transport.ClientConfig{
-				Type:            tptypes.STCPH,
-				PK:              pairs.PK,
-				SK:              pairs.SK,
-				AddressResolver: addressResolver,
-			}
-
-			clients.Direct[tptypes.STCPH] = transport.NewClient(conf)
-		}
-
-		if hasSudp {
-			conf := transport.ClientConfig{
-				Type:      tptypes.SUDP,
-				PK:        pairs.PK,
-				SK:        pairs.SK,
-				Table:     table,
-				LocalAddr: networkConfigs.SUDP.LocalAddr,
-			}
-			clients.Direct[tptypes.SUDP] = transport.NewClient(conf)
-		}
-
-		if hasSudpr {
-			conf := transport.ClientConfig{
-				Type:            tptypes.SUDPR,
-				PK:              pairs.PK,
-				SK:              pairs.SK,
-				AddressResolver: addressResolver,
-				LocalAddr:       networkConfigs.SUDPR.LocalAddr,
-			}
-
-			clients.Direct[tptypes.SUDPR] = transport.NewClient(conf)
 		}
 
 		if hasSudph {
