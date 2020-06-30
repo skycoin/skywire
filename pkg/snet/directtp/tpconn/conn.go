@@ -10,8 +10,8 @@ import (
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/noisewrapper"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tphandshake"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/noisewrapper"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
 )
 
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
