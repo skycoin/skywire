@@ -23,7 +23,6 @@ type V0 struct {
 
 	STCP  *snet.STCPConfig  `json:"stcp,omitempty"`
 	STCPR *snet.STCPRConfig `json:"stcpr,omitempty"`
-	STCPH *snet.STCPHConfig `json:"stcph,omitempty"`
 
 	Transport *struct {
 		Discovery string      `json:"discovery"`

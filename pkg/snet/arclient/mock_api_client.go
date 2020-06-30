@@ -31,29 +31,6 @@ func (_m *MockAPIClient) Bind(ctx context.Context, tType string, port string) er
 	return r0
 }
 
-// BindSTCPH provides a mock function with given fields: ctx, dialCh
-func (_m *MockAPIClient) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
-	ret := _m.Called(ctx, dialCh)
-
-	var r0 <-chan RemoteVisor
-	if rf, ok := ret.Get(0).(func(context.Context, <-chan cipher.PubKey) <-chan RemoteVisor); ok {
-		r0 = rf(ctx, dialCh)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(<-chan RemoteVisor)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, <-chan cipher.PubKey) error); ok {
-		r1 = rf(ctx, dialCh)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
 // BindSUDPH provides a mock function with given fields: ctx, filter
 func (_m *MockAPIClient) BindSUDPH(ctx context.Context, filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
 	ret := _m.Called(ctx, filter)
@@ -86,20 +63,6 @@ func (_m *MockAPIClient) Close() error {
 		r0 = rf()
 	} else {
 		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// LocalTCPAddr provides a mock function with given fields:
-func (_m *MockAPIClient) LocalTCPAddr() string {
-	ret := _m.Called()
-
-	var r0 string
-	if rf, ok := ret.Get(0).(func() string); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(string)
 	}
 
 	return r0
