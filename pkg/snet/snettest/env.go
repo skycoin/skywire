@@ -53,7 +53,7 @@ type Env struct {
 func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	// Prepare `dmsg`.
-	dmsgD := disc.NewMock()
+	dmsgD := disc.NewMock(0)
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
 
 	const baseSTCPPort = 7033
@@ -201,7 +201,8 @@ func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
 
-	srv = dmsg.NewServer(pk, sk, dc, 100)
+	srv = dmsg.NewServer(pk, sk, dc, &dmsg.ServerConfig{MaxSessions: 100}, nil)
+
 	errCh := make(chan error, 1)
 
 	go func() {

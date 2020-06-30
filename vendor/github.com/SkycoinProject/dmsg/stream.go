@@ -195,6 +195,11 @@ func (s *Stream) RawRemoteAddr() Addr {
 	return s.rAddr
 }
 
+// ServerPK returns the remote PK of the dmsg.Server used to relay frames to and from the remote client.
+func (s *Stream) ServerPK() cipher.PubKey {
+	return s.ses.RemotePK()
+}
+
 // StreamID returns the stream ID.
 func (s *Stream) StreamID() uint32 {
 	return s.yStr.StreamID()
