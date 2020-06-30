@@ -16,9 +16,9 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/pktable"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -102,7 +102,7 @@ type NetworkConfigs struct {
 // NetworkClients represents all network clients.
 type NetworkClients struct {
 	DmsgC  *dmsg.Client
-	Direct map[string]transport.Client
+	Direct map[string]directtp.Client
 }
 
 // Network represents a network between nodes in Skywire.
@@ -115,7 +115,7 @@ type Network struct {
 // New creates a network from a config.
 func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	clients := NetworkClients{
-		Direct: make(map[string]transport.Client),
+		Direct: make(map[string]directtp.Client),
 	}
 
 	if conf.NetworkConfigs.Dmsg != nil {
@@ -142,14 +142,14 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 	// TODO(nkryuchkov): Generic code for clients below.
 	if conf.NetworkConfigs.STCP != nil {
-		conf := transport.ClientConfig{
+		conf := directtp.Config{
 			Type:      tptypes.STCP,
 			PK:        conf.PubKey,
 			SK:        conf.SecKey,
 			Table:     pktable.NewTable(conf.NetworkConfigs.STCP.PKTable),
 			LocalAddr: conf.NetworkConfigs.STCP.LocalAddr,
 		}
-		clients.Direct[tptypes.STCP] = transport.NewClient(conf)
+		clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 	}
 
 	if conf.NetworkConfigs.STCPR != nil {
@@ -158,7 +158,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			return nil, err
 		}
 
-		conf := transport.ClientConfig{
+		conf := directtp.Config{
 			Type:            tptypes.STCPR,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
@@ -166,7 +166,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			AddressResolver: ar,
 		}
 
-		clients.Direct[tptypes.STCPR] = transport.NewClient(conf)
+		clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
 	}
 
 	if conf.NetworkConfigs.SUDPH != nil {
@@ -175,14 +175,14 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			return nil, err
 		}
 
-		conf := transport.ClientConfig{
+		conf := directtp.Config{
 			Type:            tptypes.SUDPH,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
 			AddressResolver: ar,
 		}
 
-		clients.Direct[tptypes.SUDPH] = transport.NewClient(conf)
+		clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf)
 	}
 
 	return NewRaw(conf, clients), nil
@@ -302,17 +302,17 @@ func (n *Network) TransportNetworks() []string { return n.networks }
 func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
 
 // STcp returns the underlying stcp.Client.
-func (n *Network) STcp() transport.Client {
+func (n *Network) STcp() directtp.Client {
 	return n.clients.Direct[tptypes.STCP]
 }
 
 // STcpr returns the underlying stcpr.Client.
-func (n *Network) STcpr() transport.Client {
+func (n *Network) STcpr() directtp.Client {
 	return n.clients.Direct[tptypes.STCPR]
 }
 
 // SUdpH returns the underlying sudph.Client.
-func (n *Network) SUdpH() transport.Client {
+func (n *Network) SUdpH() directtp.Client {
 	return n.clients.Direct[tptypes.SUDPH]
 }
 
