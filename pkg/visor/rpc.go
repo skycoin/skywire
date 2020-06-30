@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/rpc"
-	"os"
 	"time"
-
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -18,6 +15,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rpcutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -492,27 +490,16 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	<<< VISOR MANAGEMENT >>>
 */
 
-const exitDelay = 100 * time.Millisecond
-
 // Restart restarts visor.
 func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
 	rpcutil.LogCall(r.log, "Restart", nil)(nil, nil)
 
-	defer func() {
-		if err == nil {
-			go func() {
-				time.Sleep(exitDelay)
-				os.Exit(0)
-			}()
-		}
-	}()
-
 	if r.visor.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
 
-	return r.visor.restartCtx.Start()
+	return r.visor.restartCtx.Restart()
 }
 
 // Exec executes a given command in cmd and writes its output to out.
@@ -524,18 +511,28 @@ func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 }
 
 // Update updates visor.
-func (r *RPC) Update(_ *struct{}, updated *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "Update", nil)(updated, &err)
+func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "Update", updateConfig)(updated, &err)
 
-	*updated, err = r.visor.Update()
+	config := updater.UpdateConfig{}
+
+	if updateConfig != nil {
+		config = *updateConfig
+	}
+
+	*updated, err = r.visor.Update(config)
 	return
 }
 
 // UpdateAvailable checks if visor update is available.
-func (r *RPC) UpdateAvailable(_ *struct{}, version *updater.Version) (err error) {
+func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version) (err error) {
 	defer rpcutil.LogCall(r.log, "UpdateAvailable", nil)(version, &err)
 
-	v, err := r.visor.UpdateAvailable()
+	if channel == nil {
+		return updater.ErrUnknownChannel
+	}
+
+	v, err := r.visor.UpdateAvailable(*channel)
 	if err != nil {
 		return err
 	}

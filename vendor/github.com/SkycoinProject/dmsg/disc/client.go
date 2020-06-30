@@ -54,6 +54,7 @@ func (c *httpClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 	if err != nil {
 		return nil, err
 	}
+	addKeepAlive(req)
 	req = req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)
@@ -100,6 +101,7 @@ func (c *httpClient) PostEntry(ctx context.Context, e *Entry) error {
 	if err != nil {
 		return err
 	}
+	addKeepAlive(req)
 	req = req.WithContext(ctx)
 
 	req.Header.Set("Content-Type", "application/json")
@@ -178,6 +180,7 @@ func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	addKeepAlive(req)
 	req = req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)
@@ -209,4 +212,8 @@ func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 	}
 
 	return entries, nil
+}
+
+func addKeepAlive(req *http.Request) {
+	req.Header.Add("Connection", "keep-alive")
 }
