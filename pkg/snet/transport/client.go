@@ -1,4 +1,4 @@
-package directtransport
+package transport
 
 import (
 	"context"
@@ -18,7 +18,11 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport/porter"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/listener"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/pktable"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/porter"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tpconn"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tphandshake"
 )
 
 const (
@@ -57,8 +61,8 @@ var (
 )
 
 type Client interface { // TODO: rename
-	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error)
-	Listen(lPort uint16) (*Listener, error)
+	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error)
+	Listen(lPort uint16) (*listener.Listener, error)
 	Serve() error
 	Close() error
 	Type() string
@@ -69,26 +73,25 @@ type ClientConfig struct {
 	PK              cipher.PubKey
 	SK              cipher.SecKey
 	LocalAddr       string
-	Table           PKTable
+	Table           pktable.PKTable
 	AddressResolver arclient.APIClient // TODO(nkryuchkov): close it properly
 }
 
 // client is the central control for incoming and outgoing 'Conn's.
 type client struct {
-	conf                ClientConfig
-	mu                  sync.Mutex
-	done                chan struct{}
-	once                sync.Once
-	log                 *logging.Logger
-	porter              *porter.Porter
-	packetFilter        *pfilter.PacketFilter
-	listenerConn        net.PacketConn
-	visorConn           net.PacketConn
-	addressResolverConn net.PacketConn
-	connCh              <-chan arclient.RemoteVisor
-	dialCh              chan cipher.PubKey
-	listener            net.Listener
-	listeners           map[uint16]*Listener // key: lPort
+	conf           ClientConfig
+	mu             sync.Mutex
+	done           chan struct{}
+	once           sync.Once
+	log            *logging.Logger
+	porter         *porter.Porter
+	packetFilter   *pfilter.PacketFilter
+	packetListener net.PacketConn
+	visorConn      net.PacketConn
+	stcphConnCh    <-chan arclient.RemoteVisor
+	dialCh         chan cipher.PubKey
+	listener       net.Listener
+	listeners      map[uint16]*listener.Listener // key: lPort
 }
 
 // NewClient creates a net Client.
@@ -96,8 +99,8 @@ func NewClient(conf ClientConfig) *client {
 	return &client{
 		conf:      conf,
 		log:       logging.MustGetLogger(conf.Type),
-		porter:    porter.New(porter.PorterMinEphemeral),
-		listeners: make(map[uint16]*Listener),
+		porter:    porter.New(porter.MinEphemeral),
+		listeners: make(map[uint16]*listener.Listener),
 		done:      make(chan struct{}),
 	}
 }
@@ -110,100 +113,51 @@ func (c *client) Serve() error {
 			return ErrAlreadyListening
 		}
 	case SUDPHType:
-		if c.listenerConn != nil {
+		if c.packetListener != nil {
 			return ErrAlreadyListening
 		}
 	case STCPHType:
-		if c.connCh != nil {
+		if c.stcphConnCh != nil {
 			return ErrAlreadyListening
 		}
 	}
 
 	switch c.conf.Type {
 	case STCPType, STCPRType:
-		listener, err := net.Listen("tcp", c.conf.LocalAddr)
+		l, err := net.Listen("tcp", c.conf.LocalAddr)
 		if err != nil {
 			return err
 		}
 
-		c.listener = listener
+		c.listener = l
 
 	case SUDPType, SUDPRType:
-		listener, err := kcp.Listen(c.conf.LocalAddr)
+		l, err := kcp.Listen(c.conf.LocalAddr)
 		if err != nil {
 			return err
 		}
 
-		c.listener = listener
+		c.listener = l
 
 	case SUDPHType:
-		ctx := context.Background()
-		network := "udp"
-
-		lAddr, err := net.ResolveUDPAddr(network, "")
+		lAddr, err := net.ResolveUDPAddr("udp", "")
 		if err != nil {
 			return fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
 		}
 
-		c.conf.LocalAddr = lAddr.String() // TODO(nkryuchkov): remove?
-
-		c.log.Infof("SUDPH: Resolved local addr from %v to %v", "", lAddr)
-
-		rAddr, err := net.ResolveUDPAddr(network, c.conf.AddressResolver.RemoteUDPAddr())
+		packetListener, err := net.ListenUDP("udp", lAddr)
 		if err != nil {
 			return err
 		}
 
-		c.log.Infof("SUDPH dialing udp from %v to %v", lAddr, rAddr)
+		c.packetListener = packetListener
 
-		listenerConn, err := net.ListenUDP(network, lAddr)
-		if err != nil {
-			return err
-		}
-
-		c.listenerConn = listenerConn
-
-		c.packetFilter = pfilter.NewPacketFilter(listenerConn)
+		c.packetFilter = pfilter.NewPacketFilter(packetListener)
 		c.visorConn = c.packetFilter.NewConn(100, nil)
-		c.addressResolverConn = c.packetFilter.NewConn(10, packetfilter.NewAddressFilter(rAddr))
 
 		c.packetFilter.Start()
 
-		_, localPort, err := net.SplitHostPort(c.addressResolverConn.LocalAddr().String())
-		if err != nil {
-			return err
-		}
-
-		c.log.Infof("SUDPH Local port: %v", localPort)
-
-		arKCPConn, err := kcp.NewConn(c.conf.AddressResolver.RemoteUDPAddr(), nil, 0, 0, c.addressResolverConn)
-		if err != nil {
-			return err
-		}
-
-		c.log.Infof("SUDPH updating local UDP addr from %v to %v", c.conf.LocalAddr, arKCPConn.LocalAddr().String())
-
-		// TODO(nkryuchkov): consider moving some parts to address-resolver client
-		emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
-		hs := InitiatorHandshake(c.conf.SK, dmsg.Addr{PK: c.conf.PK, Port: 0}, emptyAddr)
-
-		connConfig := ConnConfig{
-			Log:       c.log,
-			Conn:      arKCPConn,
-			LocalPK:   c.conf.PK,
-			LocalSK:   c.conf.SK,
-			Deadline:  time.Now().Add(HandshakeTimeout),
-			Handshake: hs,
-			Encrypt:   false,
-			Initiator: true,
-		}
-
-		arConn, err := NewConn(connConfig)
-		if err != nil {
-			return fmt.Errorf("newConn: %w", err)
-		}
-
-		addrCh, err := c.conf.AddressResolver.BindSUDPH(ctx, arConn, localPort)
+		addrCh, err := c.conf.AddressResolver.BindSUDPH(context.Background(), c.packetFilter)
 		if err != nil {
 			return err
 		}
@@ -244,7 +198,7 @@ func (c *client) Serve() error {
 			return fmt.Errorf("ws: %w", err)
 		}
 
-		c.connCh = connCh
+		c.stcphConnCh = connCh
 		c.dialCh = dialCh
 
 		c.log.Infof("listening websocket events on %v", c.conf.AddressResolver.LocalTCPAddr())
@@ -270,7 +224,7 @@ func (c *client) Serve() error {
 	go func() {
 		switch c.Type() {
 		case STCPHType:
-			for addr := range c.connCh {
+			for addr := range c.stcphConnCh {
 				c.log.Infof("Received signal to dial %v", addr)
 
 				go func(addr arclient.RemoteVisor) {
@@ -284,7 +238,7 @@ func (c *client) Serve() error {
 			for {
 				if err := c.acceptConn(); err != nil {
 					c.log.Warnf("failed to accept incoming connection: %v", err)
-					if !IsHandshakeError(err) {
+					if !tphandshake.IsHandshakeError(err) {
 						c.log.Warnf("stopped serving")
 						return
 					}
@@ -310,8 +264,8 @@ func (c *client) acceptConn() error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	var lis *Listener
-	hs := ResponderHandshake(func(f2 Frame2) error {
+	var lis *listener.Listener
+	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 
@@ -323,19 +277,19 @@ func (c *client) acceptConn() error {
 		return nil
 	})
 
-	connConfig := ConnConfig{
+	connConfig := tpconn.Config{
 		Log:       c.log,
 		Conn:      conn,
 		LocalPK:   c.conf.PK,
 		LocalSK:   c.conf.SK,
-		Deadline:  time.Now().Add(HandshakeTimeout),
+		Deadline:  time.Now().Add(tphandshake.Timeout),
 		Handshake: hs,
 		FreePort:  nil,
 		Encrypt:   true,
 		Initiator: false,
 	}
 
-	wrappedConn, err := NewConn(connConfig)
+	wrappedConn, err := tpconn.NewConn(connConfig)
 	if err != nil {
 		return fmt.Errorf("newConn: %w", err)
 	}
@@ -361,9 +315,9 @@ func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
-	var lis *Listener
+	var lis *listener.Listener
 
-	hs := ResponderHandshake(func(f2 Frame2) error {
+	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 
@@ -375,19 +329,19 @@ func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 		return nil
 	})
 
-	connConfig := ConnConfig{
+	connConfig := tpconn.Config{
 		Log:       c.log,
 		Conn:      tcpConn,
 		LocalPK:   c.conf.PK,
 		LocalSK:   c.conf.SK,
-		Deadline:  time.Now().Add(HandshakeTimeout),
+		Deadline:  time.Now().Add(tphandshake.Timeout),
 		Handshake: hs,
 		FreePort:  nil,
 		Encrypt:   true,
 		Initiator: false,
 	}
 
-	conn, err := NewConn(connConfig)
+	conn, err := tpconn.NewConn(connConfig)
 	if err != nil {
 		return err
 	}
@@ -396,7 +350,7 @@ func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 }
 
 // Dial dials a new sudp.Conn to specified remote public key and port.
-func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -476,21 +430,21 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Co
 		return nil, err
 	}
 
-	hs := InitiatorHandshake(c.conf.SK, dmsg.Addr{PK: c.conf.PK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
+	hs := tphandshake.InitiatorHandshake(c.conf.SK, dmsg.Addr{PK: c.conf.PK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	connConfig := ConnConfig{
+	connConfig := tpconn.Config{
 		Log:       c.log,
 		Conn:      visorConn,
 		LocalPK:   c.conf.PK,
 		LocalSK:   c.conf.SK,
-		Deadline:  time.Now().Add(HandshakeTimeout),
+		Deadline:  time.Now().Add(tphandshake.Timeout),
 		Handshake: hs,
 		FreePort:  freePort,
 		Encrypt:   true,
 		Initiator: true,
 	}
 
-	return NewConn(connConfig)
+	return tpconn.NewConn(connConfig)
 }
 
 // TODO: same for listener
@@ -523,20 +477,10 @@ func (c *client) getDialer() dialFunc {
 }
 
 func (c *client) dialUDP(remoteAddr string) (net.Conn, error) {
-	c.log.Infof("SUDPH c.localUDPAddr: %q", c.conf.LocalAddr)
-
-	// TODO(nkryuchkov): Dial using listener conn?
-	lAddr, err := net.ResolveUDPAddr("udp", c.conf.LocalAddr)
-	if err != nil {
-		return nil, fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
-	}
-
 	rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
 	}
-
-	c.log.Infof("SUDPH: Resolved local addr from %v to %v", c.conf.LocalAddr, lAddr)
 
 	dialConn := c.packetFilter.NewConn(20, packetfilter.NewKCPConversationFilter())
 
@@ -593,7 +537,7 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 
 // Listen creates a new listener for sudp.
 // The created Listener cannot actually accept remote connections unless Serve is called beforehand.
-func (c *client) Listen(lPort uint16) (*Listener, error) {
+func (c *client) Listen(lPort uint16) (*listener.Listener, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -607,7 +551,7 @@ func (c *client) Listen(lPort uint16) (*Listener, error) {
 	defer c.mu.Unlock()
 
 	lAddr := dmsg.Addr{PK: c.conf.PK, Port: lPort}
-	lis := NewListener(lAddr, freePort)
+	lis := listener.NewListener(lAddr, freePort)
 	c.listeners[lPort] = lis
 
 	return lis, nil

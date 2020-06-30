@@ -1,4 +1,4 @@
-package directtransport
+package tphandshake
 
 import (
 	"bytes"
@@ -14,31 +14,31 @@ import (
 )
 
 const (
-	// HandshakeTimeout is the default timeout for a handshake.
-	HandshakeTimeout = time.Second * 10
+	// Timeout is the default timeout for a handshake.
+	Timeout = time.Second * 10
 
-	// HandshakeNonceSize is the size of the nonce for the handshake.
-	HandshakeNonceSize = 16
+	// NonceSize is the size of the nonce for the handshake.
+	NonceSize = 16
 
-	// HandshakeMessage is sent by initiator to start a handshake.
-	HandshakeMessage = "get_nonce"
+	// Message is sent by initiator to start a handshake.
+	Message = "get_nonce"
 )
 
-// HandshakeError occurs when the handshake fails.
-type HandshakeError string
+// Error occurs when the handshake fails.
+type Error string
 
 // Error implements error.
-func (err HandshakeError) Error() string {
+func (err Error) Error() string {
 	return fmt.Sprintln("handshake failed:", string(err))
 }
 
 // IsHandshakeError determines whether the error occurred during the handshake.
 func IsHandshakeError(err error) bool {
-	_, ok := err.(HandshakeError)
+	_, ok := err.(Error)
 	return ok
 }
 
-// middleware to add deadline and HandshakeError to handshakes
+// middleware to add deadline and Error to handshakes
 func handshakeMiddleware(origin Handshake) Handshake {
 	return func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		if err = conn.SetDeadline(deadline); err != nil {
@@ -46,7 +46,7 @@ func handshakeMiddleware(origin Handshake) Handshake {
 		}
 
 		if lAddr, rAddr, err = origin(conn, deadline); err != nil {
-			err = HandshakeError(err.Error())
+			err = Error(err.Error())
 			return
 		}
 
@@ -105,8 +105,8 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 			return dmsg.Addr{}, dmsg.Addr{}, err
 		}
 
-		var nonce [HandshakeNonceSize]byte
-		copy(nonce[:], cipher.RandByte(HandshakeNonceSize))
+		var nonce [NonceSize]byte
+		copy(nonce[:], cipher.RandByte(NonceSize))
 
 		if err = writeFrame1(conn, nonce); err != nil {
 			return dmsg.Addr{}, dmsg.Addr{}, err
@@ -138,14 +138,14 @@ func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
 
 // Frame1 is the first frame of the handshake. (Resp -> Init)
 type Frame1 struct {
-	Nonce [HandshakeNonceSize]byte
+	Nonce [NonceSize]byte
 }
 
 // Frame2 is the second frame of the handshake. (Init -> Resp)
 type Frame2 struct {
 	SrcAddr dmsg.Addr
 	DstAddr dmsg.Addr
-	Nonce   [HandshakeNonceSize]byte
+	Nonce   [NonceSize]byte
 	Sig     cipher.Sig
 }
 
@@ -175,7 +175,7 @@ func (f2 *Frame2) Sign(srcSK cipher.SecKey) error {
 }
 
 // Verify verifies the signature field within Frame2.
-func (f2 Frame2) Verify(nonce [HandshakeNonceSize]byte) error {
+func (f2 Frame2) Verify(nonce [NonceSize]byte) error {
 	if f2.Nonce != nonce {
 		return errors.New("unexpected nonce")
 	}
@@ -198,12 +198,12 @@ type Frame3 struct {
 }
 
 func writeFrame0(w io.Writer) error {
-	n, err := w.Write([]byte(HandshakeMessage))
+	n, err := w.Write([]byte(Message))
 	if err != nil {
 		return err
 	}
 
-	if n != len(HandshakeMessage) {
+	if n != len(Message) {
 		return fmt.Errorf("not enough bytes written")
 	}
 
@@ -211,25 +211,25 @@ func writeFrame0(w io.Writer) error {
 }
 
 func readFrame0(r io.Reader) error {
-	buf := make([]byte, len(HandshakeMessage))
+	buf := make([]byte, len(Message))
 
 	n, err := r.Read(buf)
 	if err != nil {
 		return err
 	}
 
-	if n != len(HandshakeMessage) {
+	if n != len(Message) {
 		return fmt.Errorf("not enough bytes read")
 	}
 
-	if string(buf[:n]) != HandshakeMessage {
+	if string(buf[:n]) != Message {
 		return fmt.Errorf("bad handshake message: %v", string(buf[:n]))
 	}
 
 	return nil
 }
 
-func writeFrame1(w io.Writer, nonce [HandshakeNonceSize]byte) error {
+func writeFrame1(w io.Writer, nonce [NonceSize]byte) error {
 	return json.NewEncoder(w).Encode(Frame1{Nonce: nonce})
 }
 
