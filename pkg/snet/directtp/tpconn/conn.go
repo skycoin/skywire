@@ -58,7 +58,6 @@ func NewConn(c Config) (*Conn, error) {
 		c.Log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
 	}
 
-	// TODO(nkryuchkov): extract from handshake whether encryption is needed
 	if c.Encrypt {
 		config := noise.Config{
 			LocalPK:   c.LocalPK,
