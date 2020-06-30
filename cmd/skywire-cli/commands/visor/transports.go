@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -111,12 +111,12 @@ var addTpCmd = &cobra.Command{
 			logger.Infof("Established %v transport to %v", transportType, pk)
 		} else {
 			transportTypes := []string{
-				directtransport.STCPType,
-				directtransport.STCPRType,
-				directtransport.STCPHType,
-				directtransport.SUDPType,
-				directtransport.SUDPRType,
-				directtransport.SUDPHType,
+				transport.STCPType,
+				transport.STCPRType,
+				transport.STCPHType,
+				transport.SUDPType,
+				transport.SUDPRType,
+				transport.SUDPHType,
 				dmsg.Type,
 			}
 
