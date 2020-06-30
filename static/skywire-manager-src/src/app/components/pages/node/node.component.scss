@@ -15,12 +15,16 @@
   }
 }
 
+.full-size-main-area {
+  width: 100%;
+}
+
 .main-area {
   width: 100%;
-  padding: 0 $additional-margin;
 
   @media (min-width: map-get($grid-breakpoints, lg)) {
-    width: 71%;
+    width: 73%;
+    padding-right: 20px;
     float: left;
   }
 }
@@ -28,7 +32,6 @@
 .right-bar {
   width: 27%;
   float: right;
-  padding-right: $additional-margin;
   display: none;
 
   @media (min-width: map-get($grid-breakpoints, lg)) {
