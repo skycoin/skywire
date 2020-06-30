@@ -20,7 +20,6 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/libp2p/go-reuseport"
 	"github.com/xtaci/kcp-go"
-	"nhooyr.io/websocket"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
@@ -30,7 +29,6 @@ import (
 
 const (
 	bindPath             = "/bind/"
-	bindSTCPHPath        = "/bind/stcph"
 	addrChSize           = 1024
 	udpKeepAliveInterval = 10 * time.Second
 	udpKeepAliveMessage  = "keepalive"
@@ -55,9 +53,7 @@ type Error struct {
 // APIClient implements DMSG discovery API client.
 type APIClient interface {
 	io.Closer
-	LocalTCPAddr() string
 	Bind(ctx context.Context, tType, port string) error
-	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
 	BindSUDPH(ctx context.Context, filter *pfilter.PacketFilter) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
 }
@@ -85,9 +81,7 @@ type client struct {
 	sk            cipher.SecKey
 	localTCPAddr  string
 	remoteUDPAddr string
-	stcphConn     *websocket.Conn
 	sudphConn     net.PacketConn
-	stcphAddrCh   chan RemoteVisor
 	sudphAddrCh   chan RemoteVisor
 	closed        chan struct{}
 }
@@ -181,43 +175,6 @@ func (c *client) Post(ctx context.Context, path string, payload interface{}) (*h
 	return c.httpClient.Do(req.WithContext(ctx))
 }
 
-// Websocket performs a new websocket request.
-func (c *client) Websocket(ctx context.Context, path string) (*websocket.Conn, error) {
-	header, err := c.httpClient.Header()
-	if err != nil {
-		return nil, err
-	}
-
-	dialOpts := &websocket.DialOptions{
-		HTTPClient: c.httpClient.ReuseClient(),
-		HTTPHeader: header,
-	}
-
-	addr, err := url.Parse(c.httpClient.Addr())
-	if err != nil {
-		return nil, err
-	}
-	switch addr.Scheme {
-	case "http":
-		addr.Scheme = "ws"
-	case "https":
-		addr.Scheme = "wss"
-	}
-
-	addr.Path = path
-
-	conn, resp, err := websocket.Dial(ctx, addr.String(), dialOpts)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode == http.StatusOK {
-		c.httpClient.IncrementNonce()
-	}
-
-	return conn, nil
-}
-
 // BindRequest stores bind request values.
 type BindRequest struct {
 	Port string `json:"port"`
@@ -303,97 +260,6 @@ func (c *client) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (V
 type RemoteVisor struct {
 	PK   cipher.PubKey
 	Addr string
-}
-
-func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
-	if c.stcphAddrCh == nil {
-		if err := c.initSTCPH(ctx, dialCh); err != nil {
-			return nil, err
-		}
-	}
-
-	return c.stcphAddrCh, nil
-}
-
-func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
-	conn, err := c.Websocket(ctx, bindSTCPHPath)
-	if err != nil {
-		return err
-	}
-
-	_, localPort, err := net.SplitHostPort(c.LocalTCPAddr())
-	if err != nil {
-		return err
-	}
-
-	addresses, err := localAddresses()
-	if err != nil {
-		return err
-	}
-
-	localAddresses := LocalAddresses{
-		Addresses: addresses,
-		Port:      localPort,
-	}
-
-	laData, err := json.Marshal(localAddresses)
-	if err != nil {
-		return err
-	}
-
-	if err := conn.Write(ctx, websocket.MessageText, laData); err != nil {
-		return err
-	}
-
-	c.stcphConn = conn
-	addrCh := make(chan RemoteVisor, addrChSize)
-
-	go func(conn *websocket.Conn, addrCh chan<- RemoteVisor) {
-		defer func() {
-			close(addrCh)
-		}()
-
-		for {
-			select {
-			case <-c.closed:
-				return
-			default:
-				kind, rawMsg, err := conn.Read(context.Background())
-				if err != nil {
-					c.log.Errorf("Failed to read WS message: %v", err)
-					return
-				}
-
-				c.log.Infof("New WS message of type %v: %v", kind.String(), string(rawMsg))
-
-				var remote RemoteVisor
-				if err := json.Unmarshal(rawMsg, &remote); err != nil {
-					c.log.Errorf("Failed to read unmarshal message: %v", err)
-					continue
-				}
-
-				addrCh <- remote
-			}
-		}
-	}(conn, addrCh)
-
-	go func(conn *websocket.Conn, dialCh <-chan cipher.PubKey) {
-		for {
-			select {
-			case <-c.closed:
-				return
-			case pk := <-dialCh:
-				if err := conn.Write(ctx, websocket.MessageText, []byte(pk.String())); err != nil {
-					c.log.Errorf("Failed to write to %v: %v", pk, err)
-					return
-				}
-			}
-		}
-	}(conn, dialCh)
-
-	c.stcphAddrCh = addrCh
-
-	return nil
 }
 
 func (c *client) BindSUDPH(ctx context.Context, filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
@@ -517,16 +383,8 @@ func (c *client) Close() error {
 	}
 
 	defer func() {
-		c.stcphConn = nil
 		c.sudphConn = nil
 	}()
-
-	if c.stcphConn != nil {
-		if err := c.stcphConn.Close(websocket.StatusNormalClosure, "client closed"); err != nil {
-			c.log.WithError(err).Errorf("Failed to close STCPH")
-		}
-
-	}
 
 	if c.sudphConn != nil {
 		if err := c.sudphConn.Close(); err != nil {

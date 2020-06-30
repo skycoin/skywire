@@ -74,38 +74,6 @@ func (c *STCPRConfig) Type() string {
 	return tptypes.STCPR
 }
 
-// STCPHConfig defines config for STCPH network.
-type STCPHConfig struct {
-	AddressResolver string `json:"address_resolver"`
-}
-
-// Type returns STCPH.
-func (c *STCPHConfig) Type() string {
-	return tptypes.STCPH
-}
-
-// SUDPConfig defines config for SUDP network.
-type SUDPConfig struct {
-	PKTable   map[cipher.PubKey]string `json:"pk_table"`
-	LocalAddr string                   `json:"local_address"`
-}
-
-// Type returns STCP.
-func (c *SUDPConfig) Type() string {
-	return tptypes.SUDP
-}
-
-// SUDPRConfig defines config for SUDPR network.
-type SUDPRConfig struct {
-	AddressResolver string `json:"address_resolver"`
-	LocalAddr       string `json:"local_address"`
-}
-
-// Type returns STCP.
-func (c *SUDPRConfig) Type() string {
-	return tptypes.SUDPR
-}
-
 // SUDPHConfig defines config for SUDPH network.
 type SUDPHConfig struct {
 	AddressResolver string `json:"address_resolver"`
@@ -128,9 +96,6 @@ type NetworkConfigs struct {
 	Dmsg  *DmsgConfig  // The dmsg service will not be started if nil.
 	STCP  *STCPConfig  // The stcp service will not be started if nil.
 	STCPR *STCPRConfig // The stcpr service will not be started if nil.
-	STCPH *STCPHConfig // The stcph service will not be started if nil.
-	SUDP  *SUDPConfig  // The sudp service will not be started if nil.
-	SUDPR *SUDPRConfig // The sudpr service will not be started if nil.
 	SUDPH *SUDPHConfig // The sudph service will not be started if nil.
 }
 
@@ -204,50 +169,6 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		clients.Direct[tptypes.STCPR] = transport.NewClient(conf)
 	}
 
-	if conf.NetworkConfigs.STCPH != nil {
-		ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPH.AddressResolver, conf.PubKey, conf.SecKey)
-		if err != nil {
-			return nil, err
-		}
-
-		conf := transport.ClientConfig{
-			Type:            tptypes.STCPH,
-			PK:              conf.PubKey,
-			SK:              conf.SecKey,
-			AddressResolver: ar,
-		}
-
-		clients.Direct[tptypes.STCPH] = transport.NewClient(conf)
-	}
-
-	if conf.NetworkConfigs.SUDP != nil {
-		conf := transport.ClientConfig{
-			Type:      tptypes.SUDP,
-			PK:        conf.PubKey,
-			SK:        conf.SecKey,
-			Table:     pktable.NewTable(conf.NetworkConfigs.SUDP.PKTable),
-			LocalAddr: conf.NetworkConfigs.SUDP.LocalAddr,
-		}
-		clients.Direct[tptypes.SUDP] = transport.NewClient(conf)
-	}
-
-	if conf.NetworkConfigs.SUDPR != nil {
-		ar, err := arclient.NewHTTP(conf.NetworkConfigs.SUDPR.AddressResolver, conf.PubKey, conf.SecKey)
-		if err != nil {
-			return nil, err
-		}
-
-		conf := transport.ClientConfig{
-			Type:            tptypes.SUDPR,
-			PK:              conf.PubKey,
-			SK:              conf.SecKey,
-			LocalAddr:       conf.NetworkConfigs.SUDPR.LocalAddr,
-			AddressResolver: ar,
-		}
-
-		clients.Direct[tptypes.SUDPR] = transport.NewClient(conf)
-	}
-
 	if conf.NetworkConfigs.SUDPH != nil {
 		ar, err := arclient.NewHTTP(conf.NetworkConfigs.SUDPH.AddressResolver, conf.PubKey, conf.SecKey)
 		if err != nil {
@@ -313,36 +234,6 @@ func (n *Network) Init() error {
 			}
 		} else {
 			log.Infof("No config found for stcpr")
-		}
-	}
-
-	if n.conf.NetworkConfigs.STCPH != nil {
-		if client, ok := n.clients.Direct[tptypes.STCPH]; ok && client != nil {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcph': %w", err)
-			}
-		} else {
-			log.Infof("No config found for stcph")
-		}
-	}
-
-	if n.conf.NetworkConfigs.SUDP != nil {
-		if client, ok := n.clients.Direct[tptypes.SUDP]; ok && client != nil && n.conf.NetworkConfigs.SUDP.LocalAddr != "" {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'sudp': %w", err)
-			}
-		} else {
-			log.Infof("No config found for sudp")
-		}
-	}
-
-	if n.conf.NetworkConfigs.SUDPR != nil {
-		if client, ok := n.clients.Direct[tptypes.SUDPR]; ok && client != nil && n.conf.NetworkConfigs.SUDPR.LocalAddr != "" {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'sudpr': %w", err)
-			}
-		} else {
-			log.Infof("No config found for sudpr")
 		}
 	}
 
@@ -418,21 +309,6 @@ func (n *Network) STcp() transport.Client {
 // STcpr returns the underlying stcpr.Client.
 func (n *Network) STcpr() transport.Client {
 	return n.clients.Direct[tptypes.STCPR]
-}
-
-// STcpH returns the underlying stcph.Client.
-func (n *Network) STcpH() transport.Client {
-	return n.clients.Direct[tptypes.STCPH]
-}
-
-// SUdp returns the underlying sudp.Client.
-func (n *Network) SUdp() transport.Client {
-	return n.clients.Direct[tptypes.SUDP]
-}
-
-// SUdpr returns the underlying sudpr.Client.
-func (n *Network) SUdpr() transport.Client {
-	return n.clients.Direct[tptypes.SUDPR]
 }
 
 // SUdpH returns the underlying sudph.Client.
