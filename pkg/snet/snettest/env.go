@@ -14,9 +14,9 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/pktable"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
 // KeyPair holds a public/private key pair.
@@ -104,7 +104,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		}
 
 		clients := snet.NetworkClients{
-			Direct: make(map[string]transport.Client),
+			Direct: make(map[string]directtp.Client),
 		}
 
 		if hasDmsg {
@@ -115,7 +115,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		addressResolver := new(arclient.MockAPIClient)
 
 		if hasStcp {
-			conf := transport.ClientConfig{
+			conf := directtp.Config{
 				Type:      tptypes.STCP,
 				PK:        pairs.PK,
 				SK:        pairs.SK,
@@ -123,11 +123,11 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				LocalAddr: networkConfigs.STCP.LocalAddr,
 			}
 
-			clients.Direct[tptypes.STCP] = transport.NewClient(conf)
+			clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 		}
 
 		if hasStcpr {
-			conf := transport.ClientConfig{
+			conf := directtp.Config{
 				Type:            tptypes.STCPR,
 				PK:              pairs.PK,
 				SK:              pairs.SK,
@@ -135,18 +135,18 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				LocalAddr:       networkConfigs.STCPR.LocalAddr,
 			}
 
-			clients.Direct[tptypes.STCPR] = transport.NewClient(conf)
+			clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
 		}
 
 		if hasSudph {
-			conf := transport.ClientConfig{
+			conf := directtp.Config{
 				Type:            tptypes.SUDPH,
 				PK:              pairs.PK,
 				SK:              pairs.SK,
 				AddressResolver: addressResolver,
 			}
 
-			clients.Direct[tptypes.SUDPH] = transport.NewClient(conf)
+			clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf)
 		}
 
 		snetConfig := snet.Config{
