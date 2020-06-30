@@ -25,6 +25,8 @@ type V1 struct {
 	STCPR         *snet.STCPRConfig `json:"stcpr,omitempty"`
 	STCPH         *snet.STCPHConfig `json:"stcph,omitempty"`
 	SUDP          *snet.SUDPConfig  `json:"sudp,omitempty"`
+	SUDPR         *snet.SUDPRConfig `json:"sudpr,omitempty"`
+	SUDPH         *snet.SUDPHConfig `json:"sudph,omitempty"`
 	Transport     *V1Transport      `json:"transport"`
 	Routing       *V1Routing        `json:"routing"`
 	UptimeTracker *V1UptimeTracker  `json:"uptime_tracker,omitempty"`

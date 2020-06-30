@@ -58,6 +58,8 @@ type DialOptions struct {
 // This function requires at least Go 1.12 as it uses a new feature
 // in net/http to perform WebSocket handshakes.
 // See docs on the HTTPClient option and https://github.com/golang/go/issues/26937#issuecomment-415855861
+//
+// URLs with http/https schemes will work and are interpreted as ws/wss.
 func Dial(ctx context.Context, u string, opts *DialOptions) (*Conn, *http.Response, error) {
 	return dial(ctx, u, opts, nil)
 }
@@ -145,6 +147,7 @@ func handshakeRequest(ctx context.Context, urls string, opts *DialOptions, copts
 		u.Scheme = "http"
 	case "wss":
 		u.Scheme = "https"
+	case "http", "https":
 	default:
 		return nil, fmt.Errorf("unexpected url scheme: %q", u.Scheme)
 	}
@@ -253,10 +256,10 @@ func verifyServerExtensions(copts *compressionOptions, h http.Header) (*compress
 	return copts, nil
 }
 
-var readerPool sync.Pool
+var bufioReaderPool sync.Pool
 
 func getBufioReader(r io.Reader) *bufio.Reader {
-	br, ok := readerPool.Get().(*bufio.Reader)
+	br, ok := bufioReaderPool.Get().(*bufio.Reader)
 	if !ok {
 		return bufio.NewReader(r)
 	}
@@ -265,13 +268,13 @@ func getBufioReader(r io.Reader) *bufio.Reader {
 }
 
 func putBufioReader(br *bufio.Reader) {
-	readerPool.Put(br)
+	bufioReaderPool.Put(br)
 }
 
-var writerPool sync.Pool
+var bufioWriterPool sync.Pool
 
 func getBufioWriter(w io.Writer) *bufio.Writer {
-	bw, ok := writerPool.Get().(*bufio.Writer)
+	bw, ok := bufioWriterPool.Get().(*bufio.Writer)
 	if !ok {
 		return bufio.NewWriter(w)
 	}
@@ -280,5 +283,5 @@ func getBufioWriter(w io.Writer) *bufio.Writer {
 }
 
 func putBufioWriter(bw *bufio.Writer) {
-	writerPool.Put(bw)
+	bufioWriterPool.Put(bw)
 }
