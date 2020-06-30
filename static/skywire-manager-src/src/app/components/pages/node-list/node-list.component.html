@@ -26,17 +26,17 @@
     ></app-tab-bar>
   </div>
   <div class="col-12">
-    <div class="node-list-container mt-4.5">
+    <div class="rounded-elevated-box mt-4.5" *ngIf="dataSource.length !== 0"><div class="box-internal-container overflow full-node-list-margins">
       <!-- Table for large screens. -->
       <table
-        class="responsive-table-white container-elevated-white d-none d-md-table"
+        class="responsive-table-translucid d-none d-md-table"
         *ngIf="dataSource.length > 0"
         cellspacing="0" cellpadding="0"
       >
         <!-- Column names. -->
         <tr>
-          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)">
-            <span class="dot-outline-gray" [matTooltip]="'nodes.state-tooltip' | translate"></span>
+          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)" [matTooltip]="'nodes.state-tooltip' | translate">
+            <span class="dot-outline-gray"></span>
             <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
           <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
@@ -67,26 +67,26 @@
               (copyEvent)="onCopyToClipboardClicked()"
               mat-icon-button
               [matTooltip]="'nodes.copy-key' | translate"
-              class="grey-button-background"
+              class="big-action-button transparent-button"
             >
-              <mat-icon class="small-icon">filter_none</mat-icon>
+              <mat-icon [inline]="true">filter_none</mat-icon>
             </button>
             <button
               (click)="showEditLabelDialog(node)"
               mat-icon-button
               [matTooltip]="'edit-label.title' | translate"
-              class="grey-button-background"
+              class="big-action-button transparent-button"
             >
-              <mat-icon>short_text</mat-icon>
+              <mat-icon [inline]="true">short_text</mat-icon>
             </button>
             <button
               *ngIf="node.online"
               (click)="open(node)"
               mat-icon-button
               [matTooltip]="'nodes.view-node' | translate"
-              class="grey-button-background"
+              class="big-action-button transparent-button"
             >
-              <mat-icon>chevron_right</mat-icon>
+              <mat-icon [inline]="true">chevron_right</mat-icon>
             </button>
             <button
               *ngIf="!node.online"
@@ -103,7 +103,7 @@
 
       <!-- List for small screens. -->
       <table
-        class="responsive-table-white container-elevated-white d-md-none nowrap"
+        class="responsive-table-translucid d-md-none nowrap"
         *ngIf="dataSource.length > 0"
         cellspacing="0" cellpadding="0"
       >
@@ -144,7 +144,7 @@
                 (click)="$event.stopPropagation(); showOptionsDialog(node)"
                 mat-icon-button
                 [matTooltip]="'common.options' | translate"
-                class="grey-button-background"
+                class="transparent-button"
               >
                 <mat-icon>{{ 'add' }}</mat-icon>
               </button>
@@ -152,10 +152,12 @@
           </div>
         </td></tr>
       </table>
+    </div></div>
 
-      <!-- Msg shown if the list is empty. -->
-      <div class="nodes-empty container-elevated-white" *ngIf="dataSource.length === 0">
-        <i class="material-icons">warning</i>
+    <!-- Msg shown if the list is empty. -->
+    <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length === 0">
+      <div class="box-internal-container font-sm">
+        <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
         <span>{{ 'nodes.empty' | translate }}</span>
       </div>
     </div>

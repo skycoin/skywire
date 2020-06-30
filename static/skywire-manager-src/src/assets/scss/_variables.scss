@@ -30,7 +30,7 @@ $theme-colors: (
   blue:               $blue,
   blue-dark:          $blue-dark,
   translucid:         rgba(32, 34, 38, .44),
-  translucid-hover:   rgba(0, 0, 0, 0.1),
+  translucid-hover:   rgba(0, 0, 0, 0.2),
   translucid-white:   rgba(255, 255, 255, .44),
   translucid-dark:    rgba(21, 75, 108, .91),
   white:              $white,
@@ -70,12 +70,10 @@ $mat-dialog-radius: 10px;
 //
 // Container
 //
-$containers-padding: 20px;
+$containers-padding: 15px;
 
 //
 // Sizes
 //
 $header-height: 82px;
 $header-buttons-height: 40px;
-
-$additional-margin: 5px;
