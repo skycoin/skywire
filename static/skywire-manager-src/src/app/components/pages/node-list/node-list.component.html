@@ -63,6 +63,15 @@
           </td>
           <td (click)="$event.stopPropagation()" class="actions">
             <button
+              [clipboard]="node.local_pk"
+              (copyEvent)="onCopyToClipboardClicked()"
+              mat-icon-button
+              [matTooltip]="'nodes.copy-key' | translate"
+              class="grey-button-background"
+            >
+              <mat-icon class="small-icon">filter_none</mat-icon>
+            </button>
+            <button
               (click)="showEditLabelDialog(node)"
               mat-icon-button
               [matTooltip]="'edit-label.title' | translate"
@@ -132,12 +141,12 @@
             <div class="margin-part"></div>
             <div class="right-part">
               <button
-                (click)="$event.stopPropagation(); node.online ? showEditLabelDialog(node) : showOptionsDialog(node)"
+                (click)="$event.stopPropagation(); showOptionsDialog(node)"
                 mat-icon-button
-                [matTooltip]="(node.online ? 'edit-label.title' : 'common.options') | translate"
+                [matTooltip]="'common.options' | translate"
                 class="grey-button-background"
               >
-                <mat-icon>{{ node.online ? 'short_text' : 'add' }}</mat-icon>
+                <mat-icon>{{ 'add' }}</mat-icon>
               </button>
             </div>
           </div>
