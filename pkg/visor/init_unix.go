@@ -40,6 +40,11 @@ func initDmsgpty(v *Visor) bool {
 		}
 	}
 
+	// Ensure hypervisors are added to the whitelist.
+	if err := wl.Add(v.conf.Hypervisors...); err != nil {
+		return report(err)
+	}
+
 	dmsgC := v.net.Dmsg()
 	if dmsgC == nil {
 		return report(errors.New("cannot create dmsgpty with nil dmsg client"))
@@ -48,7 +53,6 @@ func initDmsgpty(v *Visor) bool {
 	pty := dmsgpty.NewHost(dmsgC, wl)
 
 	if ptyPort := conf.Port; ptyPort != 0 {
-
 		ctx, cancel := context.WithCancel(context.Background())
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
