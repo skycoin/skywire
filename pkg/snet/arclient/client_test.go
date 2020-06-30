@@ -10,13 +10,16 @@ import (
 	"testing"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
 )
 
 var testPubKey, testSecKey = cipher.GenerateKeyPair()
+var log = logging.MustGetLogger("arclient_test")
 
 func TestClientAuth(t *testing.T) {
 	wg := sync.WaitGroup{}
@@ -67,7 +70,7 @@ func TestBind(t *testing.T) {
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	err = c.Bind(context.TODO(), "stcpr", "1234")
+	err = c.Bind(context.TODO(), tptypes.STCPR, "1234")
 	require.NoError(t, err)
 
 	assert.Equal(t, "/bind/stcpr", <-urlCh)
