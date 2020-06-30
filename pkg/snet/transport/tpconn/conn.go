@@ -1,4 +1,4 @@
-package directtransport
+package tpconn
 
 import (
 	"fmt"
@@ -10,7 +10,8 @@ import (
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/noisewrapper"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tphandshake"
 )
 
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
@@ -21,21 +22,21 @@ type Conn struct {
 	freePort func()
 }
 
-// ConnConfig describes a config for Conn.
-type ConnConfig struct {
+// Config describes a config for Conn.
+type Config struct {
 	Log       *logging.Logger
 	Conn      net.Conn
 	LocalPK   cipher.PubKey
 	LocalSK   cipher.SecKey
 	Deadline  time.Time
-	Handshake Handshake
+	Handshake tphandshake.Handshake
 	FreePort  func()
 	Encrypt   bool
 	Initiator bool
 }
 
 // NewConn creates a new Conn.
-func NewConn(c ConnConfig) (*Conn, error) {
+func NewConn(c Config) (*Conn, error) {
 	if c.Log != nil {
 		c.Log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
 	}

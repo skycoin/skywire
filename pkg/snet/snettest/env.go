@@ -14,7 +14,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/pktable"
 )
 
 // KeyPair holds a public/private key pair.
@@ -61,7 +62,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
 	}
 
-	table := directtransport.NewTable(tableEntries)
+	table := pktable.NewTable(tableEntries)
 
 	var hasDmsg, hasStcp, hasStcpr, hasStcph, hasSudp, hasSudpr, hasSudph bool
 
@@ -69,17 +70,17 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		switch network {
 		case dmsg.Type:
 			hasDmsg = true
-		case directtransport.STCPType:
+		case transport.STCPType:
 			hasStcp = true
-		case directtransport.STCPRType:
+		case transport.STCPRType:
 			hasStcpr = true
-		case directtransport.STCPHType:
+		case transport.STCPHType:
 			hasStcph = true
-		case directtransport.SUDPType:
+		case transport.SUDPType:
 			hasSudp = true
-		case directtransport.SUDPRType:
+		case transport.SUDPRType:
 			hasSudpr = true
-		case directtransport.SUDPHType:
+		case transport.SUDPHType:
 			hasSudph = true
 		}
 	}
@@ -118,7 +119,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		}
 
 		clients := snet.NetworkClients{
-			Direct: make(map[string]directtransport.Client),
+			Direct: make(map[string]transport.Client),
 		}
 
 		if hasDmsg {
@@ -129,72 +130,72 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		addressResolver := new(arclient.MockAPIClient)
 
 		if hasStcp {
-			conf := directtransport.ClientConfig{
-				Type:      directtransport.STCPType,
+			conf := transport.ClientConfig{
+				Type:      transport.STCPType,
 				PK:        pairs.PK,
 				SK:        pairs.SK,
 				Table:     table,
 				LocalAddr: networkConfigs.STCP.LocalAddr,
 			}
 
-			clients.Direct[directtransport.STCPType] = directtransport.NewClient(conf)
+			clients.Direct[transport.STCPType] = transport.NewClient(conf)
 		}
 
 		if hasStcpr {
-			conf := directtransport.ClientConfig{
-				Type:            directtransport.STCPRType,
+			conf := transport.ClientConfig{
+				Type:            transport.STCPRType,
 				PK:              pairs.PK,
 				SK:              pairs.SK,
 				AddressResolver: addressResolver,
 				LocalAddr:       networkConfigs.STCPR.LocalAddr,
 			}
 
-			clients.Direct[directtransport.STCPRType] = directtransport.NewClient(conf)
+			clients.Direct[transport.STCPRType] = transport.NewClient(conf)
 		}
 
 		if hasStcph {
-			conf := directtransport.ClientConfig{
-				Type:            directtransport.STCPHType,
+			conf := transport.ClientConfig{
+				Type:            transport.STCPHType,
 				PK:              pairs.PK,
 				SK:              pairs.SK,
 				AddressResolver: addressResolver,
 			}
 
-			clients.Direct[directtransport.STCPHType] = directtransport.NewClient(conf)
+			clients.Direct[transport.STCPHType] = transport.NewClient(conf)
 		}
 
 		if hasSudp {
-			conf := directtransport.ClientConfig{
-				Type:      directtransport.SUDPType,
+			conf := transport.ClientConfig{
+				Type:      transport.SUDPType,
 				PK:        pairs.PK,
 				SK:        pairs.SK,
 				Table:     table,
 				LocalAddr: networkConfigs.SUDP.LocalAddr,
 			}
-			clients.Direct[directtransport.SUDPType] = directtransport.NewClient(conf)
+			clients.Direct[transport.SUDPType] = transport.NewClient(conf)
 		}
 
 		if hasSudpr {
-			conf := directtransport.ClientConfig{
-				Type:            directtransport.SUDPRType,
+			conf := transport.ClientConfig{
+				Type:            transport.SUDPRType,
 				PK:              pairs.PK,
 				SK:              pairs.SK,
 				AddressResolver: addressResolver,
 				LocalAddr:       networkConfigs.SUDPR.LocalAddr,
 			}
 
-			clients.Direct[directtransport.SUDPRType] = directtransport.NewClient(conf)
+			clients.Direct[transport.SUDPRType] = transport.NewClient(conf)
 		}
 
 		if hasSudph {
-			conf := directtransport.ClientConfig{
-				Type:            directtransport.SUDPHType,
+			conf := transport.ClientConfig{
+				Type:            transport.SUDPHType,
 				PK:              pairs.PK,
 				SK:              pairs.SK,
 				AddressResolver: addressResolver,
 			}
 
-			clients.Direct[directtransport.SUDPHType] = directtransport.NewClient(conf)
+			clients.Direct[transport.SUDPHType] = transport.NewClient(conf)
 		}
 
 		snetConfig := snet.Config{
