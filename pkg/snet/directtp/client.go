@@ -1,4 +1,4 @@
-package transport
+package directtp
 
 import (
 	"context"
@@ -17,12 +17,12 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/tplistener"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/pktable"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/porter"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tpconn"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tphandshake"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/porter"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tplistener"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
 const (
@@ -44,6 +44,7 @@ var (
 	ErrAlreadyListening = errors.New("already listening")
 )
 
+// Client is the central control for incoming and outgoing 'Conn's.
 type Client interface {
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error)
 	Listen(lPort uint16) (*tplistener.Listener, error)
@@ -52,7 +53,8 @@ type Client interface {
 	Type() string
 }
 
-type ClientConfig struct {
+// Config configures Client.
+type Config struct {
 	Type            string
 	PK              cipher.PubKey
 	SK              cipher.SecKey
@@ -61,9 +63,8 @@ type ClientConfig struct {
 	AddressResolver arclient.APIClient
 }
 
-// client is the central control for incoming and outgoing 'Conn's.
 type client struct {
-	conf           ClientConfig
+	conf           Config
 	mu             sync.Mutex
 	done           chan struct{}
 	once           sync.Once
@@ -71,13 +72,13 @@ type client struct {
 	porter         *porter.Porter
 	packetFilter   *pfilter.PacketFilter
 	packetListener net.PacketConn
-	visorConn      net.PacketConn
+	visorsConn     net.PacketConn
 	listener       net.Listener
 	listeners      map[uint16]*tplistener.Listener // key: lPort
 }
 
 // NewClient creates a net Client.
-func NewClient(conf ClientConfig) *client {
+func NewClient(conf Config) Client {
 	return &client{
 		conf:      conf,
 		log:       logging.MustGetLogger(conf.Type),
@@ -114,7 +115,7 @@ func (c *client) Serve() error {
 			return err
 		}
 
-		if err := c.conf.AddressResolver.Bind(context.Background(), c.conf.Type, port); err != nil {
+		if err := c.conf.AddressResolver.BindSTCPR(context.Background(), c.conf.Type, port); err != nil {
 			return fmt.Errorf("bind %v: %w", c.conf.Type, err)
 		}
 	}
@@ -291,7 +292,7 @@ func (c *client) getListener() listenFunc {
 			c.packetListener = packetListener
 
 			c.packetFilter = pfilter.NewPacketFilter(packetListener)
-			c.visorConn = c.packetFilter.NewConn(100, nil)
+			c.visorsConn = c.packetFilter.NewConn(100, nil)
 
 			c.packetFilter.Start()
 
@@ -309,7 +310,7 @@ func (c *client) getListener() listenFunc {
 					}
 
 					c.log.Infof("Sending hole punch packet to %v", addr)
-					if _, err := c.visorConn.WriteTo([]byte(HolePunchMessage), udpAddr); err != nil {
+					if _, err := c.visorsConn.WriteTo([]byte(HolePunchMessage), udpAddr); err != nil {
 						c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
 						continue
 					}
@@ -318,7 +319,7 @@ func (c *client) getListener() listenFunc {
 				}
 			}()
 
-			return kcp.ServeConn(nil, 0, 0, c.visorConn)
+			return kcp.ServeConn(nil, 0, 0, c.visorsConn)
 		}
 
 	default:
@@ -434,6 +435,12 @@ func (c *client) Close() error {
 		case tptypes.STCPR, tptypes.SUDPH:
 			if err := c.conf.AddressResolver.Close(); err != nil {
 				c.log.WithError(err).Warnf("Failed to close address-resolver")
+			}
+		}
+
+		if c.visorsConn != nil {
+			if err := c.visorsConn.Close(); err != nil {
+				c.log.WithError(err).Warnf("Failed to close connection to visors")
 			}
 		}
 	})

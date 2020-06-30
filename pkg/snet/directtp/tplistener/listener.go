@@ -7,7 +7,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tpconn"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
 )
 
 // Listener implements net.Listener

@@ -15,9 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
