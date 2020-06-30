@@ -5,11 +5,14 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+
+	"github.com/SkycoinProject/dmsg/netutil"
 )
 
 // Listener listens for remote-initiated streams.
 type Listener struct {
-	addr Addr // local listening address
+	porter *netutil.Porter
+	addr   Addr // local listening address
 
 	accept chan *Stream
 	mx     sync.Mutex // protects 'accept'
@@ -19,8 +22,9 @@ type Listener struct {
 	once     sync.Once
 }
 
-func newListener(addr Addr) *Listener {
+func newListener(porter *netutil.Porter, addr Addr) *Listener {
 	return &Listener{
+		porter: porter,
 		addr:   addr,
 		accept: make(chan *Stream, AcceptBufferSize),
 		done:   make(chan struct{}),
@@ -48,9 +52,11 @@ func (l *Listener) introduceStream(tp *Stream) error {
 	select {
 	case l.accept <- tp:
 		return nil
+
 	case <-l.done:
 		_ = tp.Close() //nolint:errcheck
 		return ErrEntityClosed
+
 	default:
 		_ = tp.Close() //nolint:errcheck
 		return ErrAcceptChanMaxed
@@ -65,13 +71,19 @@ func (l *Listener) Accept() (net.Conn, error) {
 // AcceptStream accepts a stream connection.
 func (l *Listener) AcceptStream() (*Stream, error) {
 	select {
-	case <-l.done:
-		return nil, ErrEntityClosed
 	case tp, ok := <-l.accept:
 		if !ok {
 			return nil, ErrEntityClosed
 		}
+
+		if ok, closeFn := l.porter.ReserveChild(tp.lAddr.Port, tp.rAddr.Port, tp); ok {
+			tp.close = closeFn
+		}
+
 		return tp, nil
+
+	case <-l.done:
+		return nil, ErrEntityClosed
 	}
 }
 

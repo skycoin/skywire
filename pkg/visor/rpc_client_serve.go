@@ -23,7 +23,6 @@ func isDone(ctx context.Context) bool {
 
 // ServeRPCClient repetitively dials to a remote dmsg address and serves a RPC server to that address.
 func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, n *snet.Network, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
-
 	const maxBackoff = time.Second * 5
 	retry := netutil.NewRetrier(log, netutil.DefaultInitBackoff, maxBackoff, netutil.DefaultTries, netutil.DefaultFactor)
 
