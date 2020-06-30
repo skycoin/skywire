@@ -1,4 +1,5 @@
 // Package arclient implements address resolver client
+// TODO(nkryuchkov): move to internal
 package arclient
 
 import (
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -24,11 +26,16 @@ import (
 var log = logging.MustGetLogger("arclient")
 
 const (
-	bindPath             = "/bind"
-	resolvePath          = "/resolve/"
-	resolveHolePunchPath = "/resolve_hole_punch/"
+	bindSTCPRPath        = "/bind/stcpr"
+	bindSUDPRPath        = "/bind/sudpr"
+	resolveSTCPRPath     = "/resolve/"
+	resolveSTCPHPath     = "/resolve_hole_punch/"
+	resolveSUDPRPath     = "/resolve_sudpr/"
+	resolveSUDPHPath     = "/resolve_sudph/"
 	wsPath               = "/ws"
 	addrChSize           = 1024
+	udpKeepAliveInterval = 10 * time.Second
+	udpKeepAliveMessage  = "keepalive"
 )
 
 var (
@@ -46,20 +53,55 @@ type Error struct {
 // APIClient implements DMSG discovery API client.
 type APIClient interface {
 	io.Closer
-	LocalAddr() string
-	Bind(ctx context.Context, port string) error
-	Resolve(ctx context.Context, pk cipher.PubKey) (string, error)
-	ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error)
-	WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
+	LocalTCPAddr() string
+	LocalUDPAddr() string
+	RemoteHTTPAddr() string
+	RemoteUDPAddr() string
+	BindSTCPR(ctx context.Context, port string) error
+	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
+	BindSUDPR(ctx context.Context, port string) error
+	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error)
+	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
+	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
+	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
+	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 }
 
-// httpClient implements Client for uptime tracker API.
-type httpClient struct {
-	client    *httpauth.Client
-	localAddr string
-	pk        cipher.PubKey
-	sk        cipher.SecKey
-	wsConn    *websocket.Conn
+// VisorData stores visor data.
+type VisorData struct {
+	RemoteAddr string `json:"remote_addr"`
+	IsLocal    bool   `json:"is_local,omitempty"`
+	LocalAddresses
+}
+
+type key struct {
+	remoteAddr string
+	pk         cipher.PubKey
+	sk         cipher.SecKey
+}
+
+var clients = make(map[key]*client)
+
+// client implements Client for address resolver API.
+type client struct {
+	client         *httpauth.Client
+	localTCPAddr   string
+	localUDPAddr   string
+	remoteHTTPAddr string
+	remoteUDPAddr  string
+	pk             cipher.PubKey
+	sk             cipher.SecKey
+	stcphConn      *websocket.Conn
+	stcphAddrCh    <-chan RemoteVisor
+	sudphAddrCh    <-chan RemoteVisor
+}
+
+func (c *client) RemoteHTTPAddr() string {
+	return c.remoteHTTPAddr
+}
+
+func (c *client) RemoteUDPAddr() string {
+	return c.remoteUDPAddr
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -69,23 +111,40 @@ type httpClient struct {
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
+	key := key{
+		remoteAddr: remoteAddr,
+		pk:         pk,
+		sk:         sk,
+	}
+
+	// Same clients would have nonce collisions. Client should be reused in this case.
+	if client, ok := clients[key]; ok {
+		return client, nil
+	}
+
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
 		return nil, fmt.Errorf("address resolver httpauth: %w", err)
 	}
 
-	client := &httpClient{
-		client:    httpAuthClient,
-		pk:        pk,
-		sk:        sk,
-		localAddr: "",
+	remoteURL, err := url.Parse(remoteAddr)
+	if err != nil {
+		return nil, fmt.Errorf("parse URL: %w", err)
+	}
+
+	client := &client{
+		client:         httpAuthClient,
+		pk:             pk,
+		sk:             sk,
+		remoteHTTPAddr: remoteAddr,
+		remoteUDPAddr:  remoteURL.Host,
 	}
 
 	transport := &http.Transport{
 		DialContext: func(_ context.Context, network, remoteAddr string) (conn net.Conn, err error) {
-			conn, err = reuseport.Dial(network, client.localAddr, remoteAddr)
-			if err == nil && client.localAddr == "" {
-				client.localAddr = conn.LocalAddr().String()
+			conn, err = reuseport.Dial(network, client.localTCPAddr, remoteAddr)
+			if err == nil && client.localTCPAddr == "" {
+				client.localTCPAddr = conn.LocalAddr().String()
 			}
 
 			return conn, err
@@ -95,15 +154,21 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 
 	httpAuthClient.SetTransport(transport)
 
+	clients[key] = client
+
 	return client, nil
 }
 
-func (c *httpClient) LocalAddr() string {
-	return c.localAddr
+func (c *client) LocalTCPAddr() string {
+	return c.localTCPAddr
+}
+
+func (c *client) LocalUDPAddr() string {
+	return c.localUDPAddr
 }
 
 // Get performs a new GET request.
-func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
+func (c *client) Get(ctx context.Context, path string) (*http.Response, error) {
 	addr := c.client.Addr() + path
 
 	req, err := http.NewRequest(http.MethodGet, addr, new(bytes.Buffer))
@@ -115,7 +180,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 }
 
 // Post performs a POST request.
-func (c *httpClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+func (c *client) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
 		return nil, err
@@ -132,7 +197,7 @@ func (c *httpClient) Post(ctx context.Context, path string, payload interface{})
 }
 
 // Websocket performs a new websocket request.
-func (c *httpClient) Websocket(ctx context.Context, path string) (*websocket.Conn, error) {
+func (c *client) Websocket(ctx context.Context, path string) (*websocket.Conn, error) {
 	header, err := c.client.Header()
 	if err != nil {
 		return nil, err
@@ -173,13 +238,28 @@ type BindRequest struct {
 	Port string `json:"port"`
 }
 
-// Bind binds client PK to IP:port on address resolver.
-func (c *httpClient) Bind(ctx context.Context, port string) error {
-	req := BindRequest{
-		Port: port,
+// BindSTCPR binds client PK to IP:port on address resolver.
+func (c *client) BindSTCPR(ctx context.Context, port string) error {
+	return c.bind(ctx, bindSTCPRPath, port)
+}
+
+// BindSTCPR binds client PK to IP:port on address resolver.
+func (c *client) BindSUDPR(ctx context.Context, port string) error {
+	return c.bind(ctx, bindSUDPRPath, port)
+}
+
+func (c *client) bind(ctx context.Context, path string, port string) error {
+	addresses, err := localAddresses()
+	if err != nil {
+		return err
 	}
 
-	resp, err := c.Post(ctx, bindPath, req)
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+		Port:      port,
+	}
+
+	resp, err := c.Post(ctx, path, localAddresses)
 	if err != nil {
 		return err
 	}
@@ -197,15 +277,26 @@ func (c *httpClient) Bind(ctx context.Context, port string) error {
 	return nil
 }
 
-// ResolveResponse stores response response values.
-type ResolveResponse struct {
-	Addr string `json:"addr"`
+func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
+	return c.resolve(ctx, resolveSTCPRPath, pk)
 }
 
-func (c *httpClient) Resolve(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Get(ctx, resolvePath+pk.String())
+func (c *client) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
+	return c.resolve(ctx, resolveSTCPHPath, pk)
+}
+
+func (c *client) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
+	return c.resolve(ctx, resolveSUDPRPath, pk)
+}
+
+func (c *client) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
+	return c.resolve(ctx, resolveSUDPHPath, pk)
+}
+
+func (c *client) resolve(ctx context.Context, path string, pk cipher.PubKey) (VisorData, error) {
+	resp, err := c.Get(ctx, path+pk.String())
 	if err != nil {
-		return "", err
+		return VisorData{}, err
 	}
 
 	defer func() {
@@ -215,59 +306,25 @@ func (c *httpClient) Resolve(ctx context.Context, pk cipher.PubKey) (string, err
 	}()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNoEntry
+		return VisorData{}, ErrNoEntry
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	rawBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return VisorData{}, err
 	}
 
-	var resolveResp ResolveResponse
+	var resolveResp VisorData
 
 	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return "", err
+		return VisorData{}, err
 	}
 
-	return resolveResp.Addr, nil
-}
-
-func (c *httpClient) ResolveHolePunch(ctx context.Context, pk cipher.PubKey) (string, error) {
-	resp, err := c.Get(ctx, resolveHolePunchPath+pk.String())
-	if err != nil {
-		return "", err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNoEntry
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
-	}
-
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var resolveResp ResolveResponse
-
-	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return "", err
-	}
-
-	return resolveResp.Addr, nil
+	return resolveResp, nil
 }
 
 // RemoteVisor contains public key and address of remote visor.
@@ -276,21 +333,49 @@ type RemoteVisor struct {
 	Addr string
 }
 
-func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
-	addrCh := make(chan RemoteVisor, addrChSize)
-
-	if c.wsConn != nil {
-		if err := c.wsConn.Close(websocket.StatusNormalClosure, "new connection created"); err != nil {
-			log.WithError(err).Warnf("Failed to close WebSocket connection")
+func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
+	if c.stcphAddrCh == nil {
+		if err := c.initSTCPH(ctx, dialCh); err != nil {
+			return nil, err
 		}
 	}
 
+	return c.stcphAddrCh, nil
+}
+
+// TODO(nkryuchkov): Ensure this works correctly with closed channels and connections.
+func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
 	conn, err := c.Websocket(ctx, wsPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	c.wsConn = conn
+	_, localPort, err := net.SplitHostPort(c.LocalTCPAddr())
+	if err != nil {
+		return err
+	}
+
+	addresses, err := localAddresses()
+	if err != nil {
+		return err
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+		Port:      localPort,
+	}
+
+	laData, err := json.Marshal(localAddresses)
+	if err != nil {
+		return err
+	}
+
+	if err := conn.Write(ctx, websocket.MessageText, laData); err != nil {
+		return err
+	}
+
+	c.stcphConn = conn
+	addrCh := make(chan RemoteVisor, addrChSize)
 
 	go func(conn *websocket.Conn, addrCh chan<- RemoteVisor) {
 		defer func() {
@@ -325,11 +410,121 @@ func (c *httpClient) WS(ctx context.Context, dialCh <-chan cipher.PubKey) (<-cha
 		}
 	}(conn, dialCh)
 
-	return addrCh, nil
+	c.stcphAddrCh = addrCh
+
+	return nil
 }
 
-func (c *httpClient) Close() error {
-	return c.wsConn.Close(websocket.StatusNormalClosure, "client closed")
+// LocalAddresses contains outbound port and all network addresses of visor.
+type LocalAddresses struct {
+	Port      string   `json:"port"`
+	Addresses []string `json:"addresses"`
+}
+
+func (c *client) BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error) {
+	if c.sudphAddrCh == nil {
+		if err := c.initSUDPH(ctx, conn, localPort); err != nil {
+			return nil, err
+		}
+	}
+
+	return c.sudphAddrCh, nil
+}
+
+func (c *client) initSUDPH(ctx context.Context, conn net.Conn, localPort string) error {
+	addresses, err := localAddresses()
+	if err != nil {
+		return err
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses: addresses,
+		Port:      localPort,
+	}
+
+	laData, err := json.Marshal(localAddresses)
+	if err != nil {
+		return err
+	}
+
+	if _, err := conn.Write(laData); err != nil {
+		return err
+	}
+
+	addrCh := make(chan RemoteVisor, addrChSize)
+
+	go func(conn net.Conn, addrCh chan<- RemoteVisor) {
+		defer func() {
+			close(addrCh)
+		}()
+
+		buf := make([]byte, 4096)
+
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				log.Errorf("Failed to read SUDPH message: %v", err)
+				return
+			}
+
+			log.Infof("New SUDPH message: %v", string(buf[:n]))
+
+			var remote RemoteVisor
+			if err := json.Unmarshal(buf[:n], &remote); err != nil {
+				log.Errorf("Failed to read unmarshal message: %v", err)
+				continue
+			}
+
+			addrCh <- remote
+		}
+	}(conn, addrCh)
+
+	go func() {
+		if err := c.keepAliveLoop(ctx, conn); err != nil {
+			log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
+		}
+	}()
+
+	c.sudphAddrCh = addrCh
+
+	return nil
+}
+
+func (c *client) Close() error {
+	defer func() {
+		c.stcphConn = nil
+		// TODO(nkryuchkov): uncomment
+		// c.sudphConn = nil
+	}()
+
+	if c.stcphConn != nil {
+		if err := c.stcphConn.Close(websocket.StatusNormalClosure, "client closed"); err != nil {
+			log.WithError(err).Errorf("Failed to close STCPH")
+		}
+	}
+
+	// TODO(nkryuchkov): uncomment, check if nil
+	// if err := c.sudphConn.Close(); err != nil {
+	// 	log.WithError(err).Errorf("Failed to close SUDPH")
+	// }
+
+	return nil
+}
+
+// keep NAT mapping alive
+func (c *client) keepAliveLoop(ctx context.Context, conn net.Conn) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if _, err := conn.Write([]byte(udpKeepAliveMessage)); err != nil {
+				return err
+			}
+
+			time.Sleep(udpKeepAliveInterval)
+		}
+	}
 }
 
 // extractError returns the decoded error message from Body.
@@ -346,4 +541,28 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(apiError.Error)
+}
+
+func localAddresses() ([]string, error) {
+	result := make([]string, 0)
+
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, addr := range addresses {
+		switch v := addr.(type) {
+		case *net.IPNet:
+			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
+				result = append(result, v.IP.String())
+			}
+		case *net.IPAddr:
+			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
+				result = append(result, v.IP.String())
+			}
+		}
+	}
+
+	return result, nil
 }
