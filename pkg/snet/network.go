@@ -34,7 +34,19 @@ const (
 var (
 	// ErrUnknownNetwork occurs on attempt to dial an unknown network type.
 	ErrUnknownNetwork = errors.New("unknown network type")
+	knownNetworks     = map[string]struct{}{
+		dmsg.Type:     {},
+		tptypes.STCP:  {},
+		tptypes.STCPR: {},
+		tptypes.SUDPH: {},
+	}
 )
+
+// IsKnownNetwork tells whether network type `netType` is known.
+func IsKnownNetwork(netType string) bool {
+	_, ok := knownNetworks[netType]
+	return ok
+}
 
 // NetworkConfig is a common interface for network configs.
 type NetworkConfig interface {
@@ -107,9 +119,13 @@ type NetworkClients struct {
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf     Config
-	networks []string // networks to be used with transports
-	clients  NetworkClients
+	conf    Config
+	netsMu  sync.RWMutex
+	nets    map[string]struct{} // networks to be used with transports
+	clients NetworkClients
+
+	onNewNetworkTypeMu sync.Mutex
+	onNewNetworkType   func(netType string)
 }
 
 // New creates a network from a config.
@@ -140,7 +156,6 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		clients.DmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 	}
 
-	// TODO(nkryuchkov): Generic code for clients below.
 	if conf.NetworkConfigs.STCP != nil {
 		conf := directtp.Config{
 			Type:      tptypes.STCP,
@@ -190,23 +205,23 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 // NewRaw creates a network from a config and a dmsg client.
 func NewRaw(conf Config, clients NetworkClients) *Network {
-	networks := make([]string, 0)
+	n := &Network{
+		conf:    conf,
+		nets:    make(map[string]struct{}),
+		clients: clients,
+	}
 
 	if clients.DmsgC != nil {
-		networks = append(networks, dmsg.Type)
+		n.addNetworkType(dmsg.Type)
 	}
 
 	for k, v := range clients.Direct {
 		if v != nil {
-			networks = append(networks, k)
+			n.addNetworkType(k)
 		}
 	}
 
-	return &Network{
-		conf:     conf,
-		networks: networks,
-		clients:  clients,
-	}
+	return n
 }
 
 // Init initiates server connections.
@@ -250,13 +265,31 @@ func (n *Network) Init() error {
 	return nil
 }
 
+// OnNewNetworkType sets callback to be called when new network type is ready.
+func (n *Network) OnNewNetworkType(callback func(netType string)) {
+	n.onNewNetworkTypeMu.Lock()
+	n.onNewNetworkType = callback
+	n.onNewNetworkTypeMu.Unlock()
+}
+
+// IsNetworkReady checks whether network of type `netType` is ready.
+func (n *Network) IsNetworkReady(netType string) bool {
+	n.netsMu.Lock()
+	_, ok := n.nets[netType]
+	n.netsMu.Unlock()
+	return ok
+}
+
 // Close closes underlying connections.
 func (n *Network) Close() error {
+	n.netsMu.Lock()
+	defer n.netsMu.Unlock()
+
 	wg := new(sync.WaitGroup)
-	wg.Add(len(n.networks))
 
 	var dmsgErr error
 	if n.clients.DmsgC != nil {
+		wg.Add(1)
 		go func() {
 			dmsgErr = n.clients.DmsgC.Close()
 			wg.Done()
@@ -267,6 +300,7 @@ func (n *Network) Close() error {
 
 	for k, v := range n.clients.Direct {
 		if v != nil {
+			wg.Add(1)
 			go func() {
 				directErrors[k] = v.Close()
 				wg.Done()
@@ -296,7 +330,16 @@ func (n *Network) LocalPK() cipher.PubKey { return n.conf.PubKey }
 func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 
 // TransportNetworks returns network types that are used for transports.
-func (n *Network) TransportNetworks() []string { return n.networks }
+func (n *Network) TransportNetworks() []string {
+	n.netsMu.RLock()
+	networks := make([]string, 0, len(n.nets))
+	for network := range n.nets {
+		networks = append(networks, network)
+	}
+	n.netsMu.RUnlock()
+
+	return networks
+}
 
 // Dmsg returns underlying dmsg client.
 func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
@@ -369,6 +412,20 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		}
 
 		return makeListener(lis, network), nil
+	}
+}
+
+func (n *Network) addNetworkType(netType string) {
+	n.netsMu.Lock()
+	defer n.netsMu.Unlock()
+
+	if _, ok := n.nets[netType]; !ok {
+		n.nets[netType] = struct{}{}
+		n.onNewNetworkTypeMu.Lock()
+		if n.onNewNetworkType != nil {
+			n.onNewNetworkType(netType)
+		}
+		n.onNewNetworkTypeMu.Unlock()
 	}
 }
 
