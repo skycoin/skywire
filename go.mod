@@ -13,7 +13,6 @@ require (
 	github.com/gorilla/securecookie v1.1.1
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
-	github.com/libp2p/go-reuseport v0.0.1
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -33,7 +32,6 @@ require (
 	go.etcd.io/bbolt v1.3.4
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	golang.zx2c4.com/wireguard v0.0.20200320
-	nhooyr.io/websocket v1.8.2 // indirect
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'

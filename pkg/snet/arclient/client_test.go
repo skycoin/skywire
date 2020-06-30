@@ -15,13 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
-var testPubKey, testSecKey = cipher.GenerateKeyPair()
-var log = logging.MustGetLogger("arclient_test")
-
 func TestClientAuth(t *testing.T) {
+	testPubKey, testSecKey := cipher.GenerateKeyPair()
+
 	wg := sync.WaitGroup{}
 
 	headerCh := make(chan http.Header, 1)
@@ -42,15 +41,19 @@ func TestClientAuth(t *testing.T) {
 			}
 		},
 	))
+
 	defer srv.Close()
 
 	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
+
 	c := apiClient.(*client)
 
 	wg.Add(1)
-	_, err = c.Get(context.TODO(), "/")
+
+	resp, err := c.Get(context.TODO(), "/")
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 
 	header := <-headerCh
 	assert.Equal(t, testPubKey.Hex(), header.Get("SW-Public"))
@@ -61,23 +64,29 @@ func TestClientAuth(t *testing.T) {
 }
 
 func TestBind(t *testing.T) {
+	testPubKey, testSecKey := cipher.GenerateKeyPair()
+
 	urlCh := make(chan string, 1)
 	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		urlCh <- r.URL.String()
 	})))
+
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	err = c.Bind(context.TODO(), tptypes.STCPR, "1234")
+	err = c.BindSTCPR(context.TODO(), tptypes.STCPR, "1234")
 	require.NoError(t, err)
 
 	assert.Equal(t, "/bind/stcpr", <-urlCh)
 }
 
 func authHandler(next http.Handler) http.Handler {
+	log := logging.MustGetLogger("arclient_test")
+	testPubKey, _ := cipher.GenerateKeyPair()
 	m := http.NewServeMux()
+
 	m.Handle("/security/nonces/", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
@@ -85,6 +94,8 @@ func authHandler(next http.Handler) http.Handler {
 			}
 		},
 	))
+
 	m.Handle("/", next)
+
 	return m
 }

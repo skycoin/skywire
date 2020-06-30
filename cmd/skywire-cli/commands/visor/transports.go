@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 

@@ -17,8 +17,8 @@ type MockAPIClient struct {
 	mock.Mock
 }
 
-// Bind provides a mock function with given fields: ctx, tType, port
-func (_m *MockAPIClient) Bind(ctx context.Context, tType string, port string) error {
+// BindSTCPR provides a mock function with given fields: ctx, tType, port
+func (_m *MockAPIClient) BindSTCPR(ctx context.Context, tType string, port string) error {
 	ret := _m.Called(ctx, tType, port)
 
 	var r0 error
