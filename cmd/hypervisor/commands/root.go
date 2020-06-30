@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"time"
