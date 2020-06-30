@@ -3,6 +3,7 @@ package hypervisor
 import (
 	"context"
 	"io"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -148,7 +149,7 @@ func (dtm *DmsgTrackerManager) serve() {
 }
 
 func updateAllTrackers(ctx context.Context, dts map[cipher.PubKey]*DmsgTracker) {
-	log := log.WithField("func", "DmsgTrackerManager.updateAllTrackers")
+	log := log.WithField("func", funcName())
 
 	type errReport struct {
 		pk  cipher.PubKey
@@ -251,7 +252,7 @@ func (dtm *DmsgTrackerManager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 
 // Close implements io.Closer
 func (dtm *DmsgTrackerManager) Close() error {
-	log := dtm.log.WithField("func", "DmsgTrackerManager.Close")
+	log := dtm.log.WithField("func", funcName())
 
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
@@ -285,4 +286,9 @@ func isDone(done <-chan struct{}) bool {
 	default:
 		return false
 	}
+}
+
+func funcName() string {
+	pc, _, _, _ := runtime.Caller(1)
+	return runtime.FuncForPC(pc).Name()
 }
