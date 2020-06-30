@@ -23,29 +23,14 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/porter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tpconn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tphandshake"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
 )
 
 const (
-	// STCPType is a type of a transport that works via TCP and resolves addresses using PK table.
-	STCPType = "stcp"
-	// STCPType is a type of a transport that works via TCP and resolves addresses using address-resolver service.
-	STCPRType = "stcpr"
-	// STCPType is a type of a transport that works via TCP, resolves addresses using address-resolver service,
-	// and uses TCP hole punching.
-	STCPHType = "stcph"
-	// SUDPType is a type of a transport that works via UDP and resolves addresses using PK table.
-	SUDPType = "sudp"
-	// SUDPRType is a type of a transport that works via UDP and resolves addresses using address-resolver service.
-	SUDPRType = "sudpr"
-	// SUDPHType is a type of a transport that works via UDP, resolves addresses using address-resolver service,
-	// and uses TCP hole punching.
-	SUDPHType = "sudph"
-
 	// HolePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
 	HolePunchMessage = "holepunch"
 
 	// DialTimeout represents a timeout for dialing.
-	// TODO: Find best value.
 	DialTimeout = 30 * time.Second
 )
 
@@ -60,7 +45,7 @@ var (
 	ErrAlreadyListening = errors.New("already listening")
 )
 
-type Client interface { // TODO: rename
+type Client interface {
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error)
 	Listen(lPort uint16) (*tplistener.Listener, error)
 	Serve() error
@@ -74,7 +59,7 @@ type ClientConfig struct {
 	SK              cipher.SecKey
 	LocalAddr       string
 	Table           pktable.PKTable
-	AddressResolver arclient.APIClient // TODO(nkryuchkov): close it properly
+	AddressResolver arclient.APIClient
 }
 
 // client is the central control for incoming and outgoing 'Conn's.
@@ -108,91 +93,26 @@ func NewClient(conf ClientConfig) *client {
 // Serve serves the listening portion of the client.
 func (c *client) Serve() error {
 	switch c.conf.Type {
-	case STCPType, STCPRType, SUDPType, SUDPRType:
+	case tptypes.STCP, tptypes.STCPR, tptypes.SUDP, tptypes.SUDPR:
 		if c.listener != nil {
 			return ErrAlreadyListening
 		}
-	case SUDPHType:
+	case tptypes.SUDPH:
 		if c.packetListener != nil {
 			return ErrAlreadyListening
 		}
-	case STCPHType:
+	case tptypes.STCPH:
 		if c.stcphConnCh != nil {
 			return ErrAlreadyListening
 		}
 	}
 
 	switch c.conf.Type {
-	case STCPType, STCPRType:
-		l, err := net.Listen("tcp", c.conf.LocalAddr)
-		if err != nil {
-			return err
-		}
-
-		c.listener = l
-
-	case SUDPType, SUDPRType:
-		l, err := kcp.Listen(c.conf.LocalAddr)
-		if err != nil {
-			return err
-		}
-
-		c.listener = l
-
-	case SUDPHType:
-		lAddr, err := net.ResolveUDPAddr("udp", "")
-		if err != nil {
-			return fmt.Errorf("net.ResolveUDPAddr (local): %w", err)
-		}
-
-		packetListener, err := net.ListenUDP("udp", lAddr)
-		if err != nil {
-			return err
-		}
-
-		c.packetListener = packetListener
-
-		c.packetFilter = pfilter.NewPacketFilter(packetListener)
-		c.visorConn = c.packetFilter.NewConn(100, nil)
-
-		c.packetFilter.Start()
-
-		addrCh, err := c.conf.AddressResolver.BindSUDPH(context.Background(), c.packetFilter)
-		if err != nil {
-			return err
-		}
-
-		go func() {
-			for addr := range addrCh {
-				udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
-				if err != nil {
-					c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
-					continue
-				}
-
-				// TODO(nkryuchkov): More robust solution
-				c.log.Infof("Sending hole punch packet to %v", addr)
-				if _, err := c.visorConn.WriteTo([]byte(HolePunchMessage), udpAddr); err != nil {
-					c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
-					continue
-				}
-
-				c.log.Infof("Sent hole punch packet to %v", addr)
-			}
-		}()
-
-		listener, err := kcp.ServeConn(nil, 0, 0, c.visorConn)
-		if err != nil {
-			return err
-		}
-
-		c.listener = listener
-	case STCPHType:
+	case tptypes.STCPH:
 		ctx := context.Background()
 
 		dialCh := make(chan cipher.PubKey)
 
-		// TODO(nkryuchkov): Try to connect visors in the same local network locally.
 		connCh, err := c.conf.AddressResolver.BindSTCPH(ctx, dialCh)
 		if err != nil {
 			return fmt.Errorf("ws: %w", err)
@@ -202,15 +122,18 @@ func (c *client) Serve() error {
 		c.dialCh = dialCh
 
 		c.log.Infof("listening websocket events on %v", c.conf.AddressResolver.LocalTCPAddr())
+
+	default:
+		l, err := c.getListener()(c.conf.LocalAddr)
+		if err != nil {
+			return err
+		}
+
+		c.listener = l
 	}
 
-	if c.conf.Type != STCPHType {
-		c.log.Infof("listening on addr: %v", c.listener.Addr())
-	}
-
-	// TODO(nkryuchkov): put to getDialer
 	switch c.conf.Type {
-	case STCPRType, SUDPRType:
+	case tptypes.STCPR, tptypes.SUDPR:
 		_, port, err := net.SplitHostPort(c.listener.Addr().String())
 		if err != nil {
 			return err
@@ -223,7 +146,9 @@ func (c *client) Serve() error {
 
 	go func() {
 		switch c.Type() {
-		case STCPHType:
+		case tptypes.STCPH:
+			c.log.Infof("listening on addr: %v", c.conf.AddressResolver.LocalTCPAddr())
+
 			for addr := range c.stcphConnCh {
 				c.log.Infof("Received signal to dial %v", addr)
 
@@ -235,6 +160,8 @@ func (c *client) Serve() error {
 			}
 
 		default:
+			c.log.Infof("listening on addr: %v", c.listener.Addr())
+
 			for {
 				if err := c.acceptConn(); err != nil {
 					c.log.Warnf("failed to accept incoming connection: %v", err)
@@ -306,7 +233,7 @@ func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
 		return io.ErrClosedPipe
 	}
 
-	tcpConn, err := c.dialTimeout(c.getDialer(), remote.Addr)
+	tcpConn, err := c.getDialer()(remote.Addr)
 	if err != nil {
 		return err
 	}
@@ -360,7 +287,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 	var visorConn net.Conn
 
 	switch c.conf.Type {
-	case STCPType, SUDPType:
+	case tptypes.STCP, tptypes.SUDP:
 		addr, ok := c.conf.Table.Addr(rPK)
 		if !ok {
 			return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
@@ -373,44 +300,21 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 
 		visorConn = conn
 
-	case STCPRType, SUDPRType:
-		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.conf.Type, rPK)
+	case tptypes.STCPH:
+		select {
+		case <-time.After(DialTimeout):
+			return nil, ErrTimeout
+		case c.dialCh <- rPK:
+		}
+		fallthrough
+
+	case tptypes.STCPR, tptypes.SUDPR, tptypes.SUDPH:
+		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.Type(), rPK)
 		if err != nil {
 			return nil, fmt.Errorf("resolve PK: %w", err)
 		}
 
-		conn, err := c.dialVisor(visorData)
-		if err != nil {
-			return nil, err
-		}
-
-		visorConn = conn
-
-	case SUDPHType:
-		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.Type(), rPK)
-		if err != nil {
-			return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
-		}
-
 		c.log.Infof("Resolved PK %v to visor data %v, dialing", rPK, visorData)
-
-		conn, err := c.dialVisor(visorData)
-		if err != nil {
-			return nil, err
-		}
-
-		visorConn = conn
-
-	case STCPHType:
-		// TODO(nkryuchkov): timeout
-		c.dialCh <- rPK
-
-		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.Type(), rPK)
-		if err != nil {
-			return nil, fmt.Errorf("resolve PK (holepunch): %w", err)
-		}
-
-		c.log.Infof("Resolved PK %v to addr %v, dialing", rPK, visorData)
 
 		conn, err := c.dialVisor(visorData)
 		if err != nil {
@@ -447,16 +351,15 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 	return tpconn.NewConn(connConfig)
 }
 
-// TODO: same for listener
 type dialFunc func(addr string) (net.Conn, error)
 
 func (c *client) getDialer() dialFunc {
 	switch c.conf.Type {
-	case "stcp", "stcpr":
+	case tptypes.STCP, tptypes.STCPR:
 		return func(addr string) (net.Conn, error) {
 			return net.Dial("tcp", addr)
 		}
-	case "stcph":
+	case tptypes.STCPH:
 		return func(addr string) (net.Conn, error) {
 			f := func(addr string) (net.Conn, error) {
 				return reuseport.Dial("tcp", c.conf.AddressResolver.LocalTCPAddr(), addr)
@@ -465,12 +368,69 @@ func (c *client) getDialer() dialFunc {
 			return c.dialTimeout(f, addr)
 		}
 
-	case "sudp", "sudpr":
+	case tptypes.SUDP, tptypes.SUDPR:
 		return kcp.Dial
-	case "sudph":
+	case tptypes.SUDPH:
 		return func(addr string) (net.Conn, error) {
 			return c.dialTimeout(c.dialUDP, addr)
 		}
+	default:
+		return nil // should not happen
+	}
+}
+
+type listenFunc func(addr string) (net.Listener, error)
+
+func (c *client) getListener() listenFunc {
+	switch c.conf.Type {
+	case tptypes.STCP, tptypes.STCPR:
+		return func(addr string) (net.Listener, error) {
+			return net.Listen("tcp", addr)
+		}
+
+	case tptypes.SUDP, tptypes.SUDPR:
+		return kcp.Listen
+
+	case tptypes.SUDPH:
+		return func(_ string) (net.Listener, error) {
+			packetListener, err := net.ListenPacket("udp", "")
+			if err != nil {
+				return nil, err
+			}
+
+			c.packetListener = packetListener
+
+			c.packetFilter = pfilter.NewPacketFilter(packetListener)
+			c.visorConn = c.packetFilter.NewConn(100, nil)
+
+			c.packetFilter.Start()
+
+			addrCh, err := c.conf.AddressResolver.BindSUDPH(context.Background(), c.packetFilter)
+			if err != nil {
+				return nil, err
+			}
+
+			go func() {
+				for addr := range addrCh {
+					udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
+					if err != nil {
+						c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
+						continue
+					}
+
+					c.log.Infof("Sending hole punch packet to %v", addr)
+					if _, err := c.visorConn.WriteTo([]byte(HolePunchMessage), udpAddr); err != nil {
+						c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
+						continue
+					}
+
+					c.log.Infof("Sent hole punch packet to %v", addr)
+				}
+			}()
+
+			return kcp.ServeConn(nil, 0, 0, c.visorConn)
+		}
+
 	default:
 		return nil // should not happen
 	}
@@ -484,7 +444,6 @@ func (c *client) dialUDP(remoteAddr string) (net.Conn, error) {
 
 	dialConn := c.packetFilter.NewConn(20, packetfilter.NewKCPConversationFilter())
 
-	// TODO(nkryuchkov): More robust solution
 	if _, err := dialConn.WriteTo([]byte(HolePunchMessage), rAddr); err != nil {
 		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)
 	}
@@ -578,6 +537,13 @@ func (c *client) Close() error {
 		for _, lis := range c.listeners {
 			if err := lis.Close(); err != nil {
 				c.log.WithError(err).Warnf("Failed to close listener")
+			}
+		}
+
+		switch c.Type() {
+		case tptypes.STCPR, tptypes.STCPH, tptypes.SUDPR, tptypes.SUDPH:
+			if err := c.conf.AddressResolver.Close(); err != nil {
+				c.log.WithError(err).Warnf("Failed to close address-resolver")
 			}
 		}
 	})
