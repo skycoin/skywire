@@ -81,11 +81,3 @@ button:focus {
 .mat-snack-bar-container {
   max-width: 90vw !important;
 }
-
-.transparent-button {
-  opacity: 0.5;
-
-  &:hover {
-    opacity: 1;
-  }
-}

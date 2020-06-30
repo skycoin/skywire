@@ -29,7 +29,7 @@
     <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}" *ngIf="tabsData && tabsData[selectedTabIndex]">
       <button
         mat-button
-        class="tab-button full-opacity white-theme"
+        class="tab-button select-tab-button white-theme"
         [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
         (click)="openTabSelector()"
       >
