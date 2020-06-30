@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"fmt"
+	"context"
 	"net/http"
 	"os"
 	"time"
@@ -50,6 +50,9 @@ var rootCmd = &cobra.Command{
 	Use:   "hypervisor",
 	Short: "Manages Skywire Visors",
 	Run: func(_ *cobra.Command, args []string) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
@@ -72,29 +75,29 @@ var rootCmd = &cobra.Command{
 			log.Fatalf("Failed to obtain embedded static files: %v", err)
 		}
 
+		dmsgC := prepareDmsg(conf)
+
 		// Prepare hypervisor.
-		hv, err := hypervisor.New(assets, conf, restartCtx)
+		hv, err := hypervisor.New(conf, assets, restartCtx, dmsgC)
 		if err != nil {
 			log.Fatalln("Failed to start hypervisor:", err)
 		}
 
 		if mock {
-			prepareMockData(hv)
+			serveMockData(hv)
 		} else {
-			prepareDmsg(hv, conf)
+			serveDmsg(ctx, hv, conf)
 		}
 
 		// Serve HTTP(s).
-		log := log.
-			WithField("addr", conf.HTTPAddr).
-			WithField("tls", conf.EnableTLS)
+		log.WithField("addr", conf.HTTPAddr).
+			WithField("tls", conf.EnableTLS).
+			Info("Serving hypervisor...")
 
-		log.Info("Serving hypervisor...")
-
-		if conf.EnableTLS {
-			err = http.ListenAndServeTLS(conf.HTTPAddr, conf.TLSCertFile, conf.TLSKeyFile, hv)
+		if handler := hv.HTTPHandler(); conf.EnableTLS {
+			err = http.ListenAndServeTLS(conf.HTTPAddr, conf.TLSCertFile, conf.TLSKeyFile, handler)
 		} else {
-			err = http.ListenAndServe(conf.HTTPAddr, hv)
+			err = http.ListenAndServe(conf.HTTPAddr, handler)
 		}
 
 		if err != nil {
@@ -117,7 +120,25 @@ func prepareConfig(args []string) (conf hypervisor.Config) {
 	return conf
 }
 
-func prepareMockData(hv *hypervisor.Hypervisor) {
+func prepareDmsg(conf hypervisor.Config) *dmsg.Client {
+	dmsgC := dmsg.NewClient(conf.PK, conf.SK, disc.NewHTTP(conf.DmsgDiscovery), dmsg.DefaultConfig())
+	go dmsgC.Serve()
+
+	<-dmsgC.Ready()
+	return dmsgC
+}
+
+func serveDmsg(ctx context.Context, hv *hypervisor.Hypervisor, conf hypervisor.Config) {
+	go func() {
+		if err := hv.ServeRPC(ctx, conf.DmsgPort); err != nil {
+			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+		}
+	}()
+	log.WithField("addr", dmsg.Addr{PK: conf.PK, Port: conf.DmsgPort}).
+		Info("Serving RPC client over dmsg.")
+}
+
+func serveMockData(hv *hypervisor.Hypervisor) {
 	err := hv.AddMockData(hypervisor.MockConfig{
 		Visors:            mockVisors,
 		MaxTpsPerVisor:    mockMaxTps,
@@ -127,26 +148,6 @@ func prepareMockData(hv *hypervisor.Hypervisor) {
 	if err != nil {
 		log.Fatalln("Failed to add mock data:", err)
 	}
-}
-
-func prepareDmsg(hv *hypervisor.Hypervisor, conf hypervisor.Config) {
-	// Prepare dmsg client.
-	dmsgC := dmsg.NewClient(conf.PK, conf.SK, disc.NewHTTP(conf.DmsgDiscovery), dmsg.DefaultConfig())
-	go dmsgC.Serve()
-
-	dmsgL, err := dmsgC.Listen(conf.DmsgPort)
-	if err != nil {
-		log.WithField("addr", fmt.Sprintf("dmsg://%s:%d", conf.PK, conf.DmsgPort)).
-			Fatal("Failed to listen over dmsg.")
-	}
-	go func() {
-		if err := hv.ServeRPC(dmsgC, dmsgL); err != nil {
-			log.WithError(err).
-				Fatal("Failed to serve RPC client over dmsg.")
-		}
-	}()
-	log.WithField("addr", fmt.Sprintf("dmsg://%s:%d", conf.PK, conf.DmsgPort)).
-		Info("Serving RPC client over dmsg.")
 }
 
 // Execute executes root CLI command.
