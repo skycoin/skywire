@@ -36,14 +36,14 @@
     ></app-tab-bar>
   </div>
   <div class="col-12">
-    <div class="main-area">
+    <div [ngClass]="{'main-area': !showingInfo && !showingFullList, 'full-size-main-area': showingInfo || showingFullList}">
       <div class="d-flex flex-column h-100">
         <!-- Content of the subpage. -->
         <router-outlet></router-outlet>
       </div>
     </div>
     <!-- Right bar. -->
-    <div class="right-bar">
+    <div class="right-bar" [ngClass]="{'d-none': showingInfo || showingFullList}">
       <app-node-info-content *ngIf="!showingInfo && !showingFullList" [nodeInfo]="node"></app-node-info-content>
     </div>
   </div>

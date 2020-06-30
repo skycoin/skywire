@@ -46,3 +46,19 @@
     }
   }
 }
+
+.transparent-button {
+  opacity: 0.5;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.subtle-transparent-button {
+  opacity: 0.85;
+
+  &:hover {
+    opacity: 1;
+  }
+}
