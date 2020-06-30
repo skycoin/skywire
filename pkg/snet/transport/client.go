@@ -13,7 +13,6 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/libp2p/go-reuseport"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
@@ -73,8 +72,6 @@ type client struct {
 	packetFilter   *pfilter.PacketFilter
 	packetListener net.PacketConn
 	visorConn      net.PacketConn
-	stcphConnCh    <-chan arclient.RemoteVisor
-	dialCh         chan cipher.PubKey
 	listener       net.Listener
 	listeners      map[uint16]*tplistener.Listener // key: lPort
 }
@@ -93,7 +90,7 @@ func NewClient(conf ClientConfig) *client {
 // Serve serves the listening portion of the client.
 func (c *client) Serve() error {
 	switch c.conf.Type {
-	case tptypes.STCP, tptypes.STCPR, tptypes.SUDP, tptypes.SUDPR:
+	case tptypes.STCP, tptypes.STCPR:
 		if c.listener != nil {
 			return ErrAlreadyListening
 		}
@@ -101,39 +98,17 @@ func (c *client) Serve() error {
 		if c.packetListener != nil {
 			return ErrAlreadyListening
 		}
-	case tptypes.STCPH:
-		if c.stcphConnCh != nil {
-			return ErrAlreadyListening
-		}
 	}
 
-	switch c.conf.Type {
-	case tptypes.STCPH:
-		ctx := context.Background()
-
-		dialCh := make(chan cipher.PubKey)
-
-		connCh, err := c.conf.AddressResolver.BindSTCPH(ctx, dialCh)
-		if err != nil {
-			return fmt.Errorf("ws: %w", err)
-		}
-
-		c.stcphConnCh = connCh
-		c.dialCh = dialCh
-
-		c.log.Infof("listening websocket events on %v", c.conf.AddressResolver.LocalTCPAddr())
-
-	default:
-		l, err := c.getListener()(c.conf.LocalAddr)
-		if err != nil {
-			return err
-		}
-
-		c.listener = l
+	l, err := c.getListener()(c.conf.LocalAddr)
+	if err != nil {
+		return err
 	}
 
+	c.listener = l
+
 	switch c.conf.Type {
-	case tptypes.STCPR, tptypes.SUDPR:
+	case tptypes.STCPR:
 		_, port, err := net.SplitHostPort(c.listener.Addr().String())
 		if err != nil {
 			return err
@@ -145,30 +120,14 @@ func (c *client) Serve() error {
 	}
 
 	go func() {
-		switch c.Type() {
-		case tptypes.STCPH:
-			c.log.Infof("listening on addr: %v", c.conf.AddressResolver.LocalTCPAddr())
+		c.log.Infof("listening on addr: %v", c.listener.Addr())
 
-			for addr := range c.stcphConnCh {
-				c.log.Infof("Received signal to dial %v", addr)
-
-				go func(addr arclient.RemoteVisor) {
-					if err := c.acceptSTCPHConn(addr); err != nil {
-						c.log.Warnf("failed to accept incoming connection: %v", err)
-					}
-				}(addr)
-			}
-
-		default:
-			c.log.Infof("listening on addr: %v", c.listener.Addr())
-
-			for {
-				if err := c.acceptConn(); err != nil {
-					c.log.Warnf("failed to accept incoming connection: %v", err)
-					if !tphandshake.IsHandshakeError(err) {
-						c.log.Warnf("stopped serving")
-						return
-					}
+		for {
+			if err := c.acceptConn(); err != nil {
+				c.log.Warnf("failed to accept incoming connection: %v", err)
+				if !tphandshake.IsHandshakeError(err) {
+					c.log.Warnf("stopped serving")
+					return
 				}
 			}
 		}
@@ -228,54 +187,6 @@ func (c *client) acceptConn() error {
 	return nil
 }
 
-func (c *client) acceptSTCPHConn(remote arclient.RemoteVisor) error {
-	if c.isClosed() {
-		return io.ErrClosedPipe
-	}
-
-	tcpConn, err := c.getDialer()(remote.Addr)
-	if err != nil {
-		return err
-	}
-
-	remoteAddr := tcpConn.RemoteAddr()
-
-	c.log.Infof("Accepted connection from %v", remoteAddr)
-
-	var lis *tplistener.Listener
-
-	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-
-		var ok bool
-		if lis, ok = c.listeners[f2.DstAddr.Port]; !ok {
-			return errors.New("not listening on given port")
-		}
-
-		return nil
-	})
-
-	connConfig := tpconn.Config{
-		Log:       c.log,
-		Conn:      tcpConn,
-		LocalPK:   c.conf.PK,
-		LocalSK:   c.conf.SK,
-		Deadline:  time.Now().Add(tphandshake.Timeout),
-		Handshake: hs,
-		FreePort:  nil,
-		Encrypt:   true,
-		Initiator: false,
-	}
-
-	conn, err := tpconn.NewConn(connConfig)
-	if err != nil {
-		return err
-	}
-
-	return lis.Introduce(conn)
-}
-
 // Dial dials a new sudp.Conn to specified remote public key and port.
 func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error) {
 	if c.isClosed() {
@@ -287,7 +198,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 	var visorConn net.Conn
 
 	switch c.conf.Type {
-	case tptypes.STCP, tptypes.SUDP:
+	case tptypes.STCP:
 		addr, ok := c.conf.Table.Addr(rPK)
 		if !ok {
 			return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
@@ -300,15 +211,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 
 		visorConn = conn
 
-	case tptypes.STCPH:
-		select {
-		case <-time.After(DialTimeout):
-			return nil, ErrTimeout
-		case c.dialCh <- rPK:
-		}
-		fallthrough
-
-	case tptypes.STCPR, tptypes.SUDPR, tptypes.SUDPH:
+	case tptypes.STCPR, tptypes.SUDPH:
 		visorData, err := c.conf.AddressResolver.Resolve(ctx, c.Type(), rPK)
 		if err != nil {
 			return nil, fmt.Errorf("resolve PK: %w", err)
@@ -359,17 +262,7 @@ func (c *client) getDialer() dialFunc {
 		return func(addr string) (net.Conn, error) {
 			return net.Dial("tcp", addr)
 		}
-	case tptypes.STCPH:
-		return func(addr string) (net.Conn, error) {
-			f := func(addr string) (net.Conn, error) {
-				return reuseport.Dial("tcp", c.conf.AddressResolver.LocalTCPAddr(), addr)
-			}
 
-			return c.dialTimeout(f, addr)
-		}
-
-	case tptypes.SUDP, tptypes.SUDPR:
-		return kcp.Dial
 	case tptypes.SUDPH:
 		return func(addr string) (net.Conn, error) {
 			return c.dialTimeout(c.dialUDP, addr)
@@ -387,9 +280,6 @@ func (c *client) getListener() listenFunc {
 		return func(addr string) (net.Listener, error) {
 			return net.Listen("tcp", addr)
 		}
-
-	case tptypes.SUDP, tptypes.SUDPR:
-		return kcp.Listen
 
 	case tptypes.SUDPH:
 		return func(_ string) (net.Listener, error) {
@@ -460,7 +350,7 @@ func (c *client) dialTimeout(dialer dialFunc, addr string) (net.Conn, error) {
 	timer := time.NewTimer(DialTimeout)
 	defer timer.Stop()
 
-	c.log.Infof("Dialing %v from %v via udp", addr, c.conf.AddressResolver.LocalTCPAddr())
+	c.log.Infof("Dialing %v", addr)
 
 	for {
 		select {
@@ -469,12 +359,12 @@ func (c *client) dialTimeout(dialer dialFunc, addr string) (net.Conn, error) {
 		default:
 			conn, err := dialer(addr)
 			if err == nil {
-				c.log.Infof("Dialed %v from %v", addr, c.conf.AddressResolver.LocalTCPAddr())
+				c.log.Infof("Dialed %v", addr)
 				return conn, nil
 			}
 
 			c.log.WithError(err).
-				Warnf("Failed to dial %v from %v, trying again: %v", addr, c.conf.AddressResolver.LocalTCPAddr(), err)
+				Warnf("Failed to dial %v, trying again: %v", addr, err)
 		}
 	}
 }
@@ -541,7 +431,7 @@ func (c *client) Close() error {
 		}
 
 		switch c.Type() {
-		case tptypes.STCPR, tptypes.STCPH, tptypes.SUDPR, tptypes.SUDPH:
+		case tptypes.STCPR, tptypes.SUDPH:
 			if err := c.conf.AddressResolver.Close(); err != nil {
 				c.log.WithError(err).Warnf("Failed to close address-resolver")
 			}
