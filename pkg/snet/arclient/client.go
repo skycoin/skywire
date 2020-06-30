@@ -26,18 +26,11 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tpconn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tphandshake"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/transport/tptypes"
 )
 
 const (
 	bindPath             = "/bind/"
-	bindSTCPRPath        = "/bind/stcpr"
-	bindSUDPRPath        = "/bind/sudpr"
-	resolveSTCPRPath     = "/resolve/"
-	resolveSTCPHPath     = "/resolve_hole_punch/"
-	resolveSUDPRPath     = "/resolve_sudpr/"
-	resolveSUDPHPath     = "/resolve_sudph/"
-	wsPath               = "/ws"
+	bindSTCPHPath        = "/bind/stcph"
 	addrChSize           = 1024
 	udpKeepAliveInterval = 10 * time.Second
 	udpKeepAliveMessage  = "keepalive"
@@ -271,22 +264,9 @@ func (c *client) bind(ctx context.Context, path string, port string) error {
 }
 
 func (c *client) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
-	switch tType {
-	case tptypes.STCPR:
-		return c.resolve(ctx, resolveSTCPRPath, pk)
-	case tptypes.STCPH:
-		return c.resolve(ctx, resolveSTCPHPath, pk)
-	case tptypes.SUDPR:
-		return c.resolve(ctx, resolveSUDPRPath, pk)
-	case tptypes.SUDPH:
-		return c.resolve(ctx, resolveSUDPHPath, pk)
-	default:
-		return VisorData{}, ErrUnknownTransportType
-	}
-}
+	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
 
-func (c *client) resolve(ctx context.Context, path string, pk cipher.PubKey) (VisorData, error) {
-	resp, err := c.Get(ctx, path+pk.String())
+	resp, err := c.Get(ctx, path)
 	if err != nil {
 		return VisorData{}, err
 	}
@@ -336,7 +316,7 @@ func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-
 }
 
 func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
-	conn, err := c.Websocket(ctx, wsPath)
+	conn, err := c.Websocket(ctx, bindSTCPHPath)
 	if err != nil {
 		return err
 	}
