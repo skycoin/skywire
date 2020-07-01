@@ -17,13 +17,13 @@ type MockAPIClient struct {
 	mock.Mock
 }
 
-// BindSTCPR provides a mock function with given fields: ctx, tType, port
-func (_m *MockAPIClient) BindSTCPR(ctx context.Context, tType string, port string) error {
-	ret := _m.Called(ctx, tType, port)
+// BindSTCPR provides a mock function with given fields: ctx, port
+func (_m *MockAPIClient) BindSTCPR(ctx context.Context, port string) error {
+	ret := _m.Called(ctx, port)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = rf(ctx, tType, port)
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, port)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -31,13 +31,13 @@ func (_m *MockAPIClient) BindSTCPR(ctx context.Context, tType string, port strin
 	return r0
 }
 
-// BindSUDPH provides a mock function with given fields: ctx, filter
-func (_m *MockAPIClient) BindSUDPH(ctx context.Context, filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
-	ret := _m.Called(ctx, filter)
+// BindSUDPH provides a mock function with given fields: filter
+func (_m *MockAPIClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
+	ret := _m.Called(filter)
 
 	var r0 <-chan RemoteVisor
-	if rf, ok := ret.Get(0).(func(context.Context, *pfilter.PacketFilter) <-chan RemoteVisor); ok {
-		r0 = rf(ctx, filter)
+	if rf, ok := ret.Get(0).(func(*pfilter.PacketFilter) <-chan RemoteVisor); ok {
+		r0 = rf(filter)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(<-chan RemoteVisor)
@@ -45,8 +45,8 @@ func (_m *MockAPIClient) BindSUDPH(ctx context.Context, filter *pfilter.PacketFi
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *pfilter.PacketFilter) error); ok {
-		r1 = rf(ctx, filter)
+	if rf, ok := ret.Get(1).(func(*pfilter.PacketFilter) error); ok {
+		r1 = rf(filter)
 	} else {
 		r1 = ret.Error(1)
 	}
