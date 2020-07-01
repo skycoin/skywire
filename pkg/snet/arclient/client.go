@@ -28,20 +28,17 @@ import (
 )
 
 const (
-	bindPath             = "/bind/"
+	stcprBindPath        = "/bind/stcpr"
 	addrChSize           = 1024
 	udpKeepAliveInterval = 10 * time.Second
 	udpKeepAliveMessage  = "keepalive"
-	sudphPriority        = 10
+	// sudphPriority is used to set an order how connection filters apply.
+	sudphPriority = 1
 )
 
 var (
 	// ErrNoEntry means that there exists no entry for this PK.
 	ErrNoEntry = errors.New("no entry for this PK")
-	// ErrNotConnected is returned when PK is not connected.
-	ErrNotConnected = errors.New("this PK is not connected")
-	// ErrUnknownTransportType is returned when transport type is unknown.
-	ErrUnknownTransportType = errors.New("unknown transport type")
 )
 
 // Error is the object returned to the client when there's an error.
@@ -51,11 +48,11 @@ type Error struct {
 
 //go:generate mockery -name APIClient -case underscore -inpkg
 
-// APIClient implements DMSG discovery API client.
+// APIClient implements address resolver API client.
 type APIClient interface {
 	io.Closer
-	BindSTCPR(ctx context.Context, tType, port string) error
-	BindSUDPH(ctx context.Context, filter *pfilter.PacketFilter) (<-chan RemoteVisor, error)
+	BindSTCPR(ctx context.Context, port string) error
+	BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
 }
 
@@ -72,17 +69,16 @@ type key struct {
 	sk         cipher.SecKey
 }
 
-var clients = make(map[key]*client) // nolint: gochecknoglobals
+var clients = make(map[key]*httpClient) // nolint: gochecknoglobals
 
-// client implements Client for address resolver API.
-type client struct {
+// httpClient implements APIClient for address resolver API.
+type httpClient struct {
 	log           *logging.Logger
 	httpClient    *httpauth.Client
 	pk            cipher.PubKey
 	sk            cipher.SecKey
 	remoteUDPAddr string
 	sudphConn     net.PacketConn
-	sudphAddrCh   chan RemoteVisor
 	closed        chan struct{}
 }
 
@@ -121,7 +117,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 		})
 
 		if err != nil {
-			// This should not happen as retries is set to try indefinitely.
+			// This should not happen as retrier is set to try indefinitely.
 			// If address resolver cannot be contacted indefinitely, 'arDone' will be blocked indefinitely.
 			log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
 		}
@@ -132,7 +128,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
-	client := &client{
+	client := &httpClient{
 		closed:        make(chan struct{}),
 		log:           log,
 		httpClient:    httpAuthClient,
@@ -147,7 +143,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 }
 
 // Get performs a new GET request.
-func (c *client) Get(ctx context.Context, path string) (*http.Response, error) {
+func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
 	addr := c.httpClient.Addr() + path
 
 	req, err := http.NewRequest(http.MethodGet, addr, new(bytes.Buffer))
@@ -159,7 +155,7 @@ func (c *client) Get(ctx context.Context, path string) (*http.Response, error) {
 }
 
 // Post performs a POST request.
-func (c *client) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+func (c *httpClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
 		return nil, err
@@ -187,11 +183,7 @@ type LocalAddresses struct {
 }
 
 // BindSTCPR binds client PK to IP:port on address resolver.
-func (c *client) BindSTCPR(ctx context.Context, tType, port string) error {
-	return c.bind(ctx, bindPath+tType, port)
-}
-
-func (c *client) bind(ctx context.Context, path string, port string) error {
+func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	addresses, err := localAddresses()
 	if err != nil {
 		return err
@@ -202,7 +194,7 @@ func (c *client) bind(ctx context.Context, path string, port string) error {
 		Port:      port,
 	}
 
-	resp, err := c.Post(ctx, path, localAddresses)
+	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
 	if err != nil {
 		return err
 	}
@@ -220,7 +212,7 @@ func (c *client) bind(ctx context.Context, path string, port string) error {
 	return nil
 }
 
-func (c *client) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
+func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
 	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
 
 	resp, err := c.Get(ctx, path)
@@ -262,39 +254,29 @@ type RemoteVisor struct {
 	Addr string
 }
 
-func (c *client) BindSUDPH(ctx context.Context, filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
-	if c.sudphAddrCh == nil {
-		if err := c.initSUDPH(ctx, filter); err != nil {
-			return nil, err
-		}
-	}
-
-	return c.sudphAddrCh, nil
-}
-
-func (c *client) initSUDPH(_ context.Context, filter *pfilter.PacketFilter) error {
+func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
 	rAddr, err := net.ResolveUDPAddr("udp", c.remoteUDPAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr))
 
 	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	c.log.Infof("SUDPH Local port: %v", localPort)
 
 	arConn, err := c.wrapConn(c.sudphConn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	addresses, err := localAddresses()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	localAddresses := LocalAddresses{
@@ -304,16 +286,14 @@ func (c *client) initSUDPH(_ context.Context, filter *pfilter.PacketFilter) erro
 
 	laData, err := json.Marshal(localAddresses)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, err := arConn.Write(laData); err != nil {
-		return err
+		return nil, err
 	}
 
-	addrCh := make(chan RemoteVisor, addrChSize)
-
-	go c.readSUDPHMessages(arConn, addrCh)
+	addrCh := c.readSUDPHMessages(arConn)
 
 	go func() {
 		if err := c.keepAliveLoop(arConn); err != nil {
@@ -321,43 +301,47 @@ func (c *client) initSUDPH(_ context.Context, filter *pfilter.PacketFilter) erro
 		}
 	}()
 
-	c.sudphAddrCh = addrCh
-
-	return nil
+	return addrCh, nil
 }
 
-func (c *client) readSUDPHMessages(reader io.Reader, addrCh chan<- RemoteVisor) {
-	defer func() {
-		close(addrCh)
-	}()
+func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
+	addrCh := make(chan RemoteVisor, addrChSize)
 
-	buf := make([]byte, 4096)
+	go func(addrCh chan<- RemoteVisor) {
+		defer func() {
+			close(addrCh)
+		}()
 
-	for {
-		select {
-		case <-c.closed:
-			return
-		default:
-			n, err := reader.Read(buf)
-			if err != nil {
-				c.log.Errorf("Failed to read SUDPH message: %v", err)
+		buf := make([]byte, 4096)
+
+		for {
+			select {
+			case <-c.closed:
 				return
+			default:
+				n, err := reader.Read(buf)
+				if err != nil {
+					c.log.Errorf("Failed to read SUDPH message: %v", err)
+					return
+				}
+
+				c.log.Infof("New SUDPH message: %v", string(buf[:n]))
+
+				var remote RemoteVisor
+				if err := json.Unmarshal(buf[:n], &remote); err != nil {
+					c.log.Errorf("Failed to read unmarshal message: %v", err)
+					continue
+				}
+
+				addrCh <- remote
 			}
-
-			c.log.Infof("New SUDPH message: %v", string(buf[:n]))
-
-			var remote RemoteVisor
-			if err := json.Unmarshal(buf[:n], &remote); err != nil {
-				c.log.Errorf("Failed to read unmarshal message: %v", err)
-				continue
-			}
-
-			addrCh <- remote
 		}
-	}
+	}(addrCh)
+
+	return addrCh
 }
 
-func (c *client) wrapConn(conn net.PacketConn) (*tpconn.Conn, error) {
+func (c *httpClient) wrapConn(conn net.PacketConn) (*tpconn.Conn, error) {
 	arKCPConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, conn)
 	if err != nil {
 		return nil, err
@@ -385,7 +369,7 @@ func (c *client) wrapConn(conn net.PacketConn) (*tpconn.Conn, error) {
 	return arConn, nil
 }
 
-func (c *client) Close() error {
+func (c *httpClient) Close() error {
 	select {
 	case <-c.closed:
 		return nil // already closed
@@ -408,7 +392,7 @@ func (c *client) Close() error {
 }
 
 // Keep NAT mapping alive.
-func (c *client) keepAliveLoop(w io.Writer) error {
+func (c *httpClient) keepAliveLoop(w io.Writer) error {
 	for {
 		select {
 		case <-c.closed:
