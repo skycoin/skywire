@@ -74,8 +74,8 @@
         "transport-discovery": "Transport Entdeckung:",
         "route-finder": "Route Finder:",
         "setup-node": "Setup Visor:",
-        "uptime-tracker": "Uptime Tracker:",
-        "address-resolver": "Address Resolver:",
+        "uptime-tracker": "Verfügbarkeitsmonitor:",
+        "address-resolver": "Addressauflöser:",
         "element-offline": "offline"
       },
       "node-traffic-data": "Datenverkehr"
