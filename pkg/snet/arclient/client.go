@@ -23,6 +23,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
 )
 
+//go:generate mockery -name APIClient -case underscore -inpkg
+
 var log = logging.MustGetLogger("arclient")
 
 const (
@@ -41,8 +43,6 @@ const (
 var (
 	// ErrNoEntry means that there exists no entry for this PK.
 	ErrNoEntry = errors.New("no entry for this PK")
-	// ErrNotConnected is returned when PK is not connected.
-	ErrNotConnected = errors.New("this PK is not connected")
 )
 
 // Error is the object returned to the client when there's an error.
@@ -65,6 +65,7 @@ type APIClient interface {
 	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
 	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
+	Health(ctx context.Context) (int, error)
 }
 
 // VisorData stores visor data.
@@ -73,14 +74,6 @@ type VisorData struct {
 	IsLocal    bool   `json:"is_local,omitempty"`
 	LocalAddresses
 }
-
-type key struct {
-	remoteAddr string
-	pk         cipher.PubKey
-	sk         cipher.SecKey
-}
-
-var clients = make(map[key]*client)
 
 // client implements Client for address resolver API.
 type client struct {
@@ -111,17 +104,6 @@ func (c *client) RemoteUDPAddr() string {
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
-	key := key{
-		remoteAddr: remoteAddr,
-		pk:         pk,
-		sk:         sk,
-	}
-
-	// Same clients would have nonce collisions. Client should be reused in this case.
-	if client, ok := clients[key]; ok {
-		return client, nil
-	}
-
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
 		return nil, fmt.Errorf("address resolver httpauth: %w", err)
@@ -153,8 +135,6 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 	}
 
 	httpAuthClient.SetTransport(transport)
-
-	clients[key] = client
 
 	return client, nil
 }
@@ -325,6 +305,21 @@ func (c *client) resolve(ctx context.Context, path string, pk cipher.PubKey) (Vi
 	}
 
 	return resolveResp, nil
+}
+
+func (c *client) Health(ctx context.Context) (int, error) {
+	resp, err := c.Get(ctx, "/health")
+	if err != nil {
+		return 0, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	return resp.StatusCode, nil
 }
 
 // RemoteVisor contains public key and address of remote visor.

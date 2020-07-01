@@ -14,6 +14,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
@@ -38,6 +39,9 @@ func TestHealth(t *testing.T) {
 		utClient := &utclient.MockAPIClient{}
 		utClient.On("Health", context.Background()).Return(http.StatusOK, nil)
 
+		arClient := &arclient.MockAPIClient{}
+		arClient.On("Health", context.Background()).Return(http.StatusOK, nil)
+
 		v := &Visor{
 			conf: c,
 			tpM: &transport.Manager{
@@ -47,6 +51,7 @@ func TestHealth(t *testing.T) {
 			},
 			rfClient:      rfclient.NewMock(),
 			uptimeTracker: utClient,
+			arClient:      arClient,
 		}
 
 		rpc := &RPC{visor: v, log: logrus.New()}
@@ -59,8 +64,7 @@ func TestHealth(t *testing.T) {
 		assert.Equal(t, http.StatusOK, h.RouteFinder)
 		assert.Equal(t, http.StatusOK, h.SetupNode)
 		assert.Equal(t, http.StatusOK, h.UptimeTracker)
-		// TODO(nkryuchkov): Uncomment when address resolver check is implemented.
-		// assert.Equal(t, http.StatusOK, h.AddressResolver)
+		assert.Equal(t, http.StatusOK, h.AddressResolver)
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
