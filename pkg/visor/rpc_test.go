@@ -1,6 +1,7 @@
 package visor
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -11,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
@@ -32,6 +35,9 @@ func TestHealth(t *testing.T) {
 			SetupNodes:  []cipher.PubKey{c.PK},
 		}
 
+		utClient := &utclient.MockAPIClient{}
+		utClient.On("Health", context.Background()).Return(http.StatusOK, nil)
+
 		v := &Visor{
 			conf: c,
 			tpM: &transport.Manager{
@@ -39,15 +45,22 @@ func TestHealth(t *testing.T) {
 					DiscoveryClient: transport.NewDiscoveryMock(),
 				},
 			},
+			rfClient:      rfclient.NewMock(),
+			uptimeTracker: utClient,
 		}
+
 		rpc := &RPC{visor: v, log: logrus.New()}
 		h := &HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
 		// Transport discovery needs to be mocked or will always fail
-		assert.Equal(t, http.StatusOK, h.SetupNode)
+		assert.Equal(t, http.StatusOK, h.TransportDiscovery)
 		assert.Equal(t, http.StatusOK, h.RouteFinder)
+		assert.Equal(t, http.StatusOK, h.SetupNode)
+		assert.Equal(t, http.StatusOK, h.UptimeTracker)
+		// TODO(nkryuchkov): Uncomment when address resolver check is implemented.
+		// assert.Equal(t, http.StatusOK, h.AddressResolver)
 	})
 
 	t.Run("Report as unavailable", func(t *testing.T) {
@@ -57,9 +70,7 @@ func TestHealth(t *testing.T) {
 		v := &Visor{
 			conf: c,
 			tpM: &transport.Manager{
-				Conf: &transport.ManagerConfig{
-					DiscoveryClient: transport.NewDiscoveryMock(),
-				},
+				Conf: &transport.ManagerConfig{},
 			},
 		}
 
@@ -68,8 +79,11 @@ func TestHealth(t *testing.T) {
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
 
-		assert.Equal(t, http.StatusNotFound, h.SetupNode)
+		assert.Equal(t, http.StatusNotFound, h.TransportDiscovery)
 		assert.Equal(t, http.StatusNotFound, h.RouteFinder)
+		assert.Equal(t, http.StatusNotFound, h.SetupNode)
+		assert.Equal(t, http.StatusNotFound, h.UptimeTracker)
+		assert.Equal(t, http.StatusNotFound, h.AddressResolver)
 	})
 }
 
