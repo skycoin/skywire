@@ -25,6 +25,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -84,15 +85,14 @@ func initSNet(v *Visor) bool {
 		Dmsg:  v.conf.Dmsg,
 		STCP:  v.conf.STCP,
 		STCPR: v.conf.STCPR,
-		STCPH: v.conf.STCPH,
 		SUDP:  v.conf.SUDP,
 		SUDPR: v.conf.SUDPR,
-		SUDPH: v.conf.SUDPH,
 	}
 
 	conf := snet.Config{
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
+		ARClient:       v.arClient,
 		NetworkConfigs: nc,
 	}
 
@@ -139,6 +139,11 @@ func initSNet(v *Visor) bool {
 func initTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
+
+	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+	if err != nil {
+		return report(fmt.Errorf("failed to create address resolver client: %w", err))
+	}
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
@@ -187,7 +192,9 @@ func initTransport(v *Visor) bool {
 		return ok
 	})
 
+	v.arClient = arClient
 	v.tpM = tpM
+
 	return report(nil)
 }
 
@@ -312,6 +319,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	}
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
+		envCfg.AddressResolver = conf.Transport.AddressResolver
 	}
 	if conf.Routing != nil {
 		envCfg.RF = conf.Routing.RouteFinder
@@ -321,12 +329,6 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	}
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
-	}
-	if conf.STCPR != nil {
-		envCfg.STCPRAddressResolver = conf.STCPR.AddressResolver
-	}
-	if conf.STCPH != nil {
-		envCfg.STCPHAddressResolver = conf.STCPH.AddressResolver
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)

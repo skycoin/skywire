@@ -25,6 +25,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
@@ -65,6 +66,7 @@ type Visor struct {
 
 	net      *snet.Network
 	tpM      *transport.Manager
+	arClient arclient.APIClient
 	router   router.Router
 	rfClient rfclient.Client
 
@@ -228,6 +230,11 @@ func (v *Visor) RouteFinderClient() rfclient.Client {
 // UptimeTrackerClient is a convenience function to obtain uptime tracker client.
 func (v *Visor) UptimeTrackerClient() utclient.APIClient {
 	return v.uptimeTracker
+}
+
+// AddressResolverClient is a convenience function to obtain uptime address resovler client.
+func (v *Visor) AddressResolverClient() arclient.APIClient {
+	return v.arClient
 }
 
 // Exec executes a shell command. It returns combined stdout and stderr output and an error.
