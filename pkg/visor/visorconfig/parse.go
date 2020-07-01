@@ -100,10 +100,6 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 		conf.STCPR = old.STCPR
 	}
 
-	if old.STCPH != nil {
-		conf.STCPH = old.STCPH
-	}
-
 	if old.Transport != nil {
 		conf.Transport.Discovery = old.Transport.Discovery
 		conf.Transport.LogStore = old.Transport.LogStore

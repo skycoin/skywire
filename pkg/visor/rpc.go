@@ -122,7 +122,16 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 		out.UptimeTracker = utStatus
 	}
 
-	// TODO(nkryuchkov): Poll address resolver.
+	if arclient := r.visor.AddressResolverClient(); arclient != nil {
+		arStatus, err := arclient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check address resolver health")
+
+			out.AddressResolver = http.StatusInternalServerError
+		}
+
+		out.AddressResolver = arStatus
+	}
 
 	return nil
 }

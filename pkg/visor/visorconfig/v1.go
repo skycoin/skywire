@@ -23,10 +23,8 @@ type V1 struct {
 	Dmsgpty       *V1Dmsgpty        `json:"dmsgpty,omitempty"`
 	STCP          *snet.STCPConfig  `json:"stcp,omitempty"`
 	STCPR         *snet.STCPRConfig `json:"stcpr,omitempty"`
-	STCPH         *snet.STCPHConfig `json:"stcph,omitempty"`
 	SUDP          *snet.SUDPConfig  `json:"sudp,omitempty"`
 	SUDPR         *snet.SUDPRConfig `json:"sudpr,omitempty"`
-	SUDPH         *snet.SUDPHConfig `json:"sudph,omitempty"`
 	Transport     *V1Transport      `json:"transport"`
 	Routing       *V1Routing        `json:"routing"`
 	UptimeTracker *V1UptimeTracker  `json:"uptime_tracker,omitempty"`
@@ -50,9 +48,10 @@ type V1Dmsgpty struct {
 
 // V1Transport defines a transport config.
 type V1Transport struct {
-	Discovery     string          `json:"discovery"`
-	LogStore      *V1LogStore     `json:"log_store"`
-	TrustedVisors []cipher.PubKey `json:"trusted_visors"`
+	Discovery       string          `json:"discovery"`
+	AddressResolver string          `json:"address_resolver"`
+	LogStore        *V1LogStore     `json:"log_store"`
+	TrustedVisors   []cipher.PubKey `json:"trusted_visors"`
 }
 
 // V1LogStore configures a LogStore.
