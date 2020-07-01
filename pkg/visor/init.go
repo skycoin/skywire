@@ -194,17 +194,19 @@ func initTransport(v *Visor) bool {
 func initRouter(v *Visor) bool {
 	report := v.makeReporter("router")
 	conf := v.conf.Routing
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
 
 	rConf := router.Config{
 		Logger:           v.MasterLogger().PackageLogger("router"),
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
-		RouteFinder:      rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout)),
+		RouteFinder:      rfClient,
 		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
 	}
+
 	r, err := router.New(v.net, &rConf)
 	if err != nil {
 		return report(fmt.Errorf("failed to create router: %w", err))
@@ -228,7 +230,9 @@ func initRouter(v *Visor) bool {
 		return ok
 	})
 
+	v.rfClient = rfClient
 	v.router = r
+
 	return report(nil)
 }
 
@@ -432,6 +436,8 @@ func initUptimeTracker(v *Visor) bool {
 		ticker.Stop()
 		return report(nil)
 	})
+
+	v.uptimeTracker = ut
 
 	return true
 }
