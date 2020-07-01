@@ -27,10 +27,11 @@ import (
 
 const (
 	// holePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
-	holePunchMessage   = "holepunch"
-	dialTimeout        = 30 * time.Second
-	dialConnPriority   = 20
-	visorsConnPriority = 100
+	holePunchMessage = "holepunch"
+	dialTimeout      = 30 * time.Second
+	// dialConnPriority and visorsConnPriority are used to set an order how connection filters apply.
+	dialConnPriority   = 2
+	visorsConnPriority = 3
 )
 
 var (
@@ -67,17 +68,17 @@ type Config struct {
 }
 
 type client struct {
-	conf           Config
-	mu             sync.Mutex
-	done           chan struct{}
-	once           sync.Once
-	log            *logging.Logger
-	porter         *porter.Porter
-	packetFilter   *pfilter.PacketFilter
-	packetListener net.PacketConn
-	visorsConn     net.PacketConn
-	listener       net.Listener
-	listeners      map[uint16]*tplistener.Listener // key: lPort
+	conf              Config
+	mu                sync.Mutex
+	done              chan struct{}
+	once              sync.Once
+	log               *logging.Logger
+	porter            *porter.Porter
+	listener          net.Listener
+	listeners         map[uint16]*tplistener.Listener // key: lPort
+	sudphPacketFilter *pfilter.PacketFilter
+	sudphListener     net.PacketConn
+	sudphVisorsConn   net.PacketConn
 }
 
 // NewClient creates a net Client.
@@ -99,7 +100,7 @@ func (c *client) Serve() error {
 			return ErrAlreadyListening
 		}
 	case tptypes.SUDPH:
-		if c.packetListener != nil {
+		if c.sudphListener != nil {
 			return ErrAlreadyListening
 		}
 	}
@@ -117,7 +118,7 @@ func (c *client) Serve() error {
 			return err
 		}
 
-		if err := c.conf.AddressResolver.BindSTCPR(context.Background(), c.conf.Type, port); err != nil {
+		if err := c.conf.AddressResolver.BindSTCPR(context.Background(), port); err != nil {
 			return fmt.Errorf("bind %v: %w", c.conf.Type, err)
 		}
 	}
@@ -192,7 +193,7 @@ func (c *client) acceptConn() error {
 	return nil
 }
 
-// Dial dials a new sudp.Conn to specified remote public key and port.
+// Dial dials a new Conn to specified remote public key and port.
 func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
@@ -293,14 +294,14 @@ func (c *client) getListener() listenFunc {
 				return nil, err
 			}
 
-			c.packetListener = packetListener
+			c.sudphListener = packetListener
 
-			c.packetFilter = pfilter.NewPacketFilter(packetListener)
-			c.visorsConn = c.packetFilter.NewConn(visorsConnPriority, nil)
+			c.sudphPacketFilter = pfilter.NewPacketFilter(packetListener)
+			c.sudphVisorsConn = c.sudphPacketFilter.NewConn(visorsConnPriority, nil)
 
-			c.packetFilter.Start()
+			c.sudphPacketFilter.Start()
 
-			addrCh, err := c.conf.AddressResolver.BindSUDPH(context.Background(), c.packetFilter)
+			addrCh, err := c.conf.AddressResolver.BindSUDPH(c.sudphPacketFilter)
 			if err != nil {
 				return nil, err
 			}
@@ -315,7 +316,7 @@ func (c *client) getListener() listenFunc {
 
 					c.log.Infof("Sending hole punch packet to %v", addr)
 
-					if _, err := c.visorsConn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
+					if _, err := c.sudphVisorsConn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
 						c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
 						continue
 					}
@@ -324,7 +325,7 @@ func (c *client) getListener() listenFunc {
 				}
 			}()
 
-			return kcp.ServeConn(nil, 0, 0, c.visorsConn)
+			return kcp.ServeConn(nil, 0, 0, c.sudphVisorsConn)
 		}
 
 	default:
@@ -338,7 +339,7 @@ func (c *client) dialUDP(remoteAddr string) (net.Conn, error) {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
 	}
 
-	dialConn := c.packetFilter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter())
+	dialConn := c.sudphPacketFilter.NewConn(dialConnPriority, packetfilter.NewKCPConversationFilter())
 
 	if _, err := dialConn.WriteTo([]byte(holePunchMessage), rAddr); err != nil {
 		return nil, fmt.Errorf("dialConn.WriteTo: %w", err)
@@ -443,8 +444,8 @@ func (c *client) Close() error {
 			}
 		}
 
-		if c.visorsConn != nil {
-			if err := c.visorsConn.Close(); err != nil {
+		if c.sudphVisorsConn != nil {
+			if err := c.sudphVisorsConn.Close(); err != nil {
 				c.log.WithError(err).Warnf("Failed to close connection to visors")
 			}
 		}

@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
 func TestClientAuth(t *testing.T) {
@@ -47,7 +46,7 @@ func TestClientAuth(t *testing.T) {
 	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	c := apiClient.(*client)
+	c := apiClient.(*httpClient)
 
 	wg.Add(1)
 
@@ -76,7 +75,7 @@ func TestBind(t *testing.T) {
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	err = c.BindSTCPR(context.TODO(), tptypes.STCPR, "1234")
+	err = c.BindSTCPR(context.TODO(), "1234")
 	require.NoError(t, err)
 
 	assert.Equal(t, "/bind/stcpr", <-urlCh)
