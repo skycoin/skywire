@@ -29,6 +29,8 @@ enum SortableColumns {
   State = 'transports.state',
   Label = 'nodes.label',
   Key = 'nodes.key',
+  DmsgServer = 'nodes.dmsg-server',
+  Ping = 'nodes.ping',
 }
 
 /**
@@ -40,7 +42,8 @@ enum SortableColumns {
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
-  private static sortByInternal = SortableColumns.Key;
+  private static defaultSortableColumn = SortableColumns.Key;
+  private static sortByInternal = NodeListComponent.defaultSortableColumn;
   private static sortReverseInternal = false;
 
   // Vars for keeping track of the column used for sorting the data.
@@ -56,7 +59,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
   loading = true;
   dataSource: Node[];
   tabsData: TabButtonData[] = [];
+  showDmsgInfo = false;
 
+  private readonly dmsgInfoStorageKey = 'show-dmsg-info';
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private menuSubscription: Subscription;
@@ -80,6 +85,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
   ) {
+    // We only need to check if the key exists.
+    this.showDmsgInfo = !!localStorage.getItem(this.dmsgInfoStorageKey);
+
     // Data for populating the tab bar.
     this.tabsData = [
       {
@@ -144,6 +152,24 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Makes the dmsg info to be shown or hidden.
+   */
+  toggleDmsgInfo() {
+    this.showDmsgInfo = !this.showDmsgInfo;
+    // Create or remove an entry in the local storage, to be able to recover the setting later.
+    if (this.showDmsgInfo) {
+      localStorage.setItem(this.dmsgInfoStorageKey, '-');
+    } else {
+      localStorage.removeItem(this.dmsgInfoStorageKey);
+    }
+
+    // Do not allow to sort the list using a dmsg column while no dmsg data is being shown.
+    if (this.sortBy === SortableColumns.DmsgServer || this.sortBy === SortableColumns.Ping) {
+      this.changeSortingOrder(NodeListComponent.defaultSortableColumn);
+    }
+  }
+
+  /**
    * Returns the scss class to be used to show the current status of the node.
    * @param forDot If true, returns a class for creating a colored dot. If false,
    * returns a class for a colored text.
@@ -192,12 +218,18 @@ export class NodeListComponent implements OnInit, OnDestroy {
     // Get the list of sortable columns.
     const enumKeys = Object.keys(SortableColumns);
     const columnsMap = new Map<string, SortableColumns>();
-    const columns = enumKeys.map(key => {
-      const val = SortableColumns[key as any];
-      columnsMap.set(val, SortableColumns[key]);
+    let columns = enumKeys.map(key => {
+      // Ignore all dmsg columns if the dmsg data is not being shown.
+      if (this.showDmsgInfo || (SortableColumns[key] !== SortableColumns.DmsgServer && SortableColumns[key] !== SortableColumns.Ping)) {
+        const val = SortableColumns[key as any];
+        columnsMap.set(val, SortableColumns[key]);
 
-      return val;
+        return val;
+      }
     });
+
+    // Remove all empty entries.
+    columns = columns.filter(val => val);
 
     SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
       if (result) {
@@ -294,6 +326,10 @@ export class NodeListComponent implements OnInit, OnDestroy {
       let response: number;
       if (this.sortBy === SortableColumns.Key) {
         response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
+      } else if (this.sortBy === SortableColumns.DmsgServer) {
+        response = !this.sortReverse ? a.dmsgServerPk.localeCompare(b.dmsgServerPk) : b.dmsgServerPk.localeCompare(a.dmsgServerPk);
+      } else if (this.sortBy === SortableColumns.Ping) {
+        response = !this.sortReverse ? a.roundTripPing - b.roundTripPing : b.roundTripPing - a.roundTripPing;
       } else if (this.sortBy === SortableColumns.State) {
         if (a.online && !b.online) {
           response = -1;
@@ -479,12 +515,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
       {
         icon: 'filter_none',
         label: 'nodes.copy-key',
-      },
-      {
-        icon: 'short_text',
-        label: 'edit-label.title',
       }
     ];
+
+    if (this.showDmsgInfo) {
+      options.push({
+        icon: 'filter_none',
+        label: 'nodes.copy-dmsg',
+      });
+    }
+
+    options.push({
+      icon: 'short_text',
+      label: 'edit-label.title',
+    });
 
     if (!node.online) {
       options.push({
@@ -495,22 +539,62 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
-        if (this.clipboardService.copy(node.local_pk)) {
-          this.onCopyToClipboardClicked();
+        this.copySpecificTextToClipboard(node.local_pk);
+      } else if (this.showDmsgInfo) {
+        if (selectedOption === 2) {
+          this.copySpecificTextToClipboard(node.dmsgServerPk);
+        } else if (selectedOption === 3) {
+          this.showEditLabelDialog(node);
+        } else if (selectedOption === 4) {
+          this.deleteNode(node);
         }
-      } else if (selectedOption === 2) {
-        this.showEditLabelDialog(node);
-      } else if (selectedOption === 3) {
-        this.deleteNode(node);
+      } else {
+        if (selectedOption === 2) {
+          this.showEditLabelDialog(node);
+        } else if (selectedOption === 3) {
+          this.deleteNode(node);
+        }
       }
     });
   }
 
   /**
-   * Called after copying the public key of a node.
+   * Copies the public key of a visor. If the dmsg data is being shown, it allows the user to
+   * select between copying the public key of the node or the dmsg server.
    */
-  onCopyToClipboardClicked() {
-    this.snackbarService.showDone('copy.copied');
+  copyToClipboard(node: Node) {
+    if (!this.showDmsgInfo) {
+      this.copySpecificTextToClipboard(node.local_pk);
+    } else {
+      const options: SelectableOption[] = [
+        {
+          icon: 'filter_none',
+          label: 'nodes.key',
+        },
+        {
+          icon: 'filter_none',
+          label: 'nodes.dmsg-server',
+        }
+      ];
+
+      SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+        if (selectedOption === 1) {
+          this.copySpecificTextToClipboard(node.local_pk);
+        } else if (selectedOption === 2) {
+          this.copySpecificTextToClipboard(node.dmsgServerPk);
+        }
+      });
+    }
+  }
+
+  /**
+   * Copies a text to the clipboard.
+   * @param text Text to copy.
+   */
+  private copySpecificTextToClipboard(text: string) {
+    if (this.clipboardService.copy(text)) {
+      this.snackbarService.showDone('copy.copied');
+    }
   }
 
   /**
