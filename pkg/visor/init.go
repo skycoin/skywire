@@ -25,6 +25,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -37,6 +38,7 @@ func initStack() []initFunc {
 	return []initFunc{
 		initUpdater,
 		initEventBroadcaster,
+		initAddressResolver,
 		initSNet,
 		initDmsgpty,
 		initTransport,
@@ -81,15 +83,14 @@ func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
 	nc := snet.NetworkConfigs{
-		Dmsg:  v.conf.Dmsg,
-		STCP:  v.conf.STCP,
-		STCPR: v.conf.STCPR,
-		SUDPH: v.conf.SUDPH,
+		Dmsg: v.conf.Dmsg,
+		STCP: v.conf.STCP,
 	}
 
 	conf := snet.Config{
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
+		ARClient:       v.arClient,
 		NetworkConfigs: nc,
 	}
 
@@ -130,6 +131,20 @@ func initSNet(v *Visor) bool {
 	}
 
 	v.net = n
+	return report(nil)
+}
+
+func initAddressResolver(v *Visor) bool {
+	report := v.makeReporter("address-resolver")
+	conf := v.conf.Transport
+
+	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+	if err != nil {
+		return report(fmt.Errorf("failed to create address resolver client: %w", err))
+	}
+
+	v.arClient = arClient
+
 	return report(nil)
 }
 
@@ -185,23 +200,26 @@ func initTransport(v *Visor) bool {
 	})
 
 	v.tpM = tpM
+
 	return report(nil)
 }
 
 func initRouter(v *Visor) bool {
 	report := v.makeReporter("router")
 	conf := v.conf.Routing
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
 
 	rConf := router.Config{
 		Logger:           v.MasterLogger().PackageLogger("router"),
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
-		RouteFinder:      rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout)),
+		RouteFinder:      rfClient,
 		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
 	}
+
 	r, err := router.New(v.net, &rConf)
 	if err != nil {
 		return report(fmt.Errorf("failed to create router: %w", err))
@@ -225,7 +243,9 @@ func initRouter(v *Visor) bool {
 		return ok
 	})
 
+	v.rfClient = rfClient
 	v.router = r
+
 	return report(nil)
 }
 
@@ -303,23 +323,22 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
 	}
+
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
+		envCfg.AddressResolver = conf.Transport.AddressResolver
 	}
+
 	if conf.Routing != nil {
 		envCfg.RF = conf.Routing.RouteFinder
 	}
+
 	if conf.UptimeTracker != nil {
 		envCfg.UptimeTracker = conf.UptimeTracker.Addr
 	}
+
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
-	}
-	if conf.STCPR != nil {
-		envCfg.STCPRAddressResolver = conf.STCPR.AddressResolver
-	}
-	if conf.SUDPH != nil {
-		envCfg.SUDPHAddressResolver = conf.SUDPH.AddressResolver
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)
@@ -429,6 +448,8 @@ func initUptimeTracker(v *Visor) bool {
 		ticker.Stop()
 		return report(nil)
 	})
+
+	v.uptimeTracker = ut
 
 	return true
 }

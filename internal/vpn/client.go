@@ -48,6 +48,11 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		return nil, fmt.Errorf("error getting TP IP: %w", err)
 	}
 
+	arIP, err := addressResolverIPFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("error getting TP IP: %w", err)
+	}
+
 	rfIP, err := rfIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting RF IP: %w", err)
@@ -58,34 +63,14 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
 	}
 
-	var stcprARip net.IP
-	if _, ok := os.LookupEnv(STCPRAddressResolverAddrEnvKey); ok {
-		stcprARip, err = stcprAddressResolverIPFromEnv()
-		if err != nil {
-			return nil, fmt.Errorf("error getting stcpr AR IP: %w", err)
-		}
-	}
-
-	var sudphARip net.IP
-	if _, ok := os.LookupEnv(SUDPHAddressResolverAddrEnvKey); ok {
-		sudphARip, err = sudphAddressResolverIPFromEnv()
-		if err != nil {
-			return nil, fmt.Errorf("error getting sudph AR IP: %w", err)
-		}
-	}
-
 	requiredDirectIPs := []net.IP{dmsgDiscIP, tpDiscIP, rfIP}
 	directIPs := make([]net.IP, 0, len(requiredDirectIPs)+len(dmsgSrvAddrs)+len(stcpEntities))
 	directIPs = append(directIPs, requiredDirectIPs...)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
 
-	if stcprARip != nil {
-		directIPs = append(directIPs, stcprARip)
-	}
-
-	if sudphARip != nil {
-		directIPs = append(directIPs, sudphARip)
+	if arIP != nil {
+		directIPs = append(directIPs, arIP)
 	}
 
 	defaultGateway, err := DefaultNetworkGateway()
@@ -281,6 +266,10 @@ func tpDiscIPFromEnv() (net.IP, error) {
 	return ipFromEnv(TPDiscAddrEnvKey)
 }
 
+func addressResolverIPFromEnv() (net.IP, error) {
+	return ipFromEnv(AddressResolverAddrEnvKey)
+}
+
 func rfIPFromEnv() (net.IP, error) {
 	return ipFromEnv(RFAddrEnvKey)
 }
@@ -311,14 +300,6 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	}
 
 	return stcpEntities, nil
-}
-
-func stcprAddressResolverIPFromEnv() (net.IP, error) {
-	return ipFromEnv(STCPRAddressResolverAddrEnvKey)
-}
-
-func sudphAddressResolverIPFromEnv() (net.IP, error) {
-	return ipFromEnv(SUDPHAddressResolverAddrEnvKey)
 }
 
 func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
