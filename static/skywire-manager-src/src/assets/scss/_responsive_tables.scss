@@ -204,7 +204,45 @@ $responsive-table-colors: (
     margin-right: auto;
   }
 
-  mat-icon {
+  .icon-button {
+    display: flex;
+    line-height: 18px !important;
+    margin-right: 15px;
+    background: $white;
+    color: $blue-dark;
+    border-radius: 1000px;
+    cursor: pointer;
+    opacity: 0.9;
+    padding: 1px 7px;
+    font-weight: normal;
+    border: 0;
+    font-size: $font-size-smaller;
+    align-items: center;
+
+    &:hover {
+      opacity: 1;
+    }
+
+    mat-icon {
+      margin-right: 2px;
+      font-size: 18px;
+      height: auto;
+      width: auto;
+    }
+
+    @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+      padding: 1px 10px;
+      line-height: 24px !important;
+      font-size: $font-size-sm !important;
+
+      mat-icon {
+        margin-right: 3px;
+        font-size: 22px;
+      }
+    }
+  }
+
+  > mat-icon {
     width: 18px !important;
     height: 18px !important;
     line-height: 18px !important;
