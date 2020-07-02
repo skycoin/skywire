@@ -66,11 +66,11 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		}
 	}
 
-	var stcphARip net.IP
-	if _, ok := os.LookupEnv(STCPHAddressResolverAddrEnvKey); ok {
-		stcphARip, err = stcphAddressResolverIPFromEnv()
+	var sudphARip net.IP
+	if _, ok := os.LookupEnv(SUDPHAddressResolverAddrEnvKey); ok {
+		sudphARip, err = sudphAddressResolverIPFromEnv()
 		if err != nil {
-			return nil, fmt.Errorf("error getting stcph AR IP: %w", err)
+			return nil, fmt.Errorf("error getting sudph AR IP: %w", err)
 		}
 	}
 
@@ -84,8 +84,8 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		directIPs = append(directIPs, stcprARip)
 	}
 
-	if stcphARip != nil {
-		directIPs = append(directIPs, stcphARip)
+	if sudphARip != nil {
+		directIPs = append(directIPs, sudphARip)
 	}
 
 	defaultGateway, err := DefaultNetworkGateway()
@@ -317,8 +317,8 @@ func stcprAddressResolverIPFromEnv() (net.IP, error) {
 	return ipFromEnv(STCPRAddressResolverAddrEnvKey)
 }
 
-func stcphAddressResolverIPFromEnv() (net.IP, error) {
-	return ipFromEnv(STCPHAddressResolverAddrEnvKey)
+func sudphAddressResolverIPFromEnv() (net.IP, error) {
+	return ipFromEnv(SUDPHAddressResolverAddrEnvKey)
 }
 
 func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {

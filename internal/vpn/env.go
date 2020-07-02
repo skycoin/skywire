@@ -27,8 +27,8 @@ const (
 	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
 	// STCPRAddressResolverAddrEnvKey is env arg holding stcpr address resolver address.
 	STCPRAddressResolverAddrEnvKey = "ADDR_STCPR_ADDRESS_RESOLVER"
-	// STCPHAddressResolverAddrEnvKey is env arg holding stcph address resolver address.
-	STCPHAddressResolverAddrEnvKey = "ADDR_STCPH_ADDRESS_RESOLVER"
+	// SUDPHAddressResolverAddrEnvKey is env arg holding sudph address resolver address.
+	SUDPHAddressResolverAddrEnvKey = "ADDR_SUDPH_ADDRESS_RESOLVER"
 
 	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
@@ -47,7 +47,7 @@ type DirectRoutesEnvConfig struct {
 	RF                   string
 	UptimeTracker        string
 	STCPRAddressResolver string
-	STCPHAddressResolver string
+	SUDPHAddressResolver string
 	STCPTable            map[cipher.PubKey]string
 }
 
@@ -75,8 +75,8 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 		envs[STCPRAddressResolverAddrEnvKey] = config.STCPRAddressResolver
 	}
 
-	if config.STCPHAddressResolver != "" {
-		envs[STCPHAddressResolverAddrEnvKey] = config.STCPHAddressResolver
+	if config.SUDPHAddressResolver != "" {
+		envs[SUDPHAddressResolverAddrEnvKey] = config.SUDPHAddressResolver
 	}
 
 	if len(config.STCPTable) != 0 {

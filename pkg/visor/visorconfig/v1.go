@@ -23,9 +23,6 @@ type V1 struct {
 	Dmsgpty       *V1Dmsgpty        `json:"dmsgpty,omitempty"`
 	STCP          *snet.STCPConfig  `json:"stcp,omitempty"`
 	STCPR         *snet.STCPRConfig `json:"stcpr,omitempty"`
-	STCPH         *snet.STCPHConfig `json:"stcph,omitempty"`
-	SUDP          *snet.SUDPConfig  `json:"sudp,omitempty"`
-	SUDPR         *snet.SUDPRConfig `json:"sudpr,omitempty"`
 	SUDPH         *snet.SUDPHConfig `json:"sudph,omitempty"`
 	Transport     *V1Transport      `json:"transport"`
 	Routing       *V1Routing        `json:"routing"`

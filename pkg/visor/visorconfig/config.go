@@ -81,21 +81,6 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 	}
 
 	conf.STCPR = &snet.STCPRConfig{
-		LocalAddr:       skyenv.DefaultSTCPRAddr,
-		AddressResolver: skyenv.DefaultAddressResolverAddr,
-	}
-
-	conf.STCPH = &snet.STCPHConfig{
-		AddressResolver: skyenv.DefaultAddressResolverAddr,
-	}
-
-	conf.SUDP = &snet.SUDPConfig{
-		PKTable:   nil,
-		LocalAddr: skyenv.DefaultSUDPAddr,
-	}
-
-	conf.SUDPR = &snet.SUDPRConfig{
-		LocalAddr:       skyenv.DefaultSUDPRAddr,
 		AddressResolver: skyenv.DefaultAddressResolverAddr,
 	}
 
@@ -165,8 +150,6 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
 	conf.STCPR.AddressResolver = skyenv.TestAddressResolverAddr
-	conf.STCPH.AddressResolver = skyenv.TestAddressResolverAddr
-	conf.SUDPR.AddressResolver = skyenv.TestAddressResolverAddr
 	conf.SUDPH.AddressResolver = skyenv.TestAddressResolverAddr
 
 	return conf, nil
