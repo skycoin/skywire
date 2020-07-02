@@ -19,15 +19,13 @@ type V1 struct {
 	*Common
 	mu sync.RWMutex
 
-	Dmsg          *snet.DmsgConfig  `json:"dmsg"`
-	Dmsgpty       *V1Dmsgpty        `json:"dmsgpty,omitempty"`
-	STCP          *snet.STCPConfig  `json:"stcp,omitempty"`
-	STCPR         *snet.STCPRConfig `json:"stcpr,omitempty"`
-	SUDPH         *snet.SUDPHConfig `json:"sudph,omitempty"`
-	Transport     *V1Transport      `json:"transport"`
-	Routing       *V1Routing        `json:"routing"`
-	UptimeTracker *V1UptimeTracker  `json:"uptime_tracker,omitempty"`
-	Launcher      *V1Launcher       `json:"launcher"`
+	Dmsg          *snet.DmsgConfig `json:"dmsg"`
+	Dmsgpty       *V1Dmsgpty       `json:"dmsgpty,omitempty"`
+	STCP          *snet.STCPConfig `json:"stcp,omitempty"`
+	Transport     *V1Transport     `json:"transport"`
+	Routing       *V1Routing       `json:"routing"`
+	UptimeTracker *V1UptimeTracker `json:"uptime_tracker,omitempty"`
+	Launcher      *V1Launcher      `json:"launcher"`
 
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
 	CLIAddr     string          `json:"cli_addr"`

@@ -58,6 +58,9 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 
 	if config.TPDiscovery != "" {
 		envs[TPDiscAddrEnvKey] = config.TPDiscovery
+	}
+
+	if config.AddressResolver != "" {
 		envs[AddressResolverAddrEnvKey] = config.AddressResolver
 	}
 
