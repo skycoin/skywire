@@ -16,7 +16,6 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
-	github.com/libp2p/go-reuseport v0.0.1
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/pkg/profile v1.5.0
@@ -36,5 +35,7 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
 	golang.zx2c4.com/wireguard v0.0.20200320
-	nhooyr.io/websocket v1.8.6
 )
+
+// Uncomment for tests with alternate branches of 'dmsg'
+// replace github.com/SkycoinProject/dmsg => ../dmsg
