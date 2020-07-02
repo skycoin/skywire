@@ -26,7 +26,7 @@ type Error struct {
 	Error string `json:"error"`
 }
 
-// APIClient implements DMSG discovery API client.
+// APIClient implements uptime tracker API client.
 type APIClient interface {
 	UpdateVisorUptime(context.Context) error
 	Health(ctx context.Context) (int, error)
