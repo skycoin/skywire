@@ -74,6 +74,8 @@
         "transport-discovery": "Transport discovery:",
         "route-finder": "Route finder:",
         "setup-node": "Setup node:",
+        "uptime-tracker": "Uptime tracker:",
+        "address-resolver": "Address resolver:",
         "element-offline": "offline"
       },
       "node-traffic-data": "Traffic data"

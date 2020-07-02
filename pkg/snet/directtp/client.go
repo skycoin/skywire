@@ -105,25 +105,29 @@ func (c *client) Serve() error {
 		}
 	}
 
-	l, err := c.listen(c.conf.LocalAddr)
-	if err != nil {
-		return err
-	}
-
-	c.listener = l
-
-	if c.conf.Type == tptypes.STCPR {
-		_, port, err := net.SplitHostPort(c.listener.Addr().String())
-		if err != nil {
-			return err
-		}
-
-		if err := c.conf.AddressResolver.BindSTCPR(context.Background(), port); err != nil {
-			return fmt.Errorf("bind %v: %w", c.conf.Type, err)
-		}
-	}
-
 	go func() {
+		l, err := c.listen(c.conf.LocalAddr)
+		if err != nil {
+			c.log.Errorf("Failed to listen on %q: %v", c.conf.LocalAddr, err)
+			return
+		}
+
+		c.listener = l
+
+		if c.conf.Type == tptypes.STCPR {
+			localAddr := c.listener.Addr().String()
+			_, port, err := net.SplitHostPort(localAddr)
+			if err != nil {
+				c.log.Errorf("Failed to extract port from addr %v: %v", err)
+				return
+			}
+
+			if err := c.conf.AddressResolver.BindSTCPR(context.Background(), port); err != nil {
+				c.log.Errorf("Failed to bind STCPR: %v", err)
+				return
+			}
+		}
+
 		c.log.Infof("listening on addr: %v", c.listener.Addr())
 
 		for {
