@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
@@ -92,13 +91,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			},
 			STCP: &snet.STCPConfig{
 				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
-			},
-			STCPR: &snet.STCPRConfig{
-				AddressResolver: skyenv.TestAddressResolverAddr,
-			},
-
-			SUDPH: &snet.SUDPHConfig{
-				AddressResolver: skyenv.TestAddressResolverAddr,
 			},
 		}
 

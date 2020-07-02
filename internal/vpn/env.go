@@ -21,14 +21,12 @@ const (
 	DmsgDiscAddrEnvKey = "ADDR_DMSG_DISC"
 	// TPDiscAddrEnvKey is env arg holding TP discovery address.
 	TPDiscAddrEnvKey = "ADDR_TP_DISC"
+	// AddressResolverAddrEnvKey is env arg holding address resolver address.
+	AddressResolverAddrEnvKey = "ADDR_ADDRESS_RESOLVER"
 	// RFAddrEnvKey is env arg holding RF address.
 	RFAddrEnvKey = "ADDR_RF"
 	// UptimeTrackerAddrEnvKey is env arg holding uptime tracker address.
 	UptimeTrackerAddrEnvKey = "ADDR_UPTIME_TRACKER"
-	// STCPRAddressResolverAddrEnvKey is env arg holding stcpr address resolver address.
-	STCPRAddressResolverAddrEnvKey = "ADDR_STCPR_ADDRESS_RESOLVER"
-	// SUDPHAddressResolverAddrEnvKey is env arg holding sudph address resolver address.
-	SUDPHAddressResolverAddrEnvKey = "ADDR_SUDPH_ADDRESS_RESOLVER"
 
 	// STCPTableLenEnvKey is env arg holding Stcp table length.
 	STCPTableLenEnvKey = "STCP_TABLE_LEN"
@@ -41,14 +39,13 @@ const (
 // DirectRoutesEnvConfig contains all the addresses which need to be communicated directly,
 // not through the VPN service.
 type DirectRoutesEnvConfig struct {
-	DmsgDiscovery        string
-	DmsgServers          []string
-	TPDiscovery          string
-	RF                   string
-	UptimeTracker        string
-	STCPRAddressResolver string
-	SUDPHAddressResolver string
-	STCPTable            map[cipher.PubKey]string
+	DmsgDiscovery   string
+	DmsgServers     []string
+	TPDiscovery     string
+	RF              string
+	UptimeTracker   string
+	AddressResolver string
+	STCPTable       map[cipher.PubKey]string
 }
 
 // AppEnvArgs forms env args to pass to the app process.
@@ -63,20 +60,16 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 		envs[TPDiscAddrEnvKey] = config.TPDiscovery
 	}
 
+	if config.AddressResolver != "" {
+		envs[AddressResolverAddrEnvKey] = config.AddressResolver
+	}
+
 	if config.RF != "" {
 		envs[RFAddrEnvKey] = config.RF
 	}
 
 	if config.UptimeTracker != "" {
 		envs[UptimeTrackerAddrEnvKey] = config.UptimeTracker
-	}
-
-	if config.STCPRAddressResolver != "" {
-		envs[STCPRAddressResolverAddrEnvKey] = config.STCPRAddressResolver
-	}
-
-	if config.SUDPHAddressResolver != "" {
-		envs[SUDPHAddressResolverAddrEnvKey] = config.SUDPHAddressResolver
 	}
 
 	if len(config.STCPTable) != 0 {
