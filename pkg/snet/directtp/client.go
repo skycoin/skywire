@@ -105,7 +105,7 @@ func (c *client) Serve() error {
 		}
 	}
 
-	l, err := c.getListener()(c.conf.LocalAddr)
+	l, err := c.listen(c.conf.LocalAddr)
 	if err != nil {
 		return err
 	}
@@ -210,7 +210,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 			return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
 		}
 
-		conn, err := c.getDialer()(addr)
+		conn, err := c.dial(addr)
 		if err != nil {
 			return nil, err
 		}
@@ -260,76 +260,65 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 	return tpconn.NewConn(connConfig)
 }
 
-type dialFunc func(addr string) (net.Conn, error)
-
-func (c *client) getDialer() dialFunc {
+func (c *client) dial(addr string) (net.Conn, error) {
 	switch c.conf.Type {
 	case tptypes.STCP, tptypes.STCPR:
-		return func(addr string) (net.Conn, error) {
-			return net.Dial("tcp", addr)
-		}
+		return net.Dial("tcp", addr)
 
 	case tptypes.SUDPH:
-		return func(addr string) (net.Conn, error) {
-			return c.dialTimeout(c.dialUDP, addr)
-		}
+		return c.dialUDPWithTimeout(addr)
+
 	default:
-		return nil // should not happen
+		return nil, ErrUnknownTransportType
 	}
 }
 
-type listenFunc func(addr string) (net.Listener, error)
-
-func (c *client) getListener() listenFunc {
+func (c *client) listen(addr string) (net.Listener, error) {
 	switch c.conf.Type {
 	case tptypes.STCP, tptypes.STCPR:
-		return func(addr string) (net.Listener, error) {
-			return net.Listen("tcp", addr)
-		}
+		return net.Listen("tcp", addr)
 
 	case tptypes.SUDPH:
-		return func(_ string) (net.Listener, error) {
-			packetListener, err := net.ListenPacket("udp", "")
-			if err != nil {
-				return nil, err
-			}
-
-			c.sudphListener = packetListener
-
-			c.sudphPacketFilter = pfilter.NewPacketFilter(packetListener)
-			c.sudphVisorsConn = c.sudphPacketFilter.NewConn(visorsConnPriority, nil)
-
-			c.sudphPacketFilter.Start()
-
-			addrCh, err := c.conf.AddressResolver.BindSUDPH(c.sudphPacketFilter)
-			if err != nil {
-				return nil, err
-			}
-
-			go func() {
-				for addr := range addrCh {
-					udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
-					if err != nil {
-						c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
-						continue
-					}
-
-					c.log.Infof("Sending hole punch packet to %v", addr)
-
-					if _, err := c.sudphVisorsConn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
-						c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
-						continue
-					}
-
-					c.log.Infof("Sent hole punch packet to %v", addr)
-				}
-			}()
-
-			return kcp.ServeConn(nil, 0, 0, c.sudphVisorsConn)
+		packetListener, err := net.ListenPacket("udp", "")
+		if err != nil {
+			return nil, err
 		}
 
+		c.sudphListener = packetListener
+
+		c.sudphPacketFilter = pfilter.NewPacketFilter(packetListener)
+		c.sudphVisorsConn = c.sudphPacketFilter.NewConn(visorsConnPriority, nil)
+
+		c.sudphPacketFilter.Start()
+
+		addrCh, err := c.conf.AddressResolver.BindSUDPH(c.sudphPacketFilter)
+		if err != nil {
+			return nil, err
+		}
+
+		go func() {
+			for addr := range addrCh {
+				udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
+				if err != nil {
+					c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
+					continue
+				}
+
+				c.log.Infof("Sending hole punch packet to %v", addr)
+
+				if _, err := c.sudphVisorsConn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
+					c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
+					continue
+				}
+
+				c.log.Infof("Sent hole punch packet to %v", addr)
+			}
+		}()
+
+		return kcp.ServeConn(nil, 0, 0, c.sudphVisorsConn)
+
 	default:
-		return nil // should not happen
+		return nil, ErrUnknownTransportType
 	}
 }
 
@@ -353,7 +342,7 @@ func (c *client) dialUDP(remoteAddr string) (net.Conn, error) {
 	return kcpConn, nil
 }
 
-func (c *client) dialTimeout(dialer dialFunc, addr string) (net.Conn, error) {
+func (c *client) dialUDPWithTimeout(addr string) (net.Conn, error) {
 	timer := time.NewTimer(dialTimeout)
 	defer timer.Stop()
 
@@ -364,7 +353,7 @@ func (c *client) dialTimeout(dialer dialFunc, addr string) (net.Conn, error) {
 		case <-timer.C:
 			return nil, ErrTimeout
 		default:
-			conn, err := dialer(addr)
+			conn, err := c.dialUDP(addr)
 			if err == nil {
 				c.log.Infof("Dialed %v", addr)
 				return conn, nil
@@ -381,14 +370,14 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
 
-			conn, err := c.getDialer()(addr)
+			conn, err := c.dial(addr)
 			if err == nil {
 				return conn, nil
 			}
 		}
 	}
 
-	return c.getDialer()(visorData.RemoteAddr)
+	return c.dial(visorData.RemoteAddr)
 }
 
 // Listen creates a new listener for sudp.
