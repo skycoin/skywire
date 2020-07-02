@@ -139,9 +139,16 @@ func (c *Conn) close(err error) {
 	c.rwc.Close()
 
 	go func() {
+		if c.client {
+			c.writeFrameMu.Lock(context.Background())
+			putBufioWriter(c.bw)
+		}
 		c.msgWriterState.close()
 
 		c.msgReader.close()
+		if c.client {
+			putBufioReader(c.br)
+		}
 	}()
 }
 
@@ -230,11 +237,7 @@ func newMu(c *Conn) *mu {
 	}
 }
 
-func (m *mu) forceLock() {
-	m.ch <- struct{}{}
-}
-
-func (m *mu) lock(ctx context.Context) error {
+func (m *mu) Lock(ctx context.Context) error {
 	select {
 	case <-m.c.closed:
 		return m.c.closeErr
@@ -243,21 +246,11 @@ func (m *mu) lock(ctx context.Context) error {
 		m.c.close(err)
 		return err
 	case m.ch <- struct{}{}:
-		// To make sure the connection is certainly alive.
-		// As it's possible the send on m.ch was selected
-		// over the receive on closed.
-		select {
-		case <-m.c.closed:
-			// Make sure to release.
-			m.unlock()
-			return m.c.closeErr
-		default:
-		}
 		return nil
 	}
 }
 
-func (m *mu) unlock() {
+func (m *mu) Unlock() {
 	select {
 	case <-m.ch:
 	default:

@@ -1,5 +1,4 @@
 // Package arclient implements address resolver client
-// TODO(nkryuchkov): move to internal
 package arclient
 
 import (
@@ -15,29 +14,26 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/AudriusButkevicius/pfilter"
+	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/libp2p/go-reuseport"
-	"nhooyr.io/websocket"
+	"github.com/xtaci/kcp-go"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
 )
 
-//go:generate mockery -name APIClient -case underscore -inpkg
-
-var log = logging.MustGetLogger("arclient")
-
 const (
-	bindSTCPRPath        = "/bind/stcpr"
-	bindSUDPRPath        = "/bind/sudpr"
-	resolveSTCPRPath     = "/resolve/"
-	resolveSTCPHPath     = "/resolve_hole_punch/"
-	resolveSUDPRPath     = "/resolve_sudpr/"
-	resolveSUDPHPath     = "/resolve_sudph/"
-	wsPath               = "/ws"
+	stcprBindPath        = "/bind/stcpr"
 	addrChSize           = 1024
 	udpKeepAliveInterval = 10 * time.Second
 	udpKeepAliveMessage  = "keepalive"
+	// sudphPriority is used to set an order how connection filters apply.
+	sudphPriority = 1
 )
 
 var (
@@ -50,22 +46,14 @@ type Error struct {
 	Error string `json:"error"`
 }
 
-// APIClient implements DMSG discovery API client.
+//go:generate mockery -name APIClient -case underscore -inpkg
+
+// APIClient implements address resolver API client.
 type APIClient interface {
 	io.Closer
-	LocalTCPAddr() string
-	LocalUDPAddr() string
-	RemoteHTTPAddr() string
-	RemoteUDPAddr() string
 	BindSTCPR(ctx context.Context, port string) error
-	BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error)
-	BindSUDPR(ctx context.Context, port string) error
-	BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error)
-	ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
-	ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
-	ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error)
-	ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error)
-	Health(ctx context.Context) (int, error)
+	BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error)
+	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
 }
 
 // VisorData stores visor data.
@@ -75,38 +63,51 @@ type VisorData struct {
 	LocalAddresses
 }
 
-// client implements Client for address resolver API.
-type client struct {
-	client         *httpauth.Client
-	localTCPAddr   string
-	localUDPAddr   string
-	remoteHTTPAddr string
-	remoteUDPAddr  string
-	pk             cipher.PubKey
-	sk             cipher.SecKey
-	stcphConn      *websocket.Conn
-	stcphAddrCh    <-chan RemoteVisor
-	sudphAddrCh    <-chan RemoteVisor
+type key struct {
+	remoteAddr string
+	pk         cipher.PubKey
+	sk         cipher.SecKey
 }
 
-func (c *client) RemoteHTTPAddr() string {
-	return c.remoteHTTPAddr
-}
+var clients = make(map[key]*httpClient) // nolint: gochecknoglobals
 
-func (c *client) RemoteUDPAddr() string {
-	return c.remoteUDPAddr
+// httpClient implements APIClient for address resolver API.
+type httpClient struct {
+	log           *logging.Logger
+	httpClient    *httpauth.Client
+	pk            cipher.PubKey
+	sk            cipher.SecKey
+	remoteUDPAddr string
+	sudphConn     net.PacketConn
+	closed        chan struct{}
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
 // When keys are set, the client will sign request before submitting.
 // The signature information is transmitted in the header using:
-// * SW-Public: The specified public key
-// * SW-Nonce:  The nonce for that public key
-// * SW-Sig:    The signature of the payload + the nonce
+// * SW-Public: The specified public key.
+// * SW-Nonce:  The nonce for that public key.
+// * SW-Sig:    The signature of the payload + the nonce.
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
-		return nil, fmt.Errorf("address resolver httpauth: %w", err)
+
+		log.WithError(err).
+			Error("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
+
+		retryLog := logging.MustGetLogger("snet.arclient.retrier")
+		retry := netutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
+
+		err := retry.Do(context.Background(), func() error {
+			httpAuthClient, err = httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
+			return err
+		})
+
+		if err != nil {
+			// This should not happen as retrier is set to try indefinitely.
+			// If address resolver cannot be contacted indefinitely, 'arDone' will be blocked indefinitely.
+			log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
+		}
 	}
 
 	remoteURL, err := url.Parse(remoteAddr)
@@ -114,103 +115,45 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
-	client := &client{
-		client:         httpAuthClient,
-		pk:             pk,
-		sk:             sk,
-		remoteHTTPAddr: remoteAddr,
-		remoteUDPAddr:  remoteURL.Host,
+	client := &httpClient{
+		closed:        make(chan struct{}),
+		log:           log,
+		httpClient:    httpAuthClient,
+		pk:            pk,
+		sk:            sk,
+		remoteUDPAddr: remoteURL.Host,
 	}
-
-	transport := &http.Transport{
-		DialContext: func(_ context.Context, network, remoteAddr string) (conn net.Conn, err error) {
-			conn, err = reuseport.Dial(network, client.localTCPAddr, remoteAddr)
-			if err == nil && client.localTCPAddr == "" {
-				client.localTCPAddr = conn.LocalAddr().String()
-			}
-
-			return conn, err
-		},
-		DisableKeepAlives: false,
-	}
-
-	httpAuthClient.SetTransport(transport)
 
 	return client, nil
 }
 
-func (c *client) LocalTCPAddr() string {
-	return c.localTCPAddr
-}
-
-func (c *client) LocalUDPAddr() string {
-	return c.localUDPAddr
-}
-
 // Get performs a new GET request.
-func (c *client) Get(ctx context.Context, path string) (*http.Response, error) {
-	addr := c.client.Addr() + path
+func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
+	addr := c.httpClient.Addr() + path
 
 	req, err := http.NewRequest(http.MethodGet, addr, new(bytes.Buffer))
 	if err != nil {
 		return nil, err
 	}
 
-	return c.client.Do(req.WithContext(ctx))
+	return c.httpClient.Do(req.WithContext(ctx))
 }
 
 // Post performs a POST request.
-func (c *client) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+func (c *httpClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
 		return nil, err
 	}
 
-	addr := c.client.Addr() + path
+	addr := c.httpClient.Addr() + path
 
 	req, err := http.NewRequest(http.MethodPost, addr, body)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.client.Do(req.WithContext(ctx))
-}
-
-// Websocket performs a new websocket request.
-func (c *client) Websocket(ctx context.Context, path string) (*websocket.Conn, error) {
-	header, err := c.client.Header()
-	if err != nil {
-		return nil, err
-	}
-
-	dialOpts := &websocket.DialOptions{
-		HTTPClient: c.client.ReuseClient(),
-		HTTPHeader: header,
-	}
-
-	addr, err := url.Parse(c.client.Addr())
-	if err != nil {
-		return nil, err
-	}
-	switch addr.Scheme {
-	case "http":
-		addr.Scheme = "ws"
-	case "https":
-		addr.Scheme = "wss"
-	}
-
-	addr.Path = path
-
-	conn, resp, err := websocket.Dial(ctx, addr.String(), dialOpts)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode == http.StatusOK {
-		c.client.IncrementNonce()
-	}
-
-	return conn, nil
+	return c.httpClient.Do(req.WithContext(ctx))
 }
 
 // BindRequest stores bind request values.
@@ -218,17 +161,14 @@ type BindRequest struct {
 	Port string `json:"port"`
 }
 
-// BindSTCPR binds client PK to IP:port on address resolver.
-func (c *client) BindSTCPR(ctx context.Context, port string) error {
-	return c.bind(ctx, bindSTCPRPath, port)
+// LocalAddresses contains outbound port and all network addresses of visor.
+type LocalAddresses struct {
+	Port      string   `json:"port"`
+	Addresses []string `json:"addresses"`
 }
 
 // BindSTCPR binds client PK to IP:port on address resolver.
-func (c *client) BindSUDPR(ctx context.Context, port string) error {
-	return c.bind(ctx, bindSUDPRPath, port)
-}
-
-func (c *client) bind(ctx context.Context, path string, port string) error {
+func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	addresses, err := localAddresses()
 	if err != nil {
 		return err
@@ -239,14 +179,14 @@ func (c *client) bind(ctx context.Context, path string, port string) error {
 		Port:      port,
 	}
 
-	resp, err := c.Post(ctx, path, localAddresses)
+	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
+			c.log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
@@ -257,31 +197,17 @@ func (c *client) bind(ctx context.Context, path string, port string) error {
 	return nil
 }
 
-func (c *client) ResolveSTCPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSTCPRPath, pk)
-}
+func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
+	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
 
-func (c *client) ResolveSTCPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSTCPHPath, pk)
-}
-
-func (c *client) ResolveSUDPR(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSUDPRPath, pk)
-}
-
-func (c *client) ResolveSUDPH(ctx context.Context, pk cipher.PubKey) (VisorData, error) {
-	return c.resolve(ctx, resolveSUDPHPath, pk)
-}
-
-func (c *client) resolve(ctx context.Context, path string, pk cipher.PubKey) (VisorData, error) {
-	resp, err := c.Get(ctx, path+pk.String())
+	resp, err := c.Get(ctx, path)
 	if err != nil {
 		return VisorData{}, err
 	}
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
+			c.log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
@@ -328,31 +254,29 @@ type RemoteVisor struct {
 	Addr string
 }
 
-func (c *client) BindSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) (<-chan RemoteVisor, error) {
-	if c.stcphAddrCh == nil {
-		if err := c.initSTCPH(ctx, dialCh); err != nil {
-			return nil, err
-		}
+func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
+	rAddr, err := net.ResolveUDPAddr("udp", c.remoteUDPAddr)
+	if err != nil {
+		return nil, err
 	}
 
-	return c.stcphAddrCh, nil
-}
+	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr))
 
-// TODO(nkryuchkov): Ensure this works correctly with closed channels and connections.
-func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) error {
-	conn, err := c.Websocket(ctx, wsPath)
+	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, localPort, err := net.SplitHostPort(c.LocalTCPAddr())
+	c.log.Infof("SUDPH Local port: %v", localPort)
+
+	arConn, err := c.wrapConn(c.sudphConn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	addresses, err := localAddresses()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	localAddresses := LocalAddresses{
@@ -362,93 +286,28 @@ func (c *client) initSTCPH(ctx context.Context, dialCh <-chan cipher.PubKey) err
 
 	laData, err := json.Marshal(localAddresses)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := conn.Write(ctx, websocket.MessageText, laData); err != nil {
-		return err
+	if _, err := arConn.Write(laData); err != nil {
+		return nil, err
 	}
 
-	c.stcphConn = conn
+	addrCh := c.readSUDPHMessages(arConn)
+
+	go func() {
+		if err := c.keepAliveLoop(arConn); err != nil {
+			c.log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
+		}
+	}()
+
+	return addrCh, nil
+}
+
+func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
 	addrCh := make(chan RemoteVisor, addrChSize)
 
-	go func(conn *websocket.Conn, addrCh chan<- RemoteVisor) {
-		defer func() {
-			close(addrCh)
-		}()
-
-		for {
-			kind, rawMsg, err := conn.Read(context.TODO())
-			if err != nil {
-				log.Errorf("Failed to read WS message: %v", err)
-				return
-			}
-
-			log.Infof("New WS message of type %v: %v", kind.String(), string(rawMsg))
-
-			var remote RemoteVisor
-			if err := json.Unmarshal(rawMsg, &remote); err != nil {
-				log.Errorf("Failed to read unmarshal message: %v", err)
-				continue
-			}
-
-			addrCh <- remote
-		}
-	}(conn, addrCh)
-
-	go func(conn *websocket.Conn, dialCh <-chan cipher.PubKey) {
-		for pk := range dialCh {
-			if err := conn.Write(ctx, websocket.MessageText, []byte(pk.String())); err != nil {
-				log.Errorf("Failed to write to %v: %v", pk, err)
-				return
-			}
-		}
-	}(conn, dialCh)
-
-	c.stcphAddrCh = addrCh
-
-	return nil
-}
-
-// LocalAddresses contains outbound port and all network addresses of visor.
-type LocalAddresses struct {
-	Port      string   `json:"port"`
-	Addresses []string `json:"addresses"`
-}
-
-func (c *client) BindSUDPH(ctx context.Context, conn net.Conn, localPort string) (<-chan RemoteVisor, error) {
-	if c.sudphAddrCh == nil {
-		if err := c.initSUDPH(ctx, conn, localPort); err != nil {
-			return nil, err
-		}
-	}
-
-	return c.sudphAddrCh, nil
-}
-
-func (c *client) initSUDPH(ctx context.Context, conn net.Conn, localPort string) error {
-	addresses, err := localAddresses()
-	if err != nil {
-		return err
-	}
-
-	localAddresses := LocalAddresses{
-		Addresses: addresses,
-		Port:      localPort,
-	}
-
-	laData, err := json.Marshal(localAddresses)
-	if err != nil {
-		return err
-	}
-
-	if _, err := conn.Write(laData); err != nil {
-		return err
-	}
-
-	addrCh := make(chan RemoteVisor, addrChSize)
-
-	go func(conn net.Conn, addrCh chan<- RemoteVisor) {
+	go func(addrCh chan<- RemoteVisor) {
 		defer func() {
 			close(addrCh)
 		}()
@@ -456,64 +315,90 @@ func (c *client) initSUDPH(ctx context.Context, conn net.Conn, localPort string)
 		buf := make([]byte, 4096)
 
 		for {
-			n, err := conn.Read(buf)
-			if err != nil {
-				log.Errorf("Failed to read SUDPH message: %v", err)
+			select {
+			case <-c.closed:
 				return
+			default:
+				n, err := reader.Read(buf)
+				if err != nil {
+					c.log.Errorf("Failed to read SUDPH message: %v", err)
+					return
+				}
+
+				c.log.Infof("New SUDPH message: %v", string(buf[:n]))
+
+				var remote RemoteVisor
+				if err := json.Unmarshal(buf[:n], &remote); err != nil {
+					c.log.Errorf("Failed to read unmarshal message: %v", err)
+					continue
+				}
+
+				addrCh <- remote
 			}
-
-			log.Infof("New SUDPH message: %v", string(buf[:n]))
-
-			var remote RemoteVisor
-			if err := json.Unmarshal(buf[:n], &remote); err != nil {
-				log.Errorf("Failed to read unmarshal message: %v", err)
-				continue
-			}
-
-			addrCh <- remote
 		}
-	}(conn, addrCh)
+	}(addrCh)
 
-	go func() {
-		if err := c.keepAliveLoop(ctx, conn); err != nil {
-			log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
-		}
-	}()
-
-	c.sudphAddrCh = addrCh
-
-	return nil
+	return addrCh
 }
 
-func (c *client) Close() error {
+func (c *httpClient) wrapConn(conn net.PacketConn) (*tpconn.Conn, error) {
+	arKCPConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, conn)
+	if err != nil {
+		return nil, err
+	}
+
+	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
+	hs := tphandshake.InitiatorHandshake(c.sk, dmsg.Addr{PK: c.pk, Port: 0}, emptyAddr)
+
+	connConfig := tpconn.Config{
+		Log:       c.log,
+		Conn:      arKCPConn,
+		LocalPK:   c.pk,
+		LocalSK:   c.sk,
+		Deadline:  time.Now().Add(tphandshake.Timeout),
+		Handshake: hs,
+		Encrypt:   false,
+		Initiator: true,
+	}
+
+	arConn, err := tpconn.NewConn(connConfig)
+	if err != nil {
+		return nil, fmt.Errorf("newConn: %w", err)
+	}
+
+	return arConn, nil
+}
+
+func (c *httpClient) Close() error {
+	select {
+	case <-c.closed:
+		return nil // already closed
+	default: // close
+	}
+
 	defer func() {
-		c.stcphConn = nil
-		// TODO(nkryuchkov): uncomment
-		// c.sudphConn = nil
+		c.sudphConn = nil
 	}()
 
-	if c.stcphConn != nil {
-		if err := c.stcphConn.Close(websocket.StatusNormalClosure, "client closed"); err != nil {
-			log.WithError(err).Errorf("Failed to close STCPH")
+	if c.sudphConn != nil {
+		if err := c.sudphConn.Close(); err != nil {
+			c.log.WithError(err).Errorf("Failed to close SUDPH")
 		}
 	}
 
-	// TODO(nkryuchkov): uncomment, check if nil
-	// if err := c.sudphConn.Close(); err != nil {
-	// 	log.WithError(err).Errorf("Failed to close SUDPH")
-	// }
+	close(c.closed)
 
 	return nil
 }
 
-// keep NAT mapping alive
-func (c *client) keepAliveLoop(ctx context.Context, conn net.Conn) error {
+// Keep NAT mapping alive.
+func (c *httpClient) keepAliveLoop(w io.Writer) error {
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-c.closed:
+			return nil
 		default:
-			if _, err := conn.Write([]byte(udpKeepAliveMessage)); err != nil {
+			if _, err := w.Write([]byte(udpKeepAliveMessage)); err != nil {
 				return err
 			}
 
