@@ -122,8 +122,8 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 		out.UptimeTracker = utStatus
 	}
 
-	if arclient := r.visor.AddressResolverClient(); arclient != nil {
-		arStatus, err := arclient.Health(ctx)
+	if arClient := r.visor.AddressResolverClient(); arClient != nil {
+		arStatus, err := arClient.Health(ctx)
 		if err != nil {
 			r.log.WithError(err).Warnf("Failed to check address resolver health")
 

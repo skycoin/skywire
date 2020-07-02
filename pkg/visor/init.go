@@ -38,6 +38,7 @@ func initStack() []initFunc {
 	return []initFunc{
 		initUpdater,
 		initEventBroadcaster,
+		initAddressResolver,
 		initSNet,
 		initDmsgpty,
 		initTransport,
@@ -82,10 +83,8 @@ func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
 	nc := snet.NetworkConfigs{
-		Dmsg:  v.conf.Dmsg,
-		STCP:  v.conf.STCP,
-		STCPR: v.conf.STCPR,
-		SUDPH: v.conf.SUDPH,
+		Dmsg: v.conf.Dmsg,
+		STCP: v.conf.STCP,
 	}
 
 	conf := snet.Config{
@@ -135,14 +134,23 @@ func initSNet(v *Visor) bool {
 	return report(nil)
 }
 
-func initTransport(v *Visor) bool {
-	report := v.makeReporter("transport")
+func initAddressResolver(v *Visor) bool {
+	report := v.makeReporter("address-resolver")
 	conf := v.conf.Transport
 
 	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
 	if err != nil {
 		return report(fmt.Errorf("failed to create address resolver client: %w", err))
 	}
+
+	v.arClient = arClient
+
+	return report(nil)
+}
+
+func initTransport(v *Visor) bool {
+	report := v.makeReporter("transport")
+	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
@@ -191,7 +199,6 @@ func initTransport(v *Visor) bool {
 		return ok
 	})
 
-	v.arClient = arClient
 	v.tpM = tpM
 
 	return report(nil)
@@ -316,24 +323,22 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
 	}
+
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
 		envCfg.AddressResolver = conf.Transport.AddressResolver
 	}
+
 	if conf.Routing != nil {
 		envCfg.RF = conf.Routing.RouteFinder
 	}
+
 	if conf.UptimeTracker != nil {
 		envCfg.UptimeTracker = conf.UptimeTracker.Addr
 	}
+
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
-	}
-	if conf.STCPR != nil {
-		envCfg.STCPRAddressResolver = conf.STCPR.AddressResolver
-	}
-	if conf.SUDPH != nil {
-		envCfg.SUDPHAddressResolver = conf.SUDPH.AddressResolver
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)
