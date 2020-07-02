@@ -68,6 +68,27 @@ func (_m *MockAPIClient) Close() error {
 	return r0
 }
 
+// Health provides a mock function with given fields: ctx
+func (_m *MockAPIClient) Health(ctx context.Context) (int, error) {
+	ret := _m.Called(ctx)
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func(context.Context) int); ok {
+		r0 = rf(ctx)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Resolve provides a mock function with given fields: ctx, tType, pk
 func (_m *MockAPIClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
 	ret := _m.Called(ctx, tType, pk)

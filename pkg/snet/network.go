@@ -70,44 +70,23 @@ type STCPConfig struct {
 	LocalAddr string                   `json:"local_address"`
 }
 
-// Type returns STCP.
+// Type returns STCP type.
 func (c *STCPConfig) Type() string {
 	return tptypes.STCP
-}
-
-// STCPRConfig defines config for STCPR network.
-type STCPRConfig struct {
-	AddressResolver string `json:"address_resolver"`
-}
-
-// Type returns STCPR.
-func (c *STCPRConfig) Type() string {
-	return tptypes.STCPR
-}
-
-// SUDPHConfig defines config for SUDPH network.
-type SUDPHConfig struct {
-	AddressResolver string `json:"address_resolver"`
-}
-
-// Type returns STCPH.
-func (c *SUDPHConfig) Type() string {
-	return tptypes.SUDPH
 }
 
 // Config represents a network configuration.
 type Config struct {
 	PubKey         cipher.PubKey
 	SecKey         cipher.SecKey
+	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
 }
 
 // NetworkConfigs represents all network configs.
 type NetworkConfigs struct {
-	Dmsg  *DmsgConfig  // The dmsg service will not be started if nil.
-	STCP  *STCPConfig  // The stcp service will not be started if nil.
-	STCPR *STCPRConfig // The stcpr service will not be started if nil.
-	SUDPH *SUDPHConfig // The sudph service will not be started if nil.
+	Dmsg *DmsgConfig // The dmsg service will not be started if nil.
+	STCP *STCPConfig // The stcp service will not be started if nil.
 }
 
 // NetworkClients represents all network clients.
@@ -166,36 +145,24 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 	}
 
-	if conf.NetworkConfigs.STCPR != nil {
-		ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
-		if err != nil {
-			return nil, err
-		}
-
-		conf := directtp.Config{
+	if conf.ARClient != nil {
+		stcprConf := directtp.Config{
 			Type:            tptypes.STCPR,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
-			AddressResolver: ar,
+			AddressResolver: conf.ARClient,
 		}
 
-		clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
-	}
+		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf)
 
-	if conf.NetworkConfigs.SUDPH != nil {
-		ar, err := arclient.NewHTTP(conf.NetworkConfigs.SUDPH.AddressResolver, conf.PubKey, conf.SecKey)
-		if err != nil {
-			return nil, err
-		}
-
-		conf := directtp.Config{
+		sudphConf := directtp.Config{
 			Type:            tptypes.SUDPH,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
-			AddressResolver: ar,
+			AddressResolver: conf.ARClient,
 		}
 
-		clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf)
+		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf)
 	}
 
 	return NewRaw(conf, clients), nil
@@ -240,7 +207,7 @@ func (n *Network) Init() error {
 		}
 	}
 
-	if n.conf.NetworkConfigs.STCPR != nil {
+	if n.conf.ARClient != nil {
 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
@@ -248,9 +215,7 @@ func (n *Network) Init() error {
 		} else {
 			log.Infof("No config found for stcpr")
 		}
-	}
 
-	if n.conf.NetworkConfigs.SUDPH != nil {
 		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'sudph': %w", err)
