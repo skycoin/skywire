@@ -54,6 +54,7 @@ type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
+	Health(ctx context.Context) (int, error)
 }
 
 // VisorData stores visor data.
@@ -62,14 +63,6 @@ type VisorData struct {
 	IsLocal    bool   `json:"is_local,omitempty"`
 	LocalAddresses
 }
-
-type key struct {
-	remoteAddr string
-	pk         cipher.PubKey
-	sk         cipher.SecKey
-}
-
-var clients = make(map[key]*httpClient) // nolint: gochecknoglobals
 
 // httpClient implements APIClient for address resolver API.
 type httpClient struct {
@@ -89,9 +82,10 @@ type httpClient struct {
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
+	log := logging.MustGetLogger("address-resolver")
+
 	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
 	if err != nil {
-
 		log.WithError(err).
 			Error("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
 
@@ -233,7 +227,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	return resolveResp, nil
 }
 
-func (c *client) Health(ctx context.Context) (int, error) {
+func (c *httpClient) Health(ctx context.Context) (int, error) {
 	resp, err := c.Get(ctx, "/health")
 	if err != nil {
 		return 0, err
@@ -241,7 +235,7 @@ func (c *client) Health(ctx context.Context) (int, error) {
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close response body")
+			c.log.WithError(err).Warn("Failed to close response body")
 		}
 	}()
 
