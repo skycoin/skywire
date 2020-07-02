@@ -135,6 +135,8 @@ func (c *httpClient) initHTTPClient() {
 
 // Get performs a new GET request.
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
+	<-c.ready
+
 	addr := c.httpClient.Addr() + path
 
 	req, err := http.NewRequest(http.MethodGet, addr, new(bytes.Buffer))
@@ -147,6 +149,8 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 
 // Post performs a POST request.
 func (c *httpClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+	<-c.ready
+
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
 		return nil, err
