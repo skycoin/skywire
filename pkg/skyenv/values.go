@@ -48,8 +48,7 @@ const (
 
 // Default STCP constants.
 const (
-	DefaultSTCPAddr  = ":7777"
-	DefaultSTCPRAddr = ":7778"
+	DefaultSTCPAddr = ":7777"
 )
 
 // Default skywire app constants.

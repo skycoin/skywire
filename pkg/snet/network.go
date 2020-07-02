@@ -78,7 +78,6 @@ func (c *STCPConfig) Type() string {
 // STCPRConfig defines config for STCPR network.
 type STCPRConfig struct {
 	AddressResolver string `json:"address_resolver"`
-	LocalAddr       string `json:"local_address"`
 }
 
 // Type returns STCPR.
@@ -177,7 +176,6 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			Type:            tptypes.STCPR,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
-			LocalAddr:       conf.NetworkConfigs.STCPR.LocalAddr,
 			AddressResolver: ar,
 		}
 
@@ -243,7 +241,7 @@ func (n *Network) Init() error {
 	}
 
 	if n.conf.NetworkConfigs.STCPR != nil {
-		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil && n.conf.NetworkConfigs.STCPR.LocalAddr != "" {
+		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
