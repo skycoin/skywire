@@ -1,4 +1,4 @@
-package directtransport
+package tpconn
 
 import (
 	"fmt"
@@ -10,7 +10,8 @@ import (
 	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/noisewrapper"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/noisewrapper"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
 )
 
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
@@ -21,21 +22,21 @@ type Conn struct {
 	freePort func()
 }
 
-// ConnConfig describes a config for Conn.
-type ConnConfig struct {
+// Config describes a config for Conn.
+type Config struct {
 	Log       *logging.Logger
 	Conn      net.Conn
 	LocalPK   cipher.PubKey
 	LocalSK   cipher.SecKey
 	Deadline  time.Time
-	Handshake Handshake
+	Handshake tphandshake.Handshake
 	FreePort  func()
 	Encrypt   bool
 	Initiator bool
 }
 
 // NewConn creates a new Conn.
-func NewConn(c ConnConfig) (*Conn, error) {
+func NewConn(c Config) (*Conn, error) {
 	if c.Log != nil {
 		c.Log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
 	}
@@ -57,7 +58,6 @@ func NewConn(c ConnConfig) (*Conn, error) {
 		c.Log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
 	}
 
-	// TODO(nkryuchkov): extract from handshake whether encryption is needed
 	if c.Encrypt {
 		config := noise.Config{
 			LocalPK:   c.LocalPK,

@@ -81,17 +81,9 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 		PKTable:   nil,
 	}
 
-	conf.STCPR = &snet.STCPRConfig{
-		LocalAddr: skyenv.DefaultSTCPRAddr,
-	}
-
 	conf.SUDP = &snet.SUDPConfig{
 		PKTable:   nil,
 		LocalAddr: skyenv.DefaultSUDPAddr,
-	}
-
-	conf.SUDPR = &snet.SUDPRConfig{
-		LocalAddr: skyenv.DefaultSUDPRAddr,
 	}
 
 	conf.Transport.LogStore = &V1LogStore{

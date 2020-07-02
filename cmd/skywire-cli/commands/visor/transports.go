@@ -12,12 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudph"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudpr"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -87,7 +82,7 @@ func init() {
 	const (
 		// TODO: add stcpr implementation
 		typeFlagUsage = "type of transport to add; if unspecified, cli will attempt to establish a transport " +
-			"in the following order: stcp, stcpr, stcph, dmsg"
+			"in the following order: stcp, stcpr, sudph, dmsg"
 		publicFlagUsage  = "whether to make the transport public"
 		timeoutFlagUsage = "if specified, sets an operation timeout"
 	)
@@ -116,12 +111,9 @@ var addTpCmd = &cobra.Command{
 			logger.Infof("Established %v transport to %v", transportType, pk)
 		} else {
 			transportTypes := []string{
-				stcp.Type,
-				stcpr.Type,
-				stcph.Type,
-				sudp.Type,
-				sudpr.Type,
-				sudph.Type,
+				tptypes.STCP,
+				tptypes.STCPR,
+				tptypes.SUDPH,
 				dmsg.Type,
 			}
 

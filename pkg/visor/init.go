@@ -85,8 +85,7 @@ func initSNet(v *Visor) bool {
 		Dmsg:  v.conf.Dmsg,
 		STCP:  v.conf.STCP,
 		STCPR: v.conf.STCPR,
-		SUDP:  v.conf.SUDP,
-		SUDPR: v.conf.SUDPR,
+		SUDPH: v.conf.SUDPH,
 	}
 
 	conf := snet.Config{
@@ -329,6 +328,12 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	}
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
+	}
+	if conf.STCPR != nil {
+		envCfg.STCPRAddressResolver = conf.STCPR.AddressResolver
+	}
+	if conf.SUDPH != nil {
+		envCfg.SUDPHAddressResolver = conf.SUDPH.AddressResolver
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)

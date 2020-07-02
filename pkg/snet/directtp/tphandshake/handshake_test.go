@@ -1,4 +1,4 @@
-package directtransport
+package tphandshake
 
 import (
 	"errors"
@@ -36,7 +36,7 @@ func TestHandshake(t *testing.T) {
 
 		initC, respC := net.Pipe()
 
-		deadline := time.Now().Add(HandshakeTimeout)
+		deadline := time.Now().Add(Timeout)
 
 		respCh := make(chan hsResult, 1)
 

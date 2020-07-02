@@ -12,9 +12,10 @@ import (
 	"golang.org/x/net/nettest"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtransport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/sudp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
 // KeyPair holds a public/private key pair.
@@ -50,7 +51,6 @@ type Env struct {
 // NewEnv creates a `network.Network` test environment.
 // `nPairs` is the public/private key pairs of all the `network.Network`s to be created.
 func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
-
 	// Prepare `dmsg`.
 	dmsgD := disc.NewMock(0)
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
@@ -62,26 +62,20 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
 	}
 
-	table := directtransport.NewTable(tableEntries)
+	table := pktable.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp /*, hasStcpr, hasStcph*/, hasSudp /*, hasSudpr, hasSudph*/ bool
+	var hasDmsg, hasStcp, hasStcpr, hasSudph bool
 
 	for _, network := range networks {
 		switch network {
 		case dmsg.Type:
 			hasDmsg = true
-		case stcp.Type:
+		case tptypes.STCP:
 			hasStcp = true
-		// case stcpr.Type:
-		// 	hasStcpr = true
-		// case stcph.Type:
-		// 	hasStcph = true
-		case sudp.Type:
-			hasSudp = true
-			// case sudpr.Type:
-			// 	hasSudpr = true
-			// case sudph.Type:
-			// 	hasSudph = true
+		case tptypes.STCPR:
+			hasStcpr = true
+		case tptypes.SUDPH:
+			hasSudph = true
 		}
 	}
 
@@ -89,7 +83,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	ns := make([]*snet.Network, len(keys))
 
 	const stcpBasePort = 7033
-	const sudpBasePort = 7533
 
 	for i, pairs := range keys {
 		networkConfigs := snet.NetworkConfigs{
@@ -99,57 +92,52 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			STCP: &snet.STCPConfig{
 				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
 			},
-			STCPR: &snet.STCPRConfig{
-				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i+1000),
-			},
-			SUDP: &snet.SUDPConfig{
-				LocalAddr: "127.0.0.1:" + strconv.Itoa(sudpBasePort+i),
-			},
-			SUDPR: &snet.SUDPRConfig{
-				LocalAddr: "127.0.0.1:" + strconv.Itoa(sudpBasePort+i+1000),
-			},
 		}
 
-		var clients snet.NetworkClients
+		clients := snet.NetworkClients{
+			Direct: make(map[string]directtp.Client),
+		}
 
 		if hasDmsg {
 			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
 			go clients.DmsgC.Serve()
 		}
 
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
-		//
-		// addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
-		// if err != nil {
-		// 	panic(err)
-		// }
+		addressResolver := new(arclient.MockAPIClient)
 
 		if hasStcp {
-			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.STCP.LocalAddr)
+			conf := directtp.Config{
+				Type:      tptypes.STCP,
+				PK:        pairs.PK,
+				SK:        pairs.SK,
+				Table:     table,
+				LocalAddr: networkConfigs.STCP.LocalAddr,
+			}
+
+			clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 		}
 
-		// TODO: https://github.com/SkycoinProject/skywire-mainnet/issues/395
-		// if hasStcpr {
-		// 	clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		// }
-		//
-		// if hasStcph {
-		// 	clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		// }
+		if hasStcpr {
+			conf := directtp.Config{
+				Type:            tptypes.STCPR,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
 
-		if hasSudp {
-			clients.SudpC = sudp.NewClient(pairs.PK, pairs.SK, table, networkConfigs.SUDP.LocalAddr)
+			clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
 		}
 
-		// if hasSudpr {
-		// TODO: https: //github.com/SkycoinProject/skywire-mainnet/issues/395
-		// clients.SudprC = sudpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		// }
+		if hasSudph {
+			conf := directtp.Config{
+				Type:            tptypes.SUDPH,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
 
-		// if hasSudph {
-		// 	clients.SudphC = sudph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		// }
+			clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf)
+		}
 
 		snetConfig := snet.Config{
 			PubKey:         pairs.PK,
@@ -157,7 +145,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			NetworkConfigs: networkConfigs,
 		}
 
-		n := snet.NewRaw(snetConfig, &clients)
+		n := snet.NewRaw(snetConfig, clients)
 		require.NoError(t, n.Init())
 		ns[i] = n
 	}
