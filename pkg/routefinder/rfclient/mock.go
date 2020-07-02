@@ -2,6 +2,7 @@ package rfclient
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"golang.org/x/net/context"
@@ -47,4 +48,9 @@ func (r *mockClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, op
 			},
 		},
 	}, nil
+}
+
+// Health implements Client for MockClient
+func (r *mockClient) Health(_ context.Context) (int, error) {
+	return http.StatusOK, nil
 }
