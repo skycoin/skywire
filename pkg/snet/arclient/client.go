@@ -39,6 +39,8 @@ const (
 var (
 	// ErrNoEntry means that there exists no entry for this PK.
 	ErrNoEntry = errors.New("no entry for this PK")
+	// ErrNotReady is returned when address resolver is not ready.
+	ErrNotReady = errors.New("address resolver is not ready")
 )
 
 // Error is the object returned to the client when there's an error.
@@ -66,13 +68,15 @@ type VisorData struct {
 
 // httpClient implements APIClient for address resolver API.
 type httpClient struct {
-	log           *logging.Logger
-	httpClient    *httpauth.Client
-	pk            cipher.PubKey
-	sk            cipher.SecKey
-	remoteUDPAddr string
-	sudphConn     net.PacketConn
-	closed        chan struct{}
+	log            *logging.Logger
+	httpClient     *httpauth.Client
+	pk             cipher.PubKey
+	sk             cipher.SecKey
+	remoteHTTPAddr string
+	remoteUDPAddr  string
+	sudphConn      net.PacketConn
+	ready          chan struct{}
+	closed         chan struct{}
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -82,43 +86,51 @@ type httpClient struct {
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
-	log := logging.MustGetLogger("address-resolver")
-
-	httpAuthClient, err := httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
-	if err != nil {
-		log.WithError(err).
-			Error("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
-
-		retryLog := logging.MustGetLogger("snet.arclient.retrier")
-		retry := netutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
-
-		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauth.NewClient(context.Background(), remoteAddr, pk, sk)
-			return err
-		})
-
-		if err != nil {
-			// This should not happen as retrier is set to try indefinitely.
-			// If address resolver cannot be contacted indefinitely, 'arDone' will be blocked indefinitely.
-			log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
-		}
-	}
-
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
 	client := &httpClient{
-		closed:        make(chan struct{}),
-		log:           log,
-		httpClient:    httpAuthClient,
-		pk:            pk,
-		sk:            sk,
-		remoteUDPAddr: remoteURL.Host,
+		log:            logging.MustGetLogger("address-resolver"),
+		pk:             pk,
+		sk:             sk,
+		remoteHTTPAddr: remoteAddr,
+		remoteUDPAddr:  remoteURL.Host,
+		ready:          make(chan struct{}),
+		closed:         make(chan struct{}),
 	}
 
+	go client.initHTTPClient()
+
 	return client, nil
+}
+
+func (c *httpClient) initHTTPClient() {
+	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+	if err != nil {
+		c.log.WithError(err).
+			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
+
+		retryLog := logging.MustGetLogger("snet.arclient.retrier")
+		retry := netutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
+
+		err := retry.Do(context.Background(), func() error {
+			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
+			return err
+		})
+
+		if err != nil {
+			// This should not happen as retrier is set to try indefinitely.
+			// If address resolver cannot be contacted indefinitely, 'c.ready' will be blocked indefinitely.
+			c.log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
+		}
+	}
+
+	c.log.Infof("Connected to address resolver. STCPR/SUDPH services are available.")
+
+	c.httpClient = httpAuthClient
+	close(c.ready)
 }
 
 // Get performs a new GET request.
@@ -163,6 +175,12 @@ type LocalAddresses struct {
 
 // BindSTCPR binds client PK to IP:port on address resolver.
 func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
+	if !c.isReady() {
+		c.log.Infof("BindSTCPR: Address resolver is not ready yet, waiting...")
+		<-c.ready
+		c.log.Infof("BindSTCPR: Address resolver became ready, binding")
+	}
+
 	addresses, err := localAddresses()
 	if err != nil {
 		return err
@@ -191,64 +209,13 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	return nil
 }
 
-func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
-	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
-
-	resp, err := c.Get(ctx, path)
-	if err != nil {
-		return VisorData{}, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return VisorData{}, ErrNoEntry
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
-	}
-
-	rawBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return VisorData{}, err
-	}
-
-	var resolveResp VisorData
-
-	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
-		return VisorData{}, err
-	}
-
-	return resolveResp, nil
-}
-
-func (c *httpClient) Health(ctx context.Context) (int, error) {
-	resp, err := c.Get(ctx, "/health")
-	if err != nil {
-		return 0, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.log.WithError(err).Warn("Failed to close response body")
-		}
-	}()
-
-	return resp.StatusCode, nil
-}
-
-// RemoteVisor contains public key and address of remote visor.
-type RemoteVisor struct {
-	PK   cipher.PubKey
-	Addr string
-}
-
 func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
+	if !c.isReady() {
+		c.log.Infof("BindSUDPR: Address resolver is not ready yet, waiting...")
+		<-c.ready
+		c.log.Infof("BindSUDPR: Address resolver became ready, binding")
+	}
+
 	rAddr, err := net.ResolveUDPAddr("udp", c.remoteUDPAddr)
 	if err != nil {
 		return nil, err
@@ -296,6 +263,80 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor
 	}()
 
 	return addrCh, nil
+}
+
+func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
+	if !c.isReady() {
+		return VisorData{}, ErrNotReady
+	}
+
+	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
+
+	resp, err := c.Get(ctx, path)
+	if err != nil {
+		return VisorData{}, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return VisorData{}, ErrNoEntry
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return VisorData{}, fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
+	}
+
+	rawBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return VisorData{}, err
+	}
+
+	var resolveResp VisorData
+
+	if err := json.Unmarshal(rawBody, &resolveResp); err != nil {
+		return VisorData{}, err
+	}
+
+	return resolveResp, nil
+}
+
+func (c *httpClient) Health(ctx context.Context) (int, error) {
+	if !c.isReady() {
+		return http.StatusNotFound, nil
+	}
+
+	resp, err := c.Get(ctx, "/health")
+	if err != nil {
+		return 0, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	return resp.StatusCode, nil
+}
+
+func (c *httpClient) isReady() bool {
+	select {
+	case <-c.ready:
+		return true
+	default:
+		return false
+	}
+}
+
+// RemoteVisor contains public key and address of remote visor.
+type RemoteVisor struct {
+	PK   cipher.PubKey
+	Addr string
 }
 
 func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
