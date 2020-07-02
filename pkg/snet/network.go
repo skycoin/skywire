@@ -79,15 +79,14 @@ func (c *STCPConfig) Type() string {
 type Config struct {
 	PubKey         cipher.PubKey
 	SecKey         cipher.SecKey
+	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
 }
 
 // NetworkConfigs represents all network configs.
 type NetworkConfigs struct {
-	Dmsg  *DmsgConfig  // The dmsg service will not be started if nil.
-	STCP  *STCPConfig  // The stcp service will not be started if nil.
-	STCPR *STCPRConfig // The stcpr service will not be started if nil.
-	SUDPH *SUDPHConfig // The sudph service will not be started if nil.
+	Dmsg *DmsgConfig // The dmsg service will not be started if nil.
+	STCP *STCPConfig // The stcp service will not be started if nil.
 }
 
 // NetworkClients represents all network clients.
@@ -151,7 +150,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			Type:            tptypes.STCPR,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
-			AddressResolver: ar,
+			AddressResolver: conf.ARClient,
 		}
 
 		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf)
@@ -160,12 +159,11 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			Type:            tptypes.SUDPH,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
-			AddressResolver: ar,
+			AddressResolver: conf.ARClient,
 		}
 
 		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf)
 	}
-
 
 	return NewRaw(conf, clients), nil
 }
@@ -209,7 +207,7 @@ func (n *Network) Init() error {
 		}
 	}
 
-	if n.conf.NetworkConfigs.STCPR != nil {
+	if n.conf.ARClient != nil {
 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
@@ -217,9 +215,7 @@ func (n *Network) Init() error {
 		} else {
 			log.Infof("No config found for stcpr")
 		}
-	}
 
-	if n.conf.NetworkConfigs.SUDPH != nil {
 		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'sudph': %w", err)
