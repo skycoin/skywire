@@ -81,7 +81,6 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 	}
 
 	conf.STCPR = &snet.STCPRConfig{
-		LocalAddr:       skyenv.DefaultSTCPRAddr,
 		AddressResolver: skyenv.DefaultAddressResolverAddr,
 	}
 

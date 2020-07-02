@@ -94,7 +94,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
 			},
 			STCPR: &snet.STCPRConfig{
-				LocalAddr:       "127.0.0.1:" + strconv.Itoa(stcpBasePort+i+1000),
 				AddressResolver: skyenv.TestAddressResolverAddr,
 			},
 
@@ -132,7 +131,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				PK:              pairs.PK,
 				SK:              pairs.SK,
 				AddressResolver: addressResolver,
-				LocalAddr:       networkConfigs.STCPR.LocalAddr,
 			}
 
 			clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
