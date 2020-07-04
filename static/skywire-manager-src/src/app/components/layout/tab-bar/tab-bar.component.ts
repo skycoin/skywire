@@ -4,7 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
 import { LanguageService } from 'src/app/services/language.service';
-import { SelectTabComponent } from './select-tab/select-tab.component';
+import { SelectableOption, SelectOptionComponent } from '../select-option/select-option.component';
 
 /**
  * Properties of the tabs shown in TabBarComponent.
@@ -105,7 +105,17 @@ export class TabBarComponent implements OnInit, OnDestroy {
   }
 
   openTabSelector() {
-    SelectTabComponent.openDialog(this.dialog, this.tabsData).afterClosed().subscribe((result: number) => {
+    // Create an option for every tab.
+    const options: SelectableOption[] = [];
+    this.tabsData.forEach(tab => {
+      options.push({
+        label: tab.label,
+        icon: tab.icon,
+      });
+    });
+
+    // Open the option selection modal window.
+    SelectOptionComponent.openDialog(this.dialog, options, 'tabs-window.title').afterClosed().subscribe((result: number) => {
       if (result) {
         result -= 1;
         if (result !== this.selectedTabIndex) {
