@@ -3,7 +3,7 @@
   <div *ngIf="routeRule">
     <!-- Basic info. -->
     <div class="title mt-0">
-      {{ 'routes.details.basic.title' | translate }}
+      <mat-icon [inline]="true">list</mat-icon>{{ 'routes.details.basic.title' | translate }}
     </div>
     <div class="item">
       <span>{{ 'routes.details.basic.key' | translate }}</span> {{ routeRule.key }}
@@ -15,7 +15,7 @@
     <!-- Rule summary. -->
     <div *ngIf="routeRule.rule_summary">
       <div class="title">
-        {{ 'routes.details.summary.title' | translate }}
+        <mat-icon [inline]="true">list</mat-icon>{{ 'routes.details.summary.title' | translate }}
       </div>
       <div class="item">
         <span>{{ 'routes.details.summary.keep-alive' | translate }}</span> {{ routeRule.rule_summary.keep_alive }}
@@ -29,13 +29,13 @@
 
       <!-- Title for the specific rule type. -->
       <div *ngIf="routeRule.rule_summary.app_fields" class="title">
-        {{ 'routes.details.specific-fields-titles.app' | translate }}
+        <mat-icon [inline]="true">settings</mat-icon>{{ 'routes.details.specific-fields-titles.app' | translate }}
       </div>
       <div *ngIf="routeRule.rule_summary.forward_fields" class="title">
-        {{ 'routes.details.specific-fields-titles.forward' | translate }}
+        <mat-icon [inline]="true">swap_horiz</mat-icon>{{ 'routes.details.specific-fields-titles.forward' | translate }}
       </div>
       <div *ngIf="routeRule.rule_summary.intermediary_forward_fields" class="title">
-        {{ 'routes.details.specific-fields-titles.intermediary-forward' | translate }}
+        <mat-icon [inline]="true">arrow_forward</mat-icon>{{ 'routes.details.specific-fields-titles.intermediary-forward' | translate }}
       </div>
 
       <!-- Fields for the forward and intermediary forward rules. -->
