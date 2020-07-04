@@ -2,7 +2,7 @@
 @import 'variables';
 @import 'text';
 
-$label-background: #eeeeee;
+$label-background: rgba(255, 255, 255, 0.25);
 
 .options-container {
   display: flex;
