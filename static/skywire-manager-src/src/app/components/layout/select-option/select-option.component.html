@@ -1,12 +1,12 @@
-<app-dialog [headline]="'common.options' | translate" [includeVerticalMargins]="false">
-  <div class="options-list-button-container" *ngFor="let option of data; let i = index">
+<app-dialog [headline]="data.title | translate" [includeVerticalMargins]="false">
+  <div class="options-list-button-container" *ngFor="let option of data.options; let i = index">
     <button
       mat-button
       class="grey-button-background"
       (click)="closePopup(i + 1)"
     >
       <div class="internal-container">
-        <mat-icon [inline]="true">{{ option.icon }}</mat-icon>
+        <mat-icon [inline]="true" *ngIf="option.icon">{{ option.icon }}</mat-icon>
         <span>{{ option.label | translate }}</span>
       </div>
     </button>

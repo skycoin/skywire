@@ -238,7 +238,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       },
     ];
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         // Open the complete terminal in a new tab.
         const protocol = window.location.protocol;
