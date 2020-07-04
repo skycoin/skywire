@@ -1,4 +1,4 @@
-<app-dialog [headline]="'tabs-window.title' | translate">
+<app-dialog [headline]="'tabs-window.title' | translate" [includeVerticalMargins]="false">
   <div class="options-list-button-container" *ngFor="let tabData of data; let i = index">
     <button
       mat-button

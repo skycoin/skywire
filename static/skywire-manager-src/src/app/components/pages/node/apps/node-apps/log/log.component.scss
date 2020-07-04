@@ -7,17 +7,36 @@
 .app-log-message {
   margin-top: 15px;
   word-break: break-word;
+
+  .transparent {
+    color: $lighter-gray;
+  }
 }
 
-.transparent {
-  opacity: 0.5;
+.app-log-message:first-of-type {
+  margin-top: 0px;
 }
 
-.filter-link {
-  font-size: $font-size-sm;
+.app-log-message:last-of-type {
+  margin-bottom: $mat-dialog-padding;
+}
+
+.filter-link-container {
   text-align: center;
-  padding: 10px 0;
-  color: $blue;
-  border-bottom: $separator solid 1px;
-  cursor: pointer;
+  margin: 15px 0;
+
+  .filter-link {
+    display: inline;
+    background: $white;
+    padding: 5px 10px;
+    border-radius: 1000px;
+    font-size: $font-size-sm;
+    text-align: center;
+    color: $blue-medium;
+    cursor: pointer;
+
+    .transparent {
+      color: scale-color($blue-medium, $alpha: -50%);
+    }
+  }
 }

@@ -57,6 +57,8 @@ mat-form-field {
 
 // White form fields, to be shown with the dark background.
 .white-form-field {
+  color: $white;
+
   .mat-select-value-text, .mat-form-field-label, .mat-select-value, .mat-select-arrow {
     color: $white !important;
   }
@@ -76,7 +78,12 @@ mat-form-field {
 
 // Container for the white help icons shown in the forms, to be shown with the dark background.
 .form-help-icon-container {
-  color: scale-color($white, $alpha: -20%);
   height: 0px;
   text-align: right;
+  color: $blue-medium;
+}
+
+.white-form-help-icon-container {
+  @extend .form-help-icon-container;
+  color: scale-color($white, $alpha: -20%);
 }
