@@ -13,7 +13,6 @@ import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
-import { SelectColumnComponent, SelectedColumn } from '../../layout/select-column/select-column.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
 import { processServiceError } from 'src/app/utils/errors';
@@ -189,24 +188,28 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * Opens the modal window used on small screens for selecting how to sort the data.
    */
   openSortingOrderModal() {
-    // Get the list of sortable columns.
+    // Create 2 options for every sortable column, for ascending and descending order.
+    const options: SelectableOption[] = [];
     const enumKeys = Object.keys(SortableColumns);
-    const columnsMap = new Map<string, SortableColumns>();
-    const columns = enumKeys.map(key => {
-      const val = SortableColumns[key as any];
-      columnsMap.set(val, SortableColumns[key]);
-
-      return val;
+    enumKeys.forEach(key => {
+      options.push({
+        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
+      });
+      options.push({
+        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
+      });
     });
 
-    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
+    // Open the option selection modal window.
+    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
       if (result) {
-        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
-          this.sortBy = columnsMap.get(result.label);
-          this.sortReverse = result.sortReverse;
+        result = (result - 1) / 2;
+        const index = Math.floor(result);
+        // Use the column and order selected by the user.
+        this.sortBy = SortableColumns[enumKeys[index]];
+        this.sortReverse = result !== index;
 
-          this.sortList();
-        }
+        this.sortList();
       }
     });
   }
@@ -510,7 +513,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       });
     }
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         if (this.clipboardService.copy(node.local_pk)) {
           this.onCopyToClipboardClicked();

@@ -9,7 +9,7 @@ export interface SelectableOption {
   /**
    * Name of the material icon to show.
    */
-  icon: string;
+  icon?: string;
   /**
    * Label to show.
    */
@@ -17,8 +17,7 @@ export interface SelectableOption {
 }
 
 /**
- * Modal window for allowing the user to select an option. It is used mainly for the options
- * of the elements of the tables when the screen is too small. When the user selects an option,
+ * Modal window for allowing the user to select an option. When the user selects an option,
  * the modal window is closed and the number of the selected option (counting from 1) is
  * returned in the "afterClosed" envent.
  */
@@ -31,9 +30,12 @@ export class SelectOptionComponent {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, optionsToShow: SelectableOption[]): MatDialogRef<SelectOptionComponent, any> {
+  public static openDialog(dialog: MatDialog, optionsToShow: SelectableOption[], title: string): MatDialogRef<SelectOptionComponent, any> {
     const config = new MatDialogConfig();
-    config.data = optionsToShow;
+    config.data = {
+      options: optionsToShow,
+      title: title,
+    };
     config.autoFocus = false;
     config.width = AppConfig.smallModalWidth;
 
