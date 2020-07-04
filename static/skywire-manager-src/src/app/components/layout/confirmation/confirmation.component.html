@@ -2,6 +2,14 @@
   <div class="text-container">
     {{ (state !== confirmationStates.Done ? data.text : doneText) | translate }}
   </div>
+  <div *ngIf="(data.list && state !== confirmationStates.Done) || (doneList && state === confirmationStates.Done)" class="list-container">
+    <div *ngFor="let element of (state !== confirmationStates.Done ? data.list : doneList)">
+      - {{ element | translate }}
+    </div>
+  </div>
+  <div *ngIf="data.lowerText && state !== confirmationStates.Done" class="text-container">
+    {{ data.lowerText | translate }}
+  </div>
 
   <div class="buttons">
     <app-button
