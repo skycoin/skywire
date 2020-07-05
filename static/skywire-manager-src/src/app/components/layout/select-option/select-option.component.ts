@@ -16,6 +16,12 @@ export interface SelectableOption {
   label: string;
 }
 
+// Data received by SelectOptionComponent.
+interface ComponentData {
+  options: SelectableOption[];
+  title: string;
+}
+
 /**
  * Modal window for allowing the user to select an option. When the user selects an option,
  * the modal window is closed and the number of the selected option (counting from 1) is
@@ -43,7 +49,7 @@ export class SelectOptionComponent {
   }
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: SelectableOption[],
+    @Inject(MAT_DIALOG_DATA) public data: ComponentData,
     private dialogRef: MatDialogRef<SelectOptionComponent>,
   ) { }
 
