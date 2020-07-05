@@ -1,6 +1,7 @@
 <app-dialog
   class="position-relative"
   [headline]="'actions.update.title' | translate"
+  [includeVerticalMargins]="false"
   [includeScrollableArea]="false">
   <mat-progress-bar *ngIf="isLoading"
                     style="position: relative; top: 0;"
