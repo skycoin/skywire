@@ -1,3 +1,5 @@
+@import "bootstrap_overrides";
+
 // General utilities for the app.
 
 .cursor-pointer {
@@ -60,5 +62,19 @@
 
   &:hover {
     opacity: 1;
+  }
+}
+
+// Controls the padding of the elements in the main area when a details bar is shown at the left.
+@media (max-width: (map-get($grid-breakpoints, md) - 1)) , (min-width: map-get($grid-breakpoints, lg)) and (max-width: (map-get($grid-breakpoints, xl) - 1)) {
+  .small-node-list-margins {
+    padding: 0 !important;
+  }
+}
+
+// Controls the padding of the elements in the main area when no details bar is shown at the left.
+@media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+  .full-node-list-margins {
+    padding: 0 !important;
   }
 }

@@ -10,7 +10,7 @@
 <mat-dialog-content [ngClass]="{'content-margin': includeVerticalMargins}" *ngIf="includeScrollableArea">
   <ng-container *ngTemplateOutlet="contentTemplate"></ng-container>
 </mat-dialog-content>
-<ng-container [ngClass]="{'content-margin': includeVerticalMargins}" *ngIf="!includeScrollableArea">
+<div [ngClass]="{'content-margin': includeVerticalMargins}" *ngIf="!includeScrollableArea">
   <ng-container *ngTemplateOutlet="contentTemplate"></ng-container>
-</ng-container>
+</div>
 <ng-template #contentTemplate><ng-content></ng-content></ng-template>
