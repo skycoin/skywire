@@ -16,9 +16,9 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -34,7 +34,19 @@ const (
 var (
 	// ErrUnknownNetwork occurs on attempt to dial an unknown network type.
 	ErrUnknownNetwork = errors.New("unknown network type")
+	knownNetworks     = map[string]struct{}{
+		dmsg.Type:     {},
+		tptypes.STCP:  {},
+		tptypes.STCPR: {},
+		tptypes.SUDPH: {},
+	}
 )
+
+// IsKnownNetwork tells whether network type `netType` is known.
+func IsKnownNetwork(netType string) bool {
+	_, ok := knownNetworks[netType]
+	return ok
+}
 
 // NetworkConfig is a common interface for network configs.
 type NetworkConfig interface {
@@ -58,68 +70,47 @@ type STCPConfig struct {
 	LocalAddr string                   `json:"local_address"`
 }
 
-// Type returns STCPType.
+// Type returns STCP type.
 func (c *STCPConfig) Type() string {
-	return stcp.Type
-}
-
-// STCPRConfig defines config for STCPR network.
-type STCPRConfig struct {
-	AddressResolver string `json:"address_resolver"`
-	LocalAddr       string `json:"local_address"`
-}
-
-// Type returns STCPRType.
-func (c *STCPRConfig) Type() string {
-	return stcpr.Type
-}
-
-// STCPHConfig defines config for STCPH network.
-type STCPHConfig struct {
-	AddressResolver string `json:"address_resolver"`
-}
-
-// Type returns STCPHType.
-func (c *STCPHConfig) Type() string {
-	return stcph.Type
+	return tptypes.STCP
 }
 
 // Config represents a network configuration.
 type Config struct {
 	PubKey         cipher.PubKey
 	SecKey         cipher.SecKey
+	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
 }
 
 // NetworkConfigs represents all network configs.
 type NetworkConfigs struct {
-	Dmsg  *DmsgConfig  // The dmsg service will not be started if nil.
-	STCP  *STCPConfig  // The stcp service will not be started if nil.
-	STCPR *STCPRConfig // The stcpr service will not be started if nil.
-	STCPH *STCPHConfig // The stcph service will not be started if nil.
+	Dmsg *DmsgConfig // The dmsg service will not be started if nil.
+	STCP *STCPConfig // The stcp service will not be started if nil.
 }
 
 // NetworkClients represents all network clients.
 type NetworkClients struct {
 	DmsgC  *dmsg.Client
-	StcpC  *stcp.Client
-	StcprC *stcpr.Client
-	StcphC *stcph.Client
+	Direct map[string]directtp.Client
 }
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf     Config
-	networks []string // networks to be used with transports
-	clients  NetworkClients
+	conf    Config
+	netsMu  sync.RWMutex
+	nets    map[string]struct{} // networks to be used with transports
+	clients NetworkClients
+
+	onNewNetworkTypeMu sync.Mutex
+	onNewNetworkType   func(netType string)
 }
 
 // New creates a network from a config.
 func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
-	var (
-		clients         NetworkClients
-		addressResolver arclient.APIClient
-	)
+	clients := NetworkClients{
+		Direct: make(map[string]directtp.Client),
+	}
 
 	if conf.NetworkConfigs.Dmsg != nil {
 		dmsgConf := &dmsg.Config{
@@ -144,35 +135,34 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	}
 
 	if conf.NetworkConfigs.STCP != nil {
-		clients.StcpC = stcp.NewClient(conf.PubKey, conf.SecKey, stcp.NewTable(conf.NetworkConfigs.STCP.PKTable))
-		clients.StcpC.SetLogger(logging.MustGetLogger("snet.stcpC"))
+		conf := directtp.Config{
+			Type:      tptypes.STCP,
+			PK:        conf.PubKey,
+			SK:        conf.SecKey,
+			Table:     pktable.NewTable(conf.NetworkConfigs.STCP.PKTable),
+			LocalAddr: conf.NetworkConfigs.STCP.LocalAddr,
+		}
+		clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 	}
 
-	if conf.NetworkConfigs.STCPR != nil {
-		ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPR.AddressResolver, conf.PubKey, conf.SecKey)
-		if err != nil {
-			return nil, err
+	if conf.ARClient != nil {
+		stcprConf := directtp.Config{
+			Type:            tptypes.STCPR,
+			PK:              conf.PubKey,
+			SK:              conf.SecKey,
+			AddressResolver: conf.ARClient,
 		}
 
-		addressResolver = ar
+		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf)
 
-		clients.StcprC = stcpr.NewClient(conf.PubKey, conf.SecKey, addressResolver, conf.NetworkConfigs.STCPR.LocalAddr)
-		clients.StcprC.SetLogger(logging.MustGetLogger("snet.stcprC"))
-	}
-
-	if conf.NetworkConfigs.STCPH != nil {
-		// If address resolver is not already created or if stcpr and stcph address resolvers differ
-		if conf.NetworkConfigs.STCPR == nil || conf.NetworkConfigs.STCPR.AddressResolver != conf.NetworkConfigs.STCPH.AddressResolver {
-			ar, err := arclient.NewHTTP(conf.NetworkConfigs.STCPH.AddressResolver, conf.PubKey, conf.SecKey)
-			if err != nil {
-				return nil, err
-			}
-
-			addressResolver = ar
+		sudphConf := directtp.Config{
+			Type:            tptypes.SUDPH,
+			PK:              conf.PubKey,
+			SK:              conf.SecKey,
+			AddressResolver: conf.ARClient,
 		}
 
-		clients.StcphC = stcph.NewClient(conf.PubKey, conf.SecKey, addressResolver)
-		clients.StcphC.SetLogger(logging.MustGetLogger("snet.stcphC"))
+		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf)
 	}
 
 	return NewRaw(conf, clients), nil
@@ -180,29 +170,23 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 
 // NewRaw creates a network from a config and a dmsg client.
 func NewRaw(conf Config, clients NetworkClients) *Network {
-	networks := make([]string, 0)
+	n := &Network{
+		conf:    conf,
+		nets:    make(map[string]struct{}),
+		clients: clients,
+	}
 
 	if clients.DmsgC != nil {
-		networks = append(networks, dmsg.Type)
+		n.addNetworkType(dmsg.Type)
 	}
 
-	if clients.StcpC != nil {
-		networks = append(networks, stcp.Type)
+	for k, v := range clients.Direct {
+		if v != nil {
+			n.addNetworkType(k)
+		}
 	}
 
-	if clients.StcprC != nil {
-		networks = append(networks, stcpr.Type)
-	}
-
-	if clients.StcphC != nil {
-		networks = append(networks, stcph.Type)
-	}
-
-	return &Network{
-		conf:     conf,
-		networks: networks,
-		clients:  clients,
-	}
+	return n
 }
 
 // Init initiates server connections.
@@ -214,8 +198,8 @@ func (n *Network) Init() error {
 	}
 
 	if n.conf.NetworkConfigs.STCP != nil {
-		if n.clients.StcpC != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
-			if err := n.clients.StcpC.Serve(n.conf.NetworkConfigs.STCP.LocalAddr); err != nil {
+		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
+			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcp': %w", err)
 			}
 		} else {
@@ -223,57 +207,69 @@ func (n *Network) Init() error {
 		}
 	}
 
-	if n.conf.NetworkConfigs.STCPR != nil {
-		if n.clients.StcprC != nil && n.conf.NetworkConfigs.STCPR.LocalAddr != "" {
-			if err := n.clients.StcprC.Serve(); err != nil {
+	if n.conf.ARClient != nil {
+		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
+			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
 		} else {
 			log.Infof("No config found for stcpr")
 		}
-	}
 
-	if n.conf.NetworkConfigs.STCPH != nil {
-		if n.clients.StcphC != nil {
-			if err := n.clients.StcphC.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcph': %w", err)
+		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
+			if err := client.Serve(); err != nil {
+				return fmt.Errorf("failed to initiate 'sudph': %w", err)
 			}
 		} else {
-			log.Infof("No config found for stcph")
+			log.Infof("No config found for sudph")
 		}
 	}
 
 	return nil
 }
 
+// OnNewNetworkType sets callback to be called when new network type is ready.
+func (n *Network) OnNewNetworkType(callback func(netType string)) {
+	n.onNewNetworkTypeMu.Lock()
+	n.onNewNetworkType = callback
+	n.onNewNetworkTypeMu.Unlock()
+}
+
+// IsNetworkReady checks whether network of type `netType` is ready.
+func (n *Network) IsNetworkReady(netType string) bool {
+	n.netsMu.Lock()
+	_, ok := n.nets[netType]
+	n.netsMu.Unlock()
+	return ok
+}
+
 // Close closes underlying connections.
 func (n *Network) Close() error {
+	n.netsMu.Lock()
+	defer n.netsMu.Unlock()
+
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
 
 	var dmsgErr error
-	go func() {
-		dmsgErr = n.clients.DmsgC.Close()
-		wg.Done()
-	}()
+	if n.clients.DmsgC != nil {
+		wg.Add(1)
+		go func() {
+			dmsgErr = n.clients.DmsgC.Close()
+			wg.Done()
+		}()
+	}
 
-	var stcpErr error
-	go func() {
-		stcpErr = n.clients.StcpC.Close()
-		wg.Done()
-	}()
+	directErrors := make(map[string]error)
 
-	var stcprErr error
-	go func() {
-		stcprErr = n.clients.StcprC.Close()
-		wg.Done()
-	}()
-
-	var stcphErr error
-	go func() {
-		stcphErr = n.clients.StcphC.Close()
-		wg.Done()
-	}()
+	for k, v := range n.clients.Direct {
+		if v != nil {
+			wg.Add(1)
+			go func() {
+				directErrors[k] = v.Close()
+				wg.Done()
+			}()
+		}
+	}
 
 	wg.Wait()
 
@@ -281,16 +277,10 @@ func (n *Network) Close() error {
 		return dmsgErr
 	}
 
-	if stcpErr != nil {
-		return stcpErr
-	}
-
-	if stcprErr != nil {
-		return stcprErr
-	}
-
-	if stcphErr != nil {
-		return stcphErr
+	for _, err := range directErrors {
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -303,24 +293,33 @@ func (n *Network) LocalPK() cipher.PubKey { return n.conf.PubKey }
 func (n *Network) LocalSK() cipher.SecKey { return n.conf.SecKey }
 
 // TransportNetworks returns network types that are used for transports.
-func (n *Network) TransportNetworks() []string { return n.networks }
+func (n *Network) TransportNetworks() []string {
+	n.netsMu.RLock()
+	networks := make([]string, 0, len(n.nets))
+	for network := range n.nets {
+		networks = append(networks, network)
+	}
+	n.netsMu.RUnlock()
+
+	return networks
+}
 
 // Dmsg returns underlying dmsg client.
 func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
 
 // STcp returns the underlying stcp.Client.
-func (n *Network) STcp() *stcp.Client { return n.clients.StcpC }
+func (n *Network) STcp() directtp.Client {
+	return n.clients.Direct[tptypes.STCP]
+}
 
 // STcpr returns the underlying stcpr.Client.
-func (n *Network) STcpr() *stcpr.Client { return n.clients.StcprC }
+func (n *Network) STcpr() directtp.Client {
+	return n.clients.Direct[tptypes.STCPR]
+}
 
-// STcpH returns the underlying stcph.Client.
-func (n *Network) STcpH() *stcph.Client { return n.clients.StcphC }
-
-// Dialer is an entity that can be dialed and asked for its type.
-type Dialer interface {
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
-	Type() string
+// SUdpH returns the underlying sudph.Client.
+func (n *Network) SUdpH() directtp.Client {
+	return n.clients.Direct[tptypes.SUDPH]
 }
 
 // Dial dials a visor by its public key and returns a connection.
@@ -338,29 +337,19 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 		}
 
 		return makeConn(conn, network), nil
-	case stcp.Type:
-		conn, err := n.clients.StcpC.Dial(ctx, pk, port)
-		if err != nil {
-			return nil, fmt.Errorf("stcpr client: %w", err)
-		}
-
-		return makeConn(conn, network), nil
-	case stcpr.Type:
-		conn, err := n.clients.StcprC.Dial(ctx, pk, port)
-		if err != nil {
-			return nil, fmt.Errorf("stcpr client: %w", err)
-		}
-
-		return makeConn(conn, network), nil
-	case stcph.Type:
-		conn, err := n.clients.StcphC.Dial(ctx, pk, port)
-		if err != nil {
-			return nil, fmt.Errorf("stcph client: %w", err)
-		}
-
-		return makeConn(conn, network), nil
 	default:
-		return nil, ErrUnknownNetwork
+		client, ok := n.clients.Direct[network]
+		if !ok {
+			return nil, ErrUnknownNetwork
+		}
+
+		conn, err := client.Dial(ctx, pk, port)
+		if err != nil {
+			return nil, fmt.Errorf("sudph client: %w", err)
+		}
+
+		log.Infof("Dialed %v, conn local address %q, remote address %q", network, conn.LocalAddr(), conn.RemoteAddr())
+		return makeConn(conn, network), nil
 	}
 }
 
@@ -374,29 +363,32 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 		}
 
 		return makeListener(lis, network), nil
-	case stcp.Type:
-		lis, err := n.clients.StcpC.Listen(port)
-		if err != nil {
-			return nil, err
-		}
-
-		return makeListener(lis, network), nil
-	case stcpr.Type:
-		lis, err := n.clients.StcprC.Listen(port)
-		if err != nil {
-			return nil, err
-		}
-
-		return makeListener(lis, network), nil
-	case stcph.Type:
-		lis, err := n.clients.StcphC.Listen(port)
-		if err != nil {
-			return nil, err
-		}
-
-		return makeListener(lis, network), nil
 	default:
-		return nil, ErrUnknownNetwork
+		client, ok := n.clients.Direct[network]
+		if !ok {
+			return nil, ErrUnknownNetwork
+		}
+
+		lis, err := client.Listen(port)
+		if err != nil {
+			return nil, fmt.Errorf("sudph client: %w", err)
+		}
+
+		return makeListener(lis, network), nil
+	}
+}
+
+func (n *Network) addNetworkType(netType string) {
+	n.netsMu.Lock()
+	defer n.netsMu.Unlock()
+
+	if _, ok := n.nets[netType]; !ok {
+		n.nets[netType] = struct{}{}
+		n.onNewNetworkTypeMu.Lock()
+		if n.onNewNetworkType != nil {
+			n.onNewNetworkType(netType)
+		}
+		n.onNewNetworkTypeMu.Unlock()
 	}
 }
 

@@ -8,7 +8,10 @@ import (
 )
 
 // V0Name is the version string before proper versioning is implemented.
-const V0Name = "v0.0.0"
+const (
+	V0Name          = "v0.0.0"
+	V0NameOldFormat = "1.0"
+)
 
 // V0 is visor config v0.0.0
 type V0 struct {
@@ -21,9 +24,7 @@ type V0 struct {
 
 	DmsgPty *V1Dmsgpty `json:"dmsg_pty,omitempty"`
 
-	STCP  *snet.STCPConfig  `json:"stcp,omitempty"`
-	STCPR *snet.STCPRConfig `json:"stcpr,omitempty"`
-	STCPH *snet.STCPHConfig `json:"stcph,omitempty"`
+	STCP *snet.STCPConfig `json:"stcp,omitempty"`
 
 	Transport *struct {
 		Discovery string      `json:"discovery"`
