@@ -17,11 +17,9 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
 )
 
 const (
-	trustedVisorsTransportType = stcpr.Type
 	// TrustedVisorsDelay defines a delay before adding transports to trusted visors.
 	TrustedVisorsDelay = 5 * time.Second
 )
@@ -165,26 +163,6 @@ func (tm *Manager) serve(ctx context.Context) {
 	tm.listenersMu.Unlock()
 }
 
-// AddTrustedVisors adds transports to trusted visors from config.
-func (tm *Manager) AddTrustedVisors(ctx context.Context) {
-	for _, pk := range tm.Conf.DefaultVisors {
-		tm.Logger.WithField("pk", pk).Infof("Adding trusted visor")
-
-		if _, err := tm.SaveTransport(ctx, pk, trustedVisorsTransportType); err != nil {
-			tm.Logger.
-				WithError(err).
-				WithField("pk", pk).
-				WithField("type", trustedVisorsTransportType).
-				Warnf("Failed to add transport to trusted visor via")
-		} else {
-			tm.Logger.
-				WithField("pk", pk).
-				WithField("type", trustedVisorsTransportType).
-				Infof("Added transport to trusted visor")
-		}
-	}
-}
-
 func (tm *Manager) initTransports(ctx context.Context) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
@@ -308,8 +286,6 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
-
-var ()
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
 	if !snet.IsKnownNetwork(netName) {
