@@ -9,38 +9,40 @@ import (
 
 	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/SkycoinProject/dmsg/servermetrics"
 )
 
 // ServerSession represents a session from the perspective of a dmsg server.
 type ServerSession struct {
 	*SessionCommon
+	m servermetrics.Metrics
 }
 
-func makeServerSession(entity *EntityCommon, conn net.Conn) (ServerSession, error) {
+func makeServerSession(m servermetrics.Metrics, entity *EntityCommon, conn net.Conn) (ServerSession, error) {
 	var sSes ServerSession
 	sSes.SessionCommon = new(SessionCommon)
 	sSes.nMap = make(noise.NonceMap)
 	if err := sSes.SessionCommon.initServer(entity, conn); err != nil {
+		m.RecordSession(servermetrics.DeltaFailed) // record failed connection
 		return sSes, err
 	}
+	sSes.m = m
 	return sSes, nil
 }
 
 // Close implements io.Closer
-func (ss *ServerSession) Close() (err error) {
-	if ss != nil {
-		if ss.SessionCommon != nil {
-			err = ss.SessionCommon.Close()
-		}
-		ss.rMx.Lock()
-		ss.nMap = nil
-		ss.rMx.Unlock()
+func (ss *ServerSession) Close() error {
+	if ss == nil {
+		return nil
 	}
-	return err
+	return ss.SessionCommon.Close()
 }
 
 // Serve serves the session.
 func (ss *ServerSession) Serve() {
+	ss.m.RecordSession(servermetrics.DeltaConnect)          // record successful connection
+	defer ss.m.RecordSession(servermetrics.DeltaDisconnect) // record disconnection
+
 	for {
 		yStr, err := ss.ys.AcceptStream()
 		if err != nil {
@@ -53,9 +55,7 @@ func (ss *ServerSession) Serve() {
 			return
 		}
 
-		var log logrus.FieldLogger = ss.log.
-			WithField("yamux_id", yStr.StreamID())
-
+		log := ss.log.WithField("yamux_id", yStr.StreamID())
 		log.Info("Initiating stream.")
 
 		go func(yStr *yamux.Stream) {
@@ -88,6 +88,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr *yamux.Stream)
 	// Read request.
 	req, err := readRequest()
 	if err != nil {
+		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
 		return err
 	}
 
@@ -100,6 +101,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr *yamux.Stream)
 	// Obtain next session.
 	ss2, ok := ss.entity.serverSession(req.DstAddr.PK)
 	if !ok {
+		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
 		return ErrReqNoNextSession
 	}
 	log.Debug("Obtained next session.")
@@ -107,18 +109,22 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr *yamux.Stream)
 	// Forward request and obtain/check response.
 	yStr2, resp, err := ss2.forwardRequest(req)
 	if err != nil {
+		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
 		return err
 	}
 	log.Debug("Forwarded stream request.")
 
 	// Forward response.
 	if err := ss.writeObject(yStr, resp); err != nil {
+		ss.m.RecordStream(servermetrics.DeltaFailed) // record failed stream
 		return err
 	}
 	log.Debug("Forwarded stream response.")
 
 	// Serve stream.
 	log.Info("Serving stream.")
+	ss.m.RecordStream(servermetrics.DeltaConnect)          // record successful stream
+	defer ss.m.RecordStream(servermetrics.DeltaDisconnect) // record disconnection
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/dmsg/dmsgctrl"
 	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -36,6 +38,7 @@ func initStack() []initFunc {
 	return []initFunc{
 		initUpdater,
 		initEventBroadcaster,
+		initAddressResolver,
 		initSNet,
 		initDmsgpty,
 		initTransport,
@@ -80,15 +83,14 @@ func initSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
 	nc := snet.NetworkConfigs{
-		Dmsg:  v.conf.Dmsg,
-		STCP:  v.conf.STCP,
-		STCPR: v.conf.STCPR,
-		STCPH: v.conf.STCPH,
+		Dmsg: v.conf.Dmsg,
+		STCP: v.conf.STCP,
 	}
 
 	conf := snet.Config{
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
+		ARClient:       v.arClient,
 		NetworkConfigs: nc,
 	}
 
@@ -115,9 +117,34 @@ func initSNet(v *Visor) bool {
 		case <-n.Dmsg().Ready():
 			log.Info("Connected to the dmsg network.")
 		}
+
+		// dmsgctrl setup
+		cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
+		if err != nil {
+			return report(err)
+		}
+		v.pushCloseStack("snet.dmsgctrl", func() bool {
+			return report(cl.Close())
+		})
+
+		dmsgctrl.ServeListener(cl, 0)
 	}
 
 	v.net = n
+	return report(nil)
+}
+
+func initAddressResolver(v *Visor) bool {
+	report := v.makeReporter("address-resolver")
+	conf := v.conf.Transport
+
+	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+	if err != nil {
+		return report(fmt.Errorf("failed to create address resolver client: %w", err))
+	}
+
+	v.arClient = arClient
+
 	return report(nil)
 }
 
@@ -125,7 +152,7 @@ func initTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
-	tpdC, err := tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+	tpdC, err := connectToTpDisc(v)
 	if err != nil {
 		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
 	}
@@ -173,23 +200,26 @@ func initTransport(v *Visor) bool {
 	})
 
 	v.tpM = tpM
+
 	return report(nil)
 }
 
 func initRouter(v *Visor) bool {
 	report := v.makeReporter("router")
 	conf := v.conf.Routing
+	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
 
 	rConf := router.Config{
 		Logger:           v.MasterLogger().PackageLogger("router"),
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
-		RouteFinder:      rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout)),
+		RouteFinder:      rfClient,
 		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
 	}
+
 	r, err := router.New(v.net, &rConf)
 	if err != nil {
 		return report(fmt.Errorf("failed to create router: %w", err))
@@ -213,7 +243,9 @@ func initRouter(v *Visor) bool {
 		return ok
 	})
 
+	v.rfClient = rfClient
 	v.router = r
+
 	return report(nil)
 }
 
@@ -229,7 +261,7 @@ func initLauncher(v *Visor) bool {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ProxyDisc = conf.Discovery.ProxyDisc
+		factory.ProxyDisc = conf.Discovery.ServiceDisc
 	}
 
 	// Prepare proc manager.
@@ -291,29 +323,28 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
 	}
+
 	if conf.Transport != nil {
 		envCfg.TPDiscovery = conf.Transport.Discovery
+		envCfg.AddressResolver = conf.Transport.AddressResolver
 	}
+
 	if conf.Routing != nil {
 		envCfg.RF = conf.Routing.RouteFinder
 	}
+
 	if conf.UptimeTracker != nil {
 		envCfg.UptimeTracker = conf.UptimeTracker.Addr
 	}
+
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
-	}
-	if conf.STCPR != nil {
-		envCfg.STCPRAddressResolver = conf.STCPR.AddressResolver
-	}
-	if conf.STCPH != nil {
-		envCfg.STCPHAddressResolver = conf.STCPH.AddressResolver
 	}
 
 	envMap := vpn.AppEnvArgs(envCfg)
 
 	envs := make([]string, 0, len(envMap))
-	for k, v := range vpn.AppEnvArgs(envCfg) {
+	for k, v := range envMap {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
 
@@ -418,5 +449,41 @@ func initUptimeTracker(v *Visor) bool {
 		return report(nil)
 	})
 
+	v.uptimeTracker = ut
+
 	return true
+}
+
+func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
+	const (
+		initBO = 1 * time.Second
+		maxBO  = 10 * time.Second
+		// trying till success
+		tries  = 0
+		factor = 1
+	)
+
+	conf := v.conf.Transport
+
+	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
+	tpdCRetrier := netutil.NewRetrier(log,
+		initBO, maxBO, tries, factor)
+
+	var tpdC transport.DiscoveryClient
+	retryFunc := func() error {
+		var err error
+		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+		if err != nil {
+			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
+			return err
+		}
+
+		return nil
+	}
+
+	if err := tpdCRetrier.Do(context.Background(), retryFunc); err != nil {
+		return nil, err
+	}
+
+	return tpdC, nil
 }

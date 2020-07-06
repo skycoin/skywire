@@ -17,6 +17,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
 )
 
+//go:generate mockery -name APIClient -case underscore -inpkg
+
 var log = logging.MustGetLogger("utclient")
 
 // Error is the object returned to the client when there's an error.
@@ -24,9 +26,10 @@ type Error struct {
 	Error string `json:"error"`
 }
 
-// APIClient implements DMSG discovery API client.
+// APIClient implements uptime tracker API client.
 type APIClient interface {
 	UpdateVisorUptime(context.Context) error
+	Health(ctx context.Context) (int, error)
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -79,6 +82,23 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// UpdateVisorUptime updates visor uptime.
+func (c *httpClient) Health(ctx context.Context) (int, error) {
+	resp, err := c.Get(ctx, "/health")
+	if err != nil {
+		return 0, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	return resp.StatusCode, nil
+
 }
 
 // extractError returns the decoded error message from Body.

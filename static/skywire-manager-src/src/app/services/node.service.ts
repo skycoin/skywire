@@ -89,7 +89,7 @@ export class NodeService {
         // Needed for a change made to the names on the backend.
         if (node.apps) {
           node.apps.forEach(app => {
-            app.name = (app as any).app;
+            app.name = (app as any).name ? (app as any).name : (app as any).app;
             app.autostart = (app as any).auto_start;
           });
         }
