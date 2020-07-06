@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
-
 	"github.com/flynn/noise"
 
 	"github.com/SkycoinProject/dmsg/cipher"

@@ -22,7 +22,8 @@ func MakeBaseConfig(common *Common) *V1 {
 		SessionsCount: 1,
 	}
 	conf.Transport = &V1Transport{
-		Discovery: skyenv.DefaultTpDiscAddr,
+		Discovery:       skyenv.DefaultTpDiscAddr,
+		AddressResolver: skyenv.DefaultAddressResolverAddr,
 		LogStore: &V1LogStore{
 			Type: "memory",
 		},
@@ -80,15 +81,6 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 		PKTable:   nil,
 	}
 
-	conf.STCPR = &snet.STCPRConfig{
-		LocalAddr:       skyenv.DefaultSTCPRAddr,
-		AddressResolver: skyenv.DefaultAddressResolverAddr,
-	}
-
-	conf.STCPH = &snet.STCPHConfig{
-		AddressResolver: skyenv.DefaultAddressResolverAddr,
-	}
-
 	conf.Transport.LogStore = &V1LogStore{
 		Type:     "file",
 		Location: skyenv.DefaultTpLogStore,
@@ -100,7 +92,7 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 
 	conf.Launcher.Discovery = &V1AppDisc{
 		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
-		ProxyDisc:      skyenv.DefaultProxyDiscAddr,
+		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
 	}
 
 	conf.Launcher.Apps = []launcher.AppConfig{
@@ -146,12 +138,11 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 
 	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	conf.Transport.Discovery = skyenv.TestTpDiscAddr
+	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
 	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.Discovery.ProxyDisc = skyenv.TestProxyDiscAddr
-	conf.STCPR.AddressResolver = skyenv.TestAddressResolverAddr
-	conf.STCPH.AddressResolver = skyenv.TestAddressResolverAddr
+	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
 
 	return conf, nil
 }
