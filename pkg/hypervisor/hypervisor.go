@@ -2,6 +2,7 @@
 package hypervisor
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -25,8 +26,10 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 )
 
@@ -47,21 +50,26 @@ var (
 // VisorConn represents a visor connection.
 type VisorConn struct {
 	Addr  dmsg.Addr
+	SrvPK cipher.PubKey
 	RPC   visor.RPCClient
 	PtyUI *dmsgPtyUI
 }
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c      Config
-	assets http.FileSystem             // Web UI.
-	visors map[cipher.PubKey]VisorConn // connected remote visors.
-	users  *UserManager
-	mu     *sync.RWMutex
+	c          Config
+	dmsgC      *dmsg.Client
+	assets     http.FileSystem             // web UI
+	visors     map[cipher.PubKey]VisorConn // connected remote visors
+	trackers   *DmsgTrackerManager         // dmsg trackers
+	users      *UserManager
+	restartCtx *restart.Context
+	updater    *updater.Updater
+	mu         *sync.RWMutex
 }
 
 // New creates a new Hypervisor.
-func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
+func New(config Config, assets http.FileSystem, restartCtx *restart.Context, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
@@ -71,30 +79,52 @@ func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
 
 	singleUserDB := NewSingleUserStore("admin", boltUserDB)
 
-	return &Hypervisor{
-		c:      config,
-		assets: assets,
-		visors: make(map[cipher.PubKey]VisorConn),
-		users:  NewUserManager(singleUserDB, config.Cookies),
-		mu:     new(sync.RWMutex),
-	}, nil
+	u := updater.New(log, restartCtx, "")
+
+	hv := &Hypervisor{
+		c:          config,
+		dmsgC:      dmsgC,
+		assets:     assets,
+		visors:     make(map[cipher.PubKey]VisorConn),
+		trackers:   NewDmsgTrackerManager(nil, dmsgC, 0, 0),
+		users:      NewUserManager(singleUserDB, config.Cookies),
+		restartCtx: restartCtx,
+		updater:    u,
+		mu:         new(sync.RWMutex),
+	}
+
+	return hv, nil
 }
 
 // ServeRPC serves RPC of a Hypervisor.
-func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
+func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
+	lis, err := hv.dmsgC.Listen(dmsgPort)
+	if err != nil {
+		return err
+	}
+
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
 			return err
 		}
+
 		addr := conn.RawRemoteAddr()
 		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
+
 		visorConn := &VisorConn{
 			Addr:  addr,
+			SrvPK: conn.ServerPK(),
 			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
-			PtyUI: setupDmsgPtyUI(dmsgC, addr.PK),
+			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
-		log.WithField("remote_addr", addr).Info("Accepted.")
+
+		if _, err := hv.trackers.MustGet(ctx, addr.PK); err != nil {
+			log.WithError(err).Warn("Failed to dial tracker stream.")
+		}
+
+		log.Info("Accepted.")
+
 		hv.mu.Lock()
 		hv.visors[addr.PK] = *visorConn
 		hv.mu.Unlock()
@@ -135,8 +165,12 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 	return nil
 }
 
-// ServeHTTP implements http.Handler
-func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+// HTTPHandler returns a http handler.
+func (hv *Hypervisor) HTTPHandler() http.Handler {
+	return hv.makeMux()
+}
+
+func (hv *Hypervisor) makeMux() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
@@ -158,9 +192,15 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
+
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
 				r.Get("/about", hv.getAbout())
+				r.Post("/update", hv.updateHypervisor())
+				r.Post("/update/available", hv.hypervisorUpdateAvailable())
+				r.Post("/update/available/{channel}", hv.hypervisorUpdateAvailable())
+				r.Get("/dmsg", hv.getDmsg())
+
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -182,8 +222,9 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
-				r.Post("/visors/{pk}/update", hv.update())
-				r.Get("/visors/{pk}/update/available", hv.updateAvailable())
+				r.Post("/visors/{pk}/update", hv.updateVisor())
+				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
+				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 			})
 		})
 
@@ -193,6 +234,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
+
 				r.Get("/{pk}", hv.getPty())
 			})
 		}
@@ -200,7 +242,7 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.Handle("/*", http.FileServer(hv.assets))
 	})
 
-	r.ServeHTTP(w, req)
+	return r
 }
 
 func (hv *Hypervisor) getPong() http.HandlerFunc {
@@ -223,6 +265,87 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 			PubKey: hv.c.PK,
 			Build:  buildinfo.Get(),
 		})
+	}
+}
+
+func (hv *Hypervisor) updateHypervisor() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var updateConfig updater.UpdateConfig
+
+		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
+			if err != io.EOF {
+				log.Warnf("update visor request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetHypervisor
+
+		updated, err := hv.updater.Update(updateConfig)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		output := struct {
+			Updated bool `json:"updated"`
+		}{updated}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
+	}
+}
+
+func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channel := updater.Channel(chi.URLParam(r, "channel"))
+		if channel == "" {
+			channel = updater.ChannelStable
+		}
+
+		version, err := hv.updater.UpdateAvailable(channel)
+		if err != nil {
+			log.Errorf("Failed to check if hypervisor update is available: %v", err)
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+
+			return
+		}
+
+		output := struct {
+			Available        bool   `json:"available"`
+			CurrentVersion   string `json:"current_version"`
+			AvailableVersion string `json:"available_version,omitempty"`
+		}{
+			Available:      version != nil,
+			CurrentVersion: buildinfo.Version(),
+		}
+
+		if version != nil {
+			output.AvailableVersion = version.String()
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
+	}
+}
+
+func (hv *Hypervisor) getDmsg() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hv.mu.RLock()
+		defer hv.mu.RUnlock()
+
+		pks := make([]cipher.PubKey, 0, len(hv.visors))
+		for pk := range hv.visors {
+			pks = append(pks, pk)
+		}
+
+		out := hv.trackers.GetBulk(pks)
+		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
 }
 
@@ -750,9 +873,24 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) update() http.HandlerFunc {
+func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		updated, err := ctx.RPC.Update()
+		var updateConfig updater.UpdateConfig
+
+		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
+			log.Warnf("update visor request: %v", err)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetVisor
+
+		updated, err := ctx.RPC.Update(updateConfig)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -766,9 +904,14 @@ func (hv *Hypervisor) update() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) updateAvailable() http.HandlerFunc {
+func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		version, err := ctx.RPC.UpdateAvailable()
+		channel := updater.Channel(chi.URLParam(r, "channel"))
+		if channel == "" {
+			channel = updater.ChannelStable
+		}
+
+		version, err := ctx.RPC.UpdateAvailable(channel)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -837,7 +980,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		return nil, false
 	}
 
-	visor, ok := hv.visorConn(pk)
+	v, ok := hv.visorConn(pk)
 
 	if !ok {
 		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
@@ -845,7 +988,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	}
 
 	return &httpCtx{
-		VisorConn: visor,
+		VisorConn: v,
 	}, true
 }
 

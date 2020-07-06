@@ -7,7 +7,8 @@ RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
 
-OPTS?=GO111MODULE=on GOBIN=${PWD}/bin
+BIN := ${PWD}/bin
+OPTS?=GO111MODULE=on
 BIN_DIR?=./bin
 
 TEST_OPTS:=-tags no_ci -cover -timeout=5m
@@ -51,16 +52,20 @@ install-linters: ## Install linters
 	# However, they suggest `curl ... | bash` which we should not do
 	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
+	${OPTS} go get -u github.com/incu6us/goimports-reviser
 
-format: ## Formats the code. Must have goimports installed (use make install-linters).
-	${OPTS} goimports -w -local ${DMSG_REPO} .
+format: ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
+	# TODO: Formats vendor folder which is not desired behavior.
+	# We need to consider removing it after testing goimports-reviser.
+	#${OPTS} goimports -w -local ${DMSG_REPO} .
+	find . -type f -name '*.go' -not -path "./vendor/*" -exec goimports-reviser -project-name ${DMSG_REPO} -file-path {} \;
 
 dep: ## Sorts dependencies
 	${OPTS} go mod download
 	${OPTS} go mod tidy -v
 
 build: ## Build binaries into ./bin
-	${OPTS} go install ${BUILD_OPTS} ./cmd/*
+	mkdir -p ${BIN}; go build ${BUILD_OPTS} -o ${BIN} ./cmd/*
 
 start-db: ## Init local database env.
 	source ./integration/env.sh && init_redis
