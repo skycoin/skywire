@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 )
 
 const crossDeviceError = "invalid cross-device link"
@@ -13,7 +14,7 @@ const crossDeviceError = "invalid cross-device link"
 // If paths are located on different drives or filesystems, os.Rename fails.
 // In that case, Rename uses a workaround by copying oldPath to newPath and removing oldPath thereafter.
 func Rename(oldPath, newPath string) error {
-	if err := os.Rename(oldPath, newPath); err == nil || err.Error() != crossDeviceError {
+	if err := os.Rename(oldPath, newPath); err == nil || !strings.Contains(err.Error(), crossDeviceError) {
 		return err
 	}
 

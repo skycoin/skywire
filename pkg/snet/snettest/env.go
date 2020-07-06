@@ -11,12 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcph"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcpr"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 )
 
 // KeyPair holds a public/private key pair.
@@ -52,9 +51,8 @@ type Env struct {
 // NewEnv creates a `network.Network` test environment.
 // `nPairs` is the public/private key pairs of all the `network.Network`s to be created.
 func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
-
 	// Prepare `dmsg`.
-	dmsgD := disc.NewMock()
+	dmsgD := disc.NewMock(0)
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
 
 	const baseSTCPPort = 7033
@@ -64,20 +62,20 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
 	}
 
-	table := stcp.NewTable(tableEntries)
+	table := pktable.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp, hasStcpr, hasStcph bool
+	var hasDmsg, hasStcp, hasStcpr, hasSudph bool
 
 	for _, network := range networks {
 		switch network {
 		case dmsg.Type:
 			hasDmsg = true
-		case stcp.Type:
+		case tptypes.STCP:
 			hasStcp = true
-		case stcpr.Type:
+		case tptypes.STCPR:
 			hasStcpr = true
-		case stcph.Type:
-			hasStcph = true
+		case tptypes.SUDPH:
+			hasSudph = true
 		}
 	}
 
@@ -87,32 +85,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 	const stcpBasePort = 7033
 
 	for i, pairs := range keys {
-		var clients snet.NetworkClients
-
-		if hasDmsg {
-			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go clients.DmsgC.Serve()
-		}
-
-		addr := "127.0.0.1:" + strconv.Itoa(stcpBasePort+i)
-
-		addressResolver, err := arclient.NewHTTP(skyenv.TestAddressResolverAddr, pairs.PK, pairs.SK)
-		if err != nil {
-			panic(err)
-		}
-
-		if hasStcp {
-			clients.StcpC = stcp.NewClient(pairs.PK, pairs.SK, table)
-		}
-
-		if hasStcpr {
-			clients.StcprC = stcpr.NewClient(pairs.PK, pairs.SK, addressResolver, addr)
-		}
-
-		if hasStcph {
-			clients.StcphC = stcph.NewClient(pairs.PK, pairs.SK, addressResolver)
-		}
-
 		networkConfigs := snet.NetworkConfigs{
 			Dmsg: &snet.DmsgConfig{
 				SessionsCount: 1,
@@ -120,13 +92,51 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			STCP: &snet.STCPConfig{
 				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
 			},
-			STCPR: &snet.STCPRConfig{
-				LocalAddr:       "127.0.0.1:" + strconv.Itoa(stcpBasePort+i+1000),
-				AddressResolver: skyenv.TestAddressResolverAddr,
-			},
-			STCPH: &snet.STCPHConfig{
-				AddressResolver: skyenv.TestAddressResolverAddr,
-			},
+		}
+
+		clients := snet.NetworkClients{
+			Direct: make(map[string]directtp.Client),
+		}
+
+		if hasDmsg {
+			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go clients.DmsgC.Serve()
+		}
+
+		addressResolver := new(arclient.MockAPIClient)
+
+		if hasStcp {
+			conf := directtp.Config{
+				Type:      tptypes.STCP,
+				PK:        pairs.PK,
+				SK:        pairs.SK,
+				Table:     table,
+				LocalAddr: networkConfigs.STCP.LocalAddr,
+			}
+
+			clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
+		}
+
+		if hasStcpr {
+			conf := directtp.Config{
+				Type:            tptypes.STCPR,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
+
+			clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
+		}
+
+		if hasSudph {
+			conf := directtp.Config{
+				Type:            tptypes.SUDPH,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
+
+			clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf)
 		}
 
 		snetConfig := snet.Config{
@@ -166,14 +176,20 @@ func (e *Env) Teardown() { e.teardown() }
 func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-chan error) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("s"))
 	require.NoError(t, err)
+
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-	srv = dmsg.NewServer(pk, sk, dc, 100)
+
+	srv = dmsg.NewServer(pk, sk, dc, &dmsg.ServerConfig{MaxSessions: 100}, nil)
+
 	errCh := make(chan error, 1)
+
 	go func() {
 		errCh <- srv.Serve(l, "")
 		close(errCh)
 	}()
+
 	<-srv.Ready()
+
 	return srv, errCh
 }

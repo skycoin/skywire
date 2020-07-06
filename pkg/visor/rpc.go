@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/rpc"
-	"os"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/buildinfo"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rpcutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -66,29 +66,71 @@ type HealthInfo struct {
 	TransportDiscovery int `json:"transport_discovery"`
 	RouteFinder        int `json:"route_finder"`
 	SetupNode          int `json:"setup_node"`
+	UptimeTracker      int `json:"uptime_tracker"`
+	AddressResolver    int `json:"address_resolver"`
 }
 
 // Health returns health information about the visor
 func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Health", nil)(out, &err)
 
-	out.TransportDiscovery = http.StatusOK
-	out.RouteFinder = http.StatusOK
-	out.SetupNode = http.StatusOK
+	ctx := context.Background()
 
-	_, err = r.visor.TpDiscClient().GetTransportsByEdge(context.Background(), r.visor.conf.PK)
-	if err != nil {
-		out.TransportDiscovery = http.StatusNotFound
+	out.TransportDiscovery = http.StatusNotFound
+	out.RouteFinder = http.StatusNotFound
+	out.SetupNode = http.StatusNotFound
+	out.UptimeTracker = http.StatusNotFound
+	out.AddressResolver = http.StatusNotFound
+
+	if tdClient := r.visor.TpDiscClient(); tdClient != nil {
+		tdStatus, err := tdClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check transport discovery health")
+
+			out.TransportDiscovery = http.StatusInternalServerError
+		}
+
+		out.TransportDiscovery = tdStatus
 	}
 
-	// TODO(evanlinjin): This should actually poll the route finder service.
-	if r.visor.conf.Routing.RouteFinder == "" {
-		out.RouteFinder = http.StatusNotFound
+	if rfClient := r.visor.RouteFinderClient(); rfClient != nil {
+		rfStatus, err := rfClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check route finder health")
+
+			out.RouteFinder = http.StatusInternalServerError
+		}
+
+		out.RouteFinder = rfStatus
 	}
 
 	// TODO(evanlinjin): This should actually poll the setup nodes services.
 	if len(r.visor.conf.Routing.SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
+	} else {
+		out.SetupNode = http.StatusOK
+	}
+
+	if utClient := r.visor.UptimeTrackerClient(); utClient != nil {
+		utStatus, err := utClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check uptime tracker health")
+
+			out.UptimeTracker = http.StatusInternalServerError
+		}
+
+		out.UptimeTracker = utStatus
+	}
+
+	if arClient := r.visor.AddressResolverClient(); arClient != nil {
+		arStatus, err := arClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check address resolver health")
+
+			out.AddressResolver = http.StatusInternalServerError
+		}
+
+		out.AddressResolver = arStatus
 	}
 
 	return nil
@@ -213,7 +255,15 @@ func (r *RPC) Apps(_ *struct{}, reply *[]*launcher.AppState) (err error) {
 func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", name)(nil, &err)
 
-	return r.visor.appL.StartApp(*name, nil, nil)
+	var envs []string
+	if *name == skyenv.VPNClientName {
+		envs, err = makeVPNEnvs(r.visor.conf, r.visor.net)
+		if err != nil {
+			return err
+		}
+	}
+
+	return r.visor.appL.StartApp(*name, nil, envs)
 }
 
 // StopApp stops App with provided name.
@@ -458,7 +508,7 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 
 	rules := r.visor.router.Rules()
 	for _, rule := range rules {
-		if rule.Type() != routing.RuleConsume {
+		if rule.Type() != routing.RuleReverse {
 			continue
 		}
 
@@ -482,27 +532,16 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	<<< VISOR MANAGEMENT >>>
 */
 
-const exitDelay = 100 * time.Millisecond
-
 // Restart restarts visor.
 func (r *RPC) Restart(_ *struct{}, _ *struct{}) (err error) {
 	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.
 	rpcutil.LogCall(r.log, "Restart", nil)(nil, nil)
 
-	defer func() {
-		if err == nil {
-			go func() {
-				time.Sleep(exitDelay)
-				os.Exit(0)
-			}()
-		}
-	}()
-
 	if r.visor.restartCtx == nil {
 		return ErrMalformedRestartContext
 	}
 
-	return r.visor.restartCtx.Start()
+	return r.visor.restartCtx.Restart()
 }
 
 // Exec executes a given command in cmd and writes its output to out.
@@ -514,18 +553,28 @@ func (r *RPC) Exec(cmd *string, out *[]byte) (err error) {
 }
 
 // Update updates visor.
-func (r *RPC) Update(_ *struct{}, updated *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "Update", nil)(updated, &err)
+func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "Update", updateConfig)(updated, &err)
 
-	*updated, err = r.visor.Update()
+	config := updater.UpdateConfig{}
+
+	if updateConfig != nil {
+		config = *updateConfig
+	}
+
+	*updated, err = r.visor.Update(config)
 	return
 }
 
 // UpdateAvailable checks if visor update is available.
-func (r *RPC) UpdateAvailable(_ *struct{}, version *updater.Version) (err error) {
+func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version) (err error) {
 	defer rpcutil.LogCall(r.log, "UpdateAvailable", nil)(version, &err)
 
-	v, err := r.visor.UpdateAvailable()
+	if channel == nil {
+		return updater.ErrUnknownChannel
+	}
+
+	v, err := r.visor.UpdateAvailable(*channel)
 	if err != nil {
 		return err
 	}

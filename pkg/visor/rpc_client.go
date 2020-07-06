@@ -22,6 +22,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -69,8 +70,8 @@ type RPCClient interface {
 
 	Restart() error
 	Exec(command string) ([]byte, error)
-	Update() (bool, error)
-	UpdateAvailable() (*updater.Version, error)
+	Update(config updater.UpdateConfig) (bool, error)
+	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 }
 
 // RPCClient provides methods to call an RPC Server.
@@ -100,9 +101,16 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	ctx := context.Background()
-	if rc.timeout != 0 {
+	timeout := rc.timeout
+
+	switch method {
+	case "Update", "AddTransport":
+		timeout = skyenv.LongRPCTimeout
+	}
+
+	if timeout != 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithDeadline(ctx, time.Now().Add(rc.timeout))
+		ctx, cancel = context.WithDeadline(ctx, time.Now().Add(timeout))
 		defer cancel()
 	}
 
@@ -292,16 +300,16 @@ func (rc *rpcClient) Exec(command string) ([]byte, error) {
 }
 
 // Update calls Update.
-func (rc *rpcClient) Update() (bool, error) {
+func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	var updated bool
-	err := rc.Call("Update", &struct{}{}, &updated)
+	err := rc.Call("Update", &config, &updated)
 	return updated, err
 }
 
 // UpdateAvailable calls UpdateAvailable.
-func (rc *rpcClient) UpdateAvailable() (*updater.Version, error) {
+func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
 	var version, empty updater.Version
-	err := rc.Call("UpdateAvailable", &struct{}{}, &version)
+	err := rc.Call("UpdateAvailable", &channel, &version)
 	if err != nil {
 		return nil, err
 	}
@@ -447,6 +455,8 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 		TransportDiscovery: http.StatusOK,
 		RouteFinder:        http.StatusOK,
 		SetupNode:          http.StatusOK,
+		UptimeTracker:      http.StatusOK,
+		AddressResolver:    http.StatusOK,
 	}
 
 	return hi, nil
@@ -648,7 +658,7 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 
 	rules := mc.rt.AllRules()
 	for _, rule := range rules {
-		if rule.Type() != routing.RuleConsume {
+		if rule.Type() != routing.RuleReverse {
 			continue
 		}
 
@@ -677,11 +687,11 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 }
 
 // Update implements RPCClient.
-func (mc *mockRPCClient) Update() (bool, error) {
+func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
 	return false, nil
 }
 
 // UpdateAvailable implements RPCClient.
-func (mc *mockRPCClient) UpdateAvailable() (*updater.Version, error) {
+func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, error) {
 	return nil, nil
 }

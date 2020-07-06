@@ -137,7 +137,6 @@ type router struct {
 	trustedVisors map[cipher.PubKey]struct{}
 	tm            *transport.Manager
 	rt            routing.Table
-	rfc           rfclient.Client                         // route finder client
 	rgs           map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
@@ -167,7 +166,6 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		tm:            config.TransportManager,
 		rt:            routing.NewTable(),
 		sl:            sl,
-		rfc:           config.RouteFinder,
 		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
@@ -386,7 +384,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return err
 	}
 
-	if rule.Type() == routing.RuleConsume {
+	if rule.Type() == routing.RuleReverse {
 		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
@@ -394,7 +392,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	switch rule.Type() {
-	case routing.RuleForward, routing.RuleIntermediaryForward:
+	case routing.RuleForward, routing.RuleIntermediary:
 		r.logger.Infoln("Handling intermediary data packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
@@ -429,7 +427,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return err
 	}
 
-	if rule.Type() == routing.RuleConsume {
+	if rule.Type() == routing.RuleReverse {
 		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
@@ -441,7 +439,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		r.rt.DelRules(routeIDs)
 	}()
 
-	if t := rule.Type(); t == routing.RuleIntermediaryForward {
+	if t := rule.Type(); t == routing.RuleIntermediary {
 		r.logger.Infoln("Handling intermediary close packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
@@ -489,7 +487,7 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 		return err
 	}
 
-	if rule.Type() == routing.RuleConsume {
+	if rule.Type() == routing.RuleReverse {
 		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
@@ -498,7 +496,7 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 
 	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
 	// consume rules should be omitted, activity is already updated
-	if t := rule.Type(); t == routing.RuleIntermediaryForward {
+	if t := rule.Type(); t == routing.RuleIntermediary {
 		r.logger.Infoln("Handling intermediary keep-alive packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
@@ -605,7 +603,7 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	rules := r.rt.AllRules()
 	for _, rule := range rules {
-		if rule.Type() != routing.RuleConsume {
+		if rule.Type() != routing.RuleReverse {
 			continue
 		}
 
@@ -617,7 +615,7 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	}
 }
 
-func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev routing.Path, err error) {
+func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
 	// TODO(nkryuchkov): use opts
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
@@ -802,7 +800,7 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	// we need to process only consume rules, cause we don't
 	// really care about the other ones, other rules removal
 	// doesn't affect our work here
-	if rule.Type() != routing.RuleConsume {
+	if rule.Type() != routing.RuleReverse {
 		log.
 			WithField("func", "removeRouteGroupOfRule").
 			WithField("rule", rule.Type().String()).

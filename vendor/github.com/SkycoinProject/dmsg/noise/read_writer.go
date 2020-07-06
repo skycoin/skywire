@@ -251,10 +251,11 @@ func IsCompleteFrame(b []byte) bool {
 // FillIncompleteFrame takes in an incomplete frame, and returns empty bytes to fill the incomplete frame.
 func FillIncompleteFrame(b []byte) []byte {
 	originalLen := len(b)
+	b2 := b
 
-	for len(b) < prefixSize {
-		b = append(b, byte(0))
+	for len(b2) < prefixSize {
+		b2 = append(b2, byte(0))
 	}
-	b = append(b, make([]byte, binary.BigEndian.Uint16(b))...)
-	return b[originalLen:]
+	b2 = append(b2, make([]byte, binary.BigEndian.Uint16(b2))...)
+	return b2[originalLen:]
 }

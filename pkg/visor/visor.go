@@ -17,13 +17,16 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
@@ -55,15 +58,18 @@ type Visor struct {
 	conf *visorconfig.V1
 	log  *logging.Logger
 
-	startedAt  time.Time
-	restartCtx *restart.Context
-	updater    *updater.Updater
+	startedAt     time.Time
+	restartCtx    *restart.Context
+	updater       *updater.Updater
+	uptimeTracker utclient.APIClient
 
 	ebc *appevent.Broadcaster // event broadcaster
 
-	net    *snet.Network
-	tpM    *transport.Manager
-	router router.Router
+	net      *snet.Network
+	tpM      *transport.Manager
+	arClient arclient.APIClient
+	router   router.Router
+	rfClient rfclient.Client
 
 	procM appserver.ProcManager // proc manager
 	appL  *launcher.Launcher    // app launcher
@@ -223,6 +229,21 @@ func (v *Visor) TpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
 }
 
+// RouteFinderClient is a convenience function to obtain route finder client.
+func (v *Visor) RouteFinderClient() rfclient.Client {
+	return v.rfClient
+}
+
+// UptimeTrackerClient is a convenience function to obtain uptime tracker client.
+func (v *Visor) UptimeTrackerClient() utclient.APIClient {
+	return v.uptimeTracker
+}
+
+// AddressResolverClient is a convenience function to obtain uptime address resovler client.
+func (v *Visor) AddressResolverClient() arclient.APIClient {
+	return v.arClient
+}
+
 // Exec executes a shell command. It returns combined stdout and stderr output and an error.
 func (v *Visor) Exec(command string) ([]byte, error) {
 	args := strings.Split(command, " ")
@@ -233,8 +254,8 @@ func (v *Visor) Exec(command string) ([]byte, error) {
 // Update updates visor.
 // It checks if visor update is available.
 // If it is, the method downloads a new visor versions, starts it and kills the current process.
-func (v *Visor) Update() (bool, error) {
-	updated, err := v.updater.Update()
+func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
+	updated, err := v.updater.Update(updateConfig)
 	if err != nil {
 		v.log.Errorf("Failed to update visor: %v", err)
 		return false, err
@@ -244,8 +265,8 @@ func (v *Visor) Update() (bool, error) {
 }
 
 // UpdateAvailable checks if visor update is available.
-func (v *Visor) UpdateAvailable() (*updater.Version, error) {
-	version, err := v.updater.UpdateAvailable()
+func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
+	version, err := v.updater.UpdateAvailable(channel)
 	if err != nil {
 		v.log.Errorf("Failed to check if visor update is available: %v", err)
 		return nil, err
