@@ -1,53 +1,9 @@
-@import "variables";
-@import "text";
-@import "~bootstrap/scss/functions";
-@import "bootstrap_overrides";
-
-.node-list-container {
-  width: 100%;
-  overflow-x: auto;
-
-  table, .nodes-empty {
-    box-shadow: none !important;
-  }
-
-  .nodes-empty {
-    color: theme-color(light-gray);
-    font-size: $font-size-sm;
-
-    i {
-      display: inline-block;
-      vertical-align: middle;
-      margin-right: 10px;
-    }
-
-    span {
-      position: relative;
-      top: 2px;
-    }
-  }
+.actions {
+  text-align: right;
+  width: 120px;
 }
 
-.responsive-table-white {
-  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
-    & {
-      padding: 0;
-    }
-  }
-
-  .actions {
-    text-align: right;
-    width: 150px;
-  
-    button {
-      width: 32px;
-      height: 32px;
-      line-height: 24px;
-      margin-left: 5px;
-
-      .small-icon {
-        font-size: 15px;
-      }
-    }
-  }
+.alert-icon {
+  vertical-align: middle;
+  margin-right: 10px;
 }

@@ -7,7 +7,7 @@
   height: $header-buttons-height;
 
   &[disabled] {
-    opacity: 0.7;
+    opacity: 0.7 !important;
     color: $white;
 
     span {
