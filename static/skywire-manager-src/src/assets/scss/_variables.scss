@@ -7,17 +7,24 @@ $black: #202226;
 
 $blue-light: #00C3FF;
 $blue: #0072FF;
+$blue-medium: #215f9e;
 $blue-dark: #154B6C;
-$blue-panel: rgba(32, 34, 38, .44);
+$blue-dark-Background1: #060a10;
+$blue-dark-Background2: #0a1421;
 
 $red: #DA3439;
 $green: #2ECC54;
 $light-gray: #777;
 $lighter-gray: #999;
 
+$modal-background: #e0e5ec;
+$modal-separator: scale-color($blue-medium, $alpha: -80%);
+
 $nav-bg: rgba(255, 255, 255, 0.1);
 
-$separator: rgba(0, 0, 0, 0.12);
+$box-border: rgba(156, 197, 255, 0.33);
+$separator: rgba(255, 255, 255, 0.15);
+$grey-separator: rgba(0, 0, 0, 0.12);
 $white-separator: rgba(255, 255, 255, 0.44);
 
 $theme-colors: (
@@ -27,7 +34,7 @@ $theme-colors: (
   blue:               $blue,
   blue-dark:          $blue-dark,
   translucid:         rgba(32, 34, 38, .44),
-  translucid-hover:   rgba(0, 0, 0, 0.1),
+  translucid-hover:   rgba(0, 0, 0, 0.2),
   translucid-white:   rgba(255, 255, 255, .44),
   translucid-dark:    rgba(21, 75, 108, .91),
   white:              $white,
@@ -67,7 +74,7 @@ $mat-dialog-radius: 10px;
 //
 // Container
 //
-$containers-padding: 20px;
+$containers-padding: 15px;
 
 //
 // Sizes

@@ -166,11 +166,13 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     this.updateSubscription = this.nodeService.checkUpdate(NodeComponent.getCurrentNodeKey()).subscribe(response => {
       if (response && response.available) {
         // New configuration for asking for confirmation.
-        const newText = this.translateService.instant('actions.update.update-available',
+        const newVersion = this.translateService.instant('actions.update.version-change',
           { currentVersion: response.current_version, newVersion: response.available_version }
         );
         const newConfirmationData: ConfirmationData = {
-          text: newText,
+          text: 'actions.update.update-available1',
+          list: [newVersion],
+          lowerText: 'actions.update.update-available2',
           headerText: 'actions.update.title',
           confirmButtonText: 'actions.update.install',
           cancelButtonText: 'common.cancel',
@@ -182,9 +184,8 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
         });
       } else if (response) {
         // Inform that there are no updates available.
-        const newText = this.translateService.instant('actions.update.no-update', { version: response.current_version });
         setTimeout(() => {
-          confirmationDialog.componentInstance.showDone(null, newText);
+          confirmationDialog.componentInstance.showDone(null, 'actions.update.no-update', [response.current_version]);
         });
       } else {
         // Inform that there was an error.
@@ -237,7 +238,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       },
     ];
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         // Open the complete terminal in a new tab.
         const protocol = window.location.protocol;

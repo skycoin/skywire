@@ -2,8 +2,7 @@
 @import "~bootstrap/scss/functions";
 
 .main-container {
-  margin-bottom: 5px;
-  border-bottom: 1px solid $white-separator;
+  border-bottom: 1px solid $separator;
   padding-bottom: 10px;
   margin-bottom: -5px;
   height: $header-height;
@@ -40,11 +39,16 @@
       height: $header-buttons-height;
       display: flex;
       align-items: center;
-    
+
+      &:hover {
+        opacity: 0.75;
+      }
+
       &[disabled] {
-        opacity: 1;
+        opacity: 1 !important;
         color: $white;
-        background-color: theme-color(translucid);
+        background: rgba(0, 0, 0, 0.7) !important;
+        border-color: rgba(0, 0, 0, 0.1);
       }
     
       .mat-icon {
@@ -60,8 +64,12 @@
       }
     }
 
-    .full-opacity {
-      opacity: 1 !important;
+    .select-tab-button {
+      opacity: 0.75 !important;
+
+      &:hover {
+        opacity: 1 !important;
+      }
     }
 
     app-refresh-button {
