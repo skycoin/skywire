@@ -26,6 +26,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport/tpdclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
@@ -47,6 +48,7 @@ func initStack() []initFunc {
 		initCLI,
 		initHypervisors,
 		initUptimeTracker,
+		initTrustedVisors,
 	}
 }
 
@@ -450,6 +452,32 @@ func initUptimeTracker(v *Visor) bool {
 	})
 
 	v.uptimeTracker = ut
+
+	return true
+}
+
+func initTrustedVisors(v *Visor) bool {
+	const trustedVisorsTransportType = tptypes.STCPR
+
+	go func() {
+		time.Sleep(transport.TrustedVisorsDelay)
+		for _, pk := range v.tpM.Conf.DefaultVisors {
+			v.log.WithField("pk", pk).Infof("Adding trusted visor")
+
+			if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType); err != nil {
+				v.log.
+					WithError(err).
+					WithField("pk", pk).
+					WithField("type", trustedVisorsTransportType).
+					Warnf("Failed to add transport to trusted visor via")
+			} else {
+				v.log.
+					WithField("pk", pk).
+					WithField("type", trustedVisorsTransportType).
+					Infof("Added transport to trusted visor")
+			}
+		}
+	}()
 
 	return true
 }

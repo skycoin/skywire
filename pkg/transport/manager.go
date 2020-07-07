@@ -19,6 +19,11 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
 )
 
+const (
+	// TrustedVisorsDelay defines a delay before adding transports to trusted visors.
+	TrustedVisorsDelay = 5 * time.Second
+)
+
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
 	PubKey          cipher.PubKey
@@ -281,8 +286,6 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
-
-var ()
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
 	if !snet.IsKnownNetwork(netName) {

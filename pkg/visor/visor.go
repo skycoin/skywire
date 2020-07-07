@@ -40,9 +40,6 @@ const (
 	supportedProtocolVersion = "0.1.0"
 	ownerRWX                 = 0700
 	shortHashLen             = 6
-)
-
-const (
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
 	moduleShutdownTimeout = time.Second * 2
