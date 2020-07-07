@@ -66,29 +66,71 @@ type HealthInfo struct {
 	TransportDiscovery int `json:"transport_discovery"`
 	RouteFinder        int `json:"route_finder"`
 	SetupNode          int `json:"setup_node"`
+	UptimeTracker      int `json:"uptime_tracker"`
+	AddressResolver    int `json:"address_resolver"`
 }
 
 // Health returns health information about the visor
 func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Health", nil)(out, &err)
 
-	out.TransportDiscovery = http.StatusOK
-	out.RouteFinder = http.StatusOK
-	out.SetupNode = http.StatusOK
+	ctx := context.Background()
 
-	_, err = r.visor.TpDiscClient().GetTransportsByEdge(context.Background(), r.visor.conf.PK)
-	if err != nil {
-		out.TransportDiscovery = http.StatusNotFound
+	out.TransportDiscovery = http.StatusNotFound
+	out.RouteFinder = http.StatusNotFound
+	out.SetupNode = http.StatusNotFound
+	out.UptimeTracker = http.StatusNotFound
+	out.AddressResolver = http.StatusNotFound
+
+	if tdClient := r.visor.TpDiscClient(); tdClient != nil {
+		tdStatus, err := tdClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check transport discovery health")
+
+			out.TransportDiscovery = http.StatusInternalServerError
+		}
+
+		out.TransportDiscovery = tdStatus
 	}
 
-	// TODO(evanlinjin): This should actually poll the route finder service.
-	if r.visor.conf.Routing.RouteFinder == "" {
-		out.RouteFinder = http.StatusNotFound
+	if rfClient := r.visor.RouteFinderClient(); rfClient != nil {
+		rfStatus, err := rfClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check route finder health")
+
+			out.RouteFinder = http.StatusInternalServerError
+		}
+
+		out.RouteFinder = rfStatus
 	}
 
 	// TODO(evanlinjin): This should actually poll the setup nodes services.
 	if len(r.visor.conf.Routing.SetupNodes) == 0 {
 		out.SetupNode = http.StatusNotFound
+	} else {
+		out.SetupNode = http.StatusOK
+	}
+
+	if utClient := r.visor.UptimeTrackerClient(); utClient != nil {
+		utStatus, err := utClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check uptime tracker health")
+
+			out.UptimeTracker = http.StatusInternalServerError
+		}
+
+		out.UptimeTracker = utStatus
+	}
+
+	if arClient := r.visor.AddressResolverClient(); arClient != nil {
+		arStatus, err := arClient.Health(ctx)
+		if err != nil {
+			r.log.WithError(err).Warnf("Failed to check address resolver health")
+
+			out.AddressResolver = http.StatusInternalServerError
+		}
+
+		out.AddressResolver = arStatus
 	}
 
 	return nil

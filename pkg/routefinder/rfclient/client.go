@@ -47,6 +47,7 @@ type HTTPError struct {
 // Client implements route finding operations.
 type Client interface {
 	FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][][]routing.Hop, error)
+	Health(ctx context.Context) (int, error)
 }
 
 // APIClient implements Client interface
@@ -85,9 +86,12 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+
 	ctx, cancel := context.WithTimeout(ctx, c.apiTimeout)
 	defer cancel()
+
 	req = req.WithContext(ctx)
 
 	res, err := c.client.Do(req)
@@ -98,6 +102,7 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 			}
 		}()
 	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +125,24 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 	}
 
 	return paths, nil
+}
+
+// Health checks route finder health.
+func (c *apiClient) Health(_ context.Context) (int, error) {
+	res, err := http.Get(c.addr + "/health")
+	if err != nil {
+		return 0, err
+	}
+
+	if res != nil {
+		defer func() {
+			if err := res.Body.Close(); err != nil {
+				log.WithError(err).Warn("Failed to close HTTP response body")
+			}
+		}()
+	}
+
+	return res.StatusCode, nil
 }
 
 func sanitizedAddr(addr string) string {

@@ -36,7 +36,7 @@
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
       {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
-      
+
       <mat-icon
         *ngIf="timeOnline.totalMinutes > 60"
         [inline]="true"
@@ -74,13 +74,25 @@
       <i *ngIf="!node.health.setup_node || node.health.setup_node !== 200" class="dot-red"></i>
       {{ node.health.setup_node ? node.health.setup_node : ('node.details.node-health.element-offline' | translate) }}
     </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
+      <i *ngIf="node.health.uptime_tracker && node.health.uptime_tracker === 200" class="dot-green"></i>
+      <i *ngIf="!node.health.uptime_tracker || node.health.uptime_tracker !== 200" class="dot-red"></i>
+      {{ node.health.uptime_tracker ? node.health.uptime_tracker : ('node.details.node-health.element-offline' | translate) }}
+    </span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.node-health.address-resolver' | translate }}</span>
+      <i *ngIf="node.health.address_resolver && node.health.address_resolver === 200" class="dot-green"></i>
+      <i *ngIf="!node.health.address_resolver || node.health.address_resolver !== 200" class="dot-red"></i>
+      {{ node.health.address_resolver ? node.health.address_resolver : ('node.details.node-health.element-offline' | translate) }}
+    </span>
   </div>
   <div class="separator"></div>
   <!-- Traffic info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
     <app-charts
-      class="d-flex flex-column justify-content-end"
+      class="d-flex flex-column justify-content-end mt-3"
       [transports]="node.transports"
     ></app-charts>
   </div>

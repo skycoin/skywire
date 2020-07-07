@@ -1,5 +1,5 @@
 <!-- Header. -->
-<div class="generic-title-container mt-4.5 d-flex">
+<div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
   <div class="title uppercase ml-3.5">
     <span *ngIf="showShortList_">{{ 'apps.apps-list.title' | translate }}</span>
   </div>
@@ -38,10 +38,9 @@
 </app-paginator>
 
 <div
-  class="container-elevated-translucid mt-3"
-  [ngClass]="{'table-container': showShortList_, 'full-list-table-container': !showShortList_}"
+  class="rounded-elevated-box mt-3"
   *ngIf="dataSource && dataSource.length > 0"
->
+><div class="box-internal-container overflow" [ngClass]="{'small-node-list-margins': showShortList_, 'full-node-list-margins': !showShortList_}">
   <!-- Table for large screens. -->
   <table
     class="responsive-table-translucid d-none d-md-table"
@@ -51,8 +50,8 @@
     <!-- Column names. -->
     <tr>
       <th></th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)">
-        <span class="dot-outline-white" [matTooltip]="'apps.apps-list.state-tooltip' | translate"></span>
+      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)" [matTooltip]="'apps.apps-list.state-tooltip' | translate">
+        <span class="dot-outline-white"></span>
         <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
       </th>
       <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Name)">
@@ -94,7 +93,7 @@
           (click)="changeAppAutostart(app)"
           mat-icon-button
           [matTooltip]="(app.autostart ? 'apps.apps-list.disable-autostart' : 'apps.apps-list.enable-autostart') | translate"
-          class="big-action-button hard-grey-button-background"
+          class="big-action-button transparent-button"
         >
           <mat-icon [inline]="true">{{ app.autostart ? 'done' : 'close' }}</mat-icon>
         </button>
@@ -104,7 +103,7 @@
           (click)="config(app)"
           mat-icon-button
           [matTooltip]="'apps.settings' | translate"
-          class="big-action-button hard-grey-button-background"
+          class="big-action-button transparent-button"
           *ngIf="appsWithConfig.has(app.name)"
         >
           <mat-icon [inline]="true">settings</mat-icon>
@@ -113,7 +112,7 @@
           (click)="viewLogs(app)"
           mat-icon-button
           [matTooltip]="'apps.view-logs' | translate"
-          class="big-action-button hard-grey-button-background"
+          class="big-action-button transparent-button"
         >
           <mat-icon [inline]="true">list</mat-icon>
         </button>
@@ -121,7 +120,7 @@
           (click)="changeAppState(app)"
           mat-icon-button
           [matTooltip]="('apps.' + (app.status === 1 ? 'stop-app' : 'start-app')) | translate"
-          class="big-action-button hard-grey-button-background"
+          class="big-action-button transparent-button"
         >
           <mat-icon [inline]="true">{{ app.status === 1 ? 'stop' : 'play_arrow' }}</mat-icon>
         </button>
@@ -186,7 +185,7 @@
             (click)="$event.stopPropagation(); showOptionsDialog(app)"
             mat-icon-button
             [matTooltip]="'common.options' | translate"
-            class="grey-button-background"
+            class="transparent-button"
           >
             <mat-icon>{{ 'add' }}</mat-icon>
           </button>
@@ -201,11 +200,13 @@
     [linkParts]="['/nodes', nodePK, 'apps-list']"
     *ngIf="showShortList_ && numberOfPages > 1"
   ></app-view-all-link>
-</div>
+</div></div>
 
 <!-- Msg shown if the list is empty. -->
-<div class="container-elevated-translucid mt-3" *ngIf="!dataSource || dataSource.length === 0">
-  <span class="font-sm">{{ 'apps.apps-list.empty' | translate }}</span>
+<div class="rounded-elevated-box mt-3" *ngIf="!dataSource || dataSource.length === 0">
+  <div class="box-internal-container">
+      <span class="font-sm">{{ 'apps.apps-list.empty' | translate }}</span>
+  </div>
 </div>
 
 <!-- Link for accessing the full list. -->
