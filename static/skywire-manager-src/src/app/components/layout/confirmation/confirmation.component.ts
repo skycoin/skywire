@@ -12,6 +12,14 @@ export interface ConfirmationData {
    */
   text: string;
   /**
+   * Optional list with elements to show after the text.
+   */
+  list?: string[];
+  /**
+   * Optional text to show below the main text and the list.
+   */
+  lowerText?: string;
+  /**
    * Title of the modal window.
    */
   headerText: string;
@@ -65,6 +73,7 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
   // Texts for the Done state.
   doneTitle: string;
   doneText: string;
+  doneList: string[];
 
   // Event for when the user confirms.
   @Output() operationAccepted = new EventEmitter();
@@ -130,14 +139,16 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
    * Use only after the operation is done or receiving an error.
    * @param newTitle New title for the modal window.
    * @param newText New main text for the modal window.
+   * @param newList New optional list to show below the main text.
    */
-  showDone(newTitle: string | null, newText: string) {
+  showDone(newTitle: string | null, newText: string, newList: string[] = null) {
     if (newTitle) {
       this.doneTitle = newTitle;
     } else {
       this.doneTitle = this.data.headerText;
     }
     this.doneText = newText;
+    this.doneList = newList;
 
     this.confirmButton.reset();
     setTimeout(() => this.confirmButton.focus());

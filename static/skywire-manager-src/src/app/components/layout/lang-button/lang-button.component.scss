@@ -3,6 +3,10 @@
 .lang-button {
   height: $header-buttons-height;
   border-radius: $mat-dialog-radius;
+  background-color: $white;
+  border-radius: 100%;
+  padding: 0;
+  line-height: normal;
 
   .flag {
     width: 20px;
