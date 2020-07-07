@@ -197,16 +197,13 @@ $responsive-table-colors: (
     color: $blue-dark;
     border-radius: 1000px;
     cursor: pointer;
-    opacity: 0.9;
     padding: 1px 7px;
     font-weight: normal;
     border: 0;
     font-size: $font-size-smaller;
     align-items: center;
 
-    &:hover {
-      opacity: 1;
-    }
+    @extend .subtle-transparent-button;
 
     mat-icon {
       margin-right: 2px;
