@@ -4,7 +4,7 @@
     <app-tab-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
-      [selectedTabIndex]="0"
+      [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
       [showUpdateButton]="false"
     ></app-tab-bar>
   </div>
@@ -17,7 +17,7 @@
     <app-tab-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
-      [selectedTabIndex]="0"
+      [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
       [secondsSinceLastUpdate]="secondsSinceLastUpdate" 
       [showLoading]="updating"
       [showAlert]="errorsUpdating"
@@ -26,16 +26,6 @@
     ></app-tab-bar>
   </div>
   <div class="col-12">
-    <!-- Dmsg info button area. -->
-    <div class="generic-title-container mt-4.5 d-flex"  *ngIf="dataSource.length !== 0">
-      <div class="title ml-3.5"></div>
-      <button class="icon-button" (click)="toggleDmsgInfo()">
-        <mat-icon>
-          {{ showDmsgInfo ? 'visibility_off' : 'visibility' }}
-        </mat-icon>
-        {{ (showDmsgInfo ? 'nodes.hide-dmsg-info' : 'nodes.show-dmsg-info') | translate }}
-      </button>
-    </div>
     <div class="rounded-elevated-box mt-4.5" *ngIf="dataSource.length !== 0"><div class="box-internal-container overflow full-node-list-margins">
       <!-- Table for large screens. -->
       <table
@@ -49,7 +39,7 @@
             <span class="dot-outline-gray"></span>
             <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
-          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
+          <th class="sortable-column labels" (click)="changeSortingOrder(sortableColumns.Label)">
             {{ 'nodes.label' | translate }}
             <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
@@ -78,9 +68,11 @@
           </td>
           <td>
             {{ node.local_pk }}
+            <!--<app-copy-to-clipboard-text [short]="true" text="{{ node.local_pk }}" shortTextLength="5"></app-copy-to-clipboard-text>-->
           </td>
           <td *ngIf="showDmsgInfo">
             {{ node.dmsgServerPk }}
+            <!--<app-copy-to-clipboard-text [short]="true" text="{{ node.dmsgServerPk }}" shortTextLength="5"></app-copy-to-clipboard-text>-->
           </td>
           <td *ngIf="showDmsgInfo">
             {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
@@ -158,11 +150,13 @@
               </div>
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:
-                {{ node.local_pk }}
+                <app-copy-to-clipboard-text [short]="true" text="{{ node.local_pk }}" shortTextLength="5"></app-copy-to-clipboard-text>
+                <!--{{ node.local_pk }}-->
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
-                {{ node.dmsgServerPk }}
+                <!--{{ node.dmsgServerPk }}-->
+                <app-copy-to-clipboard-text [short]="true" text="{{ node.dmsgServerPk }}" shortTextLength="5"></app-copy-to-clipboard-text>
               </div>
               <div class="list-row" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.ping' | translate }}</span>:
