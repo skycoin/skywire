@@ -83,7 +83,7 @@
             {{ node.dmsgServerPk }}
           </td>
           <td *ngIf="showDmsgInfo">
-            {{ node.roundTripPing }}
+            {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
           </td>
           <td (click)="$event.stopPropagation()" class="actions">
             <button
@@ -166,7 +166,7 @@
               </div>
               <div class="list-row" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.ping' | translate }}</span>:
-                {{ node.roundTripPing }}
+                {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
               </div>
             </div>
             <div class="margin-part"></div>

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { flatMap, map, mergeMap } from 'rxjs/operators';
+import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
 import { Node, Transport, Route, HealthInfo } from '../app.datatypes';
@@ -44,10 +45,10 @@ export class NodeService {
       nodes.forEach(node => {
         if (dmsgInfoMap.has(node.local_pk)) {
           node.dmsgServerPk = dmsgInfoMap.get(node.local_pk).server_public_key;
-          node.roundTripPing = dmsgInfoMap.get(node.local_pk).round_trip;
+          node.roundTripPing = this.nsToMs(dmsgInfoMap.get(node.local_pk).round_trip);
         } else {
           node.dmsgServerPk = '-';
-          node.roundTripPing = -1;
+          node.roundTripPing = '-1';
         }
 
         node.ip = this.getAddressPart(node.tcp_addr, 0);
@@ -91,6 +92,22 @@ export class NodeService {
   }
 
   /**
+   * Converts a ns value to a ms string. It includes 2 decimals is the final value is less than 10.
+   * @param time Value to convert.
+   */
+  private nsToMs(time: number) {
+    let value = new BigNumber(time).dividedBy(1000000);
+
+    if (value.isLessThan(10)) {
+      value = value.decimalPlaces(2);
+    } else {
+      value = value.decimalPlaces(0);
+    }
+
+    return value.toString(10);
+  }
+
+  /**
    * Gets the details of a specific node.
    */
   getNode(nodeKey: string): Observable<Node> {
@@ -119,7 +136,7 @@ export class NodeService {
         for (let i = 0; i < dmsgInfo.length; i++) {
           if (dmsgInfo[i].public_key === currentNode.local_pk) {
             currentNode.dmsgServerPk = dmsgInfo[i].server_public_key;
-            currentNode.roundTripPing = dmsgInfo[i].round_trip;
+            currentNode.roundTripPing = this.nsToMs(dmsgInfo[i].round_trip);
 
             // Get the health info.
             return this.apiService.get(`visors/${nodeKey}/health`);
@@ -127,7 +144,7 @@ export class NodeService {
         }
 
         currentNode.dmsgServerPk = '-';
-        currentNode.roundTripPing = -1;
+        currentNode.roundTripPing = '-1';
 
         // Get the health info.
         return this.apiService.get(`visors/${nodeKey}/health`);
