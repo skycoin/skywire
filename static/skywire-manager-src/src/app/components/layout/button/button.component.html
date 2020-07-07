@@ -2,7 +2,6 @@
   <mat-spinner *ngIf="state === buttonStates.Loading" [diameter]="loadingSize"></mat-spinner>
   <mat-icon *ngIf="state === buttonStates.Success">done</mat-icon>
   <mat-icon *ngIf="state === buttonStates.Error">error_outline</mat-icon>
-  <mat-icon *ngIf="state === buttonStates.Normal && icon">{{ icon }}</mat-icon>
   <ng-content></ng-content>
   <i *ngIf="notification" class="dot-red sm"></i>
 </ng-template>

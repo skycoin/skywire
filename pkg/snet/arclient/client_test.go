@@ -10,15 +10,16 @@ import (
 	"testing"
 
 	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
 )
 
-var testPubKey, testSecKey = cipher.GenerateKeyPair()
-
 func TestClientAuth(t *testing.T) {
+	testPubKey, testSecKey := cipher.GenerateKeyPair()
+
 	wg := sync.WaitGroup{}
 
 	headerCh := make(chan http.Header, 1)
@@ -39,15 +40,19 @@ func TestClientAuth(t *testing.T) {
 			}
 		},
 	))
+
 	defer srv.Close()
 
 	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
-	c := apiClient.(*client)
+
+	c := apiClient.(*httpClient)
 
 	wg.Add(1)
-	_, err = c.Get(context.TODO(), "/")
+
+	resp, err := c.Get(context.TODO(), "/")
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 
 	header := <-headerCh
 	assert.Equal(t, testPubKey.Hex(), header.Get("SW-Public"))
@@ -58,10 +63,13 @@ func TestClientAuth(t *testing.T) {
 }
 
 func TestBind(t *testing.T) {
+	testPubKey, testSecKey := cipher.GenerateKeyPair()
+
 	urlCh := make(chan string, 1)
 	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		urlCh <- r.URL.String()
 	})))
+
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
@@ -74,7 +82,10 @@ func TestBind(t *testing.T) {
 }
 
 func authHandler(next http.Handler) http.Handler {
+	log := logging.MustGetLogger("arclient_test")
+	testPubKey, _ := cipher.GenerateKeyPair()
 	m := http.NewServeMux()
+
 	m.Handle("/security/nonces/", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
@@ -82,6 +93,8 @@ func authHandler(next http.Handler) http.Handler {
 			}
 		},
 	))
+
 	m.Handle("/", next)
+
 	return m
 }

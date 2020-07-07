@@ -1,5 +1,13 @@
+@import 'variables';
+
 .text-container {
-  margin-top: 5px;
+  word-break: break-word;
+}
+
+.list-container {
+  font-size: 14px;
+  margin: 10px;
+  color: $blue-medium;
   word-break: break-word;
 }
 

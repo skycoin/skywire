@@ -12,11 +12,11 @@ import GeneralUtils from '../../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
-import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 import { SkysocksSettingsComponent } from '../skysocks-settings/skysocks-settings.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { SkysocksClientSettingsComponent } from '../skysocks-client-settings/skysocks-client-settings.component';
+import { TranslateService } from '@ngx-translate/core';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -96,6 +96,7 @@ export class NodeAppsListComponent implements OnDestroy {
     private dialog: MatDialog,
     private route: ActivatedRoute,
     private snackbarService: SnackbarService,
+    private translateService: TranslateService,
   ) {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
@@ -234,7 +235,7 @@ export class NodeAppsListComponent implements OnDestroy {
       });
     }
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.viewLogs(app);
       } else if (selectedOption === 2) {
@@ -361,24 +362,28 @@ export class NodeAppsListComponent implements OnDestroy {
    * Opens the modal window used on small screens for selecting how to sort the data.
    */
   openSortingOrderModal() {
-    // Get the list of sortable columns.
+    // Create 2 options for every sortable column, for ascending and descending order.
+    const options: SelectableOption[] = [];
     const enumKeys = Object.keys(SortableColumns);
-    const columnsMap = new Map<string, SortableColumns>();
-    const columns = enumKeys.map(key => {
-      const val = SortableColumns[key as any];
-      columnsMap.set(val, SortableColumns[key]);
-
-      return val;
+    enumKeys.forEach(key => {
+      options.push({
+        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
+      });
+      options.push({
+        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
+      });
     });
 
-    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
+    // Open the option selection modal window.
+    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
       if (result) {
-        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
-          this.sortBy = columnsMap.get(result.label);
-          this.sortReverse = result.sortReverse;
+        result = (result - 1) / 2;
+        const index = Math.floor(result);
+        // Use the column and order selected by the user.
+        this.sortBy = SortableColumns[enumKeys[index]];
+        this.sortReverse = result !== index;
 
-          this.recalculateElementsToShow();
-        }
+        this.recalculateElementsToShow();
       }
     });
   }

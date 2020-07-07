@@ -2,7 +2,7 @@ import { Component, Input } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
-import { SelectPageComponent } from './select-page/select-page.component';
+import { SelectableOption, SelectOptionComponent } from '../select-option/select-option.component';
 
 /**
  * Generic paginator for the long lists of the app.
@@ -31,9 +31,16 @@ export class PaginatorComponent {
   ) { }
 
   openSelectionDialog() {
-    SelectPageComponent.openDialog(this.dialog, this.numberOfPages).afterClosed().subscribe((selectedPage: number) => {
-      if (selectedPage) {
-        this.router.navigate(this.linkParts.concat([selectedPage.toString()]));
+    // Create an option for every page.
+    const options: SelectableOption[] = [];
+    for (let i = 1; i <= this.numberOfPages; i++) {
+      options.push({ label: i.toString() });
+    }
+
+    // Open the option selection modal window.
+    SelectOptionComponent.openDialog(this.dialog, options, 'paginator.select-page-title').afterClosed().subscribe((result: number) => {
+      if (result) {
+        this.router.navigate(this.linkParts.concat([result.toString()]));
       }
     });
   }

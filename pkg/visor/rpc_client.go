@@ -455,6 +455,8 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 		TransportDiscovery: http.StatusOK,
 		RouteFinder:        http.StatusOK,
 		SetupNode:          http.StatusOK,
+		UptimeTracker:      http.StatusOK,
+		AddressResolver:    http.StatusOK,
 	}
 
 	return hi, nil
