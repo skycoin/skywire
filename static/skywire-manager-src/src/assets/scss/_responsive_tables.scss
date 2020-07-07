@@ -1,8 +1,3 @@
-@import "variables";
-@import "bootstrap_overrides";
-@import "~bootstrap/scss/functions";
-@import "~bootstrap/scss/mixins/text-truncate";
-
 // Backgrounds for the tables used in the app.
 $responsive-table-colors: (
   // Background, background:hover, font color
@@ -42,12 +37,6 @@ $responsive-table-colors: (
     }
 
     tr {
-      &:last-of-type {
-        td, th {
-          border-bottom: none;
-        }
-      }
-
       .sortable-column {
         @extend .selectable;
       
@@ -101,19 +90,13 @@ $responsive-table-colors: (
       }
     
       .mat-checkbox-background, .mat-checkbox-frame {
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        position: absolute;
         box-sizing: border-box;
-        pointer-events: none;
         width: 18px;
         height: 18px;
-        background: rgba(30, 34, 39, 0.10) !important;
+        background: rgba(0, 0, 0, 0.3) !important;
         border-radius: 6px;
         border-width: 2px;
-        border-color: rgba(0, 0, 0, 0.15);
+        border-color: rgba(0, 0, 0, 0.5);
       }
     
       .mat-ripple-element {
@@ -202,6 +185,8 @@ $responsive-table-colors: (
 
   .title {
     margin-right: auto;
+    font-size: $font-size-base;
+    font-weight: bold;
   }
 
   .icon-button {
@@ -253,7 +238,8 @@ $responsive-table-colors: (
     color: $blue-dark;
     border-radius: 1000px;
     cursor: pointer;
-    opacity: 0.9;
+
+    @extend .subtle-transparent-button;
 
     @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
       & {
@@ -263,9 +249,13 @@ $responsive-table-colors: (
         font-size: 24px !important;
       }
     }
+  }
+}
 
-    &:hover {
-      opacity: 1;
-    }
+// Allows to remove the margin at the right of the last mat-icon element inside
+// generic-title-container, to make it be shown correctly when there is a paginator.
+.paginator-icons-fixer {
+  mat-icon:last-of-type {
+    margin-right: 0 !important;
   }
 }

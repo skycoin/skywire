@@ -13,7 +13,6 @@ import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
-import { SelectColumnComponent, SelectedColumn } from '../../layout/select-column/select-column.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
 import { processServiceError } from 'src/app/utils/errors';
@@ -215,30 +214,30 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * Opens the modal window used on small screens for selecting how to sort the data.
    */
   openSortingOrderModal() {
-    // Get the list of sortable columns.
+    // Create 2 options for every sortable column, for ascending and descending order.
+    const options: SelectableOption[] = [];
     const enumKeys = Object.keys(SortableColumns);
-    const columnsMap = new Map<string, SortableColumns>();
-    let columns = enumKeys.map(key => {
-      // Ignore all dmsg columns if the dmsg data is not being shown.
+    enumKeys.forEach(key => {
       if (this.showDmsgInfo || (SortableColumns[key] !== SortableColumns.DmsgServer && SortableColumns[key] !== SortableColumns.Ping)) {
-        const val = SortableColumns[key as any];
-        columnsMap.set(val, SortableColumns[key]);
-
-        return val;
+        options.push({
+          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
+        });
+        options.push({
+          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
+        });
       }
     });
 
-    // Remove all empty entries.
-    columns = columns.filter(val => val);
-
-    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
+    // Open the option selection modal window.
+    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
       if (result) {
-        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
-          this.sortBy = columnsMap.get(result.label);
-          this.sortReverse = result.sortReverse;
+        result = (result - 1) / 2;
+        const index = Math.floor(result);
+        // Use the column and order selected by the user.
+        this.sortBy = SortableColumns[enumKeys[index]];
+        this.sortReverse = result !== index;
 
-          this.sortList();
-        }
+        this.sortList();
       }
     });
   }
@@ -384,44 +383,64 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.updateSubscription.unsubscribe();
     }
 
-    const nodesToCheck = this.dataSource.filter(node => node.online).map(node => node.local_pk);
+    // Get the list of all online visors, to check if there are updates available.
+    const nodesToCheck: string[] = [];
+    const labelsToCheck: string[] = [];
+    this.dataSource.forEach(node => {
+      if (node.online) {
+        nodesToCheck.push(node.local_pk);
+        labelsToCheck.push(node.label);
+      }
+    });
+
+    // Keys and labels of all visors with an update available.
+    const keysWithUpdate: string[] = [];
+    const labelsWithUpdate: string[] = [];
+    // How many visors have an update available.
+    let visorsWithUpdate = 0;
 
     // Check if there are updates available.
     this.updateSubscription = forkJoin(nodesToCheck.map(pk => this.nodeService.checkUpdate(pk))).subscribe(response => {
-      // Check how many visors have to be updated.
-      let visorsWithUpdate = 0;
-      let currentVersion = '';
-      let differentCurrentVersions = false;
-      let newVersion = '';
-      response.forEach(updateInfo => {
+      // Contains the list of all updates found, without repetitions.
+      const updates = new Map<string, string>();
+
+      // Check the response for each visor.
+      response.forEach((updateInfo, i) => {
         if (updateInfo && updateInfo.available) {
           visorsWithUpdate += 1;
 
-          if (currentVersion && currentVersion !== updateInfo.current_version) {
-            differentCurrentVersions = true;
-          }
+          // Save the data for calling the update procedure later.
+          keysWithUpdate.push(nodesToCheck[i]);
+          labelsWithUpdate.push(labelsToCheck[i]);
 
-          currentVersion = updateInfo.current_version;
-          newVersion = updateInfo.available_version;
+          // Save the name of the update, if it was not found before.
+          if (!updates.has(updateInfo.current_version + updateInfo.available_version)) {
+            const newVersion = this.translateService.instant('nodes.update.version-change',
+              { currentVersion: updateInfo.current_version, newVersion: updateInfo.available_version }
+            );
+
+            updates.set(updateInfo.current_version + updateInfo.available_version, newVersion);
+          }
         }
       });
 
       if (visorsWithUpdate > 0) {
         // Text for asking for confirmation before updating.
         let newText: string;
-        if (!differentCurrentVersions) {
-          newText = this.translateService.instant('nodes.update.update-available',
-            { number: visorsWithUpdate, currentVersion: currentVersion, newVersion: newVersion }
-          );
+        if (visorsWithUpdate === 1) {
+          newText = 'nodes.update.update-available-single';
         } else {
-          newText = this.translateService.instant('nodes.update.update-available-different',
-            { number: visorsWithUpdate, newVersion: newVersion }
-          );
+          newText = this.translateService.instant('nodes.update.update-available-multiple', {number: visorsWithUpdate});
         }
+
+        const updatesList: string[] = [];
+        updates.forEach(u => updatesList.push(u));
 
         // New configuration for asking for confirmation.
         const newConfirmationData: ConfirmationData = {
           text: newText,
+          list: updatesList,
+          lowerText: 'nodes.update.update-available-confirmation',
           headerText: 'nodes.update.title',
           confirmButtonText: 'nodes.update.install',
           cancelButtonText: 'common.cancel',
@@ -451,15 +470,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      // Keys and labels of all visors.
-      const keys = this.dataSource.map(node => node.local_pk);
-      const labels = this.dataSource.map(node => node.label);
       // Update all visors.
-      this.updateSubscription = this.recursivelyUpdateWallets(keys, labels).subscribe(response => {
+      this.updateSubscription = this.recursivelyUpdateWallets(keysWithUpdate, labelsWithUpdate).subscribe(response => {
         if (response === 0) {
           // If everything was ok, show a confirmation.
           confirmationDialog.componentInstance.showDone('confirmation.done-header-text', 'nodes.update.done-all');
-        } else if (response === this.dataSource.length) {
+        } else if (response === visorsWithUpdate) {
           // Error if no visor was updated.
           confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'nodes.update.all-failed-error');
         } else {
@@ -467,7 +483,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
           confirmationDialog.componentInstance.showDone(
             'confirmation.error-header-text',
             this.translateService.instant('nodes.update.some-updated-error',
-              {failedNumber: response, updatedNumber: this.dataSource.length - response}
+              {failedNumber: response, updatedNumber: visorsWithUpdate - response}
             )
           );
         }
@@ -538,7 +554,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       });
     }
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.copySpecificTextToClipboard(node.local_pk);
       } else if (this.showDmsgInfo) {
@@ -578,7 +594,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         }
       ];
 
-      SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+      SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
         if (selectedOption === 1) {
           this.copySpecificTextToClipboard(node.local_pk);
         } else if (selectedOption === 2) {

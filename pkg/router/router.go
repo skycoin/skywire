@@ -137,7 +137,6 @@ type router struct {
 	trustedVisors map[cipher.PubKey]struct{}
 	tm            *transport.Manager
 	rt            routing.Table
-	rfc           rfclient.Client                         // route finder client
 	rgs           map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
@@ -167,7 +166,6 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		tm:            config.TransportManager,
 		rt:            routing.NewTable(),
 		sl:            sl,
-		rfc:           config.RouteFinder,
 		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
