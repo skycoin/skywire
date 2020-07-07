@@ -17,7 +17,8 @@
     "refreshed": "Data refreshed.",
     "options": "Options",
     "logout": "Logout",
-    "logout-error": "Error logging out."
+    "logout-error": "Error logging out.",
+    "time-in-ms": "{{ time }}ms"
   },
 
   "tables": {
