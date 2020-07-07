@@ -60,7 +60,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
   showDmsgInfo = false;
 
-  private readonly dmsgInfoStorageKey = 'show-dmsg-info';
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private menuSubscription: Subscription;
@@ -84,8 +83,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
   ) {
-    // We only need to check if the key exists.
-    this.showDmsgInfo = !!localStorage.getItem(this.dmsgInfoStorageKey);
+    // Show the dmsg info if the dmsg url was used.
+    this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
 
     // Data for populating the tab bar.
     this.tabsData = [
@@ -93,6 +92,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
         icon: 'view_headline',
         label: 'nodes.title',
         linkParts: ['/nodes'],
+      },
+      {
+        icon: 'language',
+        label: 'nodes.dmsg-title',
+        linkParts: ['/nodes', 'dmsg'],
       },
       {
         icon: 'settings',
@@ -147,24 +151,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
-    }
-  }
-
-  /**
-   * Makes the dmsg info to be shown or hidden.
-   */
-  toggleDmsgInfo() {
-    this.showDmsgInfo = !this.showDmsgInfo;
-    // Create or remove an entry in the local storage, to be able to recover the setting later.
-    if (this.showDmsgInfo) {
-      localStorage.setItem(this.dmsgInfoStorageKey, '-');
-    } else {
-      localStorage.removeItem(this.dmsgInfoStorageKey);
-    }
-
-    // Do not allow to sort the list using a dmsg column while no dmsg data is being shown.
-    if (this.sortBy === SortableColumns.DmsgServer || this.sortBy === SortableColumns.Ping) {
-      this.changeSortingOrder(NodeListComponent.defaultSortableColumn);
     }
   }
 
