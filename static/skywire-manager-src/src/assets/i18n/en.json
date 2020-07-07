@@ -93,9 +93,8 @@
 
   "nodes": {
     "title": "Visor list",
+    "dmsg-title": "DMSG",
     "update-all": "Update all",
-    "show-dmsg-info": "Show DMSG info",
-    "hide-dmsg-info": "Hide DMSG info",
     "state": "State",
     "state-tooltip": "Current state",
     "label": "Label",
