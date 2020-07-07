@@ -8,8 +8,8 @@ $general-typography: mat-typography-config(
 @include mat-core($general-typography);
 
 $mat-skywire-primary: (
-  100: $blue-light,
-  500: $blue,
+  100: $blue-medium,
+  500: $blue-medium,
   contrast: (
     100: $white,
     500: $white,

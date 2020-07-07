@@ -22,7 +22,6 @@ $left-bar-width: 250px;
   right: 0;
   color: $black;
   display: flex;
-  box-shadow: 0 0 5px 2px rgba(0, 0, 0, 0.1), 1px 1px 5px 1px rgba(0, 0, 0, 0.1);
 
   .logo-container {
     flex-grow: 1;
@@ -49,7 +48,7 @@ $left-bar-width: 250px;
 .menu-separator {
   width: 100%;
   height: 1px;
-  background-color: $separator;
+  background-color: $grey-separator;
 }
 
 .flag {
@@ -73,42 +72,34 @@ $left-bar-width: 250px;
     display: flex;
 
     nav {
+      overflow: auto;
       width: $left-bar-width;
       flex-grow: 1;
       display: flex;
       flex-direction: column;
-      padding: 15px;
-      background: $nav-bg;
 
       .header {
         display: flex;
         align-items: center;
-        height: $header-height + 5px;
-        border-bottom: 1px solid $white-separator;
+        height: $header-height + 20px - 1px;
+        min-height: $header-height + 20px - 1px;
+        border-bottom: 1px solid $separator;
+        background-color: rgba(255, 255, 255, 0.05);
+        box-shadow: inset 0 0 55px 0 rgba(75, 101, 137, 0.25);
+        justify-content: center;
 
         img {
           width: 170px;
+          position: relative;
+          left: -5px;
         }
       }
 
       .menu-container {
         flex: 1;
-        margin-top: 30px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        width: 100%;
-        height: 100%;
-
-        ::ng-deep app-button {
-          width: 100%;
-
-          ::ng-deep button {
-            width: 100%;
-            text-align: left;
-            margin-bottom: 6px;
-          }
-        }
 
         .upper-actions {
           .button-group {

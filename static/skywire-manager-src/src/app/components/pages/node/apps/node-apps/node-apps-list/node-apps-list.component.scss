@@ -4,15 +4,3 @@
   text-align: right;
   width: 120px;
 }
-
-@media (max-width: (map-get($grid-breakpoints, md) - 1)) , (min-width: map-get($grid-breakpoints, lg)) and (max-width: (map-get($grid-breakpoints, xl) - 1)) {
-  .table-container {
-    padding: 0;
-  }
-}
-
-@media (max-width: (map-get($grid-breakpoints, md) - 1)) {
-  .full-list-table-container {
-    padding: 0;
-  }
-}
