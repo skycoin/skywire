@@ -109,6 +109,7 @@ export class NodeComponent implements OnInit, OnDestroy {
         NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
         this.lastUrl = event['urlAfterRedirects'] as string;
         this.updateTabBar();
+        this.navigationsSubscription.unsubscribe();
       }
     });
   }

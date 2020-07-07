@@ -5,10 +5,12 @@
   </button>
 </div>
 
-<mat-dialog-content *ngIf="includeScrollableArea">
+<div class="header-separator"></div>
+
+<mat-dialog-content [ngClass]="{'content-margin': includeVerticalMargins}" *ngIf="includeScrollableArea">
   <ng-container *ngTemplateOutlet="contentTemplate"></ng-container>
 </mat-dialog-content>
-<ng-container *ngIf="!includeScrollableArea">
+<div [ngClass]="{'content-margin': includeVerticalMargins}" *ngIf="!includeScrollableArea">
   <ng-container *ngTemplateOutlet="contentTemplate"></ng-container>
-</ng-container>
+</div>
 <ng-template #contentTemplate><ng-content></ng-content></ng-template>
