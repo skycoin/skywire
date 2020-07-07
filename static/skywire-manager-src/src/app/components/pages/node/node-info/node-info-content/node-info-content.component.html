@@ -23,7 +23,7 @@
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.ping' | translate }}&nbsp;</span>
-      {{ node.roundTripPing }}
+      {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>

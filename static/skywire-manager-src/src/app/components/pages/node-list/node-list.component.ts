@@ -329,7 +329,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
       } else if (this.sortBy === SortableColumns.DmsgServer) {
         response = !this.sortReverse ? a.dmsgServerPk.localeCompare(b.dmsgServerPk) : b.dmsgServerPk.localeCompare(a.dmsgServerPk);
       } else if (this.sortBy === SortableColumns.Ping) {
-        response = !this.sortReverse ? a.roundTripPing - b.roundTripPing : b.roundTripPing - a.roundTripPing;
+        response =
+          !this.sortReverse ? Number(a.roundTripPing) - Number(b.roundTripPing) : Number(b.roundTripPing) - Number(a.roundTripPing);
       } else if (this.sortBy === SortableColumns.State) {
         if (a.online && !b.online) {
           response = -1;
