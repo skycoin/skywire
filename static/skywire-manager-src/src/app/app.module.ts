@@ -93,17 +93,15 @@ import { InitialSetupComponent } from './components/pages/login/initial-setup/in
 import { SelectLanguageComponent } from './components/layout/select-language/select-language.component';
 import { LangButtonComponent } from './components/layout/lang-button/lang-button.component';
 import { TruncatedTextComponent } from './components/layout/truncated-text/truncated-text.component';
-import { SelectTabComponent } from './components/layout/tab-bar/select-tab/select-tab.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
-import { SelectColumnComponent } from './components/layout/select-column/select-column.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
-import { SelectPageComponent } from './components/layout/paginator/select-page/select-page.component';
 import { TerminalComponent } from './components/pages/node/actions/terminal/terminal.component';
 import { SkysocksSettingsComponent } from './components/pages/node/apps/node-apps/skysocks-settings/skysocks-settings.component';
 import {
   SkysocksClientSettingsComponent
 } from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
+import { MenuButtonComponent } from './components/layout/sidenav/menu-button/menu-button.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -176,15 +174,13 @@ const globalRippleConfig: RippleGlobalOptions = {
     SelectLanguageComponent,
     LangButtonComponent,
     TruncatedTextComponent,
-    SelectTabComponent,
     NodeInfoContentComponent,
     NodeInfoComponent,
-    SelectColumnComponent,
     SelectOptionComponent,
-    SelectPageComponent,
     TerminalComponent,
     SkysocksSettingsComponent,
     SkysocksClientSettingsComponent,
+    MenuButtonComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
@@ -208,10 +204,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SnackbarComponent,
     InitialSetupComponent,
     SelectLanguageComponent,
-    SelectTabComponent,
-    SelectColumnComponent,
     SelectOptionComponent,
-    SelectPageComponent,
     TerminalComponent,
     SkysocksSettingsComponent,
     SkysocksClientSettingsComponent,

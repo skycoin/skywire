@@ -20,7 +20,6 @@ export class ButtonComponent implements OnDestroy {
   // Should be be 'mat-button' or 'mat-raised-button'.
   @Input() type = 'mat-button';
   @Input() disabled = false;
-  @Input() icon: string;
   // Must be one of the colors defined on the default theme.
   @Input() color = '';
   @Input() loadingSize = 24;

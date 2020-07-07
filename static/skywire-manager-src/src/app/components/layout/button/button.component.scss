@@ -15,6 +15,12 @@ button {
   }
 }
 
+::ng-deep .mat-raised-button[disabled] {
+  background-color: $blue-medium !important;
+  color: $white !important;
+  opacity: 0.5;
+}
+
 mat-icon, mat-spinner {
   display: inline-block;
   margin-right: 20px;

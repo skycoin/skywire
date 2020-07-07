@@ -16,13 +16,16 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
@@ -54,15 +57,18 @@ type Visor struct {
 	conf *visorconfig.V1
 	log  *logging.Logger
 
-	startedAt  time.Time
-	restartCtx *restart.Context
-	updater    *updater.Updater
+	startedAt     time.Time
+	restartCtx    *restart.Context
+	updater       *updater.Updater
+	uptimeTracker utclient.APIClient
 
 	ebc *appevent.Broadcaster // event broadcaster
 
-	net    *snet.Network
-	tpM    *transport.Manager
-	router router.Router
+	net      *snet.Network
+	tpM      *transport.Manager
+	arClient arclient.APIClient
+	router   router.Router
+	rfClient rfclient.Client
 
 	procM appserver.ProcManager // proc manager
 	appL  *launcher.Launcher    // app launcher
@@ -214,6 +220,21 @@ func (v *Visor) Close() error {
 // TpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) TpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
+}
+
+// RouteFinderClient is a convenience function to obtain route finder client.
+func (v *Visor) RouteFinderClient() rfclient.Client {
+	return v.rfClient
+}
+
+// UptimeTrackerClient is a convenience function to obtain uptime tracker client.
+func (v *Visor) UptimeTrackerClient() utclient.APIClient {
+	return v.uptimeTracker
+}
+
+// AddressResolverClient is a convenience function to obtain uptime address resovler client.
+func (v *Visor) AddressResolverClient() arclient.APIClient {
+	return v.arClient
 }
 
 // Exec executes a shell command. It returns combined stdout and stderr output and an error.

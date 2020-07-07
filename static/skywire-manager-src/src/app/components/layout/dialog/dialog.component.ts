@@ -19,4 +19,8 @@ export class DialogComponent {
    * If false, the contents must include its own scrollable container.
    */
   @Input() includeScrollableArea = true;
+  /**
+   * If true, vertical margins will be added to the content.
+   */
+  @Input() includeVerticalMargins = true;
 }
