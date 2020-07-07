@@ -31,6 +31,10 @@ const routes: Routes = [
         component: NodeListComponent
       },
       {
+        path: 'dmsg',
+        component: NodeListComponent
+      },
+      {
         path: ':key',
         component: NodeComponent,
         children: [
