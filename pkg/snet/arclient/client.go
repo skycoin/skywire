@@ -28,12 +28,13 @@ import (
 )
 
 const (
+	// sudphPriority is used to set an order how connection filters apply.
+	sudphPriority        = 1
 	stcprBindPath        = "/bind/stcpr"
 	addrChSize           = 1024
 	udpKeepAliveInterval = 10 * time.Second
 	udpKeepAliveMessage  = "keepalive"
-	// sudphPriority is used to set an order how connection filters apply.
-	sudphPriority = 1
+	defaultUDPPort       = "30178"
 )
 
 var (
@@ -91,15 +92,22 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
+	remoteUDP := remoteURL.Host
+	if _, _, err := net.SplitHostPort(remoteUDP); err != nil {
+		remoteUDP = net.JoinHostPort(remoteUDP, defaultUDPPort)
+	}
+
 	client := &httpClient{
 		log:            logging.MustGetLogger("address-resolver"),
 		pk:             pk,
 		sk:             sk,
 		remoteHTTPAddr: remoteAddr,
-		remoteUDPAddr:  remoteURL.Host,
+		remoteUDPAddr:  remoteUDP,
 		ready:          make(chan struct{}),
 		closed:         make(chan struct{}),
 	}
+
+	client.log.Infof("Remote UDP server: %q", remoteUDP)
 
 	go client.initHTTPClient()
 
