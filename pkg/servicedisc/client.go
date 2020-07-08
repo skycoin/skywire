@@ -35,12 +35,17 @@ type HTTPClient struct {
 
 // NewClient creates a new HTTPClient.
 func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
+	var stats *Stats
+	if conf.Type != ServiceTypeVisor {
+		stats = &Stats{ConnectedClients: 0}
+	}
+
 	return &HTTPClient{
 		log:  log,
 		conf: conf,
 		entry: Service{
 			Addr:  NewSWAddr(conf.PK, conf.Port),
-			Stats: &Stats{ConnectedClients: 0},
+			Stats: stats,
 			Type:  conf.Type,
 		},
 		client: http.Client{},
@@ -62,10 +67,12 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 	if c.auth != nil {
 		return c.auth, nil
 	}
+
 	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK)
 	if err != nil {
 		return nil, err
 	}
+
 	c.auth = auth
 	return auth, nil
 }
@@ -81,6 +88,7 @@ func (c *HTTPClient) Services(ctx context.Context) (out []Service, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if resp != nil {
 		defer func() {
 			if cErr := resp.Body.Close(); cErr != nil && err == nil {
