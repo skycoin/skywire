@@ -259,11 +259,18 @@ func initLauncher(v *Visor) bool {
 	factory := appdisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
+
 	if conf.Discovery != nil {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
 		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
 		factory.ProxyDisc = conf.Discovery.ServiceDisc
+	}
+
+	var disc appdisc.Updater
+	if v.conf.PublicTrustedVisor {
+		disc = factory.VisorUpdater()
+		disc.Start()
 	}
 
 	// Prepare proc manager.
@@ -273,6 +280,9 @@ func initLauncher(v *Visor) bool {
 	}
 
 	v.pushCloseStack("launcher.proc_manager", func() bool {
+		if disc != nil {
+			disc.Stop()
+		}
 		return report(procM.Close())
 	})
 
@@ -284,21 +294,26 @@ func initLauncher(v *Visor) bool {
 		BinPath:    conf.BinPath,
 		LocalPath:  conf.LocalPath,
 	}
+
 	launchLog := v.MasterLogger().PackageLogger("launcher")
+
 	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
 	if err != nil {
 		return report(fmt.Errorf("failed to start launcher: %w", err))
 	}
+
 	err = launch.AutoStart(map[string]func() ([]string, error){
 		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 	})
+
 	if err != nil {
 		return report(fmt.Errorf("failed to autostart apps: %w", err))
 	}
 
 	v.procM = procM
 	v.appL = launch
+
 	return report(nil)
 }
 
