@@ -35,7 +35,28 @@ func (f *Factory) setDefaults() {
 }
 
 // Updater obtains an updater based on the app name and configuration.
-func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
+func (f *Factory) VisorUpdater() Updater {
+	// Always return empty updater if keys are not set.
+	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
+		return &emptyUpdater{}
+	}
+
+	conf := servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVisor,
+		PK:       f.PK,
+		SK:       f.SK,
+		Port:     0,
+		DiscAddr: f.ProxyDisc,
+	}
+
+	return &serviceUpdater{
+		client:   servicedisc.NewClient(f.Log, conf),
+		interval: f.UpdateInterval,
+	}
+}
+
+// AppUpdater obtains an updater based on the app name and configuration.
+func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
 		return &emptyUpdater{}, false
