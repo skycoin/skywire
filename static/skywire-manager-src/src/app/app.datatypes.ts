@@ -16,6 +16,8 @@ export class Node {
   online?: boolean;
   seconds_online?: number;
   health?: HealthInfo;
+  dmsgServerPk?: string;
+  roundTripPing?: string;
 }
 
 export interface Application {

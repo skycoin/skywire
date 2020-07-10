@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { flatMap, map } from 'rxjs/operators';
+import { flatMap, map, mergeMap } from 'rxjs/operators';
+import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
 import { Node, Transport, Route, HealthInfo } from '../app.datatypes';
@@ -26,12 +27,30 @@ export class NodeService {
    * Get the list of the nodes connected to the hypervisor.
    */
   getNodes(): Observable<Node[]> {
-    return this.apiService.get('visors').pipe(map((nodes: Node[]) => {
-      nodes = nodes || [];
+    let nodes: Node[];
+
+    return this.apiService.get('visors').pipe(mergeMap((result: Node[]) => {
+      // Save the visor list.
+      nodes = result || [];
+
+      // Get the dmsg info.
+      return this.apiService.get('dmsg');
+    }), map((dmsgInfo: any[]) => {
+      // Create a map to associate the dmsg info with the visors.
+      const dmsgInfoMap = new Map<string, any>();
+      dmsgInfo.forEach(info => dmsgInfoMap.set(info.public_key, info));
 
       // Process the node data and create a helper map.
       const obtainedNodes = new Map<string, Node>();
       nodes.forEach(node => {
+        if (dmsgInfoMap.has(node.local_pk)) {
+          node.dmsgServerPk = dmsgInfoMap.get(node.local_pk).server_public_key;
+          node.roundTripPing = this.nsToMs(dmsgInfoMap.get(node.local_pk).round_trip);
+        } else {
+          node.dmsgServerPk = '-';
+          node.roundTripPing = '-1';
+        }
+
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
         node.label = this.storageService.getNodeLabel(node.local_pk);
@@ -73,6 +92,22 @@ export class NodeService {
   }
 
   /**
+   * Converts a ns value to a ms string. It includes 2 decimals is the final value is less than 10.
+   * @param time Value to convert.
+   */
+  private nsToMs(time: number) {
+    let value = new BigNumber(time).dividedBy(1000000);
+
+    if (value.isLessThan(10)) {
+      value = value.decimalPlaces(2);
+    } else {
+      value = value.decimalPlaces(0);
+    }
+
+    return value.toString(10);
+  }
+
+  /**
    * Gets the details of a specific node.
    */
   getNode(nodeKey: string): Observable<Node> {
@@ -93,6 +128,23 @@ export class NodeService {
             app.autostart = (app as any).auto_start;
           });
         }
+
+        // Get the dmsg info.
+        return this.apiService.get('dmsg');
+      }),
+      flatMap((dmsgInfo: any[]) => {
+        for (let i = 0; i < dmsgInfo.length; i++) {
+          if (dmsgInfo[i].public_key === currentNode.local_pk) {
+            currentNode.dmsgServerPk = dmsgInfo[i].server_public_key;
+            currentNode.roundTripPing = this.nsToMs(dmsgInfo[i].round_trip);
+
+            // Get the health info.
+            return this.apiService.get(`visors/${nodeKey}/health`);
+          }
+        }
+
+        currentNode.dmsgServerPk = '-';
+        currentNode.roundTripPing = '-1';
 
         // Get the health info.
         return this.apiService.get(`visors/${nodeKey}/health`);

@@ -4,7 +4,7 @@
     <app-tab-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
-      [selectedTabIndex]="0"
+      [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
       [showUpdateButton]="false"
     ></app-tab-bar>
   </div>
@@ -17,7 +17,7 @@
     <app-tab-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
-      [selectedTabIndex]="0"
+      [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
       [secondsSinceLastUpdate]="secondsSinceLastUpdate" 
       [showLoading]="updating"
       [showAlert]="errorsUpdating"
@@ -39,13 +39,21 @@
             <span class="dot-outline-gray"></span>
             <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
-          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Label)">
+          <th class="sortable-column labels" (click)="changeSortingOrder(sortableColumns.Label)">
             {{ 'nodes.label' | translate }}
             <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
           <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
             {{ 'nodes.key' | translate }}
             <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
+          </th>
+          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="changeSortingOrder(sortableColumns.DmsgServer)">
+            {{ 'nodes.dmsg-server' | translate }}
+            <mat-icon *ngIf="sortBy === sortableColumns.DmsgServer" [inline]="true">{{ sortingArrow }}</mat-icon>
+          </th>
+          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="changeSortingOrder(sortableColumns.Ping)">
+            {{ 'nodes.ping' | translate }}
+            <mat-icon *ngIf="sortBy === sortableColumns.Ping" [inline]="true">{{ sortingArrow }}</mat-icon>
           </th>
           <th class="actions"></th>
         </tr>
@@ -60,13 +68,20 @@
           </td>
           <td>
             {{ node.local_pk }}
+            <!--<app-copy-to-clipboard-text [short]="true" text="{{ node.local_pk }}" shortTextLength="5"></app-copy-to-clipboard-text>-->
+          </td>
+          <td *ngIf="showDmsgInfo">
+            {{ node.dmsgServerPk }}
+            <!--<app-copy-to-clipboard-text [short]="true" text="{{ node.dmsgServerPk }}" shortTextLength="5"></app-copy-to-clipboard-text>-->
+          </td>
+          <td *ngIf="showDmsgInfo">
+            {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
           </td>
           <td (click)="$event.stopPropagation()" class="actions">
             <button
-              [clipboard]="node.local_pk"
-              (copyEvent)="onCopyToClipboardClicked()"
+              (click)="copyToClipboard(node)"
               mat-icon-button
-              [matTooltip]="'nodes.copy-key' | translate"
+              [matTooltip]="(showDmsgInfo ? 'nodes.copy-data' : 'nodes.copy-key') | translate"
               class="big-action-button transparent-button"
             >
               <mat-icon [inline]="true">filter_none</mat-icon>
@@ -135,7 +150,17 @@
               </div>
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:
-                {{ node.local_pk }}
+                <app-copy-to-clipboard-text [short]="true" text="{{ node.local_pk }}" shortTextLength="5"></app-copy-to-clipboard-text>
+                <!--{{ node.local_pk }}-->
+              </div>
+              <div class="list-row long-content" *ngIf="showDmsgInfo">
+                <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
+                <!--{{ node.dmsgServerPk }}-->
+                <app-copy-to-clipboard-text [short]="true" text="{{ node.dmsgServerPk }}" shortTextLength="5"></app-copy-to-clipboard-text>
+              </div>
+              <div class="list-row" *ngIf="showDmsgInfo">
+                <span class="title">{{ 'nodes.ping' | translate }}</span>:
+                {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
               </div>
             </div>
             <div class="margin-part"></div>
