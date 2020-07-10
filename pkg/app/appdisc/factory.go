@@ -34,7 +34,7 @@ func (f *Factory) setDefaults() {
 	}
 }
 
-// Updater obtains an updater based on the app name and configuration.
+// VisorUpdater obtains a visor updater.
 func (f *Factory) VisorUpdater(port uint16) Updater {
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
@@ -55,7 +55,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 	}
 }
 
-// AppUpdater obtains an updater based on the app name and configuration.
+// AppUpdater obtains an app updater based on the app name and configuration.
 func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
