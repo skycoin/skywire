@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { Subscription, of, timer, forkJoin, Observable } from 'rxjs';
 import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { delay, flatMap, tap, catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -60,10 +60,19 @@ export class NodeListComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
   showDmsgInfo = false;
 
+  // Vars for the pagination functionality.
+  allNodes: Node[];
+  nodesToShow: Node[];
+  numberOfPages = 1;
+  currentPage = 1;
+  // Used as a helper var, as the URL is read asynchronously.
+  currentPageInUrl = 1;
+
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private menuSubscription: Subscription;
   private updateSubscription: Subscription;
+  private navigationsSubscription: Subscription;
 
   // Vars for keeping track of the data updating.
   secondsSinceLastUpdate = 0;
@@ -82,9 +91,24 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private sidenavService: SidenavService,
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
+    route: ActivatedRoute,
   ) {
     // Show the dmsg info if the dmsg url was used.
     this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
+
+    // Get the page requested in the URL.
+    this.navigationsSubscription = route.paramMap.subscribe(params => {
+      if (params.has('page')) {
+        let selectedPage = Number.parseInt(params.get('page'), 10);
+        if (isNaN(selectedPage) || selectedPage < 1) {
+          selectedPage = 1;
+        }
+
+        this.currentPageInUrl = selectedPage;
+
+        this.recalculateElementsToShow();
+      }
+    });
 
     // Data for populating the tab bar.
     this.tabsData = [
@@ -145,6 +169,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
+    this.navigationsSubscription.unsubscribe();
 
     if (this.menuSubscription) {
       this.menuSubscription.unsubscribe();
@@ -193,7 +218,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.sortReverse = !this.sortReverse;
     }
 
-    this.sortList();
+    this.recalculateElementsToShow();
   }
 
   /**
@@ -223,7 +248,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         this.sortBy = SortableColumns[enumKeys[index]];
         this.sortReverse = result !== index;
 
-        this.sortList();
+        this.recalculateElementsToShow();
       }
     });
   }
@@ -252,8 +277,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
       ).subscribe(
         (nodes: Node[]) => {
           this.ngZone.run(() => {
-            this.dataSource = nodes;
-            this.sortList();
+            this.allNodes = nodes;
+            this.recalculateElementsToShow();
             this.loading = false;
             // Close any previous temporary loading error msg.
             this.snackbarService.closeCurrentIfTemporaryError();
@@ -302,35 +327,58 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Sorts the data.
+   * Sorts the data and recalculates which elements should be shown on the UI.
    */
-  private sortList() {
-    this.dataSource = this.dataSource.sort((a, b) => {
-      const defaultOrder = a.local_pk.localeCompare(b.local_pk);
+  private recalculateElementsToShow() {
+    // Needed to prevent racing conditions.
+    this.currentPage = this.currentPageInUrl;
 
-      let response: number;
-      if (this.sortBy === SortableColumns.Key) {
-        response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
-      } else if (this.sortBy === SortableColumns.DmsgServer) {
-        response = !this.sortReverse ? a.dmsgServerPk.localeCompare(b.dmsgServerPk) : b.dmsgServerPk.localeCompare(a.dmsgServerPk);
-      } else if (this.sortBy === SortableColumns.Ping) {
-        response =
-          !this.sortReverse ? Number(a.roundTripPing) - Number(b.roundTripPing) : Number(b.roundTripPing) - Number(a.roundTripPing);
-      } else if (this.sortBy === SortableColumns.State) {
-        if (a.online && !b.online) {
-          response = -1;
-        } else if (!a.online && b.online) {
-          response = 1;
+    // Needed to prevent racing conditions.
+    if (this.allNodes) {
+      // Sort all the data.
+      this.allNodes.sort((a, b) => {
+        const defaultOrder = a.local_pk.localeCompare(b.local_pk);
+
+        let response: number;
+        if (this.sortBy === SortableColumns.Key) {
+          response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
+        } else if (this.sortBy === SortableColumns.DmsgServer) {
+          response = !this.sortReverse ? a.dmsgServerPk.localeCompare(b.dmsgServerPk) : b.dmsgServerPk.localeCompare(a.dmsgServerPk);
+        } else if (this.sortBy === SortableColumns.Ping) {
+          response =
+            !this.sortReverse ? Number(a.roundTripPing) - Number(b.roundTripPing) : Number(b.roundTripPing) - Number(a.roundTripPing);
+        } else if (this.sortBy === SortableColumns.State) {
+          if (a.online && !b.online) {
+            response = -1;
+          } else if (!a.online && b.online) {
+            response = 1;
+          }
+          response = response * (this.sortReverse ? -1 : 1);
+        } else if (this.sortBy === SortableColumns.Label) {
+          response = !this.sortReverse ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
+        } else {
+          response = defaultOrder;
         }
-        response = response * (this.sortReverse ? -1 : 1);
-      } else if (this.sortBy === SortableColumns.Label) {
-        response = !this.sortReverse ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
-      } else {
-        response = defaultOrder;
+
+        return response !== 0 ? response : defaultOrder;
+      });
+
+      // Calculate the pagination values.
+      const maxElements = AppConfig.maxFullListElements;
+      this.numberOfPages = Math.ceil(this.allNodes.length / maxElements);
+      if (this.currentPage > this.numberOfPages) {
+        this.currentPage = this.numberOfPages;
       }
 
-      return response !== 0 ? response : defaultOrder;
-    });
+      // Limit the elements to show.
+      const start = maxElements * (this.currentPage - 1);
+      const end = start + maxElements;
+      this.nodesToShow = this.allNodes.slice(start, end);
+    } else {
+      this.nodesToShow = null;
+    }
+
+    this.dataSource = this.nodesToShow;
   }
 
   logout() {
