@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +14,11 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+)
+
+var (
+	// ErrVisorUnreachable is returned when visor is unreachable.
+	ErrVisorUnreachable = errors.New("visor is unreachable")
 )
 
 // Config configures the HTTPClient.
@@ -195,6 +202,11 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 			c.entryMx.Unlock()
 
 			if err != nil {
+				if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
+					c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
+					return
+				}
+
 				c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
 				time.Sleep(time.Second * 10) // TODO(evanlinjin): Exponential backoff.
 				continue
