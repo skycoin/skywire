@@ -17,7 +17,8 @@
     "refreshed": "Data refreshed.",
     "options": "Options",
     "logout": "Logout",
-    "logout-error": "Error logging out."
+    "logout-error": "Error logging out.",
+    "time-in-ms": "{{ time }}ms"
   },
 
   "tables": {
@@ -53,6 +54,8 @@
         "label": "Label:",
         "public-key": "Public key:",
         "port": "Port:",
+        "dmsg-server": "DMSG server:",
+        "ping": "Ping:",
         "node-version": "Visor version:",
         "app-protocol-version": "App protocol version:",
         "time": {
@@ -90,12 +93,17 @@
 
   "nodes": {
     "title": "Visor list",
+    "dmsg-title": "DMSG",
     "update-all": "Update all",
     "state": "State",
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
+    "dmsg-server": "DMSG server",
+    "ping": "Ping",
     "copy-key": "Copy key",
+    "copy-dmsg": "Copy DMSG server key",
+    "copy-data": "Copy data",
     "view-node": "View visor",
     "delete-node": "Remove visor",
     "error-load": "An error occurred while refreshing the list. Retrying...",
