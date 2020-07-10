@@ -44,6 +44,9 @@ var (
 	// ErrAlreadyListening is returned when transport is already listening.
 	ErrAlreadyListening = errors.New("already listening")
 
+	// ErrNotListening is returned when transport is not listening.
+	ErrNotListening = errors.New("not listening")
+
 	// ErrPortOccupied is returned when port is occupied.
 	ErrPortOccupied = errors.New("port is already occupied")
 )
@@ -52,6 +55,7 @@ var (
 type Client interface {
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error)
 	Listen(lPort uint16) (*tplistener.Listener, error)
+	LocalAddr() (net.Addr, error)
 	Serve() error
 	Close() error
 	Type() string
@@ -75,6 +79,7 @@ type client struct {
 	log               *logging.Logger
 	porter            *porter.Porter
 	listener          net.Listener
+	listening         chan struct{}
 	listeners         map[uint16]*tplistener.Listener // key: lPort
 	sudphPacketFilter *pfilter.PacketFilter
 	sudphListener     net.PacketConn
@@ -89,6 +94,7 @@ func NewClient(conf Config) Client {
 		porter:    porter.New(porter.MinEphemeral),
 		listeners: make(map[uint16]*tplistener.Listener),
 		done:      make(chan struct{}),
+		listening: make(chan struct{}),
 	}
 }
 
@@ -113,6 +119,7 @@ func (c *client) Serve() error {
 		}
 
 		c.listener = l
+		close(c.listening)
 
 		if c.conf.Type == tptypes.STCPR {
 			localAddr := c.listener.Addr().String()
@@ -143,6 +150,27 @@ func (c *client) Serve() error {
 	}()
 
 	return nil
+}
+
+func (c *client) LocalAddr() (net.Addr, error) {
+	<-c.listening
+
+	switch c.conf.Type {
+	case tptypes.STCP, tptypes.STCPR:
+		if c.listener == nil {
+			return nil, ErrNotListening
+		}
+
+		return c.listener.Addr(), nil
+	case tptypes.SUDPH:
+		if c.sudphListener == nil {
+			return nil, ErrNotListening
+		}
+
+		return c.listener.Addr(), nil
+	}
+
+	return nil, ErrUnknownTransportType
 }
 
 func (c *client) acceptConn() error {

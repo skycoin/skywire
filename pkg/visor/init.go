@@ -14,7 +14,6 @@ import (
 	dmsgnetutil "github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
@@ -41,6 +40,7 @@ func initStack() []initFunc {
 		initUpdater,
 		initEventBroadcaster,
 		initAddressResolver,
+		initDiscovery,
 		initSNet,
 		initDmsgpty,
 		initTransport,
@@ -95,6 +95,8 @@ func initSNet(v *Visor) bool {
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
 		NetworkConfigs: nc,
+		ServiceDisc:    v.serviceDisc,
+		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -252,14 +254,15 @@ func initRouter(v *Visor) bool {
 	return report(nil)
 }
 
-func initLauncher(v *Visor) bool {
-	report := v.makeReporter("launcher")
-	conf := v.conf.Launcher
+func initDiscovery(v *Visor) bool {
+	report := v.makeReporter("discovery")
 
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
+
+	conf := v.conf.Launcher
 
 	if conf.Discovery != nil {
 		factory.PK = v.conf.PK
@@ -268,31 +271,22 @@ func initLauncher(v *Visor) bool {
 		factory.ProxyDisc = conf.Discovery.ServiceDisc
 	}
 
-	var disc appdisc.Updater
-	if v.conf.PublicTrustedVisor {
-		hasPublicIP, err := netutil.HasPublicIP()
-		if err != nil {
-			v.log.WithError(err).Errorf("Failed to check if visor has public IP")
-		} else if !hasPublicIP {
-			v.log.Errorf("Visor doesn't have a public IP, it's impossible to register it as public trusted")
-		} else {
-			disc = factory.VisorUpdater()
-			disc.Start()
+	v.serviceDisc = factory
 
-			v.log.Infof("Registered visor as public trusted")
-		}
-	}
+	return report(nil)
+}
+
+func initLauncher(v *Visor) bool {
+	report := v.makeReporter("launcher")
+	conf := v.conf.Launcher
 
 	// Prepare proc manager.
-	procM, err := appserver.NewProcManager(v.MasterLogger(), &factory, v.ebc, conf.ServerAddr)
+	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr)
 	if err != nil {
 		return report(fmt.Errorf("failed to start proc_manager: %w", err))
 	}
 
 	v.pushCloseStack("launcher.proc_manager", func() bool {
-		if disc != nil {
-			disc.Stop()
-		}
 		return report(procM.Close())
 	})
 
