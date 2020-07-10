@@ -17,11 +17,12 @@ import (
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/netutil"
+	dmsgnetutil "github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
@@ -121,7 +122,7 @@ func (c *httpClient) initHTTPClient() {
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
 
 		retryLog := logging.MustGetLogger("snet.arclient.retrier")
-		retry := netutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
+		retry := dmsgnetutil.NewRetrier(retryLog, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
 			httpAuthClient, err = httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
@@ -193,7 +194,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		c.log.Infof("BindSTCPR: Address resolver became ready, binding")
 	}
 
-	addresses, err := localAddresses()
+	addresses, err := netutil.LocalAddresses()
 	if err != nil {
 		return err
 	}
@@ -247,7 +248,7 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor
 		return nil, err
 	}
 
-	addresses, err := localAddresses()
+	addresses, err := netutil.LocalAddresses()
 	if err != nil {
 		return nil, err
 	}
@@ -468,28 +469,4 @@ func extractError(r io.Reader) error {
 	}
 
 	return errors.New(apiError.Error)
-}
-
-func localAddresses() ([]string, error) {
-	result := make([]string, 0)
-
-	addresses, err := net.InterfaceAddrs()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, addr := range addresses {
-		switch v := addr.(type) {
-		case *net.IPNet:
-			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
-				result = append(result, v.IP.String())
-			}
-		case *net.IPAddr:
-			if v.IP.IsGlobalUnicast() || v.IP.IsLoopback() {
-				result = append(result, v.IP.String())
-			}
-		}
-	}
-
-	return result, nil
 }
