@@ -26,7 +26,17 @@
     ></app-tab-bar>
   </div>
   <div class="col-12">
-    <div class="rounded-elevated-box mt-4.5" *ngIf="dataSource.length !== 0"><div class="box-internal-container overflow full-node-list-margins">
+
+    <!-- Upper paginator. -->
+    <app-paginator
+      *ngIf="numberOfPages > 1 && dataSource"
+      [currentPage]="currentPage"
+      [numberOfPages]="numberOfPages"
+      [linkParts]="['/nodes', 'list']"
+      class="mb-3 mt-4.5 d-block">
+    </app-paginator>
+
+    <div class="rounded-elevated-box" [ngClass]="{'mt-4.5': numberOfPages < 2}" *ngIf="dataSource.length !== 0"><div class="box-internal-container overflow full-node-list-margins">
       <!-- Table for large screens. -->
       <table
         class="responsive-table-translucid d-none d-md-table"
@@ -178,6 +188,14 @@
         </td></tr>
       </table>
     </div></div>
+
+    <!-- Lower paginator. -->
+    <app-paginator
+      *ngIf="numberOfPages > 1 && dataSource"
+      [currentPage]="currentPage"
+      [numberOfPages]="numberOfPages"
+      [linkParts]="['/nodes', 'list']">
+    </app-paginator>
 
     <!-- Msg shown if the list is empty. -->
     <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length === 0">
