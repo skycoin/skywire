@@ -282,7 +282,9 @@ func (n *Network) Close() error {
 	n.netsMu.Lock()
 	defer n.netsMu.Unlock()
 
-	n.visorUpdater.Stop()
+	if n.visorUpdater != nil {
+		n.visorUpdater.Stop()
+	}
 
 	wg := new(sync.WaitGroup)
 
