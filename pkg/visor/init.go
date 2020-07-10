@@ -11,9 +11,10 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgctrl"
-	"github.com/SkycoinProject/dmsg/netutil"
+	dmsgnetutil "github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
@@ -269,8 +270,17 @@ func initLauncher(v *Visor) bool {
 
 	var disc appdisc.Updater
 	if v.conf.PublicTrustedVisor {
-		disc = factory.VisorUpdater()
-		disc.Start()
+		hasPublicIP, err := netutil.HasPublicIP()
+		if err != nil {
+			v.log.WithError(err).Errorf("Failed to check if visor has public IP")
+		} else if !hasPublicIP {
+			v.log.Errorf("Visor doesn't have a public IP, it's impossible to register it as public trusted")
+		} else {
+			disc = factory.VisorUpdater()
+			disc.Start()
+
+			v.log.Infof("Registered visor as public trusted")
+		}
 	}
 
 	// Prepare proc manager.
@@ -323,7 +333,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+		r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
 			for _, ses := range n.Dmsg().AllSessions() {
 				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.LocalTCPAddr().String())
@@ -509,7 +519,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	conf := v.conf.Transport
 
 	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
-	tpdCRetrier := netutil.NewRetrier(log,
+	tpdCRetrier := dmsgnetutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient
