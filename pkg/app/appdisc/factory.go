@@ -35,7 +35,7 @@ func (f *Factory) setDefaults() {
 }
 
 // Updater obtains an updater based on the app name and configuration.
-func (f *Factory) VisorUpdater() Updater {
+func (f *Factory) VisorUpdater(port uint16) Updater {
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
 		return &emptyUpdater{}
@@ -45,7 +45,7 @@ func (f *Factory) VisorUpdater() Updater {
 		Type:     servicedisc.ServiceTypeVisor,
 		PK:       f.PK,
 		SK:       f.SK,
-		Port:     0,
+		Port:     port,
 		DiscAddr: f.ProxyDisc,
 	}
 
