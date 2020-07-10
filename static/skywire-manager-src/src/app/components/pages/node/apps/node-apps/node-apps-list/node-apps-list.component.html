@@ -194,7 +194,7 @@
     </td></tr>
   </table>
 
-  <!-- Lower paginator. -->
+  <!-- Link for accessing the full list. -->  
   <app-view-all-link
     [numberOfElements]="allApps.length"
     [linkParts]="['/nodes', nodePK, 'apps-list']"
@@ -209,7 +209,7 @@
   </div>
 </div>
 
-<!-- Link for accessing the full list. -->
+<!-- Lower paginator. -->
 <app-paginator
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"
