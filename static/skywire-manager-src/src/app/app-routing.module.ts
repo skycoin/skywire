@@ -28,6 +28,16 @@ const routes: Routes = [
     children: [
       {
         path: '',
+        redirectTo: 'list/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'list',
+        redirectTo: 'list/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'list/:page',
         component: NodeListComponent
       },
       {
