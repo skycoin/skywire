@@ -28,6 +28,8 @@ enum SortableColumns {
   State = 'transports.state',
   Label = 'nodes.label',
   Key = 'nodes.key',
+  DmsgServer = 'nodes.dmsg-server',
+  Ping = 'nodes.ping',
 }
 
 /**
@@ -39,7 +41,8 @@ enum SortableColumns {
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
-  private static sortByInternal = SortableColumns.Key;
+  private static defaultSortableColumn = SortableColumns.Key;
+  private static sortByInternal = NodeListComponent.defaultSortableColumn;
   private static sortReverseInternal = false;
 
   // Vars for keeping track of the column used for sorting the data.
@@ -55,6 +58,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   loading = true;
   dataSource: Node[];
   tabsData: TabButtonData[] = [];
+  showDmsgInfo = false;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -79,12 +83,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
   ) {
+    // Show the dmsg info if the dmsg url was used.
+    this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
+
     // Data for populating the tab bar.
     this.tabsData = [
       {
         icon: 'view_headline',
         label: 'nodes.title',
         linkParts: ['/nodes'],
+      },
+      {
+        icon: 'language',
+        label: 'nodes.dmsg-title',
+        linkParts: ['/nodes', 'dmsg'],
       },
       {
         icon: 'settings',
@@ -192,12 +204,14 @@ export class NodeListComponent implements OnInit, OnDestroy {
     const options: SelectableOption[] = [];
     const enumKeys = Object.keys(SortableColumns);
     enumKeys.forEach(key => {
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
-      });
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
-      });
+      if (this.showDmsgInfo || (SortableColumns[key] !== SortableColumns.DmsgServer && SortableColumns[key] !== SortableColumns.Ping)) {
+        options.push({
+          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
+        });
+        options.push({
+          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
+        });
+      }
     });
 
     // Open the option selection modal window.
@@ -297,6 +311,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
       let response: number;
       if (this.sortBy === SortableColumns.Key) {
         response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
+      } else if (this.sortBy === SortableColumns.DmsgServer) {
+        response = !this.sortReverse ? a.dmsgServerPk.localeCompare(b.dmsgServerPk) : b.dmsgServerPk.localeCompare(a.dmsgServerPk);
+      } else if (this.sortBy === SortableColumns.Ping) {
+        response =
+          !this.sortReverse ? Number(a.roundTripPing) - Number(b.roundTripPing) : Number(b.roundTripPing) - Number(a.roundTripPing);
       } else if (this.sortBy === SortableColumns.State) {
         if (a.online && !b.online) {
           response = -1;
@@ -499,12 +518,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
       {
         icon: 'filter_none',
         label: 'nodes.copy-key',
-      },
-      {
-        icon: 'short_text',
-        label: 'edit-label.title',
       }
     ];
+
+    if (this.showDmsgInfo) {
+      options.push({
+        icon: 'filter_none',
+        label: 'nodes.copy-dmsg',
+      });
+    }
+
+    options.push({
+      icon: 'short_text',
+      label: 'edit-label.title',
+    });
 
     if (!node.online) {
       options.push({
@@ -515,22 +542,62 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
-        if (this.clipboardService.copy(node.local_pk)) {
-          this.onCopyToClipboardClicked();
+        this.copySpecificTextToClipboard(node.local_pk);
+      } else if (this.showDmsgInfo) {
+        if (selectedOption === 2) {
+          this.copySpecificTextToClipboard(node.dmsgServerPk);
+        } else if (selectedOption === 3) {
+          this.showEditLabelDialog(node);
+        } else if (selectedOption === 4) {
+          this.deleteNode(node);
         }
-      } else if (selectedOption === 2) {
-        this.showEditLabelDialog(node);
-      } else if (selectedOption === 3) {
-        this.deleteNode(node);
+      } else {
+        if (selectedOption === 2) {
+          this.showEditLabelDialog(node);
+        } else if (selectedOption === 3) {
+          this.deleteNode(node);
+        }
       }
     });
   }
 
   /**
-   * Called after copying the public key of a node.
+   * Copies the public key of a visor. If the dmsg data is being shown, it allows the user to
+   * select between copying the public key of the node or the dmsg server.
    */
-  onCopyToClipboardClicked() {
-    this.snackbarService.showDone('copy.copied');
+  copyToClipboard(node: Node) {
+    if (!this.showDmsgInfo) {
+      this.copySpecificTextToClipboard(node.local_pk);
+    } else {
+      const options: SelectableOption[] = [
+        {
+          icon: 'filter_none',
+          label: 'nodes.key',
+        },
+        {
+          icon: 'filter_none',
+          label: 'nodes.dmsg-server',
+        }
+      ];
+
+      SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
+        if (selectedOption === 1) {
+          this.copySpecificTextToClipboard(node.local_pk);
+        } else if (selectedOption === 2) {
+          this.copySpecificTextToClipboard(node.dmsgServerPk);
+        }
+      });
+    }
+  }
+
+  /**
+   * Copies a text to the clipboard.
+   * @param text Text to copy.
+   */
+  private copySpecificTextToClipboard(text: string) {
+    if (this.clipboardService.copy(text)) {
+      this.snackbarService.showDone('copy.copied');
+    }
   }
 
   /**
