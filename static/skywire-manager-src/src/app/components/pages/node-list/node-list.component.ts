@@ -2,10 +2,10 @@ import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { Subscription, of, timer, forkJoin, Observable } from 'rxjs';
 import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
-import { delay, flatMap, tap, catchError, mergeMap } from 'rxjs/operators';
+import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService } from '../../../services/node.service';
+import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -79,6 +79,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
   private lastUpdate = Date.now();
   updating = false;
   errorsUpdating = false;
+  // True if the user manually requested the data to be updated and the update has still
+  // not been made.
+  lastUpdateRequestedManually = false;
 
   constructor(
     private nodeService: NodeService,
@@ -132,7 +135,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     // Load the data.
-    this.refresh(0);
+    this.nodeService.startRequestingNodeList();
+    this.startGettingData();
 
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
@@ -167,6 +171,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.nodeService.stopRequestingNodeList();
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
@@ -254,75 +259,65 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Loads the data from the backend.
-   * @param delayMilliseconds Delay before loading the data.
-   * @param requestedManually True if the data is being loaded because of a direct request from the user.
+   * Makes the node list to be immediately refreshed.
+   * @param requestedManually True if the data is going to be loaded because of a direct request
+   * from the user.
    */
-  private refresh(delayMilliseconds: number, requestedManually = false) {
-    // Cancel any pending operation. Important because a previous operation could be waiting for
-    // the delay to finish.
-    if (this.dataSubscription) {
-      this.dataSubscription.unsubscribe();
+  forceDataRefresh(requestedManually = false) {
+    if (requestedManually) {
+      this.lastUpdateRequestedManually = true;
     }
 
+    this.nodeService.forceNodeListRefresh();
+  }
+
+  /**
+   * Starts getting the data from the backend.
+   */
+  private startGettingData() {
+    // Detect when the service is updating the data.
+    this.dataSubscription = this.nodeService.updatingNodeList.subscribe(val => this.updating = val);
+
     this.ngZone.runOutsideAngular(() => {
-      this.dataSubscription = of(1).pipe(
-        // Wait the requested delay.
-        delay(delayMilliseconds),
-        // Additional steps for making sure the UI shows the animation (important in case of quick errors).
-        tap(() => this.ngZone.run(() => this.updating = true)),
-        delay(120),
-        // Load the data. The node pk is obtained from the currently openned node page.
-        flatMap(() => this.nodeService.getNodes())
-      ).subscribe(
-        (nodes: Node[]) => {
-          this.ngZone.run(() => {
-            this.allNodes = nodes;
-            this.recalculateElementsToShow();
-            this.loading = false;
-            // Close any previous temporary loading error msg.
-            this.snackbarService.closeCurrentIfTemporaryError();
+      // Get the node list.
+      this.dataSubscription.add(this.nodeService.nodeList.subscribe((result: BackendData) => {
+        this.ngZone.run(() => {
+          if (result) {
+            // If the data was obtained.
+            if (result.data) {
+              this.allNodes = result.data as Node[];
+              this.recalculateElementsToShow();
+              this.loading = false;
+              // Close any previous temporary loading error msg.
+              this.snackbarService.closeCurrentIfTemporaryError();
 
-            this.lastUpdate = Date.now();
-            this.secondsSinceLastUpdate = 0;
-            this.updating = false;
-            this.errorsUpdating = false;
+              this.lastUpdate = result.momentOfLastCorrectUpdate;
+              this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
+              this.errorsUpdating = false;
 
-            if (requestedManually) {
-              // Show a confirmation msg.
-              this.snackbarService.showDone('common.refreshed', null);
-            }
-
-            // Automatically refresh the data after some time.
-            this.refresh(this.storageService.getRefreshTime() * 1000);
-          });
-        }, err => {
-          this.ngZone.run(() => {
-            err = processServiceError(err);
-
-            // Show an error msg if it has not be done before during the current attempt to obtain the data.
-            if (!this.errorsUpdating) {
-              if (this.loading) {
-                this.snackbarService.showError('common.loading-error', null, true, err);
-              } else {
-                this.snackbarService.showError('nodes.error-load', null, true, err);
+              if (this.lastUpdateRequestedManually) {
+                // Show a confirmation msg.
+                this.snackbarService.showDone('common.refreshed', null);
+                this.lastUpdateRequestedManually = false;
               }
-            }
 
-            // Stop the loading indicator and show a warning icon.
-            this.updating = false;
-            this.errorsUpdating = true;
+            // If there was an error while obtaining the data.
+            } else if (result.error) {
+              // Show an error msg if it has not be done before during the current attempt to obtain the data.
+              if (!this.errorsUpdating) {
+                if (this.loading) {
+                  this.snackbarService.showError('common.loading-error', null, true, result.error);
+                } else {
+                  this.snackbarService.showError('nodes.error-load', null, true, result.error);
+                }
+              }
 
-            // Retry after some time. Do it faster if the component is still showing the
-            // initial loading indicator (no data has been obtained since the component was created).
-            if (this.loading) {
-              this.refresh(3000, requestedManually);
-            } else {
-              this.refresh(this.storageService.getRefreshTime() * 1000, requestedManually);
+              // Stop the loading indicator and show a warning icon.
+              this.errorsUpdating = true;
             }
-          });
-        }
-      );
+          }
+        });
+      }));
     });
   }
 
@@ -654,7 +649,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   showEditLabelDialog(node: Node) {
     EditLabelComponent.openDialog(this.dialog, node).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
-        this.refresh(0);
+        this.forceDataRefresh();
       }
     });
   }
@@ -668,7 +663,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
       this.storageService.changeNodeState(node.local_pk, true);
-      this.refresh(0);
+      this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
     });
   }

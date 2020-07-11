@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { ReplaySubject, Observable } from 'rxjs';
 
 // Names for saving the data in localStorage.
 const KEY_REFRESH_SECONDS = 'refreshSeconds';
@@ -35,6 +36,7 @@ export class StorageService {
    * referesh the data from the backend.
    */
   private currentRefreshTime: number;
+  private currentRefreshTimeSubject = new ReplaySubject<number>(1);
   /**
    * Map with the currently saved node.
    */
@@ -43,6 +45,7 @@ export class StorageService {
   constructor() {
     this.storage = localStorage;
     this.currentRefreshTime = parseInt(this.storage.getItem(KEY_REFRESH_SECONDS), 10) || 10;
+    this.currentRefreshTimeSubject.next(this.currentRefreshTime);
     this.getNodes().forEach(node => this.savedNodes.set(node.publicKey, node));
   }
 
@@ -53,10 +56,19 @@ export class StorageService {
   setRefreshTime(seconds: number) {
     this.storage.setItem(KEY_REFRESH_SECONDS, seconds.toString());
     this.currentRefreshTime = seconds;
+    this.currentRefreshTimeSubject.next(this.currentRefreshTime);
   }
 
   /**
-   * Get the time interval (seconds) in which the UI should automatically referesh the data
+   * Gets the time interval (seconds) in which the UI should automatically referesh the data
+   * from the backend.
+   */
+  getRefreshTimeObservable(): Observable<number> {
+    return this.currentRefreshTimeSubject.asObservable();
+  }
+
+  /**
+   * Gets the time interval (seconds) in which the UI should automatically referesh the data
    * from the backend.
    */
   getRefreshTime(): number {
