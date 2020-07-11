@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
 import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
@@ -10,6 +11,7 @@ import { TransportService } from './transport.service';
 import { RouteService } from './route.service';
 import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
+import { AppConfig } from '../app.config';
 
 /**
  * Response returned by the node and node list observables.
@@ -40,8 +42,7 @@ export interface BackendData {
 })
 export class NodeService {
 
-  // Delays the service waits before requesting data.
-  private initialErrorRetryDelay = 3000;
+  // Delay the service waits before requesting data.
   private dataRefreshDelay: number;
 
   constructor(
@@ -239,11 +240,16 @@ export class NodeService {
         momentOfLastCorrectUpdate: dataSubject.value ? dataSubject.value.momentOfLastCorrectUpdate : -1,
       };
 
+      // If the specific node was not found, stop updating the data.
+      const stopUpdating = !gettingNodeList && err.originalError && ((err.originalError as HttpErrorResponse).status === 400);
+
       // Schedule the next update.
-      if (dataSubject.value && dataSubject.value.momentOfLastCorrectUpdate !== -1) {
-        this.startDataSubscription(this.dataRefreshDelay, gettingNodeList);
-      } else {
-        this.startDataSubscription(this.initialErrorRetryDelay, gettingNodeList);
+      if (!stopUpdating) {
+        if (dataSubject.value && dataSubject.value.momentOfLastCorrectUpdate !== -1) {
+          this.startDataSubscription(this.dataRefreshDelay, gettingNodeList);
+        } else {
+          this.startDataSubscription(AppConfig.connectionRetryDelay, gettingNodeList);
+        }
       }
 
       dataSubject.next(newData);
