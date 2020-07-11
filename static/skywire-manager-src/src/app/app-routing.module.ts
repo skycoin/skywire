@@ -42,6 +42,11 @@ const routes: Routes = [
       },
       {
         path: 'dmsg',
+        redirectTo: 'dmsg/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'dmsg/:page',
         component: NodeListComponent
       },
       {

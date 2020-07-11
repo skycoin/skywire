@@ -106,10 +106,15 @@
     "copy-data": "Copy data",
     "view-node": "View visor",
     "delete-node": "Remove visor",
+    "delete-all-offline": "Remove all offline visors",
     "error-load": "An error occurred while refreshing the list. Retrying...",
     "empty": "There aren't any visors connected to this hypervisor.",
     "delete-node-confirmation": "Are you sure you want to remove the visor from the list?",
+    "delete-all-offline-confirmation": "Are you sure you want to remove all offline visors from the list?",
     "deleted": "Visor removed.",
+    "deleted-singular": "1 offline visor removed.",
+    "deleted-plural": "{{ number }} offline visors removed.",
+    "no-offline-nodes": "No offline visors found.",
 
     "update": {
       "no-visors": "There are no visors to update. Please wait.",
