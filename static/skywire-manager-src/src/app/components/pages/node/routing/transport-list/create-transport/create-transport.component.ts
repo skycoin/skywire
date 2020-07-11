@@ -143,7 +143,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
         }
 
         // Retry after a small delay.
-        this.loadData(3000);
+        this.loadData(AppConfig.connectionRetryDelay);
       },
     );
   }

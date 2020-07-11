@@ -669,6 +669,39 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Removes all offline nodes from the list, until seeing them online again.
+   */
+  removeOffline() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'nodes.delete-all-offline-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.close();
+
+      // Remove and count all offline nodes.
+      let count = 0;
+      this.allNodes.forEach(node => {
+        if (!node.online) {
+          this.storageService.changeNodeState(node.local_pk, true);
+          count += 1;
+        }
+      });
+
+      // Show the result.
+      if (count > 0) {
+        this.forceDataRefresh();
+
+        if (count === 1) {
+          this.snackbarService.showDone('nodes.deleted-singular');
+        } else {
+          this.snackbarService.showDone('nodes.deleted-plural', { number: count });
+        }
+      } else {
+        this.snackbarService.showWarning('nodes.no-offline-nodes');
+      }
+    });
+  }
+
+  /**
    * Opens the page with the details of the node.
    */
   open(node: Node) {
