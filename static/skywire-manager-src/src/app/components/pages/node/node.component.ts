@@ -231,7 +231,7 @@ export class NodeComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           if (result) {
             // If the data was obtained.
-            if (result.data) {
+            if (result.data && !result.error) {
               this.node = result.data as Node;
               NodeComponent.nodeSubject.next(this.node);
 
