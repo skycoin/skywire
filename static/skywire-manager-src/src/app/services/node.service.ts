@@ -18,12 +18,13 @@ import { AppConfig } from '../app.config';
  */
 export interface BackendData {
   /**
-   * Node or node list, if the last operation for getting the data did not end in an error.
+   * Last obtained node or node list. If the last operation for getting the data ended in an
+   * error, this property may still have an previously obtained value.
    */
   data: Node[] | Node;
   /**
-   * Error found while trying to get the data. If this property has a value, the data
-   * property will be null.
+   * Error found while trying to get the data. If will only have a value if the last
+   * try ended in an error.
    */
   error: OperationError;
   /**
@@ -35,12 +36,41 @@ export interface BackendData {
 }
 
 /**
+ * Response returned by specificNodeTrafficData.
+ */
+export class TrafficData {
+  /**
+   * Total amount of data sent by the node since it was started.
+   */
+  totalSent = 0;
+  /**
+   * Total amount of data received by the node since it was started.
+   */
+  totalReceived = 0;
+  /**
+   * Array with historic values of the totalSent property. Each value will be separeted by
+   * the amount of time selected by the user for refreshing the data. It is not an exact history,
+   * but the service will try it best to provided good data.
+   */
+  sentHistory: number[] = [];
+  /**
+   * Array with historic values of the totalReceived property. Each value will be separeted by
+   * the amount of time selected by the user for refreshing the data. It is not an exact history,
+   * but the service will try it best to provided good data.
+   */
+  receivedHistory: number[] = [];
+}
+
+/**
  * Allows to work with the nodes.
  */
 @Injectable({
   providedIn: 'root'
 })
 export class NodeService {
+
+  // How long the history arrays of the TrafficData instances will be.
+  private readonly maxTrafficHistorySlots = 10;
 
   // Delay the service waits before requesting data.
   private dataRefreshDelay: number;
@@ -77,10 +107,18 @@ export class NodeService {
   // Vars related to the specific node.
   private specificNodeSubject = new BehaviorSubject<BackendData>(null);
   private updatingSpecificNodeSubject = new BehaviorSubject<boolean>(false);
+  private specificNodeTrafficDataSubject = new BehaviorSubject<TrafficData>(null);
   /**
    * Public key of the specific node this service must retrieve.
    */
   private specificNodeKey = '';
+  /**
+   * Last moment in which the specific node info was obtained following the specific intervals
+   * defined by the user for updating the data. It allows to update the history data in a
+   * consistent way.
+   */
+  private lastScheduledHistoryUpdateTime = 0;
+
   /**
    * Subscription for getting the specific node. If it has a value, indicates that the
    * service is automatically refreshing the node info.
@@ -103,6 +141,11 @@ export class NodeService {
    * Allows to know if the service is currently updating the specific node.
    */
   get updatingSpecificNode(): Observable<boolean> { return this.updatingSpecificNodeSubject.asObservable(); }
+  /**
+   * Allows to get details about the data traffic of the specific node. The info is
+   * periodically updated.
+   */
+  get specificNodeTrafficData(): Observable<TrafficData> { return this.specificNodeTrafficDataSubject.asObservable(); }
 
   /**
    * Makes the service start updating the node list. You must call this function before
@@ -133,9 +176,13 @@ export class NodeService {
     const momentOfLastCorrectUpdate = this.specificNodeSubject.value ? this.specificNodeSubject.value.momentOfLastCorrectUpdate : 0;
     const remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
 
+    // Reset the predefined data update intervals.
+    this.lastScheduledHistoryUpdateTime = 0;
+
     if (this.specificNodeKey !== publicKey || remainingTime === 0) {
       // Get the data from the backend.
       this.specificNodeKey = publicKey;
+      this.specificNodeTrafficDataSubject.next(new TrafficData());
       this.specificNodeSubject.next(null);
       this.startDataSubscription(0, false);
     } else {
@@ -220,6 +267,25 @@ export class NodeService {
     .subscribe(result => {
       updatingSubject.next(false);
 
+      // Calculate the delay for the next update.
+      let refrestTime: number;
+      if (!gettingNodeList) {
+        // Update the history values.
+        this.updateTrafficData((result as Node).transports);
+
+        // Wait for the amount of time pending for the next scheduled data update. This is needed
+        // in case the data was updated before that by any reason.
+        refrestTime = this.calculateRemainingTime(this.lastScheduledHistoryUpdateTime);
+        if (refrestTime < 1000) {
+          // Wait the normal time if there is just very lite or no time left for the next update.
+          this.lastScheduledHistoryUpdateTime = Date.now();
+          refrestTime = this.dataRefreshDelay;
+        }
+      } else {
+        // Wait the normal time.
+        refrestTime = this.dataRefreshDelay;
+      }
+
       const newData: BackendData = {
         data: result,
         error: null,
@@ -229,13 +295,13 @@ export class NodeService {
       dataSubject.next(newData);
 
       // Schedule the next update.
-      this.startDataSubscription(this.dataRefreshDelay, gettingNodeList);
+      this.startDataSubscription(refrestTime, gettingNodeList);
     }, err => {
       updatingSubject.next(false);
 
       err = processServiceError(err);
       const newData: BackendData = {
-        data: null,
+        data: dataSubject.value && dataSubject.value.data ? dataSubject.value.data : null,
         error: err,
         momentOfLastCorrectUpdate: dataSubject.value ? dataSubject.value.momentOfLastCorrectUpdate : -1,
       };
@@ -245,11 +311,7 @@ export class NodeService {
 
       // Schedule the next update.
       if (!stopUpdating) {
-        if (dataSubject.value && dataSubject.value.momentOfLastCorrectUpdate !== -1) {
-          this.startDataSubscription(this.dataRefreshDelay, gettingNodeList);
-        } else {
-          this.startDataSubscription(AppConfig.connectionRetryDelay, gettingNodeList);
-        }
+        this.startDataSubscription(AppConfig.connectionRetryDelay, gettingNodeList);
       }
 
       dataSubject.next(newData);
@@ -260,6 +322,61 @@ export class NodeService {
     } else {
       this.specificNodeRefreshSubscription = subscription;
     }
+  }
+
+  /**
+   * Updates the traffic data of the specific node.
+   * @param transports Transports of the specific node.
+   */
+  private updateTrafficData(transports: Transport[]) {
+    const currentData = this.specificNodeTrafficDataSubject.value;
+
+    // Update the total data values.
+    currentData.totalSent = 0;
+    currentData.totalReceived = 0;
+    if (transports && transports.length > 0) {
+      currentData.totalSent = transports.reduce((total, transport) => total + transport.log.sent, 0);
+      currentData.totalReceived = transports.reduce((total, transport) => total + transport.log.recv, 0);
+    }
+
+    // Update the history.
+    if (currentData.sentHistory.length === 0) {
+      // If the array is empty, just initialice the array with the only known value.
+      for (let i = 0; i < this.maxTrafficHistorySlots; i++) {
+        currentData.sentHistory[i] = currentData.totalSent;
+        currentData.receivedHistory[i] = currentData.totalReceived;
+      }
+    } else {
+      // Calculate how many slots should we move since the last time the history was updated.
+      // This makes the intervals work well in case of normal updates, forced updates and
+      // late updates due to errors.
+      const TimeSinceLastHistoryUpdate = Date.now() - this.lastScheduledHistoryUpdateTime;
+      let newSlotsNeeded =
+        new BigNumber(TimeSinceLastHistoryUpdate).dividedBy(this.dataRefreshDelay).decimalPlaces(0, BigNumber.ROUND_FLOOR).toNumber();
+
+      if (newSlotsNeeded > this.maxTrafficHistorySlots) {
+        newSlotsNeeded = this.maxTrafficHistorySlots;
+      }
+
+      // Save the data in the correct slots.
+      if (newSlotsNeeded === 0) {
+        currentData.sentHistory[currentData.sentHistory.length - 1] = currentData.totalSent;
+        currentData.receivedHistory[currentData.receivedHistory.length - 1] = currentData.totalReceived;
+      } else {
+        for (let i = 0; i < newSlotsNeeded; i++) {
+          currentData.sentHistory.push(currentData.totalSent);
+          currentData.receivedHistory.push(currentData.totalReceived);
+        }
+      }
+
+      // Limit the history elements.
+      if (currentData.sentHistory.length > this.maxTrafficHistorySlots) {
+        currentData.sentHistory.splice(0, currentData.sentHistory.length - this.maxTrafficHistorySlots);
+        currentData.receivedHistory.splice(0, currentData.receivedHistory.length - this.maxTrafficHistorySlots);
+      }
+    }
+
+    this.specificNodeTrafficDataSubject.next(currentData);
   }
 
   /**
