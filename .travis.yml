@@ -8,7 +8,13 @@ dist: xenial
 matrix:
   include:
     - os: linux
+      arch: amd64
+    - os: linux
+      arch: arm32
+    - os: linux
+    arch: arm64
     - os: osx
+      arch: amd64
       # Do not start osx build for PR
       if: type != pull_request
       osx_image: xcode8
