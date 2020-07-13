@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -139,6 +140,10 @@ func (c *client) Serve() error {
 
 		for {
 			if err := c.acceptConn(); err != nil {
+				if strings.Contains(err.Error(), io.EOF.Error()) {
+					continue // likely it's a dummy connection from service discovery
+				}
+
 				c.log.Warnf("failed to accept incoming connection: %v", err)
 
 				if !tphandshake.IsHandshakeError(err) {
