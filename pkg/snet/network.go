@@ -219,7 +219,7 @@ func (n *Network) Init() error {
 			}
 
 			if n.conf.PublicTrusted {
-				n.registerPublicTrusted(client)
+				go n.registerPublicTrusted(client)
 			}
 		} else {
 			log.Infof("No config found for stcpr")
@@ -238,6 +238,8 @@ func (n *Network) Init() error {
 }
 
 func (n *Network) registerPublicTrusted(client directtp.Client) {
+	log.Infof("Trying to register visor as public trusted")
+
 	la, err := client.LocalAddr()
 	if err != nil {
 		log.WithError(err).Errorf("Failed to get STCPR local addr")
@@ -259,7 +261,7 @@ func (n *Network) registerPublicTrusted(client directtp.Client) {
 	n.visorUpdater = n.conf.ServiceDisc.VisorUpdater(uint16(port))
 	n.visorUpdater.Start()
 
-	log.Infof("Registered visor as public trusted")
+	log.Infof("Sent request to register visor as public trusted")
 }
 
 // OnNewNetworkType sets callback to be called when new network type is ready.
