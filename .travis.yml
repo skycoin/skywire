@@ -12,7 +12,7 @@ matrix:
     - os: linux
       arch: arm32
     - os: linux
-    arch: arm64
+      arch: arm64
     - os: osx
       arch: amd64
       # Do not start osx build for PR
