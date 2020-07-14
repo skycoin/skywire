@@ -178,6 +178,8 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	// we don't need to keep holding mutex from this point on
 	rg.mu.Unlock()
 
+	rg.logger.Infof("TEST: WRITING PACKET: %v with rule %s", p, rule.String())
+
 	return rg.write(p, tp, rule)
 }
 
@@ -261,6 +263,8 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 
 		rg.mu.Lock()
 		defer rg.mu.Unlock()
+
+		rg.logger.Infof("TEST: READ %v", data)
 
 		return ioutil.BufRead(&rg.readBuf, data, p)
 	}
