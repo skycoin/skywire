@@ -142,14 +142,18 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 	connsMu.Unlock()
 
 	if !ok {
+		log.Infoln("TEST: DIALING APP")
 		var err error
 		err = r.Do(func() error {
 			conn, err = appC.Dial(addr)
 			return err
 		})
 		if err != nil {
+			log.Errorf("TEST: FAILED TO DIAL: %v", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		} else {
+			log.Infoln("TEST: APP DIALED")
 		}
 
 		connsMu.Lock()

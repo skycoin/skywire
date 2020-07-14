@@ -3,6 +3,7 @@ package noisewrapper
 import (
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/SkycoinProject/dmsg/noise"
@@ -17,6 +18,8 @@ func WrapConn(config noise.Config, conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare stream noise object: %w", err)
 	}
+
+	fmt.Fprintf(os.Stdout, "TEST: PREPARED NOISE OBJECT\n")
 
 	wrappedConn, err := noise.WrapConn(conn, ns, HSTimeout)
 	if err != nil {

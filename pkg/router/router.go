@@ -226,6 +226,8 @@ func (r *router) DialRoutes(
 		return nil, err
 	}
 
+	r.logger.Infof("TEST: GOT RULES")
+
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		r.logger.WithError(err).Error("Error saving routing rules")
 		return nil, err
@@ -380,6 +382,8 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
 	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
+
+	r.logger.Infoln("TEST: CREATED ROUTE GROUP, WRAPPING")
 
 	wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
 	if err != nil {
