@@ -60,14 +60,15 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 // RouteGroup should implement 'io.ReadWriteCloser'.
 // It implements 'net.Conn'.
 type RouteGroup struct {
+	// atomic requires 64-bit alignment for struct field access
+	lastSent int64
+
 	mu sync.Mutex
 
 	cfg    *RouteGroupConfig
 	logger *logging.Logger
 	desc   routing.RouteDescriptor // describes the route group
 	rt     routing.Table
-
-	lastSent int64
 
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
