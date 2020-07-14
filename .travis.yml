@@ -5,6 +5,9 @@ go:
   
 dist: xenial
 
+services:
+  - docker
+
 matrix:
   include:
     - os: linux
