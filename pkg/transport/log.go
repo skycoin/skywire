@@ -18,6 +18,7 @@ import (
 // LogEntry represents a logging entry for a given Transport.
 // The entry is updated every time a packet is received or sent.
 type LogEntry struct {
+	// atomic requires 64-bit alignment for struct field access
 	RecvBytes uint64 `json:"recv"` // Total received bytes.
 	SentBytes uint64 `json:"sent"` // Total sent bytes.
 }
