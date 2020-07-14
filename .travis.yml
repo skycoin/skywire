@@ -26,11 +26,13 @@ install:
   - go get -u github.com/FiloSottile/vendorcheck
   - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.27.0
   - make tidy
+  - docker build -t test-arm32 . -f ./travisci-arm32.Dockerfile
 
 before_script:
   - ci_scripts/create-ip-aliases.sh
 
 script:
+  - docker run -it test-arm32
 #  - make lint TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
   - make test
   - make test-no-ci
