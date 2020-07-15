@@ -1,32 +1,36 @@
 <!-- Header. -->
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
-  <div class="title uppercase ml-3.5">
-    <span *ngIf="showShortList_">{{ 'apps.apps-list.title' | translate }}</span>
+  <div class="title ml-3.5">
+    <span *ngIf="showShortList_" class="uppercase">{{ 'apps.apps-list.title' | translate }}</span>
   </div>
-  <mat-icon
-    [matMenuTriggerFor]="selectionMenu"
-    *ngIf="dataSource && dataSource.length > 0"
-  >more_horiz</mat-icon>
-  <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
-    <div mat-menu-item (click)="changeAllSelections(true)">
-      {{ 'selection.select-all' | translate }}
+  <div class="options">
+    <div class="options-container">
+      <mat-icon
+        [matMenuTriggerFor]="selectionMenu"
+        *ngIf="dataSource && dataSource.length > 0"
+      >more_horiz</mat-icon>
+      <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
+        <div mat-menu-item (click)="changeAllSelections(true)">
+          {{ 'selection.select-all' | translate }}
+        </div>
+        <div mat-menu-item (click)="changeAllSelections(false)">
+          {{ 'selection.unselect-all' | translate }}
+        </div>
+        <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeStateOfSelected(true)">
+          {{ 'selection.start-all' | translate }}
+        </div>
+        <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeStateOfSelected(false)">
+          {{ 'selection.stop-all' | translate }}
+        </div>
+        <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeAutostartOfSelected(true)">
+          {{ 'selection.enable-autostart-all' | translate }}
+        </div>
+        <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeAutostartOfSelected(false)">
+          {{ 'selection.disable-autostart-all' | translate }}
+        </div>
+      </mat-menu>
     </div>
-    <div mat-menu-item (click)="changeAllSelections(false)">
-      {{ 'selection.unselect-all' | translate }}
-    </div>
-    <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeStateOfSelected(true)">
-      {{ 'selection.start-all' | translate }}
-    </div>
-    <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeStateOfSelected(false)">
-      {{ 'selection.stop-all' | translate }}
-    </div>
-    <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeAutostartOfSelected(true)">
-      {{ 'selection.enable-autostart-all' | translate }}
-    </div>
-    <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="changeAutostartOfSelected(false)">
-      {{ 'selection.disable-autostart-all' | translate }}
-    </div>
-  </mat-menu>
+  </div>
 </div>
 
 <!-- Upper paginator. -->

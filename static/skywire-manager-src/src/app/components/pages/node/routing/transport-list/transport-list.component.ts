@@ -1,7 +1,8 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { TranslateService } from '@ngx-translate/core';
 
 import { Transport } from '../../../../../app.datatypes';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
@@ -15,7 +16,8 @@ import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
-import { TranslateService } from '@ngx-translate/core';
+import { TransportFiltersComponent, TransportFilters } from './transport-filters/transport-filters.component';
+import { FilterTextElements } from 'src/app/utils/filters';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -72,6 +74,7 @@ export class TransportListComponent implements OnDestroy {
   }
 
   allTransports: Transport[];
+  filteredTransports: Transport[];
   transportsToShow: Transport[];
   numberOfPages = 1;
   currentPage = 1;
@@ -79,8 +82,15 @@ export class TransportListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set transports(val: Transport[]) {
     this.allTransports = val;
-    this.recalculateElementsToShow();
+    this.filter();
   }
+
+  // Current filters for the daat.
+  currentFilters = new TransportFilters();
+  // Properties needed for showing the selected filters in the UI.
+  currentFiltersTexts: FilterTextElements[] = [];
+  // Current params in the query string added to the url.
+  currentUrlQueryParams: object;
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -89,9 +99,11 @@ export class TransportListComponent implements OnDestroy {
     private dialog: MatDialog,
     private transportService: TransportService,
     private route: ActivatedRoute,
+    private router: Router,
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
   ) {
+    // Detect changes in the key.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
@@ -101,9 +113,28 @@ export class TransportListComponent implements OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.recalculateElementsToShow();
+        this.filter();
       }
     });
+
+    // Detect changes in the query string.
+    this.navigationsSubscription.add(this.route.queryParamMap.subscribe(queryParams => {
+      // Get the filters from the query string.
+      this.currentFilters = new TransportFilters();
+      Object.keys(this.currentFilters).forEach(key => {
+        if(queryParams.has(key)) {
+          this.currentFilters[key] = queryParams.get(key);
+        }
+      });
+
+      // Save the query string.
+      this.currentUrlQueryParams = {};
+      queryParams.keys.forEach(key => {
+        this.currentUrlQueryParams[key] = queryParams.get(key);
+      });
+
+      this.filter();
+    }));
   }
 
   ngOnDestroy() {
@@ -203,6 +234,77 @@ export class TransportListComponent implements OnDestroy {
    */
   create() {
     CreateTransportComponent.openDialog(this.dialog);
+  }
+
+  /**
+   * Removes all the filters added by the user.
+   */
+  removeFilters() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
+
+    // Ask for confirmation.
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      // Remove the query string params.
+      this.router.navigate([], { queryParams: {}});
+    });
+  }
+
+  /**
+   * Opens the filter selection modal window to let the user change the currently selected filters.
+   */
+  changeFilters() {
+    TransportFiltersComponent.openDialog(this.dialog, this.currentFilters).afterClosed().subscribe(response => {
+      if (response) {
+        this.router.navigate([], { queryParams: response});
+      }
+    });
+  }
+
+  /**
+   * Filters the data and saved the filtered in the corresponding array.
+   */
+  private filter() {
+    if (this.allTransports) {
+      if (!this.currentFilters.id && !this.currentFilters.key) {
+        this.filteredTransports = this.allTransports;
+      } else {
+        this.filteredTransports = this.allTransports.filter(transport => {
+          if (this.currentFilters.id && !transport.id.toLowerCase().includes(this.currentFilters.id.toLowerCase())) {
+            return false;
+          }
+          if (this.currentFilters.key && !transport.remote_pk.toLowerCase().includes(this.currentFilters.key.toLowerCase())) {
+            return false;
+          }
+
+          return true;
+        });
+      }
+
+      this.updateCurrentFilters();
+      this.recalculateElementsToShow();
+    }
+  }
+
+  /**
+   * Updates the texts with the currently selected filters.
+   */
+  private updateCurrentFilters() {
+    this.currentFiltersTexts = [];
+
+    if (this.currentFilters.id) {
+      this.currentFiltersTexts.push({
+        filterName: 'transports.id',
+        value: this.currentFilters.id,
+      });
+    }
+    if (this.currentFilters.key) {
+      this.currentFiltersTexts.push({
+        filterName: 'transports.remote-node',
+        value: this.currentFilters.key,
+      });
+    }
   }
 
   /**
@@ -310,9 +412,9 @@ export class TransportListComponent implements OnDestroy {
     this.currentPage = this.currentPageInUrl;
 
     // Needed to prevent racing conditions.
-    if (this.allTransports) {
+    if (this.filteredTransports) {
       // Sort all the data.
-      this.allTransports.sort((a, b) => {
+      this.filteredTransports.sort((a, b) => {
         const defaultOrder = a.id.localeCompare(b.id);
 
         let response: number;
@@ -342,7 +444,7 @@ export class TransportListComponent implements OnDestroy {
 
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.allTransports.length / maxElements);
+      this.numberOfPages = Math.ceil(this.filteredTransports.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
@@ -350,7 +452,7 @@ export class TransportListComponent implements OnDestroy {
       // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
-      this.transportsToShow = this.allTransports.slice(start, end);
+      this.transportsToShow = this.filteredTransports.slice(start, end);
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<string, boolean>();
