@@ -11,11 +11,12 @@ type noiseRouteGroup struct {
 	net.Conn
 }
 
-func newNoiseRouteGroup(rg *RouteGroup, wrappedRG net.Conn) *noiseRouteGroup {
-	return &noiseRouteGroup{
-		rg:   rg,
-		Conn: wrappedRG,
-	}
+func (nrg *noiseRouteGroup) LocalAddr() net.Addr {
+	return nrg.rg.LocalAddr()
+}
+
+func (nrg *noiseRouteGroup) RemoteAddr() net.Addr {
+	return nrg.rg.RemoteAddr()
 }
 
 func (nrg *noiseRouteGroup) isClosed() bool {
