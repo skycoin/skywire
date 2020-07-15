@@ -394,8 +394,15 @@
       }
     },
     "filter-dialog": {
+      "online": "The transport must be",
       "id": "The id must contain",
-      "remote-node": "The remote key must contain"
+      "remote-node": "The remote key must contain",
+
+      "online-options": {
+        "any": "Online or offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
     }
   },
 
