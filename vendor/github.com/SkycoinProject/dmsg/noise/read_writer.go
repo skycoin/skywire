@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -174,15 +173,9 @@ func (rw *ReadWriter) Handshake(hsTimeout time.Duration) error {
 	errCh := make(chan error, 1)
 	go func() {
 		if rw.ns.init {
-			fmt.Fprintf(os.Stdout, "PERFORMING INITIATOR HANDSHAKE\n")
-			err := InitiatorHandshake(rw.ns, rw.rawInput, rw.origin)
-			fmt.Fprintf(os.Stdout, "INITIATOR HANDSHAKE ERROR: %v\n", err)
-			errCh <- err
+			errCh <- InitiatorHandshake(rw.ns, rw.rawInput, rw.origin)
 		} else {
-			fmt.Fprintf(os.Stdout, "PERFORMING RESPONDER HANDSHAKE\n")
-			err := ResponderHandshake(rw.ns, rw.rawInput, rw.origin)
-			fmt.Fprintf(os.Stdout, "RESPONDER HANDSHAKE ERROR: %v\n", err)
-			errCh <- err
+			errCh <- ResponderHandshake(rw.ns, rw.rawInput, rw.origin)
 		}
 		close(errCh)
 	}()
@@ -211,34 +204,22 @@ func InitiatorHandshake(ns *Noise, r *bufio.Reader, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: WRITING INITIATOR FRAME")
 		if _, err := WriteRawFrame(w, msg); err != nil {
-			fmt.Fprintf(os.Stdout, "TEST: ERROR WRITING INITIATOR FRAME: %v\n", err)
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: WROTE INITIATOR FRAME")
 		if ns.HandshakeFinished() {
-			fmt.Fprintln(os.Stdout, "TEST: INITIATOR HANDSHAKE FINISHED (1)")
 			break
 		}
-		fmt.Fprintln(os.Stdout, "TEST: READING INITIATOR FRAME")
 		res, err := ReadRawFrame(r)
 		if err != nil {
-			fmt.Fprintf(os.Stdout, "TEST: ERROR READING INITIATOR FRAME: %v\n", err)
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: READ INITIATOR FRAME")
 		if err = ns.ProcessHandshakeMessage(res); err != nil {
-			fmt.Fprintf(os.Stdout, "TEST: ERROR PROCESSING INITIATOR HANDSHAKE MESSAGE: %v\n", err)
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: PROCESSED INITIATOR HANDSHAKE MESSAGE")
 		if ns.HandshakeFinished() {
-			fmt.Fprintln(os.Stdout, "TEST: INITIATOR HANDSHAKE FINISHED (2)")
 			break
 		}
-
-		fmt.Fprintln(os.Stdout, "TEST: INITIATOR HANDSHAKE NOT FINISHED, NEW CYCLE...")
 	}
 	return nil
 }
@@ -246,37 +227,26 @@ func InitiatorHandshake(ns *Noise, r *bufio.Reader, w io.Writer) error {
 // ResponderHandshake performs a noise handshake as a responder.
 func ResponderHandshake(ns *Noise, r *bufio.Reader, w io.Writer) error {
 	for {
-		fmt.Fprintln(os.Stdout, "TEST: READING RESPONDER FRAME")
 		msg, err := ReadRawFrame(r)
 		if err != nil {
-			fmt.Fprintf(os.Stdout, "TEST: ERROR READING RESPONDER FRAME: %v\n", err)
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: READ RESPONDER FRAME")
 		if err := ns.ProcessHandshakeMessage(msg); err != nil {
-			fmt.Fprintf(os.Stdout, "TEST: ERROR PROCESSING RESPONDER HANDSHAKE MESSAGE: %v\n", err)
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: PROCESSED RESPONDER HANDSHAKE MESSAGE")
 		if ns.HandshakeFinished() {
-			fmt.Fprintln(os.Stdout, "TEST: RESPONDER HANDSHAKE FINISHED (1)")
 			break
 		}
 		res, err := ns.MakeHandshakeMessage()
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: WRITING RESPONDER HANDSHAKE MESSAGE")
 		if _, err := WriteRawFrame(w, res); err != nil {
-			fmt.Fprintf(os.Stdout, "TEST: ERROR WRITING RESPONDER HANDSHAKE MESSAGE: %v\n", err)
 			return err
 		}
-		fmt.Fprintln(os.Stdout, "TEST: WROTE RESPONDER HANDSHAKE MESSAGE")
 		if ns.HandshakeFinished() {
-			fmt.Fprintln(os.Stdout, "TEST: RESPONDER HANDSHAKE FINISHED (2)")
 			break
 		}
-		fmt.Fprintln(os.Stdout, "TEST: RESPONDER HANDSHAKE NOT FINISHED, NEW CYCLE...")
 	}
 	return nil
 }
@@ -294,18 +264,14 @@ func WriteRawFrame(w io.Writer, p []byte) ([]byte, error) {
 
 // ReadRawFrame attempts to read a raw frame from a buffered reader.
 func ReadRawFrame(r *bufio.Reader) (p []byte, err error) {
-	fmt.Fprintln(os.Stdout, "TEST: PEEKING PREFIXB")
 	prefixB, err := r.Peek(prefixSize)
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "TEST: ERROR PEEKING PREFIXB: %v\n", err)
 		return nil, err
 	}
-	fmt.Fprintln(os.Stdout, "TEST: PEEKED PREFIXB")
 
 	// obtain payload size
 	prefix := int(binary.BigEndian.Uint16(prefixB))
 	if prefix > maxPrefixValue {
-		fmt.Fprintln(os.Stdout, "TEST: PREFIX > MAX_PREFIX_VALUE")
 		return nil, &netError{
 			err:     fmt.Errorf("noise prefix value %dB exceeds maximum %dB", prefix, maxPrefixValue),
 			timeout: false,
@@ -314,18 +280,13 @@ func ReadRawFrame(r *bufio.Reader) (p []byte, err error) {
 	}
 
 	// obtain payload
-	fmt.Fprintln(os.Stdout, "PEEKING B")
 	b, err := r.Peek(prefixSize + prefix)
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "TEST: ERROR PEEKING B: %v\n", err)
 		return nil, err
 	}
-	fmt.Fprintln(os.Stdout, "TEST: DISCARDING PREFIXSIZE + PREFIX")
 	if _, err := r.Discard(prefixSize + prefix); err != nil {
-		fmt.Fprintf(os.Stdout, "TEST: ERROR DISCARDING: %v\n", err)
 		panic(fmt.Errorf("unexpected error when discarding %d bytes: %v", prefixSize+prefix, err))
 	}
-	fmt.Fprintln(os.Stdout, "TEST: DISCARDED PREFIXSIZE + PREFIX")
 
 	return b[prefixSize:], nil
 }
