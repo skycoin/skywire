@@ -16,8 +16,12 @@ import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
-import { TransportFiltersComponent, TransportFilters } from './transport-filters/transport-filters.component';
-import { FilterTextElements } from 'src/app/utils/filters';
+import { FilterTextElements, FilterKeysAssociation, filterList, updateFilterTexts } from 'src/app/utils/filters';
+import {
+  FilterFieldParams,
+  FiltersSelectionComponent,
+  FilterFieldTypes
+} from 'src/app/components/layout/filters-selection/filters-selection.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -29,6 +33,16 @@ enum SortableColumns {
   Type = 'transports.type',
   Uploaded = 'common.uploaded',
   Downloaded = 'common.downloaded',
+}
+
+/**
+ * Filters for the list. It is prepopulated with default data which indicates that no filter
+ * has been selected.
+ */
+export class TransportFilters {
+  online = '';
+  id = '';
+  key = '';
 }
 
 /**
@@ -85,7 +99,42 @@ export class TransportListComponent implements OnDestroy {
     this.filter();
   }
 
-  // Current filters for the daat.
+  // Array allowing to associate the properties of TransportFilters with the ones on the list
+  // and the values that must be shown in the UI, for being able to use helper functions to
+  // filter the data and show some UI elements.
+  filterKeysAssociations: FilterKeysAssociation[] = [
+    {
+      filterName: 'transports.filter-dialog.online',
+      keyNameInElementsArray: 'is_up',
+      keyNameInFiltersObject: 'online',
+      printableLabelsForValues: [
+        {
+          value: '',
+          label: 'transports.filter-dialog.online-options.any',
+        },
+        {
+          value: 'true',
+          label: 'transports.filter-dialog.online-options.online',
+        },
+        {
+          value: 'false',
+          label: 'transports.filter-dialog.online-options.offline',
+        }
+      ],
+    },
+    {
+      filterName: 'transports.filter-dialog.id',
+      keyNameInElementsArray: 'id',
+      keyNameInFiltersObject: 'id',
+    },
+    {
+      filterName: 'transports.filter-dialog.remote-node',
+      keyNameInElementsArray: 'remote_pk',
+      keyNameInFiltersObject: 'key',
+    }
+  ];
+
+  // Current filters for the data.
   currentFilters = new TransportFilters();
   // Properties needed for showing the selected filters in the UI.
   currentFiltersTexts: FilterTextElements[] = [];
@@ -122,7 +171,7 @@ export class TransportListComponent implements OnDestroy {
       // Get the filters from the query string.
       this.currentFilters = new TransportFilters();
       Object.keys(this.currentFilters).forEach(key => {
-        if(queryParams.has(key)) {
+        if (queryParams.has(key)) {
           this.currentFilters[key] = queryParams.get(key);
         }
       });
@@ -255,7 +304,28 @@ export class TransportListComponent implements OnDestroy {
    * Opens the filter selection modal window to let the user change the currently selected filters.
    */
   changeFilters() {
-    TransportFiltersComponent.openDialog(this.dialog, this.currentFilters).afterClosed().subscribe(response => {
+    // Properties for the modal window.
+    const filterFieldsParams: FilterFieldParams[] = [];
+    filterFieldsParams.push({
+      type: FilterFieldTypes.Select,
+      currentValue: this.currentFilters.online,
+      filterKeysAssociation: this.filterKeysAssociations[0]
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.id,
+      filterKeysAssociation: this.filterKeysAssociations[1],
+      maxlength: 36,
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.key,
+      filterKeysAssociation: this.filterKeysAssociations[2],
+      maxlength: 66,
+    });
+
+    // Open the modal window.
+    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
       if (response) {
         this.router.navigate([], { queryParams: response});
       }
@@ -263,24 +333,11 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Filters the data and saved the filtered in the corresponding array.
+   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
    */
   private filter() {
     if (this.allTransports) {
-      if (!this.currentFilters.id && !this.currentFilters.key) {
-        this.filteredTransports = this.allTransports;
-      } else {
-        this.filteredTransports = this.allTransports.filter(transport => {
-          if (this.currentFilters.id && !transport.id.toLowerCase().includes(this.currentFilters.id.toLowerCase())) {
-            return false;
-          }
-          if (this.currentFilters.key && !transport.remote_pk.toLowerCase().includes(this.currentFilters.key.toLowerCase())) {
-            return false;
-          }
-
-          return true;
-        });
-      }
+      this.filteredTransports = filterList(this.allTransports, this.currentFilters, this.filterKeysAssociations);
 
       this.updateCurrentFilters();
       this.recalculateElementsToShow();
@@ -291,20 +348,7 @@ export class TransportListComponent implements OnDestroy {
    * Updates the texts with the currently selected filters.
    */
   private updateCurrentFilters() {
-    this.currentFiltersTexts = [];
-
-    if (this.currentFilters.id) {
-      this.currentFiltersTexts.push({
-        filterName: 'transports.id',
-        value: this.currentFilters.id,
-      });
-    }
-    if (this.currentFilters.key) {
-      this.currentFiltersTexts.push({
-        filterName: 'transports.remote-node',
-        value: this.currentFilters.key,
-      });
-    }
+    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
   }
 
   /**
