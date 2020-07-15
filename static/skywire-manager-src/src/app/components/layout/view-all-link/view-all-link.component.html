@@ -1,5 +1,5 @@
 <div class="main-container">
-  <a [routerLink]="linkParts">
+  <a [routerLink]="linkParts" [queryParams]="queryParams">
     {{ 'view-all-link.label' | translate:{number: numberOfElements} }}
     <mat-icon [inline]="true">chevron_right</mat-icon>
   </a>

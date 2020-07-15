@@ -18,7 +18,15 @@
     "options": "Options",
     "logout": "Logout",
     "logout-error": "Error logging out.",
-    "time-in-ms": "{{ time }}ms"
+    "time-in-ms": "{{ time }}ms",
+    "ok": "Ok"
+  },
+
+  "filters": {
+    "filter-action": "Filter",
+    "active-filters": "Active filters: ",
+    "press-to-remove": "(Press to remove)",
+    "remove-confirmation": "Are you sure you want to remove the filters?"
   },
 
   "tables": {
@@ -352,6 +360,7 @@
     "delete": "Delete transport",
     "deleted": "Delete operation completed.",
     "empty": "Visor doesn't have any transports.",
+    "empty-with-filter": "No transport match the selected filtering criteria.",
     "statuses": {
       "online": "Online",
       "online-tooltip": "Transport is online",
@@ -383,6 +392,10 @@
         "remote-key-chars-error": "The remote public key must only contain hexadecimal characters.",
         "transport-type-error": "The transport type is required."
       }
+    },
+    "filter-dialog": {
+      "id": "The id must contain",
+      "remote-node": "The remote key must contain"
     }
   },
 

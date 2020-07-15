@@ -1,0 +1,33 @@
+<app-dialog [headline]="'filters.filter-action' | translate">
+  <form [formGroup]="form">
+    <!-- ID. -->
+    <mat-form-field>
+      <input
+        formControlName="id-text"
+        maxlength="36"
+        [placeholder]="'transports.filter-dialog.id' | translate"
+        matInput
+      >
+    </mat-form-field>
+    <!-- Remote key. -->
+    <mat-form-field>
+      <input
+        formControlName="key-text"
+        maxlength="66"
+        [placeholder]="'transports.filter-dialog.remote-node' | translate"
+        matInput
+      >
+    </mat-form-field>
+
+    <!-- button. -->
+    <app-button
+      #button
+      (action)="apply()"
+      type="mat-raised-button"
+      color="primary"
+      class="float-right"
+    >
+      {{ 'common.ok' | translate }}
+    </app-button>
+  </form>
+</app-dialog>
