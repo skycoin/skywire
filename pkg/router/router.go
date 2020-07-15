@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/noisewrapper"
+
+	"github.com/SkycoinProject/dmsg/noise"
+
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -103,14 +107,14 @@ type Router interface {
 	// - Setup routes via SetupNode (in one call).
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return RouteGroup if successful.
-	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (*RouteGroup, error)
+	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 
 	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
 	// that contains ConsumeRule(s) or ForwardRule(s).
 	// Then the following should happen:
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return the RoutingGroup.
-	AcceptRoutes(context.Context) (*RouteGroup, error)
+	AcceptRoutes(context.Context) (net.Conn, error)
 	SaveRoutingRules(rules ...routing.Rule) error
 	ReserveKeys(n int) ([]routing.RouteID, error)
 	IntroduceRules(rules routing.EdgeRules) error
@@ -138,6 +142,7 @@ type router struct {
 	tm            *transport.Manager
 	rt            routing.Table
 	rgs           map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
+	wrappedRGs    map[routing.RouteDescriptor]net.Conn    // noise-wrapped route groups
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
 	done          chan struct{}
@@ -167,6 +172,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		rt:            routing.NewTable(),
 		sl:            sl,
 		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
+		wrappedRGs:    make(map[routing.RouteDescriptor]net.Conn),
 		rpcSrv:        rpc.NewServer(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
 		done:          make(chan struct{}),
@@ -195,7 +201,7 @@ func (r *router) DialRoutes(
 	rPK cipher.PubKey,
 	lPort, rPort routing.Port,
 	opts *DialOptions,
-) (*RouteGroup, error) {
+) (net.Conn, error) {
 
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK
@@ -229,11 +235,22 @@ func (r *router) DialRoutes(
 		return nil, err
 	}
 
-	rg := r.saveRouteGroupRules(rules)
+	nsConf := noise.Config{
+		LocalPK:   r.conf.PubKey,
+		LocalSK:   r.conf.SecKey,
+		RemotePK:  rPK,
+		Initiator: true,
+	}
+
+	_, wrappedRG, err := r.saveRouteGroupRules(rules, nsConf)
+	if err != nil {
+		// TODO(darkren): log
+		return nil, err
+	}
 
 	r.logger.Infof("Created new routes to %s on port %d", rPK, lPort)
 
-	return rg, nil
+	return wrappedRG, nil
 }
 
 // AcceptsRoutes should block until we receive an AddRules packet from SetupNode
@@ -241,7 +258,7 @@ func (r *router) DialRoutes(
 // Then the following should happen:
 // - Save to routing.Table and internal RouteGroup map.
 // - Return the RoutingGroup.
-func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
+func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	var (
 		rules routing.EdgeRules
 		ok    bool
@@ -268,9 +285,20 @@ func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
 		return nil, err
 	}
 
-	rg := r.saveRouteGroupRules(rules)
+	nsConf := noise.Config{
+		LocalPK:   r.conf.PubKey,
+		LocalSK:   r.conf.SecKey,
+		RemotePK:  rules.Desc.DstPK(),
+		Initiator: false,
+	}
 
-	return rg, nil
+	_, wrappedRG, err := r.saveRouteGroupRules(rules, nsConf)
+	if err != nil {
+		// TODO(darkren): log
+		return nil, err
+	}
+
+	return wrappedRG, nil
 }
 
 // Serve starts transport listening loop.
@@ -339,7 +367,7 @@ func (r *router) serveSetup() {
 	}
 }
 
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
+func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*RouteGroup, net.Conn, error) {
 	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
 	r.mx.Lock()
 	defer r.mx.Unlock()
@@ -358,11 +386,17 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
 	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
 
 	rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
-	r.rgs[rules.Desc] = rg
-
 	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
 
-	return rg
+	wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
+	if err != nil {
+		// TODO(darkren): close rg?
+		return nil, nil, err
+	}
+	r.rgs[rules.Desc] = rg
+	r.wrappedRGs[rules.Desc] = wrappedRG
+
+	return rg, wrappedRG, nil
 }
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
@@ -398,7 +432,7 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	}
 
 	desc := rule.RouteDescriptor()
-	rg, ok := r.routeGroup(desc)
+	rg, _, ok := r.routeGroup(desc)
 
 	r.logger.Infof("Handling packet with descriptor %s", &desc)
 
@@ -445,7 +479,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}
 
 	desc := rule.RouteDescriptor()
-	rg, ok := r.routeGroup(desc)
+	rg, _, ok := r.routeGroup(desc)
 
 	r.logger.Infof("Handling close packet with descriptor %s", &desc)
 
@@ -678,27 +712,38 @@ func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
 	return ids, err
 }
 
-func (r *router) popRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
+func (r *router) popRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, net.Conn, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
 	rg, ok := r.rgs[desc]
 	if !ok {
-		return nil, false
+		return nil, nil, false
+	}
+
+	wrappedRG, ok := r.wrappedRGs[desc]
+	if !ok {
+		return nil, nil, false
 	}
 
 	delete(r.rgs, desc)
+	delete(r.wrappedRGs, desc)
 
-	return rg, true
+	return rg, wrappedRG, true
 }
 
-func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
+func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, net.Conn, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
 	rg, ok := r.rgs[desc]
+	if !ok {
+		return nil, nil, false
+	}
 
-	return rg, ok
+	wrappedRG, ok := r.wrappedRGs[desc]
+
+	return rg, wrappedRG, ok
 }
 
 func (r *router) removeRouteGroup(desc routing.RouteDescriptor) {
@@ -706,6 +751,7 @@ func (r *router) removeRouteGroup(desc routing.RouteDescriptor) {
 	defer r.mx.Unlock()
 
 	delete(r.rgs, desc)
+	delete(r.wrappedRGs, desc)
 }
 
 func (r *router) IntroduceRules(rules routing.EdgeRules) error {
@@ -813,7 +859,7 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	log.WithField("rt_desc", rDesc.String()).
 		Debug("Closing route group associated with rule...")
 
-	rg, ok := r.popRouteGroup(rDesc)
+	rg, wrappedRG, ok := r.popRouteGroup(rDesc)
 	if !ok {
 		log.Debug("No route group associated with expired rule. Nothing to be done.")
 		return
@@ -822,7 +868,7 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 		log.Debug("Route group already closed. Nothing to be done.")
 		return
 	}
-	if err := rg.Close(); err != nil {
+	if err := wrappedRG.Close(); err != nil {
 		log.WithError(err).Error("Failed to close route group.")
 		return
 	}

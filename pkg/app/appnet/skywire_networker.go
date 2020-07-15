@@ -57,13 +57,13 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net
 		}
 	}()
 
-	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
+	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
 		return nil, err
 	}
 
 	return &skywireConn{
-		Conn:     rg,
+		Conn:     conn,
 		freePort: freePort,
 	}, nil
 }
@@ -111,18 +111,18 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 	for {
 		log.Debug("Awaiting to accept route group...")
 
-		rg, err := r.r.AcceptRoutes(ctx)
+		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
 			log.WithError(err).Info("Stopped accepting routes.")
 			return err
 		}
 
 		log.
-			WithField("local", rg.LocalAddr()).
-			WithField("remote", rg.RemoteAddr()).
+			WithField("local", conn.LocalAddr()).
+			WithField("remote", conn.RemoteAddr()).
 			Info("Accepted route group.")
 
-		go r.serve(rg)
+		go r.serve(conn)
 	}
 }
 
