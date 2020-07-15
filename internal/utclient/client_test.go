@@ -67,10 +67,10 @@ func TestUpdateVisorUptime(t *testing.T) {
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
 
-	err = c.UpdateVisorUptime(context.TODO())
+	err = c.UpdateVisorUptime(context.TODO(), 15)
 	require.NoError(t, err)
 
-	assert.Equal(t, "/update", <-urlCh)
+	assert.Equal(t, "/update?seconds=15", <-urlCh)
 }
 
 func authHandler(next http.Handler) http.Handler {
