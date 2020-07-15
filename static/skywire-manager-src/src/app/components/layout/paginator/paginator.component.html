@@ -5,42 +5,42 @@
       <div class="responsive-height d-md-none">&nbsp;<br/>&nbsp;</div>
 
       <!-- Link for going to the first page, only on large window sizes. -->
-      <a *ngIf="currentPage > 3" [routerLink]="linkParts.concat(['1'])" class="d-none d-md-flex">
+      <a *ngIf="currentPage > 3" [routerLink]="linkParts.concat(['1'])" [queryParams]="queryParams" class="d-none d-md-flex">
         <mat-icon [inline]="true">chevron_left</mat-icon>
         {{ 'paginator.first' | translate }}
       </a>
       <!-- Link for going to the first page, only on small window sizes. -->
-      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat(['1'])" class="d-flex d-md-none flex-column">
+      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat(['1'])" [queryParams]="queryParams" class="d-flex d-md-none flex-column">
         <mat-icon [inline]="true">chevron_left</mat-icon>
         <span class="label">{{ 'paginator.first' | translate }}</span>
       </a>
 
       <!-- Link for going to the previous page, only on large window sizes. -->
-      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])" class="d-none d-md-flex">
+      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])" [queryParams]="queryParams" class="d-none d-md-flex">
         <div><mat-icon [inline]="true">chevron_left</mat-icon></div>
       </a>
       <!-- Link for going -2 pages, only on large window sizes. -->
-      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat([(currentPage - 2).toString()])" class="d-none d-md-flex">{{ currentPage - 2 }}</a>
+      <a *ngIf="currentPage > 2" [routerLink]="linkParts.concat([(currentPage - 2).toString()])" [queryParams]="queryParams" class="d-none d-md-flex">{{ currentPage - 2 }}</a>
       <!-- Link for going -1 pages. -->
-      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])">{{ currentPage - 1 }}</a>
+      <a *ngIf="currentPage > 1" [routerLink]="linkParts.concat([(currentPage - 1).toString()])" [queryParams]="queryParams">{{ currentPage - 1 }}</a>
       <!-- Current page. -->
       <a (click)="openSelectionDialog()" class="selected">{{ currentPage }}</a>
       <!-- Link for going +1 pages. -->
-      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])">{{ currentPage + 1 }}</a>
+      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])" [queryParams]="queryParams">{{ currentPage + 1 }}</a>
       <!-- Link for going +2 pages, only on large window sizes. -->
-      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 2).toString()])" class="d-none d-md-flex">{{ currentPage + 2 }}</a>
+      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 2).toString()])" [queryParams]="queryParams" class="d-none d-md-flex">{{ currentPage + 2 }}</a>
       <!-- Link for going to the previous page, only on large window sizes. -->
-      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])" class="d-none d-md-flex">
+      <a *ngIf="currentPage < numberOfPages" [routerLink]="linkParts.concat([(currentPage + 1).toString()])" [queryParams]="queryParams" class="d-none d-md-flex">
         <div><mat-icon [inline]="true">chevron_right</mat-icon></div>
       </a>
 
       <!-- Link for going to the last page, only on large window sizes. -->
-      <a *ngIf="currentPage + 2 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" class="d-none d-md-flex">
+      <a *ngIf="currentPage + 2 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" [queryParams]="queryParams" class="d-none d-md-flex">
         {{ 'paginator.last' | translate }}
         <mat-icon [inline]="true">chevron_right</mat-icon>
       </a>
       <!-- Link for going to the last page, only on small window sizes. -->
-      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" class="d-flex d-md-none flex-column">
+      <a *ngIf="currentPage + 1 < numberOfPages" [routerLink]="linkParts.concat([numberOfPages.toString()])" [queryParams]="queryParams" class="d-flex d-md-none flex-column">
         <mat-icon [inline]="true">chevron_right</mat-icon>
         <span class="label">{{ 'paginator.last' | translate }}</span>
       </a>
