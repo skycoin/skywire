@@ -80,6 +80,7 @@ func listenLoop() {
 			log.Println("Failed to accept conn:", err)
 			return
 		}
+		log.Infoln("TEST: ACCEPTED APP CONN")
 		log.Println("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
@@ -105,6 +106,8 @@ func handleConn(conn net.Conn) {
 			connsMu.Unlock()
 			return
 		}
+
+		log.Infof("TEST: READ MESSAGE: %v", buf[:n])
 
 		clientMsg, err := json.Marshal(map[string]string{"sender": raddr.PubKey.Hex(), "message": string(buf[:n])})
 		if err != nil {
@@ -162,6 +165,8 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 
 		go handleConn(conn)
 	}
+
+	log.Infof("TEST: WRITING TO THE APP CONN: %v", []byte(data["message"]))
 
 	_, err := conn.Write([]byte(data["message"]))
 	if err != nil {
