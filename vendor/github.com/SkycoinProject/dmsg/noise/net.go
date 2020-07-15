@@ -2,10 +2,8 @@ package noise
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"net/rpc"
-	"os"
 	"sync"
 	"time"
 
@@ -168,7 +166,6 @@ type Conn struct {
 // WrapConn wraps a provided net.Conn with noise.
 func WrapConn(conn net.Conn, ns *Noise, hsTimeout time.Duration) (*Conn, error) {
 	rw := NewReadWriter(conn, ns)
-	fmt.Fprintf(os.Stdout, "TEST: PREPARED NOISE RW\n")
 	if err := rw.Handshake(hsTimeout); err != nil {
 		return nil, err
 	}
