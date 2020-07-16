@@ -29,9 +29,26 @@
 
     <!-- Header. -->
     <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': numberOfPages > 1}">
-      <div class="title ml-3.5"></div>
+      <div class="title ml-3.5">
+        <div class="filter-label subtle-transparent-button cursor-pointer" (click)="removeFilters()" *ngIf="currentFiltersTexts && currentFiltersTexts.length > 0">
+          {{ 'filters.active-filters' | translate }}
+          <div *ngFor="let filterTexts of currentFiltersTexts" class="item">
+            <span>{{ filterTexts.filterName | translate }}: </span>
+            <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
+            <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
+          </div>
+          <div>{{ 'filters.press-to-remove' | translate }}</div>
+        </div>
+      </div>
       <div class="options">
         <div class="options-container">
+          <mat-icon
+            [inline]="true"
+            (click)="changeFilters()"
+            [matTooltip]="'filters.filter-action' | translate"
+            class="small-icon"
+            *ngIf="allNodes && allNodes.length > 0"
+          >filter_list</mat-icon>
           <mat-icon
             [matMenuTriggerFor]="selectionMenu"
             *ngIf="dataSource.length > 0"
@@ -42,16 +59,16 @@
             </div>
           </mat-menu>
         </div>
+        <!-- Upper paginator. -->
+        <app-paginator
+          *ngIf="numberOfPages > 1"
+          [currentPage]="currentPage"
+          [numberOfPages]="numberOfPages"
+          [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
+          [queryParams]="currentUrlQueryParams">
+        </app-paginator>
       </div>
     </div>
-
-    <!-- Upper paginator. -->
-    <app-paginator
-      *ngIf="numberOfPages > 1"
-      [currentPage]="currentPage"
-      [numberOfPages]="numberOfPages"
-      [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']">
-    </app-paginator>
 
     <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container overflow full-node-list-margins">
       <!-- Table for large screens. -->
@@ -211,14 +228,16 @@
       *ngIf="numberOfPages > 1"
       [currentPage]="currentPage"
       [numberOfPages]="numberOfPages"
-      [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']">
+      [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
+      [queryParams]="currentUrlQueryParams">
     </app-paginator>
 
     <!-- Msg shown if the list is empty. -->
     <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length === 0">
       <div class="box-internal-container font-sm">
         <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
-        <span>{{ 'nodes.empty' | translate }}</span>
+        <span class="font-sm" *ngIf="allNodes.length === 0">{{ 'nodes.empty' | translate }}</span>
+        <span class="font-sm" *ngIf="allNodes.length !== 0">{{ 'nodes.empty-with-filter' | translate }}</span>
       </div>
     </div>
   </div>
