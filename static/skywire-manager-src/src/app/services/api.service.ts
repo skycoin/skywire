@@ -80,6 +80,24 @@ export class ApiService {
   }
 
   /**
+   * Makes a request to a WebSocket endpoint.
+   * @param url Endpoint URL, after the "/api/" part.
+   */
+  ws(url: string, body: any = {}): Observable<any> {
+    const ws = new WebSocket('wss://localhost:8000/' + this.apiPrefix + url);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify(body));
+    };
+
+    return new Observable(observer => {
+      ws.onmessage = (evt) => {
+        observer.next(evt);
+      };
+    });
+  }
+
+  /**
    * Makes the actual call to the API.
    */
   private request(method: string, url: string, body: any, options: RequestOptions) {
