@@ -1,12 +1,12 @@
-import {Injectable, NgZone} from '@angular/core';
-import {HttpClient, HttpErrorResponse, HttpHeaders} from '@angular/common/http';
-import {Observable, throwError} from 'rxjs';
-import {catchError, map} from 'rxjs/operators';
-import {webSocket} from 'rxjs/webSocket';
-import {Router} from '@angular/router';
+import { Injectable, NgZone } from '@angular/core';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { Observable, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
+import { webSocket } from 'rxjs/webSocket';
+import { Router } from '@angular/router';
 
-import {processServiceError} from '../utils/errors';
-import {environment} from 'src/environments/environment';
+import { processServiceError } from '../utils/errors';
+import { environment } from 'src/environments/environment';
 
 
 export enum ResponseTypes {
