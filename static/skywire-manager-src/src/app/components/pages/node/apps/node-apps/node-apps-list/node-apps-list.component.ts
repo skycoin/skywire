@@ -1,7 +1,7 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { Application } from '../../../../../../app.datatypes';
 import { AppsService } from '../../../../../../services/apps.service';
@@ -17,6 +17,12 @@ import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { SkysocksClientSettingsComponent } from '../skysocks-client-settings/skysocks-client-settings.component';
 import { TranslateService } from '@ngx-translate/core';
+import { FilterKeysAssociation, FilterTextElements, filterList, updateFilterTexts } from 'src/app/utils/filters';
+import {
+  FilterFieldParams,
+  FilterFieldTypes,
+  FiltersSelectionComponent
+} from 'src/app/components/layout/filters-selection/filters-selection.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -26,6 +32,18 @@ enum SortableColumns {
   Name = 'apps.apps-list.app-name',
   Port = 'apps.apps-list.port',
   AutoStart = 'apps.apps-list.auto-start',
+}
+
+/**
+ * Filters for the list. It is prepopulated with default data which indicates that no filter
+ * has been selected. As the object may be included in the query string, prefixes are used to
+ * avoid name collisions with other components in the same URL.
+ */
+class DataFilters {
+  ap_state = '';
+  ap_name = '';
+  ap_port = '';
+  ap_autostart = '';
 }
 
 /**
@@ -77,6 +95,7 @@ export class NodeAppsListComponent implements OnDestroy {
   ]);
 
   allApps: Application[];
+  filteredApps: Application[];
   appsToShow: Application[];
   appsMap: Map<string, Application>;
   numberOfPages = 1;
@@ -85,8 +104,69 @@ export class NodeAppsListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set apps(val: Application[]) {
     this.allApps = val;
-    this.recalculateElementsToShow();
+    this.filter();
   }
+
+  // Array allowing to associate the properties of TransportFilters with the ones on the list
+  // and the values that must be shown in the UI, for being able to use helper functions to
+  // filter the data and show some UI elements.
+  filterKeysAssociations: FilterKeysAssociation[] = [
+    {
+      filterName: 'apps.apps-list.filter-dialog.state',
+      keyNameInElementsArray: 'status',
+      keyNameInFiltersObject: 'ap_state',
+      printableLabelsForValues: [
+        {
+          value: '',
+          label: 'apps.apps-list.filter-dialog.state-options.any',
+        },
+        {
+          value: '1',
+          label: 'apps.apps-list.filter-dialog.state-options.running',
+        },
+        {
+          value: '0',
+          label: 'apps.apps-list.filter-dialog.state-options.stopped',
+        }
+      ],
+    },
+    {
+      filterName: 'apps.apps-list.filter-dialog.name',
+      keyNameInElementsArray: 'name',
+      keyNameInFiltersObject: 'ap_name',
+    },
+    {
+      filterName: 'apps.apps-list.filter-dialog.port',
+      keyNameInElementsArray: 'port',
+      keyNameInFiltersObject: 'ap_port',
+    },
+    {
+      filterName: 'apps.apps-list.filter-dialog.autostart',
+      keyNameInElementsArray: 'autostart',
+      keyNameInFiltersObject: 'ap_autostart',
+      printableLabelsForValues: [
+        {
+          value: '',
+          label: 'apps.apps-list.filter-dialog.autostart-options.any',
+        },
+        {
+          value: 'true',
+          label: 'apps.apps-list.filter-dialog.autostart-options.enabled',
+        },
+        {
+          value: 'false',
+          label: 'apps.apps-list.filter-dialog.autostart-options.disabled',
+        }
+      ],
+    },
+  ];
+
+  // Current filters for the data.
+  currentFilters = new DataFilters();
+  // Properties needed for showing the selected filters in the UI.
+  currentFiltersTexts: FilterTextElements[] = [];
+  // Current params in the query string added to the url.
+  currentUrlQueryParams: object;
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -95,9 +175,11 @@ export class NodeAppsListComponent implements OnDestroy {
     private appsService: AppsService,
     private dialog: MatDialog,
     private route: ActivatedRoute,
+    private router: Router,
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
   ) {
+    // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
@@ -107,9 +189,28 @@ export class NodeAppsListComponent implements OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.recalculateElementsToShow();
+        this.filter();
       }
     });
+
+    // Get the query string.
+    this.navigationsSubscription.add(this.route.queryParamMap.subscribe(queryParams => {
+      // Get the filters from the query string.
+      this.currentFilters = new DataFilters();
+      Object.keys(this.currentFilters).forEach(key => {
+        if (queryParams.has(key)) {
+          this.currentFilters[key] = queryParams.get(key);
+        }
+      });
+
+      // Save the query string.
+      this.currentUrlQueryParams = {};
+      queryParams.keys.forEach(key => {
+        this.currentUrlQueryParams[key] = queryParams.get(key);
+      });
+
+      this.filter();
+    }));
   }
 
   ngOnDestroy() {
@@ -207,6 +308,77 @@ export class NodeAppsListComponent implements OnDestroy {
 
       this.changeAppsValRecursively(elementsToChange, true, autostart, confirmationDialog);
     });
+  }
+
+  /**
+   * Removes all the filters added by the user.
+   */
+  removeFilters() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
+
+    // Ask for confirmation.
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      // Remove the query string params.
+      this.router.navigate([], { queryParams: {}});
+    });
+  }
+
+  /**
+   * Opens the filter selection modal window to let the user change the currently selected filters.
+   */
+  changeFilters() {
+    // Properties for the modal window.
+    const filterFieldsParams: FilterFieldParams[] = [];
+    filterFieldsParams.push({
+      type: FilterFieldTypes.Select,
+      currentValue: this.currentFilters.ap_state,
+      filterKeysAssociation: this.filterKeysAssociations[0]
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.ap_name,
+      filterKeysAssociation: this.filterKeysAssociations[1],
+      maxlength: 50,
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.ap_port,
+      filterKeysAssociation: this.filterKeysAssociations[2],
+      maxlength: 8,
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.Select,
+      currentValue: this.currentFilters.ap_autostart,
+      filterKeysAssociation: this.filterKeysAssociations[3],
+    });
+
+    // Open the modal window.
+    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
+      if (response) {
+        this.router.navigate([], { queryParams: response});
+      }
+    });
+  }
+
+  /**
+   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
+   */
+  private filter() {
+    if (this.allApps) {
+      this.filteredApps = filterList(this.allApps, this.currentFilters, this.filterKeysAssociations);
+
+      this.updateCurrentFilters();
+      this.recalculateElementsToShow();
+    }
+  }
+
+  /**
+   * Updates the texts with the currently selected filters.
+   */
+  private updateCurrentFilters() {
+    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
   }
 
   /**
@@ -396,9 +568,9 @@ export class NodeAppsListComponent implements OnDestroy {
     this.currentPage = this.currentPageInUrl;
 
     // Needed to prevent racing conditions.
-    if (this.allApps) {
+    if (this.filteredApps) {
       // Sort all the data.
-      this.allApps.sort((a, b) => {
+      this.filteredApps.sort((a, b) => {
         const defaultOrder = a.name.localeCompare(b.name);
 
         let response: number;
@@ -419,7 +591,7 @@ export class NodeAppsListComponent implements OnDestroy {
 
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.allApps.length / maxElements);
+      this.numberOfPages = Math.ceil(this.filteredApps.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
@@ -427,7 +599,7 @@ export class NodeAppsListComponent implements OnDestroy {
       // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
-      this.appsToShow = this.allApps.slice(start, end);
+      this.appsToShow = this.filteredApps.slice(start, end);
 
       // Create a map with the elements to show, as a helper.
       this.appsMap = new Map<string, Application>();

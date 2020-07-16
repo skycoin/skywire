@@ -20,6 +20,8 @@ import { ClipboardService } from 'src/app/services/clipboard.service';
 import { ConfirmationData, ConfirmationComponent } from '../../layout/confirmation/confirmation.component';
 import { AppConfig } from 'src/app/app.config';
 import { OperationError } from 'src/app/utils/operation-error';
+import { FilterTextElements, FilterKeysAssociation, filterList, updateFilterTexts } from 'src/app/utils/filters';
+import { FilterFieldParams, FilterFieldTypes, FiltersSelectionComponent } from '../../layout/filters-selection/filters-selection.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -30,6 +32,17 @@ enum SortableColumns {
   Key = 'nodes.key',
   DmsgServer = 'nodes.dmsg-server',
   Ping = 'nodes.ping',
+}
+
+/**
+ * Filters for the list. It is prepopulated with default data which indicates that no filter
+ * has been selected. As the object may be included in the query string, prefixes are used to
+ * avoid name collisions with other components in the same URL.
+ */
+class DataFilters {
+  nl_online = '';
+  nl_label = '';
+  nl_key = '';
 }
 
 /**
@@ -62,11 +75,54 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   // Vars for the pagination functionality.
   allNodes: Node[];
+  filteredNodes: Node[];
   nodesToShow: Node[];
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
+
+  // Array allowing to associate the properties of TransportFilters with the ones on the list
+  // and the values that must be shown in the UI, for being able to use helper functions to
+  // filter the data and show some UI elements.
+  filterKeysAssociations: FilterKeysAssociation[] = [
+    {
+      filterName: 'nodes.filter-dialog.online',
+      keyNameInElementsArray: 'online',
+      keyNameInFiltersObject: 'nl_online',
+      printableLabelsForValues: [
+        {
+          value: '',
+          label: 'nodes.filter-dialog.online-options.any',
+        },
+        {
+          value: 'true',
+          label: 'nodes.filter-dialog.online-options.online',
+        },
+        {
+          value: 'false',
+          label: 'nodes.filter-dialog.online-options.offline',
+        }
+      ],
+    },
+    {
+      filterName: 'nodes.filter-dialog.label',
+      keyNameInElementsArray: 'label',
+      keyNameInFiltersObject: 'nl_label',
+    },
+    {
+      filterName: 'nodes.filter-dialog.key',
+      keyNameInElementsArray: 'local_pk',
+      keyNameInFiltersObject: 'nl_key',
+    }
+  ];
+
+  // Current filters for the data.
+  currentFilters = new DataFilters();
+  // Properties needed for showing the selected filters in the UI.
+  currentFiltersTexts: FilterTextElements[] = [];
+  // Current params in the query string added to the url.
+  currentUrlQueryParams: object;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
@@ -109,9 +165,28 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.recalculateElementsToShow();
+        this.filter();
       }
     });
+
+    // Get the query string.
+    this.navigationsSubscription.add(route.queryParamMap.subscribe(queryParams => {
+      // Get the filters from the query string.
+      this.currentFilters = new DataFilters();
+      Object.keys(this.currentFilters).forEach(key => {
+        if (queryParams.has(key)) {
+          this.currentFilters[key] = queryParams.get(key);
+        }
+      });
+
+      // Save the query string.
+      this.currentUrlQueryParams = {};
+      queryParams.keys.forEach(key => {
+        this.currentUrlQueryParams[key] = queryParams.get(key);
+      });
+
+      this.filter();
+    }));
 
     // Data for populating the tab bar.
     this.tabsData = [
@@ -286,7 +361,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
             // If the data was obtained.
             if (result.data) {
               this.allNodes = result.data as Node[];
-              this.recalculateElementsToShow();
+              this.filter();
               this.loading = false;
               // Close any previous temporary loading error msg.
               this.snackbarService.closeCurrentIfTemporaryError();
@@ -329,9 +404,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.currentPage = this.currentPageInUrl;
 
     // Needed to prevent racing conditions.
-    if (this.allNodes) {
+    if (this.filteredNodes) {
       // Sort all the data.
-      this.allNodes.sort((a, b) => {
+      this.filteredNodes.sort((a, b) => {
         const defaultOrder = a.local_pk.localeCompare(b.local_pk);
 
         let response: number;
@@ -360,7 +435,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
       // Calculate the pagination values.
       const maxElements = AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.allNodes.length / maxElements);
+      this.numberOfPages = Math.ceil(this.filteredNodes.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
@@ -368,7 +443,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
-      this.nodesToShow = this.allNodes.slice(start, end);
+      this.nodesToShow = this.filteredNodes.slice(start, end);
     } else {
       this.nodesToShow = null;
     }
@@ -551,6 +626,72 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
       return of(errors);
     }));
+  }
+
+  /**
+   * Removes all the filters added by the user.
+   */
+  removeFilters() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
+
+    // Ask for confirmation.
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      // Remove the query string params.
+      this.router.navigate([], { queryParams: {}});
+    });
+  }
+
+  /**
+   * Opens the filter selection modal window to let the user change the currently selected filters.
+   */
+  changeFilters() {
+    // Properties for the modal window.
+    const filterFieldsParams: FilterFieldParams[] = [];
+    filterFieldsParams.push({
+      type: FilterFieldTypes.Select,
+      currentValue: this.currentFilters.nl_online,
+      filterKeysAssociation: this.filterKeysAssociations[0],
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.nl_label,
+      filterKeysAssociation: this.filterKeysAssociations[1],
+      maxlength: 100,
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.nl_key,
+      filterKeysAssociation: this.filterKeysAssociations[2],
+      maxlength: 66,
+    });
+
+    // Open the modal window.
+    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
+      if (response) {
+        this.router.navigate([], { queryParams: response});
+      }
+    });
+  }
+
+  /**
+   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
+   */
+  private filter() {
+    if (this.allNodes) {
+      this.filteredNodes = filterList(this.allNodes, this.currentFilters, this.filterKeysAssociations);
+
+      this.updateCurrentFilters();
+      this.recalculateElementsToShow();
+    }
+  }
+
+  /**
+   * Updates the texts with the currently selected filters.
+   */
+  private updateCurrentFilters() {
+    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
   }
 
   /**
