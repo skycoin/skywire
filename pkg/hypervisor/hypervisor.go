@@ -4,6 +4,7 @@ package hypervisor
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
+	"nhooyr.io/websocket"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
@@ -223,6 +225,7 @@ func (hv *Hypervisor) makeMux() *chi.Mux {
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
 				r.Post("/visors/{pk}/update", hv.updateVisor())
+				r.Get("/visors/{pk}/update/ws", hv.updateVisorWS())
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 			})
@@ -901,6 +904,64 @@ func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 		}{updated}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
+	})
+}
+
+func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		// open websocket
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to upgrade to websocket.")
+			w.WriteHeader(http.StatusInternalServerError)
+
+			return
+		}
+
+		defer func() {
+			if err := ws.Close(websocket.StatusNormalClosure, "response sent"); err != nil {
+				log.WithError(err).Warnf("Failed to close WebSocket connection")
+			}
+		}()
+
+		var updateConfig updater.UpdateConfig
+
+		_, raw, err := ws.Read(context.Background())
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		if err := json.Unmarshal(raw, &updateConfig); err != nil {
+			log.Warnf("update visor request %v: %v", string(raw), err)
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetVisor
+
+		updated, err := ctx.RPC.Update(updateConfig)
+
+		output := struct {
+			Updated bool  `json:"updated"`
+			Error   error `json:"error"`
+		}{updated, err}
+
+		rawOutput, err := json.Marshal(output)
+		if err != nil {
+			log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+			return
+		}
+
+		if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
+			log.WithError(err).Warnf("Failed to write WebSocket response")
+		}
 	})
 }
 

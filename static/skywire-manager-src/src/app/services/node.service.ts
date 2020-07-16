@@ -209,6 +209,10 @@ export class NodeService {
    * Updates a node.
    */
   update(nodeKey: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/update`);
+    const body = {
+      channel: 'testing'
+    };
+
+    return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
   }
 }

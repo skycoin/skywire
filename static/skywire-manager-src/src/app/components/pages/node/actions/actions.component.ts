@@ -208,7 +208,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
 
       // Update the visor.
       this.updateSubscription = this.nodeService.update(NodeComponent.getCurrentNodeKey()).subscribe(response => {
-        if (response && response.updated) {
+        if (response && response.updated && !response.error) {
           this.snackbarService.showDone('actions.update.done');
           confirmationDialog.close();
         } else {
