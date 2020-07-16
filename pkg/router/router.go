@@ -414,7 +414,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	if err != nil {
 		r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
 		if err := rg.Close(); err != nil {
-			r.logger.WithError(err).Error("Failed to close route group (%s): %v", &rules.Desc, err)
+			r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 		}
 
 		return nil, fmt.Errorf("WrapConn (%s): %w", rules.Desc, err)
