@@ -35,6 +35,7 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
 	golang.zx2c4.com/wireguard v0.0.20200320
+	nhooyr.io/websocket v1.8.2
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
