@@ -35,7 +35,7 @@ pkg/visor/foo/
 go.mod-e
 
 # goreleaser
-dist
+/dist
 
 # release
 *.deb
