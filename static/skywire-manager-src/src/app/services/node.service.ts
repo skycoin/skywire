@@ -1,13 +1,13 @@
-import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
-import { flatMap, map, mergeMap } from 'rxjs/operators';
+import {Injectable} from '@angular/core';
+import {Observable} from 'rxjs';
+import {flatMap, map, mergeMap} from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
-import { StorageService } from './storage.service';
-import { Node, Transport, Route, HealthInfo } from '../app.datatypes';
-import { ApiService } from './api.service';
-import { TransportService } from './transport.service';
-import { RouteService } from './route.service';
+import {StorageService} from './storage.service';
+import {HealthInfo, Node, Route, Transport} from '../app.datatypes';
+import {ApiService} from './api.service';
+import {TransportService} from './transport.service';
+import {RouteService} from './route.service';
 
 /**
  * Allows to work with the nodes.
@@ -210,7 +210,7 @@ export class NodeService {
    */
   update(nodeKey: string): Observable<any> {
     const body = {
-      channel: 'testing'
+      channel: 'stable' // 'stable' or 'testing'
     };
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
