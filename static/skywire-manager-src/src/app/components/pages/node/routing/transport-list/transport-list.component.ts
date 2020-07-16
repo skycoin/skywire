@@ -37,12 +37,13 @@ enum SortableColumns {
 
 /**
  * Filters for the list. It is prepopulated with default data which indicates that no filter
- * has been selected.
+ * has been selected. As the object may be included in the query string, prefixes are used to
+ * avoid name collisions with other components in the same URL.
  */
-export class TransportFilters {
-  online = '';
-  id = '';
-  key = '';
+class DataFilters {
+  tr_online = '';
+  tr_id = '';
+  tr_key = '';
 }
 
 /**
@@ -106,7 +107,7 @@ export class TransportListComponent implements OnDestroy {
     {
       filterName: 'transports.filter-dialog.online',
       keyNameInElementsArray: 'is_up',
-      keyNameInFiltersObject: 'online',
+      keyNameInFiltersObject: 'tr_online',
       printableLabelsForValues: [
         {
           value: '',
@@ -125,17 +126,17 @@ export class TransportListComponent implements OnDestroy {
     {
       filterName: 'transports.filter-dialog.id',
       keyNameInElementsArray: 'id',
-      keyNameInFiltersObject: 'id',
+      keyNameInFiltersObject: 'tr_id',
     },
     {
       filterName: 'transports.filter-dialog.remote-node',
       keyNameInElementsArray: 'remote_pk',
-      keyNameInFiltersObject: 'key',
+      keyNameInFiltersObject: 'tr_key',
     }
   ];
 
   // Current filters for the data.
-  currentFilters = new TransportFilters();
+  currentFilters = new DataFilters();
   // Properties needed for showing the selected filters in the UI.
   currentFiltersTexts: FilterTextElements[] = [];
   // Current params in the query string added to the url.
@@ -152,7 +153,7 @@ export class TransportListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
   ) {
-    // Detect changes in the key.
+    // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
@@ -166,10 +167,10 @@ export class TransportListComponent implements OnDestroy {
       }
     });
 
-    // Detect changes in the query string.
+    // Get the query string.
     this.navigationsSubscription.add(this.route.queryParamMap.subscribe(queryParams => {
       // Get the filters from the query string.
-      this.currentFilters = new TransportFilters();
+      this.currentFilters = new DataFilters();
       Object.keys(this.currentFilters).forEach(key => {
         if (queryParams.has(key)) {
           this.currentFilters[key] = queryParams.get(key);
@@ -308,18 +309,18 @@ export class TransportListComponent implements OnDestroy {
     const filterFieldsParams: FilterFieldParams[] = [];
     filterFieldsParams.push({
       type: FilterFieldTypes.Select,
-      currentValue: this.currentFilters.online,
+      currentValue: this.currentFilters.tr_online,
       filterKeysAssociation: this.filterKeysAssociations[0]
     });
     filterFieldsParams.push({
       type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.id,
+      currentValue: this.currentFilters.tr_id,
       filterKeysAssociation: this.filterKeysAssociations[1],
       maxlength: 36,
     });
     filterFieldsParams.push({
       type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.key,
+      currentValue: this.currentFilters.tr_key,
       filterKeysAssociation: this.filterKeysAssociations[2],
       maxlength: 66,
     });

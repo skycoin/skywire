@@ -1,6 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, Subscription } from 'rxjs';
 
 import { Route } from 'src/app/app.datatypes';
@@ -15,6 +15,12 @@ import { SelectOptionComponent, SelectableOption } from 'src/app/components/layo
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { TranslateService } from '@ngx-translate/core';
+import { FilterKeysAssociation, FilterTextElements, filterList, updateFilterTexts } from 'src/app/utils/filters';
+import {
+  FilterFieldParams,
+  FilterFieldTypes,
+  FiltersSelectionComponent
+} from 'src/app/components/layout/filters-selection/filters-selection.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -22,6 +28,16 @@ import { TranslateService } from '@ngx-translate/core';
 enum SortableColumns {
   Key = 'routes.key',
   Rule = 'routes.rule',
+}
+
+/**
+ * Filters for the list. It is prepopulated with default data which indicates that no filter
+ * has been selected. As the object may be included in the query string, prefixes are used to
+ * avoid name collisions with other components in the same URL.
+ */
+class DataFilters {
+  rt_key = '';
+  rt_rule = '';
 }
 
 /**
@@ -67,6 +83,7 @@ export class RouteListComponent implements OnDestroy {
   }
 
   allRoutes: Route[];
+  filteredRoutes: Route[];
   routesToShow: Route[];
   numberOfPages = 1;
   currentPage = 1;
@@ -74,8 +91,31 @@ export class RouteListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set routes(val: Route[]) {
     this.allRoutes = val;
-    this.recalculateElementsToShow();
+    this.filter();
   }
+
+  // Array allowing to associate the properties of TransportFilters with the ones on the list
+  // and the values that must be shown in the UI, for being able to use helper functions to
+  // filter the data and show some UI elements.
+  filterKeysAssociations: FilterKeysAssociation[] = [
+    {
+      filterName: 'routes.filter-dialog.key',
+      keyNameInElementsArray: 'key',
+      keyNameInFiltersObject: 'rt_key',
+    },
+    {
+      filterName: 'routes.filter-dialog.rule',
+      keyNameInElementsArray: 'rule',
+      keyNameInFiltersObject: 'rt_rule',
+    }
+  ];
+
+  // Current filters for the data.
+  currentFilters = new DataFilters();
+  // Properties needed for showing the selected filters in the UI.
+  currentFiltersTexts: FilterTextElements[] = [];
+  // Current params in the query string added to the url.
+  currentUrlQueryParams: object;
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -84,9 +124,11 @@ export class RouteListComponent implements OnDestroy {
     private routeService: RouteService,
     private dialog: MatDialog,
     private route: ActivatedRoute,
+    private router: Router,
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
   ) {
+    // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
@@ -96,9 +138,28 @@ export class RouteListComponent implements OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.recalculateElementsToShow();
+        this.filter();
       }
     });
+
+    // Get the query string.
+    this.navigationsSubscription.add(this.route.queryParamMap.subscribe(queryParams => {
+      // Get the filters from the query string.
+      this.currentFilters = new DataFilters();
+      Object.keys(this.currentFilters).forEach(key => {
+        if (queryParams.has(key)) {
+          this.currentFilters[key] = queryParams.get(key);
+        }
+      });
+
+      // Save the query string.
+      this.currentUrlQueryParams = {};
+      queryParams.keys.forEach(key => {
+        this.currentUrlQueryParams[key] = queryParams.get(key);
+      });
+
+      this.filter();
+    }));
   }
 
   ngOnDestroy() {
@@ -163,6 +224,67 @@ export class RouteListComponent implements OnDestroy {
 
       this.deleteRecursively(elementsToRemove, confirmationDialog);
     });
+  }
+
+  /**
+   * Removes all the filters added by the user.
+   */
+  removeFilters() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
+
+    // Ask for confirmation.
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      // Remove the query string params.
+      this.router.navigate([], { queryParams: {}});
+    });
+  }
+
+  /**
+   * Opens the filter selection modal window to let the user change the currently selected filters.
+   */
+  changeFilters() {
+    // Properties for the modal window.
+    const filterFieldsParams: FilterFieldParams[] = [];
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.rt_key,
+      filterKeysAssociation: this.filterKeysAssociations[0],
+      maxlength: 36,
+    });
+    filterFieldsParams.push({
+      type: FilterFieldTypes.TextInput,
+      currentValue: this.currentFilters.rt_rule,
+      filterKeysAssociation: this.filterKeysAssociations[1],
+      maxlength: 100,
+    });
+
+    // Open the modal window.
+    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
+      if (response) {
+        this.router.navigate([], { queryParams: response});
+      }
+    });
+  }
+
+  /**
+   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
+   */
+  private filter() {
+    if (this.allRoutes) {
+      this.filteredRoutes = filterList(this.allRoutes, this.currentFilters, this.filterKeysAssociations);
+
+      this.updateCurrentFilters();
+      this.recalculateElementsToShow();
+    }
+  }
+
+  /**
+   * Updates the texts with the currently selected filters.
+   */
+  private updateCurrentFilters() {
+    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
   }
 
   /**
@@ -270,9 +392,9 @@ export class RouteListComponent implements OnDestroy {
     this.currentPage = this.currentPageInUrl;
 
     // Needed to prevent racing conditions.
-    if (this.allRoutes) {
+    if (this.filteredRoutes) {
       // Sort all the data.
-      this.allRoutes.sort((a, b) => {
+      this.filteredRoutes.sort((a, b) => {
         const defaultOrder = a.key - b.key;
 
         let response: number;
@@ -289,7 +411,7 @@ export class RouteListComponent implements OnDestroy {
 
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.allRoutes.length / maxElements);
+      this.numberOfPages = Math.ceil(this.filteredRoutes.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
@@ -297,7 +419,7 @@ export class RouteListComponent implements OnDestroy {
       // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
-      this.routesToShow = this.allRoutes.slice(start, end);
+      this.routesToShow = this.filteredRoutes.slice(start, end);
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<number, boolean>();
