@@ -1,7 +1,13 @@
 # This is an example goreleaser.yaml file with some sane defaults.
 # Make sure to check the documentation at http://goreleaser.com
 
-# TODO: uncomment commented targets
+release:
+  # Repo in which the release will be created.
+  # Default is extracted from the origin remote URL or empty if its private hosted.
+  # Note: it can only be one: either github or gitlab or gitea
+  github:
+    owner: SkycoinProject
+    name: skywire-mainnet
 
 before:
   hooks:
