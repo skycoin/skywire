@@ -1,11 +1,13 @@
-import { Injectable, NgZone } from '@angular/core';
-import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
-import { Router } from '@angular/router';
+import {Injectable, NgZone} from '@angular/core';
+import {HttpClient, HttpErrorResponse, HttpHeaders} from '@angular/common/http';
+import {Observable, throwError} from 'rxjs';
+import {catchError, map} from 'rxjs/operators';
+import {webSocket} from 'rxjs/webSocket';
+import {Router} from '@angular/router';
 
-import { processServiceError } from '../utils/errors';
-import { environment } from 'src/environments/environment';
+import {processServiceError} from '../utils/errors';
+import {environment} from 'src/environments/environment';
+
 
 export enum ResponseTypes {
   Json = 'json',
@@ -84,17 +86,9 @@ export class ApiService {
    * @param url Endpoint URL, after the "/api/" part.
    */
   ws(url: string, body: any = {}): Observable<any> {
-    const ws = new WebSocket('wss://localhost:8000/' + this.apiPrefix + url);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify(body));
-    };
-
-    return new Observable(observer => {
-      ws.onmessage = (evt) => {
-        observer.next(evt);
-      };
-    });
+    const ws = webSocket('wss://localhost:8000/' + this.apiPrefix + url);
+    ws.next(body);
+    return ws;
   }
 
   /**
