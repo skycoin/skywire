@@ -31,13 +31,13 @@ func (_m *MockAPIClient) Health(ctx context.Context) (int, error) {
 	return r0, r1
 }
 
-// UpdateVisorUptime provides a mock function with given fields: ctx, seconds
-func (_m *MockAPIClient) UpdateVisorUptime(ctx context.Context, seconds int) error {
-	ret := _m.Called(ctx, seconds)
+// UpdateVisorUptime provides a mock function with given fields: _a0
+func (_m *MockAPIClient) UpdateVisorUptime(_a0 context.Context) error {
+	ret := _m.Called(_a0)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, int) error); ok {
-		r0 = rf(ctx, seconds)
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}
