@@ -28,7 +28,7 @@ type Error struct {
 
 // APIClient implements uptime tracker API client.
 type APIClient interface {
-	UpdateVisorUptime(ctx context.Context, seconds int) error
+	UpdateVisorUptime(context.Context) error
 	Health(ctx context.Context) (int, error)
 }
 
@@ -65,8 +65,8 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 }
 
 // UpdateVisorUptime updates visor uptime.
-func (c *httpClient) UpdateVisorUptime(ctx context.Context, seconds int) error {
-	resp, err := c.Get(ctx, fmt.Sprintf("/update?seconds=%d", seconds))
+func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
+	resp, err := c.Get(ctx, "/v2/update")
 	if err != nil {
 		return err
 	}
