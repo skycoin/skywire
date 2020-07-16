@@ -199,6 +199,7 @@ func (hv *Hypervisor) makeMux() *chi.Mux {
 				r.Post("/change-password", hv.users.ChangePassword())
 				r.Get("/about", hv.getAbout())
 				r.Post("/update", hv.updateHypervisor())
+				r.Get("/update/ws", hv.updateHypervisorWS())
 				r.Post("/update/available", hv.hypervisorUpdateAvailable())
 				r.Post("/update/available/{channel}", hv.hypervisorUpdateAvailable())
 				r.Get("/dmsg", hv.getDmsg())
@@ -302,6 +303,67 @@ func (hv *Hypervisor) updateHypervisor() http.HandlerFunc {
 		}{updated}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
+	}
+}
+
+func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			log.WithError(err).Warnf("Failed to upgrade to websocket.")
+			w.WriteHeader(http.StatusInternalServerError)
+
+			return
+		}
+
+		defer func() {
+			if err := ws.Close(websocket.StatusNormalClosure, "response sent"); err != nil {
+				log.WithError(err).Warnf("Failed to close WebSocket connection")
+			}
+		}()
+
+		var updateConfig updater.UpdateConfig
+
+		_, raw, err := ws.Read(context.Background())
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		if err := json.Unmarshal(raw, &updateConfig); err != nil {
+			log.Warnf("update visor request %v: %v", string(raw), err)
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetHypervisor
+
+		updated, err := hv.updater.Update(updateConfig)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		output := struct {
+			Updated bool  `json:"updated"`
+			Error   error `json:"error"`
+		}{updated, err}
+
+		rawOutput, err := json.Marshal(output)
+		if err != nil {
+			log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+			return
+		}
+
+		if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
+			log.WithError(err).Warnf("Failed to write WebSocket response")
+		}
 	}
 }
 
@@ -909,7 +971,6 @@ func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 
 func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		// open websocket
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			log.WithError(err).Warnf("Failed to upgrade to websocket.")
