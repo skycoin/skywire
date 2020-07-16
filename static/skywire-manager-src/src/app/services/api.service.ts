@@ -8,7 +8,6 @@ import { Router } from '@angular/router';
 import { processServiceError } from '../utils/errors';
 import { environment } from 'src/environments/environment';
 
-
 export enum ResponseTypes {
   Json = 'json',
   Text = 'text',
