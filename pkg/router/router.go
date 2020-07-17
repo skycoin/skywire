@@ -926,12 +926,10 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	}
 
 	rDesc := rule.RouteDescriptor()
-	rDescPtr := &rDesc
-	rDescInverted := rDescPtr.Invert()
-	log.WithField("rt_desc", rDescInverted.String()).
+	log.WithField("rt_desc", rDesc.String()).
 		Debug("Closing noise route group associated with rule...")
 
-	nrg, ok := r.popNoiseRouteGroup(rDescInverted)
+	nrg, ok := r.popNoiseRouteGroup(rDesc)
 	if !ok {
 		log.Debug("No noise route group associated with expired rule. Nothing to be done.")
 		return
