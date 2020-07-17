@@ -178,8 +178,6 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	// we don't need to keep holding mutex from this point on
 	rg.mu.Unlock()
 
-	rg.logger.Infof("TEST: WRITING PACKET: %v with rule %s", p, rule.String())
-
 	return rg.write(p, tp, rule)
 }
 
@@ -254,8 +252,6 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 	case <-rg.closed:
 		return 0, io.ErrClosedPipe
 	case data, ok := <-rg.readCh:
-		rg.logger.Infof("TEST: READ %v", data)
-
 		if !ok || len(data) == 0 {
 			// route group got closed or empty data received. Behavior on the empty
 			// data is equivalent to the behavior of `read()` unix syscall as described here:
@@ -474,13 +470,10 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
-	rg.logger.Infof("TEST: HANDLING DATA PACKET %v\n", packet)
 	select {
 	case <-rg.closed:
-		rg.logger.Infoln("TEST: ERROR HANDLING DATA PACKET: RG CLOSED")
 		return io.ErrClosedPipe
 	case rg.readCh <- packet.Payload():
-		rg.logger.Infoln("TEST: HANDLED DATA PACKET, PUT DATA INTO CHANNEL")
 	}
 
 	return nil

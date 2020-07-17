@@ -228,8 +228,6 @@ func (r *router) DialRoutes(
 		return nil, err
 	}
 
-	r.logger.Infof("TEST: GOT RULES")
-
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		r.logger.WithError(err).Error("Error saving routing rules")
 		return nil, err
@@ -241,8 +239,6 @@ func (r *router) DialRoutes(
 		RemotePK:  rPK,
 		Initiator: true,
 	}
-
-	r.logger.Infof("TEST: NOISE REMOTE PK: %s", rPK.String())
 
 	nrg, err := r.saveRouteGroupRules(rules, nsConf)
 	if err != nil {
@@ -286,7 +282,6 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		return nil, fmt.Errorf("SaveRoutingRules: %w", err)
 	}
 
-	r.logger.Infof("TEST: NOISE REMOTE PK: %s", rules.Desc.SrcPK().String())
 	nsConf := noise.Config{
 		LocalPK:   r.conf.PubKey,
 		LocalSK:   r.conf.SecKey,
@@ -370,7 +365,6 @@ func (r *router) serveSetup() {
 
 func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*noiseRouteGroup, error) {
 	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
-	r.logger.Infoln("TEST: ACQUIRING MUTEX IN saveRouteGroupRules")
 
 	// when route group is wrapped with noise, it's put into `nrgs`. but before that,
 	// in the process of wrapping we still need to use this route group to handle
@@ -407,8 +401,6 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 		r.logger.Infoln("Successfully closed old noise route group")
 	}
 
-	r.logger.Infoln("TEST: CREATED ROUTE GROUP, WRAPPING")
-
 	// wrapping rg with noise
 	wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
 	if err != nil {
@@ -419,8 +411,6 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 		return nil, fmt.Errorf("WrapConn (%s): %w", rules.Desc, err)
 	}
-
-	r.logger.Infoln("TEST: SUCCESSFULLY WRAPPED ROUTE GROUP")
 
 	nrg = &noiseRouteGroup{
 		rg:   rg,
@@ -450,14 +440,10 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 }
 
 func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) error {
-	r.logger.Infoln("TEST: GETTING RULE FOR DATA PACKET")
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
-		r.logger.Infoln("TEST: ERROR GETTING RULE FOR DATA PACKET: %v\n", err)
 		return err
 	}
-
-	r.logger.Infoln("TEST: GOT RULE FOR DATA PACKET")
 
 	if rule.Type() == routing.RuleReverse {
 		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
@@ -468,21 +454,17 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 
 	switch rule.Type() {
 	case routing.RuleForward, routing.RuleIntermediary:
-		r.logger.Infoln("TEST: FORWARDING INTERMEDIARY DATA PACKET")
 		r.logger.Infoln("Handling intermediary data packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
 	desc := rule.RouteDescriptor()
-	r.logger.Infoln("TEST: GETTING NRG")
 	nrg, ok := r.noiseRouteGroup(desc)
-	r.logger.Infoln("TEST: GOT NRG")
 
 	r.logger.Infof("Handling packet with descriptor %s", &desc)
 
 	if ok {
 		if nrg == nil {
-			r.logger.Infoln("TEST: NRG IS NIL")
 			return errors.New("noiseRouteGroup is nil")
 		}
 
@@ -496,17 +478,14 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	// we don't have nrg for this packet. it's either handshake message or
 	// we don't have route for this one completely
 
-	r.logger.Infoln("TEST: NO NRG FOR ROUTE DESC")
 	rg, ok := r.initializingRouteGroup(desc)
 	if !ok {
 		// no route, just return error
-		r.logger.Infoln("TEST: NO INITIALIZING RG FOR ROUTE DESC")
 		r.logger.Infof("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
 		return errors.New("route descriptor does not exist")
 	}
 
 	if rg == nil {
-		r.logger.Infoln("TEST: INITIALIZING RG IS NIL")
 		return errors.New("initializing RouteGroup is nil")
 	}
 
@@ -647,7 +626,6 @@ func (r *router) Close() error {
 	r.once.Do(func() {
 		close(r.done)
 
-		r.logger.Infoln("TEST: ACQUIRING MUTEX IN Close")
 		r.mx.Lock()
 		close(r.accept)
 		r.mx.Unlock()
@@ -780,7 +758,6 @@ func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
 }
 
 func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
-	r.logger.Infoln("TEST: ACQUIRING MUTEX IN popNoiseRouteGroup")
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
@@ -795,7 +772,6 @@ func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGr
 }
 
 func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
-	r.logger.Infoln("TEST: ACQUIRING MUTEX IN noiseRouteGroup")
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
@@ -805,8 +781,6 @@ func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup
 }
 
 func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
-	r.logger.Infoln("TEST: ACQUIRING MUTEX IN initializingRouteGroup")
-
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
@@ -816,7 +790,6 @@ func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGro
 }
 
 func (r *router) removeNoiseRouteGroup(desc routing.RouteDescriptor) {
-	r.logger.Infoln("TEST: ACQUIRING MUTEX IN removeNoiseRouteGroup")
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
@@ -828,7 +801,6 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	case <-r.done:
 		return io.ErrClosedPipe
 	default:
-		r.logger.Infoln("TEST: ACQUIRING MUTEX IN IntroduceRules")
 		r.mx.Lock()
 		defer r.mx.Unlock()
 
