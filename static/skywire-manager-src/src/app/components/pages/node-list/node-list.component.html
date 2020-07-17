@@ -194,13 +194,11 @@
               </div>
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:
-                <app-copy-to-clipboard-text [short]="true" text="{{ node.local_pk }}" shortTextLength="5"></app-copy-to-clipboard-text>
-                <!--{{ node.local_pk }}-->
+                {{ node.local_pk }}
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
-                <!--{{ node.dmsgServerPk }}-->
-                <app-copy-to-clipboard-text [short]="true" text="{{ node.dmsgServerPk }}" shortTextLength="5"></app-copy-to-clipboard-text>
+                {{ node.dmsgServerPk }}
               </div>
               <div class="list-row" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.ping' | translate }}</span>:

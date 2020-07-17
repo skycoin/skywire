@@ -43,6 +43,7 @@ class DataFilters {
   nl_online = '';
   nl_label = '';
   nl_key = '';
+  nl_dmsg = '';
 }
 
 /**
@@ -114,6 +115,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
       filterName: 'nodes.filter-dialog.key',
       keyNameInElementsArray: 'local_pk',
       keyNameInFiltersObject: 'nl_key',
+    },
+    {
+      filterName: 'nodes.filter-dialog.dmsg',
+      keyNameInElementsArray: 'dmsgServerPk',
+      keyNameInFiltersObject: 'nl_dmsg',
     }
   ];
 
@@ -666,6 +672,15 @@ export class NodeListComponent implements OnInit, OnDestroy {
       filterKeysAssociation: this.filterKeysAssociations[2],
       maxlength: 66,
     });
+
+    if (this.showDmsgInfo) {
+      filterFieldsParams.push({
+        type: FilterFieldTypes.TextInput,
+        currentValue: this.currentFilters.nl_dmsg,
+        filterKeysAssociation: this.filterKeysAssociations[3],
+        maxlength: 66,
+      });
+    }
 
     // Open the modal window.
     FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {

@@ -128,6 +128,7 @@
       "online": "The visor must be",
       "label": "The label must contain",
       "key": "The public key must contain",
+      "dmsg": "The DMSG server key must contain",
 
       "online-options": {
         "any": "Online or offline",
