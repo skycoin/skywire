@@ -222,6 +222,7 @@
 <!-- Msg shown if the list is empty. -->
 <div class="rounded-elevated-box mt-3" *ngIf="!dataSource || dataSource.length === 0">
   <div class="box-internal-container">
+    <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
     <span class="font-sm" *ngIf="allTransports.length === 0">{{ 'transports.empty' | translate }}</span>
     <span class="font-sm" *ngIf="allTransports.length !== 0">{{ 'transports.empty-with-filter' | translate }}</span>
   </div>

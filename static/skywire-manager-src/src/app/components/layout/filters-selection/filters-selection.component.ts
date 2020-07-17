@@ -75,7 +75,7 @@ export class FiltersSelectionComponent implements OnInit {
   }
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) private data: FilterFieldParams[],
+    @Inject(MAT_DIALOG_DATA) public data: FilterFieldParams[],
     private dialogRef: MatDialogRef<FiltersSelectionComponent>,
     private formBuilder: FormBuilder,
   ) { }
