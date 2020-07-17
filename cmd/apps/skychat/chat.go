@@ -80,7 +80,6 @@ func listenLoop() {
 			log.Println("Failed to accept conn:", err)
 			return
 		}
-		log.Infoln("TEST: ACCEPTED APP CONN")
 		log.Println("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
@@ -106,8 +105,6 @@ func handleConn(conn net.Conn) {
 			connsMu.Unlock()
 			return
 		}
-
-		log.Infof("TEST: READ MESSAGE: %v", buf[:n])
 
 		clientMsg, err := json.Marshal(map[string]string{"sender": raddr.PubKey.Hex(), "message": string(buf[:n])})
 		if err != nil {
@@ -145,18 +142,14 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 	connsMu.Unlock()
 
 	if !ok {
-		log.Infoln("TEST: DIALING APP")
 		var err error
 		err = r.Do(func() error {
 			conn, err = appC.Dial(addr)
 			return err
 		})
 		if err != nil {
-			log.Errorf("TEST: FAILED TO DIAL: %v", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
-		} else {
-			log.Infoln("TEST: APP DIALED")
 		}
 
 		connsMu.Lock()
@@ -165,8 +158,6 @@ func messageHandler(w http.ResponseWriter, req *http.Request) {
 
 		go handleConn(conn)
 	}
-
-	log.Infof("TEST: WRITING TO THE APP CONN: %v", []byte(data["message"]))
 
 	_, err := conn.Write([]byte(data["message"]))
 	if err != nil {
