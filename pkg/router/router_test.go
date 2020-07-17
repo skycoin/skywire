@@ -3,24 +3,24 @@ package router
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
-
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-
-	"github.com/stretchr/testify/mock"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
@@ -28,7 +28,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 )
 
-/*func TestMain(m *testing.M) {
+func TestMain(m *testing.M) {
 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
 	if ok {
 		lvl, err := logging.LevelFromString(loggingLevel)
@@ -42,7 +42,7 @@ import (
 	}
 
 	os.Exit(m.Run())
-}*/
+}
 
 func Test_router_NoiseRouteGroups(t *testing.T) {
 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
