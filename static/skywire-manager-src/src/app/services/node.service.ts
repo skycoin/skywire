@@ -103,6 +103,11 @@ export class NodeService {
    * service is automatically refreshing the node list.
    */
   private nodeListRefreshSubscription: Subscription;
+  /**
+   * Subscription for the timer to stop refresing the node list. If it is valid, it means
+   * a call to stop updating the data was made, but it is still pending.
+   */
+  private nodeListStopSubscription: Subscription;
 
   // Vars related to the specific node.
   private specificNodeSubject = new BehaviorSubject<BackendData>(null);
@@ -124,6 +129,11 @@ export class NodeService {
    * service is automatically refreshing the node info.
    */
   private specificNodeRefreshSubscription: Subscription;
+  /**
+   * Subscription for the timer to stop refresing the specific node. If it is valid, it means
+   * a call to stop updating the data was made, but it is still pending.
+   */
+  private specificNodeStopSubscription: Subscription;
 
   /**
    * Allows to get the node list. The list is periodically updated. It may emit null.
@@ -152,6 +162,14 @@ export class NodeService {
    * using the nodeList observable.
    */
   startRequestingNodeList() {
+    // If the previous procedure is still valid, continue it.
+    if (this.nodeListStopSubscription && !this.nodeListStopSubscription.closed) {
+      this.nodeListStopSubscription.unsubscribe();
+      this.nodeListStopSubscription = null;
+
+      return;
+    }
+
     // Get for how many ms the saved data is still valid.
     const momentOfLastCorrectUpdate = this.nodeListSubject.value ? this.nodeListSubject.value.momentOfLastCorrectUpdate : 0;
     const remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
@@ -172,6 +190,14 @@ export class NodeService {
    * @param publicKey Public key of the specific node to consult.
    */
   startRequestingSpecificNode(publicKey: string) {
+    // If the previous procedure is still valid, continue it.
+    if (this.specificNodeStopSubscription && !this.specificNodeStopSubscription.closed) {
+      this.specificNodeStopSubscription.unsubscribe();
+      this.specificNodeStopSubscription = null;
+
+      return;
+    }
+
     // Get for how many ms the saved data is still valid.
     const momentOfLastCorrectUpdate = this.specificNodeSubject.value ? this.specificNodeSubject.value.momentOfLastCorrectUpdate : 0;
     const remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
@@ -213,8 +239,10 @@ export class NodeService {
    */
   stopRequestingNodeList() {
     if (this.nodeListRefreshSubscription) {
-      this.nodeListRefreshSubscription.unsubscribe();
-      this.nodeListRefreshSubscription = null;
+      this.nodeListStopSubscription = of(1).pipe(delay(4000)).subscribe(() => {
+        this.nodeListRefreshSubscription.unsubscribe();
+        this.nodeListRefreshSubscription = null;
+      });
     }
   }
 
@@ -223,8 +251,10 @@ export class NodeService {
    */
   stopRequestingSpecificNode() {
     if (this.specificNodeRefreshSubscription) {
-      this.specificNodeRefreshSubscription.unsubscribe();
-      this.specificNodeRefreshSubscription = null;
+      this.specificNodeStopSubscription = of(1).pipe(delay(4000)).subscribe(() => {
+        this.specificNodeRefreshSubscription.unsubscribe();
+        this.specificNodeRefreshSubscription = null;
+      });
     }
   }
 
@@ -383,6 +413,11 @@ export class NodeService {
    * Makes the service immediately refresh the node list.
    */
   forceNodeListRefresh() {
+    if (this.nodeListSubject.value) {
+      // Make sure the current data is invalidated.
+      this.nodeListSubject.value.momentOfLastCorrectUpdate = -1;
+    }
+
     this.startDataSubscription(0, true);
   }
 
@@ -390,6 +425,11 @@ export class NodeService {
    * Makes the service immediately refresh the specific node.
    */
   forceSpecificNodeRefresh() {
+    if (this.specificNodeSubject.value) {
+      // Make sure the current data is invalidated.
+      this.specificNodeSubject.value.momentOfLastCorrectUpdate = -1;
+    }
+
     this.startDataSubscription(0, false);
   }
 

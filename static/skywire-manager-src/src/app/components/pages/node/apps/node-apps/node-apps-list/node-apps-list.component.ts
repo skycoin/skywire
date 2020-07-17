@@ -103,7 +103,7 @@ export class NodeAppsListComponent implements OnDestroy {
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
   @Input() set apps(val: Application[]) {
-    this.allApps = val;
+    this.allApps = val ? val : [];
     this.filter();
   }
 
