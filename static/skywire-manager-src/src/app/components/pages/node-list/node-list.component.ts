@@ -818,7 +818,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
-      this.storageService.changeNodeState(node.local_pk, true);
+      this.storageService.setLocalNodesAsHidden([node.local_pk]);
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
     });
@@ -833,23 +833,24 @@ export class NodeListComponent implements OnInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
 
-      // Remove and count all offline nodes.
-      let count = 0;
+      // Prepare all offline nodes to be removed.
+      const nodesToRemove: string[] = [];
       this.allNodes.forEach(node => {
         if (!node.online) {
-          this.storageService.changeNodeState(node.local_pk, true);
-          count += 1;
+          nodesToRemove.push(node.local_pk);
         }
       });
 
-      // Show the result.
-      if (count > 0) {
+      // Remove the nodes and show the result.
+      if (nodesToRemove.length > 0) {
+        this.storageService.setLocalNodesAsHidden(nodesToRemove);
+
         this.forceDataRefresh();
 
-        if (count === 1) {
+        if (nodesToRemove.length === 1) {
           this.snackbarService.showDone('nodes.deleted-singular');
         } else {
-          this.snackbarService.showDone('nodes.deleted-plural', { number: count });
+          this.snackbarService.showDone('nodes.deleted-plural', { number: nodesToRemove.length });
         }
       } else {
         this.snackbarService.showWarning('nodes.no-offline-nodes');

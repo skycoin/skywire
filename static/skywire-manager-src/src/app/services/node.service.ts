@@ -191,7 +191,7 @@ export class NodeService {
    */
   startRequestingSpecificNode(publicKey: string) {
     // If the previous procedure is still valid, continue it.
-    if (this.specificNodeStopSubscription && !this.specificNodeStopSubscription.closed) {
+    if (this.specificNodeStopSubscription && !this.specificNodeStopSubscription.closed && this.specificNodeKey === publicKey) {
       this.specificNodeStopSubscription.unsubscribe();
       this.specificNodeStopSubscription = null;
 
@@ -452,6 +452,7 @@ export class NodeService {
 
       // Process the node data and create a helper map.
       const obtainedNodes = new Map<string, Node>();
+      const nodesToRegisterInLocalStorageAsOnline: string[] = [];
       nodes.forEach(node => {
         if (dmsgInfoMap.has(node.local_pk)) {
           node.dmsgServerPk = dmsgInfoMap.get(node.local_pk).server_public_key;
@@ -463,33 +464,36 @@ export class NodeService {
 
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
-        node.label = this.storageService.getNodeLabel(node.local_pk);
+        const labeledPublicKey = this.storageService.getLabeledPublicKey(node.local_pk);
+        node.label =
+          labeledPublicKey && labeledPublicKey.label ? labeledPublicKey.label : this.storageService.getDefaultLabel(node.local_pk);
 
         obtainedNodes.set(node.local_pk, node);
+        if (node.online) {
+          nodesToRegisterInLocalStorageAsOnline.push(node.local_pk);
+        }
       });
 
+      this.storageService.includeVisibleLocalNodes(nodesToRegisterInLocalStorageAsOnline);
+
       const missingSavedNodes: Node[] = [];
-      this.storageService.getNodes().forEach(node => {
+      this.storageService.getSavedLocalNodes().forEach(node => {
         // If the backend did not return a saved node, add it to the response as an offline node.
-        if (!obtainedNodes.has(node.publicKey) && !node.deleted) {
+        if (!obtainedNodes.has(node.publicKey) && !node.hidden) {
           const newNode: Node = new Node();
           newNode.local_pk = node.publicKey;
-          newNode.label = node.label;
+          const labeledPublicKey = this.storageService.getLabeledPublicKey(node.publicKey);
+          newNode.label =
+            labeledPublicKey && labeledPublicKey.label ? labeledPublicKey.label : this.storageService.getDefaultLabel(node.publicKey);
           newNode.online = false;
 
           missingSavedNodes.push(newNode);
         }
 
-        // If the backend returned a node, informed that it is online and the saved data indicates that
-        // the user deleted it from the node list in the past, remove it from the response.
-        if (obtainedNodes.has(node.publicKey) && !obtainedNodes.get(node.publicKey).online && node.deleted) {
+        // If the backend returned a node, informed that it is offline and the saved data indicates
+        // that the user deleted it from the node list in the past, remove it from the response.
+        if (obtainedNodes.has(node.publicKey) && !obtainedNodes.get(node.publicKey).online && node.hidden) {
           obtainedNodes.delete(node.publicKey);
-        }
-
-        // If the user deleted an ofline node from the node list but now the backend says that it is online,
-        // it will be shown in the node list again, so the "deleted" flag is removed in this code segment.
-        if (obtainedNodes.has(node.publicKey) && obtainedNodes.get(node.publicKey).online && node.deleted) {
-          this.storageService.changeNodeState(node.publicKey, false);
         }
       });
 
@@ -528,7 +532,9 @@ export class NodeService {
       flatMap((node: Node) => {
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
-        node.label = this.storageService.getNodeLabel(node.local_pk);
+        const labeledPublicKey = this.storageService.getLabeledPublicKey(node.local_pk);
+        node.label =
+          labeledPublicKey && labeledPublicKey.label ? labeledPublicKey.label : this.storageService.getDefaultLabel(node.local_pk);
         currentNode = node;
 
         // Needed for a change made to the names on the backend.
