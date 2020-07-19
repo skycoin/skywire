@@ -2,7 +2,7 @@ import { Component, Inject, ViewChild, ElementRef, AfterViewInit, OnInit } from 
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { FormGroup, FormBuilder } from '@angular/forms';
 
-import { StorageService } from '../../../services/storage.service';
+import { StorageService, PublicKeyTypes } from '../../../services/storage.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { Node } from '../../../app.datatypes';
 import { AppConfig } from 'src/app/app.config';
@@ -53,7 +53,7 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
 
   save() {
     const label = this.form.get('label').value.trim();
-    this.storageService.setNodeLabel(this.data.local_pk, label);
+    this.storageService.setLabeledPublicKeyLabel(this.data.local_pk, label, PublicKeyTypes.LocalNode);
 
     // This comprobation is used because sending an empty label to
     // storageService.setNodeLabel makes it to add a default label.
