@@ -3,7 +3,7 @@ import { ReplaySubject, Observable } from 'rxjs';
 
 // Names for saving the data in localStorage.
 const KEY_REFRESH_SECONDS = 'refreshSeconds';
-const KEY_SAVED_PKS = 'publicKeysData';
+const KEY_SAVED_LABELS = 'labelsData';
 const KEY_LOCAL_NODES = 'localNodesData';
 
 /**
@@ -47,30 +47,28 @@ export class LocalNodeInfo {
 }
 
 /**
- * Represents a public key with an associated label.
+ * Represents a label to identify an element.
  */
-export class LabeledPublicKey {
+export class LabelInfo {
   /**
-   * Public key string.
+   * ID of the element.
    */
-  publicKey: string;
+  id: string;
   /**
-   * Label for identifying the public key.
+   * Label for identifying the element.
    */
   label: string;
   /**
-   * Allows to know for what the public key points to (like a local node or a remote node).
+   * Allows to know what the element is (like a node or a dmsg server).
    */
-  keyType: PublicKeyTypes;
+  identifiedElementType: LabeledElementTypes;
 }
 
 /**
- * List with the types of labeled public keys. It simply allows to know what the public
- * key points to.
+ * List with the types of labeled elements.
  */
-export enum PublicKeyTypes {
-  LocalNode = 'ln',
-  RemoteNode = 'rn',
+export enum LabeledElementTypes {
+  Node = 'nd',
   DmsgServer = 'ds',
 }
 
@@ -94,18 +92,27 @@ export class StorageService {
    */
   private savedLocalNodes = new Map<string, LocalNodeInfo>();
   /**
-   * Map with the currently saved labeled public keys, accessible via public key.
+   * Map with the currently saved labels, accessible via id.
    */
-  private savedLabeledPublicKeys = new Map<string, LabeledPublicKey>();
+  private savedLabels = new Map<string, LabelInfo>();
+  /**
+   * Set with the public keys of the currently saved local nodes which have not been set a hidden.
+   */
+  private savedVisibleLocalNodes = new Set<string>();
 
   constructor() {
     this.storage = localStorage;
     this.currentRefreshTime = parseInt(this.storage.getItem(KEY_REFRESH_SECONDS), 10) || 10;
     this.currentRefreshTimeSubject.next(this.currentRefreshTime);
 
-    // Load the saved local nodes and labeled public keys.
-    this.getSavedLocalNodes().forEach(node => this.savedLocalNodes.set(node.publicKey, node));
-    this.getSavedLabeledPublicKeys().forEach(key => this.savedLabeledPublicKeys.set(key.publicKey, key));
+    // Load the saved local nodes and labels.
+    this.getSavedLocalNodes().forEach(node => {
+      this.savedLocalNodes.set(node.publicKey, node);
+      if (!node.hidden) {
+        this.savedVisibleLocalNodes.add(node.publicKey);
+      }
+    });
+    this.getSavedLabels().forEach(label => this.savedLabels.set(label.id, label));
 
     // Process any legacy data, if any.
     this.loadLegacyNodeData();
@@ -113,16 +120,16 @@ export class StorageService {
     // Prevent any unexpected data duplication in the local storage.
     const sanitizedLocalNodesList: LocalNodeInfo[] = [];
     this.savedLocalNodes.forEach(val => sanitizedLocalNodesList.push(val));
-    const sanitizedLabeledPublicKeysList: LabeledPublicKey[] = [];
-    this.savedLabeledPublicKeys.forEach(val => sanitizedLabeledPublicKeysList.push(val));
+    const sanitizedLabelList: LabelInfo[] = [];
+    this.savedLabels.forEach(val => sanitizedLabelList.push(val));
 
     this.saveLocalNodes(sanitizedLocalNodesList);
-    this.saveLabeledPublicKeys(sanitizedLabeledPublicKeysList);
+    this.saveLabels(sanitizedLabelList);
   }
 
   /**
    * Checks if there are data saved in the LEGACY_KEY_NODES key of the local storage. If data is
-   * found, it is added to the savedLocalNodes and savedLabeledPublicKeys maps and saved in the
+   * found, it is added to the savedLocalNodes and savedLabels maps and saved in the
    * appropriate local storage keys. After that, the contents saved in the LEGACY_KEY_NODES key
    * are removed.
    */
@@ -130,9 +137,9 @@ export class StorageService {
     const oldSavedLocalNodes: LegacyNodeInfo[] = JSON.parse(this.storage.getItem(LEGACY_KEY_NODES)) || [];
 
     if (oldSavedLocalNodes.length > 0) {
-      // Get the data saved in the new keys.
+      // Get the data saved in the new storage keys.
       const currentLocalNodes = this.getSavedLocalNodes();
-      const currentLabeledPublicKeys = this.getSavedLabeledPublicKeys();
+      const currentLabels = this.getSavedLabels();
 
       // Add the data to the new arrays and maps.
       oldSavedLocalNodes.forEach(oldNode => {
@@ -141,18 +148,21 @@ export class StorageService {
           hidden: oldNode.deleted,
         });
         this.savedLocalNodes.set(oldNode.publicKey, currentLocalNodes[currentLocalNodes.length - 1]);
+        if (!oldNode.deleted) {
+          this.savedVisibleLocalNodes.add(oldNode.publicKey);
+        }
 
-        currentLabeledPublicKeys.push({
-          publicKey: oldNode.publicKey,
-          keyType: PublicKeyTypes.LocalNode,
+        currentLabels.push({
+          id: oldNode.publicKey,
+          identifiedElementType: LabeledElementTypes.Node,
           label: oldNode.label,
         });
-        this.savedLabeledPublicKeys.set(oldNode.publicKey, currentLabeledPublicKeys[currentLabeledPublicKeys.length - 1]);
+        this.savedLabels.set(oldNode.publicKey, currentLabels[currentLabels.length - 1]);
       });
 
       // Save the data.
       this.saveLocalNodes(currentLocalNodes);
-      this.saveLabeledPublicKeys(currentLabeledPublicKeys);
+      this.saveLabels(currentLabels);
 
       this.storage.removeItem(LEGACY_KEY_NODES);
     }
@@ -232,6 +242,11 @@ export class StorageService {
           modificationsMade = true;
 
           this.savedLocalNodes.set(localNode.publicKey, localNode);
+          if (hidden) {
+            this.savedVisibleLocalNodes.delete(localNode.publicKey);
+          } else {
+            this.savedVisibleLocalNodes.add(localNode.publicKey);
+          }
         }
       }
     });
@@ -247,6 +262,11 @@ export class StorageService {
 
       localNodes.push(newLocalNode);
       this.savedLocalNodes.set(pk, newLocalNode);
+      if (hidden) {
+        this.savedVisibleLocalNodes.delete(pk);
+      } else {
+        this.savedVisibleLocalNodes.add(pk);
+      }
     });
 
     // Save the changes, if needed.
@@ -263,6 +283,14 @@ export class StorageService {
   }
 
   /**
+   * Gets the saved visible local nodes set, from the cached map. The returned set must not
+   * be modiffied.
+   */
+  getSavedVisibleLocalNodes(): Set<string> {
+    return this.savedVisibleLocalNodes;
+  }
+
+  /**
    * Saves a local nodes array in the persistent storage. It replaces any previously saved array.
    */
   private saveLocalNodes(nodes: LocalNodeInfo[]) {
@@ -270,36 +298,34 @@ export class StorageService {
   }
 
   /**
-   * Gets the saved labeled public keys array, directly from the persistent storage, not the
-   * cached map.
+   * Gets the saved labels array, directly from the persistent storage, not the cached map.
    */
-  private getSavedLabeledPublicKeys(): LabeledPublicKey[] {
-    return JSON.parse(this.storage.getItem(KEY_SAVED_PKS)) || [];
+  private getSavedLabels(): LabelInfo[] {
+    return JSON.parse(this.storage.getItem(KEY_SAVED_LABELS)) || [];
   }
 
   /**
-   * Saves a labeled public keys array in the persistent storage. It replaces any previously
-   * saved array.
+   * Saves a labels array in the persistent storage. It replaces any previously saved array.
    */
-  private saveLabeledPublicKeys(keys: LabeledPublicKey[]) {
-    this.storage.setItem(KEY_SAVED_PKS, JSON.stringify(keys));
+  private saveLabels(labels: LabelInfo[]) {
+    this.storage.setItem(KEY_SAVED_LABELS, JSON.stringify(labels));
   }
 
   /**
-   * Assigns a label to a public key. If the label is empty, the public key is removed from
-   * the saved labeled public keys list.
+   * Saves a label to identify an element via its id. If the provided label is empty, the id
+   * is removed from the saved labels list, if it was saved before.
    */
-  setLabeledPublicKeyLabel(publicKey: string, label: string, keyType: PublicKeyTypes): void {
+  saveLabel(id: string, label: string, elementType: LabeledElementTypes): void {
     if (!label) {
-      // Remove the public key from the cached map.
-      if (this.savedLabeledPublicKeys.has(publicKey)) {
-        this.savedLabeledPublicKeys.delete(publicKey);
+      // Remove the label from the cached map.
+      if (this.savedLabels.has(id)) {
+        this.savedLabels.delete(id);
       }
 
-      // Remove the public key from the saved list.
+      // Remove the label from the saved list.
       let previouslySaved = false;
-      const keys = this.getSavedLabeledPublicKeys().filter(key => {
-        if (key.publicKey === publicKey) {
+      const labels = this.getSavedLabels().filter(currentLabel => {
+        if (currentLabel.id === id) {
           previouslySaved = true;
 
           return false;
@@ -310,58 +336,58 @@ export class StorageService {
 
       // Save the changes.
       if (previouslySaved) {
-        this.saveLabeledPublicKeys(keys);
+        this.saveLabels(labels);
       }
     } else {
       // Get the saved data and update the label.
       let previouslySaved = false;
-      const keys = this.getSavedLabeledPublicKeys().map(key => {
-        if (key.publicKey === publicKey && key.keyType === keyType) {
+      const labels = this.getSavedLabels().map(currentLabel => {
+        if (currentLabel.id === id && currentLabel.identifiedElementType === elementType) {
           previouslySaved = true;
-          key.label = label;
+          currentLabel.label = label;
 
-          this.savedLabeledPublicKeys.set(key.publicKey, {
-            label: key.label,
-            publicKey: key.publicKey,
-            keyType: key.keyType,
+          this.savedLabels.set(currentLabel.id, {
+            label: currentLabel.label,
+            id: currentLabel.id,
+            identifiedElementType: currentLabel.identifiedElementType,
           });
         }
 
-        return key;
+        return currentLabel;
       });
 
-      // If the public keys was not in the saved data, save it.
+      // If the label was not in the saved data, save it.
       if (!previouslySaved) {
-        const newPkInfo = {
+        const newPkInfo: LabelInfo = {
           label: label,
-          publicKey: publicKey,
-          keyType: keyType,
+          id: id,
+          identifiedElementType: elementType,
         };
 
-        keys.push(newPkInfo);
-        this.savedLabeledPublicKeys.set(publicKey, newPkInfo);
-        this.saveLabeledPublicKeys(keys);
+        labels.push(newPkInfo);
+        this.savedLabels.set(id, newPkInfo);
+        this.saveLabels(labels);
       } else {
         // Save the updated data.
-        this.saveLabeledPublicKeys(keys);
+        this.saveLabels(labels);
       }
     }
   }
 
   /**
-   * Returns the default label for a public key.
+   * Returns the default label for a public key or any other string.
    */
   getDefaultLabel(publicKey: string): string {
     return publicKey.substr(0, 8);
   }
 
   /**
-   * Gets the label data assigned to a public key. If no label has been Assigned to the public
-   * key, null is returned.
+   * Gets the label info assigned to an id. If no label has been assigned to the id, null
+   * is returned.
    */
-  getLabeledPublicKey(publicKey: string): LabeledPublicKey {
-    if (this.savedLabeledPublicKeys.has(publicKey)) {
-      return this.savedLabeledPublicKeys.get(publicKey);
+  getLabelInfo(id: string): LabelInfo {
+    if (this.savedLabels.has(id)) {
+      return this.savedLabels.get(id);
     }
 
     return null;

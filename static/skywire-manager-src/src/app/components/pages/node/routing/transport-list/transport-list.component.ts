@@ -406,6 +406,13 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
+   * Asks the node data to be refreshed.
+   */
+  refreshData() {
+    NodeComponent.refreshCurrentDisplayedData();
+  }
+
+  /**
    * Changes the column and/or order used for sorting the data.
    */
   changeSortingOrder(column: SortableColumns) {

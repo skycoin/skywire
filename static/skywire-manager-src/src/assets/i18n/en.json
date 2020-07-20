@@ -22,6 +22,15 @@
     "ok": "Ok"
   },
 
+  "labeled-element": {
+    "edit-label": "Edit label",
+    "copy": "Copy",
+    "unknown-element": "Unknown",
+    "local-element": "Local",
+    "tooltip": "Click for options",
+    "tooltip-with-text": "{{ text }} (Click for options)"
+  },
+
   "filters": {
     "filter-action": "Filter",
     "active-filters": "Active filters: ",
@@ -160,7 +169,7 @@
     "title": "Edit label",
     "label": "Label",
     "done": "Label saved.",
-    "default-label-warning": "The default label has been used."
+    "label-removed-warning": "The label was removed."
   },
 
   "settings": {

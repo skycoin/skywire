@@ -103,6 +103,7 @@ import {
 } from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
 import { MenuButtonComponent } from './components/layout/sidenav/menu-button/menu-button.component';
 import { FiltersSelectionComponent } from './components/layout/filters-selection/filters-selection.component';
+import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -183,6 +184,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SkysocksClientSettingsComponent,
     MenuButtonComponent,
     FiltersSelectionComponent,
+    LabeledElementTextComponent,
   ],
   entryComponents: [
     ConfigurationComponent,
