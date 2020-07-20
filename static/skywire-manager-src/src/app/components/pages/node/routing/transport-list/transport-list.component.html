@@ -108,7 +108,7 @@
         <app-copy-to-clipboard-text [short]="true" text="{{ transport.id }}" shortTextLength="4"></app-copy-to-clipboard-text>
       </td>
       <td>
-        <app-copy-to-clipboard-text [short]="true" text="{{ transport.remote_pk }}" shortTextLength="4"></app-copy-to-clipboard-text>
+        <app-labeled-element-text [short]="true" id="{{ transport.remote_pk }}" shortTextLength="4" (labelEdited)="refreshData()"></app-labeled-element-text>
       </td>
       <td>
         {{ transport.type }}
