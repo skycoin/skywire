@@ -464,9 +464,9 @@ export class NodeService {
 
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
-        const labeledPublicKey = this.storageService.getLabeledPublicKey(node.local_pk);
+        const labelInfo = this.storageService.getLabelInfo(node.local_pk);
         node.label =
-          labeledPublicKey && labeledPublicKey.label ? labeledPublicKey.label : this.storageService.getDefaultLabel(node.local_pk);
+          labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.local_pk);
 
         obtainedNodes.set(node.local_pk, node);
         if (node.online) {
@@ -482,9 +482,9 @@ export class NodeService {
         if (!obtainedNodes.has(node.publicKey) && !node.hidden) {
           const newNode: Node = new Node();
           newNode.local_pk = node.publicKey;
-          const labeledPublicKey = this.storageService.getLabeledPublicKey(node.publicKey);
+          const labelInfo = this.storageService.getLabelInfo(node.publicKey);
           newNode.label =
-            labeledPublicKey && labeledPublicKey.label ? labeledPublicKey.label : this.storageService.getDefaultLabel(node.publicKey);
+            labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.publicKey);
           newNode.online = false;
 
           missingSavedNodes.push(newNode);
@@ -532,9 +532,9 @@ export class NodeService {
       flatMap((node: Node) => {
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
-        const labeledPublicKey = this.storageService.getLabeledPublicKey(node.local_pk);
+        const labelInfo = this.storageService.getLabelInfo(node.local_pk);
         node.label =
-          labeledPublicKey && labeledPublicKey.label ? labeledPublicKey.label : this.storageService.getDefaultLabel(node.local_pk);
+          labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.local_pk);
         currentNode = node;
 
         // Needed for a change made to the names on the backend.
