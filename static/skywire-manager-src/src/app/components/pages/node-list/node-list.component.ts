@@ -9,7 +9,7 @@ import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
-import { StorageService } from '../../../services/storage.service';
+import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
@@ -803,7 +803,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * Opens the modal window for changing the label of a node.
    */
   showEditLabelDialog(node: Node) {
-    EditLabelComponent.openDialog(this.dialog, node).afterClosed().subscribe((changed: boolean) => {
+    let labelInfo =  this.storageService.getLabelInfo(node.local_pk);
+    if (!labelInfo) {
+      labelInfo = {
+        id: node.local_pk,
+        label: '',
+        identifiedElementType: LabeledElementTypes.Node,
+      };
+    }
+
+    EditLabelComponent.openDialog(this.dialog, labelInfo).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
         this.forceDataRefresh();
       }
