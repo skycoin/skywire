@@ -210,8 +210,8 @@ export class NodeService {
    */
   update(nodeKey: string): Observable<any> {
     const body = {
-      // TODO: stable
-      channel: 'testing' // 'stable' or 'testing'
+      channel: 'stable'
+      // channel: 'testing' // for debugging updater
     };
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
