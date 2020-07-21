@@ -69,6 +69,7 @@ export class LabelInfo {
  */
 export enum LabeledElementTypes {
   Node = 'nd',
+  Transport = 'tp',
   DmsgServer = 'ds',
 }
 
