@@ -344,6 +344,7 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 
 		updateConfig.Target = updater.TargetHypervisor
 
+		// TODO: send data in loop
 		updated, err := hv.updater.Update(updateConfig)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
@@ -1007,21 +1008,33 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 
 		updateConfig.Target = updater.TargetVisor
 
-		updated, err := ctx.RPC.Update(updateConfig)
+		ch := ctx.RPC.UpdateWithStatus(updateConfig)
 
-		output := struct {
-			Updated bool  `json:"updated"`
-			Error   error `json:"error"`
-		}{updated, err}
+		for status := range ch {
+			if status.IsError {
+				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
+					log.WithError(err).Warnf("failed to close WebSocket (abnormal)")
+					return
+				}
+			}
 
-		rawOutput, err := json.Marshal(output)
-		if err != nil {
-			log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
-			return
+			output := struct {
+				Status string `json:"status"`
+			}{status.Text}
+
+			rawOutput, err := json.Marshal(output)
+			if err != nil {
+				log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+				return
+			}
+
+			if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
+				log.WithError(err).Warnf("Failed to write WebSocket response")
+			}
 		}
 
-		if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
-			log.WithError(err).Warnf("Failed to write WebSocket response")
+		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
+			log.WithError(err).Warnf("failed to close WebSocket (normal)")
 		}
 	})
 }
@@ -1039,13 +1052,19 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 			return
 		}
 
+		summary, err := ctx.RPC.Summary()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
 		output := struct {
 			Available        bool   `json:"available"`
 			CurrentVersion   string `json:"current_version"`
 			AvailableVersion string `json:"available_version,omitempty"`
 		}{
 			Available:      version != nil,
-			CurrentVersion: buildinfo.Version(),
+			CurrentVersion: summary.BuildInfo.Version,
 		}
 
 		if version != nil {
