@@ -115,8 +115,13 @@
             <!--<app-copy-to-clipboard-text [short]="true" text="{{ node.local_pk }}" shortTextLength="5"></app-copy-to-clipboard-text>-->
           </td>
           <td *ngIf="showDmsgInfo">
-            {{ node.dmsgServerPk }}
-            <!--<app-copy-to-clipboard-text [short]="true" text="{{ node.dmsgServerPk }}" shortTextLength="5"></app-copy-to-clipboard-text>-->
+            <app-labeled-element-text
+              [short]="true"
+              id="{{ node.dmsgServerPk }}"
+              shortTextLength="4"
+              (labelEdited)="forceDataRefresh()"
+              [elementType]="labeledElementTypes.DmsgServer">
+            </app-labeled-element-text>
           </td>
           <td *ngIf="showDmsgInfo">
             {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
@@ -133,7 +138,7 @@
             <button
               (click)="showEditLabelDialog(node)"
               mat-icon-button
-              [matTooltip]="'edit-label.title' | translate"
+              [matTooltip]="'labeled-element.edit-label' | translate"
               class="big-action-button transparent-button"
             >
               <mat-icon [inline]="true">short_text</mat-icon>
@@ -198,7 +203,11 @@
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
-                {{ node.dmsgServerPk }}
+                <app-labeled-element-text
+                  id="{{ node.dmsgServerPk }}"
+                  (labelEdited)="forceDataRefresh()"
+                  [elementType]="labeledElementTypes.DmsgServer">
+                </app-labeled-element-text>
               </div>
               <div class="list-row" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.ping' | translate }}</span>:

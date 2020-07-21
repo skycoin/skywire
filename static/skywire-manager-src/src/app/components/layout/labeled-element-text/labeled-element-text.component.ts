@@ -6,6 +6,7 @@ import { StorageService, LabelInfo, LabeledElementTypes } from 'src/app/services
 import { ClipboardService } from 'src/app/services/clipboard.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { EditLabelComponent } from '../edit-label/edit-label.component';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**
  * Shows the id of an element and a label identifying it. An icon is shown at the end of the text,
@@ -89,6 +90,13 @@ export class LabeledElementTextComponent implements OnDestroy {
       }
     ];
 
+    if (this.labelInfo) {
+      options.push({
+        icon: 'close',
+        label: 'labeled-element.remove-label',
+      });
+    }
+
     // Show the options modal window.
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
@@ -96,6 +104,18 @@ export class LabeledElementTextComponent implements OnDestroy {
         if (this.clipboardService.copy(this.id)) {
           this.snackbarService.showDone('copy.copied');
         }
+      } else if (selectedOption === 3) {
+        // Ask for confirmation and remove the label.
+        const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'labeled-element.remove-label-confirmation');
+
+        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+          confirmationDialog.componentInstance.closeModal();
+
+          this.storageService.saveLabel(this.id, null, this.elementType);
+          this.snackbarService.showDone('edit-label.label-removed-warning');
+
+          this.labelEdited.emit();
+        });
       } else {
         // Params for the edit label modal window.
         if (selectedOption === 2) {

@@ -38,6 +38,11 @@ export interface FilterKeysAssociation {
    */
   keyNameInElementsArray: string;
   /**
+   * Name of an additional property in the elements of the list which is going to be filtered.
+   * This allows to compare a filter with more than one property.
+   */
+  secondaryKeyNameInElementsArray?: string;
+  /**
    * Name of the property in the object with the filters.
    */
   keyNameInFiltersObject: string;
@@ -75,9 +80,14 @@ export function filterList(allElements: any[], currentFilters: any, filterKeysAs
 
       // Check if the element pass all the filters.
       cleanedFilterKeysAssociations.forEach(association => {
-        if (!String(element[association.keyNameInElementsArray]).toLowerCase().includes(
-          currentFilters[association.keyNameInFiltersObject].toLowerCase())
-        ) {
+        const primaryPropertyValid = String(element[association.keyNameInElementsArray]).toLowerCase().includes(
+          currentFilters[association.keyNameInFiltersObject].toLowerCase());
+
+        const secondaryPropertyValid = association.secondaryKeyNameInElementsArray &&
+          String(element[association.secondaryKeyNameInElementsArray])
+          .toLowerCase().includes(currentFilters[association.keyNameInFiltersObject].toLowerCase());
+
+        if (!primaryPropertyValid && !secondaryPropertyValid) {
           valid = false;
         }
       });

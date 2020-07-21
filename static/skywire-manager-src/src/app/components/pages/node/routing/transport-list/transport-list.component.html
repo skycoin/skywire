@@ -105,10 +105,21 @@
         <span [class]="transportStatusClass(transport, true)" [matTooltip]="transportStatusText(transport, true) | translate"></span>
       </td>
       <td>
-        <app-copy-to-clipboard-text [short]="true" text="{{ transport.id }}" shortTextLength="4"></app-copy-to-clipboard-text>
+        <app-labeled-element-text
+          [short]="true"
+          id="{{ transport.id }}"
+          shortTextLength="4"
+          (labelEdited)="refreshData()"
+          [elementType]="labeledElementTypes.Transport">
+        </app-labeled-element-text>
       </td>
       <td>
-        <app-labeled-element-text [short]="true" id="{{ transport.remote_pk }}" shortTextLength="4" (labelEdited)="refreshData()"></app-labeled-element-text>
+        <app-labeled-element-text
+          [short]="true"
+          id="{{ transport.remote_pk }}"
+          shortTextLength="4"
+          (labelEdited)="refreshData()">
+        </app-labeled-element-text>
       </td>
       <td>
         {{ transport.type }}
@@ -176,11 +187,18 @@
           </div>
           <div class="list-row long-content">
             <span class="title">{{ 'transports.id' | translate }}</span>:
-            <app-copy-to-clipboard-text text="{{ transport.id }}"></app-copy-to-clipboard-text>
+            <app-labeled-element-text
+              id="{{ transport.id }}"
+              (labelEdited)="refreshData()"
+              [elementType]="labeledElementTypes.Transport">
+            </app-labeled-element-text>
           </div>
           <div class="list-row long-content">
             <span class="title">{{ 'transports.remote-node' | translate }}</span>:
-            <app-copy-to-clipboard-text text="{{ transport.remote_pk }}"></app-copy-to-clipboard-text>
+            <app-labeled-element-text
+              id="{{ transport.remote_pk }}"
+              (labelEdited)="refreshData()">
+            </app-labeled-element-text>
           </div>
           <div class="list-row">
             <span class="title">{{ 'transports.type' | translate }}</span>:
