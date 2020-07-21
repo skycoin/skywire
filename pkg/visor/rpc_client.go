@@ -313,7 +313,7 @@ type StatusMessage struct {
 	IsError bool
 }
 
-// Update calls Update.
+// UpdateWithStatus combines results of Update and UpdateStatus.
 func (rc *rpcClient) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
 	ch := make(chan StatusMessage, 512)
 
@@ -361,9 +361,13 @@ func (rc *rpcClient) UpdateWithStatus(config updater.UpdateConfig) <-chan Status
 				Text:    err.Error(),
 				IsError: true,
 			}
+		} else if updated {
+			ch <- StatusMessage{
+				Text: "Finished",
+			}
 		} else {
 			ch <- StatusMessage{
-				Text: "finished",
+				Text: "No update found",
 			}
 		}
 	}()

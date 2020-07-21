@@ -344,28 +344,88 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 
 		updateConfig.Target = updater.TargetHypervisor
 
-		// TODO: send data in loop
-		updated, err := hv.updater.Update(updateConfig)
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
+		ch := hv.updateHVWithStatus(updateConfig)
+
+		for status := range ch {
+			if status.IsError {
+				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
+					log.WithError(err).Warnf("failed to close WebSocket (abnormal)")
+					return
+				}
+			}
+
+			output := struct {
+				Status string `json:"status"`
+			}{status.Text}
+
+			rawOutput, err := json.Marshal(output)
+			if err != nil {
+				log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+				return
+			}
+
+			if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
+				log.WithError(err).Warnf("Failed to write WebSocket response")
+			}
 		}
 
-		output := struct {
-			Updated bool  `json:"updated"`
-			Error   error `json:"error"`
-		}{updated, err}
-
-		rawOutput, err := json.Marshal(output)
-		if err != nil {
-			log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
-			return
-		}
-
-		if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
-			log.WithError(err).Warnf("Failed to write WebSocket response")
+		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
+			log.WithError(err).Warnf("failed to close WebSocket (normal)")
 		}
 	}
+}
+
+func (hv *Hypervisor) updateHVWithStatus(config updater.UpdateConfig) <-chan visor.StatusMessage {
+	ch := make(chan visor.StatusMessage, 512)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				status := hv.updater.Status()
+
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if status != "" {
+						ch <- visor.StatusMessage{
+							Text: status,
+						}
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+			}
+		}
+	}()
+
+	go func() {
+		defer func() {
+			cancel()
+			close(ch)
+		}()
+
+		if updated, err := hv.updater.Update(config); err != nil {
+			ch <- visor.StatusMessage{
+				Text:    err.Error(),
+				IsError: true,
+			}
+		} else if updated {
+			ch <- visor.StatusMessage{
+				Text: "Finished",
+			}
+		} else {
+			ch <- visor.StatusMessage{
+				Text: "No update found",
+			}
+		}
+	}()
+
+	return ch
 }
 
 func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
