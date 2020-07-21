@@ -129,6 +129,11 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 		return false, err
 	}
 
+	// No update is available.
+	if version == "" {
+		return false, nil
+	}
+
 	u.status.Set(fmt.Sprintf("Found version %q, downloading", version))
 
 	downloadedBinariesPath, err := u.download(updateConfig, version)
