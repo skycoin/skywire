@@ -8,7 +8,8 @@
 .PHONY : docker-apps docker-bin docker-volume
 .PHONY : docker-run docker-stop
 
-VERSION := $(shell git describe)
+#VERSION := $(shell git describe)
+VERSION := v0.1.0 #TODO: remove
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
