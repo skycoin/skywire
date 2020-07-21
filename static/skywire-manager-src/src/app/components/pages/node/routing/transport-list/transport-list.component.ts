@@ -22,6 +22,7 @@ import {
   FiltersSelectionComponent,
   FilterFieldTypes
 } from 'src/app/components/layout/filters-selection/filters-selection.component';
+import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -43,7 +44,9 @@ enum SortableColumns {
 class DataFilters {
   tr_online = '';
   tr_id = '';
+  tr_id_label = '';
   tr_key = '';
+  tr_key_label = '';
 }
 
 /**
@@ -126,11 +129,13 @@ export class TransportListComponent implements OnDestroy {
     {
       filterName: 'transports.filter-dialog.id',
       keyNameInElementsArray: 'id',
+      secondaryKeyNameInElementsArray: 'id_label',
       keyNameInFiltersObject: 'tr_id',
     },
     {
       filterName: 'transports.filter-dialog.remote-node',
       keyNameInElementsArray: 'remote_pk',
+      secondaryKeyNameInElementsArray: 'remote_pk_label',
       keyNameInFiltersObject: 'tr_key',
     }
   ];
@@ -142,6 +147,8 @@ export class TransportListComponent implements OnDestroy {
   // Current params in the query string added to the url.
   currentUrlQueryParams: object;
 
+  labeledElementTypes = LabeledElementTypes;
+
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
 
@@ -152,6 +159,7 @@ export class TransportListComponent implements OnDestroy {
     private router: Router,
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
+    private storageService: StorageService,
   ) {
     // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
@@ -338,9 +346,31 @@ export class TransportListComponent implements OnDestroy {
    */
   private filter() {
     if (this.allTransports) {
-      this.filteredTransports = filterList(this.allTransports, this.currentFilters, this.filterKeysAssociations);
+      // Check if at least one filter is valid.
+      let filtersSet = false;
+      Object.keys(this.currentFilters).forEach(key => {
+        if (this.currentFilters[key]) {
+          filtersSet = true;
+        }
+      });
 
-      this.updateCurrentFilters();
+      if (filtersSet) {
+        // Add the label data to the array, to be able to use it for filtering.
+        this.allTransports.forEach(transport => {
+          const idLabelInfo = this.storageService.getLabelInfo(transport.id);
+          transport['id_label'] = idLabelInfo ? idLabelInfo.label : '';
+
+          const remoteNodeLabelInfo = this.storageService.getLabelInfo(transport.remote_pk);
+          transport['remote_pk_label'] = remoteNodeLabelInfo ? remoteNodeLabelInfo.label : '';
+        });
+
+        this.filteredTransports = filterList(this.allTransports, this.currentFilters, this.filterKeysAssociations);
+
+        this.updateCurrentFilters();
+      } else {
+        this.filteredTransports = this.allTransports;
+      }
+
       this.recalculateElementsToShow();
     }
   }
