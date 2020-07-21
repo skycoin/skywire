@@ -44,6 +44,7 @@ class DataFilters {
   nl_label = '';
   nl_key = '';
   nl_dmsg = '';
+  nl_dmsg_label = '';
 }
 
 /**
@@ -119,6 +120,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     {
       filterName: 'nodes.filter-dialog.dmsg',
       keyNameInElementsArray: 'dmsgServerPk',
+      secondaryKeyNameInElementsArray: 'dmsgServerPk_label',
       keyNameInFiltersObject: 'nl_dmsg',
     }
   ];
@@ -144,6 +146,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
   // True if the user manually requested the data to be updated and the update has still
   // not been made.
   lastUpdateRequestedManually = false;
+
+  labeledElementTypes = LabeledElementTypes;
 
   constructor(
     private nodeService: NodeService,
@@ -695,9 +699,28 @@ export class NodeListComponent implements OnInit, OnDestroy {
    */
   private filter() {
     if (this.allNodes) {
-      this.filteredNodes = filterList(this.allNodes, this.currentFilters, this.filterKeysAssociations);
+      // Check if at least one filter is valid.
+      let filtersSet = false;
+      Object.keys(this.currentFilters).forEach(key => {
+        if (this.currentFilters[key]) {
+          filtersSet = true;
+        }
+      });
 
-      this.updateCurrentFilters();
+      if (filtersSet) {
+        // Add the label data to the array, to be able to use it for filtering.
+        this.allNodes.forEach(node => {
+          const dmsgLabelInfo = this.storageService.getLabelInfo(node.dmsgServerPk);
+          node['dmsgServerPk_label'] = dmsgLabelInfo ? dmsgLabelInfo.label : '';
+        });
+
+        this.filteredNodes = filterList(this.allNodes, this.currentFilters, this.filterKeysAssociations);
+
+        this.updateCurrentFilters();
+      } else {
+        this.filteredNodes = this.allNodes;
+      }
+
       this.recalculateElementsToShow();
     }
   }
@@ -729,7 +752,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     options.push({
       icon: 'short_text',
-      label: 'edit-label.title',
+      label: 'labeled-element.edit-label',
     });
 
     if (!node.online) {

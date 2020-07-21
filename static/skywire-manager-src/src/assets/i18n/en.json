@@ -24,11 +24,14 @@
 
   "labeled-element": {
     "edit-label": "Edit label",
+    "remove-label": "Remove label",
     "copy": "Copy",
-    "unknown-element": "Unknown",
+    "remove-label-confirmation": "Do you really want to remove the label?",
+    "unnamed-element": "Unnamed",
+    "unnamed-local-visor": "Local visor",
     "local-element": "Local",
-    "tooltip": "Click for options",
-    "tooltip-with-text": "{{ text }} (Click for options)"
+    "tooltip": "Click to copy the entry or change the label",
+    "tooltip-with-text": "{{ text }} (Click to copy the entry or change the label)"
   },
 
   "filters": {
@@ -166,7 +169,6 @@
   },
 
   "edit-label": {
-    "title": "Edit label",
     "label": "Label",
     "done": "Label saved.",
     "label-removed-warning": "The label was removed."
