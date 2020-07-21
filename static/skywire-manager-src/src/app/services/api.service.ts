@@ -86,7 +86,7 @@ export class ApiService {
    */
   ws(url: string, body: any = {}): Observable<any> {
     const ws = webSocket('wss://localhost:8000/' + this.apiPrefix + url);
-    // const ws = webSocket('wss://localhost:4200/ws/' + url);
+    // const ws = webSocket('wss://localhost:4200/ws/' + url); // for local dev env
     ws.next(body);
     return ws;
   }
