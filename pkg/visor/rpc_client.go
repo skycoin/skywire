@@ -71,6 +71,7 @@ type RPCClient interface {
 	Restart() error
 	Exec(command string) ([]byte, error)
 	Update(config updater.UpdateConfig) (bool, error)
+	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 }
 
@@ -304,6 +305,70 @@ func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	var updated bool
 	err := rc.Call("Update", &config, &updated)
 	return updated, err
+}
+
+// StatusMessage defines a status of visor update.
+type StatusMessage struct {
+	Text    string
+	IsError bool
+}
+
+// Update calls Update.
+func (rc *rpcClient) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
+	ch := make(chan StatusMessage, 512)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				var status string
+
+				err := rc.Call("UpdateStatus", &struct{}{}, &status)
+				if err != nil {
+					rc.log.WithError(err).Errorf("Failed to check update status")
+					status = ""
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if status != "" {
+						ch <- StatusMessage{
+							Text: status,
+						}
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+			}
+		}
+	}()
+
+	go func() {
+		defer func() {
+			cancel()
+			close(ch)
+		}()
+
+		var updated bool
+
+		if err := rc.Call("Update", &config, &updated); err != nil {
+			ch <- StatusMessage{
+				Text:    err.Error(),
+				IsError: true,
+			}
+		} else {
+			ch <- StatusMessage{
+				Text: "finished",
+			}
+		}
+	}()
+
+	return ch
 }
 
 // UpdateAvailable calls UpdateAvailable.
@@ -689,6 +754,11 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 // Update implements RPCClient.
 func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
 	return false, nil
+}
+
+// UpdateWithStatus implements RPCClient.
+func (mc *mockRPCClient) UpdateWithStatus(_ updater.UpdateConfig) <-chan StatusMessage {
+	return make(chan StatusMessage)
 }
 
 // UpdateAvailable implements RPCClient.
