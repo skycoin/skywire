@@ -3,27 +3,21 @@
   [matTooltipClass]="{ 'tooltip-word-break': true }"
   (click)="$event.stopPropagation(); processClick();"
 >
-  <span class="upper-text">
-    <!-- "Local" label if the element is a local node. -->
-    <span *ngIf="isLocalNode">
-      <ng-container *ngIf="labelText">
-        {{'labeled-element.local-element' | translate}}
-      </ng-container>
-      <ng-container *ngIf="!labelText">
-        {{'labeled-element.unnamed-local-visor' | translate}}
-      </ng-container>
+  <span class="label">
+    <!-- Label prefix. -->
+    <span *ngIf="labelComponents && labelComponents.prefix">
+      {{labelComponents.prefix | translate}}
     </span>
-    <!-- Separator if the element is a local node and it has a label. -->
-    <span *ngIf="isLocalNode && labelText">
-      -
+    <!-- Label prefix separator. -->
+    <span *ngIf="labelComponents && labelComponents.prefixSeparator">
+      {{ labelComponents.prefixSeparator }}
     </span>
     <!-- Label. -->
-    <span *ngIf="labelText">
-      {{labelText}}
+    <span *ngIf="labelComponents && labelComponents.label">
+      {{labelComponents.label}}
     </span>
-    <!-- "Unnamed" label if the element is not a local node and it does not have a label. -->
-    <span *ngIf="!isLocalNode && !labelText">
-      {{'labeled-element.unnamed-element' | translate}}
+    <span *ngIf="labelComponents && labelComponents.translatableLabel">
+      {{labelComponents.translatableLabel | translate}}
     </span>
   </span>
   <br />

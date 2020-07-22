@@ -22,6 +22,7 @@ import { AppConfig } from 'src/app/app.config';
 import { OperationError } from 'src/app/utils/operation-error';
 import { FilterTextElements, FilterKeysAssociation, filterList, updateFilterTexts } from 'src/app/utils/filters';
 import { FilterFieldParams, FilterFieldTypes, FiltersSelectionComponent } from '../../layout/filters-selection/filters-selection.component';
+import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -710,8 +711,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
       if (filtersSet) {
         // Add the label data to the array, to be able to use it for filtering.
         this.allNodes.forEach(node => {
-          const dmsgLabelInfo = this.storageService.getLabelInfo(node.dmsgServerPk);
-          node['dmsgServerPk_label'] = dmsgLabelInfo ? dmsgLabelInfo.label : '';
+          node['dmsgServerPk_label'] =
+            LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
         });
 
         this.filteredNodes = filterList(this.allNodes, this.currentFilters, this.filterKeysAssociations);
