@@ -7,6 +7,34 @@ import { ClipboardService } from 'src/app/services/clipboard.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { EditLabelComponent } from '../edit-label/edit-label.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { TranslateService } from '@ngx-translate/core';
+
+/**
+ * Represents the parts of a label.
+ */
+export class LabelComponents {
+  /**
+   * Prefix shown at the start of the label, mainly for identifying local nodes.
+   * The text is a var for the translate pipe.
+   */
+  prefix = '';
+  /**
+   * Text for separating the prefix from the label.
+   */
+  prefixSeparator = '';
+  /**
+   * Element label, to be shown without using the translate pipe.
+   */
+  label = '';
+  /**
+   * Element label, to be shown using the translate pipe.
+   */
+  translatableLabel = '';
+  /**
+   * Original saved label info.
+   */
+  labelInfo: LabelInfo;
+}
 
 /**
  * Shows the id of an element and a label identifying it. An icon is shown at the end of the text,
@@ -27,11 +55,7 @@ export class LabeledElementTextComponent implements OnDestroy {
   @Input() set id(val: string) {
     this.idInternal = val;
 
-    // Get the associated label.
-    this.labelInfo = this.storageService.getLabelInfo(val);
-    this.labelText = this.labelInfo && this.labelInfo.label ? this.labelInfo.label : null;
-
-    this.isLocalNode = this.savedVisibleLocalNodes.has(val);
+    this.labelComponents = LabeledElementTextComponent.getLabelComponents(this.storageService, this.id);
   }
   get id(): string { return this.idInternal ? this.idInternal : ''; }
 
@@ -55,16 +79,61 @@ export class LabeledElementTextComponent implements OnDestroy {
    * Event for when the label is changed.
    */
   @Output() labelEdited = new EventEmitter();
+  /**
+   * Parts of the label to be shown.
+   */
+  labelComponents: LabelComponents;
 
-  // Label to show. It is null if no label has been set for the id.
-  labelText: string;
-  // Info associated to the label. It is null if no label has been set for the id.
-  labelInfo: LabelInfo;
-  // If the id corresponds to a local node connected to the hypervisor.
-  isLocalNode = false;
-  // Set with the IDs of all visible (not set as hidden) nodes this app "remembers" as connected
-  // to the hypervisor instance.
-  savedVisibleLocalNodes = this.storageService.getSavedVisibleLocalNodes();
+  /**
+   * Gets the parts which form the label shown by this component for a particular ID.
+   * @param id Id to check.
+   */
+  private static getLabelComponents(storageService: StorageService, id: string): LabelComponents {
+    // Detect if the id if for a local node.
+    let isLocalNode: boolean;
+    if (storageService.getSavedVisibleLocalNodes().has(id)) {
+      isLocalNode = true;
+    } else {
+      isLocalNode = false;
+    }
+
+    const response = new LabelComponents();
+
+    // Get the label associated to the id.
+    response.labelInfo = storageService.getLabelInfo(id);
+    if (response.labelInfo && response.labelInfo.label) {
+      // If the ID is for a local node, add a prefix indicating that.
+      if (isLocalNode) {
+        response.prefix = 'labeled-element.local-element';
+        response.prefixSeparator = ' - ';
+      }
+
+      response.label = response.labelInfo.label;
+    } else {
+      // Add a default text.
+      if (storageService.getSavedVisibleLocalNodes().has(id)) {
+        response.prefix = 'labeled-element.unnamed-local-visor';
+      } else {
+        response.translatableLabel = 'labeled-element.unnamed-element';
+      }
+    }
+
+    return response;
+  }
+
+  /**
+   * Allows to get a string whith the label for an id as it would be shown by this component.
+   * @param id Id to check.
+   */
+  public static getCompleteLabel(storageService: StorageService, translateService: TranslateService, id: string): string {
+    const labelElements = LabeledElementTextComponent.getLabelComponents(storageService, id);
+
+    // Build the string.
+    return (labelElements.prefix ? translateService.instant(labelElements.prefix) : '') +
+      labelElements.prefixSeparator +
+      labelElements.label +
+      (labelElements.translatableLabel ? translateService.instant(labelElements.translatableLabel) : '');
+  }
 
   constructor(
     private dialog: MatDialog,
@@ -90,7 +159,7 @@ export class LabeledElementTextComponent implements OnDestroy {
       }
     ];
 
-    if (this.labelInfo) {
+    if (this.labelComponents.labelInfo) {
       options.push({
         icon: 'close',
         label: 'labeled-element.remove-label',
@@ -119,7 +188,7 @@ export class LabeledElementTextComponent implements OnDestroy {
       } else {
         // Params for the edit label modal window.
         if (selectedOption === 2) {
-          let labelInfo =  this.labelInfo;
+          let labelInfo =  this.labelComponents.labelInfo;
           if (!labelInfo) {
             labelInfo = {
               id: this.id,
