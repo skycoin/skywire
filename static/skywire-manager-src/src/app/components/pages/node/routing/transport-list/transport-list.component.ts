@@ -23,6 +23,7 @@ import {
   FilterFieldTypes
 } from 'src/app/components/layout/filters-selection/filters-selection.component';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
+import { LabeledElementTextComponent } from 'src/app/components/layout/labeled-element-text/labeled-element-text.component';
 
 /**
  * List of the columns that can be used to sort the data.
@@ -357,11 +358,11 @@ export class TransportListComponent implements OnDestroy {
       if (filtersSet) {
         // Add the label data to the array, to be able to use it for filtering.
         this.allTransports.forEach(transport => {
-          const idLabelInfo = this.storageService.getLabelInfo(transport.id);
-          transport['id_label'] = idLabelInfo ? idLabelInfo.label : '';
+          transport['id_label'] =
+            LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.id);
 
-          const remoteNodeLabelInfo = this.storageService.getLabelInfo(transport.remote_pk);
-          transport['remote_pk_label'] = remoteNodeLabelInfo ? remoteNodeLabelInfo.label : '';
+          transport['remote_pk_label'] =
+            LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.remote_pk);
         });
 
         this.filteredTransports = filterList(this.allTransports, this.currentFilters, this.filterKeysAssociations);
