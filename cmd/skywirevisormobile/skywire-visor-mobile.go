@@ -1,32 +1,17 @@
-package skywiremob
+package skywirevisormobile
 
 import (
 	"context"
 	"fmt"
-	"net"
-	"strings"
+	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 
 	"github.com/SkycoinProject/dmsg/cmdutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
+
+	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
-
-// nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
-
-func IPs() string {
-	ips, err := net.LookupIP("address.resolver.skywire.cc")
-	if err != nil {
-		fmt.Printf("DICK : PANIC: %v\n", err)
-		return ""
-	}
-	ipsStr := make([]string, 0, len(ips))
-	for _, ip := range ips {
-		ipsStr = append(ipsStr, ip.String())
-	}
-
-	return strings.Join(ipsStr, ";")
-}
 
 const (
 	visorConfig = `{
@@ -108,6 +93,8 @@ const (
 }`
 )
 
+var restartCtx = restart.CaptureContext()
+
 func RunVisor() {
 	log := logging.NewMasterLogger()
 
@@ -117,7 +104,7 @@ func RunVisor() {
 		return
 	}
 
-	v, ok := visor.NewVisor(conf)
+	v, ok := visor.NewVisor(conf, restartCtx)
 	if !ok {
 		log.Fatal("Failed to start visor.")
 	}
