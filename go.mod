@@ -33,6 +33,7 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.5
+	golang.org/x/mobile v0.0.0-20200721161523-bcce01171201 // indirect
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
 	golang.zx2c4.com/wireguard v0.0.20200320
 )

@@ -231,6 +231,8 @@ golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
+# golang.org/x/mobile v0.0.0-20200721161523-bcce01171201
+## explicit
 # golang.org/x/net v0.0.0-20200625001655-4c5254603344
 ## explicit
 golang.org/x/net/bpf
