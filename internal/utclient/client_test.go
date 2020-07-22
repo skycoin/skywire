@@ -70,7 +70,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 	err = c.UpdateVisorUptime(context.TODO())
 	require.NoError(t, err)
 
-	assert.Equal(t, "/update", <-urlCh)
+	assert.Equal(t, "/v2/update", <-urlCh)
 }
 
 func authHandler(next http.Handler) http.Handler {
