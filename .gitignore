@@ -34,8 +34,8 @@ pkg/visor/foo/
 # Ignore backup go.mod after running '/ci_scripts/go_mod_replace.sh'.
 go.mod-e
 
-# goreleaser
-/dist
+# goreleaser and frontend builds
+dist
 
 # release
 *.deb
