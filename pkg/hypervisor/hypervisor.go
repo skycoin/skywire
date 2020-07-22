@@ -68,7 +68,9 @@ type Hypervisor struct {
 	restartCtx        *restart.Context
 	updater           *updater.Updater
 	mu                *sync.RWMutex
+	visorMu           sync.Mutex
 	visorChanMux      *chanMux
+	hypervisorMu      sync.Mutex
 	hypervisorChanMux *chanMux
 }
 
@@ -202,6 +204,7 @@ func (hv *Hypervisor) makeMux() *chi.Mux {
 				r.Get("/about", hv.getAbout())
 				r.Post("/update", hv.updateHypervisor())
 				r.Get("/update/ws", hv.updateHypervisorWS())
+				r.Get("/update/ws/running", hv.isHypervisorWSUpdateRunning())
 				r.Post("/update/available", hv.hypervisorUpdateAvailable())
 				r.Post("/update/available/{channel}", hv.hypervisorUpdateAvailable())
 				r.Get("/dmsg", hv.getDmsg())
@@ -229,6 +232,7 @@ func (hv *Hypervisor) makeMux() *chi.Mux {
 				r.Post("/visors/{pk}/exec", hv.exec())
 				r.Post("/visors/{pk}/update", hv.updateVisor())
 				r.Get("/visors/{pk}/update/ws", hv.updateVisorWS())
+				r.Get("/visors/{pk}/update/ws/running", hv.isVisorWSUpdateRunning())
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 			})
@@ -347,19 +351,19 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 		updateConfig.Target = updater.TargetHypervisor
 
 		consumer := make(chan visor.StatusMessage, 512)
-		hv.mu.Lock()
+		hv.hypervisorMu.Lock()
 		if hv.visorChanMux == nil {
 			ch := hv.updateHVWithStatus(updateConfig)
 			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
 		} else {
 			hv.visorChanMux.addConsumer(consumer)
 		}
-		hv.mu.Unlock()
+		hv.hypervisorMu.Unlock()
 
 		defer func() {
-			hv.mu.Lock()
+			hv.hypervisorMu.Lock()
 			hv.visorChanMux = nil
-			hv.mu.Unlock()
+			hv.hypervisorMu.Unlock()
 		}()
 
 		for status := range consumer {
@@ -389,6 +393,23 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 			log.WithError(err).Warnf("failed to close WebSocket (normal)")
 		}
 	}
+}
+
+func (hv *Hypervisor) isHypervisorWSUpdateRunning() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		running := false
+		hv.hypervisorMu.Lock()
+		running = hv.hypervisorChanMux != nil
+		hv.hypervisorMu.Unlock()
+
+		resp := struct {
+			Running bool `json:"running"`
+		}{
+			running,
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	})
 }
 
 func (hv *Hypervisor) updateHVWithStatus(config updater.UpdateConfig) <-chan visor.StatusMessage {
@@ -1084,19 +1105,19 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 		updateConfig.Target = updater.TargetVisor
 
 		consumer := make(chan visor.StatusMessage, 512)
-		hv.mu.Lock()
+		hv.visorMu.Lock()
 		if hv.visorChanMux == nil {
 			ch := ctx.RPC.UpdateWithStatus(updateConfig)
 			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
 		} else {
 			hv.visorChanMux.addConsumer(consumer)
 		}
-		hv.mu.Unlock()
+		hv.visorMu.Unlock()
 
 		defer func() {
-			hv.mu.Lock()
+			hv.visorMu.Lock()
 			hv.visorChanMux = nil
-			hv.mu.Unlock()
+			hv.visorMu.Unlock()
 		}()
 
 		for status := range consumer {
@@ -1125,6 +1146,23 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
 			log.WithError(err).Warnf("failed to close WebSocket (normal)")
 		}
+	})
+}
+
+func (hv *Hypervisor) isVisorWSUpdateRunning() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		running := false
+		hv.visorMu.Lock()
+		running = hv.visorChanMux != nil
+		hv.visorMu.Unlock()
+
+		resp := struct {
+			Running bool `json:"running"`
+		}{
+			running,
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
 	})
 }
 
