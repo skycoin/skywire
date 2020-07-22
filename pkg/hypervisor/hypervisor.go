@@ -59,15 +59,17 @@ type VisorConn struct {
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c          Config
-	dmsgC      *dmsg.Client
-	assets     http.FileSystem             // web UI
-	visors     map[cipher.PubKey]VisorConn // connected remote visors
-	trackers   *DmsgTrackerManager         // dmsg trackers
-	users      *UserManager
-	restartCtx *restart.Context
-	updater    *updater.Updater
-	mu         *sync.RWMutex
+	c                 Config
+	dmsgC             *dmsg.Client
+	assets            http.FileSystem             // web UI
+	visors            map[cipher.PubKey]VisorConn // connected remote visors
+	trackers          *DmsgTrackerManager         // dmsg trackers
+	users             *UserManager
+	restartCtx        *restart.Context
+	updater           *updater.Updater
+	mu                *sync.RWMutex
+	visorChanMux      *chanMux
+	hypervisorChanMux *chanMux
 }
 
 // New creates a new Hypervisor.
@@ -344,9 +346,23 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 
 		updateConfig.Target = updater.TargetHypervisor
 
-		ch := hv.updateHVWithStatus(updateConfig)
+		consumer := make(chan visor.StatusMessage, 512)
+		hv.mu.Lock()
+		if hv.visorChanMux == nil {
+			ch := hv.updateHVWithStatus(updateConfig)
+			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+		} else {
+			hv.visorChanMux.addConsumer(consumer)
+		}
+		hv.mu.Unlock()
 
-		for status := range ch {
+		defer func() {
+			hv.mu.Lock()
+			hv.visorChanMux = nil
+			hv.mu.Unlock()
+		}()
+
+		for status := range consumer {
 			if status.IsError {
 				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
 					log.WithError(err).Warnf("failed to close WebSocket (abnormal)")
@@ -1046,8 +1062,6 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 			}
 		}()
 
-		var updateConfig updater.UpdateConfig
-
 		_, raw, err := ws.Read(context.Background())
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -1055,6 +1069,7 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 			return
 		}
 
+		var updateConfig updater.UpdateConfig
 		if err := json.Unmarshal(raw, &updateConfig); err != nil {
 			log.Warnf("update visor request %v: %v", string(raw), err)
 			w.WriteHeader(http.StatusBadRequest)
@@ -1068,9 +1083,23 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 
 		updateConfig.Target = updater.TargetVisor
 
-		ch := ctx.RPC.UpdateWithStatus(updateConfig)
+		consumer := make(chan visor.StatusMessage, 512)
+		hv.mu.Lock()
+		if hv.visorChanMux == nil {
+			ch := ctx.RPC.UpdateWithStatus(updateConfig)
+			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+		} else {
+			hv.visorChanMux.addConsumer(consumer)
+		}
+		hv.mu.Unlock()
 
-		for status := range ch {
+		defer func() {
+			hv.mu.Lock()
+			hv.visorChanMux = nil
+			hv.mu.Unlock()
+		}()
+
+		for status := range consumer {
 			if status.IsError {
 				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
 					log.WithError(err).Warnf("failed to close WebSocket (abnormal)")
