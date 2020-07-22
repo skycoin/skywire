@@ -160,13 +160,20 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 
 	req, err := http.NewRequest(http.MethodGet, c.addr+"/security/nonces/"+key.Hex(), nil)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("NEW REQ: %w", err)
 	}
+
+	if c.addr == "http://172.104.43.241" {
+		fmt.Printf("SETTING HOST IN NONCE: %v\n", c.addr+"/security/nonces/"+key.Hex())
+		req.Header.Set("Host", "transport.discovery.skywire.cc")
+		fmt.Printf("HOST HEADER: %v\n", req.Header.Values("Host"))
+	}
+
 	req = req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("DO: %w", err)
 	}
 
 	defer func() {

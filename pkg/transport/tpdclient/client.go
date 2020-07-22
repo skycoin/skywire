@@ -58,6 +58,8 @@ func (c *apiClient) Post(ctx context.Context, path string, payload interface{}) 
 		return nil, err
 	}
 
+	req.Header.Set("Host", "transport.discovery.skywire.cc")
+
 	return c.client.Do(req.WithContext(ctx))
 }
 
@@ -68,6 +70,8 @@ func (c *apiClient) Get(ctx context.Context, path string) (*http.Response, error
 		return nil, err
 	}
 
+	req.Header.Set("Host", "transport.discovery.skywire.cc")
+
 	return c.client.Do(req.WithContext(ctx))
 }
 
@@ -77,6 +81,8 @@ func (c *apiClient) Delete(ctx context.Context, path string) (*http.Response, er
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Set("Host", "transport.discovery.skywire.cc")
 
 	return c.client.Do(req.WithContext(ctx))
 }
