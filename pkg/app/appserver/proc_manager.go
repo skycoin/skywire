@@ -189,7 +189,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 		break
 	}
 
-	disc, ok := m.discF.Updater(conf)
+	disc, ok := m.discF.AppUpdater(conf)
 	if !ok {
 		log.WithField("appName", conf.AppName).
 			Debug("No app discovery associated with app.")

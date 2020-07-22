@@ -20,6 +20,7 @@ require (
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.7.1
+	github.com/prometheus/common v0.10.0 // indirect
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible

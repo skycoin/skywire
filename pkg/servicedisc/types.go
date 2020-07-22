@@ -15,6 +15,8 @@ const (
 	ServiceTypeProxy = "proxy"
 	// ServiceTypeVPN stands for the VPN discovery.
 	ServiceTypeVPN = "vpn"
+	// ServiceTypeVisor stands for visor.
+	ServiceTypeVisor = "visor"
 )
 
 // Errors associated with service discovery types.
