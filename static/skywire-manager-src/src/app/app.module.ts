@@ -30,43 +30,20 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TransportListComponent } from './components/pages/node/routing/transport-list/transport-list.component';
 import { NodeAppsListComponent } from './components/pages/node/apps/node-apps/node-apps-list/node-apps-list.component';
-import { NodeAppsComponent } from './components/pages/node/apps/node-apps/node-apps.component';
 import { CopyToClipboardTextComponent } from './components/layout/copy-to-clipboard-text/copy-to-clipboard-text.component';
 import { ActionsComponent } from './components/pages/node/actions/actions.component';
-import { ConfigurationComponent } from './components/pages/node/actions/configuration/configuration.component';
 import { LogComponent } from './components/pages/node/apps/node-apps/log/log.component';
-import { AppSshsComponent } from './components/pages/node/apps/node-apps/app-sshs/app-sshs.component';
-import { SshsStartupComponent } from './components/pages/node/apps/node-apps/app-sshs/sshs-startup/sshs-startup.component';
-import { SshsWhitelistComponent } from './components/pages/node/apps/node-apps/app-sshs/sshs-whitelist/sshs-whitelist.component';
-import { AppSshcComponent } from './components/pages/node/apps/node-apps/app-sshc/app-sshc.component';
-import { SshcStartupComponent } from './components/pages/node/apps/node-apps/app-sshc/sshc-startup/sshc-startup.component';
-import { SshcKeysComponent } from './components/pages/node/apps/node-apps/app-sshc/sshc-keys/sshc-keys.component';
-import { KeypairComponent } from './components/layout/keypair/keypair.component';
-import { AppSockscComponent } from './components/pages/node/apps/node-apps/app-socksc/app-socksc.component';
-import { SockscConnectComponent } from './components/pages/node/apps/node-apps/app-socksc/socksc-connect/socksc-connect.component';
-import { SockscStartupComponent } from './components/pages/node/apps/node-apps/app-socksc/socksc-startup/socksc-startup.component';
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { PasswordComponent } from './components/pages/settings/password/password.component';
-import { NodeAppButtonComponent } from './components/pages/node/apps/node-apps/node-app-button/node-app-button.component';
 import { ClipboardService } from './services/clipboard.service';
 import { ClipboardDirective } from './directives/clipboard.directive';
-import { StartupConfigComponent } from './components/pages/node/apps/node-apps/startup-config/startup-config.component';
-import { KeyInputComponent } from './components/layout/key-input/key-input.component';
 import { AppTranslationModule } from './app-translation.module';
 import { ButtonComponent } from './components/layout/button/button.component';
 import { EditLabelComponent } from './components/layout/edit-label/edit-label.component';
 import { DialogComponent } from './components/layout/dialog/dialog.component';
-import {EditableKeyComponent} from './components/layout/editable-key/editable-key.component';
-import {ComponentHostDirective} from './directives/component-host.directive';
-import {HostComponent} from './components/layout/host/host.component';
-import {DatatableComponent} from './components/layout/datatable/datatable.component';
-import {SearchNodesComponent} from './components/pages/node/apps/node-apps/app-socksc/socksc-connect/search-nodes/search-nodes.component';
 import { LineChartComponent } from './components/layout/line-chart/line-chart.component';
 import { ChartsComponent } from './components/pages/node/charts/charts.component';
-import {UpdateNodeComponent} from './components/pages/node/actions/update-node/update-node.component';
-import { HistoryComponent } from './components/pages/node/apps/node-apps/history/history.component';
 import { RouteListComponent } from './components/pages/node/routing/route-list/route-list.component';
-import { LoopListComponent } from './components/pages/node/routing/loop-list/loop-list.component';
 import { RoutingComponent } from './components/pages/node/routing/routing.component';
 import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { CreateTransportComponent } from './components/pages/node/routing/transport-list/create-transport/create-transport.component';
@@ -96,7 +73,6 @@ import { TruncatedTextComponent } from './components/layout/truncated-text/trunc
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
-import { TerminalComponent } from './components/pages/node/actions/terminal/terminal.component';
 import { SkysocksSettingsComponent } from './components/pages/node/apps/node-apps/skysocks-settings/skysocks-settings.component';
 import {
   SkysocksClientSettingsComponent
@@ -117,45 +93,22 @@ const globalRippleConfig: RippleGlobalOptions = {
     NodeComponent,
     AutoScalePipe,
     ActionsComponent,
-    ConfigurationComponent,
     LogComponent,
-    AppSshsComponent,
-    SshsStartupComponent,
-    SshsWhitelistComponent,
-    AppSshcComponent,
-    SshcStartupComponent,
-    SshcKeysComponent,
-    KeypairComponent,
-    AppSockscComponent,
-    SockscConnectComponent,
-    SockscStartupComponent,
     TransportListComponent,
     NodeAppsListComponent,
     CopyToClipboardTextComponent,
     SettingsComponent,
     PasswordComponent,
-    NodeAppButtonComponent,
     ClipboardDirective,
-    ComponentHostDirective,
-    StartupConfigComponent,
-    KeyInputComponent,
     ButtonComponent,
     EditLabelComponent,
     DialogComponent,
-    EditableKeyComponent,
-    HostComponent,
-    DatatableComponent,
-    SearchNodesComponent,
-    UpdateNodeComponent,
     LineChartComponent,
     ChartsComponent,
-    HistoryComponent,
     RouteListComponent,
-    LoopListComponent,
     RoutingComponent,
     AppsComponent,
     CreateTransportComponent,
-    NodeAppsComponent,
     SidenavComponent,
     BasicTerminalComponent,
     RouteDetailsComponent,
@@ -179,7 +132,6 @@ const globalRippleConfig: RippleGlobalOptions = {
     NodeInfoContentComponent,
     NodeInfoComponent,
     SelectOptionComponent,
-    TerminalComponent,
     SkysocksSettingsComponent,
     SkysocksClientSettingsComponent,
     MenuButtonComponent,
@@ -187,18 +139,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     LabeledElementTextComponent,
   ],
   entryComponents: [
-    ConfigurationComponent,
     LogComponent,
-    SshsStartupComponent,
-    SshsWhitelistComponent,
-    SshcKeysComponent,
-    SshcStartupComponent,
-    SockscConnectComponent,
-    SockscStartupComponent,
     EditLabelComponent,
-    EditableKeyComponent,
-    KeyInputComponent,
-    UpdateNodeComponent,
     CreateTransportComponent,
     BasicTerminalComponent,
     RouteDetailsComponent,
@@ -209,7 +151,6 @@ const globalRippleConfig: RippleGlobalOptions = {
     InitialSetupComponent,
     SelectLanguageComponent,
     SelectOptionComponent,
-    TerminalComponent,
     SkysocksSettingsComponent,
     SkysocksClientSettingsComponent,
     FiltersSelectionComponent,
@@ -225,20 +166,12 @@ const globalRippleConfig: RippleGlobalOptions = {
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
-    MatToolbarModule,
     MatTabsModule,
-    MatTableModule,
     MatButtonModule,
     MatIconModule,
-    MatSlideToggleModule,
     MatTooltipModule,
-    MatChipsModule,
     MatMenuModule,
-    MatSnackBarModule,
-    MatIconModule,
-    MatSlideToggleModule,
     FormsModule,
-    MatListModule,
     MatProgressBarModule,
     MatSelectModule,
     MatProgressSpinnerModule,
