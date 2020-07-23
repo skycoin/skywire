@@ -5,8 +5,6 @@
 $white: #F8F9F9;
 $black: #202226;
 
-$blue-light: #00C3FF;
-$blue: #0072FF;
 $blue-medium: #215f9e;
 $blue-dark: #154B6C;
 $blue-dark-Background1: #060a10;
@@ -20,28 +18,16 @@ $lighter-gray: #999;
 $modal-background: #e0e5ec;
 $modal-separator: scale-color($blue-medium, $alpha: -80%);
 
-$nav-bg: rgba(255, 255, 255, 0.1);
-
 $box-border: rgba(156, 197, 255, 0.33);
 $separator: rgba(255, 255, 255, 0.15);
 $grey-separator: rgba(0, 0, 0, 0.12);
-$white-separator: rgba(255, 255, 255, 0.44);
 
 $theme-colors: (
   green:              $green,
   red:                $red,
-  blue-light:         $blue-light,
-  blue:               $blue,
-  blue-dark:          $blue-dark,
-  translucid:         rgba(32, 34, 38, .44),
   translucid-hover:   rgba(0, 0, 0, 0.2),
-  translucid-white:   rgba(255, 255, 255, .44),
-  translucid-dark:    rgba(21, 75, 108, .91),
   white:              $white,
-  white-hover:        darken($white, 2%),
-  light-gray:         $light-gray,
-  black:              $black,
-  yellow:             #CAB862
+  light-gray:         $light-gray
 );
 
 //
@@ -56,7 +42,6 @@ $font-size-mini:              ($font-size-base * .70);
 $font-size-mini-plus:         ($font-size-base * .60);
 
 $font-weight-light:           lighter;
-$font-weight-normal:          400;
 $font-weight-bold:            700;
 
 //
