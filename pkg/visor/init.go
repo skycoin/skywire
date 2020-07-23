@@ -44,7 +44,7 @@ func initStack() []initFunc {
 		initDmsgpty,
 		initTransport,
 		initRouter,
-		initLauncher,
+		//initLauncher,
 		initCLI,
 		initHypervisors,
 		initUptimeTracker,

@@ -45,7 +45,7 @@ const (
 		"discovery": "http://transport.discovery.skywire.cc",
 		"address_resolver": "http://address.resolver.skywire.cc",
 		"log_store": {
-			"type": "file",
+			"type": "memory",
 			"location": "./transport_logs"
 		},
 		"trusted_visors": null
