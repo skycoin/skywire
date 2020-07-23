@@ -248,7 +248,7 @@ mod-uncomm: ## Uncomments the 'replace' rule in go.mod
 	./ci_scripts/go_mod_replace.sh uncomment go.mod
 
 build-android:
-	cd $HOME && gomobile bind -o ./go/src/github.com/SkycoinProject/skywire-mainnet/cmd/skywirevisormobile/android/app/skywire.aar -target=android ./go/src/github.com/SkycoinProject/skywire-mainnet/pkg/skywiremob/ && cd $OLDPWD
+	cd $$HOME && PATH=$$PATH:$$HOME/go/bin ANDROID_NDK_HOME=$$HOME/Downloads/android-ndk-r21d ANDROID_HOME=$$HOME/Library/Android/sdk gomobile bind -o ./go/src/github.com/SkycoinProject/skywire-mainnet/cmd/skywirevisormobile/android/app/skywire.aar -target=android ./go/src/github.com/SkycoinProject/skywire-mainnet/pkg/skywiremob/ && cd $$OLDPWD
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

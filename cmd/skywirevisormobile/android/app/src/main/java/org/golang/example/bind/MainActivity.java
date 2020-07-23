@@ -11,9 +11,6 @@ import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
 
-//import hello.Hello;
-
-
 public class MainActivity extends Activity {
 
     private TextView mTextView;
@@ -24,7 +21,6 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         mTextView = (TextView) findViewById(R.id.mytextview);
 
-        //String greetings = Hello.greetings("Android and Gopher");
         String greetings = "DICK";
         new Thread(new VisorRunnable()).start();
 

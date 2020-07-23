@@ -31,6 +31,5 @@ android {
 
 dependencies {
     implementation 'com.android.support:appcompat-v7:27.1.1'
-    implementation(name:'ips', ext:'aar')
-    //implementation(name:'hello', ext:'aar')
+    implementation(name:'skywire', ext:'aar')
 }
