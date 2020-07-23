@@ -3,7 +3,6 @@ import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
-import { ConfigurationComponent } from './configuration/configuration.component';
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
 import { SnackbarService } from '../../../../services/snackbar.service';
 import { NodeComponent } from '../node.component';
@@ -81,15 +80,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           name: 'actions.menu.update',
           actionName: 'update',
           icon: 'get_app',
-        }
-        // Options not implemented yet.
-        /*
-        {
-          name: 'actions.menu.config',
-          actionName: 'config',
-          icon: 'settings',
-          disabled: true
-        }*/], [
+        }], [
         {
           name: !this.showingFullListInternal ? 'nodes.title' : 'node.title',
           actionName: 'back',
@@ -98,8 +89,6 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
           // Call the adequate function if the user clicks any of the options.
           if (actionName === 'terminal') {
             this.terminal();
-          } else if (actionName === 'config') {
-            this.configuration();
           } else if (actionName === 'update') {
             this.update();
           } else if (actionName === 'reboot') {
@@ -220,10 +209,6 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
         confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       });
     });
-  }
-
-  configuration() {
-    ConfigurationComponent.openDialog(this.dialog, {});
   }
 
   terminal() {
