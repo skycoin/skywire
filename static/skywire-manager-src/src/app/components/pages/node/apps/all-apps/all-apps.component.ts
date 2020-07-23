@@ -1,8 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 
-import { Node, Application } from '../../../../../../app.datatypes';
-import { NodeComponent } from '../../../node.component';
+import { Node, Application } from '../../../../../app.datatypes';
+import { NodeComponent } from '../../node.component';
 
 /**
  * Page for showing the complete list of the apps of a node.
