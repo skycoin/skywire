@@ -24,7 +24,8 @@ import (
 
 const (
 	// RPCPrefix is the prefix used with all RPC calls.
-	RPCPrefix     = "app-visor"
+	RPCPrefix = "app-visor"
+	// HealthTimeout defines timeout for /health endpoint calls.
 	HealthTimeout = 5 * time.Second
 )
 
