@@ -1,0 +1,103 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+MERGED from [com.android.support:appcompat-v7:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/e98f7ff5d6476e51f98923b8fdb525f3/AndroidManifest.xml:17:1-22:12
+MERGED from [:ips:] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/c705354fb6850939a02937e4497bc91f/AndroidManifest.xml:1:1-2:50
+MERGED from [com.android.support:support-fragment:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/e21d8a9a6ab4389a63edeca4a2c4476c/AndroidManifest.xml:17:1-22:12
+MERGED from [com.android.support:animated-vector-drawable:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/99ad9fe634be4013061ca71600f74f9d/AndroidManifest.xml:17:1-22:12
+MERGED from [com.android.support:support-core-ui:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/60286bfcd87ba8864136fa9944098653/AndroidManifest.xml:17:1-22:12
+MERGED from [com.android.support:support-core-utils:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/f438063bf78d3cfda123654263e7273c/AndroidManifest.xml:17:1-22:12
+MERGED from [com.android.support:support-vector-drawable:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/3b4604aff15652de9665dfef1bdb718e/AndroidManifest.xml:17:1-22:12
+MERGED from [com.android.support:support-compat:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/d9c4f59d9fca7c5581ca5852bcf0a667/AndroidManifest.xml:17:1-22:12
+MERGED from [android.arch.lifecycle:livedata-core:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/f4f0a4a5298b8883e3af7440a9c4ab96/AndroidManifest.xml:17:1-22:12
+MERGED from [android.arch.lifecycle:viewmodel:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/fb74ef4eaa74dcfcd53b8f70015db151/AndroidManifest.xml:17:1-22:12
+MERGED from [android.arch.lifecycle:runtime:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/fc68a9354d80cb6937197b1a7538c5e0/AndroidManifest.xml:17:1-22:12
+MERGED from [android.arch.core:runtime:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/7c58107fc09709c852c07bb84790a8ad/AndroidManifest.xml:17:1-22:12
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+	package
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:6:5-38
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+	android:versionName
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+	android:versionCode
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:1-25:12
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:5:11-69
+uses-permission#android.permission.INTERNET
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:8:5-67
+	android:name
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:8:22-64
+uses-permission#android.permission.ACCESS_NETWORK_STATE
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:9:5-79
+	android:name
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:9:22-76
+application
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:11:5-23:19
+	android:label
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:13:9-38
+	android:allowBackup
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:12:9-35
+activity#org.golang.example.bind.MainActivity
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:14:9-22:20
+	android:label
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:16:13-42
+	android:name
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:15:13-41
+intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:17:13-21:29
+action#android.intent.action.MAIN
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:18:17-69
+	android:name
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:18:25-66
+category#android.intent.category.LAUNCHER
+ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:20:17-77
+	android:name
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml:20:27-74
+uses-sdk
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+MERGED from [com.android.support:appcompat-v7:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/e98f7ff5d6476e51f98923b8fdb525f3/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:appcompat-v7:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/e98f7ff5d6476e51f98923b8fdb525f3/AndroidManifest.xml:20:5-44
+MERGED from [:ips:] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/c705354fb6850939a02937e4497bc91f/AndroidManifest.xml:2:1-39
+MERGED from [:ips:] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/c705354fb6850939a02937e4497bc91f/AndroidManifest.xml:2:1-39
+MERGED from [com.android.support:support-fragment:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/e21d8a9a6ab4389a63edeca4a2c4476c/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-fragment:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/e21d8a9a6ab4389a63edeca4a2c4476c/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:animated-vector-drawable:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/99ad9fe634be4013061ca71600f74f9d/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:animated-vector-drawable:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/99ad9fe634be4013061ca71600f74f9d/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-core-ui:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/60286bfcd87ba8864136fa9944098653/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-core-ui:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/60286bfcd87ba8864136fa9944098653/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-core-utils:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/f438063bf78d3cfda123654263e7273c/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-core-utils:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/f438063bf78d3cfda123654263e7273c/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-vector-drawable:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/3b4604aff15652de9665dfef1bdb718e/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-vector-drawable:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/3b4604aff15652de9665dfef1bdb718e/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-compat:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/d9c4f59d9fca7c5581ca5852bcf0a667/AndroidManifest.xml:20:5-44
+MERGED from [com.android.support:support-compat:27.1.1] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/d9c4f59d9fca7c5581ca5852bcf0a667/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.lifecycle:livedata-core:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/f4f0a4a5298b8883e3af7440a9c4ab96/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.lifecycle:livedata-core:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/f4f0a4a5298b8883e3af7440a9c4ab96/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.lifecycle:viewmodel:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/fb74ef4eaa74dcfcd53b8f70015db151/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.lifecycle:viewmodel:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/fb74ef4eaa74dcfcd53b8f70015db151/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.lifecycle:runtime:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/fc68a9354d80cb6937197b1a7538c5e0/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.lifecycle:runtime:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/fc68a9354d80cb6937197b1a7538c5e0/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.core:runtime:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/7c58107fc09709c852c07bb84790a8ad/AndroidManifest.xml:20:5-44
+MERGED from [android.arch.core:runtime:1.1.0] /Users/darkrengarius/.gradle/caches/transforms-2/files-2.1/7c58107fc09709c852c07bb84790a8ad/AndroidManifest.xml:20:5-44
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+		ADDED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml
+		INJECTED from /Users/darkrengarius/go/src/golang.org/x/mobile/example/bind/android/app/src/main/AndroidManifest.xml

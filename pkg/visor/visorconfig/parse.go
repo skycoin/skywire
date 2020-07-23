@@ -53,7 +53,7 @@ func parseV1(cc *Common, raw []byte) (*V1, error) {
 	if err := conf.ensureKeys(); err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
-	return conf, conf.flush(conf)
+	return conf, nil
 }
 
 func parseV0(cc *Common, raw []byte) (*V1, error) {
@@ -136,5 +136,5 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	conf.ShutdownTimeout = old.ShutdownTimeout
 	conf.RestartCheckDelay = old.RestartCheckDelay
 
-	return conf, conf.flush(conf)
+	return conf, nil
 }

@@ -1,9 +1,7 @@
 package visorconfig
 
 import (
-	"encoding/json"
 	"errors"
-	"io/ioutil"
 
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -70,7 +68,8 @@ func (c *Common) ensureKeys() error {
 }
 
 func (c *Common) flush(v interface{}) (err error) {
-	switch c.path {
+	return nil
+	/*switch c.path {
 	case "":
 		return ErrNoConfigPath
 	case StdinName:
@@ -93,5 +92,5 @@ func (c *Common) flush(v interface{}) (err error) {
 		return err
 	}
 	const filePerm = 0644
-	return ioutil.WriteFile(c.path, raw, filePerm)
+	return ioutil.WriteFile(c.path, raw, filePerm)*/
 }
