@@ -28,7 +28,30 @@ type Client struct {
 	directIPs      []net.IP
 	defaultGateway net.IP
 	closeC         chan struct{}
+	localLis       net.Listener
 	closeOnce      sync.Once
+}
+
+func NewClientMobile(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, error) {
+	lis, err := net.Listen("tcp", ":9765")
+	if err != nil {
+		fmt.Printf("ERROR LISTENING LOCALLY IN VPN CLIENT: %v\n", err)
+		return nil, err
+	}
+	go func() {
+		_, err := lis.Accept()
+		if err != nil {
+			fmt.Printf("ERROR ACCEPTING LOCALLY IN VPN CLIENT: %v\n", err)
+		} else {
+			fmt.Println("SUCCESSFULLY ACCEPTED LOCALLY IN VPN CLIENT")
+		}
+	}()
+	return &Client{
+		cfg:    cfg,
+		log:    l,
+		conn:   conn,
+		closeC: make(chan struct{}),
+	}, nil
 }
 
 // NewClient creates VPN client instance.
@@ -88,6 +111,10 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		defaultGateway: defaultGateway,
 		closeC:         make(chan struct{}),
 	}, nil
+}
+
+func (c *Client) ShakeHands() (net.IP, net.IP, bool, error) {
+	return c.shakeHands()
 }
 
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
@@ -311,9 +338,9 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
 
 	cHello := ClientHello{
-		UnavailablePrivateIPs: unavailableIPs,
-		Passcode:              c.cfg.Passcode,
-		EnableEncryption:      c.cfg.Credentials.IsValid(),
+		//UnavailablePrivateIPs: unavailableIPs,
+		Passcode:         c.cfg.Passcode,
+		EnableEncryption: c.cfg.Credentials.IsValid(),
 	}
 
 	c.log.Debugf("Sending client hello: %v", cHello)

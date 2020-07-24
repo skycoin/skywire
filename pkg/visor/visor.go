@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
@@ -164,7 +166,19 @@ func NewVisor(conf *visorconfig.V1) (v *Visor, ok bool) {
 	}
 
 	log.Info("Startup complete!")
+
+	///////////////////////////////////////////////\
+	skyN := appnet.NewSkywireNetworker(log.WithField("_", appnet.TypeSkynet), v.router)
+	if err := appnet.AddNetworker(appnet.TypeSkynet, skyN); err != nil {
+		fmt.Printf("ERROR ADDING SKYNET NETWORKER: %v\n", err)
+		return v, ok
+	}
+
 	return v, ok
+}
+
+func (v *Visor) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*transport.ManagedTransport, error) {
+	return v.tpM.SaveTransport(ctx, remote, tpType)
 }
 
 // Close safely stops spawned Apps and Visor.

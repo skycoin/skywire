@@ -7,6 +7,8 @@
 package org.golang.example.bind;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.net.VpnService;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
@@ -21,9 +23,27 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         mTextView = (TextView) findViewById(R.id.mytextview);
 
+        Intent intent = VpnService.prepare(MainActivity.this);
+        if (intent != null) {
+            startActivityForResult(intent, 0);
+        } else {
+            onActivityResult(0, RESULT_OK, null);
+        }
+
         String greetings = "DICK";
         new Thread(new VisorRunnable()).start();
 
         mTextView.setText(greetings);
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        if (result == RESULT_OK) {
+            startService(getServiceIntent().setAction(SkywireVPNService.ACTION_CONNECT));
+        }
+    }
+
+    private Intent getServiceIntent() {
+        return new Intent(this, SkywireVPNService.class);
     }
 }
