@@ -61,13 +61,13 @@
     <!-- Column names. -->
     <tr>
       <th></th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
         {{ 'routes.key' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === keySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column"  (click)="changeSortingOrder(sortableColumns.Rule)">
+      <th class="sortable-column"  (click)="dataSorter.changeSortingOrder(ruleSortData)">
         {{ 'routes.rule' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Rule" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === ruleSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
       <th class="actions"></th>
     </tr>
@@ -113,12 +113,12 @@
     cellspacing="0" cellpadding="0"
   >
     <!-- Sorting button. -->
-    <tr class="selectable" (click)="openSortingOrderModal()"><td>
+    <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
       <div class="list-item-container">
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
-          <div>{{ sortBy | translate }}
-            {{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
+          <div>{{ dataSorter.currentSortingColumn.label | translate }}
+            {{ (!dataSorter.sortingInReverseOrder ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
           </div>
         </div>
         <div class="right-part">
