@@ -79,25 +79,25 @@
       >
         <!-- Column names. -->
         <tr>
-          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)" [matTooltip]="'nodes.state-tooltip' | translate">
+          <th class="sortable-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
             <span class="dot-outline-gray"></span>
-            <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === stateSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
-          <th class="sortable-column labels" (click)="changeSortingOrder(sortableColumns.Label)">
+          <th class="sortable-column labels" (click)="dataSorter.changeSortingOrder(labelSortData)">
             {{ 'nodes.label' | translate }}
-            <mat-icon *ngIf="sortBy === sortableColumns.Label" [inline]="true">{{ sortingArrow }}</mat-icon>
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === labelSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
-          <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Key)">
+          <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
             {{ 'nodes.key' | translate }}
-            <mat-icon *ngIf="sortBy === sortableColumns.Key" [inline]="true">{{ sortingArrow }}</mat-icon>
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === keySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
-          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="changeSortingOrder(sortableColumns.DmsgServer)">
+          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
             {{ 'nodes.dmsg-server' | translate }}
-            <mat-icon *ngIf="sortBy === sortableColumns.DmsgServer" [inline]="true">{{ sortingArrow }}</mat-icon>
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === dmsgServerSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
-          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="changeSortingOrder(sortableColumns.Ping)">
+          <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(pingSortData)">
             {{ 'nodes.ping' | translate }}
-            <mat-icon *ngIf="sortBy === sortableColumns.Ping" [inline]="true">{{ sortingArrow }}</mat-icon>
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === pingSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           </th>
           <th class="actions"></th>
         </tr>
@@ -172,12 +172,12 @@
         cellspacing="0" cellpadding="0"
       >
         <!-- Sorting button. -->
-        <tr class="selectable" (click)="openSortingOrderModal()"><td>
+        <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
           <div class="list-item-container">
             <div class="left-part">
               <div class="title">{{ 'tables.sorting-title' | translate }}</div>
-              <div>{{ sortBy | translate }}
-                {{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
+              <div>{{ dataSorter.currentSortingColumn.label | translate }}
+                {{ (!dataSorter.sortingInReverseOrder ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
               </div>
             </div>
             <div class="right-part">

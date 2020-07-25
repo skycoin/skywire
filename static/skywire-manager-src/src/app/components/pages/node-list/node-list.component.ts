@@ -23,17 +23,7 @@ import { OperationError } from 'src/app/utils/operation-error';
 import { FilterTextElements, FilterKeysAssociation, filterList, updateFilterTexts } from 'src/app/utils/filters';
 import { FilterFieldParams, FilterFieldTypes, FiltersSelectionComponent } from '../../layout/filters-selection/filters-selection.component';
 import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
-
-/**
- * List of the columns that can be used to sort the data.
- */
-enum SortableColumns {
-  State = 'transports.state',
-  Label = 'nodes.label',
-  Key = 'nodes.key',
-  DmsgServer = 'nodes.dmsg-server',
-  Ping = 'nodes.ping',
-}
+import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 
 /**
  * Filters for the list. It is prepopulated with default data which indicates that no filter
@@ -57,19 +47,16 @@ class DataFilters {
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
-  private static defaultSortableColumn = SortableColumns.Key;
-  private static sortByInternal = NodeListComponent.defaultSortableColumn;
-  private static sortReverseInternal = false;
+  // Vars with the data of the columns used for sorting the data.
+  stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
+  labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
+  keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
+  dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text);
+  pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
 
-  // Vars for keeping track of the column used for sorting the data.
-  sortableColumns = SortableColumns;
-  get sortBy(): SortableColumns { return NodeListComponent.sortByInternal; }
-  set sortBy(val: SortableColumns) { NodeListComponent.sortByInternal = val; }
-  get sortReverse(): boolean { return NodeListComponent.sortReverseInternal; }
-  set sortReverse(val: boolean) { NodeListComponent.sortReverseInternal = val; }
-  get sortingArrow(): string {
-    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
-  }
+  private dataSortedSubscription: Subscription;
+  // Object in chage of sorting the data.
+  dataSorter: DataSorter;
 
   loading = true;
   dataSource: Node[];
@@ -165,6 +152,22 @@ export class NodeListComponent implements OnInit, OnDestroy {
   ) {
     // Show the dmsg info if the dmsg url was used.
     this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
+
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.stateSortData,
+      this.labelSortData,
+      this.keySortData,
+    ];
+    if (this.showDmsgInfo) {
+      sortableColumns.push(this.dmsgServerSortData);
+      sortableColumns.push(this.pingSortData);
+    }
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 2, this.showDmsgInfo ? 'nl' : 'dl');
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allNodes has already been sorted.
+      this.recalculateElementsToShow();
+    });
 
     // Get the page requested in the URL.
     this.navigationsSubscription = route.paramMap.subscribe(params => {
@@ -268,6 +271,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
+
+    this.dataSortedSubscription.unsubscribe();
+    this.dataSorter.dispose();
   }
 
   /**
@@ -296,52 +302,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
       default:
         return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
     }
-  }
-
-  /**
-   * Changes the column and/or order used for sorting the data.
-   */
-  changeSortingOrder(column: SortableColumns) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
-    } else {
-      this.sortReverse = !this.sortReverse;
-    }
-
-    this.recalculateElementsToShow();
-  }
-
-  /**
-   * Opens the modal window used on small screens for selecting how to sort the data.
-   */
-  openSortingOrderModal() {
-    // Create 2 options for every sortable column, for ascending and descending order.
-    const options: SelectableOption[] = [];
-    const enumKeys = Object.keys(SortableColumns);
-    enumKeys.forEach(key => {
-      if (this.showDmsgInfo || (SortableColumns[key] !== SortableColumns.DmsgServer && SortableColumns[key] !== SortableColumns.Ping)) {
-        options.push({
-          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
-        });
-        options.push({
-          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
-        });
-      }
-    });
-
-    // Open the option selection modal window.
-    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
-      if (result) {
-        result = (result - 1) / 2;
-        const index = Math.floor(result);
-        // Use the column and order selected by the user.
-        this.sortBy = SortableColumns[enumKeys[index]];
-        this.sortReverse = result !== index;
-
-        this.recalculateElementsToShow();
-      }
-    });
   }
 
   /**
@@ -416,34 +376,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredNodes) {
-      // Sort all the data.
-      this.filteredNodes.sort((a, b) => {
-        const defaultOrder = a.local_pk.localeCompare(b.local_pk);
-
-        let response: number;
-        if (this.sortBy === SortableColumns.Key) {
-          response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
-        } else if (this.sortBy === SortableColumns.DmsgServer) {
-          response = !this.sortReverse ? a.dmsgServerPk.localeCompare(b.dmsgServerPk) : b.dmsgServerPk.localeCompare(a.dmsgServerPk);
-        } else if (this.sortBy === SortableColumns.Ping) {
-          response =
-            !this.sortReverse ? Number(a.roundTripPing) - Number(b.roundTripPing) : Number(b.roundTripPing) - Number(a.roundTripPing);
-        } else if (this.sortBy === SortableColumns.State) {
-          if (a.online && !b.online) {
-            response = -1;
-          } else if (!a.online && b.online) {
-            response = 1;
-          }
-          response = response * (this.sortReverse ? -1 : 1);
-        } else if (this.sortBy === SortableColumns.Label) {
-          response = !this.sortReverse ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
-        } else {
-          response = defaultOrder;
-        }
-
-        return response !== 0 ? response : defaultOrder;
-      });
-
       // Calculate the pagination values.
       const maxElements = AppConfig.maxFullListElements;
       this.numberOfPages = Math.ceil(this.filteredNodes.length / maxElements);
@@ -722,7 +654,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         this.filteredNodes = this.allNodes;
       }
 
-      this.recalculateElementsToShow();
+      this.dataSorter.setData(this.filteredNodes);
     }
   }
 
