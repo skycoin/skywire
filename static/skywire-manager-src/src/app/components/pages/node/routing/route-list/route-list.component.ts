@@ -21,14 +21,7 @@ import {
   FilterFieldTypes,
   FiltersSelectionComponent
 } from 'src/app/components/layout/filters-selection/filters-selection.component';
-
-/**
- * List of the columns that can be used to sort the data.
- */
-enum SortableColumns {
-  Key = 'routes.key',
-  Rule = 'routes.rule',
-}
+import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 
 /**
  * Filters for the list. It is prepopulated with default data which indicates that no filter
@@ -50,20 +43,15 @@ class DataFilters {
   styleUrls: ['./route-list.component.scss']
 })
 export class RouteListComponent implements OnDestroy {
-  private static sortByInternal = SortableColumns.Key;
-  private static sortReverseInternal = false;
-
   @Input() nodePK: string;
 
-  // Vars for keeping track of the column used for sorting the data.
-  sortableColumns = SortableColumns;
-  get sortBy(): SortableColumns { return RouteListComponent.sortByInternal; }
-  set sortBy(val: SortableColumns) { RouteListComponent.sortByInternal = val; }
-  get sortReverse(): boolean { return RouteListComponent.sortReverseInternal; }
-  set sortReverse(val: boolean) { RouteListComponent.sortReverseInternal = val; }
-  get sortingArrow(): string {
-    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
-  }
+  // Vars with the data of the columns used for sorting the data.
+  keySortData = new SortingColumn(['key'], 'routes.key', SortingModes.Number);
+  ruleSortData = new SortingColumn(['rule'], 'routes.rule', SortingModes.Text);
+
+  private dataSortedSubscription: Subscription;
+  // Object in chage of sorting the data.
+  dataSorter: DataSorter;
 
   dataSource: Route[];
   /**
@@ -79,7 +67,8 @@ export class RouteListComponent implements OnDestroy {
   showShortList_: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
-    this.recalculateElementsToShow();
+    // Sort the data.
+    this.dataSorter.setData(this.filteredRoutes);
   }
 
   allRoutes: Route[];
@@ -128,6 +117,17 @@ export class RouteListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
   ) {
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.keySortData,
+      this.ruleSortData,
+    ];
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, 'rt');
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allRoutes has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
     // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
@@ -165,6 +165,8 @@ export class RouteListComponent implements OnDestroy {
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
+    this.dataSortedSubscription.unsubscribe();
+    this.dataSorter.dispose();
   }
 
   /**
@@ -276,7 +278,7 @@ export class RouteListComponent implements OnDestroy {
       this.filteredRoutes = filterList(this.allRoutes, this.currentFilters, this.filterKeysAssociations);
 
       this.updateCurrentFilters();
-      this.recalculateElementsToShow();
+      this.dataSorter.setData(this.filteredRoutes);
     }
   }
 
@@ -341,50 +343,6 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
-   * Changes the column and/or order used for sorting the data.
-   */
-  changeSortingOrder(column: SortableColumns) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
-    } else {
-      this.sortReverse = !this.sortReverse;
-    }
-
-    this.recalculateElementsToShow();
-  }
-
-  /**
-   * Opens the modal window used on small screens for selecting how to sort the data.
-   */
-  openSortingOrderModal() {
-    // Create 2 options for every sortable column, for ascending and descending order.
-    const options: SelectableOption[] = [];
-    const enumKeys = Object.keys(SortableColumns);
-    enumKeys.forEach(key => {
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
-      });
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
-      });
-    });
-
-    // Open the option selection modal window.
-    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
-      if (result) {
-        result = (result - 1) / 2;
-        const index = Math.floor(result);
-        // Use the column and order selected by the user.
-        this.sortBy = SortableColumns[enumKeys[index]];
-        this.sortReverse = result !== index;
-
-        this.recalculateElementsToShow();
-      }
-    });
-  }
-
-  /**
    * Sorts the data and recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
@@ -393,22 +351,6 @@ export class RouteListComponent implements OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredRoutes) {
-      // Sort all the data.
-      this.filteredRoutes.sort((a, b) => {
-        const defaultOrder = a.key - b.key;
-
-        let response: number;
-        if (this.sortBy === SortableColumns.Key) {
-          response = !this.sortReverse ? a.key - b.key : b.key - a.key;
-        } else if (this.sortBy === SortableColumns.Rule) {
-          response = !this.sortReverse ? a.rule.localeCompare(b.rule) : b.rule.localeCompare(a.rule);
-        } else {
-          response = defaultOrder;
-        }
-
-        return response !== 0 ? response : defaultOrder;
-      });
-
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
       this.numberOfPages = Math.ceil(this.filteredRoutes.length / maxElements);

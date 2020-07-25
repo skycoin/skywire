@@ -24,18 +24,7 @@ import {
 } from 'src/app/components/layout/filters-selection/filters-selection.component';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 import { LabeledElementTextComponent } from 'src/app/components/layout/labeled-element-text/labeled-element-text.component';
-
-/**
- * List of the columns that can be used to sort the data.
- */
-enum SortableColumns {
-  State = 'transports.state',
-  Id = 'transports.id',
-  RemotePk = 'transports.remote-node',
-  Type = 'transports.type',
-  Uploaded = 'common.uploaded',
-  Downloaded = 'common.downloaded',
-}
+import { DataSorter, SortingColumn, SortingModes } from 'src/app/utils/lists/data-sorter';
 
 /**
  * Filters for the list. It is prepopulated with default data which indicates that no filter
@@ -60,20 +49,19 @@ class DataFilters {
   styleUrls: ['./transport-list.component.scss']
 })
 export class TransportListComponent implements OnDestroy {
-  private static sortByInternal = SortableColumns.Id;
-  private static sortReverseInternal = false;
-
   @Input() nodePK: string;
 
-  // Vars for keeping track of the column used for sorting the data.
-  sortableColumns = SortableColumns;
-  get sortBy(): SortableColumns { return TransportListComponent.sortByInternal; }
-  set sortBy(val: SortableColumns) { TransportListComponent.sortByInternal = val; }
-  get sortReverse(): boolean { return TransportListComponent.sortReverseInternal; }
-  set sortReverse(val: boolean) { TransportListComponent.sortReverseInternal = val; }
-  get sortingArrow(): string {
-    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
-  }
+  // Vars with the data of the columns used for sorting the data.
+  stateSortData = new SortingColumn(['is_up'], 'transports.state', SortingModes.Boolean);
+  idSortData = new SortingColumn(['id'], 'transports.id', SortingModes.Text);
+  remotePkSortData = new SortingColumn(['remote_pk'], 'transports.remote-node', SortingModes.Text);
+  typeSortData = new SortingColumn(['type'], 'transports.type', SortingModes.Text);
+  uploadedSortData = new SortingColumn(['log', 'sent'], 'common.uploaded', SortingModes.NumberReversed);
+  downloadedSortData = new SortingColumn(['log', 'recv'], 'common.downloaded', SortingModes.NumberReversed);
+
+  private dataSortedSubscription: Subscription;
+  // Object in chage of sorting the data.
+  dataSorter: DataSorter;
 
   dataSource: Transport[];
   /**
@@ -89,7 +77,8 @@ export class TransportListComponent implements OnDestroy {
   showShortList_: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
-    this.recalculateElementsToShow();
+    // Sort the data.
+    this.dataSorter.setData(this.filteredTransports);
   }
 
   allTransports: Transport[];
@@ -162,6 +151,21 @@ export class TransportListComponent implements OnDestroy {
     private translateService: TranslateService,
     private storageService: StorageService,
   ) {
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.stateSortData,
+      this.idSortData,
+      this.remotePkSortData,
+      this.typeSortData,
+      this.uploadedSortData,
+      this.downloadedSortData,
+    ];
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, 'tr');
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allTransports has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
     // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
@@ -199,6 +203,8 @@ export class TransportListComponent implements OnDestroy {
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
+    this.dataSortedSubscription.unsubscribe();
+    this.dataSorter.dispose();
   }
 
   /**
@@ -372,7 +378,7 @@ export class TransportListComponent implements OnDestroy {
         this.filteredTransports = this.allTransports;
       }
 
-      this.recalculateElementsToShow();
+      this.dataSorter.setData(this.filteredTransports);
     }
   }
 
@@ -444,50 +450,6 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Changes the column and/or order used for sorting the data.
-   */
-  changeSortingOrder(column: SortableColumns) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
-    } else {
-      this.sortReverse = !this.sortReverse;
-    }
-
-    this.recalculateElementsToShow();
-  }
-
-  /**
-   * Opens the modal window used on small screens for selecting how to sort the data.
-   */
-  openSortingOrderModal() {
-    // Create 2 options for every sortable column, for ascending and descending order.
-    const options: SelectableOption[] = [];
-    const enumKeys = Object.keys(SortableColumns);
-    enumKeys.forEach(key => {
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
-      });
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
-      });
-    });
-
-    // Open the option selection modal window.
-    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
-      if (result) {
-        result = (result - 1) / 2;
-        const index = Math.floor(result);
-        // Use the column and order selected by the user.
-        this.sortBy = SortableColumns[enumKeys[index]];
-        this.sortReverse = result !== index;
-
-        this.recalculateElementsToShow();
-      }
-    });
-  }
-
-  /**
    * Sorts the data and recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
@@ -496,35 +458,6 @@ export class TransportListComponent implements OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredTransports) {
-      // Sort all the data.
-      this.filteredTransports.sort((a, b) => {
-        const defaultOrder = a.id.localeCompare(b.id);
-
-        let response: number;
-        if (this.sortBy === SortableColumns.Id) {
-          response = !this.sortReverse ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
-        } else if (this.sortBy === SortableColumns.State) {
-          if (a.is_up && !b.is_up) {
-            response = -1;
-          } else if (!a.is_up && b.is_up) {
-            response = 1;
-          }
-          response = response * (this.sortReverse ? -1 : 1);
-        } else if (this.sortBy === SortableColumns.RemotePk) {
-          response = !this.sortReverse ? a.remote_pk.localeCompare(b.remote_pk) : b.remote_pk.localeCompare(a.remote_pk);
-        } else if (this.sortBy === SortableColumns.Type) {
-          response = !this.sortReverse ? a.type.localeCompare(b.type) : b.type.localeCompare(a.type);
-        } else if (this.sortBy === SortableColumns.Uploaded) {
-          response = !this.sortReverse ? b.log.sent - a.log.sent : a.log.sent - b.log.sent;
-        } else if (this.sortBy === SortableColumns.Downloaded) {
-          response = !this.sortReverse ? b.log.recv - a.log.recv : a.log.recv - b.log.recv;
-        } else {
-          response = defaultOrder;
-        }
-
-        return response !== 0 ? response : defaultOrder;
-      });
-
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
       this.numberOfPages = Math.ceil(this.filteredTransports.length / maxElements);

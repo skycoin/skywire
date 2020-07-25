@@ -67,29 +67,29 @@
     <!-- Column names. -->
     <tr>
       <th></th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)" [matTooltip]="'transports.state-tooltip' | translate">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'transports.state-tooltip' | translate">
         <span class="dot-outline-white"></span>
-        <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === stateSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Id)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(idSortData)">
         {{ 'transports.id' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Id" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === idSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.RemotePk)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(remotePkSortData)">
         {{ 'transports.remote-node' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.RemotePk" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === remotePkSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Type)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(typeSortData)">
         {{ 'transports.type' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Type" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === typeSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Uploaded)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(uploadedSortData)">
         {{ 'common.uploaded' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Uploaded" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === uploadedSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Downloaded)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(downloadedSortData)">
         {{ 'common.downloaded' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Downloaded" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === downloadedSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
       <th class="actions"></th>
     </tr>
@@ -158,12 +158,12 @@
     cellspacing="0" cellpadding="0"
   >
     <!-- Sorting button. -->
-    <tr class="selectable" (click)="openSortingOrderModal()"><td>
+    <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
       <div class="list-item-container">
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
-          <div>{{ sortBy | translate }}
-            {{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
+          <div>{{ dataSorter.currentSortingColumn.label | translate }}
+            {{ (!dataSorter.sortingInReverseOrder ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
           </div>
         </div>
         <div class="right-part">

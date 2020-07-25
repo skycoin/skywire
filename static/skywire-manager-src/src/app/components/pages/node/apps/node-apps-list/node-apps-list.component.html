@@ -70,21 +70,21 @@
     <!-- Column names. -->
     <tr>
       <th></th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.State)" [matTooltip]="'apps.apps-list.state-tooltip' | translate">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'apps.apps-list.state-tooltip' | translate">
         <span class="dot-outline-white"></span>
-        <mat-icon *ngIf="sortBy === sortableColumns.State" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === stateSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Name)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(nameSortData)">
         {{ 'apps.apps-list.app-name' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Name" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === nameSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.Port)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(portSortData)">
         {{ 'apps.apps-list.port' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.Port" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === portSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="changeSortingOrder(sortableColumns.AutoStart)">
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(autoStartSortData)">
         {{ 'apps.apps-list.auto-start' | translate }}
-        <mat-icon *ngIf="sortBy === sortableColumns.AutoStart" [inline]="true">{{ sortingArrow }}</mat-icon>
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === autoStartSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
       <th class="actions"></th>
     </tr>
@@ -155,12 +155,12 @@
     cellspacing="0" cellpadding="0"
   >
     <!-- Sorting button. -->
-    <tr class="selectable" (click)="openSortingOrderModal()"><td>
+    <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
       <div class="list-item-container">
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
-          <div>{{ sortBy | translate }}
-            {{ (!sortReverse ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
+          <div>{{ dataSorter.currentSortingColumn.label | translate }}
+            {{ (!dataSorter.sortingInReverseOrder ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
           </div>
         </div>
         <div class="right-part">
