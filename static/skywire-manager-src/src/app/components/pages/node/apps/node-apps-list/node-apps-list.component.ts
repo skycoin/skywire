@@ -23,16 +23,7 @@ import {
   FilterFieldTypes,
   FiltersSelectionComponent
 } from 'src/app/components/layout/filters-selection/filters-selection.component';
-
-/**
- * List of the columns that can be used to sort the data.
- */
-enum SortableColumns {
-  State = 'apps.apps-list.state',
-  Name = 'apps.apps-list.app-name',
-  Port = 'apps.apps-list.port',
-  AutoStart = 'apps.apps-list.auto-start',
-}
+import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 
 /**
  * Filters for the list. It is prepopulated with default data which indicates that no filter
@@ -56,20 +47,17 @@ class DataFilters {
   styleUrls: ['./node-apps-list.component.scss']
 })
 export class NodeAppsListComponent implements OnDestroy {
-  private static sortByInternal = SortableColumns.Name;
-  private static sortReverseInternal = false;
-
   @Input() nodePK: string;
 
-  // Vars for keeping track of the column used for sorting the data.
-  sortableColumns = SortableColumns;
-  get sortBy(): SortableColumns { return NodeAppsListComponent.sortByInternal; }
-  set sortBy(val: SortableColumns) { NodeAppsListComponent.sortByInternal = val; }
-  get sortReverse(): boolean { return NodeAppsListComponent.sortReverseInternal; }
-  set sortReverse(val: boolean) { NodeAppsListComponent.sortReverseInternal = val; }
-  get sortingArrow(): string {
-    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
-  }
+  // Vars with the data of the columns used for sorting the data.
+  stateSortData = new SortingColumn(['status'], 'apps.apps-list.state', SortingModes.NumberReversed);
+  nameSortData = new SortingColumn(['name'], 'apps.apps-list.app-name', SortingModes.Text);
+  portSortData = new SortingColumn(['port'], 'apps.apps-list.port', SortingModes.Number);
+  autoStartSortData = new SortingColumn(['autostart'], 'apps.apps-list.auto-start', SortingModes.Boolean);
+
+  private dataSortedSubscription: Subscription;
+  // Object in chage of sorting the data.
+  dataSorter: DataSorter;
 
   dataSource: Application[];
   /**
@@ -85,7 +73,8 @@ export class NodeAppsListComponent implements OnDestroy {
   showShortList_: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
-    this.recalculateElementsToShow();
+    // Sort the data.
+    this.dataSorter.setData(this.filteredApps);
   }
 
   // List with the names of all the apps which can be configured directly on the manager.
@@ -179,6 +168,19 @@ export class NodeAppsListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
   ) {
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.stateSortData,
+      this.nameSortData,
+      this.portSortData,
+      this.autoStartSortData,
+    ];
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, 'ap');
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allApps has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
     // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
@@ -216,6 +218,8 @@ export class NodeAppsListComponent implements OnDestroy {
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
+    this.dataSortedSubscription.unsubscribe();
+    this.dataSorter.dispose();
   }
 
   /**
@@ -370,7 +374,7 @@ export class NodeAppsListComponent implements OnDestroy {
       this.filteredApps = filterList(this.allApps, this.currentFilters, this.filterKeysAssociations);
 
       this.updateCurrentFilters();
-      this.recalculateElementsToShow();
+      this.dataSorter.setData(this.filteredApps);
     }
   }
 
@@ -517,50 +521,6 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   /**
-   * Changes the column and/or order used for sorting the data.
-   */
-  changeSortingOrder(column: SortableColumns) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
-    } else {
-      this.sortReverse = !this.sortReverse;
-    }
-
-    this.recalculateElementsToShow();
-  }
-
-  /**
-   * Opens the modal window used on small screens for selecting how to sort the data.
-   */
-  openSortingOrderModal() {
-    // Create 2 options for every sortable column, for ascending and descending order.
-    const options: SelectableOption[] = [];
-    const enumKeys = Object.keys(SortableColumns);
-    enumKeys.forEach(key => {
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
-      });
-      options.push({
-        label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
-      });
-    });
-
-    // Open the option selection modal window.
-    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
-      if (result) {
-        result = (result - 1) / 2;
-        const index = Math.floor(result);
-        // Use the column and order selected by the user.
-        this.sortBy = SortableColumns[enumKeys[index]];
-        this.sortReverse = result !== index;
-
-        this.recalculateElementsToShow();
-      }
-    });
-  }
-
-  /**
    * Sorts the data and recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
@@ -569,26 +529,6 @@ export class NodeAppsListComponent implements OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredApps) {
-      // Sort all the data.
-      this.filteredApps.sort((a, b) => {
-        const defaultOrder = a.name.localeCompare(b.name);
-
-        let response: number;
-        if (this.sortBy === SortableColumns.Name) {
-          response = !this.sortReverse ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-        } else if (this.sortBy === SortableColumns.Port) {
-          response = !this.sortReverse ? a.port - b.port : b.port - a.port;
-        } else if (this.sortBy === SortableColumns.State) {
-          response = !this.sortReverse ? b.status - a.status : a.status - b.status;
-        } else if (this.sortBy === SortableColumns.AutoStart) {
-          response = !this.sortReverse ? (b.autostart ? 1 : 0) - (a.autostart ? 1 : 0) : (a.autostart ? 1 : 0) - (b.autostart ? 1 : 0);
-        } else {
-          response = defaultOrder;
-        }
-
-        return response !== 0 ? response : defaultOrder;
-      });
-
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
       this.numberOfPages = Math.ceil(this.filteredApps.length / maxElements);
