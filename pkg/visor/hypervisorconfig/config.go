@@ -114,7 +114,9 @@ func (c *Config) FillDefaults(testEnv bool) {
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
-	c.HTTPAddr = defaultHTTPAddr
+	if c.HTTPAddr == "" {
+		c.HTTPAddr = defaultHTTPAddr
+	}
 	c.Cookies.FillDefaults()
 }
 
