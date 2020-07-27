@@ -528,7 +528,7 @@ func initHypervisor(v *Visor) bool {
 	conf.SK = v.conf.SK
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
-	// conf.FillDefaults(false) // TODO(nkryuchkov): uncomment
+	conf.FillDefaults(false)
 
 	dmsgC := prepareDmsg(conf)
 
