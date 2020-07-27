@@ -1,4 +1,3 @@
-// Package hypervisor implements management node
 package visor
 
 import (
@@ -29,9 +28,9 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/dmsg_tracker"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/dmsgtracker"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/user_manager"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/usermanager"
 )
 
 const (
@@ -61,10 +60,10 @@ type Hypervisor struct {
 	c        hypervisorconfig.Config
 	visor    *Visor
 	dmsgC    *dmsg.Client
-	assets   http.FileSystem                  // web UI
-	visors   map[cipher.PubKey]Conn           // connected remote visors
-	trackers *dmsg_tracker.DmsgTrackerManager // dmsg trackers
-	users    *user_manager.UserManager
+	assets   http.FileSystem        // web UI
+	visors   map[cipher.PubKey]Conn // connected remote visors
+	trackers *dmsgtracker.Manager   // dmsg trackers
+	users    *usermanager.UserManager
 	mu       *sync.RWMutex
 }
 
@@ -72,12 +71,12 @@ type Hypervisor struct {
 func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
-	boltUserDB, err := user_manager.NewBoltUserStore(config.DBPath)
+	boltUserDB, err := usermanager.NewBoltUserStore(config.DBPath)
 	if err != nil {
 		return nil, err
 	}
 
-	singleUserDB := user_manager.NewSingleUserStore("admin", boltUserDB)
+	singleUserDB := usermanager.NewSingleUserStore("admin", boltUserDB)
 
 	hv := &Hypervisor{
 		c:        config,
@@ -85,8 +84,8 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 		dmsgC:    dmsgC,
 		assets:   assets,
 		visors:   make(map[cipher.PubKey]Conn),
-		trackers: dmsg_tracker.NewDmsgTrackerManager(nil, dmsgC, 0, 0),
-		users:    user_manager.NewUserManager(singleUserDB, config.Cookies),
+		trackers: dmsgtracker.NewDmsgTrackerManager(nil, dmsgC, 0, 0),
+		users:    usermanager.NewUserManager(singleUserDB, config.Cookies),
 		mu:       new(sync.RWMutex),
 	}
 
@@ -343,19 +342,27 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.visors))
-		summaries, i := make([]summaryResp, len(hv.visors)+1), 1
 
-		summary, err := hv.visor.Summary()
-		if err != nil {
-			log.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &Summary{PubKey: hv.visor.conf.PK}
+		i := 0
+		if hv.visor != nil {
+			i++
 		}
 
-		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-		summaries[0] = summaryResp{
-			TCPAddr: addr.String(),
-			Online:  err == nil,
-			Summary: summary,
+		summaries := make([]summaryResp, len(hv.visors)+i)
+
+		if hv.visor != nil {
+			summary, err := hv.visor.Summary()
+			if err != nil {
+				log.WithError(err).Warn("Failed to obtain summary of this visor.")
+				summary = &Summary{PubKey: hv.visor.conf.PK}
+			}
+
+			addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
+			summaries[0] = summaryResp{
+				TCPAddr: addr.String(),
+				Online:  err == nil,
+				Summary: summary,
+			}
 		}
 
 		for pk, c := range hv.visors {
@@ -465,7 +472,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 				log.Warnf("putApp request: %v", err)
 			}
 
-			httputil.WriteJSON(w, r, http.StatusBadRequest, user_manager.ErrMalformedRequest)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 
 			return
 		}
@@ -601,7 +608,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 				log.Warnf("postTransport request: %v", err)
 			}
 
-			httputil.WriteJSON(w, r, http.StatusBadRequest, user_manager.ErrMalformedRequest)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 
 			return
 		}
@@ -684,7 +691,7 @@ func (hv *Hypervisor) postRoute() http.HandlerFunc {
 				log.Warnf("postRoute request: %v", err)
 			}
 
-			httputil.WriteJSON(w, r, http.StatusBadRequest, user_manager.ErrMalformedRequest)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 
 			return
 		}
@@ -730,7 +737,7 @@ func (hv *Hypervisor) putRoute() http.HandlerFunc {
 				log.Warnf("putRoute request: %v", err)
 			}
 
-			httputil.WriteJSON(w, r, http.StatusBadRequest, user_manager.ErrMalformedRequest)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 
 			return
 		}
@@ -818,7 +825,7 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 				log.Warnf("exec request: %v", err)
 			}
 
-			httputil.WriteJSON(w, r, http.StatusBadRequest, user_manager.ErrMalformedRequest)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 
 			return
 		}
@@ -843,7 +850,7 @@ func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
 			log.Warnf("update visor request: %v", err)
-			httputil.WriteJSON(w, r, http.StatusBadRequest, user_manager.ErrMalformedRequest)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 
 			return
 		}

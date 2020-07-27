@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/user_manager"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/usermanager"
 )
 
 // nolint: gosec
@@ -144,7 +144,7 @@ func testNodeNoAccessWithoutLogin(t *testing.T, config hypervisorconfig.Config) 
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, user_manager.ErrBadSession.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrBadSession.Error(), body.Error)
 			},
 		}
 	}
@@ -169,7 +169,7 @@ func testNodeOnlyAdminAccountAllowed(t *testing.T, config hypervisorconfig.Confi
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, user_manager.ErrNameNotAllowed.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrNameNotAllowed.Error(), body.Error)
 			},
 		},
 		{
@@ -221,7 +221,7 @@ func testNodeCannotLoginTwice(t *testing.T, config hypervisorconfig.Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, user_manager.ErrNotLoggedOut.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrNotLoggedOut.Error(), body.Error)
 			},
 		},
 	})
@@ -311,7 +311,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config hypervisorconfig.Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, user_manager.ErrBadSession.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrBadSession.Error(), body.Error)
 			},
 		},
 		{
@@ -321,7 +321,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config hypervisorconfig.Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, user_manager.ErrBadSession.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrBadSession.Error(), body.Error)
 			},
 		},
 	})
@@ -405,7 +405,7 @@ func testNodeChangePassword(t *testing.T, config hypervisorconfig.Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				b, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				require.Equal(t, user_manager.ErrBadLogin.Error(), b.Error)
+				require.Equal(t, usermanager.ErrBadLogin.Error(), b.Error)
 			},
 		},
 		{

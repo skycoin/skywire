@@ -74,8 +74,8 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
 
-install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor
+install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
+	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -96,7 +96,6 @@ vendorcheck:  ## Run vendorcheck
 	GO111MODULE=off vendorcheck ./internal/...
 	GO111MODULE=off vendorcheck ./pkg/...
 	GO111MODULE=off vendorcheck ./cmd/apps/...
-	GO111MODULE=off vendorcheck ./cmd/hypervisor/...
 	GO111MODULE=off vendorcheck ./cmd/setup-node/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-cli/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-visor/...
@@ -146,13 +145,11 @@ bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 
 release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without -race flag
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
