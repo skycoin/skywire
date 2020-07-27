@@ -6,7 +6,6 @@ import (
 	"net/rpc"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -57,15 +56,6 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 /*
 	<<< NODE HEALTH >>>
 */
-
-// HealthInfo carries information about visor's external services health represented as http status codes
-type HealthInfo struct {
-	TransportDiscovery int `json:"transport_discovery"`
-	RouteFinder        int `json:"route_finder"`
-	SetupNode          int `json:"setup_node"`
-	UptimeTracker      int `json:"uptime_tracker"`
-	AddressResolver    int `json:"address_resolver"`
-}
 
 // Health returns health information about the visor
 func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
@@ -145,14 +135,41 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 	return summary
 }
 
-// Summary provides a summary of a Skywire Visor.
-type Summary struct {
-	PubKey          cipher.PubKey        `json:"local_pk"`
-	BuildInfo       *buildinfo.Info      `json:"build_info"`
-	AppProtoVersion string               `json:"app_protocol_version"`
-	Apps            []*launcher.AppState `json:"apps"`
-	Transports      []*TransportSummary  `json:"transports"`
-	RoutesCount     int                  `json:"routes_count"`
+func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
+	summary, err := r.visor.Summary()
+	if err != nil {
+		return fmt.Errorf("summary")
+	}
+
+	health, err := r.visor.Health()
+	if err != nil {
+		return fmt.Errorf("health")
+	}
+
+	uptime, err := r.visor.Uptime()
+	if err != nil {
+		return fmt.Errorf("uptime")
+	}
+
+	// TODO
+	// transports, err := r.visor.Transports()
+	// if err != nil {
+	// 	return fmt.Errorf("transports")
+	// }
+
+	routes, err := r.visor.RoutingRules()
+	if err != nil {
+		return fmt.Errorf("routes")
+	}
+
+	*out = ExtraSummary{
+		Summary: summary,
+		Health:  health,
+		Uptime:  uptime,
+		Routes:  routes,
+	}
+
+	return nil
 }
 
 // Summary provides a summary of the AppNode.

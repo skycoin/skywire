@@ -19,6 +19,54 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
+// API represents visor API.
+type API interface {
+	Summary() (*Summary, error)
+	ExtraSummary() (*ExtraSummary, error)
+
+	Health() (*HealthInfo, error)
+	Uptime() (float64, error)
+
+	Apps() ([]*launcher.AppState, error)
+	StartApp(appName string) error
+	StopApp(appName string) error
+	SetAutoStart(appName string, autostart bool) error
+	SetAppPassword(appName, password string) error
+	SetAppPK(appName string, pk cipher.PubKey) error
+	LogsSince(timestamp time.Time, appName string) ([]string, error)
+
+	TransportTypes() ([]string, error)
+	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
+	Transport(tid uuid.UUID) (*TransportSummary, error)
+	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
+	RemoveTransport(tid uuid.UUID) error
+
+	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
+	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
+
+	RoutingRules() ([]routing.Rule, error)
+	RoutingRule(key routing.RouteID) (routing.Rule, error)
+	SaveRoutingRule(rule routing.Rule) error
+	RemoveRoutingRule(key routing.RouteID) error
+
+	RouteGroups() ([]RouteGroupInfo, error)
+
+	Restart() error
+	Exec(command string) ([]byte, error)
+	Update(config updater.UpdateConfig) (bool, error)
+	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
+}
+
+// Summary provides a summary of a Skywire Visor.
+type Summary struct {
+	PubKey          cipher.PubKey        `json:"local_pk"`
+	BuildInfo       *buildinfo.Info      `json:"build_info"`
+	AppProtoVersion string               `json:"app_protocol_version"`
+	Apps            []*launcher.AppState `json:"apps"`
+	Transports      []*TransportSummary  `json:"transports"`
+	RoutesCount     int                  `json:"routes_count"`
+}
+
 func (v *Visor) Summary() (*Summary, error) {
 	var summaries []*TransportSummary
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
@@ -37,6 +85,62 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	return summary, nil
+}
+
+// ExtraSummary provides an extra summary of a Skywire Visor.
+type ExtraSummary struct {
+	Summary *Summary `json:"summary"`
+	// TODO: add /dmsg
+	Health *HealthInfo `json:"health"`
+	Uptime float64     `json:"uptime"`
+	// Transports []*TransportSummary `json:"transports"` // TODO: add
+	Routes []routing.Rule `json:"routes"`
+}
+
+func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
+	summary, err := v.Summary()
+	if err != nil {
+		return nil, fmt.Errorf("summary")
+	}
+
+	health, err := v.Health()
+	if err != nil {
+		return nil, fmt.Errorf("health")
+	}
+
+	uptime, err := v.Uptime()
+	if err != nil {
+		return nil, fmt.Errorf("uptime")
+	}
+
+	// TODO
+	// transports, err := v.Transports()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("transports")
+	// }
+
+	routes, err := v.RoutingRules()
+	if err != nil {
+		return nil, fmt.Errorf("routes")
+	}
+
+	extraSummary := &ExtraSummary{
+		Summary: summary,
+		Health:  health,
+		Uptime:  uptime,
+		Routes:  routes,
+	}
+
+	return extraSummary, nil
+}
+
+// HealthInfo carries information about visor's external services health represented as http status codes
+type HealthInfo struct {
+	TransportDiscovery int `json:"transport_discovery"`
+	RouteFinder        int `json:"route_finder"`
+	SetupNode          int `json:"setup_node"`
+	UptimeTracker      int `json:"uptime_tracker"`
+	AddressResolver    int `json:"address_resolver"`
 }
 
 func (v *Visor) Health() (*HealthInfo, error) {
