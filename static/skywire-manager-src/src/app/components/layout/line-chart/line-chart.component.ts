@@ -10,7 +10,7 @@ import { Chart } from 'chart.js';
   styleUrls: ['./line-chart.component.scss']
 })
 export class LineChartComponent implements AfterViewInit, DoCheck {
-  @ViewChild('chart', { static: false }) chartElement: ElementRef;
+  @ViewChild('chart') chartElement: ElementRef;
   @Input() data: number[];
   chart: any;
 
