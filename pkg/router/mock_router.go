@@ -9,8 +9,6 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	rfclient "github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
-
 	routing "github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 )
 
@@ -119,22 +117,6 @@ func (_m *MockRouter) ReserveKeys(n int) ([]routing.RouteID, error) {
 	}
 
 	return r0, r1
-}
-
-// routeFinderClient provides a mock function with given fields:
-func (_m *MockRouter) RouteFinderClient() rfclient.Client {
-	ret := _m.Called()
-
-	var r0 rfclient.Client
-	if rf, ok := ret.Get(0).(func() rfclient.Client); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(rfclient.Client)
-		}
-	}
-
-	return r0
 }
 
 // RoutesCount provides a mock function with given fields:
