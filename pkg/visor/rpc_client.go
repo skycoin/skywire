@@ -28,43 +28,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
-// API represents visor API.
-type API interface {
-	Summary() (*Summary, error)
-
-	Health() (*HealthInfo, error)
-	Uptime() (float64, error)
-
-	Apps() ([]*launcher.AppState, error)
-	StartApp(appName string) error
-	StopApp(appName string) error
-	SetAutoStart(appName string, autostart bool) error
-	SetAppPassword(appName, password string) error
-	SetAppPK(appName string, pk cipher.PubKey) error
-	LogsSince(timestamp time.Time, appName string) ([]string, error)
-
-	TransportTypes() ([]string, error)
-	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
-	Transport(tid uuid.UUID) (*TransportSummary, error)
-	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
-	RemoveTransport(tid uuid.UUID) error
-
-	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
-	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
-
-	RoutingRules() ([]routing.Rule, error)
-	RoutingRule(key routing.RouteID) (routing.Rule, error)
-	SaveRoutingRule(rule routing.Rule) error
-	RemoveRoutingRule(key routing.RouteID) error
-
-	RouteGroups() ([]RouteGroupInfo, error)
-
-	Restart() error
-	Exec(command string) ([]byte, error)
-	Update(config updater.UpdateConfig) (bool, error)
-	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
-}
-
 var (
 	// ErrAlreadyServing is returned when an operation fails due to an operation
 	// that is currently running.
@@ -123,6 +86,13 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 		}
 		return ctx.Err()
 	}
+}
+
+// ExtraSummary calls ExtraSummary.
+func (rc *rpcClient) ExtraSummary() (*ExtraSummary, error) {
+	out := new(ExtraSummary)
+	err := rc.Call("ExtraSummary", &struct{}{}, out)
+	return out, err
 }
 
 // Summary calls Summary.
@@ -447,6 +417,38 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 		return nil
 	})
 	return &out, err
+}
+
+// Summary implements API.
+func (mc *mockRPCClient) ExtraSummary() (*ExtraSummary, error) {
+	summary, err := mc.Summary()
+	if err != nil {
+		return nil, err
+	}
+
+	health, err := mc.Health()
+	if err != nil {
+		return nil, err
+	}
+
+	uptime, err := mc.Uptime()
+	if err != nil {
+		return nil, err
+	}
+
+	routes, err := mc.RoutingRules()
+	if err != nil {
+		return nil, err
+	}
+
+	extraSummary := &ExtraSummary{
+		Summary: summary,
+		Health:  health,
+		Uptime:  uptime,
+		Routes:  routes,
+	}
+
+	return extraSummary, nil
 }
 
 // Health implements API
