@@ -17,25 +17,9 @@ import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { SkysocksClientSettingsComponent } from '../node-apps/skysocks-client-settings/skysocks-client-settings.component';
 import { TranslateService } from '@ngx-translate/core';
-import { FilterKeysAssociation, FilterTextElements, filterList, updateFilterTexts } from 'src/app/utils/filters';
-import {
-  FilterFieldParams,
-  FilterFieldTypes,
-  FiltersSelectionComponent
-} from 'src/app/components/layout/filters-selection/filters-selection.component';
+import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
-
-/**
- * Filters for the list. It is prepopulated with default data which indicates that no filter
- * has been selected. As the object may be included in the query string, prefixes are used to
- * avoid name collisions with other components in the same URL.
- */
-class DataFilters {
-  ap_state = '';
-  ap_name = '';
-  ap_port = '';
-  ap_autostart = '';
-}
+import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 
 /**
  * Shows the list of applications of a node. I can be used to show a short preview, with just some
@@ -47,6 +31,9 @@ class DataFilters {
   styleUrls: ['./node-apps-list.component.scss']
 })
 export class NodeAppsListComponent implements OnDestroy {
+  // Small text for identifying the list, needed for the helper objects.
+  private readonly listId = 'ap';
+
   @Input() nodePK: string;
 
   // Vars with the data of the columns used for sorting the data.
@@ -56,8 +43,10 @@ export class NodeAppsListComponent implements OnDestroy {
   autoStartSortData = new SortingColumn(['autostart'], 'apps.apps-list.auto-start', SortingModes.Boolean);
 
   private dataSortedSubscription: Subscription;
-  // Object in chage of sorting the data.
+  private dataFiltererSubscription: Subscription;
+  // Objects in charge of sorting and filtering the data.
   dataSorter: DataSorter;
+  dataFilterer: DataFilterer;
 
   dataSource: Application[];
   /**
@@ -93,17 +82,16 @@ export class NodeAppsListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set apps(val: Application[]) {
     this.allApps = val ? val : [];
-    this.filter();
+
+    this.dataFilterer.setData(this.allApps);
   }
 
-  // Array allowing to associate the properties of TransportFilters with the ones on the list
-  // and the values that must be shown in the UI, for being able to use helper functions to
-  // filter the data and show some UI elements.
-  filterKeysAssociations: FilterKeysAssociation[] = [
+  // Array with the properties of the columns that can be used for filtering the data.
+  filterProperties: FilterProperties[] = [
     {
       filterName: 'apps.apps-list.filter-dialog.state',
       keyNameInElementsArray: 'status',
-      keyNameInFiltersObject: 'ap_state',
+      type: FilterFieldTypes.Select,
       printableLabelsForValues: [
         {
           value: '',
@@ -122,17 +110,19 @@ export class NodeAppsListComponent implements OnDestroy {
     {
       filterName: 'apps.apps-list.filter-dialog.name',
       keyNameInElementsArray: 'name',
-      keyNameInFiltersObject: 'ap_name',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 50,
     },
     {
       filterName: 'apps.apps-list.filter-dialog.port',
       keyNameInElementsArray: 'port',
-      keyNameInFiltersObject: 'ap_port',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 8,
     },
     {
       filterName: 'apps.apps-list.filter-dialog.autostart',
       keyNameInElementsArray: 'autostart',
-      keyNameInFiltersObject: 'ap_autostart',
+      type: FilterFieldTypes.Select,
       printableLabelsForValues: [
         {
           value: '',
@@ -149,13 +139,6 @@ export class NodeAppsListComponent implements OnDestroy {
       ],
     },
   ];
-
-  // Current filters for the data.
-  currentFilters = new DataFilters();
-  // Properties needed for showing the selected filters in the UI.
-  currentFiltersTexts: FilterTextElements[] = [];
-  // Current params in the query string added to the url.
-  currentUrlQueryParams: object;
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -175,10 +158,16 @@ export class NodeAppsListComponent implements OnDestroy {
       this.portSortData,
       this.autoStartSortData,
     ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, 'ap');
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allApps has already been sorted.
       this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredApps = data;
+      this.dataSorter.setData(this.filteredApps);
     });
 
     // Get the page requested in the URL.
@@ -191,28 +180,9 @@ export class NodeAppsListComponent implements OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.filter();
+        this.recalculateElementsToShow();
       }
     });
-
-    // Get the query string.
-    this.navigationsSubscription.add(this.route.queryParamMap.subscribe(queryParams => {
-      // Get the filters from the query string.
-      this.currentFilters = new DataFilters();
-      Object.keys(this.currentFilters).forEach(key => {
-        if (queryParams.has(key)) {
-          this.currentFilters[key] = queryParams.get(key);
-        }
-      });
-
-      // Save the query string.
-      this.currentUrlQueryParams = {};
-      queryParams.keys.forEach(key => {
-        this.currentUrlQueryParams[key] = queryParams.get(key);
-      });
-
-      this.filter();
-    }));
   }
 
   ngOnDestroy() {
@@ -312,77 +282,6 @@ export class NodeAppsListComponent implements OnDestroy {
 
       this.changeAppsValRecursively(elementsToChange, true, autostart, confirmationDialog);
     });
-  }
-
-  /**
-   * Removes all the filters added by the user.
-   */
-  removeFilters() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
-
-    // Ask for confirmation.
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.closeModal();
-
-      // Remove the query string params.
-      this.router.navigate([], { queryParams: {}});
-    });
-  }
-
-  /**
-   * Opens the filter selection modal window to let the user change the currently selected filters.
-   */
-  changeFilters() {
-    // Properties for the modal window.
-    const filterFieldsParams: FilterFieldParams[] = [];
-    filterFieldsParams.push({
-      type: FilterFieldTypes.Select,
-      currentValue: this.currentFilters.ap_state,
-      filterKeysAssociation: this.filterKeysAssociations[0]
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.ap_name,
-      filterKeysAssociation: this.filterKeysAssociations[1],
-      maxlength: 50,
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.ap_port,
-      filterKeysAssociation: this.filterKeysAssociations[2],
-      maxlength: 8,
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.Select,
-      currentValue: this.currentFilters.ap_autostart,
-      filterKeysAssociation: this.filterKeysAssociations[3],
-    });
-
-    // Open the modal window.
-    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
-      if (response) {
-        this.router.navigate([], { queryParams: response});
-      }
-    });
-  }
-
-  /**
-   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
-   */
-  private filter() {
-    if (this.allApps) {
-      this.filteredApps = filterList(this.allApps, this.currentFilters, this.filterKeysAssociations);
-
-      this.updateCurrentFilters();
-      this.dataSorter.setData(this.filteredApps);
-    }
-  }
-
-  /**
-   * Updates the texts with the currently selected filters.
-   */
-  private updateCurrentFilters() {
-    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
   }
 
   /**
@@ -521,7 +420,7 @@ export class NodeAppsListComponent implements OnDestroy {
   }
 
   /**
-   * Sorts the data and recalculates which elements should be shown on the UI.
+   * Recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
     // Needed to prevent racing conditions.

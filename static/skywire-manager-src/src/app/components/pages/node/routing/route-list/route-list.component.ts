@@ -15,23 +15,9 @@ import { SelectOptionComponent, SelectableOption } from 'src/app/components/layo
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { TranslateService } from '@ngx-translate/core';
-import { FilterKeysAssociation, FilterTextElements, filterList, updateFilterTexts } from 'src/app/utils/filters';
-import {
-  FilterFieldParams,
-  FilterFieldTypes,
-  FiltersSelectionComponent
-} from 'src/app/components/layout/filters-selection/filters-selection.component';
+import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
-
-/**
- * Filters for the list. It is prepopulated with default data which indicates that no filter
- * has been selected. As the object may be included in the query string, prefixes are used to
- * avoid name collisions with other components in the same URL.
- */
-class DataFilters {
-  rt_key = '';
-  rt_rule = '';
-}
+import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 
 /**
  * Shows the list of routes of a node. I can be used to show a short preview, with just some
@@ -43,6 +29,9 @@ class DataFilters {
   styleUrls: ['./route-list.component.scss']
 })
 export class RouteListComponent implements OnDestroy {
+  // Small text for identifying the list, needed for the helper objects.
+  private readonly listId = 'rl';
+
   @Input() nodePK: string;
 
   // Vars with the data of the columns used for sorting the data.
@@ -50,8 +39,10 @@ export class RouteListComponent implements OnDestroy {
   ruleSortData = new SortingColumn(['rule'], 'routes.rule', SortingModes.Text);
 
   private dataSortedSubscription: Subscription;
-  // Object in chage of sorting the data.
+  private dataFiltererSubscription: Subscription;
+  // Objects in charge of sorting and filtering the data.
   dataSorter: DataSorter;
+  dataFilterer: DataFilterer;
 
   dataSource: Route[];
   /**
@@ -80,31 +71,25 @@ export class RouteListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set routes(val: Route[]) {
     this.allRoutes = val;
-    this.filter();
+
+    this.dataFilterer.setData(this.allRoutes);
   }
 
-  // Array allowing to associate the properties of TransportFilters with the ones on the list
-  // and the values that must be shown in the UI, for being able to use helper functions to
-  // filter the data and show some UI elements.
-  filterKeysAssociations: FilterKeysAssociation[] = [
+  // Array with the properties of the columns that can be used for filtering the data.
+  filterProperties: FilterProperties[] = [
     {
       filterName: 'routes.filter-dialog.key',
       keyNameInElementsArray: 'key',
-      keyNameInFiltersObject: 'rt_key',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 8,
     },
     {
       filterName: 'routes.filter-dialog.rule',
       keyNameInElementsArray: 'rule',
-      keyNameInFiltersObject: 'rt_rule',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 150,
     }
   ];
-
-  // Current filters for the data.
-  currentFilters = new DataFilters();
-  // Properties needed for showing the selected filters in the UI.
-  currentFiltersTexts: FilterTextElements[] = [];
-  // Current params in the query string added to the url.
-  currentUrlQueryParams: object;
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -122,10 +107,16 @@ export class RouteListComponent implements OnDestroy {
       this.keySortData,
       this.ruleSortData,
     ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, 'rt');
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allRoutes has already been sorted.
       this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredRoutes = data;
+      this.dataSorter.setData(this.filteredRoutes);
     });
 
     // Get the page requested in the URL.
@@ -138,28 +129,9 @@ export class RouteListComponent implements OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.filter();
+        this.recalculateElementsToShow();
       }
     });
-
-    // Get the query string.
-    this.navigationsSubscription.add(this.route.queryParamMap.subscribe(queryParams => {
-      // Get the filters from the query string.
-      this.currentFilters = new DataFilters();
-      Object.keys(this.currentFilters).forEach(key => {
-        if (queryParams.has(key)) {
-          this.currentFilters[key] = queryParams.get(key);
-        }
-      });
-
-      // Save the query string.
-      this.currentUrlQueryParams = {};
-      queryParams.keys.forEach(key => {
-        this.currentUrlQueryParams[key] = queryParams.get(key);
-      });
-
-      this.filter();
-    }));
   }
 
   ngOnDestroy() {
@@ -229,67 +201,6 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
-   * Removes all the filters added by the user.
-   */
-  removeFilters() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
-
-    // Ask for confirmation.
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.closeModal();
-
-      // Remove the query string params.
-      this.router.navigate([], { queryParams: {}});
-    });
-  }
-
-  /**
-   * Opens the filter selection modal window to let the user change the currently selected filters.
-   */
-  changeFilters() {
-    // Properties for the modal window.
-    const filterFieldsParams: FilterFieldParams[] = [];
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.rt_key,
-      filterKeysAssociation: this.filterKeysAssociations[0],
-      maxlength: 36,
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.rt_rule,
-      filterKeysAssociation: this.filterKeysAssociations[1],
-      maxlength: 100,
-    });
-
-    // Open the modal window.
-    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
-      if (response) {
-        this.router.navigate([], { queryParams: response});
-      }
-    });
-  }
-
-  /**
-   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
-   */
-  private filter() {
-    if (this.allRoutes) {
-      this.filteredRoutes = filterList(this.allRoutes, this.currentFilters, this.filterKeysAssociations);
-
-      this.updateCurrentFilters();
-      this.dataSorter.setData(this.filteredRoutes);
-    }
-  }
-
-  /**
-   * Updates the texts with the currently selected filters.
-   */
-  private updateCurrentFilters() {
-    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
-  }
-
-  /**
    * Opens the modal window used on small screens with the options of an element.
    */
   showOptionsDialog(route: Route) {
@@ -343,7 +254,7 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
-   * Sorts the data and recalculates which elements should be shown on the UI.
+   * Recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
     // Needed to prevent racing conditions.

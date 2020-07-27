@@ -301,7 +301,7 @@ export class StorageService {
   /**
    * Gets the saved labels array, directly from the persistent storage, not the cached map.
    */
-  private getSavedLabels(): LabelInfo[] {
+  getSavedLabels(): LabelInfo[] {
     return JSON.parse(this.storage.getItem(KEY_SAVED_LABELS)) || [];
   }
 

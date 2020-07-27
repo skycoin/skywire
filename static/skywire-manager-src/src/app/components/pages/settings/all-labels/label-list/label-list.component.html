@@ -1,7 +1,7 @@
 <!-- Header. -->
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
   <div class="title ml-3.5">
-    <span *ngIf="showShortList_" class="uppercase">{{ 'transports.title' | translate }}</span>
+    <span *ngIf="showShortList_" class="uppercase">{{ 'labels.title' | translate }}</span>
     <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
       {{ 'filters.active-filters' | translate }}
       <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
@@ -16,15 +16,10 @@
     <div class="options-container">
       <mat-icon
         [inline]="true"
-        (click)="create()"
-        [matTooltip]="'transports.create' | translate"
-      >add</mat-icon>
-      <mat-icon
-        [inline]="true"
         (click)="dataFilterer.changeFilters()"
         [matTooltip]="'filters.filter-action' | translate"
         class="small-icon"
-        *ngIf="allTransports && allTransports.length > 0"
+        *ngIf="allLabels && allLabels.length > 0"
       >filter_list</mat-icon>
       <mat-icon
         [inline]="true"
@@ -48,7 +43,7 @@
       *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
       [currentPage]="currentPage"
       [numberOfPages]="numberOfPages"
-      [linkParts]="['/nodes', nodePK, 'transports']"
+      [linkParts]="['/settings', 'labels']"
       [queryParams]="dataFilterer.currentUrlQueryParams">
     </app-paginator>
   </div>
@@ -67,82 +62,42 @@
     <!-- Column names. -->
     <tr>
       <th></th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'transports.state-tooltip' | translate">
-        <span class="dot-outline-white"></span>
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === stateSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(labelSortData)">
+        {{ 'labels.label' | translate }}
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === labelSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
       <th class="sortable-column" (click)="dataSorter.changeSortingOrder(idSortData)">
-        {{ 'transports.id' | translate }}
+        {{ 'labels.id' | translate }}
         <mat-icon *ngIf="dataSorter.currentSortingColumn === idSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(remotePkSortData)">
-        {{ 'transports.remote-node' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === remotePkSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-      </th>
       <th class="sortable-column" (click)="dataSorter.changeSortingOrder(typeSortData)">
-        {{ 'transports.type' | translate }}
+        {{ 'labels.type' | translate }}
         <mat-icon *ngIf="dataSorter.currentSortingColumn === typeSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-      </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(uploadedSortData)">
-        {{ 'common.uploaded' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === uploadedSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-      </th>
-      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(downloadedSortData)">
-        {{ 'common.downloaded' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === downloadedSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
       <th class="actions"></th>
     </tr>
     <!-- Values. -->
-    <tr *ngFor="let transport of dataSource">
+    <tr *ngFor="let label of dataSource">
       <td class="selection-col">
         <mat-checkbox
-          [checked]="selections.get(transport.id)"
-          (change)="changeSelection(transport)">
+          [checked]="selections.get(label.id)"
+          (change)="changeSelection(label)">
         </mat-checkbox>
       </td>
       <td>
-        <span [class]="transportStatusClass(transport, true)" [matTooltip]="transportStatusText(transport, true) | translate"></span>
+        {{ label.label }}
       </td>
       <td>
-        <app-labeled-element-text
-          [short]="true"
-          id="{{ transport.id }}"
-          shortTextLength="4"
-          (labelEdited)="refreshData()"
-          [elementType]="labeledElementTypes.Transport">
-        </app-labeled-element-text>
+        {{ label.id }}
       </td>
       <td>
-        <app-labeled-element-text
-          [short]="true"
-          id="{{ transport.remote_pk }}"
-          shortTextLength="4"
-          (labelEdited)="refreshData()">
-        </app-labeled-element-text>
-      </td>
-      <td>
-        {{ transport.type }}
-      </td>
-      <td>
-        {{ transport.log.sent | autoScale }}
-      </td>
-      <td>
-        {{ transport.log.recv | autoScale }}
+        {{ getLabelTypeIdentification(label)[0] }} - {{ getLabelTypeIdentification(label)[1] | translate }}
       </td>
       <td class="actions">
         <button
-          (click)="details(transport)"
+          (click)="delete(label.id)"
           mat-icon-button
-          [matTooltip]="'transports.details.title' | translate"
-          class="action-button transparent-button"
-        >
-          <mat-icon [inline]="true">visibility</mat-icon>
-        </button>
-        <button
-          (click)="delete(transport.id)"
-          mat-icon-button
-          [matTooltip]="'transports.delete' | translate"
+          [matTooltip]="'labels.delete' | translate"
           class="action-button transparent-button"
         >
           <mat-icon [inline]="true">close</mat-icon>
@@ -172,51 +127,32 @@
       </div>
     </td></tr>
     <!-- Values. -->
-    <tr *ngFor="let transport of dataSource"><td>
+    <tr *ngFor="let label of dataSource"><td>
       <div class="list-item-container">
         <div class="check-part">
           <mat-checkbox
-            [checked]="selections.get(transport.id)"
-            (change)="changeSelection(transport)">
+            [checked]="selections.get(label.id)"
+            (change)="changeSelection(label)">
           </mat-checkbox>
         </div>
         <div class="left-part">
           <div class="list-row">
-            <span class="title">{{ 'transports.state' | translate }}</span>:
-            <span [class]="transportStatusClass(transport, false) + ' title'">{{ transportStatusText(transport, false) | translate }}</span>
+            <span class="title">{{ 'labels.label' | translate }}</span>:
+            {{ label.label }}
           </div>
           <div class="list-row long-content">
-            <span class="title">{{ 'transports.id' | translate }}</span>:
-            <app-labeled-element-text
-              id="{{ transport.id }}"
-              (labelEdited)="refreshData()"
-              [elementType]="labeledElementTypes.Transport">
-            </app-labeled-element-text>
-          </div>
-          <div class="list-row long-content">
-            <span class="title">{{ 'transports.remote-node' | translate }}</span>:
-            <app-labeled-element-text
-              id="{{ transport.remote_pk }}"
-              (labelEdited)="refreshData()">
-            </app-labeled-element-text>
+            <span class="title">{{ 'labels.id' | translate }}</span>:
+            {{ label.id }}
           </div>
           <div class="list-row">
-            <span class="title">{{ 'transports.type' | translate }}</span>:
-            {{ transport.type }}
-          </div>
-          <div class="list-row">
-            <span class="title">{{ 'common.uploaded' | translate }}</span>:
-            {{ transport.log.sent | autoScale }}
-          </div>
-          <div class="list-row">
-            <span class="title">{{ 'common.downloaded' | translate }}</span>:
-            {{ transport.log.recv | autoScale }}
+            <span class="title">{{ 'labels.type' | translate }}</span>:
+            {{ getLabelTypeIdentification(label)[0] }} - {{ getLabelTypeIdentification(label)[1] | translate }}
           </div>
         </div>
         <div class="margin-part"></div>
         <div class="right-part">
           <button
-            (click)="$event.stopPropagation(); showOptionsDialog(transport)"
+            (click)="$event.stopPropagation(); showOptionsDialog(label)"
             mat-icon-button
             [matTooltip]="'common.options' | translate"
             class="transparent-button"
@@ -230,8 +166,8 @@
 
   <!-- Link for accessing the full list. -->
   <app-view-all-link
-    [numberOfElements]="filteredTransports.length"
-    [linkParts]="['/nodes', nodePK, 'transports']"
+    [numberOfElements]="filteredLabels.length"
+    [linkParts]="['/settings', 'labels']"
     [queryParams]="dataFilterer.currentUrlQueryParams"
     *ngIf="showShortList_ && numberOfPages > 1"
   ></app-view-all-link>
@@ -241,8 +177,8 @@
 <div class="rounded-elevated-box mt-3" *ngIf="!dataSource || dataSource.length === 0">
   <div class="box-internal-container">
     <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
-    <span class="font-sm" *ngIf="allTransports.length === 0">{{ 'transports.empty' | translate }}</span>
-    <span class="font-sm" *ngIf="allTransports.length !== 0">{{ 'transports.empty-with-filter' | translate }}</span>
+    <span class="font-sm" *ngIf="allLabels.length === 0">{{ 'labels.empty' | translate }}</span>
+    <span class="font-sm" *ngIf="allLabels.length !== 0">{{ 'labels.empty-with-filter' | translate }}</span>
   </div>
 </div>
 
@@ -251,6 +187,6 @@
   *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
   [currentPage]="currentPage"
   [numberOfPages]="numberOfPages"
-  [linkParts]="['/nodes', nodePK, 'transports']"
+  [linkParts]="['/settings', 'labels']"
   [queryParams]="dataFilterer.currentUrlQueryParams">
 </app-paginator>

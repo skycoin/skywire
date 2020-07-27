@@ -20,23 +20,10 @@ import { ClipboardService } from 'src/app/services/clipboard.service';
 import { ConfirmationData, ConfirmationComponent } from '../../layout/confirmation/confirmation.component';
 import { AppConfig } from 'src/app/app.config';
 import { OperationError } from 'src/app/utils/operation-error';
-import { FilterTextElements, FilterKeysAssociation, filterList, updateFilterTexts } from 'src/app/utils/filters';
-import { FilterFieldParams, FilterFieldTypes, FiltersSelectionComponent } from '../../layout/filters-selection/filters-selection.component';
+import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
-
-/**
- * Filters for the list. It is prepopulated with default data which indicates that no filter
- * has been selected. As the object may be included in the query string, prefixes are used to
- * avoid name collisions with other components in the same URL.
- */
-class DataFilters {
-  nl_online = '';
-  nl_label = '';
-  nl_key = '';
-  nl_dmsg = '';
-  nl_dmsg_label = '';
-}
+import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 
 /**
  * Page for showing the node list.
@@ -47,6 +34,10 @@ class DataFilters {
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
+  // Small texts for identifying the list, needed for the helper objects.
+  private readonly nodesListId = 'nl';
+  private readonly dmsgListId = 'dl';
+
   // Vars with the data of the columns used for sorting the data.
   stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
@@ -55,8 +46,10 @@ export class NodeListComponent implements OnInit, OnDestroy {
   pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
 
   private dataSortedSubscription: Subscription;
-  // Object in chage of sorting the data.
+  private dataFiltererSubscription: Subscription;
+  // Objects in charge of sorting and filtering the data.
   dataSorter: DataSorter;
+  dataFilterer: DataFilterer;
 
   loading = true;
   dataSource: Node[];
@@ -72,14 +65,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
 
-  // Array allowing to associate the properties of TransportFilters with the ones on the list
-  // and the values that must be shown in the UI, for being able to use helper functions to
-  // filter the data and show some UI elements.
-  filterKeysAssociations: FilterKeysAssociation[] = [
+  // Array with the properties of the columns that can be used for filtering the data.
+  filterProperties: FilterProperties[] = [
     {
       filterName: 'nodes.filter-dialog.online',
       keyNameInElementsArray: 'online',
-      keyNameInFiltersObject: 'nl_online',
+      type: FilterFieldTypes.Select,
       printableLabelsForValues: [
         {
           value: '',
@@ -98,33 +89,30 @@ export class NodeListComponent implements OnInit, OnDestroy {
     {
       filterName: 'nodes.filter-dialog.label',
       keyNameInElementsArray: 'label',
-      keyNameInFiltersObject: 'nl_label',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 100,
     },
     {
       filterName: 'nodes.filter-dialog.key',
       keyNameInElementsArray: 'local_pk',
-      keyNameInFiltersObject: 'nl_key',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 66,
     },
     {
       filterName: 'nodes.filter-dialog.dmsg',
       keyNameInElementsArray: 'dmsgServerPk',
       secondaryKeyNameInElementsArray: 'dmsgServerPk_label',
-      keyNameInFiltersObject: 'nl_dmsg',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 66,
     }
   ];
-
-  // Current filters for the data.
-  currentFilters = new DataFilters();
-  // Properties needed for showing the selected filters in the UI.
-  currentFiltersTexts: FilterTextElements[] = [];
-  // Current params in the query string added to the url.
-  currentUrlQueryParams: object;
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private menuSubscription: Subscription;
   private updateSubscription: Subscription;
   private navigationsSubscription: Subscription;
+  private languageSubscription: Subscription;
 
   // Vars for keeping track of the data updating.
   secondsSinceLastUpdate = 0;
@@ -153,6 +141,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
     // Show the dmsg info if the dmsg url was used.
     this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
 
+    // Remove the DMSG filtering options if no DMSG info is being shown.
+    if (!this.showDmsgInfo) {
+      this.filterProperties.splice(this.filterProperties.length - 1);
+    }
+
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
       this.stateSortData,
@@ -163,10 +156,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
       sortableColumns.push(this.dmsgServerSortData);
       sortableColumns.push(this.pingSortData);
     }
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 2, this.showDmsgInfo ? 'nl' : 'dl');
+    this.dataSorter = new DataSorter(
+      this.dialog, this.translateService, sortableColumns, 2, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+    );
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allNodes has already been sorted.
       this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(
+      this.dialog, route, this.router, this.filterProperties, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+    );
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredNodes = data;
+      this.dataSorter.setData(this.filteredNodes);
     });
 
     // Get the page requested in the URL.
@@ -179,28 +182,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.filter();
+        this.recalculateElementsToShow();
       }
     });
-
-    // Get the query string.
-    this.navigationsSubscription.add(route.queryParamMap.subscribe(queryParams => {
-      // Get the filters from the query string.
-      this.currentFilters = new DataFilters();
-      Object.keys(this.currentFilters).forEach(key => {
-        if (queryParams.has(key)) {
-          this.currentFilters[key] = queryParams.get(key);
-        }
-      });
-
-      // Save the query string.
-      this.currentUrlQueryParams = {};
-      queryParams.keys.forEach(key => {
-        this.currentUrlQueryParams[key] = queryParams.get(key);
-      });
-
-      this.filter();
-    }));
 
     // Data for populating the tab bar.
     this.tabsData = [
@@ -220,6 +204,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
         linkParts: ['/settings'],
       }
     ];
+
+    // Refresh the data after languaje changes, to ensure the labels used for filtering
+    // are updated.
+    this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
+      this.nodeService.forceNodeListRefresh();
+    });
   }
 
   ngOnInit() {
@@ -264,6 +254,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
+    this.languageSubscription.unsubscribe();
 
     if (this.menuSubscription) {
       this.menuSubscription.unsubscribe();
@@ -332,7 +323,15 @@ export class NodeListComponent implements OnInit, OnDestroy {
             // If the data was obtained.
             if (result.data) {
               this.allNodes = result.data as Node[];
-              this.filter();
+              if (this.showDmsgInfo) {
+                // Add the label data to the array, to be able to use it for filtering.
+                this.allNodes.forEach(node => {
+                  node['dmsgServerPk_label'] =
+                    LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
+                });
+              }
+              this.dataFilterer.setData(this.allNodes);
+
               this.loading = false;
               // Close any previous temporary loading error msg.
               this.snackbarService.closeCurrentIfTemporaryError();
@@ -368,7 +367,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Sorts the data and recalculates which elements should be shown on the UI.
+   * Recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
     // Needed to prevent racing conditions.
@@ -569,100 +568,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
       return of(errors);
     }));
-  }
-
-  /**
-   * Removes all the filters added by the user.
-   */
-  removeFilters() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
-
-    // Ask for confirmation.
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.closeModal();
-
-      // Remove the query string params.
-      this.router.navigate([], { queryParams: {}});
-    });
-  }
-
-  /**
-   * Opens the filter selection modal window to let the user change the currently selected filters.
-   */
-  changeFilters() {
-    // Properties for the modal window.
-    const filterFieldsParams: FilterFieldParams[] = [];
-    filterFieldsParams.push({
-      type: FilterFieldTypes.Select,
-      currentValue: this.currentFilters.nl_online,
-      filterKeysAssociation: this.filterKeysAssociations[0],
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.nl_label,
-      filterKeysAssociation: this.filterKeysAssociations[1],
-      maxlength: 100,
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.nl_key,
-      filterKeysAssociation: this.filterKeysAssociations[2],
-      maxlength: 66,
-    });
-
-    if (this.showDmsgInfo) {
-      filterFieldsParams.push({
-        type: FilterFieldTypes.TextInput,
-        currentValue: this.currentFilters.nl_dmsg,
-        filterKeysAssociation: this.filterKeysAssociations[3],
-        maxlength: 66,
-      });
-    }
-
-    // Open the modal window.
-    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
-      if (response) {
-        this.router.navigate([], { queryParams: response});
-      }
-    });
-  }
-
-  /**
-   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
-   */
-  private filter() {
-    if (this.allNodes) {
-      // Check if at least one filter is valid.
-      let filtersSet = false;
-      Object.keys(this.currentFilters).forEach(key => {
-        if (this.currentFilters[key]) {
-          filtersSet = true;
-        }
-      });
-
-      if (filtersSet) {
-        // Add the label data to the array, to be able to use it for filtering.
-        this.allNodes.forEach(node => {
-          node['dmsgServerPk_label'] =
-            LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
-        });
-
-        this.filteredNodes = filterList(this.allNodes, this.currentFilters, this.filterKeysAssociations);
-
-        this.updateCurrentFilters();
-      } else {
-        this.filteredNodes = this.allNodes;
-      }
-
-      this.dataSorter.setData(this.filteredNodes);
-    }
-  }
-
-  /**
-   * Updates the texts with the currently selected filters.
-   */
-  private updateCurrentFilters() {
-    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
   }
 
   /**

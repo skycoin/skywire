@@ -16,28 +16,11 @@ import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
-import { FilterTextElements, FilterKeysAssociation, filterList, updateFilterTexts } from 'src/app/utils/filters';
-import {
-  FilterFieldParams,
-  FiltersSelectionComponent,
-  FilterFieldTypes
-} from 'src/app/components/layout/filters-selection/filters-selection.component';
+import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 import { LabeledElementTextComponent } from 'src/app/components/layout/labeled-element-text/labeled-element-text.component';
 import { DataSorter, SortingColumn, SortingModes } from 'src/app/utils/lists/data-sorter';
-
-/**
- * Filters for the list. It is prepopulated with default data which indicates that no filter
- * has been selected. As the object may be included in the query string, prefixes are used to
- * avoid name collisions with other components in the same URL.
- */
-class DataFilters {
-  tr_online = '';
-  tr_id = '';
-  tr_id_label = '';
-  tr_key = '';
-  tr_key_label = '';
-}
+import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 
 /**
  * Shows the list of transports of a node. I can be used to show a short preview, with just some
@@ -49,6 +32,9 @@ class DataFilters {
   styleUrls: ['./transport-list.component.scss']
 })
 export class TransportListComponent implements OnDestroy {
+  // Small text for identifying the list, needed for the helper objects.
+  private readonly listId = 'tr';
+
   @Input() nodePK: string;
 
   // Vars with the data of the columns used for sorting the data.
@@ -60,8 +46,10 @@ export class TransportListComponent implements OnDestroy {
   downloadedSortData = new SortingColumn(['log', 'recv'], 'common.downloaded', SortingModes.NumberReversed);
 
   private dataSortedSubscription: Subscription;
-  // Object in chage of sorting the data.
+  private dataFiltererSubscription: Subscription;
+  // Objects in charge of sorting and filtering the data.
   dataSorter: DataSorter;
+  dataFilterer: DataFilterer;
 
   dataSource: Transport[];
   /**
@@ -90,17 +78,25 @@ export class TransportListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set transports(val: Transport[]) {
     this.allTransports = val;
-    this.filter();
+
+    // Add the label data to the array, to be able to use it for filtering.
+    this.allTransports.forEach(transport => {
+      transport['id_label'] =
+        LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.id);
+
+      transport['remote_pk_label'] =
+        LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.remote_pk);
+    });
+
+    this.dataFilterer.setData(this.allTransports);
   }
 
-  // Array allowing to associate the properties of TransportFilters with the ones on the list
-  // and the values that must be shown in the UI, for being able to use helper functions to
-  // filter the data and show some UI elements.
-  filterKeysAssociations: FilterKeysAssociation[] = [
+  // Array with the properties of the columns that can be used for filtering the data.
+  filterProperties: FilterProperties[] = [
     {
       filterName: 'transports.filter-dialog.online',
       keyNameInElementsArray: 'is_up',
-      keyNameInFiltersObject: 'tr_online',
+      type: FilterFieldTypes.Select,
       printableLabelsForValues: [
         {
           value: '',
@@ -120,27 +116,23 @@ export class TransportListComponent implements OnDestroy {
       filterName: 'transports.filter-dialog.id',
       keyNameInElementsArray: 'id',
       secondaryKeyNameInElementsArray: 'id_label',
-      keyNameInFiltersObject: 'tr_id',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 36,
     },
     {
       filterName: 'transports.filter-dialog.remote-node',
       keyNameInElementsArray: 'remote_pk',
       secondaryKeyNameInElementsArray: 'remote_pk_label',
-      keyNameInFiltersObject: 'tr_key',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 66,
     }
   ];
-
-  // Current filters for the data.
-  currentFilters = new DataFilters();
-  // Properties needed for showing the selected filters in the UI.
-  currentFiltersTexts: FilterTextElements[] = [];
-  // Current params in the query string added to the url.
-  currentUrlQueryParams: object;
 
   labeledElementTypes = LabeledElementTypes;
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
+  private languageSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
@@ -160,10 +152,16 @@ export class TransportListComponent implements OnDestroy {
       this.uploadedSortData,
       this.downloadedSortData,
     ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, 'tr');
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allTransports has already been sorted.
       this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredTransports = data;
+      this.dataSorter.setData(this.filteredTransports);
     });
 
     // Get the page requested in the URL.
@@ -176,35 +174,27 @@ export class TransportListComponent implements OnDestroy {
 
         this.currentPageInUrl = selectedPage;
 
-        this.filter();
+        this.recalculateElementsToShow();
       }
     });
 
-    // Get the query string.
-    this.navigationsSubscription.add(this.route.queryParamMap.subscribe(queryParams => {
-      // Get the filters from the query string.
-      this.currentFilters = new DataFilters();
-      Object.keys(this.currentFilters).forEach(key => {
-        if (queryParams.has(key)) {
-          this.currentFilters[key] = queryParams.get(key);
-        }
-      });
-
-      // Save the query string.
-      this.currentUrlQueryParams = {};
-      queryParams.keys.forEach(key => {
-        this.currentUrlQueryParams[key] = queryParams.get(key);
-      });
-
-      this.filter();
-    }));
+    // Refresh the data after languaje changes, to ensure the labels used for filtering
+    // are updated.
+    this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
+      this.transports = this.allTransports;
+    });
   }
 
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
+    this.languageSubscription.unsubscribe();
+
     this.dataSortedSubscription.unsubscribe();
     this.dataSorter.dispose();
+
+    this.dataFiltererSubscription.unsubscribe();
+    this.dataFilterer.dispose();
   }
 
   /**
@@ -302,94 +292,6 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Removes all the filters added by the user.
-   */
-  removeFilters() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'filters.remove-confirmation');
-
-    // Ask for confirmation.
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.closeModal();
-
-      // Remove the query string params.
-      this.router.navigate([], { queryParams: {}});
-    });
-  }
-
-  /**
-   * Opens the filter selection modal window to let the user change the currently selected filters.
-   */
-  changeFilters() {
-    // Properties for the modal window.
-    const filterFieldsParams: FilterFieldParams[] = [];
-    filterFieldsParams.push({
-      type: FilterFieldTypes.Select,
-      currentValue: this.currentFilters.tr_online,
-      filterKeysAssociation: this.filterKeysAssociations[0]
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.tr_id,
-      filterKeysAssociation: this.filterKeysAssociations[1],
-      maxlength: 36,
-    });
-    filterFieldsParams.push({
-      type: FilterFieldTypes.TextInput,
-      currentValue: this.currentFilters.tr_key,
-      filterKeysAssociation: this.filterKeysAssociations[2],
-      maxlength: 66,
-    });
-
-    // Open the modal window.
-    FiltersSelectionComponent.openDialog(this.dialog, filterFieldsParams).afterClosed().subscribe(response => {
-      if (response) {
-        this.router.navigate([], { queryParams: response});
-      }
-    });
-  }
-
-  /**
-   * Filters the data, saves the filtered list in the corresponding array and updates the UI.
-   */
-  private filter() {
-    if (this.allTransports) {
-      // Check if at least one filter is valid.
-      let filtersSet = false;
-      Object.keys(this.currentFilters).forEach(key => {
-        if (this.currentFilters[key]) {
-          filtersSet = true;
-        }
-      });
-
-      if (filtersSet) {
-        // Add the label data to the array, to be able to use it for filtering.
-        this.allTransports.forEach(transport => {
-          transport['id_label'] =
-            LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.id);
-
-          transport['remote_pk_label'] =
-            LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.remote_pk);
-        });
-
-        this.filteredTransports = filterList(this.allTransports, this.currentFilters, this.filterKeysAssociations);
-
-        this.updateCurrentFilters();
-      } else {
-        this.filteredTransports = this.allTransports;
-      }
-
-      this.dataSorter.setData(this.filteredTransports);
-    }
-  }
-
-  /**
-   * Updates the texts with the currently selected filters.
-   */
-  private updateCurrentFilters() {
-    this.currentFiltersTexts = updateFilterTexts(this.currentFilters, this.filterKeysAssociations);
-  }
-
-  /**
    * Opens the modal window used on small screens with the options of an element.
    */
   showOptionsDialog(transport: Transport) {
@@ -450,7 +352,7 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Sorts the data and recalculates which elements should be shown on the UI.
+   * Recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
     // Needed to prevent racing conditions.
