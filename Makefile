@@ -188,7 +188,7 @@ build-ui:  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
 	${OPTS} GOBIN=${PWD}/bin go get github.com/rakyll/statik
-	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/hypervisor -f
+	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/skywire-visor -f
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`

@@ -294,7 +294,7 @@ These tests have been commented out for the following reasons:
 //	require.NoError(t, svr.RegisterName(RPCPrefix, gateway))
 //	go svr.ServeConn(sConn)
 //
-//	// client := RPCClient{Client: rpc.NewClient(cConn)}
+//	// client := API{Client: rpc.NewClient(cConn)}
 //	client := NewRPCClient(rpc.NewClient(cConn), "")
 //
 //	printFunc := func(t *testing.T, name string, v interface{}) {
@@ -315,7 +315,7 @@ These tests have been commented out for the following reasons:
 //			require.NoError(t, gateway.Summary(&struct{}{}, &summary))
 //			test(t, &summary)
 //		})
-//		t.Run("RPCClient", func(t *testing.T) {
+//		t.Run("API", func(t *testing.T) {
 //			summary, err := client.Summary()
 //			require.NoError(t, err)
 //			test(t, summary)
@@ -331,7 +331,7 @@ These tests have been commented out for the following reasons:
 //			assert.Equal(t, []byte("1\net"), out)
 //		})
 //
-//		t.Run("RPCClient", func(t *testing.T) {
+//		t.Run("API", func(t *testing.T) {
 //			out, err := client.Exec(command)
 //			require.NoError(t, err)
 //			assert.Equal(t, []byte("1\net"), out)
@@ -348,7 +348,7 @@ These tests have been commented out for the following reasons:
 //			require.NoError(t, gateway.Apps(&struct{}{}, &apps))
 //			test(t, apps)
 //		})
-//		t.Run("RPCClient", func(t *testing.T) {
+//		t.Run("API", func(t *testing.T) {
 //			apps, err := client.Apps()
 //			require.NoError(t, err)
 //			test(t, apps)
