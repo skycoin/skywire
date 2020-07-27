@@ -16,7 +16,7 @@ import { AppConfig } from 'src/app/app.config';
   styleUrls: ['./edit-label.component.scss']
 })
 export class EditLabelComponent implements OnInit, AfterViewInit {
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('firstInput') firstInput: ElementRef;
 
   form: FormGroup;
 
