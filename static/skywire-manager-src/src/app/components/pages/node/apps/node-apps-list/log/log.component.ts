@@ -36,7 +36,7 @@ interface LogMessage {
   styleUrls: ['./log.component.scss'],
 })
 export class LogComponent implements OnInit, OnDestroy {
-  @ViewChild('content', { static: false }) content: ElementRef;
+  @ViewChild('content') content: ElementRef;
 
   logMessages: LogMessage[] = [];
   loading = false;
