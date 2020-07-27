@@ -3,6 +3,7 @@ package visor
 import (
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -441,11 +442,20 @@ func (mc *mockRPCClient) ExtraSummary() (*ExtraSummary, error) {
 		return nil, err
 	}
 
+	extraRoutes := make([]routingRuleResp, 0, len(routes))
+	for _, route := range routes {
+		extraRoutes = append(extraRoutes, routingRuleResp{
+			Key:     route.KeyRouteID(),
+			Rule:    hex.EncodeToString(route),
+			Summary: route.Summary(),
+		})
+	}
+
 	extraSummary := &ExtraSummary{
 		Summary: summary,
 		Health:  health,
 		Uptime:  uptime,
-		Routes:  routes,
+		Routes:  extraRoutes,
 	}
 
 	return extraSummary, nil
