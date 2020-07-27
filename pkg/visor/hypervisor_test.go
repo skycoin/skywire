@@ -13,29 +13,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/user_manager"
 )
-
-func TestMain(m *testing.M) {
-	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
-	if ok {
-		lvl, err := logging.LevelFromString(loggingLevel)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		logging.SetLevel(lvl)
-	} else {
-		logging.Disable()
-	}
-
-	os.Exit(m.Run())
-}
 
 // nolint: gosec
 const (
@@ -46,7 +29,7 @@ const (
 )
 
 func TestNewNode(t *testing.T) {
-	config := hypervisorconfig.makeConfig(false)
+	config := hypervisorconfig.MakeConfig(false)
 	config.EnableAuth = true
 	config.FillDefaults(false)
 
