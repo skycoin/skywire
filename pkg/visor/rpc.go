@@ -1,6 +1,7 @@
 package visor
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/rpc"
@@ -157,11 +158,20 @@ func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
 		return fmt.Errorf("routes")
 	}
 
+	extraRoutes := make([]routingRuleResp, 0, len(routes))
+	for _, route := range routes {
+		extraRoutes = append(extraRoutes, routingRuleResp{
+			Key:     route.KeyRouteID(),
+			Rule:    hex.EncodeToString(route),
+			Summary: route.Summary(),
+		})
+	}
+
 	*out = ExtraSummary{
 		Summary: summary,
 		Health:  health,
 		Uptime:  uptime,
-		Routes:  routes,
+		Routes:  extraRoutes,
 	}
 
 	return nil
