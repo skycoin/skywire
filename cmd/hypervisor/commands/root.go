@@ -13,7 +13,6 @@ import (
 	"github.com/rakyll/statik/fs"
 	"github.com/spf13/cobra"
 
-	_ "github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/statik" // embedded static files
 	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
