@@ -19,10 +19,11 @@ func init() {
 }
 
 var (
-	sk      cipher.SecKey
-	output  string
-	replace bool
-	testEnv bool
+	sk         cipher.SecKey
+	output     string
+	replace    bool
+	testEnv    bool
+	hypervisor bool
 )
 
 func init() {
@@ -30,6 +31,7 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists (this retains the keys).")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
+	genConfigCmd.Flags().BoolVarP(&hypervisor, "hypervisor", "h", false, "whether to generate hypervisor config.")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -55,7 +57,7 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		// Determine config type to generate.
-		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*visorconfig.V1, error)
+		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*visorconfig.V1, error)
 		if testEnv {
 			genConf = visorconfig.MakeTestConfig
 		} else {
@@ -63,7 +65,7 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		// Generate config.
-		conf, err := genConf(mLog, output, &sk)
+		conf, err := genConf(mLog, output, &sk, hypervisor)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
