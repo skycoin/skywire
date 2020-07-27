@@ -2,9 +2,9 @@
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
   <div class="title ml-3.5">
     <span *ngIf="showShortList_" class="uppercase">{{ 'apps.apps-list.title' | translate }}</span>
-    <div class="filter-label subtle-transparent-button cursor-pointer" (click)="removeFilters()" *ngIf="currentFiltersTexts && currentFiltersTexts.length > 0">
+    <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
       {{ 'filters.active-filters' | translate }}
-      <div *ngFor="let filterTexts of currentFiltersTexts" class="item">
+      <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
         <span>{{ filterTexts.filterName | translate }}: </span>
         <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
         <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
@@ -16,7 +16,7 @@
     <div class="options-container">
       <mat-icon
         [inline]="true"
-        (click)="changeFilters()"
+        (click)="dataFilterer.changeFilters()"
         [matTooltip]="'filters.filter-action' | translate"
         class="small-icon"
         *ngIf="allApps && allApps.length > 0"
@@ -52,7 +52,7 @@
       [currentPage]="currentPage"
       [numberOfPages]="numberOfPages"
       [linkParts]="['/nodes', nodePK, 'apps-list']"
-      [queryParams]="currentUrlQueryParams">
+      [queryParams]="dataFilterer.currentUrlQueryParams">
     </app-paginator>
   </div>
 </div>
@@ -216,9 +216,9 @@
 
   <!-- Link for accessing the full list. -->  
   <app-view-all-link
-    [numberOfElements]="allApps.length"
+    [numberOfElements]="filteredApps.length"
     [linkParts]="['/nodes', nodePK, 'apps-list']"
-    [queryParams]="currentUrlQueryParams"
+    [queryParams]="dataFilterer.currentUrlQueryParams"
     *ngIf="showShortList_ && numberOfPages > 1"
   ></app-view-all-link>
 </div></div>
@@ -238,5 +238,5 @@
   [currentPage]="currentPage"
   [numberOfPages]="numberOfPages"
   [linkParts]="['/nodes', nodePK, 'apps-list']"
-  [queryParams]="currentUrlQueryParams">
+  [queryParams]="dataFilterer.currentUrlQueryParams">
 </app-paginator>

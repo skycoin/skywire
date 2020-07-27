@@ -13,6 +13,7 @@ import { AllTransportsComponent } from './components/pages/node/routing/all-tran
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
+import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 
 const routes: Routes = [
   {
@@ -110,6 +111,15 @@ const routes: Routes = [
       {
         path: '',
         component: SettingsComponent
+      },
+      {
+        path: 'labels',
+        redirectTo: 'labels/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'labels/:page',
+        component: AllLabelsComponent
       },
     ],
   },

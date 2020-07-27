@@ -30,9 +30,9 @@
     <!-- Header. -->
     <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': numberOfPages > 1}">
       <div class="title ml-3.5">
-        <div class="filter-label subtle-transparent-button cursor-pointer" (click)="removeFilters()" *ngIf="currentFiltersTexts && currentFiltersTexts.length > 0">
+        <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
           {{ 'filters.active-filters' | translate }}
-          <div *ngFor="let filterTexts of currentFiltersTexts" class="item">
+          <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
             <span>{{ filterTexts.filterName | translate }}: </span>
             <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
             <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
@@ -44,7 +44,7 @@
         <div class="options-container">
           <mat-icon
             [inline]="true"
-            (click)="changeFilters()"
+            (click)="dataFilterer.changeFilters()"
             [matTooltip]="'filters.filter-action' | translate"
             class="small-icon"
             *ngIf="allNodes && allNodes.length > 0"
@@ -65,7 +65,7 @@
           [currentPage]="currentPage"
           [numberOfPages]="numberOfPages"
           [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
-          [queryParams]="currentUrlQueryParams">
+          [queryParams]="dataFilterer.currentUrlQueryParams">
         </app-paginator>
       </div>
     </div>
@@ -236,7 +236,7 @@
       [currentPage]="currentPage"
       [numberOfPages]="numberOfPages"
       [linkParts]="!showDmsgInfo ? ['/nodes', 'list'] : ['/nodes', 'dmsg']"
-      [queryParams]="currentUrlQueryParams">
+      [queryParams]="dataFilterer.currentUrlQueryParams">
     </app-paginator>
 
     <!-- Msg shown if the list is empty. -->
