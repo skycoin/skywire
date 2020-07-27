@@ -29,6 +29,7 @@ const (
 )
 
 // Dmsg port constants.
+// TODO(evanlinjin): Define these properly. These are currently random.
 const (
 	DmsgCtrlPort       uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
 	DmsgSetupPort      uint16 = 36  // Listening port of a setup node.
