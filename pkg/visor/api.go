@@ -67,8 +67,15 @@ type Summary struct {
 	RoutesCount     int                  `json:"routes_count"`
 }
 
+// Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
 	var summaries []*TransportSummary
+	if v == nil {
+		panic("v is nil")
+	}
+	if v.tpM == nil {
+		panic("tpM is nil")
+	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		summaries = append(summaries,
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
@@ -96,6 +103,7 @@ type ExtraSummary struct {
 	Routes []routing.Rule `json:"routes"`
 }
 
+// ExtraSummary implements API.
 func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
 	summary, err := v.Summary()
 	if err != nil {
@@ -136,6 +144,7 @@ type HealthInfo struct {
 	AddressResolver    int `json:"address_resolver"`
 }
 
+// Health implements API.
 func (v *Visor) Health() (*HealthInfo, error) {
 	ctx := context.Background()
 
@@ -201,14 +210,17 @@ func (v *Visor) Health() (*HealthInfo, error) {
 	return healthInfo, nil
 }
 
+// Uptime implements API.
 func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
 
+// Apps implements API.
 func (v *Visor) Apps() ([]*launcher.AppState, error) {
 	return v.appL.AppStates(), nil
 }
 
+// StartApp implements API.
 func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
@@ -222,11 +234,13 @@ func (v *Visor) StartApp(appName string) error {
 	return v.appL.StartApp(appName, nil, envs)
 }
 
+// StopApp implements API.
 func (v *Visor) StopApp(appName string) error {
 	_, err := v.appL.StopApp(appName)
 	return err
 }
 
+// SetAutoStart implements API.
 func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	if _, ok := v.appL.AppState(appName); !ok {
 		return ErrAppProcNotRunning
@@ -236,6 +250,7 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
 }
 
+// SetAppPassword implements API.
 func (v *Visor) SetAppPassword(appName, password string) error {
 	allowedToChangePassword := func(appName string) bool {
 		allowedApps := map[string]struct{}{
@@ -272,6 +287,7 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	return nil
 }
 
+// SetAppPK implements API.
 func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	allowedToChangePK := func(appName string) bool {
 		allowedApps := map[string]struct{}{
@@ -307,6 +323,7 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 	return nil
 }
 
+// LogsSince implements API.
 func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	proc, ok := v.procM.ProcByName(appName)
 	if !ok {
@@ -321,10 +338,12 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 	return res, nil
 }
 
+// TransportTypes implements API.
 func (v *Visor) TransportTypes() ([]string, error) {
 	return v.tpM.Networks(), nil
 }
 
+// Transports implements API.
 func (v *Visor) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
 	var result []*TransportSummary
 
@@ -360,6 +379,7 @@ func (v *Visor) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*T
 	return result, nil
 }
 
+// Transport implements API.
 func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 	tp := v.tpM.Transport(tid)
 	if tp == nil {
@@ -369,6 +389,7 @@ func (v *Visor) Transport(tid uuid.UUID) (*TransportSummary, error) {
 	return newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())), nil
 }
 
+// AddTransport implements API.
 func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error) {
 	ctx := context.Background()
 
@@ -390,11 +411,13 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, t
 	return newTransportSummary(v.tpM, tp, false, v.router.SetupIsTrusted(tp.Remote())), nil
 }
 
+// RemoveTransport implements API.
 func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 	v.tpM.DeleteTransport(tid)
 	return nil
 }
 
+// DiscoverTransportsByPK implements API.
 func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
 	tpD := v.tpDiscClient()
 
@@ -406,6 +429,7 @@ func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWith
 	return entries, nil
 }
 
+// DiscoverTransportByID implements API.
 func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
 	tpD := v.tpDiscClient()
 
@@ -417,23 +441,28 @@ func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus,
 	return entry, nil
 }
 
+// RoutingRules implements API.
 func (v *Visor) RoutingRules() ([]routing.Rule, error) {
 	return v.router.Rules(), nil
 }
 
+// RoutingRule implements API.
 func (v *Visor) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	return v.router.Rule(key)
 }
 
+// SaveRoutingRule implements API.
 func (v *Visor) SaveRoutingRule(rule routing.Rule) error {
 	return v.router.SaveRule(rule)
 }
 
+// RemoveRoutingRule implements API.
 func (v *Visor) RemoveRoutingRule(key routing.RouteID) error {
 	v.router.DelRules([]routing.RouteID{key})
 	return nil
 }
 
+// RouteGroups implements API.
 func (v *Visor) RouteGroups() ([]RouteGroupInfo, error) {
 	var routegroups []RouteGroupInfo
 
@@ -458,6 +487,7 @@ func (v *Visor) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, nil
 }
 
+// Restart implements API.
 func (v *Visor) Restart() error {
 	if v.restartCtx == nil {
 		return ErrMalformedRestartContext
@@ -466,6 +496,7 @@ func (v *Visor) Restart() error {
 	return v.restartCtx.Restart()
 }
 
+// Exec implements API.
 // Exec executes a shell command. It returns combined stdout and stderr output and an error.
 func (v *Visor) Exec(command string) ([]byte, error) {
 	args := strings.Split(command, " ")
@@ -473,6 +504,7 @@ func (v *Visor) Exec(command string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
+// Update implements API.
 // Update updates visor.
 // It checks if visor update is available.
 // If it is, the method downloads a new visor versions, starts it and kills the current process.
@@ -486,6 +518,7 @@ func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
 	return updated, nil
 }
 
+// UpdateAvailable implements API.
 // UpdateAvailable checks if visor update is available.
 func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
 	version, err := v.updater.UpdateAvailable(channel)

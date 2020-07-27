@@ -135,6 +135,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 	return summary
 }
 
+// ExtraSummary provides an extra summary of the AppNode.
 func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
 	summary, err := r.visor.Summary()
 	if err != nil {
@@ -150,12 +151,6 @@ func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
 	if err != nil {
 		return fmt.Errorf("uptime")
 	}
-
-	// TODO
-	// transports, err := r.visor.Transports()
-	// if err != nil {
-	// 	return fmt.Errorf("transports")
-	// }
 
 	routes, err := r.visor.RoutingRules()
 	if err != nil {
