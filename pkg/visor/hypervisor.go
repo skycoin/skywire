@@ -264,17 +264,21 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 
 func (hv *Hypervisor) getDmsg() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		hv.mu.RLock()
-		defer hv.mu.RUnlock()
-
-		pks := make([]cipher.PubKey, 0, len(hv.visors))
-		for pk := range hv.visors {
-			pks = append(pks, pk)
-		}
-
-		out := hv.trackers.GetBulk(pks)
+		out := hv.getDmsgSummary()
 		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
+}
+
+func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
+	hv.mu.RLock()
+	defer hv.mu.RUnlock()
+
+	pks := make([]cipher.PubKey, 0, len(hv.visors))
+	for pk := range hv.visors {
+		pks = append(pks, pk)
+	}
+
+	return hv.trackers.GetBulk(pks)
 }
 
 // Health represents a visor's health report attached to hypervisor to visor request status
@@ -428,6 +432,8 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
+
+		extraSummary.Dmsg = hv.getDmsgSummary()
 
 		httputil.WriteJSON(w, r, http.StatusOK, extraSummaryResp{
 			TCPAddr:      ctx.Addr.String(),
