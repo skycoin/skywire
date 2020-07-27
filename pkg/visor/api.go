@@ -18,6 +18,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/dmsgtracker"
 )
 
 // API represents visor API.
@@ -97,11 +98,11 @@ func (v *Visor) Summary() (*Summary, error) {
 
 // ExtraSummary provides an extra summary of a Skywire Visor.
 type ExtraSummary struct {
-	Summary *Summary `json:"summary"`
-	// TODO: add /dmsg
-	Health *HealthInfo       `json:"health"`
-	Uptime float64           `json:"uptime"`
-	Routes []routingRuleResp `json:"routes"`
+	Summary *Summary                        `json:"summary"`
+	Dmsg    []dmsgtracker.DmsgClientSummary `json:"dmsg"`
+	Health  *HealthInfo                     `json:"health"`
+	Uptime  float64                         `json:"uptime"`
+	Routes  []routingRuleResp               `json:"routes"`
 }
 
 // ExtraSummary implements API.
