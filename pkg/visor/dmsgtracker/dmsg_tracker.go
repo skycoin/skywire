@@ -1,4 +1,4 @@
-package dmsg_tracker
+package dmsgtracker
 
 import (
 	"context"
@@ -78,8 +78,8 @@ func (dt *DmsgTracker) Update(ctx context.Context) error {
 	return nil
 }
 
-// DmsgTrackerManager tracks round trip durations for dmsg client connections.
-type DmsgTrackerManager struct {
+// Manager tracks round trip durations for dmsg client connections.
+type Manager struct {
 	updateInterval time.Duration
 	updateTimeout  time.Duration
 
@@ -93,7 +93,7 @@ type DmsgTrackerManager struct {
 }
 
 // NewDmsgTrackerManager creates a new dmsg tracker manager.
-func NewDmsgTrackerManager(log logrus.FieldLogger, dc *dmsg.Client, updateInterval, updateTimeout time.Duration) *DmsgTrackerManager {
+func NewDmsgTrackerManager(log logrus.FieldLogger, dc *dmsg.Client, updateInterval, updateTimeout time.Duration) *Manager {
 	if log == nil {
 		log = logging.MustGetLogger("dmsg_trackers")
 	}
@@ -104,7 +104,7 @@ func NewDmsgTrackerManager(log logrus.FieldLogger, dc *dmsg.Client, updateInterv
 		updateTimeout = DefaultDTMUpdateTimeout
 	}
 
-	dtm := &DmsgTrackerManager{
+	dtm := &Manager{
 		updateInterval: updateInterval,
 		updateTimeout:  updateTimeout,
 		log:            log,
@@ -121,7 +121,7 @@ func NewDmsgTrackerManager(log logrus.FieldLogger, dc *dmsg.Client, updateInterv
 }
 
 // Serve serves the dmsg tracker manager.
-func (dtm *DmsgTrackerManager) serve() {
+func (dtm *Manager) serve() {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		<-dtm.done
@@ -148,7 +148,7 @@ func (dtm *DmsgTrackerManager) serve() {
 	}
 }
 
-func (dtm *DmsgTrackerManager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey]*DmsgTracker) {
+func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey]*DmsgTracker) {
 	log := dtm.log.WithField("func", funcName())
 
 	type errReport struct {
@@ -181,7 +181,7 @@ func (dtm *DmsgTrackerManager) updateAllTrackers(ctx context.Context, dts map[ci
 
 // MustGet obtains a DmsgClientSummary of the client of given pk.
 // If one is not found internally, a new tracker stream is to be established, returning error on failure.
-func (dtm *DmsgTrackerManager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, error) {
+func (dtm *Manager) MustGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, error) {
 	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
 	defer cancel()
 
@@ -206,7 +206,7 @@ func (dtm *DmsgTrackerManager) MustGet(ctx context.Context, pk cipher.PubKey) (D
 }
 
 // Get obtains a DmsgClientSummary of the client with given public key.
-func (dtm *DmsgTrackerManager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
+func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
@@ -218,7 +218,7 @@ func (dtm *DmsgTrackerManager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 }
 
 // GetBulk obtains bulk dmsg client summaries.
-func (dtm *DmsgTrackerManager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
+func (dtm *Manager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary {
 	dtm.mx.Lock()
 	defer dtm.mx.Unlock()
 
@@ -241,7 +241,7 @@ func (dtm *DmsgTrackerManager) GetBulk(pks []cipher.PubKey) []DmsgClientSummary 
 	return out
 }
 
-func (dtm *DmsgTrackerManager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
+func (dtm *Manager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 	dt, ok := dtm.dm[pk]
 	if !ok {
 		return DmsgClientSummary{}, false
@@ -251,7 +251,7 @@ func (dtm *DmsgTrackerManager) get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 }
 
 // Close implements io.Closer
-func (dtm *DmsgTrackerManager) Close() error {
+func (dtm *Manager) Close() error {
 	log := dtm.log.WithField("func", funcName())
 
 	dtm.mx.Lock()

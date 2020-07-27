@@ -1,4 +1,4 @@
-package dmsg_tracker
+package dmsgtracker
 
 import (
 	"context"

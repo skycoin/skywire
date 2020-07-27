@@ -60,6 +60,7 @@ type Config struct {
 	TLSKeyFile    string        `json:"tls_key_file"`        // TLS key file location.
 }
 
+// MakeConfig returns hypervisor config.
 func MakeConfig(testenv bool) Config {
 	var c Config
 	c.FillDefaults(testenv)
