@@ -120,7 +120,7 @@ export class DataSorter {
    * @param defaultColumnIndex Index in the "columns" array that must be used by default for
    * sorting the data. This column will be the one selected if not previously saved sorting
    * settings are found and will be used as tie-breaker when 2 columns have the same value.
-   * @param id Unique text identifying the list, for saving the sorting configuration
+   * @param id Unique short text identifying the list, for saving the sorting configuration
    * in localStorage.
    */
   constructor(

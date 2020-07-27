@@ -1,23 +1,23 @@
 <app-dialog [headline]="'filters.filter-action' | translate">
   <form [formGroup]="form">
     <!-- Form fields. -->
-    <ng-container *ngFor="let fieldParams of data">
+    <ng-container *ngFor="let fieldParams of data.filterPropertiesList">
       <mat-form-field>
         <!-- Text input. -->
         <input
           *ngIf="fieldParams.type === filterFieldTypes.TextInput"
-          [formControlName]="fieldParams.filterKeysAssociation.keyNameInFiltersObject"
+          [formControlName]="fieldParams.keyNameInFiltersObject"
           [maxlength]="fieldParams.maxlength"
-          [placeholder]="fieldParams.filterKeysAssociation.filterName | translate"
+          [placeholder]="fieldParams.filterName | translate"
           matInput
         >
         <!-- Select. -->
         <mat-select
           *ngIf="fieldParams.type === filterFieldTypes.Select"
-          [formControlName]="fieldParams.filterKeysAssociation.keyNameInFiltersObject"
-          [placeholder]="fieldParams.filterKeysAssociation.filterName | translate"
+          [formControlName]="fieldParams.keyNameInFiltersObject"
+          [placeholder]="fieldParams.filterName | translate"
         >
-          <mat-option *ngFor="let option of fieldParams.filterKeysAssociation.printableLabelsForValues" [value]="option.value">{{ option.label | translate }}</mat-option>
+          <mat-option *ngFor="let option of fieldParams.printableLabelsForValues" [value]="option.value">{{ option.label | translate }}</mat-option>
         </mat-select>
       </mat-form-field>
     </ng-container>
