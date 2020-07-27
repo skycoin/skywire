@@ -28,6 +28,32 @@
     "tooltip-with-text": "{{ text }} (Click to copy the entry or change the label)"
   },
 
+  "labels": {
+    "title": "Labels",
+    "list-title": "Label list",
+    "label": "Label",
+    "id": "Element ID",
+    "type": "Type",
+    "delete-confirmation": "Are you sure you want to delete the label?",
+    "delete-selected-confirmation": "Are you sure you want to delete the selected labels?",
+    "delete": "Delete label",
+    "deleted": "Delete operation completed.",
+    "empty": "There aren't any saved labels.",
+    "empty-with-filter": "No label matches the selected filtering criteria.",
+    "filter-dialog": {
+      "label": "The label must contain",
+      "id": "The id must contain",
+      "type": "The type must be",
+
+      "type-options": {
+        "any": "Any",
+        "visor": "Visor",
+        "dmsg-server": "DMSG server",
+        "transport": "Transport"
+      }
+    }
+  },
+
   "filters": {
     "filter-action": "Filter",
     "active-filters": "Active filters: ",

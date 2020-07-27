@@ -75,6 +75,8 @@ import {
 import { MenuButtonComponent } from './components/layout/sidenav/menu-button/menu-button.component';
 import { FiltersSelectionComponent } from './components/layout/filters-selection/filters-selection.component';
 import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
+import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
+import { LabelListComponent } from './components/pages/settings/all-labels/label-list/label-list.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -132,6 +134,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     MenuButtonComponent,
     FiltersSelectionComponent,
     LabeledElementTextComponent,
+    AllLabelsComponent,
+    LabelListComponent,
   ],
   entryComponents: [
     LogComponent,
@@ -149,6 +153,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SkysocksSettingsComponent,
     SkysocksClientSettingsComponent,
     FiltersSelectionComponent,
+    AllLabelsComponent,
   ],
   imports: [
     BrowserModule,
