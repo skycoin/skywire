@@ -60,7 +60,7 @@ type Config struct {
 	TLSKeyFile    string        `json:"tls_key_file"`        // TLS key file location.
 }
 
-func makeConfig(testenv bool) Config {
+func MakeConfig(testenv bool) Config {
 	var c Config
 	c.FillDefaults(testenv)
 	return c
@@ -72,21 +72,21 @@ func GenerateWorkDirConfig(testenv bool) Config {
 	if err != nil {
 		log.Fatalf("failed to generate WD config: %s", dir)
 	}
-	c := makeConfig(testenv)
+	c := MakeConfig(testenv)
 	c.DBPath = filepath.Join(dir, "users.db")
 	return c
 }
 
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
 func GenerateHomeConfig(testenv bool) Config {
-	c := makeConfig(testenv)
+	c := MakeConfig(testenv)
 	c.DBPath = filepath.Join(pathutil.HomeDir(), ".skycoin/hypervisor/users.db")
 	return c
 }
 
 // GenerateLocalConfig generates a config with default values and uses db from shared folder.
 func GenerateLocalConfig(testenv bool) Config {
-	c := makeConfig(testenv)
+	c := MakeConfig(testenv)
 	c.DBPath = "/usr/local/SkycoinProject/hypervisor/users.db"
 	return c
 }
@@ -100,6 +100,7 @@ func (c *Config) FillDefaults(testEnv bool) {
 	if len(c.Cookies.HashKey) != hashKeyLen {
 		c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
 	}
+
 	if len(c.Cookies.BlockKey) != blockKeyLen {
 		c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
 	}
@@ -111,12 +112,15 @@ func (c *Config) FillDefaults(testEnv bool) {
 			c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
 		}
 	}
+
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
+
 	if c.HTTPAddr == "" {
 		c.HTTPAddr = defaultHTTPAddr
 	}
+
 	c.Cookies.FillDefaults()
 }
 

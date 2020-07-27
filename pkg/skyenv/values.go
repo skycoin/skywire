@@ -93,6 +93,11 @@ const (
 	DefaultTpLogStore = "./transport_logs"
 )
 
+// Default hypervisor constants
+const (
+	DefaultHypervisorDB = ".skycoin/hypervisor/users.db"
+)
+
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
 func MustPK(pk string) cipher.PubKey {
 	var sPK cipher.PubKey
