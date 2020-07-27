@@ -1,6 +1,8 @@
 package visorconfig
 
 import (
+	"path/filepath"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -9,6 +11,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
 )
 
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
@@ -51,15 +55,15 @@ func MakeBaseConfig(common *Common) *V1 {
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
+func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
 	cc, err := NewCommon(log, confPath, V1Name, sk)
 	if err != nil {
 		return nil, err
 	}
-	return defaultConfigFromCommon(cc)
+	return defaultConfigFromCommon(cc, hypervisor)
 }
 
-func defaultConfigFromCommon(cc *Common) (*V1, error) {
+func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	// Enforce version and keys in 'cc'.
 	cc.Version = V1Name
 	if err := cc.ensureKeys(); err != nil {
@@ -126,12 +130,24 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
+	if hypervisor {
+		config := makeHypervisorConfig()
+		conf.Hypervisor = &config
+	}
+
 	return conf, nil
 }
 
+func makeHypervisorConfig() hypervisorconfig.Config {
+	var c hypervisorconfig.Config
+	c.FillDefaults(false)
+	c.DBPath = filepath.Join(pathutil.HomeDir(), skyenv.DefaultHypervisorDB)
+	return c
+}
+
 // MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
-func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk)
+func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +159,9 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
+	}
 
 	return conf, nil
 }

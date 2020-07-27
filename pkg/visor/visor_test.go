@@ -2,7 +2,6 @@ package visor
 
 import (
 	"io/ioutil"
-	"log"
 	"os"
 	"testing"
 
