@@ -419,7 +419,7 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 	return &out, err
 }
 
-// Summary implements API.
+// ExtraSummary implements API.
 func (mc *mockRPCClient) ExtraSummary() (*ExtraSummary, error) {
 	summary, err := mc.Summary()
 	if err != nil {
