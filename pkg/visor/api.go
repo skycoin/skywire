@@ -2,6 +2,7 @@ package visor
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -98,9 +99,9 @@ func (v *Visor) Summary() (*Summary, error) {
 type ExtraSummary struct {
 	Summary *Summary `json:"summary"`
 	// TODO: add /dmsg
-	Health *HealthInfo    `json:"health"`
-	Uptime float64        `json:"uptime"`
-	Routes []routing.Rule `json:"routes"`
+	Health *HealthInfo       `json:"health"`
+	Uptime float64           `json:"uptime"`
+	Routes []routingRuleResp `json:"routes"`
 }
 
 // ExtraSummary implements API.
@@ -125,11 +126,20 @@ func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
 		return nil, fmt.Errorf("routes")
 	}
 
+	extraRoutes := make([]routingRuleResp, 0, len(routes))
+	for _, route := range routes {
+		extraRoutes = append(extraRoutes, routingRuleResp{
+			Key:     route.KeyRouteID(),
+			Rule:    hex.EncodeToString(route),
+			Summary: route.Summary(),
+		})
+	}
+
 	extraSummary := &ExtraSummary{
 		Summary: summary,
 		Health:  health,
 		Uptime:  uptime,
-		Routes:  routes,
+		Routes:  extraRoutes,
 	}
 
 	return extraSummary, nil
