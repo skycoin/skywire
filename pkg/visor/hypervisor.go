@@ -342,7 +342,20 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.visors))
-		summaries, i := make([]summaryResp, len(hv.visors)), 0
+		summaries, i := make([]summaryResp, len(hv.visors)+1), 1
+
+		summary, err := hv.visor.Summary()
+		if err != nil {
+			log.WithError(err).Warn("Failed to obtain summary of this visor.")
+			summary = &Summary{PubKey: hv.visor.conf.PK}
+		}
+
+		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
+		summaries[0] = summaryResp{
+			TCPAddr: addr.String(),
+			Online:  err == nil,
+			Summary: summary,
+		}
 
 		for pk, c := range hv.visors {
 			go func(pk cipher.PubKey, c Conn, i int) {
