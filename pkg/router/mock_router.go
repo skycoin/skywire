@@ -121,7 +121,7 @@ func (_m *MockRouter) ReserveKeys(n int) ([]routing.RouteID, error) {
 	return r0, r1
 }
 
-// RouteFinderClient provides a mock function with given fields:
+// routeFinderClient provides a mock function with given fields:
 func (_m *MockRouter) RouteFinderClient() rfclient.Client {
 	ret := _m.Called()
 

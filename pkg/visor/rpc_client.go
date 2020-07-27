@@ -28,17 +28,8 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
 )
 
-var (
-	// ErrAlreadyServing is returned when an operation fails due to an operation
-	// that is currently running.
-	ErrAlreadyServing = errors.New("already serving")
-
-	// ErrTimeout represents a timed-out call.
-	ErrTimeout = errors.New("rpc client timeout")
-)
-
-// RPCClient represents a RPC Client implementation.
-type RPCClient interface {
+// API represents visor API.
+type API interface {
 	Summary() (*Summary, error)
 
 	Health() (*HealthInfo, error)
@@ -74,8 +65,17 @@ type RPCClient interface {
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 }
 
-// RPCClient provides methods to call an RPC Server.
-// It implements RPCClient
+var (
+	// ErrAlreadyServing is returned when an operation fails due to an operation
+	// that is currently running.
+	ErrAlreadyServing = errors.New("already serving")
+
+	// ErrTimeout represents a timed-out call.
+	ErrTimeout = errors.New("rpc client timeout")
+)
+
+// API provides methods to call an RPC Server.
+// It implements API
 type rpcClient struct {
 	log     logrus.FieldLogger
 	timeout time.Duration
@@ -84,8 +84,8 @@ type rpcClient struct {
 	prefix  string
 }
 
-// NewRPCClient creates a new RPCClient.
-func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) RPCClient {
+// NewRPCClient creates a new API.
+func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) API {
 	if log == nil {
 		log = logging.MustGetLogger("visor_rpc_client")
 	}
@@ -321,7 +321,7 @@ func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version,
 	return &version, err
 }
 
-// MockRPCClient mocks RPCClient.
+// MockRPCClient mocks API.
 type mockRPCClient struct {
 	startedAt time.Time
 	s         *Summary
@@ -331,8 +331,8 @@ type mockRPCClient struct {
 	sync.RWMutex
 }
 
-// NewMockRPCClient creates a new mock RPCClient.
-func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, RPCClient, error) {
+// NewMockRPCClient creates a new mock API.
+func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, API, error) {
 	log := logging.MustGetLogger("mock-rpc-client")
 
 	types := []string{"messaging", "native"}
@@ -430,7 +430,7 @@ func (mc *mockRPCClient) do(write bool, f func() error) error {
 	return f()
 }
 
-// Summary implements RPCClient.
+// Summary implements API.
 func (mc *mockRPCClient) Summary() (*Summary, error) {
 	var out Summary
 	err := mc.do(false, func() error {
@@ -449,7 +449,7 @@ func (mc *mockRPCClient) Summary() (*Summary, error) {
 	return &out, err
 }
 
-// Health implements RPCClient
+// Health implements API
 func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	hi := &HealthInfo{
 		TransportDiscovery: http.StatusOK,
@@ -462,12 +462,12 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	return hi, nil
 }
 
-// Uptime implements RPCClient
+// Uptime implements API
 func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
-// Apps implements RPCClient.
+// Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
 	var apps []*launcher.AppState
 	err := mc.do(false, func() error {
@@ -480,17 +480,17 @@ func (mc *mockRPCClient) Apps() ([]*launcher.AppState, error) {
 	return apps, err
 }
 
-// StartApp implements RPCClient.
+// StartApp implements API.
 func (*mockRPCClient) StartApp(string) error {
 	return nil
 }
 
-// StopApp implements RPCClient.
+// StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
 	return nil
 }
 
-// SetAutoStart implements RPCClient.
+// SetAutoStart implements API.
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
 		for _, a := range mc.s.Apps {
@@ -503,7 +503,7 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	})
 }
 
-// SetAppPassword implements RPCClient.
+// SetAppPassword implements API.
 func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
@@ -518,7 +518,7 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	})
 }
 
-// SetAppPK implements RPCClient.
+// SetAppPK implements API.
 func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
@@ -533,17 +533,17 @@ func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	})
 }
 
-// LogsSince implements RPCClient. Manually set (*mockRPPClient).logS before calling this function
+// LogsSince implements API. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.logS.LogsSince(timestamp)
 }
 
-// TransportTypes implements RPCClient.
+// TransportTypes implements API.
 func (mc *mockRPCClient) TransportTypes() ([]string, error) {
 	return mc.tpTypes, nil
 }
 
-// Transports implements RPCClient.
+// Transports implements API.
 func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
 	var summaries []*TransportSummary
 	err := mc.do(false, func() error {
@@ -580,7 +580,7 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 	return summaries, err
 }
 
-// Transport implements RPCClient.
+// Transport implements API.
 func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 	var summary TransportSummary
 	err := mc.do(false, func() error {
@@ -595,7 +595,7 @@ func (mc *mockRPCClient) Transport(tid uuid.UUID) (*TransportSummary, error) {
 	return &summary, err
 }
 
-// AddTransport implements RPCClient.
+// AddTransport implements API.
 func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ bool, _ time.Duration) (*TransportSummary, error) {
 	summary := &TransportSummary{
 		ID:     transport.MakeTransportID(mc.s.PubKey, remote, tpType),
@@ -610,7 +610,7 @@ func (mc *mockRPCClient) AddTransport(remote cipher.PubKey, tpType string, _ boo
 	})
 }
 
-// RemoveTransport implements RPCClient.
+// RemoveTransport implements API.
 func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	return mc.do(true, func() error {
 		for i, tp := range mc.s.Transports {
@@ -631,28 +631,28 @@ func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithS
 	return nil, ErrNotImplemented
 }
 
-// RoutingRules implements RPCClient.
+// RoutingRules implements API.
 func (mc *mockRPCClient) RoutingRules() ([]routing.Rule, error) {
 	return mc.rt.AllRules(), nil
 }
 
-// RoutingRule implements RPCClient.
+// RoutingRule implements API.
 func (mc *mockRPCClient) RoutingRule(key routing.RouteID) (routing.Rule, error) {
 	return mc.rt.Rule(key)
 }
 
-// SaveRoutingRule implements RPCClient.
+// SaveRoutingRule implements API.
 func (mc *mockRPCClient) SaveRoutingRule(rule routing.Rule) error {
 	return mc.rt.SaveRule(rule)
 }
 
-// RemoveRoutingRule implements RPCClient.
+// RemoveRoutingRule implements API.
 func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 	mc.rt.DelRules([]routing.RouteID{key})
 	return nil
 }
 
-// RouteGroups implements RPCClient.
+// RouteGroups implements API.
 func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	var routeGroups []RouteGroupInfo
 
@@ -676,22 +676,22 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routeGroups, nil
 }
 
-// Restart implements RPCClient.
+// Restart implements API.
 func (mc *mockRPCClient) Restart() error {
 	return nil
 }
 
-// Exec implements RPCClient.
+// Exec implements API.
 func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
 }
 
-// Update implements RPCClient.
+// Update implements API.
 func (mc *mockRPCClient) Update(_ updater.UpdateConfig) (bool, error) {
 	return false, nil
 }
 
-// UpdateAvailable implements RPCClient.
+// UpdateAvailable implements API.
 func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, error) {
 	return nil, nil
 }
