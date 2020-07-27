@@ -44,7 +44,7 @@ type API interface {
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
 
-	RoutingRules() ([]routing.Rule, error)
+	RoutingRules() ([]routing.Rule, error) // TODO(nkryuchkov): improve API
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
@@ -71,7 +71,7 @@ func (v *Visor) Summary() (*Summary, error) {
 	var summaries []*TransportSummary
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		summaries = append(summaries,
-			newTransportSummary(v.tpM, tp, false, v.router.SetupIsTrusted(tp.Remote())))
+			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
 
@@ -91,9 +91,8 @@ func (v *Visor) Summary() (*Summary, error) {
 type ExtraSummary struct {
 	Summary *Summary `json:"summary"`
 	// TODO: add /dmsg
-	Health *HealthInfo `json:"health"`
-	Uptime float64     `json:"uptime"`
-	// Transports []*TransportSummary `json:"transports"` // TODO: add
+	Health *HealthInfo    `json:"health"`
+	Uptime float64        `json:"uptime"`
 	Routes []routing.Rule `json:"routes"`
 }
 
@@ -112,12 +111,6 @@ func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("uptime")
 	}
-
-	// TODO
-	// transports, err := v.Transports()
-	// if err != nil {
-	// 	return nil, fmt.Errorf("transports")
-	// }
 
 	routes, err := v.RoutingRules()
 	if err != nil {
