@@ -203,6 +203,7 @@ func (hv *Hypervisor) makeMux() *chi.Mux {
 
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors/{pk}", hv.getVisor())
+				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())
 				r.Get("/visors/{pk}/uptime", hv.getUptime())
 				r.Get("/visors/{pk}/apps", hv.getApps())
@@ -461,6 +462,28 @@ func (hv *Hypervisor) getVisor() http.HandlerFunc {
 		httputil.WriteJSON(w, r, http.StatusOK, summaryResp{
 			TCPAddr: ctx.Addr.String(),
 			Summary: summary,
+		})
+	})
+}
+
+type extraSummaryResp struct {
+	TCPAddr string `json:"tcp_addr"`
+	Online  bool   `json:"online"`
+	*visor.ExtraSummary
+}
+
+// provides extra summary of single visor.
+func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		extraSummary, err := ctx.RPC.ExtraSummary()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, extraSummaryResp{
+			TCPAddr:      ctx.Addr.String(),
+			ExtraSummary: extraSummary,
 		})
 	})
 }
