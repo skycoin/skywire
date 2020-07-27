@@ -11,7 +11,6 @@ import (
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/dmsg/dmsgctrl"
 	dmsgnetutil "github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
@@ -530,10 +529,8 @@ func initHypervisor(v *Visor) bool {
 
 	conf.FillDefaults(false)
 
-	dmsgC := prepareDmsg(conf)
-
 	// Prepare hypervisor.
-	hv, err := New(conf, assets, v, dmsgC)
+	hv, err := New(conf, assets, v, v.net.Dmsg())
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
@@ -594,14 +591,6 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	}
 
 	return tpdC, nil
-}
-
-func prepareDmsg(conf hypervisorconfig.Config) *dmsg.Client {
-	dmsgC := dmsg.NewClient(conf.PK, conf.SK, disc.NewHTTP(conf.DmsgDiscovery), dmsg.DefaultConfig())
-	go dmsgC.Serve()
-
-	<-dmsgC.Ready()
-	return dmsgC
 }
 
 func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hypervisorconfig.Config) {
