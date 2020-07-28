@@ -66,7 +66,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 
 // UpdateVisorUptime updates visor uptime.
 func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
-	resp, err := c.Get(ctx, "/update")
+	resp, err := c.Get(ctx, "/v2/update")
 	if err != nil {
 		return err
 	}

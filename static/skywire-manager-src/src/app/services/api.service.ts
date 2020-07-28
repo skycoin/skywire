@@ -2,6 +2,7 @@ import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { webSocket } from 'rxjs/webSocket';
 import { Router } from '@angular/router';
 
 import { processServiceError } from '../utils/errors';
@@ -77,6 +78,19 @@ export class ApiService {
    */
   delete(url: string, options: RequestOptions = null): Observable<any> {
     return this.request('DELETE', url, {}, options);
+  }
+
+  /**
+   * Makes a request to a WebSocket endpoint.
+   * @param url Endpoint URL, after the "/api/" part.
+   */
+  ws(url: string, body: any = {}): Observable<any> {
+    const wsProtocol = (location.protocol.startsWith('https')) ? 'wss://' : 'ws://';
+    const wsUrl = wsProtocol + location.host + '/' + this.apiPrefix + url;
+    const ws = webSocket(wsUrl);
+
+    ws.next(body);
+    return ws;
   }
 
   /**
