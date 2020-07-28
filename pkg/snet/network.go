@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/SkycoinProject/dmsg/disc"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
@@ -81,6 +83,8 @@ type Config struct {
 	SecKey         cipher.SecKey
 	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
+	ServiceDisc    appdisc.Factory
+	PublicTrusted  bool
 }
 
 // NetworkConfigs represents all network configs.
@@ -97,10 +101,11 @@ type NetworkClients struct {
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf    Config
-	netsMu  sync.RWMutex
-	nets    map[string]struct{} // networks to be used with transports
-	clients NetworkClients
+	conf         Config
+	netsMu       sync.RWMutex
+	nets         map[string]struct{} // networks to be used with transports
+	clients      NetworkClients
+	visorUpdater appdisc.Updater
 
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
@@ -212,6 +217,10 @@ func (n *Network) Init() error {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
+
+			if n.conf.PublicTrusted {
+				go n.registerPublicTrusted(client)
+			}
 		} else {
 			log.Infof("No config found for stcpr")
 		}
@@ -226,6 +235,33 @@ func (n *Network) Init() error {
 	}
 
 	return nil
+}
+
+func (n *Network) registerPublicTrusted(client directtp.Client) {
+	log.Infof("Trying to register visor as public trusted")
+
+	la, err := client.LocalAddr()
+	if err != nil {
+		log.WithError(err).Errorf("Failed to get STCPR local addr")
+		return
+	}
+
+	_, portStr, err := net.SplitHostPort(la.String())
+	if err != nil {
+		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		return
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to convert port to int")
+		return
+	}
+
+	n.visorUpdater = n.conf.ServiceDisc.VisorUpdater(uint16(port))
+	n.visorUpdater.Start()
+
+	log.Infof("Sent request to register visor as public trusted")
 }
 
 // OnNewNetworkType sets callback to be called when new network type is ready.
@@ -247,6 +283,10 @@ func (n *Network) IsNetworkReady(netType string) bool {
 func (n *Network) Close() error {
 	n.netsMu.Lock()
 	defer n.netsMu.Unlock()
+
+	if n.visorUpdater != nil {
+		n.visorUpdater.Stop()
+	}
 
 	wg := new(sync.WaitGroup)
 
