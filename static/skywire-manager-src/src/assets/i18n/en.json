@@ -13,7 +13,8 @@
     "logout": "Logout",
     "logout-error": "Error logging out.",
     "time-in-ms": "{{ time }}ms",
-    "ok": "Ok"
+    "ok": "Ok",
+    "unknown": "Unknown"
   },
 
   "labeled-element": {
@@ -170,7 +171,7 @@
       "no-update": "Currently, there are no new updates for the visors.",
       "update-available-single": "There is an update available for 1 visor:",
       "update-available-multiple": "There are updates available for {{ number }} visors:",
-      "update-available-confirmation": "Click the 'Install update' button to continue.",
+      "update-available-confirmation": "Click the 'Install updates' button to continue.",
       "version-change": "From {{ currentVersion }} to {{ newVersion }}",
       "done": "The visor {{ name }} is being updated.",
       "done-all": "Operation completed. All visors are being updated.",

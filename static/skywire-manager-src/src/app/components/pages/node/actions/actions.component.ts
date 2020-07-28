@@ -156,7 +156,10 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       if (response && response.available) {
         // New configuration for asking for confirmation.
         const newVersion = this.translateService.instant('actions.update.version-change',
-          { currentVersion: response.current_version, newVersion: response.available_version }
+          {
+            currentVersion: response.current_version ? response.current_version : this.translateService.instant('common.unknown'),
+            newVersion: response.available_version
+          }
         );
         const newConfirmationData: ConfirmationData = {
           text: 'actions.update.update-available1',
