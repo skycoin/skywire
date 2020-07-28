@@ -24,6 +24,10 @@ export class PaginatorComponent {
    * the <a> tag will open the URL corresponding to the array ['page1', 'page 2', '5'].
    */
   @Input() linkParts = [''];
+  /**
+   * Object with the params to be sent in the query string when navigating.
+   */
+  @Input() queryParams = {};
 
   constructor(
     private dialog: MatDialog,
@@ -40,7 +44,7 @@ export class PaginatorComponent {
     // Open the option selection modal window.
     SelectOptionComponent.openDialog(this.dialog, options, 'paginator.select-page-title').afterClosed().subscribe((result: number) => {
       if (result) {
-        this.router.navigate(this.linkParts.concat([result.toString()]));
+        this.router.navigate(this.linkParts.concat([result.toString()]), { queryParams: this.queryParams});
       }
     });
   }

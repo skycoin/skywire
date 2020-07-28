@@ -14,8 +14,8 @@ enum ButtonStates {
   styleUrls: ['./button.component.scss']
 })
 export class ButtonComponent implements OnDestroy {
-  @ViewChild('button1', { static: false }) button1: MatButton;
-  @ViewChild('button2', { static: false }) button2: MatButton;
+  @ViewChild('button1') button1: MatButton;
+  @ViewChild('button2') button2: MatButton;
 
   // Should be be 'mat-button' or 'mat-raised-button'.
   @Input() type = 'mat-button';

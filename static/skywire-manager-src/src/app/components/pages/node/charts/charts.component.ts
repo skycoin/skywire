@@ -1,6 +1,7 @@
-import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Subscription } from 'rxjs';
 
-import { Transport } from '../../../../app.datatypes';
+import { TrafficData, NodeService } from 'src/app/services/node.service';
 
 /**
  * Shows 2 line graps with the recent data upload/download activity of a node.
@@ -10,48 +11,20 @@ import { Transport } from '../../../../app.datatypes';
   templateUrl: './charts.component.html',
   styleUrls: ['./charts.component.scss']
 })
-export class ChartsComponent implements OnChanges {
-  /**
-   * The transports data of the node.
-   */
-  @Input() transports: Transport[];
+export class ChartsComponent implements OnInit, OnDestroy {
+  data: TrafficData;
 
-  // Data for the graphs.
-  sendingTotal = 0;
-  receivingTotal = 0;
-  sendingHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-  receivingHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  private dataSubscription: Subscription;
 
-  private initialized = false;
+  constructor(private nodeService: NodeService) { }
 
-  ngOnChanges(changes: SimpleChanges) {
-    const transports: Transport[] = changes.transports.currentValue;
+  ngOnInit() {
+    this.dataSubscription = this.nodeService.specificNodeTrafficData.subscribe(data => {
+      this.data = data;
+    });
+  }
 
-    if (transports) {
-      this.sendingTotal = transports.reduce((total, transport) => total + transport.log.sent, 0);
-      this.receivingTotal = transports.reduce((total, transport) => total + transport.log.recv, 0);
-
-      // Populate the history arrays for the first time.
-      if (!this.initialized) {
-        for (let i = 0; i < 10; i++) {
-          this.sendingHistory[i] = this.sendingTotal;
-          this.receivingHistory[i] = this.receivingTotal;
-        }
-
-        this.initialized = true;
-      }
-    } else {
-      this.sendingTotal = 0;
-      this.receivingTotal = 0;
-    }
-
-    this.sendingHistory.push(this.sendingTotal);
-    this.receivingHistory.push(this.receivingTotal);
-
-    // Limit the history to 10 elements.
-    if (this.sendingHistory.length > 10) {
-      this.sendingHistory.splice(0, this.sendingHistory.length - 10);
-      this.receivingHistory.splice(0, this.receivingHistory.length - 10);
-    }
+  ngOnDestroy() {
+    this.dataSubscription.unsubscribe();
   }
 }

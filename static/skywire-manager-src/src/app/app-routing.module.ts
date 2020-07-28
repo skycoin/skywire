@@ -11,8 +11,9 @@ import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { SidenavComponent } from './components/layout/sidenav/sidenav.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
-import { AllAppsComponent } from './components/pages/node/apps/node-apps/all-apps/all-apps.component';
+import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
+import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 
 const routes: Routes = [
   {
@@ -28,10 +29,25 @@ const routes: Routes = [
     children: [
       {
         path: '',
+        redirectTo: 'list/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'list',
+        redirectTo: 'list/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'list/:page',
         component: NodeListComponent
       },
       {
         path: 'dmsg',
+        redirectTo: 'dmsg/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'dmsg/:page',
         component: NodeListComponent
       },
       {
@@ -95,6 +111,15 @@ const routes: Routes = [
       {
         path: '',
         component: SettingsComponent
+      },
+      {
+        path: 'labels',
+        redirectTo: 'labels/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'labels/:page',
+        component: AllLabelsComponent
       },
     ],
   },
