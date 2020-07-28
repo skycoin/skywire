@@ -27,8 +27,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // Max elements the history can contain.
   readonly maxHistoryElements = 10;
 
-  @ViewChild('button', { static: false }) button: ButtonComponent;
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
   form: FormGroup;
   // Entries to show on the history.
   history: string[];

@@ -18,7 +18,6 @@
         class="tab-button white-theme"
         [disabled]="i === selectedTabIndex"
         [routerLink]="tabData.linkParts"
-        replaceUrl
         [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
       >
         <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
