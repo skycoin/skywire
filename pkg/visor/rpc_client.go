@@ -337,7 +337,10 @@ func (rc *rpcClient) UpdateWithStatus(config updater.UpdateConfig) <-chan Status
 				case <-ctx.Done():
 					return
 				default:
-					if status != "" {
+					switch status {
+					case "", io.EOF.Error():
+
+					default:
 						ch <- StatusMessage{
 							Text: status,
 						}
