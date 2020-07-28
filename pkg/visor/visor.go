@@ -267,6 +267,11 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 	return version, nil
 }
 
+// UpdateStatus returns status of the current updating operation.
+func (v *Visor) UpdateStatus() string {
+	return v.updater.Status()
+}
+
 func (v *Visor) setAutoStart(appName string, autoStart bool) error {
 	if _, ok := v.appL.AppState(appName); !ok {
 		return ErrAppProcNotRunning
