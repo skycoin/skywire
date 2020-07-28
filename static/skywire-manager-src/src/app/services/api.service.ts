@@ -85,8 +85,10 @@ export class ApiService {
    * @param url Endpoint URL, after the "/api/" part.
    */
   ws(url: string, body: any = {}): Observable<any> {
-    const ws = webSocket('wss://localhost:8000/' + this.apiPrefix + url);
-    // const ws = webSocket('wss://localhost:4200/ws/' + url); // for local dev env
+    const wsProtocol = (location.protocol.startsWith('https')) ? 'wss://' : 'ws://';
+    const wsUrl = wsProtocol + location.host + '/' + this.apiPrefix + url;
+    const ws = webSocket(wsUrl);
+
     ws.next(body);
     return ws;
   }
