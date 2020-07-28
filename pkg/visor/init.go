@@ -11,7 +11,7 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgctrl"
-	"github.com/SkycoinProject/dmsg/netutil"
+	dmsgnetutil "github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
@@ -40,6 +40,7 @@ func initStack() []initFunc {
 		initUpdater,
 		initEventBroadcaster,
 		initAddressResolver,
+		initDiscovery,
 		initSNet,
 		initDmsgpty,
 		initTransport,
@@ -94,6 +95,8 @@ func initSNet(v *Visor) bool {
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
 		NetworkConfigs: nc,
+		ServiceDisc:    v.serviceDisc,
+		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -251,14 +254,16 @@ func initRouter(v *Visor) bool {
 	return report(nil)
 }
 
-func initLauncher(v *Visor) bool {
-	report := v.makeReporter("launcher")
-	conf := v.conf.Launcher
+func initDiscovery(v *Visor) bool {
+	report := v.makeReporter("discovery")
 
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
+
+	conf := v.conf.Launcher
+
 	if conf.Discovery != nil {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
@@ -266,8 +271,17 @@ func initLauncher(v *Visor) bool {
 		factory.ProxyDisc = conf.Discovery.ServiceDisc
 	}
 
+	v.serviceDisc = factory
+
+	return report(nil)
+}
+
+func initLauncher(v *Visor) bool {
+	report := v.makeReporter("launcher")
+	conf := v.conf.Launcher
+
 	// Prepare proc manager.
-	procM, err := appserver.NewProcManager(v.MasterLogger(), &factory, v.ebc, conf.ServerAddr)
+	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr)
 	if err != nil {
 		return report(fmt.Errorf("failed to start proc_manager: %w", err))
 	}
@@ -284,21 +298,26 @@ func initLauncher(v *Visor) bool {
 		BinPath:    conf.BinPath,
 		LocalPath:  conf.LocalPath,
 	}
+
 	launchLog := v.MasterLogger().PackageLogger("launcher")
+
 	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
 	if err != nil {
 		return report(fmt.Errorf("failed to start launcher: %w", err))
 	}
+
 	err = launch.AutoStart(map[string]func() ([]string, error){
 		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 	})
+
 	if err != nil {
 		return report(fmt.Errorf("failed to autostart apps: %w", err))
 	}
 
 	v.procM = procM
 	v.appL = launch
+
 	return report(nil)
 }
 
@@ -308,7 +327,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+		r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
 			for _, ses := range n.Dmsg().AllSessions() {
 				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.LocalTCPAddr().String())
@@ -416,7 +435,7 @@ func initHypervisors(v *Visor) bool {
 }
 
 func initUptimeTracker(v *Visor) bool {
-	const tickDuration = time.Second
+	const tickDuration = 10 * time.Second
 
 	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker
@@ -494,7 +513,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	conf := v.conf.Transport
 
 	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
-	tpdCRetrier := netutil.NewRetrier(log,
+	tpdCRetrier := dmsgnetutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient
