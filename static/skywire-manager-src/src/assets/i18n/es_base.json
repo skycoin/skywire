@@ -1,15 +1,9 @@
 {
   "common": {
     "save": "Save",
-    "edit": "Edit",
     "cancel": "Cancel",
-    "node-key": "Node Key",
-    "app-key": "App Key",
-    "discovery": "Discovery",
     "downloaded": "Downloaded",
     "uploaded": "Uploaded",
-    "delete": "Delete",
-    "none": "None",
     "loading-error": "There was an error getting the data. Retrying...",
     "operation-error": "There was an error trying to complete the operation.",
     "no-connection-error": "There is no internet connection or connection to the Hypervisor.",
@@ -17,7 +11,55 @@
     "refreshed": "Data refreshed.",
     "options": "Options",
     "logout": "Logout",
-    "logout-error": "Error logging out."
+    "logout-error": "Error logging out.",
+    "time-in-ms": "{{ time }}ms",
+    "ok": "Ok",
+    "unknown": "Unknown"
+  },
+
+  "labeled-element": {
+    "edit-label": "Edit label",
+    "remove-label": "Remove label",
+    "copy": "Copy",
+    "remove-label-confirmation": "Do you really want to remove the label?",
+    "unnamed-element": "Unnamed",
+    "unnamed-local-visor": "Local visor",
+    "local-element": "Local",
+    "tooltip": "Click to copy the entry or change the label",
+    "tooltip-with-text": "{{ text }} (Click to copy the entry or change the label)"
+  },
+
+  "labels": {
+    "title": "Labels",
+    "list-title": "Label list",
+    "label": "Label",
+    "id": "Element ID",
+    "type": "Type",
+    "delete-confirmation": "Are you sure you want to delete the label?",
+    "delete-selected-confirmation": "Are you sure you want to delete the selected labels?",
+    "delete": "Delete label",
+    "deleted": "Delete operation completed.",
+    "empty": "There aren't any saved labels.",
+    "empty-with-filter": "No label matches the selected filtering criteria.",
+    "filter-dialog": {
+      "label": "The label must contain",
+      "id": "The id must contain",
+      "type": "The type must be",
+
+      "type-options": {
+        "any": "Any",
+        "visor": "Visor",
+        "dmsg-server": "DMSG server",
+        "transport": "Transport"
+      }
+    }
+  },
+
+  "filters": {
+    "filter-action": "Filter",
+    "active-filters": "Active filters: ",
+    "press-to-remove": "(Press to remove)",
+    "remove-confirmation": "Are you sure you want to remove the filters?"
   },
 
   "tables": {
@@ -25,13 +67,6 @@
     "sorting-title": "Ordered by:",
     "ascending-order": "(ascending)",
     "descending-order": "(descending)"
-  },
-
-  "inputs": {
-    "errors": {
-      "key-required": "Key is required.",
-      "key-length": "Key must be 66 characters long."
-    }
   },
 
   "start": {
@@ -53,6 +88,8 @@
         "label": "Label:",
         "public-key": "Public key:",
         "port": "Port:",
+        "dmsg-server": "DMSG server:",
+        "ping": "Ping:",
         "node-version": "Visor version:",
         "app-protocol-version": "App protocol version:",
         "time": {
@@ -90,23 +127,65 @@
 
   "nodes": {
     "title": "Visor list",
+    "dmsg-title": "DMSG",
+    "update-all": "Update all",
     "state": "State",
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
+    "dmsg-server": "DMSG server",
+    "ping": "Ping",
+    "copy-key": "Copy key",
+    "copy-dmsg": "Copy DMSG server key",
+    "copy-data": "Copy data",
     "view-node": "View visor",
     "delete-node": "Remove visor",
+    "delete-all-offline": "Remove all offline visors",
     "error-load": "An error occurred while refreshing the list. Retrying...",
     "empty": "There aren't any visors connected to this hypervisor.",
+    "empty-with-filter": "No visor matches the selected filtering criteria.",
     "delete-node-confirmation": "Are you sure you want to remove the visor from the list?",
-    "deleted": "Visor removed."
+    "delete-all-offline-confirmation": "Are you sure you want to remove all offline visors from the list?",
+    "deleted": "Visor removed.",
+    "deleted-singular": "1 offline visor removed.",
+    "deleted-plural": "{{ number }} offline visors removed.",
+    "no-offline-nodes": "No offline visors found.",
+    "filter-dialog": {
+      "online": "The visor must be",
+      "label": "The label must contain",
+      "key": "The public key must contain",
+      "dmsg": "The DMSG server key must contain",
+
+      "online-options": {
+        "any": "Online or offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
+    },
+
+    "update": {
+      "no-visors": "There are no visors to update. Please wait.",
+      "title": "Update visors",
+      "processing": "Looking for updates...",
+      "processing-button": "Please wait",
+      "no-update": "Currently, there are no new updates for the visors.",
+      "update-available-single": "There is an update available for 1 visor:",
+      "update-available-multiple": "There are updates available for {{ number }} visors:",
+      "update-available-confirmation": "Click the 'Install updates' button to continue.",
+      "version-change": "From {{ currentVersion }} to {{ newVersion }}",
+      "done": "The visor {{ name }} is being updated.",
+      "done-all": "Operation completed. All visors are being updated.",
+      "update-error": "Could not install the update in visor {{ name }}. Please, try again later.",
+      "all-failed-error": "Could not update any of the visors. Please, try again later.",
+      "some-updated-error": "{{ updatedNumber }} visors were updated and there were problems for updating {{ failedNumber }}. Please, try again later.",
+      "install": "Install updates"
+    }
   },
 
   "edit-label": {
-    "title": "Edit label",
     "label": "Label",
     "done": "Label saved.",
-    "default-label-warning": "The default label has been used."
+    "label-removed-warning": "The label was removed."
   },
 
   "settings": {
@@ -159,14 +238,6 @@
       "confirmation": "Are you sure you want to reboot the visor?",
       "done": "The visor is restarting."
     },
-    "config": {
-      "title": "Discovery configuration",
-      "header": "Discovery address",
-      "remove": "Remove address",
-      "add": "Add address",
-      "cant-store": "Unable to store node configuration.",
-      "success": "Applying discovery configuration by restarting node process."
-    },
     "terminal-options": {
       "full": "Full terminal",
       "simple": "Simple terminal"
@@ -180,49 +251,17 @@
       "title": "Update",
       "processing": "Looking for updates...",
       "processing-button": "Please wait",
-      "no-update": "Currently, there is no update for the visor. The currently installed version is {{ version }}.",
-      "update-available": "There is an update available for the visor. Click the 'Install update' button to continue. The currently installed version is {{ currentVersion }} and the new version is {{ newVersion }}.",
-      "done": "The visor is updated.",
+      "no-update": "Currently, there is no update for the visor. The currently installed version is:",
+      "update-available1": "There is an update available for the visor:",
+      "update-available2": "Click the 'Install update' button to install it.",
+      "version-change": "From {{ currentVersion }} to {{ newVersion }}",
+      "done": "The visor is being updated.",
       "update-error": "Could not install the update. Please, try again later.",
       "install": "Install update"
     }
   },
 
   "apps": {
-    "socksc": {
-      "title": "Connect to Node",
-      "connect-keypair": "Enter keypair",
-      "connect-search": "Search node",
-      "connect-history": "History",
-      "versions": "Versions",
-      "location": "Location",
-      "connect": "Connect",
-      "next-page": "Next page",
-      "prev-page": "Previous page",
-      "auto-startup": "Automatically connect to Node"
-    },
-    "sshc": {
-      "title": "SSH Client",
-      "connect": "Connect to SSH Server",
-      "auto-startup": "Automatically start SSH client",
-      "connect-keypair": "Enter keypair",
-      "connect-history": "History"
-    },
-    "sshs": {
-      "title": "SSH Server",
-      "whitelist": {
-        "title": "SSH Server Whitelist",
-        "header": "Key",
-        "add": "Add to list",
-        "remove": "Remove key",
-        "enter-key": "Enter node key",
-        "errors": {
-          "cant-save": "Could not save whitelist changes."
-        },
-        "saved-correctly": "Whitelist changes saved successfully."
-      },
-      "auto-startup": "Automatically start SSH server"
-    },
     "log": {
       "title": "Log",
       "empty": "There are no log messages for the selected time range.",
@@ -238,14 +277,6 @@
         "all": "Show all"
       }
     },
-    "config": {
-      "title": "Startup configuration"
-    },
-    "menu": {
-      "startup-config": "Startup configuration",
-      "log": "Log messages",
-      "whitelist": "Whitelist"
-    },
     "apps-list": {
       "title": "Applications",
       "list-title": "Application list",
@@ -255,10 +286,29 @@
       "state-tooltip": "Current state",
       "auto-start": "Auto start",
       "empty": "Visor doesn't have any applications.",
+      "empty-with-filter": "No app matches the selected filtering criteria.",
       "disable-autostart": "Disable autostart",
       "enable-autostart": "Enable autostart",
       "autostart-disabled": "Autostart disabled",
-      "autostart-enabled": "Autostart enabled"
+      "autostart-enabled": "Autostart enabled",
+      "filter-dialog": {
+        "state": "The state must be",
+        "name": "The name must contain",
+        "port": "The port must contain",
+        "autostart": "The autostart must be",
+  
+        "state-options": {
+          "any": "Running or stopped",
+          "running": "Running",
+          "stopped": "Stopped"
+        },
+
+        "autostart-options": {
+          "any": "Enabled or disabled",
+          "enabled": "Enabled",
+          "disabled": "Disabled"
+        }
+      }
     },
     "skysocks-settings": {
       "title": "Skysocks Settings",
@@ -317,6 +367,7 @@
     "delete": "Delete transport",
     "deleted": "Delete operation completed.",
     "empty": "Visor doesn't have any transports.",
+    "empty-with-filter": "No transport matches the selected filtering criteria.",
     "statuses": {
       "online": "Online",
       "online-tooltip": "Transport is online",
@@ -348,6 +399,17 @@
         "remote-key-chars-error": "The remote public key must only contain hexadecimal characters.",
         "transport-type-error": "The transport type is required."
       }
+    },
+    "filter-dialog": {
+      "online": "The transport must be",
+      "id": "The id must contain",
+      "remote-node": "The remote key must contain",
+
+      "online-options": {
+        "any": "Online or offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
     }
   },
 
@@ -361,6 +423,7 @@
     "delete": "Delete route",
     "deleted": "Delete operation completed.",
     "empty": "Visor doesn't have any routes.",
+    "empty-with-filter": "No route matches the selected filtering criteria.",
     "details": {
       "title": "Details",
       "basic": {
@@ -387,6 +450,10 @@
         "destination-port": "Destination port:",
         "source-port": "Source port:"
       }
+    },
+    "filter-dialog": {
+      "key": "The key must contain",
+      "rule": "The rule must contain"
     }
   },
 
@@ -435,7 +502,8 @@
     "confirm-button": "Yes",
     "cancel-button": "No",
     "close": "Close",
-    "error-header-text": "Error"
+    "error-header-text": "Error",
+    "done-header-text": "Done"
   },
 
   "language" : {

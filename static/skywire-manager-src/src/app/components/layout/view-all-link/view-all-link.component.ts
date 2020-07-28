@@ -19,4 +19,8 @@ export class ViewAllLinkComponent {
    * the same that would be usend in the "routerLink" property of an <a> tag.
    */
   @Input() linkParts = [''];
+  /**
+   * Object with the params to be sent in the query string when navigating.
+   */
+  @Input() queryParams = {};
 }

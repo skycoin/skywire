@@ -119,7 +119,7 @@ export class TabBarComponent implements OnInit, OnDestroy {
       if (result) {
         result -= 1;
         if (result !== this.selectedTabIndex) {
-          this.router.navigate(this.tabsData[result].linkParts, {replaceUrl: true});
+          this.router.navigate(this.tabsData[result].linkParts);
         }
       }
     });
