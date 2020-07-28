@@ -43,7 +43,7 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
         if (mHandler == null) {
             mHandler = new Handler(this);
         }
-        // Create the intent to "configure" the connection (just start ToyVpnClient).
+        // Create the intent to "configure" the connection (just start SkywireVPNClient).
         mConfigureIntent = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_UPDATE_CURRENT);
     }
@@ -54,6 +54,7 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
             disconnect();
             return START_NOT_STICKY;
         } else {
+            Skywiremob.printString("STARTING ANDROID VPN SERVICE");
             connect();
             return START_STICKY;
         }
@@ -78,6 +79,21 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
         // be killed by background check before getting a chance to receive onRevoke().
         updateForegroundNotification(R.string.connecting);
         mHandler.sendEmptyMessage(R.string.connecting);
+
+        try {
+            while (!Skywiremob.isListening()) {
+                Skywiremob.printString("STILL NOT LISTENING, WAITING...");
+                Thread.sleep(1000);
+            }
+        } catch (Exception e) {
+            Skywiremob.printString("FAILED TO GET IS_LISTENING " + e.getMessage());
+        }
+
+        Skywiremob.printString("LISTENING, LET'S TRY IT OUT");
+
+        startConnection(new SkywireVPNConnection(
+                this, mNextConnectionId.getAndIncrement(), "localhost", 7890));
+
         // Extract information from the shared preferences.
 
         /*final SharedPreferences prefs = getSharedPreferences(MainActivity.Prefs.NAME, MODE_PRIVATE);
@@ -89,9 +105,14 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
         final int port = prefs.getInt(ToyVpnClient.Prefs.SERVER_PORT, 0);
         final String proxyHost = prefs.getString(ToyVpnClient.Prefs.PROXY_HOSTNAME, "");
         final int proxyPort = prefs.getInt(ToyVpnClient.Prefs.PROXY_PORT, 0);*/
-        startConnection(new SkywireVPNConnection(
+
+
+
+
+
+        /*startConnection(new SkywireVPNConnection(
                 this, mNextConnectionId.getAndIncrement(), server, port, secret,
-                proxyHost, proxyPort, allow, packages));
+                allow, packages));*/
     }
 
     private void startConnection(final SkywireVPNConnection connection) {
@@ -139,6 +160,7 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
                 NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_ID,
                 NotificationManager.IMPORTANCE_DEFAULT));
         startForeground(1, new Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_vpn)
                 .setContentText(getString(message))
                 .setContentIntent(mConfigureIntent)
                 .build());

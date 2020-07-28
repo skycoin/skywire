@@ -31,6 +31,10 @@ type SessionCommon struct {
 	log logrus.FieldLogger
 }
 
+func (sc *SessionCommon) GetConn() net.Conn {
+	return sc.netConn
+}
+
 func (sc *SessionCommon) initClient(entity *EntityCommon, conn net.Conn, rPK cipher.PubKey) error {
 	ns, err := noise.New(noise.HandshakeXK, noise.Config{
 		LocalPK:   entity.pk,

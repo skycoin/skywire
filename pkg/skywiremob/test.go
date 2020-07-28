@@ -2,14 +2,19 @@ package skywiremob
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/cmdutil"
+	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
@@ -153,6 +158,106 @@ const (
 }`
 )
 
+func GetMTU() int {
+	// TODO: refactor to return constant
+	return 1500
+}
+
+func GetTUNIPPrefix() int {
+	// TODO: refactor to return constant
+	return 29
+}
+
+var list net.Listener
+var conn net.Conn
+var isListening int32
+
+func IsListening() bool {
+	return atomic.LoadInt32(&isListening) == 1
+}
+
+func StartListening() {
+	var err error
+	list, err = net.Listen("tcp", ":7890")
+	if err != nil {
+		fmt.Println(fmt.Errorf("ERROR LISTENING: %v", err))
+		return
+	}
+
+	fmt.Printf("LISTENING ON %d\n", 7890)
+
+	go func() {
+		/*var err error
+
+		rw := io.ReadWriter(vpnClient.GetConn())
+		if encrypt {
+			fmt.Println("Enabling encryption...")
+
+			rw, err = vpn.WrapRWWithNoise(vpnClient.GetConn(), true, vpnClient.PK(), vpnClient.SK())
+			if err != nil {
+				fmt.Println(fmt.Errorf("failed to enable encryption: %w", err))
+				return
+			}
+
+			fmt.Println("Encryption enabled")
+		} else {
+			fmt.Println("Encryption disabled")
+		}*/
+
+		atomic.StoreInt32(&isListening, 1)
+
+		/*conn, err = list.Accept()
+		if err != nil {
+			fmt.Println(fmt.Errorf("ERROR ACCEPTING CONN: %v", err))
+			return
+		}*/
+
+		fmt.Println("ACCEPTED ANDROID APP CONN")
+
+		// read all system traffic and pass it to the remote VPN server
+		/*go func() {
+			if _, err := io.Copy(conn, rw); err != nil {
+				fmt.Printf("Error resending traffic from TUN to VPN server: %v", err)
+			}
+		}()
+		go func() {
+			if _, err := io.Copy(rw, conn); err != nil {
+				fmt.Printf("Error resending traffic from VPN server to TUN: %v", err)
+			}
+		}()*/
+	}()
+}
+
+func GetTestConn() net.Conn {
+	var d net.Conn
+	return d
+}
+
+func Write(data []byte) {
+	totalWritten := 0
+	for totalWritten < len(data) {
+		n, err := vpnClient.GetConn().Write(data)
+		if err != nil {
+			fmt.Printf("ERROR WRITING DATA PACKET: %v\n", err)
+			return
+		}
+
+		totalWritten += n
+	}
+}
+
+var buf []byte = make([]byte, 1024)
+
+func Read() []byte {
+	n, err := vpnClient.GetConn().Read(buf)
+	if err != nil {
+		fmt.Printf("ERROR READING DATA PACKET: %v\n", err)
+		return nil
+	}
+
+	return buf[:n]
+}
+
 var log *logging.MasterLogger
 var globalVisor *visor.Visor
 
@@ -177,6 +282,61 @@ func PrepareVisor() {
 	}
 
 	globalVisor = v
+}
+
+func PrintDmsgServers() {
+	r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+	var resDmsgServers []string
+	err := r.Do(context.Background(), func() error {
+		var dmsgServers []string
+		for _, ses := range globalVisor.Network().Dmsg().AllSessions() {
+			dmsgServers = append(dmsgServers, ses.LocalTCPAddr().String())
+		}
+
+		if len(dmsgServers) == 0 {
+			return errors.New("no dmsg servers found")
+		}
+
+		resDmsgServers = dmsgServers
+
+		return nil
+	})
+	if err != nil {
+		fmt.Println("ERROR GETTING DMSG SERVERS")
+		return
+	}
+
+	fmt.Printf("DMSG SERVERS: %v\n", resDmsgServers)
+}
+
+func GetSocketFD() int {
+	allSessions := globalVisor.Network().Dmsg().AllSessions()
+	fmt.Printf("SOCKETS COUNT: %d\n", len(allSessions))
+	conn := allSessions[0].SessionCommon.GetConn()
+
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		fmt.Println("ERROR GETTING TCP CONN")
+		return 0
+	}
+
+	rawConn, err := tcpConn.SyscallConn()
+	if err != nil {
+		fmt.Printf("ERROR GETTING RAW CONN: %v\n", err)
+		return 0
+	}
+
+	var fd uintptr
+	var controlFunc = func(fdInner uintptr) {
+		fd = fdInner
+	}
+
+	if err := rawConn.Control(controlFunc); err != nil {
+		fmt.Printf("ERROR GETTING FD: %v\n", err)
+		return 0
+	}
+
+	return int(fd)
 }
 
 func PrepareVPNClient() {
@@ -244,30 +404,55 @@ func PrepareVPNClient() {
 
 var (
 	vpnClient  *vpn.Client
+	tunCredsMx sync.Mutex
 	tunIP      net.IP
 	tunGateway net.IP
 	encrypt    bool
 )
 
 func ShakeHands() {
-	var err error
-	tunIP, tunGateway, encrypt, err = vpnClient.ShakeHands()
+	tunIPInternal, tunGatewayInternal, encryptInternal, err := vpnClient.ShakeHands()
 	if err != nil {
 		fmt.Printf("ERROR SHAKING HANDS: %v\n", err)
+		return
 	} else {
 		fmt.Println("SHOOK HANDS")
 	}
+
+	tunCredsMx.Lock()
+	tunIP = tunIPInternal
+	tunGateway = tunGatewayInternal
+	encrypt = encryptInternal
+	tunCredsMx.Unlock()
+
+	fmt.Println("SET TUN CREDS")
 }
 
 func TUNIP() string {
+	tunCredsMx.Lock()
+	defer tunCredsMx.Unlock()
+
+	if tunIP == nil {
+		return ""
+	}
 	return tunIP.String()
 }
 
 func TUNGateway() string {
+	tunCredsMx.Lock()
+	defer tunCredsMx.Unlock()
+
+	if tunGateway == nil {
+		return ""
+	}
+
 	return tunGateway.String()
 }
 
 func VPNEncrypt() bool {
+	tunCredsMx.Lock()
+	defer tunCredsMx.Unlock()
+
 	return encrypt
 }
 

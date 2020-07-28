@@ -73,6 +73,10 @@ type Visor struct {
 	appL  *launcher.Launcher    // app launcher
 }
 
+func (v *Visor) Network() *snet.Network {
+	return v.net
+}
+
 type vReport struct {
 	src string
 	err error

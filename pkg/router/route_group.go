@@ -102,6 +102,15 @@ type RouteGroup struct {
 	once      sync.Once
 }
 
+func (rg *RouteGroup) GetTP() *transport.ManagedTransport {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	tp := rg.tps[0]
+
+	return tp
+}
+
 // NewRouteGroup creates a new RouteGroup.
 func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDescriptor) *RouteGroup {
 	if cfg == nil {

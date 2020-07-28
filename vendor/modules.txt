@@ -1,7 +1,7 @@
 # github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
 ## explicit
 github.com/AudriusButkevicius/pfilter
-# github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab
+# github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab => ../dmsg
 ## explicit
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/buildinfo
@@ -316,3 +316,4 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# github.com/SkycoinProject/dmsg => ../dmsg

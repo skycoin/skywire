@@ -23,6 +23,8 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         mTextView = (TextView) findViewById(R.id.mytextview);
 
+        new Thread(new VisorRunnable()).start();
+
         Intent intent = VpnService.prepare(MainActivity.this);
         if (intent != null) {
             startActivityForResult(intent, 0);
@@ -31,7 +33,7 @@ public class MainActivity extends Activity {
         }
 
         String greetings = "DICK";
-        new Thread(new VisorRunnable()).start();
+
 
         mTextView.setText(greetings);
     }

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/SkycoinProject/dmsg/cipher"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,6 +32,10 @@ type Client struct {
 	closeC         chan struct{}
 	localLis       net.Listener
 	closeOnce      sync.Once
+}
+
+func (c *Client) GetConn() net.Conn {
+	return c.conn
 }
 
 func NewClientMobile(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, error) {
@@ -204,6 +210,14 @@ func (c *Client) Serve() error {
 	}
 
 	return nil
+}
+
+func (c *Client) PK() cipher.PubKey {
+	return c.cfg.Credentials.PK
+}
+
+func (c *Client) SK() cipher.SecKey {
+	return c.cfg.Credentials.SK
 }
 
 // Close closes client.

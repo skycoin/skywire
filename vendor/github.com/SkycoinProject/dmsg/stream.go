@@ -26,6 +26,10 @@ type Stream struct {
 	log    logrus.FieldLogger
 }
 
+func (s *Stream) YamuxSession() *yamux.Session {
+	return s.ses.ys
+}
+
 func newInitiatingStream(cSes *ClientSession) (*Stream, error) {
 	yStr, err := cSes.ys.OpenStream()
 	if err != nil {
