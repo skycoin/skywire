@@ -462,7 +462,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
           // Save the name of the update, if it was not found before.
           if (!updates.has(updateInfo.current_version + updateInfo.available_version)) {
             const newVersion = this.translateService.instant('nodes.update.version-change',
-              { currentVersion: updateInfo.current_version, newVersion: updateInfo.available_version }
+              {
+                currentVersion: updateInfo.current_version
+                  ? updateInfo.current_version : this.translateService.instant('common.unknown'),
+                newVersion: updateInfo.available_version
+              }
             );
 
             updates.set(updateInfo.current_version + updateInfo.available_version, newVersion);
