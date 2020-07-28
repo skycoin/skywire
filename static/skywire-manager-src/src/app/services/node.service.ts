@@ -4,7 +4,7 @@ import { flatMap, map, mergeMap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
-import { Node, Transport, Route, HealthInfo } from '../app.datatypes';
+import { HealthInfo, Node, Route, Transport } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { TransportService } from './transport.service';
 import { RouteService } from './route.service';
@@ -209,6 +209,11 @@ export class NodeService {
    * Updates a node.
    */
   update(nodeKey: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/update`);
+    const body = {
+      channel: 'stable'
+      // channel: 'testing' // for debugging updater
+    };
+
+    return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
   }
 }

@@ -491,7 +491,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       return of(null);
     }), mergeMap(response => {
       // Show the result of the current step.
-      if (response && response.updated) {
+      if (response && response.updated && !response.error) {
         this.snackbarService.showDone(this.translateService.instant('nodes.update.done', { name: labels[labels.length - 1] }));
       } else {
         this.snackbarService.showError(this.translateService.instant('nodes.update.update-error', { name: labels[labels.length - 1] }));

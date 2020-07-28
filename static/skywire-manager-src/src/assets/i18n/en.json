@@ -121,8 +121,8 @@
       "update-available-multiple": "There are updates available for {{ number }} visors:",
       "update-available-confirmation": "Click the 'Install update' button to continue.",
       "version-change": "From {{ currentVersion }} to {{ newVersion }}",
-      "done": "The visor {{ name }} is being updated.",
-      "done-all": "Operation completed. All visors are being updated.",
+      "done": "The visor {{ name }} is updated.",
+      "done-all": "Operation completed. All visors are updated.",
       "update-error": "Could not install the update in visor {{ name }}. Please, try again later.",
       "all-failed-error": "Could not update any of the visors. Please, try again later.",
       "some-updated-error": "{{ updatedNumber }} visors were updated and there were problems for updating {{ failedNumber }}. Please, try again later.",
@@ -212,7 +212,7 @@
       "update-available1": "There is an update available for the visor:",
       "update-available2": "Click the 'Install update' button to install it.",
       "version-change": "From {{ currentVersion }} to {{ newVersion }}",
-      "done": "The visor is being updated.",
+      "done": "The visor is updated.",
       "update-error": "Could not install the update. Please, try again later.",
       "install": "Install update"
     }
