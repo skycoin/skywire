@@ -208,17 +208,16 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
 
       // Update the visor.
       this.updateSubscription = this.nodeService.update(NodeComponent.getCurrentNodeKey()).subscribe(response => {
-        if (response && response.updated) {
-          this.snackbarService.showDone('actions.update.done');
-          confirmationDialog.close();
-        } else {
-          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'actions.update.update-error');
-        }
+          confirmationDialog.componentInstance.data.lowerText = response.status;
       }, (err: OperationError) => {
         err = processServiceError(err);
 
         confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      });
+      },
+        () => {
+          this.snackbarService.showDone('actions.update.done');
+          confirmationDialog.close();
+        });
     });
   }
 
