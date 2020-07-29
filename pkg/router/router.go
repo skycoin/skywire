@@ -139,8 +139,8 @@ type router struct {
 	trustedVisors map[cipher.PubKey]struct{}
 	tm            *transport.Manager
 	rt            routing.Table
-	nrgs          map[routing.RouteDescriptor]*noiseRouteGroup // noise-wrapped route groups to push incoming reads from transports.
-	rgsRaw        map[routing.RouteDescriptor]*RouteGroup      // not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	rgsNs         map[routing.RouteDescriptor]*noiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
+	rgsRaw        map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
 	done          chan struct{}
@@ -169,7 +169,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		tm:            config.TransportManager,
 		rt:            routing.NewTable(),
 		sl:            sl,
-		nrgs:          make(map[routing.RouteDescriptor]*noiseRouteGroup),
+		rgsNs:         make(map[routing.RouteDescriptor]*noiseRouteGroup),
 		rgsRaw:        make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
@@ -366,7 +366,7 @@ func (r *router) serveSetup() {
 func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*noiseRouteGroup, error) {
 	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
 
-	// when route group is wrapped with noise, it's put into `nrgs`. but before that,
+	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
 	// in the process of wrapping we still need to use this route group to handle
 	// handshake packets. so we keep these not-yet wrapped rgs in the `rgsRaw`
 	// until they get wrapped with noise
@@ -376,12 +376,12 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	// first ensure that this rg is not being wrapped with noise right now
 	if _, ok := r.rgsRaw[rules.Desc]; ok {
 		r.mx.Unlock()
-		r.logger.Warnf("Desc %s already reserved, skipping...")
+		r.logger.Warnf("Desc %s already reserved, skipping...", rules.Desc)
 		return nil, fmt.Errorf("noise route group with desc %s already being initialized", rules.Desc)
 	}
 
 	// we need to close currently existing wrapped rg if there's one
-	nrg, ok := r.nrgs[rules.Desc]
+	nrg, ok := r.rgsNs[rules.Desc]
 
 	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
@@ -419,7 +419,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 	r.mx.Lock()
 	// put ready nrg and remove raw rg, we won't need it anymore
-	r.nrgs[rules.Desc] = nrg
+	r.rgsNs[rules.Desc] = nrg
 	delete(r.rgsRaw, rules.Desc)
 	r.mx.Unlock()
 
@@ -445,18 +445,13 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return err
 	}
 
-	if rule.Type() == routing.RuleReverse {
-		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
-	} else {
+	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
-	}
-
-	switch rule.Type() {
-	case routing.RuleForward, routing.RuleIntermediary:
-		r.logger.Infoln("Handling intermediary data packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
+
+	r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
@@ -761,12 +756,12 @@ func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGr
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	nrg, ok := r.nrgs[desc]
+	nrg, ok := r.rgsNs[desc]
 	if !ok {
 		return nil, false
 	}
 
-	delete(r.nrgs, desc)
+	delete(r.rgsNs, desc)
 
 	return nrg, true
 }
@@ -775,7 +770,7 @@ func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	nrg, ok := r.nrgs[desc]
+	nrg, ok := r.rgsNs[desc]
 
 	return nrg, ok
 }
@@ -793,7 +788,7 @@ func (r *router) removeNoiseRouteGroup(desc routing.RouteDescriptor) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	delete(r.nrgs, desc)
+	delete(r.rgsNs, desc)
 }
 
 func (r *router) IntroduceRules(rules routing.EdgeRules) error {
