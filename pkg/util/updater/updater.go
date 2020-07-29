@@ -90,16 +90,6 @@ type UpdateConfig struct {
 	ChecksumsURL string  `json:"checksums_url"`
 }
 
-// Target defines what binary target to update.
-type Target int
-
-const (
-	// TargetVisor updates visor.
-	TargetVisor Target = iota
-	// TargetHypervisor updates hypervisor.
-	TargetHypervisor
-)
-
 // Channel defines channel for updating.
 type Channel string
 
