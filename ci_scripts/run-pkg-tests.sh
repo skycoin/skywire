@@ -11,8 +11,6 @@ go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/app  -run TestProtocol >> ./logs/pkg/TestProtocol.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/app  -run TestProtocolParallel >> ./logs/pkg/TestProtocolParallel.log
  
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor -run TestNewVisor >> ./logs/pkg/TestNewVisor.log
-
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestDmsgDiscovery >> ./logs/pkg/TestDmsgDiscovery.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestTransportDiscovery >> ./logs/pkg/TestTransportDiscovery.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/SkycoinProject/skywire-mainnet/pkg/visor	 -run TestTransportLogStore >> ./logs/pkg/TestTransportLogStore.log
