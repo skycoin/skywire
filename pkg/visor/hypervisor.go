@@ -865,8 +865,6 @@ func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 			updateConfig.Channel = updater.ChannelStable
 		}
 
-		updateConfig.Target = updater.TargetVisor
-
 		updated, err := ctx.API.Update(updateConfig)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)

@@ -41,7 +41,6 @@ const (
 	appsSubfolder     = "apps"
 	archiveFormat     = ".tar.gz"
 	visorBinary       = "skywire-visor"
-	hypervisorBinary  = "hypervisor"
 	cliBinary         = "skywire-cli"
 )
 
@@ -85,7 +84,6 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 // Version overrides Channel.
 // ArchiveURL/ChecksumURL override Version and channel.
 type UpdateConfig struct {
-	Target       Target
 	Channel      Channel `json:"channel"`
 	Version      string  `json:"version"`
 	ArchiveURL   string  `json:"archive_url"`
@@ -143,7 +141,7 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	}
 
 	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
-	if err := u.updateBinaries(updateConfig.Target, downloadedBinariesPath, currentBasePath); err != nil {
+	if err := u.updateBinaries(downloadedBinariesPath, currentBasePath); err != nil {
 		return false, err
 	}
 
@@ -182,33 +180,22 @@ func (u *Updater) UpdateAvailable(channel Channel) (*Version, error) {
 	return latestVersion, nil
 }
 
-func (u *Updater) updateBinaries(target Target, downloadedBinariesPath string, currentBasePath string) error {
-	switch target {
-	case TargetHypervisor:
-		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, hypervisorBinary); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", hypervisorBinary, err)
+func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath string) error {
+	for _, app := range apps() {
+		if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", app, err)
 		}
-
-		return nil
-	case TargetVisor:
-		for _, app := range apps() {
-			if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
-				return fmt.Errorf("failed to update %s binary: %w", app, err)
-			}
-		}
-
-		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
-		}
-
-		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
-		}
-
-		return nil
-	default:
-		return ErrUnknownTarget
 	}
+
+	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
+		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
+	}
+
+	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
+		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
+	}
+
+	return nil
 }
 
 func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) error {

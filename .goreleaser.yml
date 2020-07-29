@@ -45,25 +45,6 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/SkycoinProject/dmsg/buildinfo.version={{.Version}} -X github.com/SkycoinProject/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/dmsg/buildinfo.date={{.Date}}
-  - id: hypervisor
-    binary: hypervisor
-    goos:
-      - linux
-      - darwin
-    goarch:
-      - amd64
-      - 386
-      - arm64
-      - arm
-    goarm:
-      - 7
-    ignore:
-      - goos: darwin
-        goarch: 386
-    env:
-      - CGO_ENABLED=0
-    main: ./cmd/apps/skychat/
-    ldflags: -s -w -X github.com/SkycoinProject/dmsg/buildinfo.version={{.Version}} -X github.com/SkycoinProject/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/SkycoinProject/dmsg/buildinfo.date={{.Date}}
   - id: skysocks
     binary: apps/skysocks
     goos:
