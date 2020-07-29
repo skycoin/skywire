@@ -384,12 +384,13 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return err
 	}
 
-	if rule.Type() == routing.RuleReverse {
+	// TODO (darkrengarius): uncomment
+	/*if rule.Type() == routing.RuleReverse {
 		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
-	}
+	}*/
 
 	switch rule.Type() {
 	case routing.RuleForward, routing.RuleIntermediary:
@@ -400,7 +401,8 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 	desc := rule.RouteDescriptor()
 	rg, ok := r.routeGroup(desc)
 
-	r.logger.Infof("Handling packet with descriptor %s", &desc)
+	// TODO (darkrengarius): uncomment
+	//r.logger.Infof("Handling packet with descriptor %s", &desc)
 
 	if !ok {
 		r.logger.Infof("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
@@ -411,8 +413,9 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return errors.New("RouteGroup is nil")
 	}
 
-	r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
-		len(packet.Payload()), packet.RouteID(), rule)
+	// TODO (darkrengarius): uncomment
+	//r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+	//	len(packet.Payload()), packet.RouteID(), rule)
 
 	return rg.handlePacket(packet)
 }
@@ -427,12 +430,13 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return err
 	}
 
-	if rule.Type() == routing.RuleReverse {
+	// TODO (darkrengarius): uncomment
+	/*if rule.Type() == routing.RuleReverse {
 		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
-	}
+	}*/
 
 	defer func() {
 		routeIDs := []routing.RouteID{routeID}
@@ -487,12 +491,13 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 		return err
 	}
 
-	if rule.Type() == routing.RuleReverse {
+	// TODO (darkrengarius): uncomment
+	/*if rule.Type() == routing.RuleReverse {
 		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
 	} else {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
-	}
+	}*/
 
 	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
 	// consume rules should be omitted, activity is already updated

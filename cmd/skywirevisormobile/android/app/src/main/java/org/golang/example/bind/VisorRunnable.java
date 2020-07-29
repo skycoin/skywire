@@ -32,12 +32,18 @@ public class VisorRunnable implements Runnable {
         Skywiremob.prepareLogger();
         Skywiremob.prepareVisor();
 
+        Skywiremob.printString("PREPARED VISOR");
+
         Skywiremob.prepareVPNClient();
+        Skywiremob.printString("PREPARED VPN CLIENT");
         Skywiremob.shakeHands();
+        Skywiremob.printString("SHOOK HANDS");
+
+        Skywiremob.printDmsgServers();
 
         Skywiremob.startListening();
 
-        Skywiremob.printDmsgServers();
+
 
         Skywiremob.waitForVisorToStop();
         //kywiremob

@@ -311,7 +311,8 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
 			for _, ses := range n.Dmsg().AllSessions() {
-				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.LocalTCPAddr().String())
+				fmt.Printf("ADDRESS: %v\n", ses.RemoteTCPAddr().String())
+				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
 			}
 
 			if len(envCfg.DmsgServers) == 0 {

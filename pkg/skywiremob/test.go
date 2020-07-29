@@ -1,6 +1,7 @@
 package skywiremob
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -233,10 +234,14 @@ func GetTestConn() net.Conn {
 	return d
 }
 
-func Write(data []byte) {
+func Write(data []byte, ln int) {
+	//fmt.Printf("WRITING %d DATA TO VPN CONN: %v\n", ln, data[:ln])
+	if bytes.Contains(data[:ln], []byte{195, 201, 201, 32}) {
+		fmt.Printf("WRITING %d DATA TO VPN CONN: %v\n", ln, data[:ln])
+	}
 	totalWritten := 0
-	for totalWritten < len(data) {
-		n, err := vpnClient.GetConn().Write(data)
+	for totalWritten < ln {
+		n, err := vpnClient.GetConn().Write(data[:ln])
 		if err != nil {
 			fmt.Printf("ERROR WRITING DATA PACKET: %v\n", err)
 			return
@@ -253,6 +258,11 @@ func Read() []byte {
 	if err != nil {
 		fmt.Printf("ERROR READING DATA PACKET: %v\n", err)
 		return nil
+	}
+
+	//fmt.Printf("READ %d DATA FROM VPN CONN: %v\n", n, buf[:n])
+	if bytes.Contains(buf[:n], []byte{195, 201, 201, 32}) {
+		fmt.Printf("WRITING %d DATA TO VPN CONN: %v\n", n, buf[:n])
 	}
 
 	return buf[:n]
@@ -290,7 +300,7 @@ func PrintDmsgServers() {
 	err := r.Do(context.Background(), func() error {
 		var dmsgServers []string
 		for _, ses := range globalVisor.Network().Dmsg().AllSessions() {
-			dmsgServers = append(dmsgServers, ses.LocalTCPAddr().String())
+			dmsgServers = append(dmsgServers, ses.RemoteTCPAddr().String())
 		}
 
 		if len(dmsgServers) == 0 {
@@ -309,10 +319,23 @@ func PrintDmsgServers() {
 	fmt.Printf("DMSG SERVERS: %v\n", resDmsgServers)
 }
 
-func GetSocketFD() int {
+var nextDmsgSocketIdx = -1
+
+func GetDmsgSocket() int {
 	allSessions := globalVisor.Network().Dmsg().AllSessions()
-	fmt.Printf("SOCKETS COUNT: %d\n", len(allSessions))
-	conn := allSessions[0].SessionCommon.GetConn()
+	fmt.Printf("DMSG SOCKETS COUNT: %d\n", len(allSessions))
+
+	if nextDmsgSocketIdx == -2 {
+		return 0
+	}
+
+	nextDmsgSocketIdx++
+	if nextDmsgSocketIdx == len(allSessions) {
+		nextDmsgSocketIdx = -2
+		return 0
+	}
+
+	conn := allSessions[nextDmsgSocketIdx].SessionCommon.GetConn()
 
 	tcpConn, ok := conn.(*net.TCPConn)
 	if !ok {
