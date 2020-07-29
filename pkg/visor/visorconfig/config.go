@@ -1,8 +1,6 @@
 package visorconfig
 
 import (
-	"path/filepath"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
@@ -11,7 +9,6 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
 )
 
@@ -131,18 +128,11 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
 	if hypervisor {
-		config := makeHypervisorConfig()
+		config := hypervisorconfig.GenerateWorkDirConfig(false)
 		conf.Hypervisor = &config
 	}
 
 	return conf, nil
-}
-
-func makeHypervisorConfig() hypervisorconfig.Config {
-	var c hypervisorconfig.Config
-	c.FillDefaults(false)
-	c.DBPath = filepath.Join(pathutil.HomeDir(), skyenv.DefaultHypervisorDB)
-	return c
 }
 
 // MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
