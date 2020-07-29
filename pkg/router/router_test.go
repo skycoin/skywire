@@ -44,11 +44,13 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// Test ensures that we can establish connection between 2 routers. 1st router dials
+// the 2nd one, 2nd one accepts. We get 2 noise-wrapped route groups and check that
+// these route groups correctly communicate with each other.
 func Test_router_NoiseRouteGroups(t *testing.T) {
-	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
+	// We're doing 2 key pairs for 2 communicating routers.
 	keys := snettest.GenKeyPairs(2)
 
-	// prepare route group creation (client_1 will use this to request route group creation with setup node).
 	desc := routing.NewRouteDescriptor(keys[0].PK, keys[1].PK, 1, 1)
 
 	forwardHops := []routing.Hop{
@@ -56,9 +58,10 @@ func Test_router_NoiseRouteGroups(t *testing.T) {
 	}
 
 	reverseHops := []routing.Hop{
-		{From: keys[1].PK, To: keys[1].PK, TpID: transport.MakeTransportID(keys[1].PK, keys[0].PK, dmsg.Type)},
+		{From: keys[1].PK, To: keys[0].PK, TpID: transport.MakeTransportID(keys[1].PK, keys[0].PK, dmsg.Type)},
 	}
 
+	// Route that will be established
 	route := routing.BidirectionalRoute{
 		Desc:      desc,
 		KeepAlive: DefaultRouteKeepAlive,
@@ -66,20 +69,20 @@ func Test_router_NoiseRouteGroups(t *testing.T) {
 		Reverse:   reverseHops,
 	}
 
-	// create test env
+	// Create test env
 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
 	defer nEnv.Teardown()
 
 	tpD := transport.NewDiscoveryMock()
 
-	// prepare transports
+	// Prepare transports
 	m0, m1, _, _, err := transport.CreateTransportPair(tpD, keys[:2], nEnv, dmsg.Type)
 	require.NoError(t, err)
 
 	forward := [2]cipher.PubKey{keys[0].PK, keys[1].PK}
 	backward := [2]cipher.PubKey{keys[1].PK, keys[0].PK}
 
-	// paths to be returned from route finder
+	// Paths to be returned from route finder
 	rfPaths := make(map[routing.PathEdges][][]routing.Hop)
 	rfPaths[forward] = append(rfPaths[forward], forwardHops)
 	rfPaths[backward] = append(rfPaths[backward], reverseHops)
@@ -97,7 +100,7 @@ func Test_router_NoiseRouteGroups(t *testing.T) {
 	fwdRules0 := routing.ForwardRule(route.KeepAlive, 1, 2, forwardHops[0].TpID, srcPK, dstPK, 1, 1)
 	revRules0 := routing.ConsumeRule(route.KeepAlive, 3, srcPK, dstPK, 1, 1)
 
-	// edge rules to be returned from route group dialer
+	// Edge rules to be returned from route group dialer
 	initEdge := routing.EdgeRules{Desc: revRt.Desc, Forward: fwdRules0, Reverse: revRules0}
 
 	setupCl0 := &setupclient.MockRouteGroupDialer{}
@@ -158,12 +161,13 @@ func Test_router_NoiseRouteGroups(t *testing.T) {
 	fwdRules1 := routing.ForwardRule(route.KeepAlive, 4, 3, reverseHops[0].TpID, dstPK, srcPK, 1, 1)
 	revRules1 := routing.ConsumeRule(route.KeepAlive, 2, dstPK, srcPK, 1, 1)
 
+	// This edge is returned by the setup node to accepting router
 	respEdge := routing.EdgeRules{Desc: fwdRt.Desc, Forward: fwdRules1, Reverse: revRules1}
 
-	// unblock AcceptRoutes, imitates setup node request with EdgeRules
+	// Unblock AcceptRoutes, imitates setup node request with EdgeRules
 	r1.accept <- respEdge
 
-	// at some point raw route group gets into `rgsRaw` and waits for
+	// At some point raw route group gets into `rgsRaw` and waits for
 	// handshake packets. we're waiting for this moment in the cycle
 	// to start passing packets from the transport to route group
 	for {
@@ -407,7 +411,7 @@ func testClosePacketRemote(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubKey,
 	rg1.appendRules(rules.Forward, rules.Reverse, r1.tm.Transport(rules.Forward.NextTransportID()))
 
 	nrg1 := &noiseRouteGroup{rg: rg1}
-	r1.nrgs[rg1.desc] = nrg1
+	r1.rgsNs[rg1.desc] = nrg1
 
 	packet := routing.MakeClosePacket(intFwdID[0], routing.CloseRequested)
 	err = r0.handleTransportPacket(context.TODO(), packet)
@@ -425,7 +429,7 @@ func testClosePacketRemote(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubKey,
 
 	require.True(t, nrg1.rg.isRemoteClosed())
 	require.False(t, nrg1.isClosed())
-	require.Len(t, r1.nrgs, 0)
+	require.Len(t, r1.rgsNs, 0)
 	require.Len(t, r0.rt.AllRules(), 0)
 	require.Len(t, r1.rt.AllRules(), 0)
 }
@@ -468,7 +472,7 @@ func testClosePacketInitiator(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubK
 	rg1.appendRules(rules.Forward, rules.Reverse, r1.tm.Transport(rules.Forward.NextTransportID()))
 
 	nrg1 := &noiseRouteGroup{rg: rg1}
-	r1.nrgs[rg1.desc] = nrg1
+	r1.rgsNs[rg1.desc] = nrg1
 
 	packet := routing.MakeClosePacket(intFwdID[0], routing.CloseRequested)
 	err = r0.handleTransportPacket(context.TODO(), packet)
@@ -487,7 +491,7 @@ func testClosePacketInitiator(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubK
 	err = r1.handleTransportPacket(context.TODO(), recvPacket)
 	require.NoError(t, err)
 
-	require.Len(t, r1.nrgs, 0)
+	require.Len(t, r1.rgsNs, 0)
 	require.Len(t, r0.rt.AllRules(), 0)
 	// since this is the close initiator but the close routine wasn't called,
 	// forward rule is left
@@ -515,7 +519,7 @@ func testForwardRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	rg0.appendRules(rules.Forward, rules.Reverse, r0.tm.Transport(rules.Forward.NextTransportID()))
 
 	nrg0 := &noiseRouteGroup{rg: rg0}
-	r0.nrgs[rg0.desc] = nrg0
+	r0.rgsNs[rg0.desc] = nrg0
 
 	// Call handleTransportPacket for r0 (this should in turn, use the rule we added).
 	packet, err := routing.MakeDataPacket(fwdRtID[0], []byte("This is a test!"))
@@ -594,7 +598,7 @@ func testConsumeRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	rg1.appendRules(rules.Forward, rules.Reverse, r1.tm.Transport(rules.Forward.NextTransportID()))
 
 	nrg1 := &noiseRouteGroup{rg: rg1}
-	r1.nrgs[rg1.desc] = nrg1
+	r1.rgsNs[rg1.desc] = nrg1
 
 	packet, err := routing.MakeDataPacket(intFwdRtID[0], []byte("test intermediary forward"))
 	require.NoError(t, err)
@@ -739,7 +743,7 @@ func TestRouter_SetupIsTrusted(t *testing.T) {
 
 func clearRouteGroups(routers ...*router) {
 	for _, r := range routers {
-		r.nrgs = make(map[routing.RouteDescriptor]*noiseRouteGroup)
+		r.rgsNs = make(map[routing.RouteDescriptor]*noiseRouteGroup)
 	}
 }
 
@@ -810,8 +814,7 @@ func (e *TestEnv) GenRouterConfig(i int) *Config {
 		PubKey:           e.TpMngrConfs[i].PubKey,
 		SecKey:           e.TpMngrConfs[i].SecKey,
 		TransportManager: e.TpMngrs[i],
-		//RouteFinder:      rfclient.NewMock(),
-		SetupNodes: nil, // TODO
+		SetupNodes:       nil, // TODO
 	}
 }
 
