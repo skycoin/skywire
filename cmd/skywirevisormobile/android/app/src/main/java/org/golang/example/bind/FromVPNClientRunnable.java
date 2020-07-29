@@ -18,29 +18,29 @@ public class FromVPNClientRunnable implements Runnable {
 
         byte[] readData = new byte[]{};
 
-            while (true) {
-                try {
-                    // Read the incoming packet from the tunnel.
-                    readData = Skywiremob.read();
-                    int length = readData.length;
-                    if (length > 0) {
-                        out.write(readData, 0, length);
-                        //Skywiremob.printString("WROTE PACKET TO TUN");
-                    }
-                } catch (Exception e) {
-                    String bytes = "[";
-                    for (int i = 0; i < readData.length; i++) {
-                        bytes += readData[i] + ", ";
-                    }
-                    bytes += "]";
-
-                    String stackTrace = "";
-                    StackTraceElement[] stackTraceArr = e.getStackTrace();
-                    for (int i = 0; i < stackTraceArr.length; i++) {
-                        stackTrace += stackTraceArr[i].toString() + "\n";
-                    }
-                    //Skywiremob.printString("EXCEPTION IN FromVPNClientRunnable WHILRE WRITING " + bytes + ": " + stackTrace);
+        while (true) {
+            try {
+                // Read the incoming packet from the tunnel.
+                readData = Skywiremob.read();
+                int length = readData.length;
+                if (length > 0) {
+                    out.write(readData, 0, length);
+                    //Skywiremob.printString("WROTE PACKET TO TUN");
                 }
+            } catch (Exception e) {
+                String bytes = "[";
+                for (int i = 0; i < readData.length; i++) {
+                    bytes += readData[i] + ", ";
+                }
+                bytes += "]";
+
+                String stackTrace = "";
+                StackTraceElement[] stackTraceArr = e.getStackTrace();
+                for (int i = 0; i < stackTraceArr.length; i++) {
+                    stackTrace += stackTraceArr[i].toString() + "\n";
+                }
+                //Skywiremob.printString("EXCEPTION IN FromVPNClientRunnable WHILRE WRITING " + bytes + ": " + stackTrace);
             }
+        }
     }
 }
