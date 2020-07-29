@@ -6,6 +6,7 @@ import android.net.Network;
 import android.net.ProxyInfo;
 import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
+import android.system.OsConstants;
 import android.text.TextUtils;
 
 import java.io.FileInputStream;
@@ -61,6 +62,7 @@ public class SkywireVPNConnection implements Runnable {
     private final int mServerPort;
     private PendingIntent mConfigureIntent;
     private OnEstablishListener mOnEstablishListener;
+    private FromVPNClientRunnable fromVPNClientRunnable;
     // Allowed/Disallowed packages for VPN usage
     //private final boolean mAllow;
     //private final Set<String> mPackages;
@@ -116,9 +118,11 @@ public class SkywireVPNConnection implements Runnable {
         boolean connected = false;
 
         try {
-            int socketFD = (int)Skywiremob.getSocketFD();
-            if (!mService.protect(socketFD)) {
-                throw new IllegalStateException("Cannot protect the tunnel");
+            for (int fd = (int)Skywiremob.getDmsgSocket(); fd != 0; fd = (int)Skywiremob.getDmsgSocket()) {
+                Skywiremob.printString("PRINTING FD " + fd);
+                if (!mService.protect(fd)) {
+                    throw new IllegalStateException("Cannot protect the tunnel");
+                }
             }
             // Configure the virtual network interface.
             iface = configure();
@@ -128,6 +132,9 @@ public class SkywireVPNConnection implements Runnable {
             FileInputStream in = new FileInputStream(iface.getFileDescriptor());
             // Packets received need to be written to this output stream.
             FileOutputStream out = new FileOutputStream(iface.getFileDescriptor());
+
+            new Thread(new FromVPNClientRunnable(out)).start();
+
             // Allocate the buffer for a single packet.
             ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_SIZE);
             //mService.protect()
@@ -144,26 +151,18 @@ public class SkywireVPNConnection implements Runnable {
                 // Read the outgoing packet from the input stream.
                 int length = in.read(packet.array());
                 if (length > 0) {
-                    Skywiremob.printString("READ PACKET FROM TUN");
+                    //Skywiremob.printString("READ PACKET OF " + length + " FROM TUN");
                     // Write the outgoing packet to the tunnel.
                     packet.limit(length);
-                    Skywiremob.write(packet.array());
+                    Skywiremob.write(packet.array(), length);
                     packet.clear();
                     // There might be more outgoing packets.
                     idle = false;
                     lastReceiveTime = System.currentTimeMillis();
                 }
-                // Read the incoming packet from the tunnel.
-                byte[] readData = Skywiremob.read();
-                length = readData.length;
-                if (length > 0) {
-                    out.write(readData, 0, length);
-                    Skywiremob.printString("WROTE PACKET TO TUN");
-                    packet.clear();
-                    // There might be more incoming packets.
-                    idle = false;
-                    lastSendTime = System.currentTimeMillis();
-                }
+
+                ////////////////////// TAKEN CARE OF IN FromVPNClientRunnable
+
                 // If we are idle or waiting for the network, sleep for a
                 // fraction of time to avoid busy looping.
                 if (idle) {
@@ -295,11 +294,16 @@ public class SkywireVPNConnection implements Runnable {
         VpnService.Builder builder = mService.new Builder();
 
         builder.setMtu((short)Skywiremob.getMTU());
+        Skywiremob.printString("TUN IP: " + Skywiremob.tunip());
         builder.addAddress(Skywiremob.tunip(), (int)Skywiremob.getTUNIPPrefix());
+        builder.allowFamily(OsConstants.AF_INET);
         builder.addDnsServer("8.8.8.8");
         builder.addDnsServer("192.168.1.1");
+        //builder.addRoute("10.131.229.154", 32);
         builder.addRoute("0.0.0.0", 1);
         builder.addRoute("128.0.0.0", 1);
+        //builder.addRoute("172.104.43.241", 32);
+
         //builder.setUnderlyingNetworks(new Network[]{Network.CREATOR()});
         //builder.addDisallowedApplication("skywiremob.Skywiremob");
 

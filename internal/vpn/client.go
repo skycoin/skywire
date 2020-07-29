@@ -353,8 +353,8 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error
 
 	cHello := ClientHello{
 		//UnavailablePrivateIPs: unavailableIPs,
-		Passcode:         c.cfg.Passcode,
-		EnableEncryption: c.cfg.Credentials.IsValid(),
+		Passcode: c.cfg.Passcode,
+		//EnableEncryption: c.cfg.Credentials.IsValid(),
 	}
 
 	c.log.Debugf("Sending client hello: %v", cHello)

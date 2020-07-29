@@ -1,9 +1,12 @@
 package main
 
 import (
-	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/skywiremob"
 )
 
 func main() {
-	commands.Execute()
+	skywiremob.PrepareLogger()
+	skywiremob.PrepareVisor()
+	skywiremob.PrintDmsgServers()
+	//commands.Execute()
 }

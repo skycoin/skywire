@@ -568,10 +568,11 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize))
 	}
 
-	log.WithField("type", packet.Type().String()).
-		WithField("rt_id", packet.RouteID()).
-		WithField("size", packet.Size()).
-		Info("Received packet.")
+	// TODO (darkrengarius): uncomment
+	/*log.WithField("type", packet.Type().String()).
+	WithField("rt_id", packet.RouteID()).
+	WithField("size", packet.Size()).
+	Info("Received packet.")*/
 	return packet, nil
 }
 
