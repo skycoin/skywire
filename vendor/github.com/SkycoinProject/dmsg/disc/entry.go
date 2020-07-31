@@ -10,7 +10,11 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 )
 
-const currentVersion = "0.0.1"
+const (
+	currentVersion             = "0.0.1"
+	entryLifetime              = 1 * time.Minute
+	allowedEntryTimestampError = 100 * time.Millisecond
+)
 
 var (
 	// ErrKeyNotFound occurs in case when entry of public key is not found
@@ -262,7 +266,11 @@ func (e *Entry) Validate() error {
 	}
 
 	now, ts := time.Now(), time.Unix(0, e.Timestamp)
-	if ts.After(now) || ts.Before(now.Add(-time.Minute)) {
+	earliestAcceptable := now.Add(-entryLifetime)
+	latestAcceptable := now.Add(allowedEntryTimestampError) // in case when time on nodes mismatches a bit
+
+	if ts.After(latestAcceptable) || ts.Before(earliestAcceptable) {
+		log.Warnf("Entry timestamp %v is not correct (now: %v)", ts, now)
 		return ErrValidationOutdatedTime
 	}
 
