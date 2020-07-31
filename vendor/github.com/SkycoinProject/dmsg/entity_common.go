@@ -16,6 +16,9 @@ import (
 
 // EntityCommon contains the common fields and methods for server and client entities.
 type EntityCommon struct {
+	// atomic requires 64-bit alignment for struct field access
+	lastUpdate int64 // Timestamp (in unix seconds) of last update.
+
 	pk cipher.PubKey
 	sk cipher.SecKey
 	dc disc.APIClient
@@ -24,7 +27,6 @@ type EntityCommon struct {
 	sessionsMx *sync.Mutex
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
-	lastUpdate     int64         // Timestamp (in unix seconds) of last update.
 
 	log logrus.FieldLogger
 
@@ -175,7 +177,7 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 		entry.Server.Address = addr
 		log = log.WithField("addr", entry.Server.Address)
 	}
-	log.Info("Updating discovery entry...")
+	log.Debug("Updating entry.")
 
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
@@ -244,7 +246,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	}
 
 	entry.Client.DelegatedServers = srvPKs
-	c.log.WithField("entry", entry).Info("Updating entry.")
+	c.log.WithField("entry", entry).Debug("Updating entry.")
 	return c.dc.PutEntry(ctx, c.sk, entry)
 }
 
