@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
-	github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab
+	github.com/SkycoinProject/dmsg v0.2.3
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -20,7 +20,6 @@ require (
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.7.1
-	github.com/prometheus/common v0.10.0 // indirect
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
