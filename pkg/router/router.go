@@ -154,8 +154,6 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		return nil, err
 	}
 
-	config.Logger.Warnf("Router listening dmsg at port %v", skyenv.DmsgAwaitSetupPort)
-
 	trustedVisors := make(map[cipher.PubKey]struct{})
 	for _, node := range config.SetupNodes {
 		trustedVisors[node] = struct{}{}
