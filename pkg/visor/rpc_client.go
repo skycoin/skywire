@@ -105,8 +105,10 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	timeout := rc.timeout
 
 	switch method {
-	case "Update", "AddTransport":
-		timeout = skyenv.LongRPCTimeout
+	case "AddTransport":
+		timeout = skyenv.TransportRPCTimeout
+	case "Update":
+		timeout = skyenv.UpdateRPCTimeout
 	}
 
 	if timeout != 0 {
