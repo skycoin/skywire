@@ -3,8 +3,8 @@ github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6 h1:Apvc
 github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6/go.mod h1:1N0EEx/irz4B1qV17wW82TFbjQrE7oX316Cki6eDY0Q=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
-github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab h1:Tk6A+wHK/geAOZcwcvpKsVRtEGz91y2FM6Y6ePtt0/M=
-github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab/go.mod h1:qLrCsFiggHokPHyHH8069v6DawaD16SiUc8ml9W7CEo=
+github.com/SkycoinProject/dmsg v0.2.3 h1:x6Wok/CXnAWdngMQ1q0sOiP81r9G21EeP4jnDfxEEJk=
+github.com/SkycoinProject/dmsg v0.2.3/go.mod h1:qLrCsFiggHokPHyHH8069v6DawaD16SiUc8ml9W7CEo=
 github.com/SkycoinProject/skycoin v0.27.0 h1:N3IHxj8ossHOcsxLYOYugT+OaELLncYHJHxbbYLPPmY=
 github.com/SkycoinProject/skycoin v0.27.0/go.mod h1:xqPLOKh5B6GBZlGA7B5IJfQmCy7mwimD9NlqxR3gMXo=
 github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a h1:6nHCJqh7trsuRcpMC5JmtDukUndn2VC9sY64K6xQ7hQ=
