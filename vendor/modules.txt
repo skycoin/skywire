@@ -1,7 +1,7 @@
 # github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
 ## explicit
 github.com/AudriusButkevicius/pfilter
-# github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab
+# github.com/SkycoinProject/dmsg v0.2.3
 ## explicit
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/buildinfo
@@ -15,6 +15,7 @@ github.com/SkycoinProject/dmsg/httputil
 github.com/SkycoinProject/dmsg/ioutil
 github.com/SkycoinProject/dmsg/netutil
 github.com/SkycoinProject/dmsg/noise
+github.com/SkycoinProject/dmsg/promutil
 github.com/SkycoinProject/dmsg/servermetrics
 # github.com/SkycoinProject/skycoin v0.27.0
 ## explicit
