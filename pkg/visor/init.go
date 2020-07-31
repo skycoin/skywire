@@ -515,7 +515,6 @@ func initHypervisor(v *Visor) bool {
 	v.log.Infof("Initializing hypervisor")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	assets, err := fs.New()
 	if err != nil {
@@ -553,8 +552,10 @@ func initHypervisor(v *Visor) bool {
 			v.log.WithError(err).Fatal("Hypervisor exited with error.")
 		}
 
-		v.log.Infof("Hypervisor initialized")
+		cancel()
 	}()
+
+	v.log.Infof("Hypervisor initialized")
 
 	return true
 }
