@@ -92,7 +92,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
 func (c *Client) Serve() error {
-	tunIP, tunGateway, encrypt, err := c.ShakeHands()
+	tunIP, tunGateway, encrypt, err := c.shakeHands()
 	if err != nil {
 		return fmt.Errorf("error during client/server handshake: %w", err)
 	}
@@ -302,7 +302,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	return stcpEntities, nil
 }
 
-func (c *Client) ShakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
+func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
 	unavailableIPs, err := LocalNetworkInterfaceIPs()
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("error getting unavailable private IPs: %w", err)
