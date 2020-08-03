@@ -3,9 +3,6 @@ module github.com/skycoin/skywire
 go 1.13
 
 require (
-	github.com/SkycoinProject/dmsg v0.2.0
-	github.com/SkycoinProject/skycoin v0.27.0
-	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/google/uuid v1.1.1
@@ -17,6 +14,9 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/sirupsen/logrus v1.4.2
+	github.com/skycoin/dmsg v0.0.0-20200803194104-78ff5746d8a3
+	github.com/skycoin/skycoin v0.26.0
+	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.4
@@ -24,4 +24,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-//replace github.com/SkycoinProject/dmsg => ../dmsg
+//replace github.com/skycoin/dmsg => ../dmsg
