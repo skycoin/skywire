@@ -6,7 +6,6 @@ import (
 	context "context"
 
 	cipher "github.com/skycoin/dmsg/cipher"
-
 	mock "github.com/stretchr/testify/mock"
 
 	routing "github.com/skycoin/skywire/pkg/routing"
