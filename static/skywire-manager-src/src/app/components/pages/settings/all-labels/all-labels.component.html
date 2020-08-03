@@ -1,10 +1,12 @@
 <div class="row">
   <div class="col-12">
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="['settings.title', 'labels.title']"
       [tabsData]="tabsData"
       [showUpdateButton]="false" 
-    ></app-tab-bar>
+      [returnText]="returnButtonText"
+      (optionSelected)="performAction($event)"
+    ></app-top-bar>
   </div>
   <div class="content col-12">
     <app-label-list

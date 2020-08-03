@@ -1,15 +1,15 @@
-<!-- Show the options on the left bar. -->
-<app-actions [showingFullList]="showingFullList"></app-actions>
-
 <!-- Content when loading. -->
 <div *ngIf="!node" class="flex-column h-100 w-100">
   <div>
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="titleParts"
       [tabsData]="tabsData"
       [selectedTabIndex]="selectedTabIndex"
       [showUpdateButton]="false"
-    ></app-tab-bar>
+      [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
+      [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
+      (optionSelected)="performAction($event)"
+    ></app-top-bar>
   </div>
   <app-loading-indicator *ngIf="!notFound"></app-loading-indicator>
   <!-- Msg shown if the node is not found. -->
@@ -24,7 +24,7 @@
 <!-- Content when loaded. -->
 <div class="row" *ngIf="node">
   <div class="col-12">
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="titleParts"
       [tabsData]="tabsData"
       [selectedTabIndex]="selectedTabIndex"
@@ -32,8 +32,11 @@
       [showLoading]="updating"
       [showAlert]="errorsUpdating"
       [refeshRate]="storageService.getRefreshTime()"
+      [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
+      [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
+      (optionSelected)="performAction($event)"
       (refreshRequested)="forceDataRefresh(true)"
-    ></app-tab-bar>
+    ></app-top-bar>
   </div>
   <div class="col-12">
     <div [ngClass]="{'main-area': !showingInfo && !showingFullList, 'full-size-main-area': showingInfo || showingFullList}">

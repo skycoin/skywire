@@ -1,12 +1,11 @@
-import { Component, AfterViewInit, OnDestroy, Input } from '@angular/core';
 import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { TranslateService } from '@ngx-translate/core';
+import { Injector } from '@angular/core';
 
 import { BasicTerminalComponent } from './basic-terminal/basic-terminal.component';
 import { SnackbarService } from '../../../../services/snackbar.service';
-import { NodeComponent } from '../node.component';
-import { SidenavService } from 'src/app/services/sidenav.service';
 import { Node } from '../../../../app.datatypes';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { NodeService } from 'src/app/services/node.service';
@@ -15,99 +14,100 @@ import { processServiceError } from 'src/app/utils/errors';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { ConfirmationData, ConfirmationComponent } from 'src/app/components/layout/confirmation/confirmation.component';
 import { AppConfig } from 'src/app/app.config';
-import { TranslateService } from '@ngx-translate/core';
+import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
 
 /**
- * Component for making the options of the left bar of the nodes page to appear. It does not
- * have its own UI, it just works with SidenavService to make the options appear and work.
+ * Helper object for managing the options shown in the menu while in the node details page.
  */
-@Component({
-  selector: 'app-actions',
-  templateUrl: './actions.component.html',
-  styleUrls: ['./actions.component.scss']
-})
-export class ActionsComponent implements AfterViewInit, OnDestroy {
+export class NodeActionsHelper {
   /**
    * Allows to know if the currently displayed subpage is one dedicated to show a full list
-   * of elements (true) or if it is one dedicated only to show a sumary (false).
+   * of elements (true) or if it is one dedicated only to show a summary (false).
    */
-  @Input() set showingFullList(val: boolean) {
-    this.showingFullListInternal = val;
-    this.updateMenu();
-  }
-  private showingFullListInternal: boolean;
-
+  private showingFullList: boolean;
   private currentNode: Node;
+  private currentNodeKey: string;
 
-  private menuSubscription: Subscription;
-  private nodeSubscription: Subscription;
+  options: MenuOptionData[] = [];
+  returnButtonText: string;
+
   private rebootSubscription: Subscription;
   private updateSubscription: Subscription;
 
-  constructor(
-    private dialog: MatDialog,
-    private router: Router,
-    private snackbarService: SnackbarService,
-    private sidenavService: SidenavService,
-    private nodeService: NodeService,
-    private translateService: TranslateService,
-  ) { }
+  // Services this class need.
+  private dialog: MatDialog;
+  private router: Router;
+  private snackbarService: SnackbarService;
+  private nodeService: NodeService;
+  private translateService: TranslateService;
 
-  ngAfterViewInit() {
-    this.nodeSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
-      this.currentNode = node;
-    });
+  constructor(injector: Injector, showingFullList: boolean) {
+    // Get the services.
+    this.dialog = injector.get(MatDialog);
+    this.router = injector.get(Router);
+    this.snackbarService = injector.get(SnackbarService);
+    this.nodeService = injector.get(NodeService);
+    this.translateService = injector.get(TranslateService);
 
-    this.updateMenu();
+    // Options for the menu shown in the top bar.
+    this.options = [
+      {
+        name: 'actions.menu.terminal',
+        actionName: 'terminal',
+        icon: 'laptop'
+      },
+      {
+        name: 'actions.menu.reboot',
+        actionName: 'reboot',
+        icon: 'rotate_right'
+      },
+      {
+        name: 'actions.menu.update',
+        actionName: 'update',
+        icon: 'get_app',
+      }
+    ];
+
+    this.showingFullList = showingFullList;
+    this.returnButtonText = !showingFullList ? 'nodes.title' : 'node.title';
   }
 
-  updateMenu() {
-    setTimeout(() => {
-      // Make the options appear and listen to the event, to react if the user selects
-      // any of the options.
-      this.menuSubscription = this.sidenavService.setContents([
-        {
-          name: 'actions.menu.terminal',
-          actionName: 'terminal',
-          icon: 'laptop'
-        },
-        {
-          name: 'actions.menu.reboot',
-          actionName: 'reboot',
-          icon: 'rotate_right'
-        },
-        {
-          name: 'actions.menu.update',
-          actionName: 'update',
-          icon: 'get_app',
-        }], [
-        {
-          name: !this.showingFullListInternal ? 'nodes.title' : 'node.title',
-          actionName: 'back',
-          icon: 'chevron_left'
-        }]).subscribe(actionName => {
-          // Call the adequate function if the user clicks any of the options.
-          if (actionName === 'terminal') {
-            this.terminal();
-          } else if (actionName === 'update') {
-            this.update();
-          } else if (actionName === 'reboot') {
-            this.reboot();
-          } else if (actionName === 'back') {
-            this.back();
-          }
-        }
-      );
-    });
+  /**
+   * Allows to set the data of the current node.
+   */
+  setCurrentNode(currentNode: Node) {
+    this.currentNode = currentNode;
   }
 
-  ngOnDestroy() {
-    if (this.nodeSubscription) {
-      this.nodeSubscription.unsubscribe();
+  /**
+   * Allows to set the key of the current node.
+   */
+  setCurrentNodeKey(nodeKey: string) {
+    this.currentNodeKey = nodeKey;
+  }
+
+  /**
+   * Must be called when an option form the top bar is selected.
+   * @param actionName Name of the selected option, as defined in the options array.
+   */
+  performAction(actionName: string) {
+    // Call the adequate function if the user clicks any of the options.
+    if (actionName === 'terminal') {
+      this.terminal();
+    } else if (actionName === 'update') {
+      this.update();
+    } else if (actionName === 'reboot') {
+      this.reboot();
+    } else if (actionName === null) {
+      // Null is returned if the back button was pressed.
+      this.back();
     }
-    if (this.menuSubscription) {
-      this.menuSubscription.unsubscribe();
-    }
+  }
+
+  /**
+   * Cleans the object. Must be called when the object is no longer needed.
+   */
+  dispose() {
     if (this.rebootSubscription) {
       this.rebootSubscription.unsubscribe();
     }
@@ -122,7 +122,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.showProcessing();
 
-      this.rebootSubscription = this.nodeService.reboot(NodeComponent.getCurrentNodeKey()).subscribe(() => {
+      this.rebootSubscription = this.nodeService.reboot(this.currentNodeKey).subscribe(() => {
         this.snackbarService.showDone('actions.reboot.done');
         confirmationDialog.close();
       }, (err: OperationError) => {
@@ -152,7 +152,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
     setTimeout(() => confirmationDialog.componentInstance.showProcessing());
 
     // Check if there is an update available.
-    this.updateSubscription = this.nodeService.checkUpdate(NodeComponent.getCurrentNodeKey()).subscribe(response => {
+    this.updateSubscription = this.nodeService.checkUpdate(this.currentNodeKey).subscribe(response => {
       if (response && response.available) {
         // New configuration for asking for confirmation.
         const newVersion = this.translateService.instant('actions.update.version-change',
@@ -199,7 +199,7 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
       confirmationDialog.componentInstance.showProcessing();
 
       // Update the visor.
-      this.updateSubscription = this.nodeService.update(NodeComponent.getCurrentNodeKey()).subscribe(response => {
+      this.updateSubscription = this.nodeService.update(this.currentNodeKey).subscribe(response => {
           confirmationDialog.componentInstance.data.lowerText = response.status;
       }, (err: OperationError) => {
         err = processServiceError(err);
@@ -230,11 +230,11 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
         // Open the complete terminal in a new tab.
         const protocol = window.location.protocol;
         const hostname = window.location.host.replace('localhost:4200', '127.0.0.1:8000');
-        window.open(protocol + '//' + hostname + '/pty/' + NodeComponent.getCurrentNodeKey(), '_blank', 'noopener noreferrer');
+        window.open(protocol + '//' + hostname + '/pty/' + this.currentNodeKey, '_blank', 'noopener noreferrer');
       } else if (selectedOption === 2) {
         // Open the simple terminal in a modal window.
         BasicTerminalComponent.openDialog(this.dialog, {
-          pk: NodeComponent.getCurrentNodeKey(),
+          pk: this.currentNodeKey,
           label: this.currentNode ? this.currentNode.label : '',
         });
       }
@@ -242,10 +242,10 @@ export class ActionsComponent implements AfterViewInit, OnDestroy {
   }
 
   back() {
-    if (!this.showingFullListInternal) {
+    if (!this.showingFullList) {
       this.router.navigate(['nodes']);
     } else {
-      this.router.navigate(['nodes', NodeComponent.getCurrentNodeKey()]);
+      this.router.navigate(['nodes', this.currentNodeKey]);
     }
   }
 }
