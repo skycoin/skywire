@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/SkycoinProject/yamux"
+	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/yamux"
 
 	"github.com/skycoin/skywire/pkg/router"
 )

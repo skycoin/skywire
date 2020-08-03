@@ -7,7 +7,7 @@ import (
 
 	appcommon "github.com/skycoin/skywire/pkg/app/appcommon"
 
-	logging "github.com/SkycoinProject/skycoin/src/util/logging"
+	logging "github.com/skycoin/skycoin/src/util/logging"
 
 	mock "github.com/stretchr/testify/mock"
 )

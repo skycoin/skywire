@@ -1,7 +1,7 @@
 package skyenv
 
 import (
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // Constants for default services.

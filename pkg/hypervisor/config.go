@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
@@ -84,7 +84,7 @@ func GenerateHomeConfig(testenv bool) Config {
 // GenerateLocalConfig generates a config with default values and uses db from shared folder.
 func GenerateLocalConfig(testenv bool) Config {
 	c := makeConfig(testenv)
-	c.DBPath = "/usr/local/SkycoinProject/hypervisor/users.db"
+	c.DBPath = "/usr/local/skycoin/hypervisor/users.db"
 	return c
 }
 

@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 func TestDisassembleAddr(t *testing.T) {

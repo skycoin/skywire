@@ -3,7 +3,7 @@ package rfclient
 import (
 	"fmt"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"golang.org/x/net/context"
 
 	"github.com/skycoin/skywire/pkg/routing"
