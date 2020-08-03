@@ -8,7 +8,7 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 func TestNewEntry(t *testing.T) {
