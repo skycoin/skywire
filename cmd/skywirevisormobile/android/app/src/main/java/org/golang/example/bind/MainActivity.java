@@ -10,32 +10,100 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.VpnService;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
-public class MainActivity extends Activity {
+import skywiremob.Skywiremob;
 
-    private TextView mTextView;
+public class MainActivity extends Activity implements Handler.Callback {
+
+    private EditText mRemotePK;
+    private EditText mPasscode;
+    private Button mStart;
+    private Button mStop;
+
+    private final Object visorMx = new Object();
+    private VisorRunnable visor = null;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        mTextView = (TextView) findViewById(R.id.mytextview);
+    public boolean handleMessage(Message msg) {
+        String err = msg.getData().getString("text");
+        showToast(err);
+        return false;
+    }
 
-        new Thread(new VisorRunnable()).start();
+    public void showToast(String text) {
+        Toast toast = Toast.makeText(getApplicationContext(), text, Toast.LENGTH_SHORT);
+        toast.show();
+    }
 
+    public void startVPNService() {
         Intent intent = VpnService.prepare(MainActivity.this);
         if (intent != null) {
             startActivityForResult(intent, 0);
         } else {
             onActivityResult(0, RESULT_OK, null);
         }
+    }
 
-        String greetings = "DICK";
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        mRemotePK = (EditText) findViewById(R.id.editTextRemotePK);
+        mPasscode = (EditText) findViewById(R.id.editTextPasscode);
+        mStart = (Button) findViewById(R.id.buttonStart);
+        mStop = (Button)findViewById(R.id.buttonStop);
 
+        mStart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String remotePK = mRemotePK.getText().toString();
+                String passcode = mPasscode.getText().toString();
 
-        mTextView.setText(greetings);
+                String err = Skywiremob.setRemoteCreds(remotePK, passcode);
+                if (!err.isEmpty()) {
+                    Toast toast = Toast.makeText(getApplicationContext(),
+                            "Invalid credentials: " + err, Toast.LENGTH_SHORT);
+                    toast.show();
+                    return;
+                } else {
+                    Skywiremob.printString("SET CREDS CORRECTLY");
+                }
+
+                synchronized (visorMx) {
+                    if (visor != null) {
+                        visor.stopVisor();
+                        visor = null;
+                        stopService(getServiceIntent().setAction(SkywireVPNService.ACTION_DISCONNECT));
+                    }
+
+                    visor = new VisorRunnable(getApplicationContext(), MainActivity.this);
+
+                    new Thread(visor).start();
+                }
+            }
+        });
+
+        mStop.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startService(getServiceIntent().setAction(SkywireVPNService.ACTION_DISCONNECT));
+
+                synchronized (visorMx) {
+                    if (visor != null) {
+                        visor.stopVisor();
+                    }
+                }
+            }
+        });
     }
 
     @Override

@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -82,8 +84,8 @@ func IPs() string {
 const (
 	visorConfig = `{
 	"version": "v1.0.0",
-	"sk": "c5b5c8b68ce91dd42bf0343926c7b551336c359c8e13a83cedd573d377aacf8c",
-	"pk": "0305deabe88b41b25697ee30133e514bd427be208f4590bc85b27cd447b19b1538",
+	"sk": "${SK}",
+	"pk": "${PK}",
 	"dmsg": {
 		"discovery": "http://dmsg.discovery.skywire.cc",
 		"sessions_count": 1
@@ -118,30 +120,6 @@ const (
 		},
 		"apps": [
 			{
-				"name": "skychat",
-				"args": [
-					"-addr",
-					":8001"
-				],
-				"auto_start": true,
-				"port": 1
-			},
-			{
-				"name": "skysocks",
-				"auto_start": true,
-				"port": 3
-			},
-			{
-				"name": "skysocks-client",
-				"auto_start": false,
-				"port": 13
-			},
-			{
-				"name": "vpn-server",
-				"auto_start": false,
-				"port": 44
-			},
-			{
 				"name": "vpn-client",
 				"auto_start": false,
 				"port": 43
@@ -159,6 +137,24 @@ const (
 }`
 )
 
+var remoteCredsMx sync.Mutex
+var remotePK cipher.PubKey
+var remotePasscode string
+
+func SetRemoteCreds(pkStr string, passcode string) string {
+	var pk cipher.PubKey
+	if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
+		return fmt.Errorf("invalid remote PK: %w", err).Error()
+	}
+
+	remoteCredsMx.Lock()
+	remotePK = pk
+	remotePasscode = passcode
+	remoteCredsMx.Unlock()
+
+	return ""
+}
+
 func GetMTU() int {
 	// TODO: refactor to return constant
 	return 1500
@@ -175,58 +171,6 @@ var isListening int32
 
 func IsListening() bool {
 	return atomic.LoadInt32(&isListening) == 1
-}
-
-func StartListening() {
-	var err error
-	list, err = net.Listen("tcp", ":7890")
-	if err != nil {
-		fmt.Println(fmt.Errorf("ERROR LISTENING: %v", err))
-		return
-	}
-
-	fmt.Printf("LISTENING ON %d\n", 7890)
-
-	go func() {
-		/*var err error
-
-		rw := io.ReadWriter(vpnClient.GetConn())
-		if encrypt {
-			fmt.Println("Enabling encryption...")
-
-			rw, err = vpn.WrapRWWithNoise(vpnClient.GetConn(), true, vpnClient.PK(), vpnClient.SK())
-			if err != nil {
-				fmt.Println(fmt.Errorf("failed to enable encryption: %w", err))
-				return
-			}
-
-			fmt.Println("Encryption enabled")
-		} else {
-			fmt.Println("Encryption disabled")
-		}*/
-
-		atomic.StoreInt32(&isListening, 1)
-
-		/*conn, err = list.Accept()
-		if err != nil {
-			fmt.Println(fmt.Errorf("ERROR ACCEPTING CONN: %v", err))
-			return
-		}*/
-
-		fmt.Println("ACCEPTED ANDROID APP CONN")
-
-		// read all system traffic and pass it to the remote VPN server
-		/*go func() {
-			if _, err := io.Copy(conn, rw); err != nil {
-				fmt.Printf("Error resending traffic from TUN to VPN server: %v", err)
-			}
-		}()
-		go func() {
-			if _, err := io.Copy(rw, conn); err != nil {
-				fmt.Printf("Error resending traffic from VPN server to TUN: %v", err)
-			}
-		}()*/
-	}()
 }
 
 func GetTestConn() net.Conn {
@@ -279,19 +223,30 @@ func PrepareLogger() {
 	log = logging.NewMasterLogger()
 }
 
-func PrepareVisor() {
+var (
+	keyPairMx sync.Mutex
+	visorSK   cipher.SecKey
+	visorPK   cipher.PubKey
+)
+
+func PrepareVisor() string {
 	conf, err := initConfig(log, "./skywire-config.json")
 	if err != nil {
-		fmt.Printf("Error getting visor config: %v\n", err)
-		return
+		return fmt.Errorf("error getting visor config: %v", err).Error()
 	}
+
+	fmt.Println("INITIATED CONFIG")
 
 	v, ok := visor.NewVisor(conf)
 	if !ok {
-		log.Fatal("Failed to start visor.")
+		return errors.New("failed to start visor").Error()
 	}
 
+	fmt.Println("CREATED VISOR INSTANCE")
+
 	globalVisor = v
+
+	return ""
 }
 
 func PrintDmsgServers() {
@@ -362,15 +317,14 @@ func GetDmsgSocket() int {
 	return int(fd)
 }
 
-func PrepareVPNClient() {
-	vpnSrvPKStr := "03d65df7e74a480ab645ade9ae45ec6280c9a86fef2a9e955d99361c9a678b61ee"
-	var vpnSrvPK cipher.PubKey
-	if err := vpnSrvPK.UnmarshalText([]byte(vpnSrvPKStr)); err != nil {
-		log.WithError(err).Fatalln("Invalid VPN Server PK")
-	}
+func PrepareVPNClient() string {
+	remoteCredsMx.Lock()
+	vpnSrvPK := remotePK
+	vpnPasscode := remotePasscode
+	remoteCredsMx.Unlock()
 
 	if _, err := globalVisor.SaveTransport(context.Background(), vpnSrvPK, dmsg.Type); err != nil {
-		fmt.Printf("ERROR SAVING TRANSPORT TO VPN SERVER: %v\n", err)
+		return fmt.Errorf("error saving transport to VPN server: %w", err).Error()
 	} else {
 		fmt.Println("SAVED TRANSPORT TO VPN SERVER")
 	}
@@ -383,21 +337,19 @@ func PrepareVPNClient() {
 		Port:   vpnPort,
 	})
 	if err != nil {
-		log.Errorf("ERROR DIALING VPN SERVER: %v", err)
-		return
+		return fmt.Errorf("error dialing VPN server: %w", err).Error()
 	} else {
 		log.Infoln("DIALED VPN SERVER")
 	}
 
 	conn, err := appnet.WrapConn(connRaw)
 	if err != nil {
-		log.Errorf("ERROR WRAPPING APP CONN: %v", err)
-		return
+		return fmt.Errorf("error wrapping app conn: %w", err).Error()
 	} else {
 		log.Infoln("WRAPPED APP CONN")
 	}
 
-	localPK := cipher.PubKey{}
+	/*localPK := cipher.PubKey{}
 	if err := localPK.UnmarshalText([]byte("0305deabe88b41b25697ee30133e514bd427be208f4590bc85b27cd447b19b1538")); err != nil {
 		log.WithError(err).Fatalln("Invalid local PK")
 	}
@@ -405,24 +357,31 @@ func PrepareVPNClient() {
 	localSK := cipher.SecKey{}
 	if err := localSK.UnmarshalText([]byte("c5b5c8b68ce91dd42bf0343926c7b551336c359c8e13a83cedd573d377aacf8c")); err != nil {
 		log.WithError(err).Fatalln("Invalid local SK")
-	}
+	}*/
+
+	keyPairMx.Lock()
+	localSK := visorSK
+	localPK := visorPK
+	keyPairMx.Unlock()
 
 	noiseCreds := vpn.NewNoiseCredentials(localSK, localPK)
 
 	vpnClientCfg := vpn.ClientConfig{
-		Passcode:    "1234",
+		Passcode:    vpnPasscode,
 		Credentials: noiseCreds,
 	}
 
 	log2 := logrus.New()
 	vpnCl, err := vpn.NewClientMobile(vpnClientCfg, log2, conn)
 	if err != nil {
-		log.WithError(err).Fatalln("Error creating VPN client")
+		return fmt.Errorf("error creating VPN client: %w", err).Error()
 	} else {
 		log.Infoln("CREATED VPN CLIENT")
 	}
 
 	vpnClient = vpnCl
+
+	return ""
 }
 
 var (
@@ -433,11 +392,10 @@ var (
 	encrypt    bool
 )
 
-func ShakeHands() {
+func ShakeHands() string {
 	tunIPInternal, tunGatewayInternal, encryptInternal, err := vpnClient.ShakeHands()
 	if err != nil {
-		fmt.Printf("ERROR SHAKING HANDS: %v\n", err)
-		return
+		return fmt.Errorf("handshake error: %w", err).Error()
 	} else {
 		fmt.Println("SHOOK HANDS")
 	}
@@ -449,6 +407,8 @@ func ShakeHands() {
 	tunCredsMx.Unlock()
 
 	fmt.Println("SET TUN CREDS")
+
+	return ""
 }
 
 func TUNIP() string {
@@ -479,23 +439,201 @@ func VPNEncrypt() bool {
 	return encrypt
 }
 
-func WaitForVisorToStop() {
+var stopVisorFuncMx sync.Mutex
+var stopVisorFunc func()
+
+func StopVisor() string {
+	stopVisorFuncMx.Lock()
+	stopFunc := stopVisorFunc
+	stopVisorFunc = nil
+	stopVisorFuncMx.Unlock()
+
+	if stopFunc == nil {
+		return "visor is not running"
+	}
+	stopFunc()
+
+	vpnClient.Close()
+	udpConn.Close()
+
+	return ""
+}
+
+func WaitForVisorToStop() string {
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	defer cancel()
+	stopVisorFuncMx.Lock()
+	stopVisorFunc = cancel
+	stopVisorFuncMx.Unlock()
 
 	// Wait.
 	<-ctx.Done()
 
 	if err := globalVisor.Close(); err != nil {
-		log.WithError(err).Error("Visor closed with error.")
+		return fmt.Errorf("error closing visor: %w", err).Error()
 	}
+
+	return ""
 }
 
 func initConfig(mLog *logging.MasterLogger, confPath string) (*visorconfig.V1, error) {
-	conf, err := visorconfig.Parse(mLog, confPath, []byte(visorConfig))
+	pk, sk := cipher.GenerateKeyPair()
+	keyPairMx.Lock()
+	visorPK = pk
+	visorSK = sk
+	keyPairMx.Unlock()
+
+	fmt.Printf("VISOR KEY PAIR: \nSK: %s\nPK: %s\n", sk.String(), pk.String())
+
+	parsedConf := strings.ReplaceAll(visorConfig, "${SK}", sk.String())
+	parsedConf = strings.ReplaceAll(parsedConf, "${PK}", pk.String())
+	fmt.Printf("PARSED CONF:\n%s\n", parsedConf)
+	conf, err := visorconfig.Parse(mLog, confPath, []byte(parsedConf))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	return conf, nil
+}
+
+var androidAppAddrCh = make(chan *net.UDPAddr, 2)
+
+func SetAndroidAppAddr(addr string) {
+	addr = strings.TrimLeft(addr, " /")
+
+	tokens := strings.Split(addr, ":")
+
+	addrIP := net.ParseIP(tokens[0])
+	addrPort, err := strconv.Atoi(tokens[1])
+	if err != nil {
+		fmt.Printf("ERROR PARSING ANDROID APP PORT: %v\n", err)
+		return
+	}
+
+	androidAppAddrCh <- &net.UDPAddr{
+		IP:   addrIP,
+		Port: addrPort,
+		Zone: "",
+	}
+	close(androidAppAddrCh)
+}
+
+var udpConn *net.UDPConn
+
+func StartListeningUDP() string {
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{
+		IP:   net.IP{127, 0, 0, 1},
+		Port: 7890,
+	})
+	if err != nil {
+		return fmt.Errorf("error listening UDP: %w", err).Error()
+	}
+
+	udpConn = conn
+	fmt.Println("LISTENING UPD")
+
+	//tunAddrCh := make(chan *net.UDPAddr, 2)
+	go func() {
+		/*if _, err := io.Copy(vpnClient.GetConn(), conn); err != nil {
+			fmt.Printf("ERROR COPYING FROM ANDROID APP TO VPN CONN: %v\n", err)
+		}*/
+
+		/*buf := make([]byte, 2500)
+
+		n, addr, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			fmt.Printf("ERROR INITIAL READING UDP PACKET: %v\n", err)
+			return
+		}
+
+		fmt.Printf("INITIALLY READ FROM ANDROID APP (%s): %v\n", addr.String(), buf[:n])
+
+		tunAddrCh <- addr
+
+		totalWritten := 0
+		for totalWritten < n {
+			n2, err := vpnClient.GetConn().Write(buf[totalWritten:n])
+			if err != nil {
+				fmt.Printf("ERROR INITIAL WRITING UDP PACKET: %v\n", err)
+				return
+			}
+
+			totalWritten += n2
+		}*/
+
+		if _, err := io.Copy(vpnClient.GetConn(), conn); err != nil {
+			fmt.Printf("ERROR COPYING FROM ANDROID APP TO VPN CONN: %v\n", err)
+		}
+
+		/*for {
+			n, _, err = conn.ReadFromUDP(buf)
+			if err != nil {
+				fmt.Printf("ERROR READING UDP PACKET: %v\n", err)
+				return
+			}
+
+			fmt.Printf("READ FROM ANDROID APP: %v\n", buf[:n])
+
+			n, err = vpnClient.GetConn().Read(buf[:n])
+			if err != nil {
+				fmt.Printf("ERROR WRITING TO VPN CONN: %v\n", err)
+				return
+			}
+
+			fmt.Printf("WROTE TO VPN CONN: %v\n", buf[:n])
+		}*/
+	}()
+
+	go func() {
+		tunAddr := <-androidAppAddrCh
+		fmt.Printf("GOT ANDROID APP ADDR: %s\n", tunAddr.String())
+		wr := &UDPConnWriter{
+			conn: conn,
+			to:   tunAddr,
+		}
+		//buf := make([]byte, 2500)
+		for {
+			/*if _, err := copyToUDP(conn, vpnClient.GetConn(), tunAddr); err != nil {
+				fmt.Printf("ERROR COPYING TO ANDROID APP: %v\n", err)
+				return
+			}*/
+			if _, err := io.Copy(wr, vpnClient.GetConn()); err != nil {
+				fmt.Printf("ERROR COPYING TO ANDROID APP: %v\n", err)
+				return
+			}
+			/*n, err := vpnClient.GetConn().Read(buf)
+			if err != nil {
+				fmt.Printf("ERROR READING FROM VPN CONN: %v\n", err)
+				return
+			}
+
+			fmt.Printf("READ FROM VPN CONN: %v\n", buf[:n])
+
+			totalWritten := 0
+			for totalWritten < n {
+				n2, err := conn.WriteToUDP(buf[totalWritten:n], tunAddr)
+				if err != nil {
+					fmt.Printf("ERROR WRITING TO ANDROID APP: %v\n", err)
+					return
+				}
+
+				totalWritten += n2
+			}*/
+		}
+		/*if _, err := io.Copy(conn, vpnClient.GetConn()); err != nil {
+			fmt.Printf("ERROR COPYING FROM VPN CONN TO ANDROID APP: %v\n", err)
+		}*/
+	}()
+
+	atomic.StoreInt32(&isListening, 1)
+
+	return ""
+}
+
+type UDPConnWriter struct {
+	conn *net.UDPConn
+	to   *net.UDPAddr
+}
+
+func (w *UDPConnWriter) Write(b []byte) (int, error) {
+	return w.conn.WriteToUDP(b, w.to)
 }

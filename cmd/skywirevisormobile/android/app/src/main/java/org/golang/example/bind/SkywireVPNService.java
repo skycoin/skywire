@@ -24,6 +24,7 @@ import skywiremob.Skywiremob;
 public class SkywireVPNService extends VpnService implements Handler.Callback {
     public static final String ACTION_CONNECT = "com.skywire.android.vpn.START";
     public static final String ACTION_DISCONNECT = "com.skywire.android.vpn.STOP";
+    private SkywireVPNConnection connectionRunnable;
 
     private static final String TAG = SkywireVPNService.class.getSimpleName();
     private Handler mHandler;
@@ -51,6 +52,7 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_DISCONNECT.equals(intent.getAction())) {
+            Skywiremob.printString("STOPPING ANDROID VPN SERVICE");
             disconnect();
             return START_NOT_STICKY;
         } else {
@@ -116,6 +118,7 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
     }
 
     private void startConnection(final SkywireVPNConnection connection) {
+        this.connectionRunnable = connection;
         // Replace any existing connecting thread with the  new one.
         final Thread thread = new Thread(connection, "SkywireVPNThread");
         setConnectingThread(thread);
@@ -148,6 +151,7 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
     }
     private void disconnect() {
         mHandler.sendEmptyMessage(R.string.disconnected);
+        connectionRunnable.Stop();
         setConnectingThread(null);
         setConnection(null);
         stopForeground(true);

@@ -22,19 +22,26 @@ var (
 // Parse parses the visor config from a given reader.
 // If the config file is not the most recent version, it is upgraded and written back to 'path'.
 func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
+	fmt.Println("INSIDE PARSE")
 	cc, err := NewCommon(log, path, "", nil)
 	if err != nil {
 		return nil, err
 	}
 
+	fmt.Println("GOT COMMON")
+
 	if err := json.Unmarshal(raw, cc); err != nil {
 		return nil, fmt.Errorf("failed to obtain config version: %w", err)
 	}
 
+	fmt.Println("UNMARSHALED CONFIG")
+
 	switch cc.Version {
 	case V1Name: // Current version.
+		fmt.Println("PARSING V1")
 		return parseV1(cc, raw)
 	case V0Name, V0NameOldFormat, "":
+		fmt.Println("PARSING V0")
 		return parseV0(cc, raw)
 	default:
 		return nil, ErrUnsupportedConfigVersion
