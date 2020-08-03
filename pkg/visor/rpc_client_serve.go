@@ -8,7 +8,7 @@ import (
 	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 func isDone(ctx context.Context) bool {

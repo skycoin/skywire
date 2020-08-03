@@ -24,11 +24,11 @@ import (
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
+	"github.com/skycoin/skywire/internal/utclient"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 // TODO(evanlinjin): Determine if this is still needed.

@@ -14,9 +14,9 @@ import (
 	"github.com/SkycoinProject/dmsg/ioutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/deadline"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/deadline"
 )
 
 const (

@@ -13,8 +13,8 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 var log = logging.MustGetLogger("transport-discovery")

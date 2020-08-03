@@ -5,9 +5,9 @@ package app
 import (
 	mock "github.com/stretchr/testify/mock"
 
-	appnet "github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	appnet "github.com/skycoin/skywire/pkg/app/appnet"
 
-	routing "github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	routing "github.com/skycoin/skywire/pkg/routing"
 
 	time "time"
 )

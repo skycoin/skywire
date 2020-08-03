@@ -22,14 +22,14 @@ import (
 	"github.com/mholt/archiver/v3"
 	"github.com/schollz/progressbar/v2"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/util/rename"
 )
 
 const (
-	owner             = "SkycoinProject"
-	gitProjectName    = "skywire-mainnet"
+	owner             = "skycoin"
+	gitProjectName    = "skywire"
 	projectName       = "skywire"
 	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
 	urlText           = "/" + owner + "/" + gitProjectName + "/releases/tag/"

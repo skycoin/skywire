@@ -8,9 +8,9 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/idmanager"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 func TestListener_Accept(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // ErrNoKey is returned when key is not found.

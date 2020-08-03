@@ -81,7 +81,7 @@ func VisorDefaults() ConfigPaths {
 	}
 
 	paths[HomeLoc] = filepath.Join(HomeDir(), ".skycoin/skywire/skywire-config.json")
-	paths[LocalLoc] = "/usr/local/SkycoinProject/skywire-mainnet/skywire-config.json"
+	paths[LocalLoc] = "/usr/local/skycoin/skywire/skywire-config.json"
 
 	return paths
 }
