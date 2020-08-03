@@ -4,10 +4,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/app/appcommon"
-
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 )
 
 func TestProcManager_Exists(t *testing.T) {

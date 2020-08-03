@@ -9,13 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/snet/stcp"
-
-	"github.com/skycoin/skycoin/src/util/logging"
-
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire/pkg/snet/stcp"
 )
 
 // Default ports.
