@@ -160,14 +160,14 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 
 	req, err := http.NewRequest(http.MethodGet, c.addr+"/security/nonces/"+key.Hex(), nil)
 	if err != nil {
-		return 0, fmt.Errorf("NEW REQ: %w", err)
+		return 0, err
 	}
 
 	req = req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("DO: %w", err)
+		return 0, err
 	}
 
 	defer func() {
