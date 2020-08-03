@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 // Conn is a connection from app client to the server.

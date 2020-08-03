@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/stcp"
+	"github.com/skycoin/skywire/pkg/snet/stcp"
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 

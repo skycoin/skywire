@@ -5,7 +5,7 @@ package appserver
 import (
 	io "io"
 
-	appcommon "github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	appcommon "github.com/skycoin/skywire/pkg/app/appcommon"
 
 	logging "github.com/SkycoinProject/skycoin/src/util/logging"
 

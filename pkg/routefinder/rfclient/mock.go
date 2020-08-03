@@ -6,8 +6,8 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"golang.org/x/net/context"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // MockClient implements mock route finder client.
