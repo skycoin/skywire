@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -385,7 +384,7 @@ func PrepareVPNClient() string {
 }
 
 var (
-	vpnClient  *vpn.Client
+	vpnClient  *vpn.ClientMobile
 	tunCredsMx sync.Mutex
 	tunIP      net.IP
 	tunGateway net.IP
@@ -519,6 +518,18 @@ func SetAndroidAppAddr(addr string) {
 
 var udpConn *net.UDPConn
 
+func ServeVPN() {
+	go func() {
+		tunAddr := <-androidAppAddrCh
+		fmt.Printf("GOT ANDROID APP ADDR: %s\n", tunAddr.String())
+		wr := vpn.NewUDPConnWriter(udpConn, tunAddr)
+
+		if err := vpnClient.Serve(wr); err != nil {
+			fmt.Printf("FAILED TO SERVE VPN: %v\n", err)
+		}
+	}()
+}
+
 func StartListeningUDP() string {
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{
 		IP:   net.IP{127, 0, 0, 1},
@@ -531,109 +542,7 @@ func StartListeningUDP() string {
 	udpConn = conn
 	fmt.Println("LISTENING UPD")
 
-	//tunAddrCh := make(chan *net.UDPAddr, 2)
-	go func() {
-		/*if _, err := io.Copy(vpnClient.GetConn(), conn); err != nil {
-			fmt.Printf("ERROR COPYING FROM ANDROID APP TO VPN CONN: %v\n", err)
-		}*/
-
-		/*buf := make([]byte, 2500)
-
-		n, addr, err := conn.ReadFromUDP(buf)
-		if err != nil {
-			fmt.Printf("ERROR INITIAL READING UDP PACKET: %v\n", err)
-			return
-		}
-
-		fmt.Printf("INITIALLY READ FROM ANDROID APP (%s): %v\n", addr.String(), buf[:n])
-
-		tunAddrCh <- addr
-
-		totalWritten := 0
-		for totalWritten < n {
-			n2, err := vpnClient.GetConn().Write(buf[totalWritten:n])
-			if err != nil {
-				fmt.Printf("ERROR INITIAL WRITING UDP PACKET: %v\n", err)
-				return
-			}
-
-			totalWritten += n2
-		}*/
-
-		if _, err := io.Copy(vpnClient.GetConn(), conn); err != nil {
-			fmt.Printf("ERROR COPYING FROM ANDROID APP TO VPN CONN: %v\n", err)
-		}
-
-		/*for {
-			n, _, err = conn.ReadFromUDP(buf)
-			if err != nil {
-				fmt.Printf("ERROR READING UDP PACKET: %v\n", err)
-				return
-			}
-
-			fmt.Printf("READ FROM ANDROID APP: %v\n", buf[:n])
-
-			n, err = vpnClient.GetConn().Read(buf[:n])
-			if err != nil {
-				fmt.Printf("ERROR WRITING TO VPN CONN: %v\n", err)
-				return
-			}
-
-			fmt.Printf("WROTE TO VPN CONN: %v\n", buf[:n])
-		}*/
-	}()
-
-	go func() {
-		tunAddr := <-androidAppAddrCh
-		fmt.Printf("GOT ANDROID APP ADDR: %s\n", tunAddr.String())
-		wr := &UDPConnWriter{
-			conn: conn,
-			to:   tunAddr,
-		}
-		//buf := make([]byte, 2500)
-		for {
-			/*if _, err := copyToUDP(conn, vpnClient.GetConn(), tunAddr); err != nil {
-				fmt.Printf("ERROR COPYING TO ANDROID APP: %v\n", err)
-				return
-			}*/
-			if _, err := io.Copy(wr, vpnClient.GetConn()); err != nil {
-				fmt.Printf("ERROR COPYING TO ANDROID APP: %v\n", err)
-				return
-			}
-			/*n, err := vpnClient.GetConn().Read(buf)
-			if err != nil {
-				fmt.Printf("ERROR READING FROM VPN CONN: %v\n", err)
-				return
-			}
-
-			fmt.Printf("READ FROM VPN CONN: %v\n", buf[:n])
-
-			totalWritten := 0
-			for totalWritten < n {
-				n2, err := conn.WriteToUDP(buf[totalWritten:n], tunAddr)
-				if err != nil {
-					fmt.Printf("ERROR WRITING TO ANDROID APP: %v\n", err)
-					return
-				}
-
-				totalWritten += n2
-			}*/
-		}
-		/*if _, err := io.Copy(conn, vpnClient.GetConn()); err != nil {
-			fmt.Printf("ERROR COPYING FROM VPN CONN TO ANDROID APP: %v\n", err)
-		}*/
-	}()
-
 	atomic.StoreInt32(&isListening, 1)
 
 	return ""
-}
-
-type UDPConnWriter struct {
-	conn *net.UDPConn
-	to   *net.UDPAddr
-}
-
-func (w *UDPConnWriter) Write(b []byte) (int, error) {
-	return w.conn.WriteToUDP(b, w.to)
 }

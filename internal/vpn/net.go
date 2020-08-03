@@ -6,11 +6,35 @@ import (
 	"io"
 	"net"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 )
+
+func DoClientHandshake(log logrus.FieldLogger, conn net.Conn,
+	cHello ClientHello) (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
+	log.Debugf("Sending client hello: %v", cHello)
+
+	if err := WriteJSON(conn, &cHello); err != nil {
+		return nil, nil, false, fmt.Errorf("error sending client hello: %w", err)
+	}
+
+	var sHello ServerHello
+	if err := ReadJSON(conn, &sHello); err != nil {
+		return nil, nil, false, fmt.Errorf("error reading server hello: %w", err)
+	}
+
+	log.Debugf("Got server hello: %v", sHello)
+
+	if sHello.Status != HandshakeStatusOK {
+		return nil, nil, false, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
+	}
+
+	return sHello.TUNIP, sHello.TUNGateway, sHello.EncryptionEnabled, nil
+}
 
 // WriteJSON marshals `data` and sends it over the `conn`.
 func WriteJSON(conn net.Conn, data interface{}) error {

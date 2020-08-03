@@ -84,6 +84,8 @@ public class VisorRunnable implements Runnable {
             return;
         }
 
+        Skywiremob.serveVPN();
+
         //Skywiremob.printDmsgServers();
 
         activity.runOnUiThread(new Runnable() {

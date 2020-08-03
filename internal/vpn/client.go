@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,34 +28,7 @@ type Client struct {
 	directIPs      []net.IP
 	defaultGateway net.IP
 	closeC         chan struct{}
-	localLis       net.Listener
 	closeOnce      sync.Once
-}
-
-func (c *Client) GetConn() net.Conn {
-	return c.conn
-}
-
-func NewClientMobile(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, error) {
-	lis, err := net.Listen("tcp", ":9765")
-	if err != nil {
-		fmt.Printf("ERROR LISTENING LOCALLY IN VPN CLIENT: %v\n", err)
-		return nil, err
-	}
-	go func() {
-		_, err := lis.Accept()
-		if err != nil {
-			fmt.Printf("ERROR ACCEPTING LOCALLY IN VPN CLIENT: %v\n", err)
-		} else {
-			fmt.Println("SUCCESSFULLY ACCEPTED LOCALLY IN VPN CLIENT")
-		}
-	}()
-	return &Client{
-		cfg:    cfg,
-		log:    l,
-		conn:   conn,
-		closeC: make(chan struct{}),
-	}, nil
 }
 
 // NewClient creates VPN client instance.
@@ -119,13 +90,9 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 	}, nil
 }
 
-func (c *Client) ShakeHands() (net.IP, net.IP, bool, error) {
-	return c.shakeHands()
-}
-
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
 func (c *Client) Serve() error {
-	tunIP, tunGateway, encrypt, err := c.shakeHands()
+	tunIP, tunGateway, encrypt, err := c.ShakeHands()
 	if err != nil {
 		return fmt.Errorf("error during client/server handshake: %w", err)
 	}
@@ -210,14 +177,6 @@ func (c *Client) Serve() error {
 	}
 
 	return nil
-}
-
-func (c *Client) PK() cipher.PubKey {
-	return c.cfg.Credentials.PK
-}
-
-func (c *Client) SK() cipher.SecKey {
-	return c.cfg.Credentials.SK
 }
 
 // Close closes client.
@@ -343,7 +302,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	return stcpEntities, nil
 }
 
-func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
+func (c *Client) ShakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
 	unavailableIPs, err := LocalNetworkInterfaceIPs()
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("error getting unavailable private IPs: %w", err)
@@ -352,29 +311,12 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
 
 	cHello := ClientHello{
-		//UnavailablePrivateIPs: unavailableIPs,
-		Passcode: c.cfg.Passcode,
-		//EnableEncryption: c.cfg.Credentials.IsValid(),
+		UnavailablePrivateIPs: unavailableIPs,
+		Passcode:              c.cfg.Passcode,
+		EnableEncryption:      c.cfg.Credentials.IsValid(),
 	}
 
-	c.log.Debugf("Sending client hello: %v", cHello)
-
-	if err := WriteJSON(c.conn, &cHello); err != nil {
-		return nil, nil, false, fmt.Errorf("error sending client hello: %w", err)
-	}
-
-	var sHello ServerHello
-	if err := ReadJSON(c.conn, &sHello); err != nil {
-		return nil, nil, false, fmt.Errorf("error reading server hello: %w", err)
-	}
-
-	c.log.Debugf("Got server hello: %v", sHello)
-
-	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, false, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
-	}
-
-	return sHello.TUNIP, sHello.TUNGateway, sHello.EncryptionEnabled, nil
+	return DoClientHandshake(c.log, c.conn, cHello)
 }
 
 func ipFromEnv(key string) (net.IP, error) {
