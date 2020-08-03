@@ -11,10 +11,10 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/idmanager"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 var (

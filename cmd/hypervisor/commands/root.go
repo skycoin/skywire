@@ -11,10 +11,10 @@ import (
 	"github.com/rakyll/statik/fs"
 	"github.com/spf13/cobra"
 
-	_ "github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/statik" // embedded static files
-	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	_ "github.com/skycoin/skywire/cmd/hypervisor/statik" // embedded static files
+	"github.com/skycoin/skywire/pkg/hypervisor"
+	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 const configEnv = "SW_HYPERVISOR_CONFIG"

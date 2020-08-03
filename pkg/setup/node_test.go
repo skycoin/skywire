@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
+	"github.com/skycoin/skywire/pkg/setup/setupclient"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
+	"github.com/skycoin/skywire/internal/testhelpers"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
+	"github.com/skycoin/skywire/pkg/snet/snettest"
 
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
@@ -25,10 +25,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/metrics"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 func TestMain(m *testing.M) {

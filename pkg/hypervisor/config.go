@@ -10,8 +10,8 @@ import (
 
 	"github.com/SkycoinProject/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 const (
