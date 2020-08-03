@@ -12,7 +12,7 @@ import (
 
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 )
 
 var (
