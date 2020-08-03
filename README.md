@@ -29,7 +29,7 @@ Skywire requires a version of [golang](https://golang.org/) with [go modules](ht
 ```bash
 # Clone.
 $ git clone https://github.com/skycoin/skywire.git
-$ cd skywire-mainnet
+$ cd skywire
 
 # Build.
 $ make build # installs all dependencies, build binaries and skywire apps

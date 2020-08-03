@@ -3,10 +3,9 @@ package snet
 import (
 	"testing"
 
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
-
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
 )
 
 func TestDisassembleAddr(t *testing.T) {

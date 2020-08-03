@@ -18,9 +18,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/mholt/archiver/v3"
 	"github.com/schollz/progressbar/v2"
+	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/util/buildinfo"

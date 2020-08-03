@@ -19,9 +19,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/pkg/profile"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/internal/utclient"

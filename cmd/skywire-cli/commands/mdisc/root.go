@@ -7,12 +7,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
-
-	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/skycoin/dmsg/disc"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var mdAddr string
