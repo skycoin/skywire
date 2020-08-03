@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"

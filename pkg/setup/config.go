@@ -3,7 +3,7 @@ package setup
 import (
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // Various timeouts for setup node.
