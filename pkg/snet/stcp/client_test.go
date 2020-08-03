@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 )

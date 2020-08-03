@@ -5,7 +5,7 @@ import (
 	"net/rpc"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/visor"

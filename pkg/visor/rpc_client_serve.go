@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/rpc"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/netutil"
 
 	"github.com/skycoin/skywire/pkg/snet"
 )
