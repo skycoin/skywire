@@ -1,4 +1,4 @@
-package org.golang.example.bind;
+package com.skywire.skycoin.vpn;
 
 import android.content.Context;
 import android.os.Bundle;

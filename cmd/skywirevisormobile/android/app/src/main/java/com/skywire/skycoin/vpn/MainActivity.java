@@ -4,7 +4,7 @@
  * license that can be found in the LICENSE file.
  */
 
-package org.golang.example.bind;
+package com.skywire.skycoin.vpn;
 
 import android.app.Activity;
 import android.content.Intent;

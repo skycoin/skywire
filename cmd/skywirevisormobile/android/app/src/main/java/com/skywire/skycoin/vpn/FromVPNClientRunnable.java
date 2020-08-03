@@ -1,4 +1,4 @@
-package org.golang.example.bind;
+package com.skywire.skycoin.vpn;
 
 import java.io.File;
 import java.io.FileOutputStream;

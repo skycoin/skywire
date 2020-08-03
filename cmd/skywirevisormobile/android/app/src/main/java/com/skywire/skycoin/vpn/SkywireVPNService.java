@@ -1,4 +1,4 @@
-package org.golang.example.bind;
+package com.skywire.skycoin.vpn;;
 
 import android.app.Notification;
 import android.app.NotificationChannel;

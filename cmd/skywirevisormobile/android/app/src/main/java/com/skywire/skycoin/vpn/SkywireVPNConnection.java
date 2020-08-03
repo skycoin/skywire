@@ -1,4 +1,4 @@
-package org.golang.example.bind;
+package com.skywire.skycoin.vpn;
 
 import android.app.PendingIntent;
 import android.content.pm.PackageManager;

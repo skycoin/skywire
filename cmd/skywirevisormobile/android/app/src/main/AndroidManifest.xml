@@ -3,7 +3,7 @@
      Use of this source code is governed by a BSD-style
      license that can be found in the LICENSE file.  -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.golang.example.bind" >
+    package="com.skywire.skycoin.vpn" >
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
