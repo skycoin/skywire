@@ -26,7 +26,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { TransportListComponent } from './components/pages/node/routing/transport-list/transport-list.component';
 import { NodeAppsListComponent } from './components/pages/node/apps/node-apps-list/node-apps-list.component';
 import { CopyToClipboardTextComponent } from './components/layout/copy-to-clipboard-text/copy-to-clipboard-text.component';
-import { ActionsComponent } from './components/pages/node/actions/actions.component';
 import { LogComponent } from './components/pages/node/apps/node-apps-list/log/log.component';
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { PasswordComponent } from './components/pages/settings/password/password.component';
@@ -43,7 +42,6 @@ import { RoutingComponent } from './components/pages/node/routing/routing.compon
 import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { CreateTransportComponent } from './components/pages/node/routing/transport-list/create-transport/create-transport.component';
 import { AutoScalePipe } from './pipes/auto-scale.pipe';
-import { SidenavComponent } from './components/layout/sidenav/sidenav.component';
 import { BasicTerminalComponent } from './components/pages/node/actions/basic-terminal/basic-terminal.component';
 import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
 import { RefreshRateComponent } from './components/pages/settings/refresh-rate/refresh-rate.component';
@@ -54,7 +52,7 @@ import { AllTransportsComponent } from './components/pages/node/routing/all-tran
 import { PaginatorComponent } from './components/layout/paginator/paginator.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
-import { TabBarComponent } from './components/layout/tab-bar/tab-bar.component';
+import { TopBarComponent } from './components/layout/top-bar/top-bar.component';
 import { RouteReuseStrategy } from '@angular/router';
 import { AppReuseStrategy } from './app.reuse-strategy';
 import { ConfirmationComponent } from './components/layout/confirmation/confirmation.component';
@@ -72,7 +70,6 @@ import { SkysocksSettingsComponent } from './components/pages/node/apps/node-app
 import {
   SkysocksClientSettingsComponent
 } from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
-import { MenuButtonComponent } from './components/layout/sidenav/menu-button/menu-button.component';
 import { FiltersSelectionComponent } from './components/layout/filters-selection/filters-selection.component';
 import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
@@ -89,7 +86,6 @@ const globalRippleConfig: RippleGlobalOptions = {
     NodeListComponent,
     NodeComponent,
     AutoScalePipe,
-    ActionsComponent,
     LogComponent,
     TransportListComponent,
     NodeAppsListComponent,
@@ -106,7 +102,6 @@ const globalRippleConfig: RippleGlobalOptions = {
     RoutingComponent,
     AppsComponent,
     CreateTransportComponent,
-    SidenavComponent,
     BasicTerminalComponent,
     RouteDetailsComponent,
     RefreshRateComponent,
@@ -117,7 +112,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     AllRoutesComponent,
     AllAppsComponent,
     PaginatorComponent,
-    TabBarComponent,
+    TopBarComponent,
     ConfirmationComponent,
     TransportDetailsComponent,
     LogFilterComponent,
@@ -131,7 +126,6 @@ const globalRippleConfig: RippleGlobalOptions = {
     SelectOptionComponent,
     SkysocksSettingsComponent,
     SkysocksClientSettingsComponent,
-    MenuButtonComponent,
     FiltersSelectionComponent,
     LabeledElementTextComponent,
     AllLabelsComponent,
