@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	owner             = "SkycoinProject"
-	gitProjectName    = "skywire-mainnet"
+	owner             = "skycoin"
+	gitProjectName    = "skywire"
 	projectName       = "skywire"
 	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
 	urlText           = "/" + owner + "/" + gitProjectName + "/releases/tag/"
