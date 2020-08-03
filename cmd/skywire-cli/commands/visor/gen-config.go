@@ -7,14 +7,13 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/spf13/cobra"
+
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/spf13/cobra"
-
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 	"github.com/skycoin/skywire/pkg/visor"
 )

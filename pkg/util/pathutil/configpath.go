@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 var log = logging.MustGetLogger("pathutil")
@@ -94,7 +94,7 @@ func HypervisorDefaults() ConfigPaths {
 	}
 
 	paths[HomeLoc] = filepath.Join(HomeDir(), ".skycoin/hypervisor/hypervisor-config.json")
-	paths[LocalLoc] = "/usr/local/SkycoinProject/hypervisor/hypervisor-config.json"
+	paths[LocalLoc] = "/usr/local/skycoin/hypervisor/hypervisor-config.json"
 
 	return paths
 }
@@ -165,6 +165,7 @@ func WriteJSONConfig(conf interface{}, output string, replace bool) {
 		log.WithError(err).Fatalln("failed to create output directory")
 	}
 
+	// nolint:gosec
 	if err := ioutil.WriteFile(output, raw, 0744); err != nil {
 		log.WithError(err).Fatalln("failed to write file")
 	}
