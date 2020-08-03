@@ -3,7 +3,7 @@ package router
 import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // RPCGateway is a RPC interface for router.

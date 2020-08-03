@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 func TestMain(m *testing.M) {

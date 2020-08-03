@@ -1,4 +1,4 @@
-module github.com/SkycoinProject/skywire-mainnet
+module github.com/skycoin/skywire
 
 go 1.13
 

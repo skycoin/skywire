@@ -8,9 +8,9 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/snet/snettest"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 func TestSettlementHS(t *testing.T) {
