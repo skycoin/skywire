@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/SkycoinProject/dmsg/cipher"
 
 	"github.com/skycoin/skywire/pkg/transport"
 )

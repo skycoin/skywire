@@ -6,7 +6,7 @@ import (
 	"net/rpc"
 	"testing"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 

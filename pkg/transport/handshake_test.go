@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
+	"github.com/skycoin/dmsg"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
