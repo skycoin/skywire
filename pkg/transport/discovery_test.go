@@ -4,9 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/transport"
 )

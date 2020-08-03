@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
-
 	"github.com/skycoin/dmsg/httputil"
 )
 
