@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/idmanager"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
+	"github.com/skycoin/skywire/internal/testhelpers"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/idmanager"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/snet/snettest"
 )
 
 func TestConn_Read(t *testing.T) {

@@ -8,7 +8,7 @@ github.com/SkycoinProject/dmsg v0.2.0/go.mod h1:MiX+UG/6fl3g+9rS13/fq7BwUQ2eOlg1
 github.com/SkycoinProject/skycoin v0.26.0/go.mod h1:xqPLOKh5B6GBZlGA7B5IJfQmCy7mwimD9NlqxR3gMXo=
 github.com/SkycoinProject/skycoin v0.27.0 h1:N3IHxj8ossHOcsxLYOYugT+OaELLncYHJHxbbYLPPmY=
 github.com/SkycoinProject/skycoin v0.27.0/go.mod h1:xqPLOKh5B6GBZlGA7B5IJfQmCy7mwimD9NlqxR3gMXo=
-github.com/SkycoinProject/skywire-mainnet v0.0.0-20200309204032-14af5342da86/go.mod h1:xuOpE5ZZU2kR39u0tJWtOpak/sJpnEFj1HpTxtyPU/A=
+github.com/skycoin/skywire v0.0.0-20200309204032-14af5342da86/go.mod h1:xuOpE5ZZU2kR39u0tJWtOpak/sJpnEFj1HpTxtyPU/A=
 github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a h1:6nHCJqh7trsuRcpMC5JmtDukUndn2VC9sY64K6xQ7hQ=
 github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a/go.mod h1:IaE1dxncLQs4RJcQTZPikJfAZY4szH87u2h0lT0SDuM=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=

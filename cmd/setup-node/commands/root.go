@@ -15,9 +15,9 @@ import (
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/metrics"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/metrics"
+	"github.com/skycoin/skywire/pkg/setup"
+	"github.com/skycoin/skywire/pkg/util/buildinfo"
 )
 
 var (

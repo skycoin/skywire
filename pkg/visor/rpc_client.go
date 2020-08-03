@@ -14,13 +14,13 @@ import (
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/buildinfo"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/snet/snettest"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
 var (
