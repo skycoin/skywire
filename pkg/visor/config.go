@@ -16,12 +16,12 @@ import (
 	"github.com/SkycoinProject/dmsg/dmsgpty"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	trClient "github.com/SkycoinProject/skywire-mainnet/pkg/transport-discovery/client"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport"
+	trClient "github.com/skycoin/skywire/pkg/transport-discovery/client"
 )
 
 const (
