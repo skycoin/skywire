@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
@@ -37,10 +37,10 @@ func TestHealth(t *testing.T) {
 		}
 
 		utClient := &utclient.MockAPIClient{}
-		utClient.On("Health", context.Background()).Return(http.StatusOK, nil)
+		utClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
 		arClient := &arclient.MockAPIClient{}
-		arClient.On("Health", context.Background()).Return(http.StatusOK, nil)
+		arClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
 		v := &Visor{
 			conf: c,
