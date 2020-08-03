@@ -36,8 +36,7 @@ import (
 )
 
 const (
-	healthTimeout = 5 * time.Second
-	httpTimeout   = 30 * time.Second
+	httpTimeout = 30 * time.Second
 )
 
 const (
@@ -529,7 +528,7 @@ func (hv *Hypervisor) getHealth() http.HandlerFunc {
 		}
 
 		resCh := make(chan healthRes)
-		tCh := time.After(healthTimeout)
+		tCh := time.After(visor.HealthTimeout)
 
 		go func() {
 			hi, err := ctx.RPC.Health()
