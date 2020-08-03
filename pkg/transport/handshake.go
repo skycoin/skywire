@@ -8,8 +8,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/httputil"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/httputil"
 
 	"github.com/skycoin/skywire/pkg/snet"
 )

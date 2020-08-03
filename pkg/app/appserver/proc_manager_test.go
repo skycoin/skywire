@@ -6,7 +6,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 )
 

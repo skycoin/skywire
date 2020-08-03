@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
 
-	"github.com/SkycoinProject/dmsg/httputil"
+	"github.com/skycoin/dmsg/httputil"
 )
 
 const (
