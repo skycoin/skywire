@@ -19,8 +19,8 @@ fi
 [ $pkgarch == "arm64" ] && buildwith=(env GOOS=linux GOARCH=arm64)
 [ $pkgarch == "armhf" ] && buildwith=(env GOOS=linux GOARCH=arm GOARM=6)
 
-githuborg=SkycoinProject
-pkggopath="github.com/${githuborg}/skywire-mainnet"
+githuborg=skycoin
+pkggopath="github.com/${githuborg}/skywire"
 
 #srcdir and pkgdir are understood by makepkg on Arch
 sourcedir=$(pwd)
@@ -53,7 +53,7 @@ prepare() {
     # https://wiki.archlinux.org/index.php/Go_package_guidelines
   	mkdir -p ${srcdir}/go/src/github.com/${githuborg}/ ${srcdir}/go/bin ${srcdir}/go/apps
     ln -rTsf ${sourcedir} ${srcdir}/go/src/${pkggopath}
-    ln -rTsf ${sourcedir} ${srcdir}/skywire-mainnet
+    ln -rTsf ${sourcedir} ${srcdir}/skywire
   }
 
 
@@ -105,7 +105,7 @@ package() {
   echo "Priority: optional" >> ${srcdir}/control
   echo "Section: web" >> ${srcdir}/control
   echo "Architecture: ${pkgarch}" >> ${srcdir}/control
-  echo "Maintainer: SkycoinProject" >> ${srcdir}/control
+  echo "Maintainer: skycoin" >> ${srcdir}/control
   echo "Description: ${pkgdesc}" >> ${srcdir}/control
   info 'installing binaries'
   sudo mv ${srcdir}/control ${pkgdir}/DEBIAN/control
@@ -117,8 +117,8 @@ package() {
   sudo install -Dm755 ${srcdir}/go/apps/skysocks ${pkgdir}/usr/bin/apps/skysocks
   sudo install -Dm755 ${srcdir}/go/apps/skysocks-client ${pkgdir}/usr/bin/apps/skysocks-client
   #install the system.d services
-  sudo install -Dm644 ${srcdir}/skywire-mainnet/init/skywire-hypervisor.service ${pkgdir}/etc/systemd/system/skywire-hypervisor.service
-  sudo install -Dm644 ${srcdir}/skywire-mainnet/init/skywire-visor.service ${pkgdir}/etc/systemd/system/skywire-visor.service
+  sudo install -Dm644 ${srcdir}/skywire/init/skywire-hypervisor.service ${pkgdir}/etc/systemd/system/skywire-hypervisor.service
+  sudo install -Dm644 ${srcdir}/skywire/init/skywire-visor.service ${pkgdir}/etc/systemd/system/skywire-visor.service
   #create the debian package
   dpkg-deb --build ${pkgdir}
 }

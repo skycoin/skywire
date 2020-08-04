@@ -11,19 +11,19 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/porter"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tplistener"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/internal/packetfilter"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
+	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tplistener"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 )
 
 const (

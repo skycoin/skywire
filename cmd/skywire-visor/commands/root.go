@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/pkg/profile"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/restart"
