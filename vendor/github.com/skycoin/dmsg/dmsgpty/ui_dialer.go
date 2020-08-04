@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/SkycoinProject/dmsg"
+	"github.com/skycoin/dmsg"
 )
 
 // UIDialer represents a dialer for dmsgpty-ui.

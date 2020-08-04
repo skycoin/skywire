@@ -9,9 +9,9 @@ import (
 
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/disc"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/disc"
 )
 
 // DefaultTimeout is the recommended timeout for the Env.

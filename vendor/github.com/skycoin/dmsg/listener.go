@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/SkycoinProject/dmsg/netutil"
+	"github.com/skycoin/dmsg/netutil"
 )
 
 // Listener listens for remote-initiated streams.
