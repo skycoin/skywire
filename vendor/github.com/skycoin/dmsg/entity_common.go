@@ -9,9 +9,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/dmsg/netutil"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/dmsg/netutil"
 )
 
 // EntityCommon contains the common fields and methods for server and client entities.

@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/flynn/noise"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 var noiseLogger = logging.MustGetLogger("noise") // TODO: initialize properly or remove

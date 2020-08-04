@@ -20,7 +20,7 @@ ifneq (,$(findstring 64,$(GOARCH)))
     TEST_OPTS:=$(TEST_OPTS) $(RACE_FLAG)
 endif
 
-DMSG_REPO := github.com/SkycoinProject/dmsg
+DMSG_REPO := github.com/skycoin/dmsg
 BUILDINFO_PATH := $(DMSG_REPO)/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
