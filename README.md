@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/SkycoinProject/skywire-mainnet.svg?branch=master)](https://travis-ci.com/SkycoinProject/skywire-mainnet)
+[![Build Status](https://travis-ci.com/skycoin/skywire.svg?branch=master)](https://travis-ci.com/skycoin/skywire)
 
 # Skywire Mainnet
 
@@ -31,8 +31,8 @@ with [go modules](https://github.com/golang/go/wiki/Modules) support.
 
 ```bash
 # Clone.
-$ git clone https://github.com/SkycoinProject/skywire-mainnet.git
-$ cd skywire-mainnet
+$ git clone https://github.com/skycoin/skywire.git
+$ cd skywire
 
 # Build.
 $ make build # installs all dependencies, build binaries and skywire apps
@@ -254,7 +254,7 @@ $ skywire-cli visor ls-tp
 ## Creating a GitHub release
 
 To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor` binaries. 
-Binaries for each version are uploaded to [GitHub releases](https://github.com/SkycoinProject/skywire-mainnet/releases/).
+Binaries for each version are uploaded to [GitHub releases](https://github.com/skycoin/skywire/releases/).
 We use [goreleaser](https://goreleaser.com) for creating them.
 
 ### How to create a GitHub release
@@ -267,4 +267,4 @@ where `0.1.0` is release version and `First release` is release name.
 5. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
 6. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
 7. Run `GITHUB_TOKEN=your_token make github-release` 
-8. [Check the created GitHub release.](https://github.com/SkycoinProject/skywire-mainnet/releases/)
+8. [Check the created GitHub release.](https://github.com/skycoin/skywire/releases/)
