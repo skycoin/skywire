@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/httputil"
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
+	"github.com/skycoin/dmsg/httputil"
 )
 
 const (

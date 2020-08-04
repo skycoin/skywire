@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 )
 
 func init() {
