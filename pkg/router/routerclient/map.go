@@ -3,9 +3,9 @@ package routerclient
 import (
 	"context"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 // Map is a map of router RPC clients associated with the router's visor PK.

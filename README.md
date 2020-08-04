@@ -2,7 +2,7 @@
 
 # Skywire Mainnet
 
-- [Skywire Mainnet](#skywire-mainnet)
+- [Skywire Mainnet](#skywire)
   - [Build and run](#build-and-run)
     - [Requirements](#requirements)
     - [Build](#build)
