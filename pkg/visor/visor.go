@@ -19,7 +19,6 @@ import (
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
@@ -71,10 +70,6 @@ type Visor struct {
 
 	procM appserver.ProcManager // proc manager
 	appL  *launcher.Launcher    // app launcher
-}
-
-func (v *Visor) Network() *snet.Network {
-	return v.net
 }
 
 type vReport struct {
@@ -171,14 +166,11 @@ func NewVisor(conf *visorconfig.V1) (v *Visor, ok bool) {
 
 	log.Info("Startup complete!")
 
-	///////////////////////////////////////////////\
-	skyN := appnet.NewSkywireNetworker(log.WithField("_", appnet.TypeSkynet), v.router)
-	if err := appnet.AddNetworker(appnet.TypeSkynet, skyN); err != nil {
-		fmt.Printf("ERROR ADDING SKYNET NETWORKER: %v\n", err)
-		return v, ok
-	}
-
 	return v, ok
+}
+
+func (v *Visor) Network() *snet.Network {
+	return v.net
 }
 
 func (v *Visor) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*transport.ManagedTransport, error) {

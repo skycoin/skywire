@@ -18,6 +18,7 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
@@ -44,6 +45,7 @@ var initStack = func() []InitFunc {
 		InitDmsgpty,
 		InitTransport,
 		InitRouter,
+		InitNetworkers,
 		InitLauncher,
 		InitCLI,
 		InitHypervisors,
@@ -251,6 +253,23 @@ func InitRouter(v *Visor) bool {
 
 	v.rfClient = rfClient
 	v.router = r
+
+	return report(nil)
+}
+
+func InitNetworkers(v *Visor) bool {
+	report := v.makeReporter("networkers")
+	log := v.MasterLogger().PackageLogger("networkers")
+
+	// Prepare networks.
+	skyN := appnet.NewSkywireNetworker(log.WithField("_", appnet.TypeSkynet), v.router)
+	if err := appnet.AddNetworker(appnet.TypeSkynet, skyN); err != nil {
+		return report(fmt.Errorf("failed to add skywire networker: %w", err))
+	}
+	dmsgN := appnet.NewDMSGNetworker(v.net.Dmsg())
+	if err := appnet.AddNetworker(appnet.TypeDmsg, dmsgN); err != nil {
+		return report(fmt.Errorf("failed to add DMSG networker: %w", err))
+	}
 
 	return report(nil)
 }

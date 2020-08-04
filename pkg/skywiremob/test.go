@@ -239,6 +239,7 @@ func PrepareVisor() string {
 			visor.InitDmsgpty,
 			visor.InitTransport,
 			visor.InitRouter,
+			visor.InitNetworkers,
 			visor.InitCLI,
 			visor.InitHypervisors,
 			visor.InitUptimeTracker,
