@@ -229,6 +229,23 @@ var (
 )
 
 func PrepareVisor() string {
+	// set the same init stack as usual, but without apps launcher
+	visor.SetInitStack(func() []visor.InitFunc {
+		return []visor.InitFunc{
+			visor.InitUpdater,
+			visor.InitEventBroadcaster,
+			visor.InitAddressResolver,
+			visor.InitSNet,
+			visor.InitDmsgpty,
+			visor.InitTransport,
+			visor.InitRouter,
+			visor.InitCLI,
+			visor.InitHypervisors,
+			visor.InitUptimeTracker,
+			visor.InitTrustedVisors,
+		}
+	})
+
 	conf, err := initConfig(log, "./skywire-config.json")
 	if err != nil {
 		return fmt.Errorf("error getting visor config: %v", err).Error()

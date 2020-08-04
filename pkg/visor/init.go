@@ -33,26 +33,30 @@ import (
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
 )
 
-type initFunc func(v *Visor) bool
+type InitFunc func(v *Visor) bool
 
-func initStack() []initFunc {
-	return []initFunc{
-		initUpdater,
-		initEventBroadcaster,
-		initAddressResolver,
-		initSNet,
-		initDmsgpty,
-		initTransport,
-		initRouter,
-		//initLauncher,
-		initCLI,
-		initHypervisors,
-		initUptimeTracker,
-		initTrustedVisors,
+var initStack = func() []InitFunc {
+	return []InitFunc{
+		InitUpdater,
+		InitEventBroadcaster,
+		InitAddressResolver,
+		InitSNet,
+		InitDmsgpty,
+		InitTransport,
+		InitRouter,
+		InitLauncher,
+		InitCLI,
+		InitHypervisors,
+		InitUptimeTracker,
+		InitTrustedVisors,
 	}
 }
 
-func initUpdater(v *Visor) bool {
+func SetInitStack(f func() []InitFunc) {
+	initStack = f
+}
+
+func InitUpdater(v *Visor) bool {
 	report := v.makeReporter("updater")
 
 	restartCheckDelay, err := time.ParseDuration(v.conf.RestartCheckDelay)
@@ -66,7 +70,7 @@ func initUpdater(v *Visor) bool {
 	return report(nil)
 }
 
-func initEventBroadcaster(v *Visor) bool {
+func InitEventBroadcaster(v *Visor) bool {
 	report := v.makeReporter("event_broadcaster")
 
 	log := v.MasterLogger().PackageLogger("event_broadcaster")
@@ -81,7 +85,7 @@ func initEventBroadcaster(v *Visor) bool {
 	return report(nil)
 }
 
-func initSNet(v *Visor) bool {
+func InitSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
 	nc := snet.NetworkConfigs{
@@ -136,7 +140,7 @@ func initSNet(v *Visor) bool {
 	return report(nil)
 }
 
-func initAddressResolver(v *Visor) bool {
+func InitAddressResolver(v *Visor) bool {
 	report := v.makeReporter("address-resolver")
 	conf := v.conf.Transport
 
@@ -150,7 +154,7 @@ func initAddressResolver(v *Visor) bool {
 	return report(nil)
 }
 
-func initTransport(v *Visor) bool {
+func InitTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
@@ -206,7 +210,7 @@ func initTransport(v *Visor) bool {
 	return report(nil)
 }
 
-func initRouter(v *Visor) bool {
+func InitRouter(v *Visor) bool {
 	report := v.makeReporter("router")
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
@@ -251,7 +255,7 @@ func initRouter(v *Visor) bool {
 	return report(nil)
 }
 
-func initLauncher(v *Visor) bool {
+func InitLauncher(v *Visor) bool {
 	report := v.makeReporter("launcher")
 	conf := v.conf.Launcher
 
@@ -354,7 +358,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	return envs, nil
 }
 
-func initCLI(v *Visor) bool {
+func InitCLI(v *Visor) bool {
 	report := v.makeReporter("cli")
 
 	if v.conf.CLIAddr == "" {
@@ -380,7 +384,7 @@ func initCLI(v *Visor) bool {
 	return report(nil)
 }
 
-func initHypervisors(v *Visor) bool {
+func InitHypervisors(v *Visor) bool {
 	report := v.makeReporter("hypervisors")
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
@@ -416,7 +420,7 @@ func initHypervisors(v *Visor) bool {
 	return report(nil)
 }
 
-func initUptimeTracker(v *Visor) bool {
+func InitUptimeTracker(v *Visor) bool {
 	const tickDuration = time.Second
 
 	report := v.makeReporter("uptime_tracker")
@@ -457,7 +461,7 @@ func initUptimeTracker(v *Visor) bool {
 	return true
 }
 
-func initTrustedVisors(v *Visor) bool {
+func InitTrustedVisors(v *Visor) bool {
 	const trustedVisorsTransportType = tptypes.STCPR
 
 	go func() {
