@@ -76,13 +76,6 @@ type ManagedTransport struct {
 	wg   sync.WaitGroup
 }
 
-func (mt *ManagedTransport) GetConn() *snet.Conn {
-	mt.connMx.Lock()
-	defer mt.connMx.Unlock()
-
-	return mt.conn
-}
-
 // NewManagedTransport creates a new ManagedTransport.
 func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK cipher.PubKey, netName string) *ManagedTransport {
 	mt := &ManagedTransport{
