@@ -16,9 +16,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/app"

@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/skycoin/dmsg/noise"
 )
 
 // HSTimeout sets handshake timeout.

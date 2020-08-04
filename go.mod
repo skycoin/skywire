@@ -4,9 +4,9 @@ go 1.14
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
-	github.com/SkycoinProject/dmsg v0.2.3
-	github.com/SkycoinProject/skycoin v0.27.0
-	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
+	github.com/skycoin/dmsg v0.2.3
+	github.com/skycoin/skycoin v0.27.0
+	github.com/skycoin/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/go-chi/chi v4.1.2+incompatible

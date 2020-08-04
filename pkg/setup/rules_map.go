@@ -3,9 +3,9 @@ package setup
 import (
 	"encoding/json"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // RulesMap associates a slice of rules to a visor's public key.

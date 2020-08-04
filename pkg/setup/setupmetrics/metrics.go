@@ -5,7 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // Metrics collects metrics for prometheus.

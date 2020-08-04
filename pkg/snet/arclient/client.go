@@ -15,17 +15,17 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	dmsgnetutil "github.com/SkycoinProject/dmsg/netutil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
-	"github.com/SkycoinProject/skywire-mainnet/internal/netutil"
-	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
+	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire/internal/packetfilter"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
 )
 
 const (

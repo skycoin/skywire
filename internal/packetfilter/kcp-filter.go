@@ -5,7 +5,7 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 )
 
