@@ -3,11 +3,11 @@ package router
 import (
 	"testing"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/internal/testhelpers"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 func TestRPCGateway_AddEdgeRules(t *testing.T) {
