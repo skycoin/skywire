@@ -11,7 +11,7 @@ import (
 	"github.com/SkycoinProject/dmsg"
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/dmsgctrl"
-	"github.com/SkycoinProject/dmsg/netutil"
+	dmsgnetutil "github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
@@ -41,6 +41,7 @@ var initStack = func() []InitFunc {
 		InitUpdater,
 		InitEventBroadcaster,
 		InitAddressResolver,
+		InitDiscovery,
 		InitSNet,
 		InitDmsgpty,
 		InitTransport,
@@ -56,6 +57,23 @@ var initStack = func() []InitFunc {
 
 func SetInitStack(f func() []InitFunc) {
 	initStack = f
+}
+
+func InitNetworkers(v *Visor) bool {
+	report := v.makeReporter("networkers")
+	log := v.MasterLogger().PackageLogger("networkers")
+
+	// Prepare networks.
+	skyN := appnet.NewSkywireNetworker(log.WithField("_", appnet.TypeSkynet), v.router)
+	if err := appnet.AddNetworker(appnet.TypeSkynet, skyN); err != nil {
+		return report(fmt.Errorf("failed to add skywire networker: %w", err))
+	}
+	dmsgN := appnet.NewDMSGNetworker(v.net.Dmsg())
+	if err := appnet.AddNetworker(appnet.TypeDmsg, dmsgN); err != nil {
+		return report(fmt.Errorf("failed to add DMSG networker: %w", err))
+	}
+
+	return report(nil)
 }
 
 func InitUpdater(v *Visor) bool {
@@ -100,6 +118,8 @@ func InitSNet(v *Visor) bool {
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
 		NetworkConfigs: nc,
+		ServiceDisc:    v.serviceDisc,
+		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -257,19 +277,24 @@ func InitRouter(v *Visor) bool {
 	return report(nil)
 }
 
-func InitNetworkers(v *Visor) bool {
-	report := v.makeReporter("networkers")
-	log := v.MasterLogger().PackageLogger("networkers")
+func InitDiscovery(v *Visor) bool {
+	report := v.makeReporter("discovery")
 
-	// Prepare networks.
-	skyN := appnet.NewSkywireNetworker(log.WithField("_", appnet.TypeSkynet), v.router)
-	if err := appnet.AddNetworker(appnet.TypeSkynet, skyN); err != nil {
-		return report(fmt.Errorf("failed to add skywire networker: %w", err))
+	// Prepare app discovery factory.
+	factory := appdisc.Factory{
+		Log: v.MasterLogger().PackageLogger("app_discovery"),
 	}
-	dmsgN := appnet.NewDMSGNetworker(v.net.Dmsg())
-	if err := appnet.AddNetworker(appnet.TypeDmsg, dmsgN); err != nil {
-		return report(fmt.Errorf("failed to add DMSG networker: %w", err))
+
+	conf := v.conf.Launcher
+
+	if conf.Discovery != nil {
+		factory.PK = v.conf.PK
+		factory.SK = v.conf.SK
+		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
+		factory.ProxyDisc = conf.Discovery.ServiceDisc
 	}
+
+	v.serviceDisc = factory
 
 	return report(nil)
 }
@@ -278,19 +303,8 @@ func InitLauncher(v *Visor) bool {
 	report := v.makeReporter("launcher")
 	conf := v.conf.Launcher
 
-	// Prepare app discovery factory.
-	factory := appdisc.Factory{
-		Log: v.MasterLogger().PackageLogger("app_discovery"),
-	}
-	if conf.Discovery != nil {
-		factory.PK = v.conf.PK
-		factory.SK = v.conf.SK
-		factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-		factory.ProxyDisc = conf.Discovery.ServiceDisc
-	}
-
 	// Prepare proc manager.
-	procM, err := appserver.NewProcManager(v.MasterLogger(), &factory, v.ebc, conf.ServerAddr)
+	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr)
 	if err != nil {
 		return report(fmt.Errorf("failed to start proc_manager: %w", err))
 	}
@@ -307,21 +321,26 @@ func InitLauncher(v *Visor) bool {
 		BinPath:    conf.BinPath,
 		LocalPath:  conf.LocalPath,
 	}
+
 	launchLog := v.MasterLogger().PackageLogger("launcher")
+
 	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
 	if err != nil {
 		return report(fmt.Errorf("failed to start launcher: %w", err))
 	}
+
 	err = launch.AutoStart(map[string]func() ([]string, error){
 		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
 	})
+
 	if err != nil {
 		return report(fmt.Errorf("failed to autostart apps: %w", err))
 	}
 
 	v.procM = procM
 	v.appL = launch
+
 	return report(nil)
 }
 
@@ -331,11 +350,10 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	if conf.Dmsg != nil {
 		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-		r := netutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+		r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
 			for _, ses := range n.Dmsg().AllSessions() {
-				fmt.Printf("ADDRESS: %v\n", ses.RemoteTCPAddr().String())
-				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.LocalTCPAddr().String())
 			}
 
 			if len(envCfg.DmsgServers) == 0 {
@@ -440,7 +458,7 @@ func InitHypervisors(v *Visor) bool {
 }
 
 func InitUptimeTracker(v *Visor) bool {
-	const tickDuration = time.Second
+	const tickDuration = 10 * time.Second
 
 	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker
@@ -518,7 +536,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	conf := v.conf.Transport
 
 	log := v.MasterLogger().PackageLogger("tp_disc_retrier")
-	tpdCRetrier := netutil.NewRetrier(log,
+	tpdCRetrier := dmsgnetutil.NewRetrier(log,
 		initBO, maxBO, tries, factor)
 
 	var tpdC transport.DiscoveryClient

@@ -22,8 +22,8 @@ import { Application } from 'src/app/app.datatypes';
   styleUrls: ['./skysocks-settings.component.scss']
 })
 export class SkysocksSettingsComponent implements OnInit, OnDestroy {
-  @ViewChild('button', { static: false }) button: ButtonComponent;
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
   form: FormGroup;
 
   private operationSubscription: Subscription;

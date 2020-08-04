@@ -131,6 +131,7 @@ func PrepareVisor() string {
 			visor.InitUpdater,
 			visor.InitEventBroadcaster,
 			visor.InitAddressResolver,
+			visor.InitDiscovery,
 			visor.InitSNet,
 			visor.InitDmsgpty,
 			visor.InitTransport,
@@ -258,7 +259,6 @@ func PrepareVPNClient(srvPKStr, passcode string) string {
 	localPK := visorPK
 	keyPairMx.Unlock()
 
-	// TODO: remove after pulling in develop
 	noiseCreds := vpn.NewNoiseCredentials(localSK, localPK)
 
 	vpnClientCfg := vpn.ClientConfig{

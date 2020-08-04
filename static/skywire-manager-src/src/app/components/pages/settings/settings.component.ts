@@ -34,6 +34,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
         linkParts: ['/nodes'],
       },
       {
+        icon: 'language',
+        label: 'nodes.dmsg-title',
+        linkParts: ['/nodes', 'dmsg'],
+      },
+      {
         icon: 'settings',
         label: 'settings.title',
         linkParts: ['/settings'],

@@ -1,7 +1,7 @@
 # github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
 ## explicit
 github.com/AudriusButkevicius/pfilter
-# github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab => ../dmsg
+# github.com/SkycoinProject/dmsg v0.2.3 => ../dmsg
 ## explicit
 github.com/SkycoinProject/dmsg
 github.com/SkycoinProject/dmsg/buildinfo
@@ -311,6 +311,7 @@ google.golang.org/protobuf/types/known/timestamppb
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
 # nhooyr.io/websocket v1.8.2
+## explicit
 nhooyr.io/websocket
 nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd

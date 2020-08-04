@@ -1,15 +1,15 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
 import { Subscription, of, timer, forkJoin, Observable } from 'rxjs';
 import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
-import { Router } from '@angular/router';
-import { delay, flatMap, tap, catchError, mergeMap } from 'rxjs/operators';
+import { Router, ActivatedRoute } from '@angular/router';
+import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService } from '../../../services/node.service';
+import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
-import { StorageService } from '../../../services/storage.service';
+import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
@@ -20,17 +20,10 @@ import { ClipboardService } from 'src/app/services/clipboard.service';
 import { ConfirmationData, ConfirmationComponent } from '../../layout/confirmation/confirmation.component';
 import { AppConfig } from 'src/app/app.config';
 import { OperationError } from 'src/app/utils/operation-error';
-
-/**
- * List of the columns that can be used to sort the data.
- */
-enum SortableColumns {
-  State = 'transports.state',
-  Label = 'nodes.label',
-  Key = 'nodes.key',
-  DmsgServer = 'nodes.dmsg-server',
-  Ping = 'nodes.ping',
-}
+import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
+import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
+import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
+import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 
 /**
  * Page for showing the node list.
@@ -41,35 +34,96 @@ enum SortableColumns {
   styleUrls: ['./node-list.component.scss'],
 })
 export class NodeListComponent implements OnInit, OnDestroy {
-  private static defaultSortableColumn = SortableColumns.Key;
-  private static sortByInternal = NodeListComponent.defaultSortableColumn;
-  private static sortReverseInternal = false;
+  // Small texts for identifying the list, needed for the helper objects.
+  private readonly nodesListId = 'nl';
+  private readonly dmsgListId = 'dl';
 
-  // Vars for keeping track of the column used for sorting the data.
-  sortableColumns = SortableColumns;
-  get sortBy(): SortableColumns { return NodeListComponent.sortByInternal; }
-  set sortBy(val: SortableColumns) { NodeListComponent.sortByInternal = val; }
-  get sortReverse(): boolean { return NodeListComponent.sortReverseInternal; }
-  set sortReverse(val: boolean) { NodeListComponent.sortReverseInternal = val; }
-  get sortingArrow(): string {
-    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
-  }
+  // Vars with the data of the columns used for sorting the data.
+  stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
+  labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
+  keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
+  dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text);
+  pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
+
+  private dataSortedSubscription: Subscription;
+  private dataFiltererSubscription: Subscription;
+  // Objects in charge of sorting and filtering the data.
+  dataSorter: DataSorter;
+  dataFilterer: DataFilterer;
 
   loading = true;
   dataSource: Node[];
   tabsData: TabButtonData[] = [];
   showDmsgInfo = false;
 
+  // Vars for the pagination functionality.
+  allNodes: Node[];
+  filteredNodes: Node[];
+  nodesToShow: Node[];
+  numberOfPages = 1;
+  currentPage = 1;
+  // Used as a helper var, as the URL is read asynchronously.
+  currentPageInUrl = 1;
+
+  // Array with the properties of the columns that can be used for filtering the data.
+  filterProperties: FilterProperties[] = [
+    {
+      filterName: 'nodes.filter-dialog.online',
+      keyNameInElementsArray: 'online',
+      type: FilterFieldTypes.Select,
+      printableLabelsForValues: [
+        {
+          value: '',
+          label: 'nodes.filter-dialog.online-options.any',
+        },
+        {
+          value: 'true',
+          label: 'nodes.filter-dialog.online-options.online',
+        },
+        {
+          value: 'false',
+          label: 'nodes.filter-dialog.online-options.offline',
+        }
+      ],
+    },
+    {
+      filterName: 'nodes.filter-dialog.label',
+      keyNameInElementsArray: 'label',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 100,
+    },
+    {
+      filterName: 'nodes.filter-dialog.key',
+      keyNameInElementsArray: 'local_pk',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 66,
+    },
+    {
+      filterName: 'nodes.filter-dialog.dmsg',
+      keyNameInElementsArray: 'dmsgServerPk',
+      secondaryKeyNameInElementsArray: 'dmsgServerPk_label',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 66,
+    }
+  ];
+
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private menuSubscription: Subscription;
   private updateSubscription: Subscription;
+  private navigationsSubscription: Subscription;
+  private languageSubscription: Subscription;
 
   // Vars for keeping track of the data updating.
   secondsSinceLastUpdate = 0;
   private lastUpdate = Date.now();
   updating = false;
   errorsUpdating = false;
+  // True if the user manually requested the data to be updated and the update has still
+  // not been made.
+  lastUpdateRequestedManually = false;
+
+  labeledElementTypes = LabeledElementTypes;
 
   constructor(
     private nodeService: NodeService,
@@ -82,9 +136,55 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private sidenavService: SidenavService,
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
+    route: ActivatedRoute,
   ) {
     // Show the dmsg info if the dmsg url was used.
     this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
+
+    // Remove the DMSG filtering options if no DMSG info is being shown.
+    if (!this.showDmsgInfo) {
+      this.filterProperties.splice(this.filterProperties.length - 1);
+    }
+
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.stateSortData,
+      this.labelSortData,
+      this.keySortData,
+    ];
+    if (this.showDmsgInfo) {
+      sortableColumns.push(this.dmsgServerSortData);
+      sortableColumns.push(this.pingSortData);
+    }
+    this.dataSorter = new DataSorter(
+      this.dialog, this.translateService, sortableColumns, 2, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+    );
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allNodes has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(
+      this.dialog, route, this.router, this.filterProperties, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+    );
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredNodes = data;
+      this.dataSorter.setData(this.filteredNodes);
+    });
+
+    // Get the page requested in the URL.
+    this.navigationsSubscription = route.paramMap.subscribe(params => {
+      if (params.has('page')) {
+        let selectedPage = Number.parseInt(params.get('page'), 10);
+        if (isNaN(selectedPage) || selectedPage < 1) {
+          selectedPage = 1;
+        }
+
+        this.currentPageInUrl = selectedPage;
+
+        this.recalculateElementsToShow();
+      }
+    });
 
     // Data for populating the tab bar.
     this.tabsData = [
@@ -104,11 +204,18 @@ export class NodeListComponent implements OnInit, OnDestroy {
         linkParts: ['/settings'],
       }
     ];
+
+    // Refresh the data after languaje changes, to ensure the labels used for filtering
+    // are updated.
+    this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
+      this.nodeService.forceNodeListRefresh();
+    });
   }
 
   ngOnInit() {
     // Load the data.
-    this.refresh(0);
+    this.nodeService.startRequestingNodeList();
+    this.startGettingData();
 
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
@@ -143,8 +250,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.nodeService.stopRequestingNodeList();
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
+    this.navigationsSubscription.unsubscribe();
+    this.languageSubscription.unsubscribe();
 
     if (this.menuSubscription) {
       this.menuSubscription.unsubscribe();
@@ -152,6 +262,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
+
+    this.dataSortedSubscription.unsubscribe();
+    this.dataSorter.dispose();
   }
 
   /**
@@ -183,154 +296,101 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Changes the column and/or order used for sorting the data.
+   * Makes the node list to be immediately refreshed.
+   * @param requestedManually True if the data is going to be loaded because of a direct request
+   * from the user.
    */
-  changeSortingOrder(column: SortableColumns) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
-    } else {
-      this.sortReverse = !this.sortReverse;
+  forceDataRefresh(requestedManually = false) {
+    if (requestedManually) {
+      this.lastUpdateRequestedManually = true;
     }
 
-    this.sortList();
+    this.nodeService.forceNodeListRefresh();
   }
 
   /**
-   * Opens the modal window used on small screens for selecting how to sort the data.
+   * Starts getting the data from the backend.
    */
-  openSortingOrderModal() {
-    // Create 2 options for every sortable column, for ascending and descending order.
-    const options: SelectableOption[] = [];
-    const enumKeys = Object.keys(SortableColumns);
-    enumKeys.forEach(key => {
-      if (this.showDmsgInfo || (SortableColumns[key] !== SortableColumns.DmsgServer && SortableColumns[key] !== SortableColumns.Ping)) {
-        options.push({
-          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.ascending-order'),
-        });
-        options.push({
-          label: this.translateService.instant(SortableColumns[key]) + ' ' + this.translateService.instant('tables.descending-order'),
-        });
-      }
-    });
-
-    // Open the option selection modal window.
-    SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
-      if (result) {
-        result = (result - 1) / 2;
-        const index = Math.floor(result);
-        // Use the column and order selected by the user.
-        this.sortBy = SortableColumns[enumKeys[index]];
-        this.sortReverse = result !== index;
-
-        this.sortList();
-      }
-    });
-  }
-
-  /**
-   * Loads the data from the backend.
-   * @param delayMilliseconds Delay before loading the data.
-   * @param requestedManually True if the data is being loaded because of a direct request from the user.
-   */
-  private refresh(delayMilliseconds: number, requestedManually = false) {
-    // Cancel any pending operation. Important because a previous operation could be waiting for
-    // the delay to finish.
-    if (this.dataSubscription) {
-      this.dataSubscription.unsubscribe();
-    }
+  private startGettingData() {
+    // Detect when the service is updating the data.
+    this.dataSubscription = this.nodeService.updatingNodeList.subscribe(val => this.updating = val);
 
     this.ngZone.runOutsideAngular(() => {
-      this.dataSubscription = of(1).pipe(
-        // Wait the requested delay.
-        delay(delayMilliseconds),
-        // Additional steps for making sure the UI shows the animation (important in case of quick errors).
-        tap(() => this.ngZone.run(() => this.updating = true)),
-        delay(120),
-        // Load the data. The node pk is obtained from the currently openned node page.
-        flatMap(() => this.nodeService.getNodes())
-      ).subscribe(
-        (nodes: Node[]) => {
-          this.ngZone.run(() => {
-            this.dataSource = nodes;
-            this.sortList();
-            this.loading = false;
-            // Close any previous temporary loading error msg.
-            this.snackbarService.closeCurrentIfTemporaryError();
-
-            this.lastUpdate = Date.now();
-            this.secondsSinceLastUpdate = 0;
-            this.updating = false;
-            this.errorsUpdating = false;
-
-            if (requestedManually) {
-              // Show a confirmation msg.
-              this.snackbarService.showDone('common.refreshed', null);
-            }
-
-            // Automatically refresh the data after some time.
-            this.refresh(this.storageService.getRefreshTime() * 1000);
-          });
-        }, err => {
-          this.ngZone.run(() => {
-            err = processServiceError(err);
-
-            // Show an error msg if it has not be done before during the current attempt to obtain the data.
-            if (!this.errorsUpdating) {
-              if (this.loading) {
-                this.snackbarService.showError('common.loading-error', null, true, err);
-              } else {
-                this.snackbarService.showError('nodes.error-load', null, true, err);
+      // Get the node list.
+      this.dataSubscription.add(this.nodeService.nodeList.subscribe((result: BackendData) => {
+        this.ngZone.run(() => {
+          if (result) {
+            // If the data was obtained.
+            if (result.data) {
+              this.allNodes = result.data as Node[];
+              if (this.showDmsgInfo) {
+                // Add the label data to the array, to be able to use it for filtering.
+                this.allNodes.forEach(node => {
+                  node['dmsgServerPk_label'] =
+                    LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
+                });
               }
-            }
+              this.dataFilterer.setData(this.allNodes);
 
-            // Stop the loading indicator and show a warning icon.
-            this.updating = false;
-            this.errorsUpdating = true;
+              this.loading = false;
+              // Close any previous temporary loading error msg.
+              this.snackbarService.closeCurrentIfTemporaryError();
 
-            // Retry after some time. Do it faster if the component is still showing the
-            // initial loading indicator (no data has been obtained since the component was created).
-            if (this.loading) {
-              this.refresh(3000, requestedManually);
-            } else {
-              this.refresh(this.storageService.getRefreshTime() * 1000, requestedManually);
+              this.lastUpdate = result.momentOfLastCorrectUpdate;
+              this.secondsSinceLastUpdate = Math.floor((Date.now() - result.momentOfLastCorrectUpdate) / 1000);
+              this.errorsUpdating = false;
+
+              if (this.lastUpdateRequestedManually) {
+                // Show a confirmation msg.
+                this.snackbarService.showDone('common.refreshed', null);
+                this.lastUpdateRequestedManually = false;
+              }
+
+            // If there was an error while obtaining the data.
+            } else if (result.error) {
+              // Show an error msg if it has not be done before during the current attempt to obtain the data.
+              if (!this.errorsUpdating) {
+                if (this.loading) {
+                  this.snackbarService.showError('common.loading-error', null, true, result.error);
+                } else {
+                  this.snackbarService.showError('nodes.error-load', null, true, result.error);
+                }
+              }
+
+              // Stop the loading indicator and show a warning icon.
+              this.errorsUpdating = true;
             }
-          });
-        }
-      );
+          }
+        });
+      }));
     });
   }
 
   /**
-   * Sorts the data.
+   * Recalculates which elements should be shown on the UI.
    */
-  private sortList() {
-    this.dataSource = this.dataSource.sort((a, b) => {
-      const defaultOrder = a.local_pk.localeCompare(b.local_pk);
+  private recalculateElementsToShow() {
+    // Needed to prevent racing conditions.
+    this.currentPage = this.currentPageInUrl;
 
-      let response: number;
-      if (this.sortBy === SortableColumns.Key) {
-        response = !this.sortReverse ? a.local_pk.localeCompare(b.local_pk) : b.local_pk.localeCompare(a.local_pk);
-      } else if (this.sortBy === SortableColumns.DmsgServer) {
-        response = !this.sortReverse ? a.dmsgServerPk.localeCompare(b.dmsgServerPk) : b.dmsgServerPk.localeCompare(a.dmsgServerPk);
-      } else if (this.sortBy === SortableColumns.Ping) {
-        response =
-          !this.sortReverse ? Number(a.roundTripPing) - Number(b.roundTripPing) : Number(b.roundTripPing) - Number(a.roundTripPing);
-      } else if (this.sortBy === SortableColumns.State) {
-        if (a.online && !b.online) {
-          response = -1;
-        } else if (!a.online && b.online) {
-          response = 1;
-        }
-        response = response * (this.sortReverse ? -1 : 1);
-      } else if (this.sortBy === SortableColumns.Label) {
-        response = !this.sortReverse ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
-      } else {
-        response = defaultOrder;
+    // Needed to prevent racing conditions.
+    if (this.filteredNodes) {
+      // Calculate the pagination values.
+      const maxElements = AppConfig.maxFullListElements;
+      this.numberOfPages = Math.ceil(this.filteredNodes.length / maxElements);
+      if (this.currentPage > this.numberOfPages) {
+        this.currentPage = this.numberOfPages;
       }
 
-      return response !== 0 ? response : defaultOrder;
-    });
+      // Limit the elements to show.
+      const start = maxElements * (this.currentPage - 1);
+      const end = start + maxElements;
+      this.nodesToShow = this.filteredNodes.slice(start, end);
+    } else {
+      this.nodesToShow = null;
+    }
+
+    this.dataSource = this.nodesToShow;
   }
 
   logout() {
@@ -402,7 +462,11 @@ export class NodeListComponent implements OnInit, OnDestroy {
           // Save the name of the update, if it was not found before.
           if (!updates.has(updateInfo.current_version + updateInfo.available_version)) {
             const newVersion = this.translateService.instant('nodes.update.version-change',
-              { currentVersion: updateInfo.current_version, newVersion: updateInfo.available_version }
+              {
+                currentVersion: updateInfo.current_version
+                  ? updateInfo.current_version : this.translateService.instant('common.unknown'),
+                newVersion: updateInfo.available_version
+              }
             );
 
             updates.set(updateInfo.current_version + updateInfo.available_version, newVersion);
@@ -491,7 +555,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       return of(null);
     }), mergeMap(response => {
       // Show the result of the current step.
-      if (response && response.updated) {
+      if (response && response.updated && !response.error) {
         this.snackbarService.showDone(this.translateService.instant('nodes.update.done', { name: labels[labels.length - 1] }));
       } else {
         this.snackbarService.showError(this.translateService.instant('nodes.update.update-error', { name: labels[labels.length - 1] }));
@@ -530,7 +594,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     options.push({
       icon: 'short_text',
-      label: 'edit-label.title',
+      label: 'labeled-element.edit-label',
     });
 
     if (!node.online) {
@@ -604,9 +668,18 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * Opens the modal window for changing the label of a node.
    */
   showEditLabelDialog(node: Node) {
-    EditLabelComponent.openDialog(this.dialog, node).afterClosed().subscribe((changed: boolean) => {
+    let labelInfo =  this.storageService.getLabelInfo(node.local_pk);
+    if (!labelInfo) {
+      labelInfo = {
+        id: node.local_pk,
+        label: '',
+        identifiedElementType: LabeledElementTypes.Node,
+      };
+    }
+
+    EditLabelComponent.openDialog(this.dialog, labelInfo).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
-        this.refresh(0);
+        this.forceDataRefresh();
       }
     });
   }
@@ -619,9 +692,43 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
-      this.storageService.changeNodeState(node.local_pk, true);
-      this.refresh(0);
+      this.storageService.setLocalNodesAsHidden([node.local_pk]);
+      this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
+    });
+  }
+
+  /**
+   * Removes all offline nodes from the list, until seeing them online again.
+   */
+  removeOffline() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'nodes.delete-all-offline-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.close();
+
+      // Prepare all offline nodes to be removed.
+      const nodesToRemove: string[] = [];
+      this.allNodes.forEach(node => {
+        if (!node.online) {
+          nodesToRemove.push(node.local_pk);
+        }
+      });
+
+      // Remove the nodes and show the result.
+      if (nodesToRemove.length > 0) {
+        this.storageService.setLocalNodesAsHidden(nodesToRemove);
+
+        this.forceDataRefresh();
+
+        if (nodesToRemove.length === 1) {
+          this.snackbarService.showDone('nodes.deleted-singular');
+        } else {
+          this.snackbarService.showDone('nodes.deleted-plural', { number: nodesToRemove.length });
+        }
+      } else {
+        this.snackbarService.showWarning('nodes.no-offline-nodes');
+      }
     });
   }
 

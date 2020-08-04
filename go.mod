@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
-	github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab
+	github.com/SkycoinProject/dmsg v0.2.3
 	github.com/SkycoinProject/skycoin v0.27.0
 	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -36,6 +36,7 @@ require (
 	golang.org/x/mobile v0.0.0-20200721161523-bcce01171201 // indirect
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
 	golang.zx2c4.com/wireguard v0.0.20200320
+	nhooyr.io/websocket v1.8.2
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'

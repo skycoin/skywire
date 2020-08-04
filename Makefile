@@ -9,6 +9,7 @@
 .PHONY : docker-run docker-stop
 
 VERSION := $(shell git describe)
+#VERSION := v0.1.0 # for debugging updater
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))

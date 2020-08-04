@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
+	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
@@ -68,8 +69,9 @@ type Visor struct {
 	router   router.Router
 	rfClient rfclient.Client
 
-	procM appserver.ProcManager // proc manager
-	appL  *launcher.Launcher    // app launcher
+	procM       appserver.ProcManager // proc manager
+	appL        *launcher.Launcher    // app launcher
+	serviceDisc appdisc.Factory
 }
 
 type vReport struct {
@@ -273,6 +275,11 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 	}
 
 	return version, nil
+}
+
+// UpdateStatus returns status of the current updating operation.
+func (v *Visor) UpdateStatus() string {
+	return v.updater.Status()
 }
 
 func (v *Visor) setAutoStart(appName string, autoStart bool) error {
