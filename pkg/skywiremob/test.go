@@ -247,7 +247,8 @@ func PrepareVisor() string {
 		}
 	})
 
-	conf, err := initConfig(log, "./skywire-config.json")
+	// we use STDIN not to flush the config
+	conf, err := initConfig(log, visorconfig.StdinName)
 	if err != nil {
 		return fmt.Errorf("error getting visor config: %v", err).Error()
 	}
