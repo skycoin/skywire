@@ -136,5 +136,5 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	conf.ShutdownTimeout = old.ShutdownTimeout
 	conf.RestartCheckDelay = old.RestartCheckDelay
 
-	return conf, nil
+	return conf, conf.flush(conf)
 }
