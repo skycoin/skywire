@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/internal/utclient"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func baseConfig(t *testing.T) *visorconfig.V1 {

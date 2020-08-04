@@ -1,4 +1,4 @@
-module github.com/SkycoinProject/skywire-mainnet
+module github.com/skycoin/skywire
 
 go 1.14
 
@@ -25,6 +25,9 @@ require (
 	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/sirupsen/logrus v1.6.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+	github.com/skycoin/dmsg v0.0.0-20200803194104-78ff5746d8a3
+	github.com/skycoin/skycoin v0.26.0
+	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/spf13/cobra v1.0.0
 	github.com/stretchr/testify v1.6.1
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
@@ -39,4 +42,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-// replace github.com/SkycoinProject/dmsg => ../dmsg
+//replace github.com/skycoin/dmsg => ../dmsg

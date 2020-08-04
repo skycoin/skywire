@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands/mdisc"
-	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands/rtfind"
-	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/commands/visor"
+	"github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
+	"github.com/skycoin/skywire/cmd/skywire-cli/commands/rtfind"
+	"github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 )
 
 var rootCmd = &cobra.Command{
