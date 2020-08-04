@@ -121,13 +121,14 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(conf *visorconfig.V1) (v *Visor, ok bool) {
+func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok bool) {
 	ok = true
 
 	v = &Visor{
-		reportCh: make(chan vReport, 100),
-		log:      conf.MasterLogger().PackageLogger("visor"),
-		conf:     conf,
+		reportCh:   make(chan vReport, 100),
+		log:        conf.MasterLogger().PackageLogger("visor"),
+		conf:       conf,
+		restartCtx: restartCtx,
 	}
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {

@@ -254,7 +254,7 @@ func PrepareVisor() string {
 
 	fmt.Println("INITIATED CONFIG")
 
-	v, ok := visor.NewVisor(conf)
+	v, ok := visor.NewVisor(conf, nil)
 	if !ok {
 		return errors.New("failed to start visor").Error()
 	}
