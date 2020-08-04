@@ -83,38 +83,18 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
         mHandler.sendEmptyMessage(R.string.connecting);
 
         try {
-            while (!Skywiremob.isListening()) {
-                Skywiremob.printString("STILL NOT LISTENING, WAITING...");
+            while (!Skywiremob.isVPNReady()) {
+                Skywiremob.printString("VPN STILL NOT READY, WAITING...");
                 Thread.sleep(1000);
             }
         } catch (Exception e) {
-            Skywiremob.printString("FAILED TO GET IS_LISTENING " + e.getMessage());
+            Skywiremob.printString(e.getMessage());
         }
 
-        Skywiremob.printString("LISTENING, LET'S TRY IT OUT");
+        Skywiremob.printString("VPN IS READY, LET'S TRY IT OUT");
 
         startConnection(new SkywireVPNConnection(
                 this, mNextConnectionId.getAndIncrement(), "localhost", 7890));
-
-        // Extract information from the shared preferences.
-
-        /*final SharedPreferences prefs = getSharedPreferences(MainActivity.Prefs.NAME, MODE_PRIVATE);
-        final String server = prefs.getString(ToyVpnClient.Prefs.SERVER_ADDRESS, "");
-        final byte[] secret = prefs.getString(ToyVpnClient.Prefs.SHARED_SECRET, "").getBytes();
-        final boolean allow = prefs.getBoolean(ToyVpnClient.Prefs.ALLOW, true);
-        final Set<String> packages =
-                prefs.getStringSet(ToyVpnClient.Prefs.PACKAGES, Collections.emptySet());
-        final int port = prefs.getInt(ToyVpnClient.Prefs.SERVER_PORT, 0);
-        final String proxyHost = prefs.getString(ToyVpnClient.Prefs.PROXY_HOSTNAME, "");
-        final int proxyPort = prefs.getInt(ToyVpnClient.Prefs.PROXY_PORT, 0);*/
-
-
-
-
-
-        /*startConnection(new SkywireVPNConnection(
-                this, mNextConnectionId.getAndIncrement(), server, port, secret,
-                allow, packages));*/
     }
 
     private void startConnection(final SkywireVPNConnection connection) {

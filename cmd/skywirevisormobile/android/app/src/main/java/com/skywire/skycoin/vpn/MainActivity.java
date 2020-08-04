@@ -68,14 +68,14 @@ public class MainActivity extends Activity implements Handler.Callback {
                 String remotePK = mRemotePK.getText().toString();
                 String passcode = mPasscode.getText().toString();
 
-                String err = Skywiremob.setRemoteCreds(remotePK, passcode);
+                String err = Skywiremob.isPKValid(remotePK);
                 if (!err.isEmpty()) {
                     Toast toast = Toast.makeText(getApplicationContext(),
                             "Invalid credentials: " + err, Toast.LENGTH_SHORT);
                     toast.show();
                     return;
                 } else {
-                    Skywiremob.printString("SET CREDS CORRECTLY");
+                    Skywiremob.printString("PK is correct");
                 }
 
                 synchronized (visorMx) {
@@ -85,7 +85,8 @@ public class MainActivity extends Activity implements Handler.Callback {
                         stopService(getServiceIntent().setAction(SkywireVPNService.ACTION_DISCONNECT));
                     }
 
-                    visor = new VisorRunnable(getApplicationContext(), MainActivity.this);
+                    visor = new VisorRunnable(getApplicationContext(), MainActivity.this,
+                            remotePK, passcode);
 
                     new Thread(visor).start();
                 }

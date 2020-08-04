@@ -114,7 +114,8 @@ func (c *Client) Serve() error {
 
 	c.log.Infof("Allocated TUN %s", tun.Name())
 
-	if err := SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
+	err = SetupTUN(tun.Name(), tunIP.String()+"/"+strconv.Itoa(TUNNetmaskPrefix), tunGateway.String(), TUNMTU)
+	if err != nil {
 		return fmt.Errorf("error setting up TUN %s: %w", tun.Name(), err)
 	}
 

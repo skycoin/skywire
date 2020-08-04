@@ -128,95 +128,13 @@ public class SkywireVPNConnection implements Runnable {
         ParcelFileDescriptor iface = null;
         boolean connected = false;
 
-        /*try {
-            for (int fd = (int)Skywiremob.getDmsgSocket(); fd != 0; fd = (int)Skywiremob.getDmsgSocket()) {
-                Skywiremob.printString("PRINTING FD " + fd);
-                if (!mService.protect(fd)) {
-                    throw new IllegalStateException("Cannot protect the tunnel");
-                }
-            }
-            // Configure the virtual network interface.
-            iface = configure();
-            // Now we are connected. Set the flag.
-            connected = true;
-            // Packets to be sent are queued in this input stream.
-            FileInputStream in = new FileInputStream(iface.getFileDescriptor());
-            // Packets received need to be written to this output stream.
-            FileOutputStream out = new FileOutputStream(iface.getFileDescriptor());
-
-            new Thread(new FromVPNClientRunnable(out)).start();
-
-            // Allocate the buffer for a single packet.
-            ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_SIZE);
-            //mService.protect()
-            // Timeouts:
-            //   - when data has not been sent in a while, send empty keepalive messages.
-            //   - when data has not been received in a while, assume the connection is broken.
-            long lastSendTime = System.currentTimeMillis();
-            long lastReceiveTime = System.currentTimeMillis();
-            // We keep forwarding packets till something goes wrong.
-            Skywiremob.printString("START FORWARDING PACKETS ON ANDROID");
-            while (true) {
-                // Assume that we did not make any progress in this iteration.
-                boolean idle = true;
-                // Read the outgoing packet from the input stream.
-                int length = in.read(packet.array());
-                if (length > 0) {
-                    //Skywiremob.printString("READ PACKET OF " + length + " FROM TUN");
-                    // Write the outgoing packet to the tunnel.
-                    packet.limit(length);
-                    Skywiremob.write(packet.array(), length);
-                    packet.clear();
-                    // There might be more outgoing packets.
-                    idle = false;
-                    lastReceiveTime = System.currentTimeMillis();
-                }
-
-                ////////////////////// TAKEN CARE OF IN FromVPNClientRunnable
-
-                // If we are idle or waiting for the network, sleep for a
-                // fraction of time to avoid busy looping.
-                if (idle) {
-                    Thread.sleep(IDLE_INTERVAL_MS);
-                    final long timeNow = System.currentTimeMillis();
-                    if (lastSendTime + KEEPALIVE_INTERVAL_MS <= timeNow) {
-                        /*  //We are receiving for a long time but not sending.
-                        // Send empty control messages.
-                        packet.put((byte) 0).limit(1);
-                        for (int i = 0; i < 3; ++i) {
-                            packet.position(0);
-                            tunnel.write(packet);
-                        }
-                        packet.clear();
-                        lastSendTime = timeNow;*/
-                        /*packet.clear();
-                        lastSendTime = timeNow;
-                        Skywiremob.printString("IMITATE KEEP ALIVE");
-                    } else if (lastReceiveTime + RECEIVE_TIMEOUT_MS <= timeNow) {
-                        // We are sending for a long time but not receiving.
-                        throw new IllegalStateException("Timed out");
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            Skywiremob.printString(getTag() + " Cannot use socket " + e.getMessage());
-        } finally {
-            if (iface != null) {
-                try {
-                    iface.close();
-                } catch (IOException e) {
-                    Skywiremob.printString(getTag() + " Unable to close interface " + e.getMessage());
-                }
-            }
-        }*/
-
         // Create a DatagramChannel as the VPN tunnel.
         try (DatagramChannel tunnel = DatagramChannel.open()) {
             // Protect the tunnel before connecting to avoid loopback.
             if (!mService.protect(tunnel.socket())) {
                 throw new IllegalStateException("Cannot protect the tunnel");
             }
-            for (int fd = (int)Skywiremob.getDmsgSocket(); fd != 0; fd = (int)Skywiremob.getDmsgSocket()) {
+            for (int fd = (int)Skywiremob.nextDmsgSocket(); fd != 0; fd = (int)Skywiremob.nextDmsgSocket()) {
                 Skywiremob.printString("PRINTING FD " + fd);
                 if (!mService.protect(fd)) {
                     throw new IllegalStateException("Cannot protect the tunnel");
@@ -225,7 +143,7 @@ public class SkywireVPNConnection implements Runnable {
             // Connect to the server.
             tunnel.connect(server);
 
-            Skywiremob.setAndroidAppAddr(tunnel.getLocalAddress().toString());
+            Skywiremob.setMobileAppAddr(tunnel.getLocalAddress().toString());
 
             // For simplicity, we use the same thread for both reading and
             // writing. Here we put the tunnel into non-blocking mode.
@@ -243,13 +161,8 @@ public class SkywireVPNConnection implements Runnable {
             new Thread(this.fromVPNClientRunnable).start();
             // Allocate the buffer for a single packet.
             ByteBuffer packet = ByteBuffer.allocate(MAX_PACKET_SIZE);
-            // Timeouts:
-            //   - when data has not been sent in a while, send empty keepalive messages.
-            //   - when data has not been received in a while, assume the connection is broken.
-            //long lastSendTime = System.currentTimeMillis();
-            long lastReceiveTime = System.currentTimeMillis();
             // We keep forwarding packets till something goes wrong.
-            Skywiremob.printString("START FORWARDING PACKETS ON ANDROID");
+            Skywiremob.printString("Start forwarding packets on Android");
             while (true) {
                 synchronized (StopMx) {
                     if (shouldStop) {
@@ -258,7 +171,6 @@ public class SkywireVPNConnection implements Runnable {
                 }
 
                 // Assume that we did not make any progress in this iteration.
-                boolean idle = true;
                 // Read the outgoing packet from the input stream.
                 int length = in.read(packet.array());
                 if (length > 0) {
@@ -266,43 +178,7 @@ public class SkywireVPNConnection implements Runnable {
                     packet.limit(length);
                     tunnel.write(packet);
                     packet.clear();
-                    // There might be more outgoing packets.
-                    idle = false;
-                    lastReceiveTime = System.currentTimeMillis();
                 }
-                /* //Read the incoming packet from the tunnel.
-                length = tunnel.read(packet);
-                if (length > 0) {
-                    // Ignore control messages, which start with zero.
-                    if (packet.get(0) != 0) {
-                        // Write the incoming packet to the output stream.
-                        out.write(packet.array(), 0, length);
-                    }
-                    packet.clear();
-                    // There might be more incoming packets.
-                    idle = false;
-                    lastSendTime = System.currentTimeMillis();
-                }*/
-                // If we are idle or waiting for the network, sleep for a
-                // fraction of time to avoid busy looping.
-                /*if (idle) {
-                    Thread.sleep(IDLE_INTERVAL_MS);
-                    final long timeNow = System.currentTimeMillis();
-                    if (lastSendTime + KEEPALIVE_INTERVAL_MS <= timeNow) {
-                        // We are receiving for a long time but not sending.
-                        // Send empty control messages.
-                        packet.put((byte) 0).limit(1);
-                        for (int i = 0; i < 3; ++i) {
-                            packet.position(0);
-                            tunnel.write(packet);
-                        }
-                        packet.clear();
-                        lastSendTime = timeNow;
-                    } else if (lastReceiveTime + RECEIVE_TIMEOUT_MS <= timeNow) {
-                        // We are sending for a long time but not receiving.
-                        throw new IllegalStateException("Timed out");
-                    }
-                }*/
             }
         } catch (SocketException e) {
             Skywiremob.printString(getTag() + " Cannot use socket " + e.getMessage());
@@ -327,28 +203,13 @@ public class SkywireVPNConnection implements Runnable {
         builder.addAddress(Skywiremob.tunip(), (int)Skywiremob.getTUNIPPrefix());
         builder.allowFamily(OsConstants.AF_INET);
         builder.addDnsServer("8.8.8.8");
-        builder.addDnsServer("192.168.1.1");
-        //builder.addRoute("10.131.229.154", 32);
+        //builder.addDnsServer("192.168.1.1");
         builder.addRoute("0.0.0.0", 1);
         builder.addRoute("128.0.0.0", 1);
-        //builder.addRoute("172.104.43.241", 32);
-
-        //builder.setUnderlyingNetworks(new Network[]{Network.CREATOR()});
-        //builder.addDisallowedApplication("skywiremob.Skywiremob");
 
         // Create a new interface using the builder and save the parameters.
         final ParcelFileDescriptor vpnInterface;
-        /*for (String packageName : mPackages) {
-            try {
-                if (mAllow) {
-                    builder.addAllowedApplication(packageName);
-                } else {
-                    builder.addDisallowedApplication(packageName);
-                }
-            } catch (PackageManager.NameNotFoundException e){
-                Skywiremob.printString(getTag() + " Package not available: " + packageName + " " + e.getMessage());
-            }
-        }*/
+
         builder.setSession(mServerName).setConfigureIntent(mConfigureIntent);
         synchronized (mService) {
             vpnInterface = builder.establish();

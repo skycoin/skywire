@@ -17,11 +17,14 @@ import skywiremob.Skywiremob;
 public class VisorRunnable implements Runnable {
     private Context context;
     private MainActivity activity;
-    //private Handler activity;
+    private String RemotePK;
+    private String Passcode;
 
-    public VisorRunnable(Context context, MainActivity activity) {
+    public VisorRunnable(Context context, MainActivity activity, String remotePK, String passcode) {
         this.context = context;
         this.activity = activity;
+        this.RemotePK = remotePK;
+        this.Passcode = passcode;
     }
 
     public void stopVisor() {
@@ -33,12 +36,6 @@ public class VisorRunnable implements Runnable {
     }
 
     private void showToast(String text) {
-        /*Message msg = new Message();
-        Bundle data =new Bundle();
-        data.putString("text", text);
-        msg.setData(data);
-        activity.sendMessage(msg);*/
-
         activity.runOnUiThread(new Runnable() {
             public void run() {
                 Toast.makeText(activity, text, Toast.LENGTH_SHORT).show();
@@ -50,32 +47,28 @@ public class VisorRunnable implements Runnable {
     public void run() {
         android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
 
-        Skywiremob.printString("INSIDE RUNNABLE");
-        Skywiremob.prepareLogger();
-        Skywiremob.printString("PREPARED LOGGER");
         String err = Skywiremob.prepareVisor();
         if (!err.isEmpty()) {
             Skywiremob.printString(err);
             showToast(err);
             return;
         }
+        Skywiremob.printString("Prepared visor");
 
-        Skywiremob.printString("PREPARED VISOR");
-
-        err = Skywiremob.prepareVPNClient();
+        err = Skywiremob.prepareVPNClient(this.RemotePK, this.Passcode);
         if (!err.isEmpty()) {
             Skywiremob.printString(err);
             showToast(err);
             return;
         }
-        Skywiremob.printString("PREPARED VPN CLIENT");
+        Skywiremob.printString("Prepared VPN client");
+
         err = Skywiremob.shakeHands();
         if (!err.isEmpty()) {
             Skywiremob.printString(err);
             showToast(err);
             return;
         }
-        Skywiremob.printString("SHOOK HANDS");
 
         err = Skywiremob.startListeningUDP();
         if (!err.isEmpty()) {
@@ -85,8 +78,6 @@ public class VisorRunnable implements Runnable {
         }
 
         Skywiremob.serveVPN();
-
-        //Skywiremob.printDmsgServers();
 
         activity.runOnUiThread(new Runnable() {
             public void run() {
