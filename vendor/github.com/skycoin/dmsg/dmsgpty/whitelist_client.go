@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/rpc"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // WhitelistClient interacts with a whitelist's API.
