@@ -7,11 +7,11 @@ import (
 	"os"
 	"sync"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/creack/pty"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // PtyClient represents the client end of a dmsgpty session.

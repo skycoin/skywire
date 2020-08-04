@@ -12,12 +12,12 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/dmsg/promutil"
+	"github.com/skycoin/dmsg/promutil"
 )
 
 // Associated errors.
