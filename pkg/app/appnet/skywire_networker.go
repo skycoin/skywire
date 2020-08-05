@@ -9,11 +9,11 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/netutil"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 var (
