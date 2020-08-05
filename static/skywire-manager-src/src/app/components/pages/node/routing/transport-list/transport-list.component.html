@@ -1,15 +1,17 @@
 <!-- Header. -->
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
-  <div class="title ml-3.5">
-    <span *ngIf="showShortList_" class="uppercase">{{ 'transports.title' | translate }}</span>
+  <div class="title">
+    <span *ngIf="showShortList_" class="uppercase">
+      {{ 'transports.title' | translate }}
+      <mat-icon [inline]="true" class="help d-none d-md-inline" [matTooltip]="'transports.info' | translate">help</mat-icon>
+    </span>
     <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
-      {{ 'filters.active-filters' | translate }}
       <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
         <span>{{ filterTexts.filterName | translate }}: </span>
         <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
         <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
       </div>
-      <div>{{ 'filters.press-to-remove' | translate }}</div>
+      <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
     </div>
   </div>
   <div class="options">
@@ -17,12 +19,10 @@
       <mat-icon
         [inline]="true"
         (click)="create()"
-        [matTooltip]="'transports.create' | translate"
       >add</mat-icon>
       <mat-icon
         [inline]="true"
         (click)="dataFilterer.changeFilters()"
-        [matTooltip]="'filters.filter-action' | translate"
         class="small-icon"
         *ngIf="allTransports && allTransports.length > 0"
       >filter_list</mat-icon>
@@ -73,11 +73,17 @@
       </th>
       <th class="sortable-column" (click)="dataSorter.changeSortingOrder(idSortData)">
         {{ 'transports.id' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === idSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+        <ng-container *ngIf="dataSorter.currentSortingColumn === idSortData">
+          <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          <ng-container *ngIf="dataSorter.currentlySortingByLabel">*</ng-container>
+        </ng-container>
       </th>
       <th class="sortable-column" (click)="dataSorter.changeSortingOrder(remotePkSortData)">
         {{ 'transports.remote-node' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === remotePkSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+        <ng-container *ngIf="dataSorter.currentSortingColumn === remotePkSortData">
+          <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          <ng-container *ngIf="dataSorter.currentlySortingByLabel">*</ng-container>
+        </ng-container>
       </th>
       <th class="sortable-column" (click)="dataSorter.changeSortingOrder(typeSortData)">
         {{ 'transports.type' | translate }}
@@ -163,7 +169,8 @@
         <div class="left-part">
           <div class="title">{{ 'tables.sorting-title' | translate }}</div>
           <div>{{ dataSorter.currentSortingColumn.label | translate }}
-            {{ (!dataSorter.sortingInReverseOrder ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
+            <ng-container *ngIf="dataSorter.currentlySortingByLabel">{{ 'tables.label' | translate }}</ng-container>
+            <ng-container *ngIf="dataSorter.sortingInReverseOrder">{{ 'tables.inverted-order' | translate }}</ng-container>
           </div>
         </div>
         <div class="right-part">
