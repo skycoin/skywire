@@ -12,6 +12,7 @@
     "options": "Options",
     "logout": "Logout",
     "logout-error": "Error logging out.",
+    "logout-confirmation": "Are you sure you want to log out?",
     "time-in-ms": "{{ time }}ms",
     "ok": "Ok",
     "unknown": "Unknown"
@@ -31,6 +32,7 @@
 
   "labels": {
     "title": "Labels",
+    "info": "Labels you have entered to easily identify visors, transports and other elements, instead of having to read machine generated identifiers.",
     "list-title": "Label list",
     "label": "Label",
     "id": "Element ID",
@@ -57,16 +59,17 @@
 
   "filters": {
     "filter-action": "Filter",
-    "active-filters": "Active filters: ",
-    "press-to-remove": "(Press to remove)",
+    "press-to-remove": "(Press to remove the filters)",
     "remove-confirmation": "Are you sure you want to remove the filters?"
   },
 
   "tables": {
     "title": "Order by",
     "sorting-title": "Ordered by:",
-    "ascending-order": "(ascending)",
-    "descending-order": "(descending)"
+    "sort-by-value": "Value",
+    "sort-by-label": "Label",
+    "label": "(label)",
+    "inverted-order": "(inverted)"
   },
 
   "start": {
@@ -355,6 +358,7 @@
 
   "transports": {
     "title": "Transports",
+    "info": "Connections you have with remote Skywire visors, to allow local Skywire apps to communicate with apps running on those remote visors.",
     "list-title": "Transport list",
     "state": "State",
     "state-tooltip": "Current state",
@@ -415,6 +419,7 @@
 
   "routes": {
     "title": "Routes",
+    "info": "Paths used to reach the remote visors to which transports have been established. Routes are automatically generated as needed.",
     "list-title": "Route list",
     "key": "Key",
     "rule": "Rule",

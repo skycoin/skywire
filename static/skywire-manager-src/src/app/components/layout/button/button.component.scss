@@ -9,10 +9,6 @@ button {
   mat-spinner ::ng-deep circle {
     stroke: $white;
   }
-
-  .dot-red {
-    margin-left: 10px;
-  }
 }
 
 mat-icon, mat-spinner {
@@ -20,4 +16,10 @@ mat-icon, mat-spinner {
   margin-right: 20px;
   position: relative;
   top: -2px;
+}
+
+.for-dark-background:disabled {
+  background-color: #000000 !important;
+  color: white !important;
+  opacity: 0.3;
 }
