@@ -14,13 +14,14 @@ import (
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/cmdutil"
 	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
+
 	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
 	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
-	"github.com/sirupsen/logrus"
 )
 
 const (

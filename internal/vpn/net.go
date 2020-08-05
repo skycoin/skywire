@@ -6,10 +6,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/sirupsen/logrus"
 
 	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
 )
