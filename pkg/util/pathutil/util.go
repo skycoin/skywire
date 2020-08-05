@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
+	"github.com/skycoin/skywire/pkg/util/rename"
 )
 
 const (
