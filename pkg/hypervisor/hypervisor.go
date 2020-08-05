@@ -16,28 +16,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/httputil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/httputil"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"nhooyr.io/websocket"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 const (
-	healthTimeout = 5 * time.Second
-	httpTimeout   = 30 * time.Second
+	httpTimeout = 30 * time.Second
 )
 
 const (
@@ -530,7 +529,7 @@ func (hv *Hypervisor) getHealth() http.HandlerFunc {
 		}
 
 		resCh := make(chan healthRes)
-		tCh := time.After(healthTimeout)
+		tCh := time.After(visor.HealthTimeout)
 
 		go func() {
 			hi, err := ctx.RPC.Health()

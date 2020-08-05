@@ -5,9 +5,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/SkycoinProject/dmsg"
+	"github.com/skycoin/dmsg"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
 )
 
 // Listener implements net.Listener

@@ -6,7 +6,7 @@ import (
 	context "context"
 	net "net"
 
-	cipher "github.com/SkycoinProject/dmsg/cipher"
+	cipher "github.com/skycoin/dmsg/cipher"
 	mock "github.com/stretchr/testify/mock"
 )
 
