@@ -249,7 +249,7 @@ mod-uncomm: ## Uncomments the 'replace' rule in go.mod
 	./ci_scripts/go_mod_replace.sh uncomment go.mod
 
 build-android:
-	cd $$HOME && PATH=$$PATH:$$HOME/go/bin ANDROID_NDK_HOME=$$HOME/Downloads/android-ndk-r21d ANDROID_HOME=$$HOME/Library/Android/sdk gomobile bind -o ./go/src/github.com/SkycoinProject/skywire-mainnet/cmd/skywirevisormobile/android/app/skywire.aar -target=android ./go/src/github.com/SkycoinProject/skywire-mainnet/pkg/skywiremob/ && cd $$OLDPWD
+	cd $$HOME && PATH=$$PATH:$$HOME/go/bin ANDROID_NDK_HOME=$$HOME/Downloads/android-ndk-r21d ANDROID_HOME=$$HOME/Library/Android/sdk gomobile bind -o ./go/src/github.com/skycoin/skywire/cmd/skywirevisormobile/android/app/skywire.aar -target=android ./go/src/github.com/skycoin/skywire/pkg/skywiremob/ && cd $$OLDPWD
 	cd ./cmd/skywirevisormobile/android/ && ./gradlew assembleDebug && cd $$OLDPWD
 	cd ./cmd/skywirevisormobile/android/app/build/outputs/apk/debug/ && PATH=$$PATH:$$HOME/Downloads/platform-tools adb install ./app-debug.apk && cd $$OLDPWD
 

@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/dmsg/dmsgpty"
 )
 
+// InitDmsgpty initializes dmsgpty.
 func InitDmsgpty(v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty

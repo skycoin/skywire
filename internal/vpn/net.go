@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
+// DoClientHandshake performs client/server handshake from the client side.
 func DoClientHandshake(log logrus.FieldLogger, conn net.Conn,
 	cHello ClientHello) (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
 	log.Debugf("Sending client hello: %v", cHello)

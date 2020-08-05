@@ -27,6 +27,7 @@ func NewClientMobile(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Cl
 	}, nil
 }
 
+// GetConn returns VPN server connection.
 func (c *ClientMobile) GetConn() net.Conn {
 	return c.conn
 }
@@ -38,6 +39,7 @@ func (c *ClientMobile) Close() {
 	})
 }
 
+// ShakeHands performs client/server handshake.
 func (c *ClientMobile) ShakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
 	cHello := ClientHello{
 		Passcode: c.cfg.Passcode,

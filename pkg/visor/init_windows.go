@@ -2,6 +2,7 @@
 
 package visor
 
+// InitDmsgpty initializes dmsgpty.
 func InitDmsgpty(v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty

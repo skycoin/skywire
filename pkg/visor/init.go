@@ -34,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
+// InitFunc is an initializing function for some of the visor modules.
 type InitFunc func(v *Visor) bool
 
 var initStack = func() []InitFunc {
@@ -55,10 +56,12 @@ var initStack = func() []InitFunc {
 	}
 }
 
+// SetInitStack sets custom stack of initializing functions.
 func SetInitStack(f func() []InitFunc) {
 	initStack = f
 }
 
+// InitNetworkers initializes networkers.
 func InitNetworkers(v *Visor) bool {
 	report := v.makeReporter("networkers")
 	log := v.MasterLogger().PackageLogger("networkers")
@@ -76,6 +79,7 @@ func InitNetworkers(v *Visor) bool {
 	return report(nil)
 }
 
+// InitUpdater initializes updater.
 func InitUpdater(v *Visor) bool {
 	report := v.makeReporter("updater")
 
@@ -90,6 +94,7 @@ func InitUpdater(v *Visor) bool {
 	return report(nil)
 }
 
+// InitEventBroadcaster initializes event broadcaster.
 func InitEventBroadcaster(v *Visor) bool {
 	report := v.makeReporter("event_broadcaster")
 
@@ -105,6 +110,7 @@ func InitEventBroadcaster(v *Visor) bool {
 	return report(nil)
 }
 
+// InitSNet initializes skywire network.
 func InitSNet(v *Visor) bool {
 	report := v.makeReporter("snet")
 
@@ -162,6 +168,7 @@ func InitSNet(v *Visor) bool {
 	return report(nil)
 }
 
+// InitAddressResolver initializes address resolver.
 func InitAddressResolver(v *Visor) bool {
 	report := v.makeReporter("address-resolver")
 	conf := v.conf.Transport
@@ -176,6 +183,7 @@ func InitAddressResolver(v *Visor) bool {
 	return report(nil)
 }
 
+// InitTransport initializes transport manager.
 func InitTransport(v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
@@ -232,6 +240,7 @@ func InitTransport(v *Visor) bool {
 	return report(nil)
 }
 
+// InitRouter initializes router.
 func InitRouter(v *Visor) bool {
 	report := v.makeReporter("router")
 	conf := v.conf.Routing
@@ -277,6 +286,7 @@ func InitRouter(v *Visor) bool {
 	return report(nil)
 }
 
+// InitDiscovery initializes app discovery.
 func InitDiscovery(v *Visor) bool {
 	report := v.makeReporter("discovery")
 
@@ -299,6 +309,7 @@ func InitDiscovery(v *Visor) bool {
 	return report(nil)
 }
 
+// InitLauncher initializes app launcher.
 func InitLauncher(v *Visor) bool {
 	report := v.makeReporter("launcher")
 	conf := v.conf.Launcher
@@ -395,6 +406,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	return envs, nil
 }
 
+// InitCLI initializes CLI.
 func InitCLI(v *Visor) bool {
 	report := v.makeReporter("cli")
 
@@ -421,6 +433,7 @@ func InitCLI(v *Visor) bool {
 	return report(nil)
 }
 
+// InitHypervisors initializes hypervisor clients.
 func InitHypervisors(v *Visor) bool {
 	report := v.makeReporter("hypervisors")
 
@@ -457,6 +470,7 @@ func InitHypervisors(v *Visor) bool {
 	return report(nil)
 }
 
+// InitUptimeTracker initializes uptime tracker client.
 func InitUptimeTracker(v *Visor) bool {
 	const tickDuration = 10 * time.Second
 
@@ -482,6 +496,7 @@ func InitUptimeTracker(v *Visor) bool {
 	go func() {
 		for range ticker.C {
 			ctx := context.Background()
+			log.Infof("DICK: UPDATING UPTIME")
 			if err := ut.UpdateVisorUptime(ctx); err != nil {
 				log.WithError(err).Warn("Failed to update visor uptime.")
 			}
@@ -498,6 +513,7 @@ func InitUptimeTracker(v *Visor) bool {
 	return true
 }
 
+// InitTrustedVisors initializes trusted visors.
 func InitTrustedVisors(v *Visor) bool {
 	const trustedVisorsTransportType = tptypes.STCPR
 

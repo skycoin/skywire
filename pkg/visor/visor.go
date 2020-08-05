@@ -172,10 +172,12 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	return v, ok
 }
 
+// Network returns skywire network.
 func (v *Visor) Network() *snet.Network {
 	return v.net
 }
 
+// SaveTransport saves transport to `remote`.
 func (v *Visor) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*transport.ManagedTransport, error) {
 	return v.tpM.SaveTransport(ctx, remote, tpType)
 }

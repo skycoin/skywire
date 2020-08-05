@@ -80,10 +80,12 @@ const (
 }`
 )
 
+// PrintString logs passed `str` with info log level.
 func PrintString(str string) {
 	log.Infoln(str)
 }
 
+// IsPKValid checks if pub key is valid. Returns non-empty error string on failure.
 func IsPKValid(pkStr string) string {
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
@@ -93,16 +95,19 @@ func IsPKValid(pkStr string) string {
 	return ""
 }
 
+// GetMTU returns VPN connection MTU.
 func GetMTU() int {
 	return vpn.TUNMTU
 }
 
+// GetTUNIPPrefix returns netmask prefix of TUN IP address.
 func GetTUNIPPrefix() int {
 	return vpn.TUNNetmaskPrefix
 }
 
 var isVPNReady int32
 
+// IsVPNReady checks if the VPN is ready.
 func IsVPNReady() bool {
 	return atomic.LoadInt32(&isVPNReady) == 1
 }
@@ -125,6 +130,7 @@ var (
 	tunGateway net.IP
 )
 
+// PrepareVisor creates and runs visor instance.
 func PrepareVisor() string {
 	// set the same init stack as usual, but without apps launcher
 	visor.SetInitStack(func() []visor.InitFunc {
@@ -187,6 +193,8 @@ func getNextDmsgSocketIdx(ln int) int {
 	return nextDmsgSocketIdx
 }
 
+// NextDmsgSocket returns next file descriptor of Dmsg socket. If no descriptors
+// left or in case of error returns 0.
 func NextDmsgSocket() int {
 	allSessions := globalVisor.Network().Dmsg().AllSessions()
 	log.Infof("Dmsg sockets count: %d\n", len(allSessions))
@@ -223,6 +231,7 @@ func NextDmsgSocket() int {
 	return int(fd)
 }
 
+// PrepareVPNClient creates and runs VPN client instance.
 func PrepareVPNClient(srvPKStr, passcode string) string {
 	var srvPK cipher.PubKey
 	if err := srvPK.UnmarshalText([]byte(srvPKStr)); err != nil {
@@ -279,6 +288,7 @@ func PrepareVPNClient(srvPKStr, passcode string) string {
 	return ""
 }
 
+// ShakeHands performs VPN client/server handshake.
 func ShakeHands() string {
 	tunIPInternal, tunGatewayInternal, _, err := vpnClient.ShakeHands()
 	if err != nil {
@@ -297,6 +307,7 @@ func ShakeHands() string {
 	return ""
 }
 
+// TUNIP gets assigned TUN IP address.
 func TUNIP() string {
 	tunCredsMx.Lock()
 	defer tunCredsMx.Unlock()
@@ -308,6 +319,7 @@ func TUNIP() string {
 	return tunIP.String()
 }
 
+// TUNGateway gets assigned TUN gateway.
 func TUNGateway() string {
 	tunCredsMx.Lock()
 	defer tunCredsMx.Unlock()
@@ -319,6 +331,7 @@ func TUNGateway() string {
 	return tunGateway.String()
 }
 
+// StopVisor stops running visor. Returns non-empty error string on failure.
 func StopVisor() string {
 	stopVisorFuncMx.Lock()
 	stopFunc := stopVisorFunc
@@ -339,6 +352,7 @@ func StopVisor() string {
 	return ""
 }
 
+// WaitForVisorToStop blocks until visor exits. Returns non-empty error string on failure.
 func WaitForVisorToStop() string {
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	stopVisorFuncMx.Lock()
@@ -374,7 +388,9 @@ func initConfig(mLog *logging.MasterLogger, confPath string) (*visorconfig.V1, e
 
 var mobileAppAddrCh = make(chan *net.UDPAddr, 2)
 
+// SetMobileAppAddr sets address of the UDP connection opened on the mobile application side.
 func SetMobileAppAddr(addr string) {
+	// address passed from the Android device contains `/` prefix, strip it.
 	addr = strings.TrimLeft(addr, " /")
 
 	tokens := strings.Split(addr, ":")
@@ -396,6 +412,7 @@ func SetMobileAppAddr(addr string) {
 
 var udpConn *net.UDPConn
 
+// ServeVPN starts handling VPN traffic.
 func ServeVPN() {
 	go func() {
 		tunAddr := <-mobileAppAddrCh
@@ -410,6 +427,7 @@ func ServeVPN() {
 	atomic.StoreInt32(&isVPNReady, 1)
 }
 
+// StartListeningUDP starts listening UDP.
 func StartListeningUDP() string {
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{
 		IP:   net.IP{127, 0, 0, 1},
