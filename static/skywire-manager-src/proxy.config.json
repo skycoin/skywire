@@ -27,7 +27,7 @@
     "ws": true,
     "headers": {"host":"127.0.0.1:8000", "origin":"ws://127.0.0.1:8000", "referer":"ws://127.0.0.1:8000"},
     "pathRewrite": {
-      "^/wss-api" : "/api"
+      "^/ws-api" : "/api"
     }
   }
 }
