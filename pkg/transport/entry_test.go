@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 func TestNewEntry(t *testing.T) {
