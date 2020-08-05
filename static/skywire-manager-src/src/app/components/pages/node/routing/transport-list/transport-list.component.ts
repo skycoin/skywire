@@ -39,8 +39,8 @@ export class TransportListComponent implements OnDestroy {
 
   // Vars with the data of the columns used for sorting the data.
   stateSortData = new SortingColumn(['is_up'], 'transports.state', SortingModes.Boolean);
-  idSortData = new SortingColumn(['id'], 'transports.id', SortingModes.Text);
-  remotePkSortData = new SortingColumn(['remote_pk'], 'transports.remote-node', SortingModes.Text);
+  idSortData = new SortingColumn(['id'], 'transports.id', SortingModes.Text, ['id_label']);
+  remotePkSortData = new SortingColumn(['remote_pk'], 'transports.remote-node', SortingModes.Text, ['remote_pk_label']);
   typeSortData = new SortingColumn(['type'], 'transports.type', SortingModes.Text);
   uploadedSortData = new SortingColumn(['log', 'sent'], 'common.uploaded', SortingModes.NumberReversed);
   downloadedSortData = new SortingColumn(['log', 'recv'], 'common.downloaded', SortingModes.NumberReversed);
@@ -79,7 +79,7 @@ export class TransportListComponent implements OnDestroy {
   @Input() set transports(val: Transport[]) {
     this.allTransports = val;
 
-    // Add the label data to the array, to be able to use it for filtering.
+    // Add the label data to the array, to be able to use it for filtering and sorting.
     this.allTransports.forEach(transport => {
       transport['id_label'] =
         LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.id);

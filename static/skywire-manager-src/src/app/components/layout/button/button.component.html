@@ -1,29 +1,12 @@
-<ng-template #contentTpl>
-  <mat-spinner *ngIf="state === buttonStates.Loading" [diameter]="loadingSize"></mat-spinner>
-  <mat-icon *ngIf="state === buttonStates.Success">done</mat-icon>
-  <mat-icon *ngIf="state === buttonStates.Error">error_outline</mat-icon>
-  <ng-content></ng-content>
-  <i *ngIf="notification" class="dot-red sm"></i>
-</ng-template>
-
 <button
-  *ngIf="type === 'mat-button'"
-  mat-button
-  (click)="click()"
-  [disabled]="disabled"
-  [color]="color"
-  [ngClass]="{'grey-button-background': !disabled}"
-  #button1
->
-  <ng-container [ngTemplateOutlet]="contentTpl"></ng-container>
-</button>
-<button
-  *ngIf="type === 'mat-raised-button'"
   mat-raised-button
   (click)="click()"
   [disabled]="disabled"
   [color]="color"
+  [ngClass]="{'for-dark-background': forDarkBackground}"
   #button2
 >
-  <ng-container [ngTemplateOutlet]="contentTpl"></ng-container>
+  <mat-spinner *ngIf="state === buttonStates.Loading" [diameter]="loadingSize"></mat-spinner>
+  <mat-icon *ngIf="state === buttonStates.Error">error_outline</mat-icon>
+  <ng-content></ng-content>
 </button>
