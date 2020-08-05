@@ -92,7 +92,6 @@
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
-        "app-protocol-version": "App protocol version:",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",
