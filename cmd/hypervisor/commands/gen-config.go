@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/hypervisor"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 // nolint:gochecknoglobals

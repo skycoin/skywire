@@ -10,18 +10,18 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/cmdutil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/cmdutil"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (

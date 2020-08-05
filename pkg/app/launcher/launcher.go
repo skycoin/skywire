@@ -12,15 +12,15 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 const (

@@ -4,10 +4,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var logger = logging.MustGetLogger("skywire-cli")

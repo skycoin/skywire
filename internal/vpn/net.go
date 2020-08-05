@@ -6,11 +6,11 @@ import (
 	"io"
 	"net"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/noise"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 func DoClientHandshake(log logrus.FieldLogger, conn net.Conn,

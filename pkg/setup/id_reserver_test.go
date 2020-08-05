@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // We check the contents of 'idReserver.rec' is as expected after calling 'NewIDReserver'.

@@ -2,7 +2,7 @@
 
 package appevent
 
-import appcommon "github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+import appcommon "github.com/skycoin/skywire/pkg/app/appcommon"
 import context "context"
 import mock "github.com/stretchr/testify/mock"
 
