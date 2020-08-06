@@ -1,51 +1,44 @@
 @import 'variables';
 @import "~bootstrap/scss/functions";
+@import "bootstrap_overrides";
 
 $top-bar-height: 56px;
-
-// Temporal for one of the back button styles.
-.main-container-1 {
-  height: 100px !important;
-}
 
 .main-container {
   border-bottom: 1px solid $separator;
   padding-bottom: 10px;
   margin-bottom: -5px;
-  height: $header-height;
+  height: 100px;
 
-  .title {
-    font-size: $font-size-mini;
-    margin-bottom: 5px;
-    margin-left: 5px;
-    opacity: 0.75;
-    font-weight: lighter;
-
-    .old {
-      opacity: 0.75;
-    }
-
-    .separator {
-      margin: 0 2px;
-    }
+  @media (max-width: (map-get($grid-breakpoints, lg) - 1)) {
+    height: 55px;
   }
 
-  // Temporal for one of the back button styles.
-  .title-1 {
-    font-size: 22px;
+  .title {
+    font-size: $font-size-sm;
     margin-bottom: 15px;
     margin-left: 5px;
-    font-weight: lighter;
-
-    display: flex !important;
     flex-direction: row;
     align-items: center;
 
-    .return-separator {
-      height: 25px;
-      background: $separator;
-      width: 1px;
-      margin: 0 15px 0 10px;
+    .title-text {
+      z-index: 1;
+    }
+
+    .return-container {
+      width: 30px;
+      position: relative;
+      top: 2px;
+
+      .return-button {
+        line-height: 1;
+        font-size: 25px;
+        position: relative;
+        top: 2px;
+        width: 100%;
+        margin-right: 4px;
+        cursor: pointer;
+      }
     }
   }
 
@@ -54,17 +47,6 @@ $top-bar-height: 56px;
 
     .blank-space {
       flex-grow: 1;
-    }
-
-    .back-button-container {
-      align-items: center;
-    
-      .return-separator {
-        height: 80%;
-        background: $separator;
-        width: 1px;
-        margin: 0 10px 0 0;
-      }
     }
 
     .tab-button {
@@ -79,15 +61,6 @@ $top-bar-height: 56px;
 
       &:hover {
         opacity: 0.75;
-      }
-
-      &.return {
-        opacity: 0.75;
-        font-size: 20px;
-
-        &:hover {
-          opacity: 1;
-        }
       }
 
       &[disabled] {
@@ -163,7 +136,7 @@ $top-bar-height: 56px;
 
 .top-bar {
   position: fixed;
-  z-index: 1;
+  z-index: 10;
   width: 100%;
   height: $top-bar-height;
   background-color: $white;
@@ -193,4 +166,9 @@ $top-bar-height: 56px;
       height: $top-bar-height;
     }
   }
+}
+
+.top-bar-margin {
+  margin-top: $top-bar-height;
+  flex-shrink: 0;
 }
