@@ -116,9 +116,6 @@ export class TopBarComponent implements OnInit, OnDestroy {
   // Currently selecte language.
   language: LanguageData;
 
-  // Temporal for the back button styles.
-  style = 1;
-
   private langSubscriptionsGroup: Subscription[] = [];
 
   constructor(

@@ -1,8 +1,22 @@
 <!-- Top bar shown on small screens. -->
 <div class="top-bar d-lg-none">
-  <div class="button-container"></div>
+  <div class="button-container">
+    <button
+      mat-icon-button
+      *ngIf="returnText"
+      (click)="requestAction(null)"
+      class="transparent-button"
+    >
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+  </div>
   <div class="logo-container">
-    <img src="/assets/img/logo-s.png" />
+    <ng-container *ngIf="!titleParts || titleParts.length < 2">
+      <img src="/assets/img/logo-s.png" />
+    </ng-container>
+    <ng-container *ngIf="titleParts && titleParts.length >= 2">
+      {{ titleParts[titleParts.length - 1] | translate }}
+    </ng-container>
   </div>
   <div class="button-container">
     <button
@@ -15,10 +29,13 @@
   </div>
 </div>
 
+<!-- Margin to prevent the top bar from covering the content. -->
+<div class="top-bar-margin d-lg-none"></div>
+
 <!-- Options menu. -->
 <mat-menu #menu="matMenu" [overlapTrigger]="false">
   <!-- Options. -->
-  <ng-container *ngIf="optionsData && optionsData.length">
+  <ng-container *ngIf="optionsData && optionsData.length > 1">
     <ng-container *ngFor="let option of optionsData">
       <div mat-menu-item (click)="requestAction(option.actionName)" [disabled]="option.disabled">
         <mat-icon [ngClass]="{'transparent': option.disabled}">{{ option.icon }}</mat-icon> {{ option.name | translate }}
@@ -26,62 +43,27 @@
     </ng-container>
     <div *ngIf="returnText" class="menu-separator"></div>
   </ng-container>
-  <!-- Return button. -->
-  <ng-container *ngIf="returnText">
-    <div mat-menu-item (click)="requestAction(null)" class="d-block d-lg-none">
-      <mat-icon>chevron_left</mat-icon> {{ returnText | translate }}
-    </div>
-  </ng-container>
-  <div *ngIf="!hideLanguageButton && (optionsData && optionsData.length) && !returnText" class="menu-separator"></div>
-  <div *ngIf="!hideLanguageButton && returnText" class="menu-separator d-block d-lg-none"></div>
+  <div *ngIf="!hideLanguageButton && optionsData && optionsData.length > 1" class="menu-separator"></div>
   <!-- Language area. -->
   <div *ngIf="!hideLanguageButton" mat-menu-item (click)="openLanguageWindow()">
     <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag"> {{ (language ? language.name : '') | translate }}
   </div>
 </mat-menu>
 
-<div class="main-container" [ngClass]="{'main-container-1': style === 1}">
-  <!-- Title text, with the path. -->
-  <div class="title" *ngIf="style === 0">
-    <span *ngFor="let titlePart of titleParts; let i = index" [ngClass]="{'old': i !== titleParts.length - 1}">
-      {{ titlePart | translate }}
-      <span *ngIf="i !== titleParts.length - 1" class="separator">/</span>
-    </span>
-  </div>
-  <div class="title-1" *ngIf="style === 1">
-    <div
-      *ngIf="returnText"
-      class="d-none d-lg-block"
-      style="width: 30px; position: relative; top: 2px;"
-    >
-      <a
-        style="line-height: 1; font-size: 25px; position: relative; top: 2px; width: 100%; margin-left: 4px; cursor: pointer;"
-        class="tab-button return white-theme transparent-button"
-        (click)="requestAction(null)"
-        [matTooltip]="returnText | translate"
-      >
+<div class="main-container">
+  <!-- Return button and title text. -->
+  <div class="title d-none d-lg-flex">
+    <div *ngIf="returnText" class="return-container">
+      <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
         <mat-icon [inline]="true">chevron_left</mat-icon>
       </a>
     </div>
-    <div *ngIf="returnText" class="d-none d-lg-block return-separator"></div>
-    <span>
+    <span class="title-text">
       {{ titleParts[titleParts.length - 1] | translate }}
     </span>
   </div>
 
   <div class="lower-container">
-    <div *ngIf="returnText && style === 0" class="back-button-container d-none d-lg-inline-flex">
-      <a
-        mat-button
-        class="tab-button return white-theme"
-        (click)="requestAction(null)"
-        [matTooltip]="returnText | translate"
-      >
-        <mat-icon [inline]="true">chevron_left</mat-icon>
-      </a>
-
-      <div class="return-separator"></div>
-    </div>
     <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
     <div
       *ngFor="let tabData of tabsData; let i = index"
