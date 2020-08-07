@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
+	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -53,6 +54,11 @@ var rootCmd = &cobra.Command{
 				log.Fatalf("Error setting up syslog: %v", err)
 			}
 
+			logging.AddHook(hook)
+		}
+
+		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+			hook := discord.NewHook(tag, discordWebhookURL)
 			logging.AddHook(hook)
 		}
 
