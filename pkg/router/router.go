@@ -13,6 +13,7 @@ import (
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/noise"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
@@ -20,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -103,14 +105,14 @@ type Router interface {
 	// - Setup routes via SetupNode (in one call).
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return RouteGroup if successful.
-	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (*RouteGroup, error)
+	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 
 	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
 	// that contains ConsumeRule(s) or ForwardRule(s).
 	// Then the following should happen:
 	// - Save to routing.Table and internal RouteGroup map.
 	// - Return the RoutingGroup.
-	AcceptRoutes(context.Context) (*RouteGroup, error)
+	AcceptRoutes(context.Context) (net.Conn, error)
 	SaveRoutingRules(rules ...routing.Rule) error
 	ReserveKeys(n int) ([]routing.RouteID, error)
 	IntroduceRules(rules routing.EdgeRules) error
@@ -137,7 +139,8 @@ type router struct {
 	trustedVisors map[cipher.PubKey]struct{}
 	tm            *transport.Manager
 	rt            routing.Table
-	rgs           map[routing.RouteDescriptor]*RouteGroup // route groups to push incoming reads from transports.
+	rgsNs         map[routing.RouteDescriptor]*noiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
+	rgsRaw        map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
 	done          chan struct{}
@@ -166,7 +169,8 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		tm:            config.TransportManager,
 		rt:            routing.NewTable(),
 		sl:            sl,
-		rgs:           make(map[routing.RouteDescriptor]*RouteGroup),
+		rgsNs:         make(map[routing.RouteDescriptor]*noiseRouteGroup),
+		rgsRaw:        make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
 		done:          make(chan struct{}),
@@ -195,7 +199,7 @@ func (r *router) DialRoutes(
 	rPK cipher.PubKey,
 	lPort, rPort routing.Port,
 	opts *DialOptions,
-) (*RouteGroup, error) {
+) (net.Conn, error) {
 
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK
@@ -229,11 +233,21 @@ func (r *router) DialRoutes(
 		return nil, err
 	}
 
-	rg := r.saveRouteGroupRules(rules)
+	nsConf := noise.Config{
+		LocalPK:   r.conf.PubKey,
+		LocalSK:   r.conf.SecKey,
+		RemotePK:  rPK,
+		Initiator: true,
+	}
+
+	nrg, err := r.saveRouteGroupRules(rules, nsConf)
+	if err != nil {
+		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+	}
 
 	r.logger.Infof("Created new routes to %s on port %d", rPK, lPort)
 
-	return rg, nil
+	return nrg, nil
 }
 
 // AcceptsRoutes should block until we receive an AddRules packet from SetupNode
@@ -241,7 +255,7 @@ func (r *router) DialRoutes(
 // Then the following should happen:
 // - Save to routing.Table and internal RouteGroup map.
 // - Return the RoutingGroup.
-func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
+func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	var (
 		rules routing.EdgeRules
 		ok    bool
@@ -265,12 +279,22 @@ func (r *router) AcceptRoutes(ctx context.Context) (*RouteGroup, error) {
 	}
 
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("SaveRoutingRules: %w", err)
 	}
 
-	rg := r.saveRouteGroupRules(rules)
+	nsConf := noise.Config{
+		LocalPK:   r.conf.PubKey,
+		LocalSK:   r.conf.SecKey,
+		RemotePK:  rules.Desc.SrcPK(),
+		Initiator: false,
+	}
 
-	return rg, nil
+	nrg, err := r.saveRouteGroupRules(rules, nsConf)
+	if err != nil {
+		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
+	}
+
+	return nrg, nil
 }
 
 // Serve starts transport listening loop.
@@ -339,30 +363,67 @@ func (r *router) serveSetup() {
 	}
 }
 
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules) *RouteGroup {
+func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*noiseRouteGroup, error) {
 	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
+
+	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
+	// in the process of wrapping we still need to use this route group to handle
+	// handshake packets. so we keep these not-yet wrapped rgs in the `rgsRaw`
+	// until they get wrapped with noise
+
 	r.mx.Lock()
-	defer r.mx.Unlock()
 
-	rg, ok := r.rgs[rules.Desc]
-	if ok && rg != nil {
-		r.logger.Infof("Route group with desc %s already exists, closing the old one and replacing...", &rules.Desc)
-
-		if err := rg.Close(); err != nil {
-			r.logger.Errorf("Error closing already existing route group: %v", err)
-		}
-
-		r.logger.Infoln("Successfully closed old route group")
+	// first ensure that this rg is not being wrapped with noise right now
+	if _, ok := r.rgsRaw[rules.Desc]; ok {
+		r.mx.Unlock()
+		r.logger.Warnf("Desc %s already reserved, skipping...", rules.Desc)
+		return nil, fmt.Errorf("noise route group with desc %s already being initialized", &rules.Desc)
 	}
 
+	// we need to close currently existing wrapped rg if there's one
+	nrg, ok := r.rgsNs[rules.Desc]
+
 	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
-
-	rg = NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
-	r.rgs[rules.Desc] = rg
-
+	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
 	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
+	// we put raw rg so it can be accessible to the router when handshake packets come in
+	r.rgsRaw[rules.Desc] = rg
+	r.mx.Unlock()
 
-	return rg
+	if ok && nrg != nil {
+		// if already functioning wrapped rg exists, we safely close it here
+		r.logger.Infof("Noise route group with desc %s already exists, closing the old one and replacing...", &rules.Desc)
+
+		if err := nrg.Close(); err != nil {
+			r.logger.Errorf("Error closing already existing noise route group: %v", err)
+		}
+
+		r.logger.Infoln("Successfully closed old noise route group")
+	}
+
+	// wrapping rg with noise
+	wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
+	if err != nil {
+		r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
+		if err := rg.Close(); err != nil {
+			r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+		}
+
+		return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
+	}
+
+	nrg = &noiseRouteGroup{
+		rg:   rg,
+		Conn: wrappedRG,
+	}
+
+	r.mx.Lock()
+	// put ready nrg and remove raw rg, we won't need it anymore
+	r.rgsNs[rules.Desc] = nrg
+	delete(r.rgsRaw, rules.Desc)
+	r.mx.Unlock()
+
+	return nrg, nil
 }
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
@@ -384,33 +445,46 @@ func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) er
 		return err
 	}
 
-	if rule.Type() == routing.RuleReverse {
-		r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
-	} else {
+	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
 		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
 			packet.RouteID(), rule.NextRouteID())
-	}
-
-	switch rule.Type() {
-	case routing.RuleForward, routing.RuleIntermediary:
-		r.logger.Infoln("Handling intermediary data packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
+	r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+
 	desc := rule.RouteDescriptor()
-	rg, ok := r.routeGroup(desc)
+	nrg, ok := r.noiseRouteGroup(desc)
 
 	r.logger.Infof("Handling packet with descriptor %s", &desc)
 
+	if ok {
+		if nrg == nil {
+			return errors.New("noiseRouteGroup is nil")
+		}
+
+		// in this case we have already initialized nrg and may use it straightforward
+		r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+			len(packet.Payload()), packet.RouteID(), rule)
+
+		return nrg.handlePacket(packet)
+	}
+
+	// we don't have nrg for this packet. it's either handshake message or
+	// we don't have route for this one completely
+
+	rg, ok := r.initializingRouteGroup(desc)
 	if !ok {
+		// no route, just return error
 		r.logger.Infof("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
 		return errors.New("route descriptor does not exist")
 	}
 
 	if rg == nil {
-		return errors.New("RouteGroup is nil")
+		return errors.New("initializing RouteGroup is nil")
 	}
 
+	// handshake packet, handling with the raw rg
 	r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
 		len(packet.Payload()), packet.RouteID(), rule)
 
@@ -445,7 +519,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}
 
 	desc := rule.RouteDescriptor()
-	rg, ok := r.routeGroup(desc)
+	nrg, ok := r.noiseRouteGroup(desc)
 
 	r.logger.Infof("Handling close packet with descriptor %s", &desc)
 
@@ -454,10 +528,10 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return errors.New("route descriptor does not exist")
 	}
 
-	defer r.removeRouteGroup(desc)
+	defer r.removeNoiseRouteGroup(desc)
 
-	if rg == nil {
-		return errors.New("RouteGroup is nil")
+	if nrg == nil {
+		return errors.New("noiseRouteGroup is nil")
 	}
 
 	r.logger.Infof("Got new remote close packet with size %d and route ID %d. Using rule: %s",
@@ -465,12 +539,12 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 
 	closeCode := routing.CloseCode(packet.Payload()[0])
 
-	if rg.isClosed() {
+	if nrg.isClosed() {
 		return io.ErrClosedPipe
 	}
 
-	if err := rg.handlePacket(packet); err != nil {
-		return fmt.Errorf("error handling close packet with code %d by route group with descriptor %s: %v",
+	if err := nrg.handlePacket(packet); err != nil {
+		return fmt.Errorf("error handling close packet with code %d by noise route group with descriptor %s: %v",
 			closeCode, &desc, err)
 	}
 
@@ -678,34 +752,43 @@ func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
 	return ids, err
 }
 
-func (r *router) popRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
+func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	rg, ok := r.rgs[desc]
+	nrg, ok := r.rgsNs[desc]
 	if !ok {
 		return nil, false
 	}
 
-	delete(r.rgs, desc)
+	delete(r.rgsNs, desc)
 
-	return rg, true
+	return nrg, true
 }
 
-func (r *router) routeGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
+func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	rg, ok := r.rgs[desc]
+	nrg, ok := r.rgsNs[desc]
+
+	return nrg, ok
+}
+
+func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+
+	rg, ok := r.rgsRaw[desc]
 
 	return rg, ok
 }
 
-func (r *router) removeRouteGroup(desc routing.RouteDescriptor) {
+func (r *router) removeNoiseRouteGroup(desc routing.RouteDescriptor) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	delete(r.rgs, desc)
+	delete(r.rgsNs, desc)
 }
 
 func (r *router) IntroduceRules(rules routing.EdgeRules) error {
@@ -811,20 +894,20 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 
 	rDesc := rule.RouteDescriptor()
 	log.WithField("rt_desc", rDesc.String()).
-		Debug("Closing route group associated with rule...")
+		Debug("Closing noise route group associated with rule...")
 
-	rg, ok := r.popRouteGroup(rDesc)
+	nrg, ok := r.popNoiseRouteGroup(rDesc)
 	if !ok {
-		log.Debug("No route group associated with expired rule. Nothing to be done.")
+		log.Debug("No noise route group associated with expired rule. Nothing to be done.")
 		return
 	}
-	if rg.isClosed() {
-		log.Debug("Route group already closed. Nothing to be done.")
+	if nrg.isClosed() {
+		log.Debug("Noise route group already closed. Nothing to be done.")
 		return
 	}
-	if err := rg.Close(); err != nil {
-		log.WithError(err).Error("Failed to close route group.")
+	if err := nrg.Close(); err != nil {
+		log.WithError(err).Error("Failed to close noise route group.")
 		return
 	}
-	log.Debug("Route group closed.")
+	log.Debug("Noise route group closed.")
 }
