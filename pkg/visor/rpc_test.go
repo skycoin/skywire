@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
@@ -42,6 +43,9 @@ func TestHealth(t *testing.T) {
 		arClient := &arclient.MockAPIClient{}
 		arClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
+		rfClient := &rfclient.MockClient{}
+		rfClient.On("Health", mock.Anything).Return(http.StatusOK, testhelpers.NoErr)
+
 		v := &Visor{
 			conf: c,
 			tpM: &transport.Manager{
@@ -49,9 +53,9 @@ func TestHealth(t *testing.T) {
 					DiscoveryClient: transport.NewDiscoveryMock(),
 				},
 			},
-			rfClient:      rfclient.NewMock(),
 			uptimeTracker: utClient,
 			arClient:      arClient,
+			rfClient:      rfClient,
 		}
 
 		rpc := &RPC{visor: v, log: logrus.New()}

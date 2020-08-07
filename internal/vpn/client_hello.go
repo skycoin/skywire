@@ -6,5 +6,4 @@ import "net"
 type ClientHello struct {
 	UnavailablePrivateIPs []net.IP `json:"unavailable_private_ips"`
 	Passcode              string   `json:"passcode"`
-	EnableEncryption      bool     `json:"enable_encryption"`
 }

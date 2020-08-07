@@ -20,3 +20,4 @@
 - `expires_duration` (Duration)
 - `path` (string)
 - `domain` (string)
+- `-` (bool)
