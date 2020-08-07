@@ -3,10 +3,10 @@ package visorconfig
 import (
 	"sync"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 //go:generate readmegen -n V1 -o ./README.md ./v1.go
@@ -33,6 +33,8 @@ type V1 struct {
 	LogLevel          string   `json:"log_level"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	RestartCheckDelay string   `json:"restart_check_delay,omitempty"`
+
+	PublicTrustedVisor bool `json:"public_trusted_visor,omitempty"`
 }
 
 // V1Dmsgpty configures the dmsgpty-host.

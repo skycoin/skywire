@@ -3,7 +3,7 @@ package router
 import (
 	"net"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 type noiseRouteGroup struct {

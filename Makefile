@@ -9,13 +9,14 @@
 .PHONY : docker-run docker-stop
 
 VERSION := $(shell git describe)
+#VERSION := v0.1.0 # for debugging updater
 
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
 
-PROJECT_BASE := github.com/SkycoinProject/skywire-mainnet
-DMSG_BASE := github.com/SkycoinProject/dmsg
+PROJECT_BASE := github.com/skycoin/skywire
+DMSG_BASE := github.com/skycoin/dmsg
 OPTS?=GO111MODULE=on
 MANAGER_UI_DIR = static/skywire-manager-src
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too

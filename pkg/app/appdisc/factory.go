@@ -4,13 +4,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/servicedisc"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Factory creates appdisc.Updater instances based on the app name.
@@ -34,8 +34,29 @@ func (f *Factory) setDefaults() {
 	}
 }
 
-// Updater obtains an updater based on the app name and configuration.
-func (f *Factory) Updater(conf appcommon.ProcConfig) (Updater, bool) {
+// VisorUpdater obtains a visor updater.
+func (f *Factory) VisorUpdater(port uint16) Updater {
+	// Always return empty updater if keys are not set.
+	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
+		return &emptyUpdater{}
+	}
+
+	conf := servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVisor,
+		PK:       f.PK,
+		SK:       f.SK,
+		Port:     port,
+		DiscAddr: f.ProxyDisc,
+	}
+
+	return &serviceUpdater{
+		client:   servicedisc.NewClient(f.Log, conf),
+		interval: f.UpdateInterval,
+	}
+}
+
+// AppUpdater obtains an app updater based on the app name and configuration.
+func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	// Always return empty updater if keys are not set.
 	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
 		return &emptyUpdater{}, false

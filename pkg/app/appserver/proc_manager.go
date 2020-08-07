@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 )
 
 //go:generate mockery -name ProcManager -case underscore -inpkg
@@ -189,7 +189,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 		break
 	}
 
-	disc, ok := m.discF.Updater(conf)
+	disc, ok := m.discF.AppUpdater(conf)
 	if !ok {
 		log.WithField("appName", conf.AppName).
 			Debug("No app discovery associated with app.")

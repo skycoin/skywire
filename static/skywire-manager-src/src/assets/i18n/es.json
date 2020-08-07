@@ -1,15 +1,9 @@
 {
   "common": {
     "save": "Guardar",
-    "edit": "Editar",
     "cancel": "Cancelar",
-    "node-key": "Llave del Nodo",
-    "app-key": "Llave de la App",
-    "discovery": "Discovery",
     "downloaded": "Recibido",
     "uploaded": "Enviado",
-    "delete": "Borrar",
-    "none": "Ninguro",
     "loading-error": "Hubo un error obteniendo los datos. Reintentando...",
     "operation-error": "Hubo un error al intentar completar la operación.",
     "no-connection-error": "No hay conexión a Internet o conexión con el hipervisor.",
@@ -17,7 +11,55 @@
     "refreshed": "Datos refrescados.",
     "options": "Opciones",
     "logout": "Cerrar sesión",
-    "logout-error": "Error cerrando la sesión."
+    "logout-error": "Error cerrando la sesión.",
+    "time-in-ms": "{{ time }}ms",
+    "ok": "Ok",
+    "unknown": "Desconocido"
+  },
+
+  "labeled-element": {
+    "edit-label": "Editar etiqueta",
+    "remove-label": "Remover etiqueta",
+    "copy": "Copiar",
+    "remove-label-confirmation": "¿Realmente desea eliminar la etiqueta?",
+    "unnamed-element": "Sin nombre",
+    "unnamed-local-visor": "Visor local",
+    "local-element": "Local",
+    "tooltip": "Haga clic para copiar la entrada o cambiar la etiqueta",
+    "tooltip-with-text": "{{ text }} (Haga clic para copiar la entrada o cambiar la etiqueta)"
+  },
+
+  "labels": {
+    "title": "Etiquetas",
+    "list-title": "Lista de etiquetas",
+    "label": "Etiqueta",
+    "id": "ID del elemento",
+    "type": "Tipo",
+    "delete-confirmation": "¿Seguro que desea borrar la etiqueta?",
+    "delete-selected-confirmation": "¿Seguro que desea borrar las etiquetas seleccionados?",
+    "delete": "Borrar etiqueta",
+    "deleted": "Operación de borrado completada.",
+    "empty": "No hay etiquetas guardadas.",
+    "empty-with-filter": "Ninguna etiqueta coincide con los criterios de filtrado seleccionados.",
+    "filter-dialog": {
+      "label": "La etiqueta debe contener",
+      "id": "El id debe contener",
+      "type": "El tipo debe ser",
+
+      "type-options": {
+        "any": "Cualquiera",
+        "visor": "Visor",
+        "dmsg-server": "Servidor DMSG",
+        "transport": "Transporte"
+      }
+    }
+  },
+
+  "filters": {
+    "filter-action": "Filtrar",
+    "active-filters": "Filtros activos: ",
+    "press-to-remove": "(Presione para remover)",
+    "remove-confirmation": "¿Seguro que desea remover los filtros?"
   },
 
   "tables": {
@@ -25,13 +67,6 @@
     "sorting-title": "Ordenado por:",
     "ascending-order": "(ascendente)",
     "descending-order": "(descendente)"
-  },
-
-  "inputs": {
-    "errors": {
-      "key-required": "La llave es requerida.",
-      "key-length": "La llave debe tener 66 caracteres de largo."
-    }
   },
 
   "start": {
@@ -53,6 +88,8 @@
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
         "port": "Puerto:",
+        "dmsg-server": "Servidor DMSG:",
+        "ping": "Ping:",
         "node-version": "Versión del visor:",
         "app-protocol-version": "Versión del protocolo de app:",
         "time": {
@@ -90,23 +127,65 @@
 
   "nodes": {
     "title": "Lista de visores",
+    "dmsg-title": "DMSG",
+    "update-all": "Actualizar todo",
     "state": "Estado",
     "state-tooltip": "Estado actual",
     "label": "Etiqueta",
     "key": "Llave",
+    "dmsg-server": "Servidor DMSG",
+    "ping": "Ping",
+    "copy-key": "Copiar llave",
+    "copy-dmsg": "Copiar llave DMSG",
+    "copy-data": "Copiar datos",
     "view-node": "Ver visor",
     "delete-node": "Remover visor",
+    "delete-all-offline": "Remover todos los visores offline",
     "error-load": "Hubo un error al intentar refrescar la lista. Reintentando...",
     "empty": "No hay ningún visor conectado a este hypervisor.",
+    "empty-with-filter": "Ningun visor coincide con los criterios de filtrado seleccionados.",
     "delete-node-confirmation": "¿Seguro que desea remover el visor de la lista?",
-    "deleted": "Visor removido."
+    "delete-all-offline-confirmation": "¿Seguro que desea remover todos los visores offline de la lista?",
+    "deleted": "Visor removido.",
+    "deleted-singular": "1 visor offline removido.",
+    "deleted-plural": "{{ number }} visores offline removidos.",
+    "no-offline-nodes": "No se encontraron visores offline.",
+    "filter-dialog": {
+      "online": "El visor debe estar",
+      "label": "La etiqueta debe contener",
+      "key": "La llave debe contener",
+      "dmsg": "La llave del servidor DMSG debe contener",
+
+      "online-options": {
+        "any": "Online u offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
+    },
+
+    "update": {
+      "no-visors": "No hay visores para actualizar. Por favor espere.",
+      "title": "Actualizar visores",
+      "processing": "Buscando actualizaciones...",
+      "processing-button": "Por favor espere",
+      "no-update": "Actualmente no hay nuevas actualizaciones para los visores.",
+      "update-available-single": "Hay una actualización disponible para 1 visor:",
+      "update-available-multiple": "Hay actualizaciones disponibles para {{ number }} visores:",
+      "update-available-confirmation": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
+      "version-change": "De {{ currentVersion }} a {{ newVersion }}",
+      "done": "El visor {{ name }} está siendo actualizado.",
+      "done-all": "Operación completada. Todos los visores están siendo actualizandos.",
+      "update-error": "No se pudo instalar la actualización en el visor {{name}}. Por favor, inténtelo de nuevo más tarde.",
+      "all-failed-error": "No se pudo actualizar ninguno de los visores. Por favor, inténtelo de nuevo más tarde.",
+      "some-updated-error": "{{ updatedNumber }} visores fueron actualizados y hubo problemas para actualizar {{ failedNumber }}. Por favor, inténtelo de nuevo más tarde.",
+      "install": "Instalar actualizaciones"
+    }
   },
 
   "edit-label": {
-    "title": "Editar etiqueta",
     "label": "Etiqueta",
     "done": "Etiqueta guardada.",
-    "default-label-warning": "La etiqueta por defecto ha sido usada."
+    "label-removed-warning": "La etiqueta fue removida."
   },
 
   "settings": {
@@ -159,14 +238,6 @@
       "confirmation": "¿Seguro que desea reiniciar el visor?",
       "done": "El visor se está reiniciando."
     },
-    "config": {
-      "title": "Configuración de discovery",
-      "header": "Dirección de discovery",
-      "remove": "Remover dirección",
-      "add": "Agregar dirección",
-      "cant-store": "No se pudo guardar la configuración del nodo.",
-      "success": "Aplicando la configuración de discovery mediante el reinicio del proceso de nodo."
-    },
     "terminal-options": {
       "full": "Terminal completa",
       "simple": "Terminal simple"
@@ -180,8 +251,10 @@
       "title": "Actualizar",
       "processing": "Buscando actualizaciones...",
       "processing-button": "Por favor espere",
-      "no-update": "Actualmente no hay actualizaciones para el visor. Actualmente está instalada la versión {{ version }}.",
-      "update-available": "Hay una actualización disponible para el visor. Presione el botón 'Instalar actualización' para continuar. Actualmente está instalada la versión {{ currentVersion }} y la nueva versión es la {{ newVersion }}.",
+      "no-update": "Actualmente no hay ninguna actualización para el visor. La versión instalada actualmente es:",
+      "update-available1": "Hay una actualización disponible para el visor:",
+      "update-available2": "Haga clic en el botón 'Instalar actualización' para instalarla.",
+      "version-change": "De {{ currentVersion }} a {{ newVersion }}",
       "done": "El visor está siendo actualizado.",
       "update-error": "No se pudo instalar la actualización. Por favor inténtelo nuevamente luego.",
       "install": "Instalar actualización"
@@ -189,40 +262,6 @@
   },
 
   "apps": {
-    "socksc": {
-      "title": "Connect to Node",
-      "connect-keypair": "Enter keypair",
-      "connect-search": "Search node",
-      "connect-history": "History",
-      "versions": "Versions",
-      "location": "Location",
-      "connect": "Connect",
-      "next-page": "Next page",
-      "prev-page": "Previous page",
-      "auto-startup": "Automatically connect to Node"
-    },
-    "sshc": {
-      "title": "SSH Client",
-      "connect": "Connect to SSH Server",
-      "auto-startup": "Automatically start SSH client",
-      "connect-keypair": "Enter keypair",
-      "connect-history": "History"
-    },
-    "sshs": {
-      "title": "SSH Server",
-      "whitelist": {
-        "title": "SSH Server Whitelist",
-        "header": "Key",
-        "add": "Add to list",
-        "remove": "Remove key",
-        "enter-key": "Enter node key",
-        "errors": {
-          "cant-save": "Could not save whitelist changes."
-        },
-        "saved-correctly": "Whitelist changes saved successfully."
-      },
-      "auto-startup": "Automatically start SSH server"
-    },
     "log": {
       "title": "Log",
       "empty": "No hay mensajes de log para el rango de fecha seleccionado.",
@@ -238,14 +277,6 @@
         "all": "mostrar todos"
       }
     },
-    "config": {
-      "title": "Startup configuration"
-    },
-    "menu": {
-      "startup-config": "Startup configuration",
-      "log": "Log messages",
-      "whitelist": "Whitelist"
-    },
     "apps-list": {
       "title": "Aplicaciones",
       "list-title": "Lista de aplicaciones",
@@ -255,10 +286,29 @@
       "state-tooltip": "Estado actual",
       "auto-start": "Autoinicio",
       "empty": "El visor no tiene ninguna aplicación.",
+      "empty-with-filter": "Ninguna app coincide con los criterios de filtrado seleccionados.",
       "disable-autostart": "Deshabilitar autoinicio",
       "enable-autostart": "Habilitar autoinicio",
       "autostart-disabled": "Autoinicio deshabilitado",
-      "autostart-enabled": "Autoinicio habilitado"
+      "autostart-enabled": "Autoinicio habilitado",
+      "filter-dialog": {
+        "state": "El estado debe ser",
+        "name": "El nombre debe contener",
+        "port": "El puerto debe contener",
+        "autostart": "El autoinicio debe estar",
+  
+        "state-options": {
+          "any": "Iniciada o detenida",
+          "running": "Iniciada",
+          "stopped": "Detenida"
+        },
+
+        "autostart-options": {
+          "any": "Activado or desactivado",
+          "enabled": "Activado",
+          "disabled": "Desactivado"
+        }
+      }
     },
     "skysocks-settings": {
       "title": "Configuración de Skysocks",
@@ -317,6 +367,7 @@
     "delete": "Borrar transporte",
     "deleted": "Operación de borrado completada.",
     "empty": "El visor no tiene ningún transporte.",
+    "empty-with-filter": "Ningun transporte coincide con los criterios de filtrado seleccionados.",
     "statuses": {
       "online": "Online",
       "online-tooltip": "El transporte está online",
@@ -348,6 +399,17 @@
         "remote-key-chars-error": "La llave pública remota sólo debe contener caracteres hexadecimales.",
         "transport-type-error": "El tipo de transporte es requerido."
       }
+    },
+    "filter-dialog": {
+      "online": "El transporte debe estar",
+      "id": "El id debe contener",
+      "remote-node": "La llave remota debe contener",
+
+      "online-options": {
+        "any": "Online u offline",
+        "online": "Online",
+        "offline": "Offline"
+      }
     }
   },
 
@@ -361,6 +423,7 @@
     "delete": "Borrar ruta",
     "deleted": "Operación de borrado completada.",
     "empty": "El visor no tiene ninguna ruta.",
+    "empty-with-filter": "Ninguna ruta coincide con los criterios de filtrado seleccionados.",
     "details": {
       "title": "Detalles",
       "basic": {
@@ -387,6 +450,10 @@
         "destination-port": "Puerto de destino:",
         "source-port": "Puerto de origen:"
       }
+    },
+    "filter-dialog": {
+      "key": "La llave debe contener",
+      "rule": "La regla debe contener"
     }
   },
 
@@ -435,7 +502,8 @@
     "confirm-button": "Sí",
     "cancel-button": "No",
     "close": "Cerrar",
-    "error-header-text": "Error"
+    "error-header-text": "Error",
+    "done-header-text": "Hecho"
   },
 
   "language" : {

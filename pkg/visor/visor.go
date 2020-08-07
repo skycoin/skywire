@@ -12,23 +12,24 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/internal/utclient"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
+	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -67,8 +68,9 @@ type Visor struct {
 	router   router.Router
 	rfClient rfclient.Client
 
-	procM appserver.ProcManager // proc manager
-	appL  *launcher.Launcher    // app launcher
+	procM       appserver.ProcManager // proc manager
+	appL        *launcher.Launcher    // app launcher
+	serviceDisc appdisc.Factory
 }
 
 type vReport struct {
@@ -263,6 +265,11 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 	}
 
 	return version, nil
+}
+
+// UpdateStatus returns status of the current updating operation.
+func (v *Visor) UpdateStatus() string {
+	return v.updater.Status()
 }
 
 func (v *Visor) setAutoStart(appName string, autoStart bool) error {

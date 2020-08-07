@@ -5,6 +5,7 @@ import { Node } from '../../../../../app.datatypes';
 import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-label.component';
 import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
+import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 
 /**
  * Shows the basic info of a node.
@@ -25,10 +26,20 @@ export class NodeInfoContentComponent {
 
   constructor(
     private dialog: MatDialog,
+    public storageService: StorageService,
   ) { }
 
   showEditLabelDialog() {
-    EditLabelComponent.openDialog(this.dialog, this.node).afterClosed().subscribe((changed: boolean) => {
+    let labelInfo =  this.storageService.getLabelInfo(this.node.local_pk);
+    if (!labelInfo) {
+      labelInfo = {
+        id: this.node.local_pk,
+        label: '',
+        identifiedElementType: LabeledElementTypes.Node,
+      };
+    }
+
+    EditLabelComponent.openDialog(this.dialog, labelInfo).afterClosed().subscribe((changed: boolean) => {
       if (changed) {
         NodeComponent.refreshCurrentDisplayedData();
       }

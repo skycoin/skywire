@@ -126,7 +126,7 @@ func Test_fileURL(t *testing.T) {
 			name:     "Case 1",
 			version:  "v1.2.3",
 			filename: "skywire-visor-v1.2.3-linux-amd64",
-			want: "https://github.com/SkycoinProject/skywire-mainnet/releases/download/v1.2.3/" +
+			want: "https://github.com/skycoin/skywire/releases/download/v1.2.3/" +
 				"skywire-visor-v1.2.3-linux-amd64",
 		},
 	}

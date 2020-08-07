@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 //go:generate mockery -name Dialer -case underscore -inpkg
