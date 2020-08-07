@@ -2,7 +2,7 @@
 
 package snet
 
-import cipher "github.com/SkycoinProject/dmsg/cipher"
+import cipher "github.com/skycoin/dmsg/cipher"
 import context "context"
 import mock "github.com/stretchr/testify/mock"
 import net "net"

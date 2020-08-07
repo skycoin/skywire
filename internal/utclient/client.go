@@ -11,10 +11,10 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/skycoin/skywire/internal/httpauth"
 )
 
 //go:generate mockery -name APIClient -case underscore -inpkg
@@ -66,7 +66,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 
 // UpdateVisorUptime updates visor uptime.
 func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
-	resp, err := c.Get(ctx, "/update")
+	resp, err := c.Get(ctx, "/v2/update")
 	if err != nil {
 		return err
 	}

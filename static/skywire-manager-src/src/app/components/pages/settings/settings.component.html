@@ -3,12 +3,15 @@
     <app-tab-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
-      [selectedTabIndex]="1"
+      [selectedTabIndex]="2"
       [showUpdateButton]="false" 
     ></app-tab-bar>
   </div>
   <div class="content col-12 mt-4.5">
     <app-refresh-rate class="d-block mb-4"></app-refresh-rate>
     <app-password></app-password>
+    <app-label-list
+      [showShortList]="true">
+    </app-label-list>
   </div>
 </div>

@@ -8,7 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 )
 
 // DoReqHandshake performs a request handshake which is initiated from an app.

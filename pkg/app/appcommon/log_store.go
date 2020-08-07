@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"go.etcd.io/bbolt"
 )
 

@@ -9,11 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/skycoin/skywire/internal/httpauth"
 )
 
 var testPubKey, testSecKey = cipher.GenerateKeyPair()
@@ -70,7 +70,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 	err = c.UpdateVisorUptime(context.TODO())
 	require.NoError(t, err)
 
-	assert.Equal(t, "/update", <-urlCh)
+	assert.Equal(t, "/v2/update", <-urlCh)
 }
 
 func authHandler(next http.Handler) http.Handler {

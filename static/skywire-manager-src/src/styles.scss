@@ -9,7 +9,6 @@
 @import "assets/scss/text";
 @import "assets/scss/icons";
 @import "assets/scss/menu";
-@import "assets/scss/tables";
 @import "assets/scss/responsive_tables";
 @import "assets/scss/forms";
 @import "assets/scss/backgrounds";
@@ -67,10 +66,6 @@ button:focus {
 
 .grey-button-background:hover {
   background-color: rgba(0,0,0,0.05) !important;
-}
-
-.hard-grey-button-background:hover {
-  background-color: rgba(0,0,0,0.1) !important;
 }
 
 .flex-1

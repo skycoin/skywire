@@ -11,18 +11,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/noise"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/noisewrapper"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/setup/setupclient"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 //go:generate mockery -name Router -case underscore -inpkg
@@ -377,7 +377,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	if _, ok := r.rgsRaw[rules.Desc]; ok {
 		r.mx.Unlock()
 		r.logger.Warnf("Desc %s already reserved, skipping...", rules.Desc)
-		return nil, fmt.Errorf("noise route group with desc %s already being initialized", rules.Desc)
+		return nil, fmt.Errorf("noise route group with desc %s already being initialized", &rules.Desc)
 	}
 
 	// we need to close currently existing wrapped rg if there's one
@@ -409,7 +409,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 		}
 
-		return nil, fmt.Errorf("WrapConn (%s): %w", rules.Desc, err)
+		return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
 	}
 
 	nrg = &noiseRouteGroup{
