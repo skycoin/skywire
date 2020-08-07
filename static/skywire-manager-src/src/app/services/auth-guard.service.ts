@@ -7,12 +7,16 @@ import { MatDialog } from '@angular/material/dialog';
 import { AuthService, AuthStates } from './auth.service';
 
 /**
- * Makes sure of only allowing the user to access the system when having permission.
+ * Redirects unauthorized users to the login page during the first load and always redirects
+ * authorized users from the login page to the node list. The api service is in chage of
+ * redirecting the unauthorized users to the login page in other cases.
  */
 @Injectable({
   providedIn: 'root'
 })
 export class AuthGuardService implements CanActivate, CanActivateChild {
+  private authChecked = false;
+
   constructor(
     private authService: AuthService,
     private router: Router,
@@ -28,9 +32,15 @@ export class AuthGuardService implements CanActivate, CanActivateChild {
   }
 
   private checkIfCanActivate(route: ActivatedRouteSnapshot): Observable<boolean> {
-    return this.authService.checkLogin().pipe(catchError(() => {
+    if (this.authChecked && route.routeConfig.path !== 'login') {
+      return of(true);
+    }
+
+    return this.authService.checkLogin().pipe(catchError(e => {
       return of(AuthStates.AuthDisabled);
     }), map((authState: AuthStates) => {
+      this.authChecked = true;
+
       // If the user is trying to access "Login" page while he is already logged in or the
       // auth is disabled, redirect him to "Nodes" page
       if (route.routeConfig.path === 'login' && (authState === AuthStates.Logged || authState === AuthStates.AuthDisabled)) {

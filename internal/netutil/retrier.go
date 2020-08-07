@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Package errors

@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 //go:generate mockery -name RouteGroupDialer -case underscore -inpkg

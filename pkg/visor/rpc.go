@@ -6,24 +6,27 @@ import (
 	"fmt"
 	"net/http"
 	"net/rpc"
+	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rpcutil"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
 const (
 	// RPCPrefix is the prefix used with all RPC calls.
 	RPCPrefix = "app-visor"
+	// HealthTimeout defines timeout for /health endpoint calls.
+	HealthTimeout = 5 * time.Second
 )
 
 var (
@@ -74,7 +77,8 @@ type HealthInfo struct {
 func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "Health", nil)(out, &err)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), HealthTimeout/2)
+	defer cancel()
 
 	out.TransportDiscovery = http.StatusNotFound
 	out.RouteFinder = http.StatusNotFound
@@ -82,26 +86,36 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	out.UptimeTracker = http.StatusNotFound
 	out.AddressResolver = http.StatusNotFound
 
+	var wg sync.WaitGroup
+
 	if tdClient := r.visor.TpDiscClient(); tdClient != nil {
-		tdStatus, err := tdClient.Health(ctx)
-		if err != nil {
-			r.log.WithError(err).Warnf("Failed to check transport discovery health")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tdStatus, err := tdClient.Health(ctx)
+			if err != nil {
+				r.log.WithError(err).Warnf("Failed to check transport discovery health")
 
-			out.TransportDiscovery = http.StatusInternalServerError
-		}
+				out.TransportDiscovery = http.StatusInternalServerError
+			}
 
-		out.TransportDiscovery = tdStatus
+			out.TransportDiscovery = tdStatus
+		}()
 	}
 
 	if rfClient := r.visor.RouteFinderClient(); rfClient != nil {
-		rfStatus, err := rfClient.Health(ctx)
-		if err != nil {
-			r.log.WithError(err).Warnf("Failed to check route finder health")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rfStatus, err := rfClient.Health(ctx)
+			if err != nil {
+				r.log.WithError(err).Warnf("Failed to check route finder health")
 
-			out.RouteFinder = http.StatusInternalServerError
-		}
+				out.RouteFinder = http.StatusInternalServerError
+			}
 
-		out.RouteFinder = rfStatus
+			out.RouteFinder = rfStatus
+		}()
 	}
 
 	// TODO(evanlinjin): This should actually poll the setup nodes services.
@@ -112,26 +126,36 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	}
 
 	if utClient := r.visor.UptimeTrackerClient(); utClient != nil {
-		utStatus, err := utClient.Health(ctx)
-		if err != nil {
-			r.log.WithError(err).Warnf("Failed to check uptime tracker health")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			utStatus, err := utClient.Health(ctx)
+			if err != nil {
+				r.log.WithError(err).Warnf("Failed to check uptime tracker health")
 
-			out.UptimeTracker = http.StatusInternalServerError
-		}
+				out.UptimeTracker = http.StatusInternalServerError
+			}
 
-		out.UptimeTracker = utStatus
+			out.UptimeTracker = utStatus
+		}()
 	}
 
 	if arClient := r.visor.AddressResolverClient(); arClient != nil {
-		arStatus, err := arClient.Health(ctx)
-		if err != nil {
-			r.log.WithError(err).Warnf("Failed to check address resolver health")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			arStatus, err := arClient.Health(ctx)
+			if err != nil {
+				r.log.WithError(err).Warnf("Failed to check address resolver health")
 
-			out.AddressResolver = http.StatusInternalServerError
-		}
+				out.AddressResolver = http.StatusInternalServerError
+			}
 
-		out.AddressResolver = arStatus
+			out.AddressResolver = arStatus
+		}()
 	}
+
+	wg.Wait()
 
 	return nil
 }
@@ -568,7 +592,7 @@ func (r *RPC) Update(updateConfig *updater.UpdateConfig, updated *bool) (err err
 
 // UpdateAvailable checks if visor update is available.
 func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version) (err error) {
-	defer rpcutil.LogCall(r.log, "UpdateAvailable", nil)(version, &err)
+	defer rpcutil.LogCall(r.log, "UpdateAvailable", channel)(version, &err)
 
 	if channel == nil {
 		return updater.ErrUnknownChannel
@@ -584,5 +608,11 @@ func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version
 	}
 
 	*version = *v
+	return nil
+}
+
+// UpdateStatus returns visor update status.
+func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
+	*status = r.visor.UpdateStatus()
 	return nil
 }

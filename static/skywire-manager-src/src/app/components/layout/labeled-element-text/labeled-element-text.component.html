@@ -1,0 +1,28 @@
+<div class="wrapper highlight-internal-icon"
+  [matTooltip]="(!short ? 'labeled-element.tooltip' : 'labeled-element.tooltip-with-text') | translate:{ text: id }"
+  [matTooltipClass]="{ 'tooltip-word-break': true }"
+  (click)="$event.stopPropagation(); processClick();"
+>
+  <span class="label">
+    <!-- Label prefix. -->
+    <span *ngIf="labelComponents && labelComponents.prefix">
+      {{labelComponents.prefix | translate}}
+    </span>
+    <!-- Label prefix separator. -->
+    <span *ngIf="labelComponents && labelComponents.prefixSeparator">
+      {{ labelComponents.prefixSeparator }}
+    </span>
+    <!-- Label. -->
+    <span *ngIf="labelComponents && labelComponents.label">
+      {{labelComponents.label}}
+    </span>
+    <span *ngIf="labelComponents && labelComponents.translatableLabel">
+      {{labelComponents.translatableLabel | translate}}
+    </span>
+  </span>
+  <br />
+  <!-- Id. -->
+  <app-truncated-text [short]="short" [showTooltip]="false" [shortTextLength]="shortTextLength" [text]="id"></app-truncated-text>
+  <!-- Icon. -->
+  &nbsp;<mat-icon [inline]="true">settings</mat-icon>
+</div>
