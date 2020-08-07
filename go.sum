@@ -124,6 +124,8 @@ github.com/kr/pretty v0.2.0/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfn
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+github.com/kz/discordrus v1.2.0 h1:r5uplKozPR+TIJ1NUZT758Lv7eukf8+fp3L4uRj+6xs=
+github.com/kz/discordrus v1.2.0/go.mod h1:cJ3TiJUUuY5Gm3DNYHnnaUa3iol8VBRPzztAeZm7exc=
 github.com/magiconair/properties v1.8.0/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/magiconair/properties v1.8.1/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/mattn/go-colorable v0.1.4/go.mod h1:U0ppj6V5qS13XJ6of8GYAs25YV2eR4EVcfRqFIhoBtE=
@@ -192,8 +194,8 @@ github.com/schollz/progressbar/v2 v2.15.0/go.mod h1:UdPq3prGkfQ7MOzZKlDRpYKcFqEM
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2 h1:SPIRibHv4MatM3XXNO2BJeFLZwZ2LvZgfQ5+UNI2im4=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
-github.com/skycoin/dmsg v0.0.0-20200803194104-78ff5746d8a3 h1:mSraFLdscptO1H9nJ1rrzXegC+hIC8TeWP4LoO9Oe6I=
-github.com/skycoin/dmsg v0.0.0-20200803194104-78ff5746d8a3/go.mod h1:wyteEV9/z7kxG6nAWslHlQtEpixpB/RWtzFg7GLlIEQ=
+github.com/skycoin/dmsg v0.0.0-20200807121748-518564603fc3 h1:9xY2P7ssFM33qIqK1mIdKlJ+IuAFHh96N83ttbPHJOM=
+github.com/skycoin/dmsg v0.0.0-20200807121748-518564603fc3/go.mod h1:Bl7qEJ0iYn8Pg6yk3WhE15Rd7OdWmxcIE+NGpeQw2fA=
 github.com/skycoin/skycoin v0.26.0 h1:xDxe2r8AclMntZ550Y/vUQgwgLtwrf9Wu5UYiYcN5/o=
 github.com/skycoin/skycoin v0.26.0/go.mod h1:78nHjQzd8KG0jJJVL/j0xMmrihXi70ti63fh8vXScJw=
 github.com/skycoin/skywire v0.2.3-0.20200803142942-0f8b9981f6f9/go.mod h1:VtQTQdSwPvAZDzDgFK41PwGGQGeY3ehlFCtT0F8C7/8=
