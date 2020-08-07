@@ -92,7 +92,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
 func (c *Client) Serve() error {
-	tunIP, tunGateway, encrypt, err := c.shakeHands()
+	tunIP, tunGateway, err := c.shakeHands()
 	if err != nil {
 		return fmt.Errorf("error during client/server handshake: %w", err)
 	}
@@ -137,34 +137,20 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
-	rw := io.ReadWriter(c.conn)
-	if encrypt {
-		c.log.Infoln("Enabling encryption...")
-
-		rw, err = WrapRWWithNoise(c.conn, true, c.cfg.Credentials.PK, c.cfg.Credentials.SK)
-		if err != nil {
-			return fmt.Errorf("failed to enable encryption: %w", err)
-		}
-
-		c.log.Infoln("Encryption enabled")
-	} else {
-		c.log.Infoln("Encryption disabled")
-	}
-
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	// read all system traffic and pass it to the remote VPN server
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, rw); err != nil {
+		if _, err := io.Copy(tun, c.conn); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN server", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(rw, tun); err != nil {
+		if _, err := io.Copy(c.conn, tun); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())
 		}
 	}()
@@ -302,10 +288,10 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	return stcpEntities, nil
 }
 
-func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
+func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 	unavailableIPs, err := LocalNetworkInterfaceIPs()
 	if err != nil {
-		return nil, nil, false, fmt.Errorf("error getting unavailable private IPs: %w", err)
+		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
 
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
@@ -313,27 +299,26 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error
 	cHello := ClientHello{
 		UnavailablePrivateIPs: unavailableIPs,
 		Passcode:              c.cfg.Passcode,
-		EnableEncryption:      c.cfg.Credentials.IsValid(),
 	}
 
 	c.log.Debugf("Sending client hello: %v", cHello)
 
 	if err := WriteJSON(c.conn, &cHello); err != nil {
-		return nil, nil, false, fmt.Errorf("error sending client hello: %w", err)
+		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
 	}
 
 	var sHello ServerHello
 	if err := ReadJSON(c.conn, &sHello); err != nil {
-		return nil, nil, false, fmt.Errorf("error reading server hello: %w", err)
+		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
 	}
 
 	c.log.Debugf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, false, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
+		return nil, nil, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
 	}
 
-	return sHello.TUNIP, sHello.TUNGateway, sHello.EncryptionEnabled, nil
+	return sHello.TUNIP, sHello.TUNGateway, nil
 }
 
 func ipFromEnv(key string) (net.IP, error) {
