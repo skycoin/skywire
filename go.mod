@@ -14,7 +14,7 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/sirupsen/logrus v1.4.2
-	github.com/skycoin/dmsg v0.0.0-20200803194104-78ff5746d8a3
+	github.com/skycoin/dmsg v0.0.0-20200807121748-518564603fc3
 	github.com/skycoin/skycoin v0.26.0
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/spf13/cobra v0.0.5
