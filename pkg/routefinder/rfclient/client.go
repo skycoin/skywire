@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 //go:generate mockery -name Client -case underscore -inpkg
@@ -130,8 +130,13 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 }
 
 // Health checks route finder health.
-func (c *apiClient) Health(_ context.Context) (int, error) {
-	res, err := http.Get(c.addr + "/health")
+func (c *apiClient) Health(ctx context.Context) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr+"/health", nil)
+	if err != nil {
+		return 0, err
+	}
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 0, err
 	}

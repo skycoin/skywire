@@ -6,14 +6,14 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/vpn"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/skycoin/skywire/internal/vpn"
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 const (
@@ -67,7 +67,7 @@ func main() {
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
 	srvCfg := vpn.ServerConfig{
-		Passcode:    *passcode,
+		Passcode: *passcode,
 	}
 	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {

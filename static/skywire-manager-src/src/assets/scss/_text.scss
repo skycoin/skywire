@@ -2,10 +2,6 @@ span {
   overflow-wrap: break-word;
 }
 
-.font-base {
-  font-size: $font-size-base !important;
-}
-
 .font-sm {
   font-size: $font-size-sm !important;
   font-weight: $font-weight-light !important;
@@ -13,11 +9,6 @@ span {
 
 .font-smaller {
   font-size: $font-size-smaller !important;
-  font-weight: $font-weight-light !important;
-}
-
-.font-mini {
-  font-size: $font-size-mini !important;
   font-weight: $font-weight-light !important;
 }
 

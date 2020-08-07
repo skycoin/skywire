@@ -14,6 +14,14 @@
 - `log_level` (string)
 - `shutdown_timeout` (Duration)
 - `restart_check_delay` (string)
+- `public_trusted_visor` (bool)
+
+
+# V1Routing
+
+- `setup_nodes` ()
+- `route_finder` (string)
+- `route_finder_timeout` (Duration)
 
 
 # V1Transport
@@ -32,6 +40,11 @@
 - `cli_address` (string)
 
 
+# V1UptimeTracker
+
+- `addr` (string)
+
+
 # V1Launcher
 
 - `discovery` (*[V1AppDisc](#V1AppDisc))
@@ -39,18 +52,6 @@
 - `server_addr` (string)
 - `bin_path` (string)
 - `local_path` (string)
-
-
-# V1Routing
-
-- `setup_nodes` ()
-- `route_finder` (string)
-- `route_finder_timeout` (Duration)
-
-
-# V1UptimeTracker
-
-- `addr` (string)
 
 
 # V1LogStore
@@ -74,16 +75,6 @@
 - `pk` (PubKey)
 
 
-# MasterLogger
-
-- `` (*[Logger](#Logger))
-
-
-# Logger
-
-- `` (FieldLogger)
-
-
 # AppConfig
 
 - `name` (string)
@@ -92,10 +83,14 @@
 - `port` (Port)
 
 
-# STCPConfig
+# MasterLogger
 
-- `pk_table` ()
-- `local_address` (string)
+- `` (*[Logger](#Logger))
+
+
+# Logger
+
+- `` (FieldLogger)
 
 
 # RWMutex
@@ -111,6 +106,12 @@
 
 - `state` (int32)
 - `sema` (uint32)
+
+
+# STCPConfig
+
+- `pk_table` ()
+- `local_address` (string)
 
 
 # DmsgConfig

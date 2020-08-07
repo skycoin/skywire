@@ -8,13 +8,13 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/SkycoinProject/dmsg/buildinfo"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/buildinfo"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/skysocks"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/internal/skysocks"
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 const (
