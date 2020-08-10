@@ -144,5 +144,10 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
 
+	conf.Dmsgpty.AuthFile = skyenv.TestDmsgPtyWhiteList
+	conf.Transport.LogStore.Location = skyenv.TestTpLogStore
+	conf.Launcher.LocalPath = skyenv.TestAppLocalPath
+	conf.Launcher.BinPath = skyenv.TestAppBinPath
+
 	return conf, nil
 }
