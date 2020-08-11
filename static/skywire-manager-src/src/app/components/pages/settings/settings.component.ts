@@ -1,11 +1,13 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
 
 import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
 import { AuthService } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { SidenavService } from 'src/app/services/sidenav.service';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**
  * Page with the general settings of the app.
@@ -25,6 +27,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private router: Router,
     private snackbarService: SnackbarService,
     private sidenavService: SidenavService,
+    private dialog: MatDialog,
   ) {
     // Data for populating the tab bar.
     this.tabsData = [
@@ -71,9 +74,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   logout() {
-    this.authService.logout().subscribe(
-      () => this.router.navigate(['login']),
-      () => this.snackbarService.showError('common.logout-error')
-    );
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'common.logout-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      this.authService.logout().subscribe(
+        () => this.router.navigate(['login']),
+        () => this.snackbarService.showError('common.logout-error')
+      );
+    });
   }
 }
