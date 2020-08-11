@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 const (

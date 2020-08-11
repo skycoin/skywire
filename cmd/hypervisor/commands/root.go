@@ -6,17 +6,17 @@ import (
 	"os"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/rakyll/statik/fs"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	_ "github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/statik" // embedded static files
-	"github.com/SkycoinProject/skywire-mainnet/pkg/hypervisor"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	_ "github.com/skycoin/skywire/cmd/hypervisor/statik" // embedded static files
+	"github.com/skycoin/skywire/pkg/hypervisor"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 const configEnv = "SW_HYPERVISOR_CONFIG"

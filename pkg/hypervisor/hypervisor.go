@@ -16,28 +16,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/httputil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/httputil"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"nhooyr.io/websocket"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 const (
-	healthTimeout = 5 * time.Second
-	httpTimeout   = 30 * time.Second
+	httpTimeout = 30 * time.Second
 )
 
 const (
@@ -69,7 +68,7 @@ type Hypervisor struct {
 	updater           *updater.Updater
 	mu                *sync.RWMutex
 	visorMu           sync.Mutex
-	visorChanMux      *chanMux
+	visorChanMux      map[cipher.PubKey]*chanMux
 	hypervisorMu      sync.Mutex
 	hypervisorChanMux *chanMux
 }
@@ -88,15 +87,16 @@ func New(config Config, assets http.FileSystem, restartCtx *restart.Context, dms
 	u := updater.New(log, restartCtx, "")
 
 	hv := &Hypervisor{
-		c:          config,
-		dmsgC:      dmsgC,
-		assets:     assets,
-		visors:     make(map[cipher.PubKey]VisorConn),
-		trackers:   NewDmsgTrackerManager(nil, dmsgC, 0, 0),
-		users:      NewUserManager(singleUserDB, config.Cookies),
-		restartCtx: restartCtx,
-		updater:    u,
-		mu:         new(sync.RWMutex),
+		c:            config,
+		dmsgC:        dmsgC,
+		assets:       assets,
+		visors:       make(map[cipher.PubKey]VisorConn),
+		trackers:     NewDmsgTrackerManager(nil, dmsgC, 0, 0),
+		users:        NewUserManager(singleUserDB, config.Cookies),
+		restartCtx:   restartCtx,
+		updater:      u,
+		mu:           new(sync.RWMutex),
+		visorChanMux: make(map[cipher.PubKey]*chanMux),
 	}
 
 	return hv, nil
@@ -352,17 +352,17 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 
 		consumer := make(chan visor.StatusMessage, 512)
 		hv.hypervisorMu.Lock()
-		if hv.visorChanMux == nil {
+		if hv.hypervisorChanMux == nil {
 			ch := hv.updateHVWithStatus(updateConfig)
-			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+			hv.hypervisorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
 		} else {
-			hv.visorChanMux.addConsumer(consumer)
+			hv.hypervisorChanMux.addConsumer(consumer)
 		}
 		hv.hypervisorMu.Unlock()
 
 		defer func() {
 			hv.hypervisorMu.Lock()
-			hv.visorChanMux = nil
+			hv.hypervisorChanMux = nil
 			hv.hypervisorMu.Unlock()
 		}()
 
@@ -529,7 +529,7 @@ func (hv *Hypervisor) getHealth() http.HandlerFunc {
 		}
 
 		resCh := make(chan healthRes)
-		tCh := time.After(healthTimeout)
+		tCh := time.After(visor.HealthTimeout)
 
 		go func() {
 			hi, err := ctx.RPC.Health()
@@ -1106,17 +1106,17 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 
 		consumer := make(chan visor.StatusMessage, 512)
 		hv.visorMu.Lock()
-		if hv.visorChanMux == nil {
+		if mux := hv.visorChanMux[ctx.Addr.PK]; mux == nil {
 			ch := ctx.RPC.UpdateWithStatus(updateConfig)
-			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+			hv.visorChanMux[ctx.Addr.PK] = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
 		} else {
-			hv.visorChanMux.addConsumer(consumer)
+			hv.visorChanMux[ctx.Addr.PK].addConsumer(consumer)
 		}
 		hv.visorMu.Unlock()
 
 		defer func() {
 			hv.visorMu.Lock()
-			hv.visorChanMux = nil
+			delete(hv.visorChanMux, ctx.Addr.PK)
 			hv.visorMu.Unlock()
 		}()
 
@@ -1153,7 +1153,7 @@ func (hv *Hypervisor) isVisorWSUpdateRunning() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		running := false
 		hv.visorMu.Lock()
-		running = hv.visorChanMux != nil
+		running = hv.visorChanMux != nil && hv.visorChanMux[ctx.Addr.PK] != nil
 		hv.visorMu.Unlock()
 
 		resp := struct {

@@ -74,6 +74,7 @@ import { FiltersSelectionComponent } from './components/layout/filters-selection
 import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { LabelListComponent } from './components/pages/settings/all-labels/label-list/label-list.component';
+import { UpdateComponent } from './components/layout/update/update.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -130,24 +131,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     LabeledElementTextComponent,
     AllLabelsComponent,
     LabelListComponent,
-  ],
-  entryComponents: [
-    LogComponent,
-    EditLabelComponent,
-    CreateTransportComponent,
-    BasicTerminalComponent,
-    RouteDetailsComponent,
-    ConfirmationComponent,
-    TransportDetailsComponent,
-    LogFilterComponent,
-    SnackbarComponent,
-    InitialSetupComponent,
-    SelectLanguageComponent,
-    SelectOptionComponent,
-    SkysocksSettingsComponent,
-    SkysocksClientSettingsComponent,
-    FiltersSelectionComponent,
-    AllLabelsComponent,
+    UpdateComponent,
   ],
   imports: [
     BrowserModule,

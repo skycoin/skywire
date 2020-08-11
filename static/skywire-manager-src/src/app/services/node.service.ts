@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
+import { Observable, Subscription, BehaviorSubject, of, throwError } from 'rxjs';
 import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
@@ -612,6 +612,13 @@ export class NodeService {
    */
   reboot(nodeKey: string): Observable<any> {
     return this.apiService.post(`visors/${nodeKey}/restart`);
+  }
+
+  /**
+   * Checks if there are updates available for a node.
+   */
+  checkIfUpdating(nodeKey: string): Observable<any> {
+    return this.apiService.get(`visors/${nodeKey}/update/ws/running`);
   }
 
   /**

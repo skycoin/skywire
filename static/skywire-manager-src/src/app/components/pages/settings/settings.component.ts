@@ -1,9 +1,11 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { AuthService } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**
  * Page with the general settings of the app.
@@ -21,6 +23,7 @@ export class SettingsComponent {
     private authService: AuthService,
     private router: Router,
     private snackbarService: SnackbarService,
+    private dialog: MatDialog,
   ) {
     // Data for populating the tab bar.
     this.tabsData = [
@@ -62,9 +65,15 @@ export class SettingsComponent {
   }
 
   logout() {
-    this.authService.logout().subscribe(
-      () => this.router.navigate(['login']),
-      () => this.snackbarService.showError('common.logout-error')
-    );
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'common.logout-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      this.authService.logout().subscribe(
+        () => this.router.navigate(['login']),
+        () => this.snackbarService.showError('common.logout-error')
+      );
+    });
   }
 }

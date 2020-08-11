@@ -5,9 +5,9 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/SkycoinProject/yamux"
 	"github.com/armon/go-socks5"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/yamux"
 )
 
 // Server implements multiplexing proxy server using yamux.

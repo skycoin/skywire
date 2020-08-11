@@ -14,7 +14,8 @@
     "logout-error": "Error cerrando la sesión.",
     "time-in-ms": "{{ time }}ms",
     "ok": "Ok",
-    "unknown": "Desconocido"
+    "unknown": "Desconocido",
+    "close": "Cerrar"
   },
 
   "labeled-element": {
@@ -91,7 +92,6 @@
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
         "node-version": "Versión del visor:",
-        "app-protocol-version": "Versión del protocolo de app:",
         "time": {
           "title": "Tiempo online:",
           "seconds": "unos segundos",
@@ -150,6 +150,7 @@
     "deleted-singular": "1 visor offline removido.",
     "deleted-plural": "{{ number }} visores offline removidos.",
     "no-offline-nodes": "No se encontraron visores offline.",
+    "no-visors-to-update": "No hay visores para actualizar.",
     "filter-dialog": {
       "online": "El visor debe estar",
       "label": "La etiqueta debe contener",
@@ -161,24 +162,6 @@
         "online": "Online",
         "offline": "Offline"
       }
-    },
-
-    "update": {
-      "no-visors": "No hay visores para actualizar. Por favor espere.",
-      "title": "Actualizar visores",
-      "processing": "Buscando actualizaciones...",
-      "processing-button": "Por favor espere",
-      "no-update": "Actualmente no hay nuevas actualizaciones para los visores.",
-      "update-available-single": "Hay una actualización disponible para 1 visor:",
-      "update-available-multiple": "Hay actualizaciones disponibles para {{ number }} visores:",
-      "update-available-confirmation": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
-      "version-change": "De {{ currentVersion }} a {{ newVersion }}",
-      "done": "El visor {{ name }} está siendo actualizado.",
-      "done-all": "Operación completada. Todos los visores están siendo actualizandos.",
-      "update-error": "No se pudo instalar la actualización en el visor {{name}}. Por favor, inténtelo de nuevo más tarde.",
-      "all-failed-error": "No se pudo actualizar ninguno de los visores. Por favor, inténtelo de nuevo más tarde.",
-      "some-updated-error": "{{ updatedNumber }} visores fueron actualizados y hubo problemas para actualizar {{ failedNumber }}. Por favor, inténtelo de nuevo más tarde.",
-      "install": "Instalar actualizaciones"
     }
   },
 
@@ -246,19 +229,31 @@
       "title": "Terminal",
       "input-start": "Terminal de Skywire para {{address}}",
       "error": "Error inesperado mientras se intentaba ejecutar el comando."
-    },
-    "update": {
-      "title": "Actualizar",
-      "processing": "Buscando actualizaciones...",
-      "processing-button": "Por favor espere",
-      "no-update": "Actualmente no hay ninguna actualización para el visor. La versión instalada actualmente es:",
-      "update-available1": "Hay una actualización disponible para el visor:",
-      "update-available2": "Haga clic en el botón 'Instalar actualización' para instalarla.",
-      "version-change": "De {{ currentVersion }} a {{ newVersion }}",
-      "done": "El visor está siendo actualizado.",
-      "update-error": "No se pudo instalar la actualización. Por favor inténtelo nuevamente luego.",
-      "install": "Instalar actualización"
     }
+  },
+
+  "update": {
+    "title": "Actualizar",
+    "error-title": "Error",
+    "processing": "Buscando actualizaciones...",
+    "no-update": "No hay ninguna actualización para el visor. La versión instalada actualmente es:",
+    "no-updates": "No se encontraron nuevas actualizaciones.",
+    "already-updating": "Algunos visores ya están siendo actualizandos:",
+    "update-available": "Las siguientes actualizaciones fueron encontradas:",
+    "update-available-singular": "Las siguientes actualizaciones para 1 visor fueron encontradas:",
+    "update-available-plural": "Las siguientes actualizaciones para {{ number }} visores fueron encontradas:",
+    "update-available-additional-singular": "Las siguientes actualizaciones adicionales para 1 visor fueron encontradas:",
+    "update-available-additional-plural": "Las siguientes actualizaciones adicionales para {{ number }} visores fueron encontradas:",
+    "update-instructions": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
+    "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
+    "version-change": "De {{ currentVersion }} a {{ newVersion }}",
+    "downloaded-file-name-prefix": "Descargando: ",
+    "speed-prefix": "Velocidad: ",
+    "time-downloading-prefix": "Tiempo descargando: ",
+    "time-left-prefix": "Tiempo aprox. faltante: ",
+    "starting": "Preparando para actualizar",
+    "finished": "Conexión de estado terminada",
+    "install": "Instalar actualizaciones"
   },
 
   "apps": {

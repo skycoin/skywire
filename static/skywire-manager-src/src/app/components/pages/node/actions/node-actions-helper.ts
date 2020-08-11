@@ -1,4 +1,5 @@
 import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { Component, AfterViewInit, OnDestroy, Input } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
@@ -15,6 +16,8 @@ import { SelectableOption, SelectOptionComponent } from 'src/app/components/layo
 import { ConfirmationData, ConfirmationComponent } from 'src/app/components/layout/confirmation/confirmation.component';
 import { AppConfig } from 'src/app/app.config';
 import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
+import { UpdateComponent } from 'src/app/components/layout/update/update.component';
+import { StorageService } from 'src/app/services/storage.service';
 
 /**
  * Helper object for managing the options shown in the menu while in the node details page.
@@ -40,6 +43,7 @@ export class NodeActionsHelper {
   private snackbarService: SnackbarService;
   private nodeService: NodeService;
   private translateService: TranslateService;
+  private storageService: StorageService;
 
   constructor(injector: Injector, showingFullList: boolean) {
     // Get the services.
@@ -48,6 +52,7 @@ export class NodeActionsHelper {
     this.snackbarService = injector.get(SnackbarService);
     this.nodeService = injector.get(NodeService);
     this.translateService = injector.get(TranslateService);
+    this.storageService = injector.get(StorageService);
 
     // Options for the menu shown in the top bar.
     this.options = [
@@ -134,83 +139,9 @@ export class NodeActionsHelper {
   }
 
   update() {
-    // Configuration for the confirmation modal window used as the main UI element for the
-    // updating process.
-    const confirmationData: ConfirmationData = {
-      text: 'actions.update.processing',
-      headerText: 'actions.update.title',
-      confirmButtonText: 'actions.update.processing-button',
-      disableDismiss: true,
-    };
-
-    // Show the confirmation window in a "loading" state while checking if there are updates.
-    const config = new MatDialogConfig();
-    config.data = confirmationData;
-    config.autoFocus = false;
-    config.width = AppConfig.smallModalWidth;
-    const confirmationDialog = this.dialog.open(ConfirmationComponent, config);
-    setTimeout(() => confirmationDialog.componentInstance.showProcessing());
-
-    // Check if there is an update available.
-    this.updateSubscription = this.nodeService.checkUpdate(this.currentNodeKey).subscribe(response => {
-      if (response && response.available) {
-        // New configuration for asking for confirmation.
-        const newVersion = this.translateService.instant('actions.update.version-change',
-          {
-            currentVersion: response.current_version ? response.current_version : this.translateService.instant('common.unknown'),
-            newVersion: response.available_version
-          }
-        );
-        const newConfirmationData: ConfirmationData = {
-          text: 'actions.update.update-available1',
-          list: [newVersion],
-          lowerText: 'actions.update.update-available2',
-          headerText: 'actions.update.title',
-          confirmButtonText: 'actions.update.install',
-          cancelButtonText: 'common.cancel',
-        };
-
-        // Ask for confirmation.
-        setTimeout(() => {
-          confirmationDialog.componentInstance.showAsking(newConfirmationData);
-        });
-      } else if (response) {
-        // Inform that there are no updates available.
-        setTimeout(() => {
-          confirmationDialog.componentInstance.showDone(null, 'actions.update.no-update', [response.current_version]);
-        });
-      } else {
-        // Inform that there was an error.
-        setTimeout(() => {
-          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'common.operation-error');
-        });
-      }
-    }, (err: OperationError) => {
-      err = processServiceError(err);
-
-      // Must wait because the loading state is activated after a frame.
-      setTimeout(() => {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      });
-    });
-
-    // React if the user confirm the update.
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      // Update the visor.
-      this.updateSubscription = this.nodeService.update(this.currentNodeKey).subscribe(response => {
-          confirmationDialog.componentInstance.data.lowerText = response.status;
-      }, (err: OperationError) => {
-        err = processServiceError(err);
-
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      },
-        () => {
-          this.snackbarService.showDone('actions.update.done');
-          confirmationDialog.close();
-        });
-    });
+    const labelInfo = this.storageService.getLabelInfo(this.currentNodeKey);
+    const label = labelInfo ? labelInfo.label : '';
+    UpdateComponent.openDialog(this.dialog, [{key: this.currentNodeKey, label: label}]);
   }
 
   terminal() {

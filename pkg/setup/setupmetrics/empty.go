@@ -3,7 +3,7 @@ package setupmetrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // NewEmpty creates a new metrics implementation that does nothing.
