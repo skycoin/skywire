@@ -3,7 +3,7 @@ package skyenv
 import (
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // Constants for default services.

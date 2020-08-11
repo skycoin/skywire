@@ -6,10 +6,10 @@ import (
 	"io"
 	"net/rpc"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 )
 
 // RPCGateway represents the RPC gateway that opens up an app for incoming events from visor.

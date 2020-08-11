@@ -3,6 +3,6 @@
     <mat-form-field>
       <input #firstInput [placeholder]="'edit-label.label' | translate" formControlName="label" maxlength="66" matInput>
     </mat-form-field>
-    <app-button class="float-right" color="primary" type="mat-raised-button" (action)="save()">{{ 'common.save' | translate }}</app-button>
+    <app-button class="float-right" color="primary" (action)="save()">{{ 'common.save' | translate }}</app-button>
   </form>
 </app-dialog>

@@ -12,9 +12,11 @@
     "options": "Options",
     "logout": "Logout",
     "logout-error": "Error logging out.",
+    "logout-confirmation": "Are you sure you want to log out?",
     "time-in-ms": "{{ time }}ms",
     "ok": "Ok",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "close": "Close"
   },
 
   "labeled-element": {
@@ -31,6 +33,7 @@
 
   "labels": {
     "title": "Labels",
+    "info": "Labels you have entered to easily identify visors, transports and other elements, instead of having to read machine generated identifiers.",
     "list-title": "Label list",
     "label": "Label",
     "id": "Element ID",
@@ -57,16 +60,17 @@
 
   "filters": {
     "filter-action": "Filter",
-    "active-filters": "Active filters: ",
-    "press-to-remove": "(Press to remove)",
+    "press-to-remove": "(Press to remove the filters)",
     "remove-confirmation": "Are you sure you want to remove the filters?"
   },
 
   "tables": {
     "title": "Order by",
     "sorting-title": "Ordered by:",
-    "ascending-order": "(ascending)",
-    "descending-order": "(descending)"
+    "sort-by-value": "Value",
+    "sort-by-label": "Label",
+    "label": "(label)",
+    "inverted-order": "(inverted)"
   },
 
   "start": {
@@ -91,7 +95,6 @@
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
-        "app-protocol-version": "App protocol version:",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",
@@ -150,6 +153,7 @@
     "deleted-singular": "1 offline visor removed.",
     "deleted-plural": "{{ number }} offline visors removed.",
     "no-offline-nodes": "No offline visors found.",
+    "no-visors-to-update": "There are no visors to update.",
     "filter-dialog": {
       "online": "The visor must be",
       "label": "The label must contain",
@@ -161,24 +165,6 @@
         "online": "Online",
         "offline": "Offline"
       }
-    },
-
-    "update": {
-      "no-visors": "There are no visors to update. Please wait.",
-      "title": "Update visors",
-      "processing": "Looking for updates...",
-      "processing-button": "Please wait",
-      "no-update": "Currently, there are no new updates for the visors.",
-      "update-available-single": "There is an update available for 1 visor:",
-      "update-available-multiple": "There are updates available for {{ number }} visors:",
-      "update-available-confirmation": "Click the 'Install updates' button to continue.",
-      "version-change": "From {{ currentVersion }} to {{ newVersion }}",
-      "done": "The visor {{ name }} is updated.",
-      "done-all": "Operation completed. All visors are updated.",
-      "update-error": "Could not install the update in visor {{ name }}. Please, try again later.",
-      "all-failed-error": "Could not update any of the visors. Please, try again later.",
-      "some-updated-error": "{{ updatedNumber }} visors were updated and there were problems for updating {{ failedNumber }}. Please, try again later.",
-      "install": "Install updates"
     }
   },
 
@@ -246,19 +232,31 @@
       "title": "Terminal",
       "input-start": "Skywire terminal for {{address}}",
       "error": "Unexpected error while trying to execute the command."
-    },
-    "update": {
-      "title": "Update",
-      "processing": "Looking for updates...",
-      "processing-button": "Please wait",
-      "no-update": "Currently, there is no update for the visor. The currently installed version is:",
-      "update-available1": "There is an update available for the visor:",
-      "update-available2": "Click the 'Install update' button to install it.",
-      "version-change": "From {{ currentVersion }} to {{ newVersion }}",
-      "done": "The visor is updated.",
-      "update-error": "Could not install the update. Please, try again later.",
-      "install": "Install update"
     }
+  },
+
+  "update": {
+    "title": "Update",
+    "error-title": "Error",
+    "processing": "Looking for updates...",
+    "no-update": "There is no update for the visor. The currently installed version is:",
+    "no-updates": "No new updates were found.",
+    "already-updating": "Some visors are already being updated:",
+    "update-available": "The following updates were found:",
+    "update-available-singular": "The following updates for 1 visor were found:",
+    "update-available-plural": "The following updates for {{ number }} visors were found:",
+    "update-available-additional-singular": "The following additional updates for 1 visor were found:",
+    "update-available-additional-plural": "The following additional updates for {{ number }} visors were found:",
+    "update-instructions": "Click the 'Install updates' button to continue.",
+    "updating": "The update operation has been started, you can open this window again for checking the progress:",
+    "version-change": "From {{ currentVersion }} to {{ newVersion }}",
+    "downloaded-file-name-prefix": "Downloading: ",
+    "speed-prefix": "Speed: ",
+    "time-downloading-prefix": "Time downloading: ",
+    "time-left-prefix": "Aprox. time left: ",
+    "starting": "Preparing to update",
+    "finished": "Status connection finished",
+    "install": "Install updates"
   },
 
   "apps": {
@@ -355,6 +353,7 @@
 
   "transports": {
     "title": "Transports",
+    "info": "Connections you have with remote Skywire visors, to allow local Skywire apps to communicate with apps running on those remote visors.",
     "list-title": "Transport list",
     "state": "State",
     "state-tooltip": "Current state",
@@ -415,6 +414,7 @@
 
   "routes": {
     "title": "Routes",
+    "info": "Paths used to reach the remote visors to which transports have been established. Routes are automatically generated as needed.",
     "list-title": "Route list",
     "key": "Key",
     "rule": "Rule",
