@@ -68,7 +68,7 @@ type Hypervisor struct {
 	updater           *updater.Updater
 	mu                *sync.RWMutex
 	visorMu           sync.Mutex
-	visorChanMux      *chanMux
+	visorChanMux      map[cipher.PubKey]*chanMux
 	hypervisorMu      sync.Mutex
 	hypervisorChanMux *chanMux
 }
@@ -87,15 +87,16 @@ func New(config Config, assets http.FileSystem, restartCtx *restart.Context, dms
 	u := updater.New(log, restartCtx, "")
 
 	hv := &Hypervisor{
-		c:          config,
-		dmsgC:      dmsgC,
-		assets:     assets,
-		visors:     make(map[cipher.PubKey]VisorConn),
-		trackers:   NewDmsgTrackerManager(nil, dmsgC, 0, 0),
-		users:      NewUserManager(singleUserDB, config.Cookies),
-		restartCtx: restartCtx,
-		updater:    u,
-		mu:         new(sync.RWMutex),
+		c:            config,
+		dmsgC:        dmsgC,
+		assets:       assets,
+		visors:       make(map[cipher.PubKey]VisorConn),
+		trackers:     NewDmsgTrackerManager(nil, dmsgC, 0, 0),
+		users:        NewUserManager(singleUserDB, config.Cookies),
+		restartCtx:   restartCtx,
+		updater:      u,
+		mu:           new(sync.RWMutex),
+		visorChanMux: make(map[cipher.PubKey]*chanMux),
 	}
 
 	return hv, nil
@@ -351,17 +352,17 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 
 		consumer := make(chan visor.StatusMessage, 512)
 		hv.hypervisorMu.Lock()
-		if hv.visorChanMux == nil {
+		if hv.hypervisorChanMux == nil {
 			ch := hv.updateHVWithStatus(updateConfig)
-			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+			hv.hypervisorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
 		} else {
-			hv.visorChanMux.addConsumer(consumer)
+			hv.hypervisorChanMux.addConsumer(consumer)
 		}
 		hv.hypervisorMu.Unlock()
 
 		defer func() {
 			hv.hypervisorMu.Lock()
-			hv.visorChanMux = nil
+			hv.hypervisorChanMux = nil
 			hv.hypervisorMu.Unlock()
 		}()
 
@@ -1105,17 +1106,17 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 
 		consumer := make(chan visor.StatusMessage, 512)
 		hv.visorMu.Lock()
-		if hv.visorChanMux == nil {
+		if mux := hv.visorChanMux[ctx.Addr.PK]; mux == nil {
 			ch := ctx.RPC.UpdateWithStatus(updateConfig)
-			hv.visorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+			hv.visorChanMux[ctx.Addr.PK] = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
 		} else {
-			hv.visorChanMux.addConsumer(consumer)
+			hv.visorChanMux[ctx.Addr.PK].addConsumer(consumer)
 		}
 		hv.visorMu.Unlock()
 
 		defer func() {
 			hv.visorMu.Lock()
-			hv.visorChanMux = nil
+			delete(hv.visorChanMux, ctx.Addr.PK)
 			hv.visorMu.Unlock()
 		}()
 
@@ -1152,7 +1153,7 @@ func (hv *Hypervisor) isVisorWSUpdateRunning() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		running := false
 		hv.visorMu.Lock()
-		running = hv.visorChanMux != nil
+		running = hv.visorChanMux != nil && hv.visorChanMux[ctx.Addr.PK] != nil
 		hv.visorMu.Unlock()
 
 		resp := struct {

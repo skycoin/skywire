@@ -1,0 +1,119 @@
+<app-dialog [headline]="(state !== updatingStates.Error ? 'update.title' : 'update.error-title') | translate">
+  <!-- Main black text area. -->
+  <div class="text-container">
+    <ng-container *ngIf="state === updatingStates.InitialProcessing">
+      <mat-spinner class="loading-indicator" [diameter]="12"></mat-spinner>
+      {{ 'update.processing' | translate }}
+    </ng-container>
+    <ng-container *ngIf="state === updatingStates.Error">
+      {{ errorText | translate }}
+    </ng-container>
+    <ng-container *ngIf="state === updatingStates.NoUpdatesFound">
+      {{ (data.length === 1 ? 'update.no-update' : 'update.no-updates') | translate }}
+    </ng-container>
+  </div>
+
+  <!-- Current version, shown if no update was found and only one node was going to be updated. -->
+  <div *ngIf="state === updatingStates.NoUpdatesFound && data.length === 1" class="list-container">
+    - {{ currentNodeVersion ? currentNodeVersion : ('common.unknown' | translate) }}
+  </div>
+
+  <!-- List with the nodes currently being updated, shown while asking for confirmation before installing the updates. -->
+  <ng-container *ngIf="state === updatingStates.Asking && indexesAlreadyBeingUpdated.length > 0">
+    <div class="text-container">
+      {{ 'update.already-updating' | translate }}
+    </div>
+    <div class="list-container">
+      <div *ngFor="let index of indexesAlreadyBeingUpdated">
+        - {{ nodesToUpdate[index].label }}
+      </div>
+    </div>
+  </ng-container>
+  <!-- Text asking for confirmation before installing the updates. -->
+  <ng-container *ngIf="state === updatingStates.Asking">
+    <div class="text-container">
+      {{ updateAvailableText | translate:{number: nodesForUpdatesFound} }}
+    </div>
+    <div class="list-container">
+      <div *ngFor="let update of updatesFound">
+        - {{ 'update.version-change' | translate:update }}
+      </div>
+    </div>
+    <div class="text-container">
+      {{ 'update.update-instructions' | translate }}
+    </div>
+  </ng-container>
+
+  <!-- Content shown while updating. -->
+  <ng-container *ngIf="state === updatingStates.Updating">
+    <!-- Indications. -->
+    <div class="text-container">
+      {{ 'update.updating' | translate }}
+    </div>
+    <div>
+      <ng-container *ngFor="let node of nodesToUpdate">
+        <ng-container *ngIf="node.update">
+          <!-- Raw progress text shown if it was not possible to parse it for showing the progrss bar. -->
+          <div *ngIf="!node.updateProgressInfo.errorMsg && !node.updateProgressInfo.dataParsed" class="list-container">
+            - <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!node.updateProgressInfo.closed"></mat-spinner> {{ node.label }}
+            : <span class="details">{{ node.updateProgressInfo.rawMsg }}</span>
+            <span *ngIf="node.updateProgressInfo.closed" class="closed-indication">&nbsp;({{ 'update.finished' | translate }})</span>
+          </div>
+          <!-- Progress bar. -->
+          <div *ngIf="!node.updateProgressInfo.errorMsg && node.updateProgressInfo.dataParsed" class="progress-container">
+            <!-- Node label. -->
+            <div class="name">
+              <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!node.updateProgressInfo.closed"></mat-spinner>
+              {{ node.label }}
+            </div>
+            <!-- Bar. -->
+            <mat-progress-bar
+              color="accent"
+              [mode]="'determinate'"
+              [value]="node.updateProgressInfo.progress">
+            </mat-progress-bar>
+            <!-- Details. -->
+            <div class="details">
+              {{ 'update.downloaded-file-name-prefix' | translate }} {{ node.updateProgressInfo.fileName }}
+              ({{ node.updateProgressInfo.progress }}%)
+              <br/>
+              {{ 'update.speed-prefix' | translate }} {{ node.updateProgressInfo.speed }}
+              <br/>
+              {{ 'update.time-downloading-prefix' | translate }} {{ node.updateProgressInfo.elapsedTime }}
+              /
+              {{ 'update.time-left-prefix' | translate }} {{ node.updateProgressInfo.remainingTime }}
+              <ng-container *ngIf="node.updateProgressInfo.closed">
+                <br/>
+                <span class="closed-indication">{{ 'update.finished' | translate }}</span>
+              </ng-container>
+            </div>
+          </div>
+          <!-- Msg shown if there was an error during the operation. -->
+          <div *ngIf="node.updateProgressInfo.errorMsg" class="list-container">
+            - {{ node.label }}: <span class="red-text">{{ node.updateProgressInfo.errorMsg }}</span>
+          </div>
+        </ng-container>
+      </ng-container>
+    </div>
+  </ng-container>
+
+  <!-- Buttons. -->
+  <div class="buttons">
+    <app-button
+      #cancelButton
+      type="mat-raised-button"
+      color="accent"
+      (action)="closeModal()"
+      *ngIf="cancelButtonText">
+        {{ cancelButtonText | translate }}
+    </app-button>
+    <app-button
+      #confirmButton
+      type="mat-raised-button"
+      color="primary"
+      (action)="state === updatingStates.Asking ? update() : closeModal()"
+      *ngIf="confirmButtonText">
+        {{ confirmButtonText | translate }}
+    </app-button>
+  </div>
+</app-dialog>
