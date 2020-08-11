@@ -42,7 +42,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
   keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
-  dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text);
+  dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
   pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
 
   private dataSortedSubscription: Subscription;
@@ -324,7 +324,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
             if (result.data) {
               this.allNodes = result.data as Node[];
               if (this.showDmsgInfo) {
-                // Add the label data to the array, to be able to use it for filtering.
+                // Add the label data to the array, to be able to use it for filtering and sorting.
                 this.allNodes.forEach(node => {
                   node['dmsgServerPk_label'] =
                     LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
@@ -394,10 +394,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   logout() {
-    this.authService.logout().subscribe(
-      () => this.router.navigate(['login']),
-      () => this.snackbarService.showError('common.logout-error')
-    );
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'common.logout-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      this.authService.logout().subscribe(
+        () => this.router.navigate(['login']),
+        () => this.snackbarService.showError('common.logout-error')
+      );
+    });
   }
 
   // Updates all visors.
