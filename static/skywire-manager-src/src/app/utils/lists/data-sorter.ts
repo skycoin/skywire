@@ -23,11 +23,18 @@ export class SortingColumn {
    * How the data must be sorted.
    */
   sortingMode: SortingModes;
+  /**
+   * Similar to "properties", but for finding the property which contains the label of the value
+   * shown in the cell, instead of the value itself. If set, the user will be able to select
+   * to sort the data using the value or the label shown in the cell.
+   */
+  labelProperties: string[];
 
-  constructor(properties: string[], label: string, sortingMode: SortingModes) {
+  constructor(properties: string[], label: string, sortingMode: SortingModes, labelProperties?: string[]) {
     this.properties = properties;
     this.label = label;
     this.sortingMode = sortingMode;
+    this.labelProperties = labelProperties;
   }
 
   /**
@@ -75,6 +82,8 @@ export class DataSorter {
   private sortBy: SortingColumn;
   // If the data must be sorted in reversed order.
   private sortReverse = false;
+  // If the data must be sorted using the label shown in the cell instead of the data itself.
+  private sortByLabel = false;
   // Data to sort.
   private data: any[];
   // Index inside sortableColumns of the default column.
@@ -83,6 +92,7 @@ export class DataSorter {
   // Prefixes used, along the ID, for saving the sorting options in localStorage.
   private readonly columnStorageKeyPrefix = 'col_';
   private readonly orderStorageKeyPrefix = 'order_';
+  private readonly labelStorageKeyPrefix = 'label_';
 
   private dataUpdatedSubject = new Subject<void>();
 
@@ -116,6 +126,14 @@ export class DataSorter {
   }
 
   /**
+   * Allow to know if the data is currently being sorted by the label shown in the cells and not
+   * the value itself.
+   */
+  get currentlySortingByLabel(): boolean {
+    return this.sortByLabel;
+  }
+
+  /**
    * @param columns Array with the data about the columns that can be used for sorting the list.
    * @param defaultColumnIndex Index in the "columns" array that must be used by default for
    * sorting the data. This column will be the one selected if not previously saved sorting
@@ -145,6 +163,7 @@ export class DataSorter {
     }
 
     this.sortReverse = localStorage.getItem(this.orderStorageKeyPrefix + id) === 'true';
+    this.sortByLabel = localStorage.getItem(this.labelStorageKeyPrefix + id) === 'true';
   }
 
   /**
@@ -168,17 +187,52 @@ export class DataSorter {
    * Changes the column and/or order used for sorting the data.
    */
   changeSortingOrder(column: SortingColumn) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
+    if (this.sortBy !== column && !column.labelProperties) {
+      // If a different column which can not be sorted by label was selected, use the new column.
+      this.changeSortingParams(column, false, false);
+    } else if (column.labelProperties) {
+      // If a column which can be sorted by label was selected, create options for allowing the
+      // user to select how to sort the data.
+      const options: SelectableOption[] = [{
+        label: this.translateService.instant('tables.sort-by-value'),
+      },
+      {
+        label: this.translateService.instant('tables.sort-by-value')  + ' ' + this.translateService.instant('tables.inverted-order'),
+      },
+      {
+        label: this.translateService.instant('tables.sort-by-label'),
+      },
+      {
+        label: this.translateService.instant('tables.sort-by-label')  + ' ' + this.translateService.instant('tables.inverted-order'),
+      }];
 
-      localStorage.setItem(this.columnStorageKeyPrefix + this.id, column.id);
-      localStorage.setItem(this.orderStorageKeyPrefix + this.id, String(this.sortReverse));
+      // Open the option selection modal window.
+      SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
+        if (result) {
+          // Use the selection made by the user.
+          this.changeSortingParams(column, result > 2, result % 2 === 0);
+        }
+      });
     } else {
+      // If the same column was selected, change the order.
       this.sortReverse = !this.sortReverse;
-
       localStorage.setItem(this.orderStorageKeyPrefix + this.id, String(this.sortReverse));
+
+      this.sortData();
     }
+  }
+
+  /**
+   * Changes the current sorting params, saves them and sorts the data.
+   */
+  changeSortingParams(column: SortingColumn, sortByLabel: boolean, sortReverse: boolean) {
+    this.sortBy = column;
+    this.sortByLabel = sortByLabel;
+    this.sortReverse = sortReverse;
+
+    localStorage.setItem(this.columnStorageKeyPrefix + this.id, column.id);
+    localStorage.setItem(this.orderStorageKeyPrefix + this.id, String(this.sortReverse));
+    localStorage.setItem(this.labelStorageKeyPrefix + this.id, String(this.sortByLabel));
 
     this.sortData();
   }
@@ -187,28 +241,60 @@ export class DataSorter {
    * Opens the modal window used on small screens for selecting how to sort the data.
    */
   openSortingOrderModal() {
-    // Create 2 options for every sortable column, for ascending and descending order.
+    // Create options for every sortable column, including variations.
     const options: SelectableOption[] = [];
+    const optionParams = [];
     this.sortableColumns.forEach(column => {
+      // Options for the normal and inverted mode.
       const label = this.translateService.instant(column.label);
       options.push({
-        label: label + ' ' + this.translateService.instant('tables.ascending-order'),
+        label: label,
+      });
+      optionParams.push({
+        sortBy: column,
+        sortReverse: false,
+        sortByLabel: false,
       });
       options.push({
-        label: label + ' ' + this.translateService.instant('tables.descending-order'),
+        label: label + ' ' + this.translateService.instant('tables.inverted-order'),
       });
+      optionParams.push({
+        sortBy: column,
+        sortReverse: true,
+        sortByLabel: false,
+      });
+
+      // Options for using the label to sort the data.
+      if (column.labelProperties) {
+        options.push({
+          label: label + ' ' + this.translateService.instant('tables.label'),
+        });
+        optionParams.push({
+          sortBy: column,
+          sortReverse: false,
+          sortByLabel: true,
+        });
+        options.push({
+          label: label + ' ' + this.translateService.instant('tables.label') +
+            ' ' + this.translateService.instant('tables.inverted-order'),
+        });
+        optionParams.push({
+          sortBy: column,
+          sortReverse: true,
+          sortByLabel: true,
+        });
+      }
     });
 
     // Open the option selection modal window.
     SelectOptionComponent.openDialog(this.dialog, options, 'tables.title').afterClosed().subscribe((result: number) => {
       if (result) {
-        result = (result - 1) / 2;
-        const index = Math.floor(result);
-        // Use the column and order selected by the user.
-        this.sortBy = this.sortableColumns[index];
-        this.sortReverse = result !== index;
-
-        this.sortData();
+        // Use the selection made by the user.
+        this.changeSortingParams(
+          optionParams[result - 1].sortBy,
+          optionParams[result - 1].sortReverse,
+          optionParams[result - 1].sortByLabel
+        );
       }
     });
   }
@@ -221,12 +307,12 @@ export class DataSorter {
       // Sort all the data.
       this.data.sort((a, b) => {
         // Sort using the currently selected column.
-        let response = this.getSortResponse(this.sortBy, a, b);
+        let response = this.getSortResponse(this.sortBy, a, b, true);
         // If the 2 values are equal, sort using the default column, if it is not already
         // the selected one.
         if (response === 0) {
           if (this.sortableColumns[this.defaultColumnIndex] !== this.sortBy) {
-            response = this.getSortResponse(this.sortableColumns[this.defaultColumnIndex], a, b);
+            response = this.getSortResponse(this.sortableColumns[this.defaultColumnIndex], a, b, false);
           }
         }
 
@@ -243,24 +329,32 @@ export class DataSorter {
    * @param sortingColumn Column being used to sort the data.
    * @param a First value.
    * @param b Second value.
+   * @param sortByLabelIfRequested if true and this.sortByLabel is also true, the data will be
+   * sorted using the label instead of the value itself.
    */
-  private getSortResponse(sortingColumn: SortingColumn, a, b) {
+  private getSortResponse(sortingColumn: SortingColumn, a, b, sortByLabelIfRequested: boolean) {
+    // List of params for getting the value that will be used for sorting the data.
+    const propertiesList = this.sortByLabel && sortByLabelIfRequested && sortingColumn.labelProperties ?
+      sortingColumn.labelProperties : sortingColumn.properties;
+
     // Get the data from the property.
     let aVal = a, bVal = b;
-    sortingColumn.properties.forEach(property => {
+    propertiesList.forEach(property => {
       aVal = aVal[property];
       bVal = bVal[property];
     });
 
+    const sortingMode = this.sortByLabel && sortByLabelIfRequested ? SortingModes.Text : sortingColumn.sortingMode;
+
     // Use the selected sorting method.
     let response = 0;
-    if (sortingColumn.sortingMode === SortingModes.Text) {
+    if (sortingMode === SortingModes.Text) {
       response = !this.sortReverse ? (aVal as string).localeCompare(bVal) : (bVal as string).localeCompare(aVal);
-    } else if (sortingColumn.sortingMode === SortingModes.NumberReversed) {
+    } else if (sortingMode === SortingModes.NumberReversed) {
       response = !this.sortReverse ? bVal - aVal : aVal - bVal;
-    } else if (sortingColumn.sortingMode === SortingModes.Number) {
+    } else if (sortingMode === SortingModes.Number) {
       response = !this.sortReverse ? aVal - bVal : bVal - aVal;
-    } else if (sortingColumn.sortingMode === SortingModes.Boolean) {
+    } else if (sortingMode === SortingModes.Boolean) {
       if (aVal.is_up && !bVal.is_up) {
         response = -1;
       } else if (!aVal.is_up && bVal.is_up) {

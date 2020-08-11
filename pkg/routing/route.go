@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // Route is a succession of transport entries that denotes a path from source visor to destination visor

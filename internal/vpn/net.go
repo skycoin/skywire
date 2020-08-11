@@ -6,10 +6,10 @@ import (
 	"io"
 	"net"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/noise"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 // WriteJSON marshals `data` and sends it over the `conn`.

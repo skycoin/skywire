@@ -18,20 +18,20 @@ import (
 	"sync/atomic"
 	"unicode"
 
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/go-github/github"
 	"github.com/mholt/archiver/v3"
 	"github.com/schollz/progressbar/v2"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/util/rename"
 )
 
 const (
-	owner             = "SkycoinProject"
-	gitProjectName    = "skywire-mainnet"
+	owner             = "skycoin"
+	gitProjectName    = "skywire"
 	projectName       = "skywire"
 	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
 	checksumsFilename = "checksums.txt"

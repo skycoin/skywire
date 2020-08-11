@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/skycoin/skywire/internal/httpauth"
 )
 
 var (
