@@ -1,22 +1,23 @@
 package visor
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/utclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routefinder/rfclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/internal/testhelpers"
+	"github.com/skycoin/skywire/internal/utclient"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func baseConfig(t *testing.T) *visorconfig.V1 {
@@ -37,10 +38,13 @@ func TestHealth(t *testing.T) {
 		}
 
 		utClient := &utclient.MockAPIClient{}
-		utClient.On("Health", context.Background()).Return(http.StatusOK, nil)
+		utClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
 		arClient := &arclient.MockAPIClient{}
-		arClient.On("Health", context.Background()).Return(http.StatusOK, nil)
+		arClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
+
+		rfClient := &rfclient.MockClient{}
+		rfClient.On("Health", mock.Anything).Return(http.StatusOK, testhelpers.NoErr)
 
 		v := &Visor{
 			conf: c,
@@ -49,9 +53,9 @@ func TestHealth(t *testing.T) {
 					DiscoveryClient: transport.NewDiscoveryMock(),
 				},
 			},
-			rfClient:      rfclient.NewMock(),
 			uptimeTracker: utClient,
 			arClient:      arClient,
+			rfClient:      rfClient,
 		}
 
 		rpc := &RPC{visor: v, log: logrus.New()}

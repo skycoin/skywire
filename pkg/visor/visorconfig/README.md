@@ -1,10 +1,10 @@
 # V1
 
+- `` (*[Common](#Common))
+- `mu` ([RWMutex](#RWMutex))
 - `dmsg` (*[DmsgConfig](#DmsgConfig))
 - `dmsgpty` (*[V1Dmsgpty](#V1Dmsgpty))
 - `stcp` (*[STCPConfig](#STCPConfig))
-- `stcpr` (*[STCPRConfig](#STCPRConfig))
-- `stcph` (*[STCPHConfig](#STCPHConfig))
 - `transport` (*[V1Transport](#V1Transport))
 - `routing` (*[V1Routing](#V1Routing))
 - `uptime_tracker` (*[V1UptimeTracker](#V1UptimeTracker))
@@ -14,6 +14,35 @@
 - `log_level` (string)
 - `shutdown_timeout` (Duration)
 - `restart_check_delay` (string)
+- `public_trusted_visor` (bool)
+
+
+# V1Routing
+
+- `setup_nodes` ()
+- `route_finder` (string)
+- `route_finder_timeout` (Duration)
+
+
+# V1Transport
+
+- `discovery` (string)
+- `address_resolver` (string)
+- `log_store` (*[V1LogStore](#V1LogStore))
+- `trusted_visors` ()
+
+
+# V1Dmsgpty
+
+- `port` (uint16)
+- `authorization_file` (string)
+- `cli_network` (string)
+- `cli_address` (string)
+
+
+# V1UptimeTracker
+
+- `addr` (string)
 
 
 # V1Launcher
@@ -25,32 +54,10 @@
 - `local_path` (string)
 
 
-# V1Transport
-
-- `discovery` (string)
-- `log_store` (*[V1LogStore](#V1LogStore))
-- `trusted_visors` ()
-
-
 # V1LogStore
 
 - `type` (string) - Type defines the log store type. Valid values: file, memory.
 - `location` (string)
-
-
-# V1Dmsgpty
-
-- `port` (uint16)
-- `authorization_file` (string)
-- `cli_network` (string)
-- `cli_address` (string)
-
-
-# V1Routing
-
-- `setup_nodes` ()
-- `route_finder` (string)
-- `route_finder_timeout` (Duration)
 
 
 # V1AppDisc
@@ -59,9 +66,13 @@
 - `proxy_discovery_addr` (string)
 
 
-# V1UptimeTracker
+# Common
 
-- `addr` (string)
+- `path` (string)
+- `log` (*[MasterLogger](#MasterLogger))
+- `version` (string)
+- `sk` (SecKey)
+- `pk` (PubKey)
 
 
 # AppConfig
@@ -70,6 +81,31 @@
 - `args` ([]string)
 - `auto_start` (bool)
 - `port` (Port)
+
+
+# MasterLogger
+
+- `` (*[Logger](#Logger))
+
+
+# Logger
+
+- `` (FieldLogger)
+
+
+# RWMutex
+
+- `w` ([Mutex](#Mutex))
+- `writerSem` (uint32)
+- `readerSem` (uint32)
+- `readerCount` (int32)
+- `readerWait` (int32)
+
+
+# Mutex
+
+- `state` (int32)
+- `sema` (uint32)
 
 
 # STCPConfig

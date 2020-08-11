@@ -8,10 +8,10 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/httputil"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/httputil"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 func makeEntry(pk1, pk2 cipher.PubKey, tpType string) Entry {

@@ -42,6 +42,13 @@ export class ApiService {
   private readonly apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ?
     'http-api/' : 'api/';
 
+  /**
+   * Similar to apiPrefix, but for web sockets.
+   */
+  private readonly wsApiPrefix = !environment.production ?
+    (location.protocol.indexOf('http:') !== -1 ? 'ws-api/' : 'wss-api/') :
+    'api/';
+
   constructor(
     private http: HttpClient,
     private router: Router,
@@ -86,7 +93,7 @@ export class ApiService {
    */
   ws(url: string, body: any = {}): Observable<any> {
     const wsProtocol = (location.protocol.startsWith('https')) ? 'wss://' : 'ws://';
-    const wsUrl = wsProtocol + location.host + '/' + this.apiPrefix + url;
+    const wsUrl = wsProtocol + location.host + '/' + this.wsApiPrefix + url;
     const ws = webSocket(wsUrl);
 
     ws.next(body);

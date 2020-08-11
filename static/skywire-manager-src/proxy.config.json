@@ -11,5 +11,23 @@
     "pathRewrite": {
       "^/http-api" : "/api"
     }
+  },
+  "/wss-api": {
+    "target": "wss://127.0.0.1:8000",
+    "secure": false,
+    "ws": true,
+    "headers": {"host":"127.0.0.1:8000", "origin":"wss://127.0.0.1:8000", "referer":"wss://127.0.0.1:8000"},
+    "pathRewrite": {
+      "^/wss-api" : "/api"
+    }
+  },
+  "/ws-api": {
+    "target": "ws://127.0.0.1:8000",
+    "secure": false,
+    "ws": true,
+    "headers": {"host":"127.0.0.1:8000", "origin":"ws://127.0.0.1:8000", "referer":"ws://127.0.0.1:8000"},
+    "pathRewrite": {
+      "^/ws-api" : "/api"
+    }
   }
 }
