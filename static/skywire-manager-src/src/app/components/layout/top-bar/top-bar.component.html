@@ -35,7 +35,7 @@
 <!-- Options menu. -->
 <mat-menu #menu="matMenu" [overlapTrigger]="false">
   <!-- Options. -->
-  <ng-container *ngIf="optionsData && optionsData.length > 1">
+  <ng-container *ngIf="optionsData && optionsData.length >= 1">
     <ng-container *ngFor="let option of optionsData">
       <div mat-menu-item (click)="requestAction(option.actionName)" [disabled]="option.disabled">
         <mat-icon [ngClass]="{'transparent': option.disabled}">{{ option.icon }}</mat-icon> {{ option.name | translate }}
@@ -43,7 +43,7 @@
     </ng-container>
     <div *ngIf="returnText" class="menu-separator"></div>
   </ng-container>
-  <div *ngIf="!hideLanguageButton && optionsData && optionsData.length > 1" class="menu-separator"></div>
+  <div *ngIf="!hideLanguageButton && optionsData && optionsData.length >= 1" class="menu-separator"></div>
   <!-- Language area. -->
   <div *ngIf="!hideLanguageButton" mat-menu-item (click)="openLanguageWindow()">
     <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag"> {{ (language ? language.name : '') | translate }}
