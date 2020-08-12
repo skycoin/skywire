@@ -6,10 +6,6 @@ mat-dialog-container.mat-dialog-container {
   background-image: url('/assets/img/modal-background-pattern.png');
   box-shadow: inset 0 0 100px 0 rgba(255, 255, 255, 0.5), 5px 5px 15px 0 rgba(0, 0, 0, 1);
   background-color: $modal-background;
-
-  .mat-dialog-actions {
-    padding-bottom: $mat-dialog-padding;
-  }
 }
 
 .mat-dialog-content {

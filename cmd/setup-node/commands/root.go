@@ -9,17 +9,17 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/dmsg/cmdutil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cmdutil"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/setup/setupmetrics"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/syslog"
+	"github.com/skycoin/skywire/pkg/setup"
+	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
+	"github.com/skycoin/skywire/pkg/syslog"
 )
 
 var (
