@@ -3,7 +3,7 @@ package snet
 import (
 	"net"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // Conn represent a connection between nodes in Skywire.

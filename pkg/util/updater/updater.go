@@ -18,20 +18,20 @@ import (
 	"sync/atomic"
 	"unicode"
 
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/go-github/github"
 	"github.com/mholt/archiver/v3"
 	"github.com/schollz/progressbar/v2"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/restart"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/rename"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/util/rename"
 )
 
 const (
-	owner             = "SkycoinProject"
-	gitProjectName    = "skywire-mainnet"
+	owner             = "skycoin"
+	gitProjectName    = "skywire"
 	projectName       = "skywire"
 	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
 	checksumsFilename = "checksums.txt"
@@ -69,6 +69,7 @@ type Updater struct {
 	restartCtx *restart.Context
 	appsPath   string
 	updating   int32
+	status     *status
 }
 
 // New returns a new Updater.
@@ -77,6 +78,7 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 		log:        log,
 		restartCtx: restartCtx,
 		appsPath:   appsPath,
+		status:     newStatus(),
 	}
 }
 
@@ -120,32 +122,33 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	}
 	defer atomic.StoreInt32(&u.updating, 0)
 
-	version := updateConfig.Version
-	if version == "" {
-		latestVersion, err := u.UpdateAvailable(updateConfig.Channel)
-		if err != nil {
-			return false, fmt.Errorf("failed to get last Skywire version: %w", err)
-		}
+	u.status.Set("Started, checking update")
 
-		// No update is available.
-		if latestVersion == nil {
-			return false, nil
-		}
-
-		version = latestVersion.String()
+	version, err := u.getVersion(updateConfig)
+	if err != nil {
+		return false, err
 	}
 
-	u.log.Infof("Update found, version: %q", version)
+	// No update is available.
+	if version == "" {
+		return false, nil
+	}
+
+	u.status.Set(fmt.Sprintf("Found version %q, downloading", version))
 
 	downloadedBinariesPath, err := u.download(updateConfig, version)
 	if err != nil {
 		return false, err
 	}
 
+	u.status.Set("Downloading completed, updating binaries")
+
 	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
 	if err := u.updateBinaries(updateConfig.Target, downloadedBinariesPath, currentBasePath); err != nil {
 		return false, err
 	}
+
+	u.status.Set("Binaries updated, restarting current process")
 
 	if err := u.restartCurrentProcess(); err != nil {
 		currentVisorPath := filepath.Join(currentBasePath, visorBinary)
@@ -156,9 +159,19 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 		return false, err
 	}
 
+	u.status.Set("Removing downloaded files")
+
 	u.removeFiles(downloadedBinariesPath)
 
+	u.status.Set("")
+
 	return true, nil
+}
+
+// Status returns status of the current update operation.
+// An empty string is returned if no operation is running.
+func (u *Updater) Status() string {
+	return u.status.Get()
 }
 
 // UpdateAvailable checks if an update is available.
@@ -180,6 +193,27 @@ func (u *Updater) UpdateAvailable(channel Channel) (*Version, error) {
 	}
 
 	return latestVersion, nil
+}
+
+func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
+	version := updateConfig.Version
+	if version == "" {
+		latestVersion, err := u.UpdateAvailable(updateConfig.Channel)
+		if err != nil {
+			return "", fmt.Errorf("failed to get last Skywire version: %w", err)
+		}
+
+		// No update is available.
+		if latestVersion == nil {
+			return "", nil
+		}
+
+		version = latestVersion.String()
+	}
+
+	u.log.Infof("Update found, version: %q", version)
+
+	return version, nil
 }
 
 func (u *Updater) updateBinaries(target Target, downloadedBinariesPath string, currentBasePath string) error {
@@ -276,7 +310,7 @@ func (u *Updater) download(updateConfig UpdateConfig, version string) (string, e
 
 	u.log.Infof("Checksums file URL: %q", checksumsURL)
 
-	checksums, err := downloadChecksums(checksumsURL)
+	checksums, err := u.downloadChecksums(checksumsURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download checksums: %w", err)
 	}
@@ -300,7 +334,7 @@ func (u *Updater) download(updateConfig UpdateConfig, version string) (string, e
 
 	u.log.Infof("Downloading archive from %q", archiveURL)
 
-	archivePath, err := downloadFile(archiveURL, archiveFilename)
+	archivePath, err := u.downloadFile(archiveURL, archiveFilename)
 	if err != nil {
 		return "", fmt.Errorf("failed to download archive file from URL %q: %w", archiveURL, err)
 	}
@@ -393,7 +427,7 @@ func getChecksum(checksums, filename string) (string, error) {
 	return checksums[first:last], nil
 }
 
-func downloadChecksums(url string) (checksums string, err error) {
+func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 	resp, err := http.Get(url) // nolint:gosec
 	if err != nil {
 		return "", err
@@ -409,7 +443,7 @@ func downloadChecksums(url string) (checksums string, err error) {
 		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
 	}
 
-	r := io.TeeReader(resp.Body, progressBar(resp.ContentLength))
+	r := io.TeeReader(resp.Body, u.progressBar(resp.ContentLength, checksumsFilename))
 
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -419,15 +453,18 @@ func downloadChecksums(url string) (checksums string, err error) {
 	return string(data), nil
 }
 
-func progressBar(contentLength int64) io.Writer {
-	newline := progressbar.OptionOnCompletion(func() {
-		fmt.Println()
-	})
+func (u *Updater) progressBar(contentLength int64, filename string) io.Writer {
+	width := progressbar.OptionSetWidth(0)
+	desc := progressbar.OptionSetDescription("Downloading " + filename)
+	speed := progressbar.OptionSetBytes64(contentLength)
+	theme := progressbar.OptionSetTheme(progressbar.Theme{})
+	writer := progressbar.OptionSetWriter(io.MultiWriter(os.Stdout, u.status))
+	completion := progressbar.OptionOnCompletion(func() { fmt.Printf("\n") })
 
-	return progressbar.NewOptions64(contentLength, progressbar.OptionSetBytes64(contentLength), newline)
+	return progressbar.NewOptions64(contentLength, speed, completion, width, theme, desc, writer)
 }
 
-func downloadFile(url, filename string) (path string, err error) {
+func (u *Updater) downloadFile(url, filename string) (path string, err error) {
 	resp, err := http.Get(url) // nolint:gosec
 	if err != nil {
 		return "", err
@@ -458,7 +495,7 @@ func downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
-	out := io.MultiWriter(f, progressBar(resp.ContentLength))
+	out := io.MultiWriter(f, u.progressBar(resp.ContentLength, filename))
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return "", err

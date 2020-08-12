@@ -6,23 +6,24 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/xtaci/kcp-go"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/packetfilter"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/porter"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tpconn"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tplistener"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/internal/packetfilter"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
+	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tplistener"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 )
 
 const (
@@ -44,6 +45,9 @@ var (
 	// ErrAlreadyListening is returned when transport is already listening.
 	ErrAlreadyListening = errors.New("already listening")
 
+	// ErrNotListening is returned when transport is not listening.
+	ErrNotListening = errors.New("not listening")
+
 	// ErrPortOccupied is returned when port is occupied.
 	ErrPortOccupied = errors.New("port is already occupied")
 )
@@ -52,6 +56,7 @@ var (
 type Client interface {
 	Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error)
 	Listen(lPort uint16) (*tplistener.Listener, error)
+	LocalAddr() (net.Addr, error)
 	Serve() error
 	Close() error
 	Type() string
@@ -75,6 +80,7 @@ type client struct {
 	log               *logging.Logger
 	porter            *porter.Porter
 	listener          net.Listener
+	listening         chan struct{}
 	listeners         map[uint16]*tplistener.Listener // key: lPort
 	sudphPacketFilter *pfilter.PacketFilter
 	sudphListener     net.PacketConn
@@ -89,6 +95,7 @@ func NewClient(conf Config) Client {
 		porter:    porter.New(porter.MinEphemeral),
 		listeners: make(map[uint16]*tplistener.Listener),
 		done:      make(chan struct{}),
+		listening: make(chan struct{}),
 	}
 }
 
@@ -113,6 +120,7 @@ func (c *client) Serve() error {
 		}
 
 		c.listener = l
+		close(c.listening)
 
 		if c.conf.Type == tptypes.STCPR {
 			localAddr := c.listener.Addr().String()
@@ -132,6 +140,10 @@ func (c *client) Serve() error {
 
 		for {
 			if err := c.acceptConn(); err != nil {
+				if strings.Contains(err.Error(), io.EOF.Error()) {
+					continue // likely it's a dummy connection from service discovery
+				}
+
 				c.log.Warnf("failed to accept incoming connection: %v", err)
 
 				if !tphandshake.IsHandshakeError(err) {
@@ -143,6 +155,27 @@ func (c *client) Serve() error {
 	}()
 
 	return nil
+}
+
+func (c *client) LocalAddr() (net.Addr, error) {
+	<-c.listening
+
+	switch c.conf.Type {
+	case tptypes.STCP, tptypes.STCPR:
+		if c.listener == nil {
+			return nil, ErrNotListening
+		}
+
+		return c.listener.Addr(), nil
+	case tptypes.SUDPH:
+		if c.sudphListener == nil {
+			return nil, ErrNotListening
+		}
+
+		return c.listener.Addr(), nil
+	}
+
+	return nil, ErrUnknownTransportType
 }
 
 func (c *client) acceptConn() error {
