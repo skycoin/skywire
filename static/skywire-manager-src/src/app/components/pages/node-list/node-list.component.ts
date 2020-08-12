@@ -10,9 +10,8 @@ import { Node } from '../../../app.datatypes';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
-import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
+import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
-import { SidenavService } from 'src/app/services/sidenav.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
 import { ClipboardService } from 'src/app/services/clipboard.service';
@@ -52,6 +51,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   loading = true;
   dataSource: Node[];
   tabsData: TabButtonData[] = [];
+  options: MenuOptionData[] = [];
   showDmsgInfo = false;
 
   // Vars for the pagination functionality.
@@ -107,7 +107,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
-  private menuSubscription: Subscription;
   private updateSubscription: Subscription;
   private navigationsSubscription: Subscription;
   private languageSubscription: Subscription;
@@ -131,7 +130,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     public storageService: StorageService,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
-    private sidenavService: SidenavService,
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
     route: ActivatedRoute,
@@ -203,6 +201,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
       }
     ];
 
+    // Options for the menu shown in the top bar.
+    this.options = [
+      {
+        name: 'nodes.update-all',
+        actionName: 'update',
+        icon: 'get_app'
+      },
+      {
+        name: 'common.logout',
+        actionName: 'logout',
+        icon: 'power_settings_new'
+      }
+    ];
+
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
@@ -222,29 +234,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
     });
-
-    // Populate the left options bar.
-    setTimeout(() => {
-      this.menuSubscription = this.sidenavService.setContents([
-        {
-          name: 'nodes.update-all',
-          actionName: 'update',
-          icon: 'get_app'
-        },
-        {
-          name: 'common.logout',
-          actionName: 'logout',
-          icon: 'power_settings_new'
-        }], null).subscribe(actionName => {
-          // React to the events of the left options bar.
-          if (actionName === 'logout') {
-            this.logout();
-          } else if (actionName === 'update') {
-            this.updateAll();
-          }
-        }
-      );
-    });
   }
 
   ngOnDestroy() {
@@ -253,16 +242,26 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.languageSubscription.unsubscribe();
+    this.dataFiltererSubscription.unsubscribe();
 
-    if (this.menuSubscription) {
-      this.menuSubscription.unsubscribe();
-    }
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
 
     this.dataSortedSubscription.unsubscribe();
     this.dataSorter.dispose();
+  }
+
+  /**
+   * Called when an option form the top bar is selected.
+   * @param actionName Name of the selected option, as defined in the this.options array.
+   */
+  performAction(actionName: string) {
+    if (actionName === 'logout') {
+      this.logout();
+    } else if (actionName === 'update') {
+      this.updateAll();
+    }
   }
 
   /**
