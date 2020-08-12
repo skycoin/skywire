@@ -311,7 +311,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       }
     ];
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.saveChanges(historyEntry.key, historyEntry.enteredManually, historyEntry.location, historyEntry.note);
       } else if (selectedOption === 2) {
