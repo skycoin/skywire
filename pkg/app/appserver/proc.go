@@ -161,6 +161,7 @@ func (p *Proc) Start() error {
 
 		// Wait for proc to exit.
 		p.waitErr = p.cmd.Wait()
+		p.log.Errorf("CMD EXITED WITH %v", p.waitErr)
 
 		// Close proc conn and associated listeners and connections.
 		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
