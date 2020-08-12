@@ -3,16 +3,15 @@ package setupclient
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
-	"github.com/google/uuid"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/snettest"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/snet"
 )
+
+//go:generate mockery -name RouteGroupDialer -case underscore -inpkg
 
 // RouteGroupDialer is an interface for RouteGroup dialers
 type RouteGroupDialer interface {
@@ -57,40 +56,4 @@ func (d *setupNodeDialer) Dial(
 	}
 
 	return resp, nil
-}
-
-type mockDialer struct{}
-
-// NewMockDialer returns a mock for (*Client).DialRouteGroup.
-func NewMockDialer() RouteGroupDialer {
-	return new(mockDialer)
-}
-
-// Dial dials RouteGroup.
-func (d *mockDialer) Dial(
-	context.Context,
-	*logging.Logger,
-	*snet.Network,
-	[]cipher.PubKey,
-	routing.BidirectionalRoute,
-) (routing.EdgeRules, error) {
-	keys := snettest.GenKeyPairs(2)
-
-	srcPK, _ := cipher.GenerateKeyPair()
-	dstPK, _ := cipher.GenerateKeyPair()
-
-	var srcPort, dstPort routing.Port = 1, 2
-
-	desc := routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort)
-
-	fwdRule := routing.ForwardRule(1*time.Hour, 1, routing.RouteID(3), uuid.UUID{}, keys[0].PK, keys[1].PK, 4, 5)
-	cnsmRule := routing.ConsumeRule(1*time.Hour, 2, keys[1].PK, keys[0].PK, 5, 4)
-
-	rules := routing.EdgeRules{
-		Desc:    desc,
-		Forward: fwdRule,
-		Reverse: cnsmRule,
-	}
-
-	return rules, nil
 }

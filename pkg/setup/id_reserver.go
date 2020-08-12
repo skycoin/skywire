@@ -8,11 +8,11 @@ import (
 	"io"
 	"sync"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router/routerclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/skycoin/skywire/pkg/router/routerclient"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 // ErrNoKey is returned when key is not found.

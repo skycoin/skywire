@@ -22,8 +22,8 @@ import { OperationError } from 'src/app/utils/operation-error';
   styleUrls: ['./create-transport.component.scss']
 })
 export class CreateTransportComponent implements OnInit, OnDestroy {
-  @ViewChild('button', { static: false }) button: ButtonComponent;
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
   types: string[];
   form: FormGroup;
 
@@ -143,7 +143,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
         }
 
         // Retry after a small delay.
-        this.loadData(3000);
+        this.loadData(AppConfig.connectionRetryDelay);
       },
     );
   }
