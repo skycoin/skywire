@@ -5,6 +5,7 @@ import (
 	"flag"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -43,6 +44,12 @@ var (
 )
 
 func main() {
+	cmd := exec.Command("ip", "r", "add", "172.104.38.122", "via", "192.168.1.1")
+	if err := cmd.Run(); err != nil {
+		panic(err)
+	}
+	return
+
 	flag.Parse()
 
 	if *serverPKStr == "" {
