@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
@@ -19,7 +18,6 @@ func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
 
 //nolint:unparam
 func run(bin string, args ...string) error {
-	fmt.Fprintf(os.Stdout, "RUNNING: %s %s", bin, strings.Join(args, " "))
 	cmd := exec.Command(bin, args...) //nolint:gosec
 
 	cmd.Stderr = os.Stderr
