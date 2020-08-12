@@ -9,11 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/httpauth"
+	"github.com/skycoin/skywire/internal/httpauth"
 )
 
 var testPubKey, testSecKey = cipher.GenerateKeyPair()
@@ -31,7 +31,7 @@ func TestClientAuth(t *testing.T) {
 
 			case fmt.Sprintf("/security/nonces/%s", testPubKey):
 				if _, err := fmt.Fprintf(w, `{"edge": "%s", "next_nonce": 1}`, testPubKey); err != nil {
-					t.Errorf("Failed to write nonce response: %w", err)
+					t.Errorf("Failed to write nonce response: %v", err)
 				}
 
 			default:

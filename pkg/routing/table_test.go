@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

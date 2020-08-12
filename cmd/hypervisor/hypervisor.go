@@ -4,7 +4,7 @@ skywire hypervisor
 package main
 
 import (
-	"github.com/SkycoinProject/skywire-mainnet/cmd/hypervisor/commands"
+	"github.com/skycoin/skywire/cmd/hypervisor/commands"
 )
 
 func main() {

@@ -5,13 +5,13 @@ import (
 	"net"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/noise"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/noise"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/noisewrapper"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tphandshake"
+	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
 )
 
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.

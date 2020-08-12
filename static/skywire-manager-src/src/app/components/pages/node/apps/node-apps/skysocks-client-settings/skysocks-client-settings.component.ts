@@ -59,8 +59,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // How many elements to show per page on the proxy discovery tab.
   readonly maxElementsPerPage = 10;
 
-  @ViewChild('button', { static: false }) button: ButtonComponent;
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
   form: FormGroup;
   // Entries to show on the history.
   history: HistoryEntry[];

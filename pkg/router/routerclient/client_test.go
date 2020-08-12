@@ -6,13 +6,13 @@ import (
 	"net/rpc"
 	"testing"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/SkycoinProject/skywire-mainnet/internal/testhelpers"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
+	"github.com/skycoin/skywire/internal/testhelpers"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 func TestClient_Close(t *testing.T) {

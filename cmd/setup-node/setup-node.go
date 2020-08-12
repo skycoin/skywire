@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/SkycoinProject/skywire-mainnet/cmd/setup-node/commands"
+	"github.com/skycoin/skywire/cmd/setup-node/commands"
 )
 
 func main() {

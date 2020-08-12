@@ -6,12 +6,12 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/spf13/cobra"
 
-	"github.com/SkycoinProject/skywire-mainnet/cmd/skywire-cli/internal"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
+	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 func init() {

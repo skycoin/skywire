@@ -3,7 +3,7 @@ package packetfilter
 import (
 	"net"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // AddressFilter filters packets from specified address.
