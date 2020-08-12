@@ -148,16 +148,21 @@ func (p *Proc) Start() error {
 		return err
 	}
 
+	p.log.Infoln("STARTED PROCESS")
+
 	go func() {
+		p.log.Infoln("AWAITING CONN")
 		if ok := p.awaitConn(); !ok {
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
 		}
+		p.log.Infoln("AWAITED CONN")
 
 		// App discovery start/stop.
 		p.disc.Start()
 		defer p.disc.Stop()
+		p.log.Infoln("WAITING CMD")
 
 		// Wait for proc to exit.
 		p.waitErr = p.cmd.Wait()
