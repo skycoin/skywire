@@ -84,7 +84,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		cfg:            cfg,
 		log:            l,
 		conn:           conn,
-		directIPs:      directIPs,
+		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
 		closeC:         make(chan struct{}),
 	}, nil
@@ -197,7 +197,6 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 }
 
 func (c *Client) setupDirectRoutes() error {
-	c.log.Infof("DIRECT ROUTES: %v", c.directIPs)
 	for _, ip := range c.directIPs {
 		if !ip.IsLoopback() {
 			c.log.Infof("Adding direct route to %s, via %s", ip.String(), c.defaultGateway.String())
@@ -332,4 +331,20 @@ func ipFromEnv(key string) (net.IP, error) {
 	}
 
 	return ip, nil
+}
+
+func filterOutEqualIPs(ips []net.IP) []net.IP {
+	ipsSet := make(map[string]struct{})
+	var filteredIPs []net.IP
+	for _, ip := range ips {
+		ipStr := ip.String()
+
+		if _, ok := ipsSet[ipStr]; !ok {
+			filteredIPs = append(filteredIPs, ip)
+			ipsSet[ip.String()] = struct{}{}
+		}
+	}
+
+	return filteredIPs
+
 }
