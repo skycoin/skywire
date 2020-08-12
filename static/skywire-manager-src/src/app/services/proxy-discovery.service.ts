@@ -18,7 +18,7 @@ export class ProxyDiscoveryService {
    * dev server proxy.
    */
   private readonly discoveryServiceUrl = environment.production ?
-    (window.location.protocol + '//proxy.discovery.skywire.cc/api') :
+    (window.location.protocol + '//service.discovery.skycoin.com/api/services?type=proxy') :
     '/discovery-api';
 
   constructor(
@@ -31,7 +31,7 @@ export class ProxyDiscoveryService {
   getProxies(): Observable<ProxyDiscoveryEntry[]> {
     const response: ProxyDiscoveryEntry[] = [];
 
-    return this.http.get(this.discoveryServiceUrl + '/proxies').pipe(
+    return this.http.get(this.discoveryServiceUrl).pipe(
       // In case of error, retry.
       retryWhen(errors => errors.pipe(delay(4000))),
       map((result: any[]) => {
