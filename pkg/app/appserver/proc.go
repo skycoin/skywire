@@ -103,6 +103,8 @@ func (p *Proc) awaitConn() bool {
 		return false
 	}
 
+	p.log.Infoln("GOT CONN FROM CHAN")
+
 	rpcS := rpc.NewServer()
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
