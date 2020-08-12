@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
+import { Component, OnDestroy, OnInit, NgZone, Injector } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs/internal/Subscription';
 import { Observable, ReplaySubject, timer } from 'rxjs';
@@ -7,8 +7,9 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
-import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
+import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
+import { NodeActionsHelper } from './actions/node-actions-helper';
 
 /**
  * Main page used for showing the details of a node. It is in charge of loading
@@ -70,6 +71,9 @@ export class NodeComponent implements OnInit, OnDestroy {
   // not been made.
   lastUpdateRequestedManually = false;
 
+  // Manages the options shown in the menu.
+  nodeActionsHelper: NodeActionsHelper;
+
   /**
    * Ask the currently displayed instance of this page to reload the node data.
    */
@@ -99,6 +103,7 @@ export class NodeComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
+    private injector: Injector,
     router: Router,
   ) {
     NodeComponent.nodeSubject = new ReplaySubject<Node>(1);
@@ -107,6 +112,9 @@ export class NodeComponent implements OnInit, OnDestroy {
     this.navigationsSubscription = router.events.subscribe(event => {
       if (event['urlAfterRedirects']) {
         NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
+        if (this.nodeActionsHelper) {
+          this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
+        }
         this.lastUrl = event['urlAfterRedirects'] as string;
         this.updateTabBar();
         this.navigationsSubscription.unsubscribe();
@@ -171,6 +179,11 @@ export class NodeComponent implements OnInit, OnDestroy {
 
       // Inform that the current subpage is not for showing a full list.
       this.showingFullList = false;
+      this.nodeActionsHelper = new NodeActionsHelper(this.injector, this.showingFullList);
+      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
+      if (this.node) {
+        this.nodeActionsHelper.setCurrentNode(this.node);
+      }
 
       // If showing a page dedicated to display a full list.
     } else if (
@@ -180,6 +193,11 @@ export class NodeComponent implements OnInit, OnDestroy {
 
       this.showingFullList = true;
       this.showingInfo = false;
+      this.nodeActionsHelper = new NodeActionsHelper(this.injector, this.showingFullList);
+      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
+      if (this.node) {
+        this.nodeActionsHelper.setCurrentNode(this.node);
+      }
 
       // Set the tabs bar header.
       let prefix = 'transports';
@@ -203,6 +221,15 @@ export class NodeComponent implements OnInit, OnDestroy {
       this.titleParts = [];
       this.tabsData = [];
     }
+  }
+
+  /**
+   * Called when an option form the top bar is selected.
+   * @param actionName Name of the selected option.
+   */
+  performAction(actionName: string) {
+    // The helper object manages the event.
+    this.nodeActionsHelper.performAction(actionName);
   }
 
   /**
@@ -234,6 +261,9 @@ export class NodeComponent implements OnInit, OnDestroy {
             if (result.data && !result.error) {
               this.node = result.data as Node;
               NodeComponent.nodeSubject.next(this.node);
+              if (this.nodeActionsHelper) {
+                this.nodeActionsHelper.setCurrentNode(this.node);
+              }
 
               // Close any previous temporary loading error msg.
               this.snackbarService.closeCurrentIfTemporaryError();
@@ -287,5 +317,7 @@ export class NodeComponent implements OnInit, OnDestroy {
 
     NodeComponent.nodeSubject.complete();
     NodeComponent.nodeSubject = undefined;
+
+    this.nodeActionsHelper.dispose();
   }
 }

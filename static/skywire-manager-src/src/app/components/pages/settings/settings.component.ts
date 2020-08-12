@@ -1,12 +1,10 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component } from '@angular/core';
 import { Router } from '@angular/router';
-import { Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 
-import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
+import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { AuthService } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
-import { SidenavService } from 'src/app/services/sidenav.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**
@@ -17,16 +15,14 @@ import GeneralUtils from 'src/app/utils/generalUtils';
   templateUrl: './settings.component.html',
   styleUrls: ['./settings.component.scss']
 })
-export class SettingsComponent implements OnInit, OnDestroy {
+export class SettingsComponent {
   tabsData: TabButtonData[] = [];
-
-  private menuSubscription: Subscription;
+  options: MenuOptionData[] = [];
 
   constructor(
     private authService: AuthService,
     private router: Router,
     private snackbarService: SnackbarService,
-    private sidenavService: SidenavService,
     private dialog: MatDialog,
   ) {
     // Data for populating the tab bar.
@@ -47,29 +43,24 @@ export class SettingsComponent implements OnInit, OnDestroy {
         linkParts: ['/settings'],
       }
     ];
+
+    // Options for the menu shown in the top bar.
+    this.options = [
+      {
+        name: 'common.logout',
+        actionName: 'logout',
+        icon: 'power_settings_new'
+      }
+    ];
   }
 
-  ngOnInit() {
-    setTimeout(() => {
-      // Populate the left options bar.
-      this.menuSubscription = this.sidenavService.setContents([
-        {
-          name: 'common.logout',
-          actionName: 'logout',
-          icon: 'power_settings_new'
-        }], null).subscribe(actionName => {
-          // React to the events of the left options bar.
-          if (actionName === 'logout') {
-            this.logout();
-          }
-        }
-      );
-    });
-  }
-
-  ngOnDestroy() {
-    if (this.menuSubscription) {
-      this.menuSubscription.unsubscribe();
+  /**
+   * Called when an option form the top bar is selected.
+   * @param actionName Name of the selected option, as defined in the this.options array.
+   */
+  performAction(actionName: string) {
+    if (actionName === 'logout') {
+      this.logout();
     }
   }
 
