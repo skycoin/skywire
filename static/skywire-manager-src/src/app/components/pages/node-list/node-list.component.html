@@ -1,12 +1,12 @@
 <!-- Content when loading. -->
 <div *ngIf="loading" class="flex-column h-100 w-100">
   <div>
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
       [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
       [showUpdateButton]="false"
-    ></app-tab-bar>
+    ></app-top-bar>
   </div>
   <app-loading-indicator class="h-100"></app-loading-indicator>
 </div>
@@ -14,7 +14,7 @@
 <!-- Content when loaded. -->
 <div *ngIf="!loading" class="row">
   <div class="col-12">
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
       [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
@@ -22,8 +22,10 @@
       [showLoading]="updating"
       [showAlert]="errorsUpdating"
       [refeshRate]="storageService.getRefreshTime()"
+      [optionsData]="options"
       (refreshRequested)="forceDataRefresh(true)"
-    ></app-tab-bar>
+      (optionSelected)="performAction($event)"
+    ></app-top-bar>
   </div>
   <div class="col-12">
 
