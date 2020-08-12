@@ -197,6 +197,7 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 }
 
 func (c *Client) setupDirectRoutes() error {
+	c.log.Infof("DIRECT ROUTES: %v", c.directIPs)
 	for _, ip := range c.directIPs {
 		if !ip.IsLoopback() {
 			c.log.Infof("Adding direct route to %s, via %s", ip.String(), c.defaultGateway.String())
