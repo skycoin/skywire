@@ -42,10 +42,14 @@ type Proc struct {
 	conn     net.Conn           // connection to proc - introduced AFTER proc is started
 	connCh   chan struct{}      // push here when conn is received - protected by 'connOnce'
 	connOnce sync.Once          // ensures we only push to 'connCh' once
+
+	m       ProcManager
+	appName string
 }
 
 // NewProc constructs `Proc`.
-func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
+func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
+	appName string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -60,12 +64,14 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
 	return &Proc{
-		disc:   disc,
-		conf:   conf,
-		log:    mLog.PackageLogger(moduleName),
-		logDB:  appLogDB,
-		cmd:    cmd,
-		connCh: make(chan struct{}, 1),
+		disc:    disc,
+		conf:    conf,
+		log:     mLog.PackageLogger(moduleName),
+		logDB:   appLogDB,
+		cmd:     cmd,
+		connCh:  make(chan struct{}, 1),
+		m:       m,
+		appName: appName,
 	}
 }
 
@@ -162,6 +168,14 @@ func (p *Proc) Start() error {
 				// just kill the process and exit.
 				_ = p.cmd.Process.Kill() //nolint:errcheck
 				p.waitMx.Unlock()
+
+				// channel won't get closed outside, close it now.
+				p.connOnce.Do(func() { close(p.connCh) })
+
+				// here will definitely be an error notifying that the process
+				// is already stopped. We do this to remove proc from the manager,
+				// therefore giving the correct app status to hypervisor.
+				_ = p.m.Stop(p.appName) //nolint:errcheck
 				return
 			}
 		case waitErr := <-waitErrCh:
@@ -169,6 +183,7 @@ func (p *Proc) Start() error {
 			// error occurred during app startup.
 			p.waitErr = waitErr
 			p.waitMx.Unlock()
+
 			return
 		}
 
