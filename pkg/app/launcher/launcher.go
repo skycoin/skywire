@@ -257,6 +257,7 @@ func (l *Launcher) RestartApp(name string) error {
 	}
 
 	cmd := proc.Cmd()
+	// complete list of args includes binary name which is not needed, so omit it
 	if err := l.StartApp(name, cmd.Args[1:], cmd.Env); err != nil {
 		return fmt.Errorf("failed to start %s: %w", name, err)
 	}
