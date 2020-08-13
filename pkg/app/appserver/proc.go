@@ -42,10 +42,14 @@ type Proc struct {
 	conn     net.Conn           // connection to proc - introduced AFTER proc is started
 	connCh   chan struct{}      // push here when conn is received - protected by 'connOnce'
 	connOnce sync.Once          // ensures we only push to 'connCh' once
+
+	m       ProcManager
+	appName string
 }
 
 // NewProc constructs `Proc`.
-func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater) *Proc {
+func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
+	appName string) *Proc {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -60,12 +64,14 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
 	return &Proc{
-		disc:   disc,
-		conf:   conf,
-		log:    mLog.PackageLogger(moduleName),
-		logDB:  appLogDB,
-		cmd:    cmd,
-		connCh: make(chan struct{}, 1),
+		disc:    disc,
+		conf:    conf,
+		log:     mLog.PackageLogger(moduleName),
+		logDB:   appLogDB,
+		cmd:     cmd,
+		connCh:  make(chan struct{}, 1),
+		m:       m,
+		appName: appName,
 	}
 }
 
@@ -99,10 +105,6 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 }
 
 func (p *Proc) awaitConn() bool {
-	if _, ok := <-p.connCh; !ok {
-		return false
-	}
-
 	rpcS := rpc.NewServer()
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
@@ -149,6 +151,42 @@ func (p *Proc) Start() error {
 	}
 
 	go func() {
+		waitErrCh := make(chan error)
+		go func() {
+			waitErrCh <- p.cmd.Wait()
+			close(waitErrCh)
+		}()
+
+		select {
+		case _, ok := <-p.connCh:
+			if !ok {
+				// in this case app got stopped from the outer code before initializing the connection,
+				// just kill the process and exit.
+				_ = p.cmd.Process.Kill() //nolint:errcheck
+				p.waitMx.Unlock()
+
+				return
+			}
+		case waitErr := <-waitErrCh:
+			// in this case app process finished before initializing the connection. Happens if an
+			// error occurred during app startup.
+			p.waitErr = waitErr
+			p.waitMx.Unlock()
+
+			// channel won't get closed outside, close it now.
+			p.connOnce.Do(func() { close(p.connCh) })
+
+			// here will definitely be an error notifying that the process
+			// is already stopped. We do this to remove proc from the manager,
+			// therefore giving the correct app status to hypervisor.
+			_ = p.m.Stop(p.appName) //nolint:errcheck
+
+			return
+		}
+
+		// here, the connection is established, so we're not blocked by awaiting it anymore,
+		// execution may be continued as usual.
+
 		if ok := p.awaitConn(); !ok {
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
@@ -160,7 +198,7 @@ func (p *Proc) Start() error {
 		defer p.disc.Stop()
 
 		// Wait for proc to exit.
-		p.waitErr = p.cmd.Wait()
+		p.waitErr = <-waitErrCh
 
 		// Close proc conn and associated listeners and connections.
 		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
