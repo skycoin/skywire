@@ -132,8 +132,6 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value st
 
 	conf := v1.Launcher
 
-	v1.log.Infof("BIN PATH ON UPDTE ARG: %v", conf.BinPath)
-
 	configChanged := true
 	for i := range conf.Apps {
 		if conf.Apps[i].Name == appName {

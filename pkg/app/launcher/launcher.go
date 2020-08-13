@@ -100,13 +100,11 @@ func NewLauncher(log logrus.FieldLogger, conf Config, dmsgC *dmsg.Client, r rout
 	}
 	launcher.apps = apps
 
-	launcher.log.Infof("CREATED LAUNCHER, BIN PATH: %s", launcher.conf.BinPath)
-
 	return launcher, nil
 }
 
 // ResetConfig resets the launcher config.
-func (l *Launcher) ResetConfig(conf Config) error {
+func (l *Launcher) ResetConfig(conf Config) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
@@ -122,10 +120,6 @@ func (l *Launcher) ResetConfig(conf Config) error {
 	l.conf.VisorPK = conf.VisorPK
 	l.conf.Apps = conf.Apps
 	l.conf.ServerAddr = conf.ServerAddr
-
-	l.log.Infof("BIN PATH AFTER ARG UPDATE: %s", l.conf.BinPath)
-
-	return nil
 }
 
 // AutoStart auto-starts marked apps.
@@ -150,7 +144,6 @@ func (l *Launcher) AutoStart(envMap map[string]func() ([]string, error)) error {
 				return fmt.Errorf("error running %s: %w", name, err)
 			}
 		}
-		l.log.Infof("BEFORE startApp BIN PATH: %s", l.conf.BinPath)
 		if err := l.startApp(name, ac.Args, envs); err != nil {
 			log.WithError(err).
 				WithField("app_name", name).
@@ -201,12 +194,10 @@ func (l *Launcher) StartApp(cmd string, args, envs []string) error {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	l.log.Infof("BEFORE startApp BIN PATH: %s", l.conf.BinPath)
 	return l.startApp(cmd, args, envs)
 }
 
 func (l *Launcher) startApp(cmd string, args, envs []string) error {
-	l.log.Infof("DICK STARTING APP %s", cmd)
 	log := l.log.WithField("func", "StartApp").WithField("cmd", cmd)
 
 	// Obtain associated app config.
@@ -215,11 +206,8 @@ func (l *Launcher) startApp(cmd string, args, envs []string) error {
 		return ErrAppNotFound
 	}
 	if args != nil {
-		l.log.Infof("ARGS NOT EMPTY, SETTING: %v", args)
 		ac.Args = args
 	}
-
-	l.log.Infof("BIN PATH: %s, NAME: %s", l.conf.BinPath, ac.Name)
 
 	// Make proc config.
 	procConf, err := makeProcConfig(l.conf, ac, envs)
@@ -263,16 +251,12 @@ func (l *Launcher) RestartApp(name string) error {
 	l.log.WithField("func", "RestartApp").WithField("app_name", name).
 		Info("Restarting app...")
 
-	l.log.Infof("BEFORE STOPPING BIN PATH: %s", l.conf.BinPath)
-
 	proc, err := l.StopApp(name)
 	if err != nil {
 		return fmt.Errorf("failed to stop %s: %w", name, err)
 	}
 
 	cmd := proc.Cmd()
-	l.log.Infof("AFTER STOPPING, BEFORE STARTING BIN PATH: %s", l.conf.BinPath)
-	l.log.Infof("STARTING %s WITH ARGS %v AND ENV %v", name, cmd.Args[1:], cmd.Env)
 	if err := l.StartApp(name, cmd.Args[1:], cmd.Env); err != nil {
 		return fmt.Errorf("failed to start %s: %w", name, err)
 	}
