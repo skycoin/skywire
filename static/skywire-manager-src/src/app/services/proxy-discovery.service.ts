@@ -17,9 +17,7 @@ export class ProxyDiscoveryService {
    * URL of the proxy discovery service. While in dev mode the url is managed by the
    * dev server proxy.
    */
-  private readonly discoveryServiceUrl = environment.production ?
-    (window.location.protocol + '//service.discovery.skycoin.com/api/services?type=proxy') :
-    '/discovery-api';
+  private readonly discoveryServiceUrl = 'https://service.discovery.skycoin.com/api/services?type=proxy';
 
   constructor(
     private http: HttpClient,
