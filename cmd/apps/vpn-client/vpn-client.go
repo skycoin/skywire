@@ -48,9 +48,7 @@ func main() {
 	if *serverPKStr == "" {
 		// TODO: fix args passage for Windows
 		//*serverPKStr = "03e9019b3caa021dbee1c23e6295c6034ab4623aec50802fcfdd19764568e2958d"
-		log.Errorln("VPN server pub key is missing")
-		//log.Fatalln("VPN server pub key is missing")
-		return
+		log.Fatalln("VPN server pub key is missing")
 	}
 
 	serverPK := cipher.PubKey{}
