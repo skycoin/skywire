@@ -195,7 +195,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 			Debug("No app discovery associated with app.")
 	}
 
-	proc := NewProc(m.mLog, conf, disc)
+	proc := NewProc(m.mLog, conf, disc, m, conf.AppName)
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
