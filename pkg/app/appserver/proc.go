@@ -105,8 +105,6 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 }
 
 func (p *Proc) awaitConn() bool {
-	p.log.Infoln("GOT CONN FROM CHAN")
-
 	rpcS := rpc.NewServer()
 	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
@@ -152,8 +150,6 @@ func (p *Proc) Start() error {
 		return err
 	}
 
-	p.log.Infoln("STARTED PROCESS")
-
 	go func() {
 		waitErrCh := make(chan error)
 		go func() {
@@ -183,8 +179,7 @@ func (p *Proc) Start() error {
 			// here will definitely be an error notifying that the process
 			// is already stopped. We do this to remove proc from the manager,
 			// therefore giving the correct app status to hypervisor.
-			err := p.m.Stop(p.appName) //nolint:errcheck
-			p.log.Errorf("ERROR STOPPING APP AFTER FAILUER: %v", err)
+			_ = p.m.Stop(p.appName) //nolint:errcheck
 
 			return
 		}
@@ -192,22 +187,18 @@ func (p *Proc) Start() error {
 		// here, the connection is established, so we're not blocked by awaiting it anymore,
 		// execution may be continued as usual.
 
-		p.log.Infoln("AWAITING CONN")
 		if ok := p.awaitConn(); !ok {
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
 		}
-		p.log.Infoln("AWAITED CONN")
 
 		// App discovery start/stop.
 		p.disc.Start()
 		defer p.disc.Stop()
-		p.log.Infoln("WAITING CMD")
 
 		// Wait for proc to exit.
 		p.waitErr = <-waitErrCh
-		p.log.Errorf("CMD EXITED WITH %v", p.waitErr)
 
 		// Close proc conn and associated listeners and connections.
 		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
