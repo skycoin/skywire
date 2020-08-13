@@ -99,10 +99,6 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 }
 
 func (p *Proc) awaitConn() bool {
-	if _, ok := <-p.connCh; !ok {
-		return false
-	}
-
 	p.log.Infoln("GOT CONN FROM CHAN")
 
 	rpcS := rpc.NewServer()
@@ -153,6 +149,32 @@ func (p *Proc) Start() error {
 	p.log.Infoln("STARTED PROCESS")
 
 	go func() {
+		waitErrCh := make(chan error)
+		go func() {
+			waitErrCh <- p.cmd.Wait()
+			close(waitErrCh)
+		}()
+
+		select {
+		case _, ok := <-p.connCh:
+			if !ok {
+				// in this case app got stopped from the outer code before initializing the connection,
+				// just kill the process and exit.
+				_ = p.cmd.Process.Kill() //nolint:errcheck
+				p.waitMx.Unlock()
+				return
+			}
+		case waitErr := <-waitErrCh:
+			// in this case app process finished before initializing the connection. Happens if an
+			// error occurred during app startup.
+			p.waitErr = waitErr
+			p.waitMx.Unlock()
+			return
+		}
+
+		// here, the connection is established, so we're not blocked by awaiting it anymore,
+		// execution may be continued as usual.
+
 		p.log.Infoln("AWAITING CONN")
 		if ok := p.awaitConn(); !ok {
 			_ = p.cmd.Process.Kill() //nolint:errcheck
@@ -167,7 +189,7 @@ func (p *Proc) Start() error {
 		p.log.Infoln("WAITING CMD")
 
 		// Wait for proc to exit.
-		p.waitErr = p.cmd.Wait()
+		p.waitErr = <-waitErrCh
 		p.log.Errorf("CMD EXITED WITH %v", p.waitErr)
 
 		// Close proc conn and associated listeners and connections.
