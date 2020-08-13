@@ -299,6 +299,8 @@ func initLauncher(v *Visor) bool {
 		LocalPath:  conf.LocalPath,
 	}
 
+	v.log.Infof("BIN PATH ON LAUNCHER INIT: %s", launchConf.BinPath)
+
 	launchLog := v.MasterLogger().PackageLogger("launcher")
 
 	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
