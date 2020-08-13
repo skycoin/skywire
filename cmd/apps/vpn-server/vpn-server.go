@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -32,6 +33,10 @@ var (
 )
 
 func main() {
+	if runtime.GOOS != "linux" {
+		log.Fatalln("OS is not supported")
+	}
+
 	flag.Parse()
 
 	localPK := cipher.PubKey{}
