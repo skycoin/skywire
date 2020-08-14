@@ -1,0 +1,102 @@
+<app-dialog [headline]="(state !== updatingStates.Error ? 'update-hypervisor.title' : 'update.error-title') | translate">
+  <!-- Main black text area. -->
+  <div class="text-container">
+    <ng-container *ngIf="state === updatingStates.InitialProcessing">
+      <mat-spinner class="loading-indicator" [diameter]="12"></mat-spinner>
+      {{ 'update-hypervisor.processing' | translate }}
+    </ng-container>
+    <ng-container *ngIf="state === updatingStates.Error">
+      {{ errorText | translate }}
+    </ng-container>
+    <ng-container *ngIf="state === updatingStates.NoUpdatesFound">
+      {{ 'update-hypervisor.no-update' | translate }}
+    </ng-container>
+  </div>
+
+  <!-- Current version, shown if no update was found. -->
+  <div *ngIf="state === updatingStates.NoUpdatesFound" class="list-container">
+    - {{ currentNodeVersion ? currentNodeVersion : ('common.unknown' | translate) }}
+  </div>
+
+  <!-- Text asking for confirmation before installing the update. -->
+  <ng-container *ngIf="state === updatingStates.Asking">
+    <div class="text-container">
+      {{ 'update-hypervisor.update-available' | translate }}
+    </div>
+    <div class="list-container">
+      - {{ 'update.version-change' | translate:updateFound }}
+    </div>
+    <div class="text-container">
+      {{ 'update-hypervisor.update-instructions' | translate }}
+    </div>
+  </ng-container>
+
+  <!-- Content shown while updating. -->
+  <ng-container *ngIf="state === updatingStates.Updating">
+    <!-- Indications. -->
+    <div class="text-container">
+      {{ 'update-hypervisor.updating' | translate }}
+    </div>
+    <div>
+      <!-- Raw progress text shown if it was not possible to parse it for showing the progrss bar. -->
+      <div *ngIf="!progressInfo.errorMsg && !progressInfo.dataParsed" class="list-container">
+        - <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!progressInfo.closed"></mat-spinner> {{ 'update-hypervisor.label' | translate }}
+        : <span class="details">{{ progressInfo.rawMsg }}</span>
+        <span *ngIf="progressInfo.closed" class="closed-indication">&nbsp;({{ 'update.finished' | translate }})</span>
+      </div>
+      <!-- Progress bar. -->
+      <div *ngIf="!progressInfo.errorMsg && progressInfo.dataParsed" class="progress-container">
+        <!-- Hypervisor label. -->
+        <div class="name">
+          <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!progressInfo.closed"></mat-spinner>
+          {{ 'update-hypervisor.label' | translate }}
+        </div>
+        <!-- Bar. -->
+        <mat-progress-bar
+          color="accent"
+          [mode]="'determinate'"
+          [value]="progressInfo.progress">
+        </mat-progress-bar>
+        <!-- Details. -->
+        <div class="details">
+          {{ 'update.downloaded-file-name-prefix' | translate }} {{ progressInfo.fileName }}
+          ({{ progressInfo.progress }}%)
+          <br/>
+          {{ 'update.speed-prefix' | translate }} {{ progressInfo.speed }}
+          <br/>
+          {{ 'update.time-downloading-prefix' | translate }} {{ progressInfo.elapsedTime }}
+          /
+          {{ 'update.time-left-prefix' | translate }} {{ progressInfo.remainingTime }}
+          <ng-container *ngIf="progressInfo.closed">
+            <br/>
+            <span class="closed-indication">{{ 'update.finished' | translate }}</span>
+          </ng-container>
+        </div>
+      </div>
+      <!-- Msg shown if there was an error during the operation. -->
+      <div *ngIf="progressInfo.errorMsg" class="list-container">
+        - {{ 'update-hypervisor.label' | translate }}: <span class="red-text">{{ progressInfo.errorMsg | translate }}</span>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- Buttons. -->
+  <div class="buttons">
+    <app-button
+      #cancelButton
+      type="mat-raised-button"
+      color="accent"
+      (action)="closeModal()"
+      *ngIf="cancelButtonText">
+        {{ cancelButtonText | translate }}
+    </app-button>
+    <app-button
+      #confirmButton
+      type="mat-raised-button"
+      color="primary"
+      (action)="state === updatingStates.Asking ? update() : closeModal()"
+      *ngIf="confirmButtonText">
+        {{ confirmButtonText | translate }}
+    </app-button>
+  </div>
+</app-dialog>
