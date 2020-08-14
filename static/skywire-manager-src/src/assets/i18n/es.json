@@ -317,15 +317,46 @@
     },
     "skysocks-client-settings": {
       "title": "Configuración de Skysocks-Client",
-      "remote-visor-tab": "Visor Remoto",
+      "discovery-tab": "Buscar visor",
+      "remote-visor-tab": "Introducir manualmente",
       "history-tab": "Historial",
+      "use": "Usar estos datos",
+      "change-note": "Cambiar nota",
+      "remove-entry": "Remover entrada",
+      "note": "Nota:",
+      "note-entered-manually": "Introducido manualmente",
+      "note-obtained": "Obtenido del servicio de descubrimiento",
+      "key": "Llave:",
+      "port": "Puerto:",
+      "location": "Ubicación:",
+      "state-available": "Disponible",
+      "state-offline": "Offline",
       "public-key": "Llave pública del visor remoto",
+      "no-elements": "Actualmente no hay elementos para mostrar. Por favor, inténtelo de nuevo más tarde.",
+      "no-elements-for-filters": "No hay elementos que cumplan los criterios de filtro.",
+      "no-filter": "No se ha seleccionado ningún filtro",
+      "click-to-change": "Haga clic para cambiar",
       "remote-key-length-error": "La llave pública debe tener 66 caracteres.",
       "remote-key-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
       "save": "Guardar",
+      "remove-from-history-confirmation": "¿Seguro de que desea eliminar la entrada del historial?",
       "change-key-confirmation": "¿Seguro que desea cambiar la llave pública del visor remoto?",
       "changes-made": "Los cambios han sido realizados.",
-      "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas."
+      "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas.",
+      "default-note-warning": "La nota por defecto ha sido utilizada.",
+      "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
+
+      "change-note-dialog": {
+        "title": "Cambiar Nota",
+        "note": "Nota"
+      },
+
+      "filter-dialog": {
+        "title": "Filtros",
+        "location": "La ubicación debe contener",
+        "pub-key": "La llave pública debe contener",
+        "apply": "Aplicar"
+      }
     },
     "stop-app": "Detener",
     "start-app": "Iniciar",
