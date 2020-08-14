@@ -184,7 +184,7 @@ func (rc *rpcClient) SetAppPassword(appName, password string) error {
 
 // SetAppPK calls SetAppPK.
 func (rc *rpcClient) SetAppPK(appName string, pk cipher.PubKey) error {
-	return rc.Call("SetSocksClientPK", &SetAppPKIn{
+	return rc.Call("SetAppPK", &SetAppPKIn{
 		AppName: appName,
 		PK:      pk,
 	}, &struct{}{})
