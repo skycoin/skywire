@@ -1,0 +1,33 @@
+<app-dialog [headline]="'apps.skysocks-client-settings.filter-dialog.title' | translate">
+  <form [formGroup]="form">
+    <!-- Location. -->
+    <mat-form-field>
+      <input
+        formControlName="location-text"
+        maxlength="100"
+        [placeholder]="'apps.skysocks-client-settings.filter-dialog.location' | translate"
+        matInput
+      >
+    </mat-form-field>
+    <!-- Key. -->
+    <mat-form-field>
+      <input
+        formControlName="key-text"
+        maxlength="66"
+        [placeholder]="'apps.skysocks-client-settings.filter-dialog.pub-key' | translate"
+        matInput
+      >
+    </mat-form-field>
+
+    <!-- button. -->
+    <app-button
+      #button
+      (action)="apply()"
+      type="mat-raised-button"
+      color="primary"
+      class="float-right"
+    >
+      {{ 'apps.skysocks-client-settings.filter-dialog.apply' | translate }}
+    </app-button>
+  </form>
+</app-dialog>
