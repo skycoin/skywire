@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -32,6 +33,10 @@ var (
 )
 
 func main() {
+	if runtime.GOOS != "linux" {
+		log.Fatalln("OS is not supported")
+	}
+
 	flag.Parse()
 
 	localPK := cipher.PubKey{}
@@ -78,11 +83,19 @@ func main() {
 			log.WithError(err).Errorln("Error closing server")
 		}
 	}()
+
+	errCh := make(chan error)
 	go func() {
 		if err := srv.Serve(l); err != nil {
-			log.WithError(err).Errorln("Error serving")
+			errCh <- err
 		}
+
+		close(errCh)
 	}()
 
-	<-osSigs
+	select {
+	case <-osSigs:
+	case err := <-errCh:
+		log.WithError(err).Errorln("Error serving")
+	}
 }
