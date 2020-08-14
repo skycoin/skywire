@@ -615,27 +615,41 @@ export class NodeService {
   }
 
   /**
-   * Checks if there are updates available for a node.
+   * Checks if a node is currently being updated. If no node key is provided, checks if the
+   * hypervisor is currently being updated.
    */
   checkIfUpdating(nodeKey: string): Observable<any> {
+    if (!nodeKey) {
+      return this.apiService.get(`update/ws/running`);
+    }
+
     return this.apiService.get(`visors/${nodeKey}/update/ws/running`);
   }
 
   /**
-   * Checks if there are updates available for a node.
+   * Checks if there are updates available for a node. If no node key is provided, checks if
+   * there are updates available for the hypervisor.
    */
   checkUpdate(nodeKey: string): Observable<any> {
+    if (!nodeKey) {
+      return this.apiService.post(`update/available`);
+    }
+
     return this.apiService.get(`visors/${nodeKey}/update/available`);
   }
 
   /**
-   * Updates a node.
+   * Updates a node. If no node key is provided, updates the hypervisor.
    */
   update(nodeKey: string): Observable<any> {
     const body = {
       channel: 'stable'
       // channel: 'testing' // for debugging updater
     };
+
+    if (!nodeKey) {
+      return this.apiService.ws(`update/ws`, body);
+    }
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
   }
