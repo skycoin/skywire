@@ -135,9 +135,7 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 		},
 	}
 
-	for _, app := range vpnApps {
-		conf.Launcher.Apps = append(conf.Launcher.Apps, app)
-	}
+	conf.Launcher.Apps = append(conf.Launcher.Apps, vpnApps...)
 
 	conf.Launcher.BinPath = old.AppsPath
 	conf.Launcher.LocalPath = old.LocalPath
