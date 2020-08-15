@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of, throwError } from 'rxjs';
+import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
 import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
@@ -59,6 +59,20 @@ export class TrafficData {
    * but the service will try it best to provided good data.
    */
   receivedHistory: number[] = [];
+}
+
+/**
+ * Keys for saving custom settings for the calls to the updater API endpoints.
+ */
+export enum UpdaterStorageKeys {
+  /**
+   * If has a value, at least one of the other keys have a value.
+   */
+  UseCustomSettings = 'updaterUseCustomSettings',
+  Channel = 'updaterChannel',
+  Version = 'updaterVersion',
+  ArchiveURL = 'updaterArchiveURL',
+  ChecksumsURL = 'updaterChecksumsURL',
 }
 
 /**
@@ -646,6 +660,19 @@ export class NodeService {
       channel: 'stable'
       // channel: 'testing' // for debugging updater
     };
+
+    // Use any custom settings saved by the user.
+    const useCustomSettings = localStorage.getItem(UpdaterStorageKeys.UseCustomSettings);
+    if (useCustomSettings) {
+      const channel = localStorage.getItem(UpdaterStorageKeys.Channel);
+      if (channel) { body['channel'] = channel; }
+      const version = localStorage.getItem(UpdaterStorageKeys.Version);
+      if (version) { body['version'] = version; }
+      const archiveURL = localStorage.getItem(UpdaterStorageKeys.ArchiveURL);
+      if (archiveURL) { body['archive_url'] = archiveURL; }
+      const checksumsURL = localStorage.getItem(UpdaterStorageKeys.ChecksumsURL);
+      if (checksumsURL) { body['checksums_url'] = checksumsURL; }
+    }
 
     if (!nodeKey) {
       return this.apiService.ws(`update/ws`, body);
