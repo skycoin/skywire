@@ -53,3 +53,12 @@ export interface HealthInfo {
   route_finder?: number;
   setup_node?: number;
 }
+
+export class ProxyDiscoveryEntry {
+  address: string;
+  pk: string;
+  port: string;
+  country?: string;
+  region?: string;
+  location?: string;
+}

@@ -70,6 +70,12 @@ import { SkysocksSettingsComponent } from './components/pages/node/apps/node-app
 import {
   SkysocksClientSettingsComponent
 } from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
+import {
+  EditSkysocksClientNoteComponent
+} from './components/pages/node/apps/node-apps/skysocks-client-settings/edit-skysocks-client-note/edit-skysocks-client-note.component';
+import {
+  SkysocksClientFilterComponent
+} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-filter/skysocks-client-filter.component';
 import { FiltersSelectionComponent } from './components/layout/filters-selection/filters-selection.component';
 import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
@@ -136,6 +142,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     UpdateComponent,
     UpdateHypervisorComponent,
     UpdaterConfigComponent,
+    EditSkysocksClientNoteComponent,
+    SkysocksClientFilterComponent,
   ],
   imports: [
     BrowserModule,
