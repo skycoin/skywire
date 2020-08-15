@@ -198,6 +198,22 @@
         "default-password": "Don't use the default password (1234)."
       }
     },
+    "updater-config" : {
+      "open-link": "Show updater settings",
+      "open-confirmation": "The updater settings are for experienced users only. Are you sure you want to continue?",
+      "help": "Use this form for overriding the settings that will be used by the updater. All empty fields will be ignored. The settings will be used for all updating operations, no mater which element is being updated, so please be careful.",
+      "channel": "Channel",
+      "version": "Version",
+      "archive-url": "Archive URL",
+      "checksum-url": "Checksum URL",
+      "not-saved": "The changes have not been saved yet.",
+      "save": "Save changes",
+      "remove-settings": "Remove the settings",
+      "saved": "The custom settings have been saved.",
+      "removed": "The custom settings have been removed.",
+      "save-confirmation": "Are you sure you want to apply the custom settings?",
+      "remove-confirmation": "Are you sure you want to remove the custom settings?"
+    },
     "change-password": "Change password",
     "refresh-rate": "Refresh rate",
     "refresh-rate-help": "Time the system waits to update the data automatically.",

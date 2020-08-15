@@ -7,7 +7,6 @@ import { AppConfig } from 'src/app/app.config';
 import { NodeService } from 'src/app/services/node.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
-import { WebSocketSubject } from 'rxjs/webSocket';
 
 /**
  * States of the modal window.
