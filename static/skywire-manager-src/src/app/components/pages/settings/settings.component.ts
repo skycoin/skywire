@@ -6,6 +6,7 @@ import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.comp
 import { AuthService } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { UpdaterStorageKeys } from 'src/app/services/node.service';
 
 /**
  * Page with the general settings of the app.
@@ -18,6 +19,7 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 export class SettingsComponent {
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
+  mustShowUpdaterSettings = !!localStorage.getItem(UpdaterStorageKeys.UseCustomSettings);
 
   constructor(
     private authService: AuthService,
@@ -74,6 +76,17 @@ export class SettingsComponent {
         () => this.router.navigate(['login']),
         () => this.snackbarService.showError('common.logout-error')
       );
+    });
+  }
+
+  // Opens the updater settings, if the user confirms the operation.
+  showUpdaterSettings() {
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'settings.updater-config.open-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.close();
+
+      this.mustShowUpdaterSettings = true;
     });
   }
 }

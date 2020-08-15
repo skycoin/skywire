@@ -1,0 +1,44 @@
+<div class="rounded-elevated-box"><div class="box-internal-container overflow">
+  <!-- Help icon. -->
+  <div class="white-form-help-icon-container">
+    <mat-icon [inline]="true" [matTooltip]="'settings.updater-config.help' | translate">
+      help
+    </mat-icon>
+  </div>
+  <!-- Form. -->
+  <form [formGroup]="form">
+    <mat-form-field class="white-form-field">
+      <input formControlName="channel" [placeholder]="'settings.updater-config.channel' | translate" maxlength="255" matInput>
+    </mat-form-field>
+
+    <mat-form-field class="white-form-field">
+      <input formControlName="version" [placeholder]="'settings.updater-config.version' | translate" maxlength="255" matInput>
+    </mat-form-field>
+
+    <mat-form-field class="white-form-field">
+      <input formControlName="archiveURL" [placeholder]="'settings.updater-config.archive-url' | translate" maxlength="255" matInput>
+    </mat-form-field>
+
+    <mat-form-field class="white-form-field">
+      <input formControlName="checksumsURL" [placeholder]="'settings.updater-config.checksum-url' | translate" maxlength="255" matInput>
+    </mat-form-field>
+
+    <div class="mt-2 buttons-area">
+      <!-- Alert shown when there are unsaved changes. -->
+      <div class="text-area red-text">
+        <span *ngIf="dataChanged">
+          <mat-icon [inline]="true">warning</mat-icon>
+          {{ 'settings.updater-config.not-saved' | translate }}
+        </span>
+      </div>
+
+      <!-- Buttons. -->
+      <app-button class="app-button left-button" color="primary" (action)="removeSettings()" [forDarkBackground]="true" [disabled]="!hasCustomSettings">
+        {{ 'settings.updater-config.remove-settings' | translate }}
+      </app-button>
+      <app-button class="app-button" color="primary" (action)="saveSettings()" [forDarkBackground]="true" [disabled]="!dataChanged">
+        {{ 'settings.updater-config.save' | translate }}
+      </app-button>
+    </div>
+  </form>
+</div></div>
