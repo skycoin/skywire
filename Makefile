@@ -130,14 +130,14 @@ vendorcheck:  ## Run vendorcheck
 	GO111MODULE=off vendorcheck ./cmd/skywire-cli/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-visor/...
 
-test: ## Run tests
-	-go clean -testcache &>/dev/null
-	${OPTS} go test ${TEST_OPTS} ./internal/...
-	${OPTS} go test ${TEST_OPTS} ./pkg/...
+#test: ## Run tests
+#	-go clean -testcache &>/dev/null
+#	${OPTS} go test ${TEST_OPTS} ./internal/...
+#	${OPTS} go test ${TEST_OPTS} ./pkg/...
 
-test-no-ci: ## Run no_ci tests
-	-go clean -testcache
-	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
+#test-no-ci: ## Run no_ci tests
+#	-go clean -testcache
+#	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
