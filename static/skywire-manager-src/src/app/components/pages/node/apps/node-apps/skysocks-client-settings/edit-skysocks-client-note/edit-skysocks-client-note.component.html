@@ -1,7 +1,7 @@
-<app-dialog [headline]="'apps.skysocks-client-settings.change-note-dialog.title' | translate">
+<app-dialog [headline]="'apps.vpn-socks-client-settings.change-note-dialog.title' | translate">
   <form [formGroup]="form">
     <mat-form-field>
-      <input #firstInput [placeholder]="'apps.skysocks-client-settings.change-note-dialog.note' | translate" formControlName="note" maxlength="100" matInput>
+      <input #firstInput [placeholder]="'apps.vpn-socks-client-settings.change-note-dialog.note' | translate" formControlName="note" maxlength="100" matInput>
     </mat-form-field>
     <app-button class="float-right" color="primary" type="mat-raised-button" (action)="finish()">{{ 'common.save' | translate }}</app-button>
   </form>
