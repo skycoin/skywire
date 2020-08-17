@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
-import { Subscription, of, timer, forkJoin, Observable } from 'rxjs';
-import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
+import { Subscription, of, timer, Observable } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
@@ -10,20 +10,17 @@ import { Node } from '../../../app.datatypes';
 import { AuthService } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
-import { TabButtonData } from '../../layout/tab-bar/tab-bar.component';
+import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { SnackbarService } from '../../../services/snackbar.service';
-import { SidenavService } from 'src/app/services/sidenav.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
-import { processServiceError } from 'src/app/utils/errors';
 import { ClipboardService } from 'src/app/services/clipboard.service';
-import { ConfirmationData, ConfirmationComponent } from '../../layout/confirmation/confirmation.component';
 import { AppConfig } from 'src/app/app.config';
-import { OperationError } from 'src/app/utils/operation-error';
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { LabeledElementTextComponent } from '../../layout/labeled-element-text/labeled-element-text.component';
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
+import { UpdateComponent, NodeData } from '../../layout/update/update.component';
 
 /**
  * Page for showing the node list.
@@ -42,7 +39,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
   keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
-  dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text);
+  dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
   pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
 
   private dataSortedSubscription: Subscription;
@@ -54,6 +51,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   loading = true;
   dataSource: Node[];
   tabsData: TabButtonData[] = [];
+  options: MenuOptionData[] = [];
   showDmsgInfo = false;
 
   // Vars for the pagination functionality.
@@ -109,7 +107,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
-  private menuSubscription: Subscription;
   private updateSubscription: Subscription;
   private navigationsSubscription: Subscription;
   private languageSubscription: Subscription;
@@ -133,7 +130,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     public storageService: StorageService,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
-    private sidenavService: SidenavService,
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
     route: ActivatedRoute,
@@ -205,6 +201,20 @@ export class NodeListComponent implements OnInit, OnDestroy {
       }
     ];
 
+    // Options for the menu shown in the top bar.
+    this.options = [
+      {
+        name: 'nodes.update-all',
+        actionName: 'update',
+        icon: 'get_app'
+      },
+      {
+        name: 'common.logout',
+        actionName: 'logout',
+        icon: 'power_settings_new'
+      }
+    ];
+
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
@@ -224,29 +234,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
         }));
     });
-
-    // Populate the left options bar.
-    setTimeout(() => {
-      this.menuSubscription = this.sidenavService.setContents([
-        {
-          name: 'nodes.update-all',
-          actionName: 'update',
-          icon: 'get_app'
-        },
-        {
-          name: 'common.logout',
-          actionName: 'logout',
-          icon: 'power_settings_new'
-        }], null).subscribe(actionName => {
-          // React to the events of the left options bar.
-          if (actionName === 'logout') {
-            this.logout();
-          } else if (actionName === 'update') {
-            this.updateAll();
-          }
-        }
-      );
-    });
   }
 
   ngOnDestroy() {
@@ -255,16 +242,26 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.languageSubscription.unsubscribe();
+    this.dataFiltererSubscription.unsubscribe();
 
-    if (this.menuSubscription) {
-      this.menuSubscription.unsubscribe();
-    }
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
     }
 
     this.dataSortedSubscription.unsubscribe();
     this.dataSorter.dispose();
+  }
+
+  /**
+   * Called when an option form the top bar is selected.
+   * @param actionName Name of the selected option, as defined in the this.options array.
+   */
+  performAction(actionName: string) {
+    if (actionName === 'logout') {
+      this.logout();
+    } else if (actionName === 'update') {
+      this.updateAll();
+    }
   }
 
   /**
@@ -324,7 +321,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
             if (result.data) {
               this.allNodes = result.data as Node[];
               if (this.showDmsgInfo) {
-                // Add the label data to the array, to be able to use it for filtering.
+                // Add the label data to the array, to be able to use it for filtering and sorting.
                 this.allNodes.forEach(node => {
                   node['dmsgServerPk_label'] =
                     LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, node.dmsgServerPk);
@@ -394,151 +391,35 @@ export class NodeListComponent implements OnInit, OnDestroy {
   }
 
   logout() {
-    this.authService.logout().subscribe(
-      () => this.router.navigate(['login']),
-      () => this.snackbarService.showError('common.logout-error')
-    );
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'common.logout-confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+
+      this.authService.logout().subscribe(
+        () => this.router.navigate(['login']),
+        () => this.snackbarService.showError('common.logout-error')
+      );
+    });
   }
 
   // Updates all visors.
   updateAll() {
     if (!this.dataSource || this.dataSource.length === 0) {
-      this.snackbarService.showError('nodes.update.no-visors');
+      this.snackbarService.showError('nodes.no-visors-to-update');
 
       return;
     }
 
-    // Configuration for the confirmation modal window used as the main UI element for the
-    // updating process.
-    const confirmationData: ConfirmationData = {
-      text: 'nodes.update.processing',
-      headerText: 'nodes.update.title',
-      confirmButtonText: 'nodes.update.processing-button',
-      disableDismiss: true,
-    };
-
-    // Show the confirmation window in a "loading" state while checking if there are updates.
-    const config = new MatDialogConfig();
-    config.data = confirmationData;
-    config.autoFocus = false;
-    config.width = AppConfig.smallModalWidth;
-    const confirmationDialog = this.dialog.open(ConfirmationComponent, config);
-    setTimeout(() => confirmationDialog.componentInstance.showProcessing());
-
-    if (this.updateSubscription) {
-      this.updateSubscription.unsubscribe();
-    }
-
-    // Get the list of all online visors, to check if there are updates available.
-    const nodesToCheck: string[] = [];
-    const labelsToCheck: string[] = [];
+    const nodesData: NodeData[] = [];
     this.dataSource.forEach(node => {
-      if (node.online) {
-        nodesToCheck.push(node.local_pk);
-        labelsToCheck.push(node.label);
-      }
-    });
-
-    // Keys and labels of all visors with an update available.
-    const keysWithUpdate: string[] = [];
-    const labelsWithUpdate: string[] = [];
-    // How many visors have an update available.
-    let visorsWithUpdate = 0;
-
-    // Check if there are updates available.
-    this.updateSubscription = forkJoin(nodesToCheck.map(pk => this.nodeService.checkUpdate(pk))).subscribe(response => {
-      // Contains the list of all updates found, without repetitions.
-      const updates = new Map<string, string>();
-
-      // Check the response for each visor.
-      response.forEach((updateInfo, i) => {
-        if (updateInfo && updateInfo.available) {
-          visorsWithUpdate += 1;
-
-          // Save the data for calling the update procedure later.
-          keysWithUpdate.push(nodesToCheck[i]);
-          labelsWithUpdate.push(labelsToCheck[i]);
-
-          // Save the name of the update, if it was not found before.
-          if (!updates.has(updateInfo.current_version + updateInfo.available_version)) {
-            const newVersion = this.translateService.instant('nodes.update.version-change',
-              {
-                currentVersion: updateInfo.current_version
-                  ? updateInfo.current_version : this.translateService.instant('common.unknown'),
-                newVersion: updateInfo.available_version
-              }
-            );
-
-            updates.set(updateInfo.current_version + updateInfo.available_version, newVersion);
-          }
-        }
-      });
-
-      if (visorsWithUpdate > 0) {
-        // Text for asking for confirmation before updating.
-        let newText: string;
-        if (visorsWithUpdate === 1) {
-          newText = 'nodes.update.update-available-single';
-        } else {
-          newText = this.translateService.instant('nodes.update.update-available-multiple', {number: visorsWithUpdate});
-        }
-
-        const updatesList: string[] = [];
-        updates.forEach(u => updatesList.push(u));
-
-        // New configuration for asking for confirmation.
-        const newConfirmationData: ConfirmationData = {
-          text: newText,
-          list: updatesList,
-          lowerText: 'nodes.update.update-available-confirmation',
-          headerText: 'nodes.update.title',
-          confirmButtonText: 'nodes.update.install',
-          cancelButtonText: 'common.cancel',
-        };
-
-        // Ask for confirmation.
-        setTimeout(() => {
-          confirmationDialog.componentInstance.showAsking(newConfirmationData);
-        });
-      } else {
-        // Inform that there are no updates available.
-        const newText = this.translateService.instant('nodes.update.no-update');
-        setTimeout(() => {
-          confirmationDialog.componentInstance.showDone(null, newText);
-        });
-      }
-    }, (err: OperationError) => {
-      err = processServiceError(err);
-
-      // Must wait because the loading state is activated after a frame.
-      setTimeout(() => {
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      nodesData.push({
+        key: node.local_pk,
+        label: node.label,
       });
     });
 
-    // React if the user confirms the update.
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      // Update all visors.
-      this.updateSubscription = this.recursivelyUpdateWallets(keysWithUpdate, labelsWithUpdate).subscribe(response => {
-        if (response === 0) {
-          // If everything was ok, show a confirmation.
-          confirmationDialog.componentInstance.showDone('confirmation.done-header-text', 'nodes.update.done-all');
-        } else if (response === visorsWithUpdate) {
-          // Error if no visor was updated.
-          confirmationDialog.componentInstance.showDone('confirmation.error-header-text', 'nodes.update.all-failed-error');
-        } else {
-          // Error if only some visors were updated.
-          confirmationDialog.componentInstance.showDone(
-            'confirmation.error-header-text',
-            this.translateService.instant('nodes.update.some-updated-error',
-              {failedNumber: response, updatedNumber: visorsWithUpdate - response}
-            )
-          );
-        }
-      });
-    });
+    UpdateComponent.openDialog(this.dialog, nodesData);
   }
 
   /**

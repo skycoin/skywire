@@ -189,6 +189,7 @@ export class NodeAppsListComponent implements OnDestroy {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
     this.dataSortedSubscription.unsubscribe();
+    this.dataFiltererSubscription.unsubscribe();
     this.dataSorter.dispose();
   }
 

@@ -1,9 +1,7 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { TabButtonData } from '../../../layout/tab-bar/tab-bar.component';
-import { SidenavService } from 'src/app/services/sidenav.service';
+import { TabButtonData } from '../../../layout/top-bar/top-bar.component';
 
 /**
  * Page for showing the complete list of the labels.
@@ -13,13 +11,11 @@ import { SidenavService } from 'src/app/services/sidenav.service';
   templateUrl: './all-labels.component.html',
   styleUrls: ['./all-labels.component.scss']
 })
-export class AllLabelsComponent implements OnInit, OnDestroy {
+export class AllLabelsComponent {
   tabsData: TabButtonData[] = [];
-
-  private menuSubscription: Subscription;
+  returnButtonText = 'settings.title';
 
   constructor(
-    private sidenavService: SidenavService,
     private router: Router,
   ) {
     // Data for populating the tab bar.
@@ -32,28 +28,14 @@ export class AllLabelsComponent implements OnInit, OnDestroy {
     ];
   }
 
-  ngOnInit() {
-    setTimeout(() => {
-      // Populate the left options bar.
-      this.menuSubscription = this.sidenavService.setContents(null, [
-        {
-          name: 'settings.title',
-          actionName: 'back',
-          icon: 'chevron_left'
-        }
-      ]).subscribe(actionName => {
-          // React to the events of the left options bar.
-          if (actionName === 'back') {
-            this.router.navigate(['settings']);
-          }
-        }
-      );
-    });
-  }
-
-  ngOnDestroy() {
-    if (this.menuSubscription) {
-      this.menuSubscription.unsubscribe();
+  /**
+   * Called when an option form the top bar is selected.
+   * @param actionName Name of the selected option.
+   */
+  performAction(actionName: string) {
+    // Null is returned if the back button was pressed.
+    if (actionName === null) {
+      this.router.navigate(['settings']);
     }
   }
 }
