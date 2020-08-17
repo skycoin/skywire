@@ -81,6 +81,8 @@ import { LabeledElementTextComponent } from './components/layout/labeled-element
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { LabelListComponent } from './components/pages/settings/all-labels/label-list/label-list.component';
 import { UpdateComponent } from './components/layout/update/update.component';
+import { UpdateHypervisorComponent } from './components/layout/update-hypervisor/update-hypervisor.component';
+import { UpdaterConfigComponent } from './components/pages/settings/updater-config/updater-config.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -138,6 +140,8 @@ const globalRippleConfig: RippleGlobalOptions = {
     AllLabelsComponent,
     LabelListComponent,
     UpdateComponent,
+    UpdateHypervisorComponent,
+    UpdaterConfigComponent,
     EditSkysocksClientNoteComponent,
     SkysocksClientFilterComponent,
   ],
