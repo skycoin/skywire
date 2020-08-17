@@ -2,6 +2,7 @@ import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
+import { TranslateService } from '@ngx-translate/core';
 
 import { Application } from '../../../../../app.datatypes';
 import { AppsService } from '../../../../../services/apps.service';
@@ -16,7 +17,6 @@ import { SkysocksSettingsComponent } from '../node-apps/skysocks-settings/skysoc
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { SkysocksClientSettingsComponent } from '../node-apps/skysocks-client-settings/skysocks-client-settings.component';
-import { TranslateService } from '@ngx-translate/core';
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
@@ -70,6 +70,8 @@ export class NodeAppsListComponent implements OnDestroy {
   appsWithConfig = new Map<string, boolean>([
     ['skysocks', true],
     ['skysocks-client', true],
+    ['vpn-client', true],
+    ['vpn-server', true],
   ]);
 
   allApps: Application[];
@@ -411,9 +413,9 @@ export class NodeAppsListComponent implements OnDestroy {
    * Shows the appropriate modal window for configuring the app.
    */
   config(app: Application): void {
-    if (app.name === 'skysocks') {
+    if (app.name === 'skysocks' || app.name === 'vpn-server') {
       SkysocksSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skysocks-client') {
+    } else if (app.name === 'skysocks-client' || app.name === 'vpn-client') {
       SkysocksClientSettingsComponent.openDialog(this.dialog, app);
     } else {
       this.snackbarService.showError('apps.error');

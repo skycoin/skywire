@@ -1,24 +1,24 @@
-<app-dialog [headline]="'apps.skysocks-client-settings.title' | translate">
+<app-dialog [headline]="('apps.vpn-socks-client-settings.' + ( configuringVpn ? 'vpn-title' : 'socks-title')) | translate">
   <mat-tab-group>
     <!-- Form. -->
-    <mat-tab [label]="'apps.skysocks-client-settings.remote-visor-tab' | translate">
+    <mat-tab [label]="'apps.vpn-socks-client-settings.remote-visor-tab' | translate">
       <form [formGroup]="form">
         <mat-form-field>
           <input
             id="pk"
             formControlName="pk"
             maxlength="66"
-            [placeholder]="'apps.skysocks-client-settings.public-key' | translate"
+            [placeholder]="'apps.vpn-socks-client-settings.public-key' | translate"
             #firstInput
             matInput
           >
           <mat-error>
             <ng-container *ngIf="!this.form.get('pk').hasError('pattern');else hexError">
-              {{ 'apps.skysocks-client-settings.remote-key-length-error' | translate }}
+              {{ 'apps.vpn-socks-client-settings.remote-key-length-error' | translate }}
             </ng-container>
           </mat-error>
           <ng-template #hexError>
-            {{ 'apps.skysocks-client-settings.remote-key-chars-error' | translate }}
+            {{ 'apps.vpn-socks-client-settings.remote-key-chars-error' | translate }}
           </ng-template>
         </mat-form-field>
     
@@ -29,18 +29,18 @@
           color="primary"
           class="float-right"
         >
-          {{ 'apps.skysocks-client-settings.save' | translate }}
+          {{ 'apps.vpn-socks-client-settings.save' | translate }}
         </app-button>
       </form>
     </mat-tab>
     <!-- Discovery. -->
-    <mat-tab [label]="'apps.skysocks-client-settings.discovery-tab' | translate">
+    <mat-tab [label]="'apps.vpn-socks-client-settings.discovery-tab' | translate">
       <app-loading-indicator class="loading-indicator" [showWhite]="false" *ngIf="loadingFromDiscovery"></app-loading-indicator>
 
       <!-- No proxies in the discovery service msg. -->
       <div class="info-text" *ngIf="!loadingFromDiscovery && proxiesFromDiscovery.length === 0">
         <mat-icon [inline]="true">error</mat-icon>
-        {{ 'apps.skysocks-client-settings.no-elements' | translate }}
+        {{ 'apps.vpn-socks-client-settings.no-elements' | translate }}
       </div>
 
       <!-- Filters button. -->
@@ -56,14 +56,14 @@
             </div>
             <div>
               <div class="item" *ngIf="currentFiltersTexts.length === 0">
-                {{ 'apps.skysocks-client-settings.no-filter' | translate }}
+                {{ 'apps.vpn-socks-client-settings.no-filter' | translate }}
               </div>
               <div *ngFor="let filterTexts of currentFiltersTexts" class="item">
                 <span>{{ filterTexts[0] | translate }} </span>
                 <ng-container *ngIf="filterTexts[1]">{{ filterTexts[1] | translate }}</ng-container>
                 <ng-container *ngIf="filterTexts[2]">{{ filterTexts[2] }}</ng-container>
               </div>
-              <div class="item" class="blue-part">{{ 'apps.skysocks-client-settings.click-to-change' | translate }}</div>
+              <div class="item" class="blue-part">{{ 'apps.vpn-socks-client-settings.click-to-change' | translate }}</div>
             </div>
           </div>
         </button>
@@ -71,7 +71,7 @@
         <!-- No proxies with the current filters msg. -->
         <div class="info-text" *ngIf="filteredProxiesFromDiscovery.length === 0">
           <mat-icon [inline]="true">error</mat-icon>
-          {{ 'apps.skysocks-client-settings.no-elements-for-filters' | translate }}
+          {{ 'apps.vpn-socks-client-settings.no-elements-for-filters' | translate }}
         </div>
 
         <!-- Proxies list. -->
@@ -83,16 +83,23 @@
           >
             <div class="button-content">
               <div class="item">
-                <span>{{ 'apps.skysocks-client-settings.key' | translate }}</span>
+                <span>{{ 'apps.vpn-socks-client-settings.key' | translate }}</span>
                 <span>&nbsp;<ng-container *ngFor="let part of getHighlightedTextParts(proxy.pk, currentFilters.key); let i = index">
                   <span [ngClass]="{ highlighted: i % 2 !== 0 }">{{ part }}</span>
                 </ng-container></span>
               </div>
               <div class="item" *ngIf="proxy.location">
-                <span>{{ 'apps.skysocks-client-settings.location' | translate }}</span>
-                <span>&nbsp;<ng-container *ngFor="let part of getHighlightedTextParts(proxy.location, currentFilters.location); let i = index">
-                  <span [ngClass]="{ highlighted: i % 2 !== 0 }">{{ part }}</span>
-                </ng-container></span>
+                <span>{{ 'apps.vpn-socks-client-settings.location' | translate }}</span>
+                <span>&nbsp;
+                  <ng-container *ngIf="proxy.country">
+                    <div class="flag-container">
+                      <div [style]="'background-image: url(\'assets/img/flags/' + proxy.country.toLocaleLowerCase() + '.png\');'"></div>
+                    </div>
+                  </ng-container>
+                  <ng-container *ngFor="let part of getHighlightedTextParts(proxy.location, currentFilters.location); let i = index">
+                    <span [ngClass]="{ highlighted: i % 2 !== 0 }">{{ part }}</span>
+                  </ng-container>
+                </span>
               </div>
             </div>
           </button>
@@ -101,7 +108,7 @@
 
       <!-- Paginator. -->
       <div class="paginator" *ngIf="numberOfPages > 1">
-        <span>{{ 'apps.skysocks-client-settings.pagination-info' | translate:{currentElementsRange: currentRange, totalElements: filteredProxiesFromDiscovery.length} }}</span>
+        <span>{{ 'apps.vpn-socks-client-settings.pagination-info' | translate:{currentElementsRange: currentRange, totalElements: filteredProxiesFromDiscovery.length} }}</span>
 
         <button (click)="goToPreviousPage()" mat-icon-button class="hard-grey-button-background">
           <mat-icon>chevron_left</mat-icon>
@@ -112,12 +119,12 @@
       </div>
     </mat-tab>
     <!-- History. -->
-    <mat-tab [label]="'apps.skysocks-client-settings.history-tab' | translate">
+    <mat-tab [label]="'apps.vpn-socks-client-settings.history-tab' | translate">
       <!-- Msg shown if there is no history. -->
       <div *ngIf="history.length === 0">
         <div class="info-text">
           <mat-icon [inline]="true">error</mat-icon>
-          {{ 'apps.skysocks-client-settings.no-history' | translate:{number: maxHistoryElements} }}
+          {{ 'apps.vpn-socks-client-settings.no-history' | translate:{number: maxHistoryElements} }}
         </div>
       </div>
 
@@ -146,20 +153,20 @@
             <!-- Info. -->
             <div class="full-size-area">
               <div class="item">
-                <span>{{ 'apps.skysocks-client-settings.key' | translate }}</span>
+                <span>{{ 'apps.vpn-socks-client-settings.key' | translate }}</span>
                 <span> {{ entry.key }}</span>
               </div>
               <div class="item">
-                <span>{{ 'apps.skysocks-client-settings.note' | translate }}</span>
+                <span>{{ 'apps.vpn-socks-client-settings.note' | translate }}</span>
                 <ng-container *ngIf="entry.note">
                   <span> {{ entry.note }}</span>
                 </ng-container>
                 <ng-container *ngIf="!entry.note">
                   <ng-container *ngIf="entry.enteredManually">
-                    <span> {{ 'apps.skysocks-client-settings.note-entered-manually' | translate }}</span>
+                    <span> {{ 'apps.vpn-socks-client-settings.note-entered-manually' | translate }}</span>
                   </ng-container>
                   <ng-container *ngIf="!entry.enteredManually">
-                    <span> {{ 'apps.skysocks-client-settings.note-obtained' | translate }}</span>
+                    <span> {{ 'apps.vpn-socks-client-settings.note-obtained' | translate }}</span>
                     <ng-container *ngIf="entry.location">
                       <span> ({{ entry.location }})</span>
                     </ng-container>
@@ -172,7 +179,7 @@
               <button
                 (click)="$event.stopPropagation(); changeNote(entry)"
                 mat-icon-button
-                [matTooltip]="'apps.skysocks-client-settings.change-note' | translate"
+                [matTooltip]="'apps.vpn-socks-client-settings.change-note' | translate"
                 class="small-button hard-grey-button-background d-none d-md-inline"
               >
                 <mat-icon [inline]="true">edit</mat-icon>
@@ -180,7 +187,7 @@
               <button
                 (click)="$event.stopPropagation(); removeFromHistory(entry.key)"
                 mat-icon-button
-                [matTooltip]="'apps.skysocks-client-settings.remove-entry' | translate"
+                [matTooltip]="'apps.vpn-socks-client-settings.remove-entry' | translate"
                 class="small-button hard-grey-button-background d-none d-md-inline"
               >
                 <mat-icon [inline]="true">close</mat-icon>

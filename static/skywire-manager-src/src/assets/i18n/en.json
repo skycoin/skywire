@@ -308,8 +308,9 @@
         }
       }
     },
-    "skysocks-settings": {
-      "title": "Skysocks Settings",
+    "vpn-socks-server-settings": {
+      "socks-title": "Skysocks Settings",
+      "vpn-title": "VPN-Server Settings",
       "new-password": "New password (Leave empty to remove the password)",
       "repeat-password": "Repeat password",
       "passwords-not-match": "Passwords do not match.",
@@ -318,9 +319,10 @@
       "change-passowrd-confirmation": "Are you sure you want to change the password?",
       "changes-made": "The changes have been made."
     },
-    "skysocks-client-settings": {
-      "title": "Skysocks-Client Settings",
-      "discovery-tab": "Search visor",
+    "vpn-socks-client-settings": {
+      "socks-title": "Skysocks-Client Settings",
+      "vpn-title": "VPN-Client Settings",
+      "discovery-tab": "Search",
       "remote-visor-tab": "Enter manually",
       "history-tab": "History",
       "use": "Use this data",
@@ -356,6 +358,8 @@
 
       "filter-dialog": {
         "title": "Filters",
+        "country": "The country must be",
+        "any-country": "Any",
         "location": "The location must contain",
         "pub-key": "The public key must contain",
         "apply": "Apply"

@@ -1,11 +1,38 @@
-<app-dialog [headline]="'apps.skysocks-client-settings.filter-dialog.title' | translate">
+<app-dialog [headline]="'apps.vpn-socks-client-settings.filter-dialog.title' | translate">
   <form [formGroup]="form">
+
+    <!-- Country. -->
+    <mat-form-field *ngIf="data.availableCountries.length > 0">
+      <mat-select formControlName="country" id="country" [placeholder]="'apps.vpn-socks-client-settings.filter-dialog.country' | translate">
+        <mat-option [value]="'-'">{{ 'apps.vpn-socks-client-settings.filter-dialog.any-country' | translate }}</mat-option>
+        <mat-option *ngFor="let country of data.availableCountries" [value]="country.toUpperCase()">
+          <div class="flag-container">
+            <div [style]="'background-image: url(\'assets/img/flags/' + country.toLocaleLowerCase() + '.png\');'"></div>
+          </div>
+          <ng-container *ngIf="completeCountriesList[country.toUpperCase()]">{{ completeCountriesList[country.toUpperCase()] }}</ng-container>
+          <ng-container *ngIf="!completeCountriesList[country.toUpperCase()]">{{ country.toUpperCase() }}</ng-container>
+        </mat-option>
+        <mat-select-trigger>
+          <ng-container *ngIf="form.get('country').value === '-'">
+            {{ 'apps.vpn-socks-client-settings.filter-dialog.any-country' | translate }}
+          </ng-container>
+          <ng-container *ngIf="form.get('country').value !== '-'">
+            <div class="flag-container">
+              <div [style]="'background-image: url(\'assets/img/flags/' + form.get('country').value.toLocaleLowerCase() + '.png\');'"></div>
+            </div>
+            <ng-container *ngIf="completeCountriesList[form.get('country').value]">{{ completeCountriesList[form.get('country').value] }}</ng-container>
+            <ng-container *ngIf="!completeCountriesList[form.get('country').value]">{{ form.get('country').value }}</ng-container>
+          </ng-container>
+        </mat-select-trigger>
+      </mat-select>
+    </mat-form-field>
+
     <!-- Location. -->
     <mat-form-field>
       <input
         formControlName="location-text"
         maxlength="100"
-        [placeholder]="'apps.skysocks-client-settings.filter-dialog.location' | translate"
+        [placeholder]="'apps.vpn-socks-client-settings.filter-dialog.location' | translate"
         matInput
       >
     </mat-form-field>
@@ -14,7 +41,7 @@
       <input
         formControlName="key-text"
         maxlength="66"
-        [placeholder]="'apps.skysocks-client-settings.filter-dialog.pub-key' | translate"
+        [placeholder]="'apps.vpn-socks-client-settings.filter-dialog.pub-key' | translate"
         matInput
       >
     </mat-form-field>
@@ -27,7 +54,7 @@
       color="primary"
       class="float-right"
     >
-      {{ 'apps.skysocks-client-settings.filter-dialog.apply' | translate }}
+      {{ 'apps.vpn-socks-client-settings.filter-dialog.apply' | translate }}
     </app-button>
   </form>
 </app-dialog>
