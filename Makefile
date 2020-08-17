@@ -94,13 +94,6 @@ uninstall:
 	rm -rf $(DESTDIR)/usr/bin/skywire-cli
 	rm -rf $(DESTDIR)/opt/skywire
 
-clean:
-	rm -rf ./skywire-visor
-	rm -rf ./skywire-cli
-	rm -rf ./setup-node
-	rm -rf ./hypervisor
-	rm -rf ./apps
-
 distclean: clean
 	rm -rf ./hypervisor-config.json
 	rm -rf ./skywire-config.json
