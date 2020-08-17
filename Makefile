@@ -75,9 +75,7 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
 
-all: bin host-apps
-
-install: all ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
+install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
 	mkdir -p $(DESTDIR)/opt/skywire/apps
 	mkdir -p $(DESTDIR)/usr/bin
 	install -m 0755 skywire-visor $(DESTDIR)/opt/skywire/skywire-visor
