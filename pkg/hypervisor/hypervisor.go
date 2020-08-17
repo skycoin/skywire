@@ -396,7 +396,7 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 }
 
 func (hv *Hypervisor) isHypervisorWSUpdateRunning() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		running := false
 		hv.hypervisorMu.Lock()
 		running = hv.hypervisorChanMux != nil
@@ -409,7 +409,7 @@ func (hv *Hypervisor) isHypervisorWSUpdateRunning() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, resp)
-	})
+	}
 }
 
 func (hv *Hypervisor) updateHVWithStatus(config updater.UpdateConfig) <-chan visor.StatusMessage {
