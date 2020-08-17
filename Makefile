@@ -46,6 +46,9 @@ BUILDINFO?=-ldflags="$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)"
 
 BUILD_OPTS?=$(BUILDINFO)
 
+all:
+	echo "dummy"
+
 check: lint test ## Run linters and tests
 
 #build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
