@@ -8,7 +8,6 @@ import { AuthGuardService } from './services/auth-guard.service';
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { RoutingComponent } from './components/pages/node/routing/routing.component';
 import { AppsComponent } from './components/pages/node/apps/apps.component';
-import { SidenavComponent } from './components/layout/sidenav/sidenav.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
@@ -23,7 +22,6 @@ const routes: Routes = [
   },
   {
     path: 'nodes',
-    component: SidenavComponent,
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     children: [
@@ -104,7 +102,6 @@ const routes: Routes = [
   },
   {
     path: 'settings',
-    component: SidenavComponent,
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     children: [

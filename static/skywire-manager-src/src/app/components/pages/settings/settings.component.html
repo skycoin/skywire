@@ -1,11 +1,13 @@
 <div class="row">
   <div class="col-12">
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
       [selectedTabIndex]="2"
-      [showUpdateButton]="false" 
-    ></app-tab-bar>
+      [showUpdateButton]="false"
+      [optionsData]="options"
+      (optionSelected)="performAction($event)"
+    ></app-top-bar>
   </div>
   <div class="content col-12 mt-4.5">
     <app-refresh-rate class="d-block mb-4"></app-refresh-rate>

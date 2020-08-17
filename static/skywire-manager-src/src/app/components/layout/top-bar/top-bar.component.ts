@@ -3,11 +3,12 @@ import { Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
-import { LanguageService } from 'src/app/services/language.service';
+import { LanguageService, LanguageData } from 'src/app/services/language.service';
 import { SelectableOption, SelectOptionComponent } from '../select-option/select-option.component';
+import { SelectLanguageComponent } from '../select-language/select-language.component';
 
 /**
- * Properties of the tabs shown in TabBarComponent.
+ * Properties of a tab shown in TopBarComponent.
  */
 export interface TabButtonData {
   /**
@@ -24,17 +25,35 @@ export interface TabButtonData {
 }
 
 /**
- * Tab bar shown by most of the pages. It shows a list of tabs, a button for refreshing the
- * currently displayed data and a language button (only on large screens). The design is
- * responsive, but it is advisable to use only a maximum of 3 tabs with short texts, to
- * avoid some problems.
+ * Properties of an option shown in TopBarComponent.
+ */
+export interface MenuOptionData {
+  /**
+   * Text that will be shown in the button.
+   */
+  name: string;
+  /**
+   * Icon that will be shown in the button.
+   */
+  icon: string;
+  /**
+   * Unique string to identify the option if the user selects it.
+   */
+  actionName: string;
+  disabled?: boolean;
+}
+
+/**
+ * Top bar shown by most of the pages. It shows a list of tabs, a button for refreshing the
+ * currently displayed data and a menu button. The design is responsive, but it is advisable
+ * to use only a maximum of 3 tabs with short texts, to avoid some problems.
  */
 @Component({
-  selector: 'app-tab-bar',
-  templateUrl: './tab-bar.component.html',
-  styleUrls: ['./tab-bar.component.scss']
+  selector: 'app-top-bar',
+  templateUrl: './top-bar.component.html',
+  styleUrls: ['./top-bar.component.scss']
 })
-export class TabBarComponent implements OnInit, OnDestroy {
+export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * Deactivates the mouse events.
    */
@@ -48,7 +67,20 @@ export class TabBarComponent implements OnInit, OnDestroy {
    * List with the tabs to show.
    */
   @Input() tabsData: TabButtonData[];
+  /**
+   * Index of the currently selected tab.
+   */
   @Input() selectedTabIndex = 0;
+  /**
+   * List with the options to show.
+   */
+  @Input() optionsData: MenuOptionData[];
+  /**
+   * Text for the translatable pipe to be shown in the return button. The return button is only
+   * shown if this var has a valid value. If the return button is pressed, the optionSelected
+   * event is emited with null as value.
+   */
+  @Input() returnText: string;
 
   /**
    * Seconds since the last time the data was updated.
@@ -74,10 +106,17 @@ export class TabBarComponent implements OnInit, OnDestroy {
    * Event for when the user presses the update button.
    */
   @Output() refreshRequested = new EventEmitter();
+  /**
+   * Event for when the user selects an option from the menu. It return the value of the
+   * actionName property of the selected option or null, if the back button was pressed.
+   */
+  @Output() optionSelected = new EventEmitter<string>();
 
   hideLanguageButton = true;
+  // Currently selecte language.
+  language: LanguageData;
 
-  private langSubscription: Subscription;
+  private langSubscriptionsGroup: Subscription[] = [];
 
   constructor(
     private languageService: LanguageService,
@@ -86,18 +125,33 @@ export class TabBarComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
-    this.langSubscription = this.languageService.languages.subscribe(langs => {
+    this.langSubscriptionsGroup.push(this.languageService.currentLanguage.subscribe(lang => {
+      this.language = lang;
+    }));
+
+    this.langSubscriptionsGroup.push(this.languageService.languages.subscribe(langs => {
       if (langs.length > 1) {
         this.hideLanguageButton = false;
       } else {
         this.hideLanguageButton = true;
       }
-    });
+    }));
   }
 
   ngOnDestroy() {
-    this.langSubscription.unsubscribe();
+    this.langSubscriptionsGroup.forEach(sub => sub.unsubscribe());
     this.refreshRequested.complete();
+    this.optionSelected.complete();
+  }
+
+  // Called when the user selects an option from the menu.
+  requestAction(name: string) {
+    this.optionSelected.emit(name);
+  }
+
+  // Opens the language selection modal window.
+  openLanguageWindow() {
+    SelectLanguageComponent.openDialog(this.dialog);
   }
 
   sendRefreshEvent() {
