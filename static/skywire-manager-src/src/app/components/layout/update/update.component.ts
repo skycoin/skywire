@@ -152,9 +152,6 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
-   */
-  /**
-   * Opens the modal window. Please use this function instead of opening the window "by hand".
    * @param nodes Nodes to update.
    */
   public static openDialog(dialog: MatDialog, nodes: NodeData[]): MatDialogRef<UpdateComponent, any> {
@@ -236,7 +233,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
       }
     });
 
-    // Check iof there are updates.
+    // Check if there are updates.
     this.subscription = forkJoin(nodesToCheck.map(node => this.nodeService.checkUpdate(node.key))).subscribe(versionsResponse => {
       // Contains the list of all updates found, without repetitions.
       const updates = new Map<string, boolean>();
