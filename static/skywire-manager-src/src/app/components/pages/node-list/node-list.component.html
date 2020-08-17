@@ -1,12 +1,12 @@
 <!-- Content when loading. -->
 <div *ngIf="loading" class="flex-column h-100 w-100">
   <div>
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
       [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
       [showUpdateButton]="false"
-    ></app-tab-bar>
+    ></app-top-bar>
   </div>
   <app-loading-indicator class="h-100"></app-loading-indicator>
 </div>
@@ -14,7 +14,7 @@
 <!-- Content when loaded. -->
 <div *ngIf="!loading" class="row">
   <div class="col-12">
-    <app-tab-bar
+    <app-top-bar
       [titleParts]="['start.title']"
       [tabsData]="tabsData"
       [selectedTabIndex]="!showDmsgInfo ? 0 : 1"
@@ -22,22 +22,23 @@
       [showLoading]="updating"
       [showAlert]="errorsUpdating"
       [refeshRate]="storageService.getRefreshTime()"
+      [optionsData]="options"
       (refreshRequested)="forceDataRefresh(true)"
-    ></app-tab-bar>
+      (optionSelected)="performAction($event)"
+    ></app-top-bar>
   </div>
   <div class="col-12">
 
     <!-- Header. -->
     <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': numberOfPages > 1}">
-      <div class="title ml-3.5">
+      <div class="title">
         <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
-          {{ 'filters.active-filters' | translate }}
           <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
             <span>{{ filterTexts.filterName | translate }}: </span>
             <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
             <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
           </div>
-          <div>{{ 'filters.press-to-remove' | translate }}</div>
+          <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
         </div>
       </div>
       <div class="options">
@@ -93,7 +94,10 @@
           </th>
           <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(dmsgServerSortData)">
             {{ 'nodes.dmsg-server' | translate }}
-            <mat-icon *ngIf="dataSorter.currentSortingColumn === dmsgServerSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            <ng-container *ngIf="dataSorter.currentSortingColumn === dmsgServerSortData">
+              <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+              <ng-container *ngIf="dataSorter.currentlySortingByLabel">*</ng-container>
+            </ng-container>
           </th>
           <th *ngIf="showDmsgInfo" class="sortable-column" (click)="dataSorter.changeSortingOrder(pingSortData)">
             {{ 'nodes.ping' | translate }}
@@ -177,7 +181,8 @@
             <div class="left-part">
               <div class="title">{{ 'tables.sorting-title' | translate }}</div>
               <div>{{ dataSorter.currentSortingColumn.label | translate }}
-                {{ (!dataSorter.sortingInReverseOrder ? 'tables.ascending-order' : 'tables.descending-order') | translate }}
+                <ng-container *ngIf="dataSorter.currentlySortingByLabel">{{ 'tables.label' | translate }}</ng-container>
+                <ng-container *ngIf="dataSorter.sortingInReverseOrder">{{ 'tables.inverted-order' | translate }}</ng-container>
               </div>
             </div>
             <div class="right-part">

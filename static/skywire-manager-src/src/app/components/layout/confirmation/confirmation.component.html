@@ -14,7 +14,6 @@
   <div class="buttons">
     <app-button
       #cancelButton
-      type="mat-raised-button"
       color="accent"
       (action)="closeModal()"
       *ngIf="data.cancelButtonText && state !== confirmationStates.Done">
@@ -22,7 +21,6 @@
     </app-button>
     <app-button
       #confirmButton
-      type="mat-raised-button"
       color="primary"
       (action)="state === confirmationStates.Asking ? sendOperationAcceptedEvent() : closeModal()">
       {{ (state !== confirmationStates.Done ? data.confirmButtonText : 'confirmation.close') | translate }}

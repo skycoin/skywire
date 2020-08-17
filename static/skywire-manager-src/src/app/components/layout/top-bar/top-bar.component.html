@@ -1,0 +1,117 @@
+<!-- Top bar shown on small screens. -->
+<div class="top-bar d-lg-none">
+  <div class="button-container">
+    <button
+      mat-icon-button
+      *ngIf="returnText"
+      (click)="requestAction(null)"
+      class="transparent-button"
+    >
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+  </div>
+  <div class="logo-container">
+    <ng-container *ngIf="!titleParts || titleParts.length < 2">
+      <img src="/assets/img/logo-s.png" />
+    </ng-container>
+    <ng-container *ngIf="titleParts && titleParts.length >= 2">
+      {{ titleParts[titleParts.length - 1] | translate }}
+    </ng-container>
+  </div>
+  <div class="button-container">
+    <button
+      mat-icon-button
+      [matMenuTriggerFor]="menu"
+      class="transparent-button"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+  </div>
+</div>
+
+<!-- Margin to prevent the top bar from covering the content. -->
+<div class="top-bar-margin d-lg-none"></div>
+
+<!-- Options menu. -->
+<mat-menu #menu="matMenu" [overlapTrigger]="false">
+  <!-- Options. -->
+  <ng-container *ngIf="optionsData && optionsData.length >= 1">
+    <ng-container *ngFor="let option of optionsData">
+      <div mat-menu-item (click)="requestAction(option.actionName)" [disabled]="option.disabled">
+        <mat-icon [ngClass]="{'transparent': option.disabled}">{{ option.icon }}</mat-icon> {{ option.name | translate }}
+      </div>
+    </ng-container>
+    <div *ngIf="returnText" class="menu-separator"></div>
+  </ng-container>
+  <div *ngIf="!hideLanguageButton && optionsData && optionsData.length >= 1" class="menu-separator"></div>
+  <!-- Language area. -->
+  <div *ngIf="!hideLanguageButton" mat-menu-item (click)="openLanguageWindow()">
+    <img *ngIf="language" [src]="'assets/img/lang/' + language.iconName" class="flag"> {{ (language ? language.name : '') | translate }}
+  </div>
+</mat-menu>
+
+<div class="main-container">
+  <!-- Return button and title text. -->
+  <div class="title d-none d-lg-flex">
+    <div *ngIf="returnText" class="return-container">
+      <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
+        <mat-icon [inline]="true">chevron_left</mat-icon>
+      </a>
+    </div>
+    <span class="title-text">
+      {{ titleParts[titleParts.length - 1] | translate }}
+    </span>
+  </div>
+
+  <div class="lower-container">
+    <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
+    <div
+      *ngFor="let tabData of tabsData; let i = index"
+      [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
+    >
+      <a
+        mat-button
+        class="tab-button white-theme"
+        [disabled]="i === selectedTabIndex"
+        [routerLink]="tabData.linkParts"
+        [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
+      >
+        <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
+        <span>{{ tabData.label | translate }}</span>
+      </a>
+    </div>
+    <!-- Select tab button. Only shown on small screens when there is only one tab. -->
+    <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}" *ngIf="tabsData && tabsData[selectedTabIndex]">
+      <button
+        mat-button
+        class="tab-button select-tab-button white-theme"
+        [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
+        (click)="openTabSelector()"
+      >
+        <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
+        <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
+        <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+      </button>
+    </div>
+    <div class="blank-space"></div>
+    <!-- Right buttons area. -->
+    <div class="right-container">
+      <app-refresh-button
+        *ngIf="showUpdateButton"
+        [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+        [showLoading]="showLoading"
+        [showAlert]="showAlert"
+        [refeshRate]="refeshRate"
+        (click)="sendRefreshEvent()"
+      ></app-refresh-button>
+      <!-- Menu button. -->
+      <button
+        mat-button
+        class="menu-button subtle-transparent-button d-none d-lg-block"
+        [matMenuTriggerFor]="menu"
+      >
+        <mat-icon [inline]="true">menu</mat-icon>
+      </button>
+    </div>
+  </div>
+</div>

@@ -14,7 +14,8 @@
     "logout-error": "Error logging out.",
     "time-in-ms": "{{ time }}ms",
     "ok": "Ok",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "close": "Close"
   },
 
   "labeled-element": {
@@ -91,7 +92,6 @@
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
-        "app-protocol-version": "App protocol version:",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",
@@ -150,6 +150,7 @@
     "deleted-singular": "1 offline visor removed.",
     "deleted-plural": "{{ number }} offline visors removed.",
     "no-offline-nodes": "No offline visors found.",
+    "no-visors-to-update": "There are no visors to update.",
     "filter-dialog": {
       "online": "The visor must be",
       "label": "The label must contain",
@@ -161,24 +162,6 @@
         "online": "Online",
         "offline": "Offline"
       }
-    },
-
-    "update": {
-      "no-visors": "There are no visors to update. Please wait.",
-      "title": "Update visors",
-      "processing": "Looking for updates...",
-      "processing-button": "Please wait",
-      "no-update": "Currently, there are no new updates for the visors.",
-      "update-available-single": "There is an update available for 1 visor:",
-      "update-available-multiple": "There are updates available for {{ number }} visors:",
-      "update-available-confirmation": "Click the 'Install updates' button to continue.",
-      "version-change": "From {{ currentVersion }} to {{ newVersion }}",
-      "done": "The visor {{ name }} is being updated.",
-      "done-all": "Operation completed. All visors are being updated.",
-      "update-error": "Could not install the update in visor {{ name }}. Please, try again later.",
-      "all-failed-error": "Could not update any of the visors. Please, try again later.",
-      "some-updated-error": "{{ updatedNumber }} visors were updated and there were problems for updating {{ failedNumber }}. Please, try again later.",
-      "install": "Install updates"
     }
   },
 
@@ -246,19 +229,31 @@
       "title": "Terminal",
       "input-start": "Skywire terminal for {{address}}",
       "error": "Unexpected error while trying to execute the command."
-    },
-    "update": {
-      "title": "Update",
-      "processing": "Looking for updates...",
-      "processing-button": "Please wait",
-      "no-update": "Currently, there is no update for the visor. The currently installed version is:",
-      "update-available1": "There is an update available for the visor:",
-      "update-available2": "Click the 'Install update' button to install it.",
-      "version-change": "From {{ currentVersion }} to {{ newVersion }}",
-      "done": "The visor is being updated.",
-      "update-error": "Could not install the update. Please, try again later.",
-      "install": "Install update"
     }
+  },
+
+  "update": {
+    "title": "Update",
+    "error-title": "Error",
+    "processing": "Looking for updates...",
+    "no-update": "There is no update for the visor. The currently installed version is:",
+    "no-updates": "No new updates were found.",
+    "already-updating": "Some visors are already being updated:",
+    "update-available": "The following updates were found:",
+    "update-available-singular": "The following updates for 1 visor were found:",
+    "update-available-plural": "The following updates for {{ number }} visors were found:",
+    "update-available-additional-singular": "The following additional updates for 1 visor were found:",
+    "update-available-additional-plural": "The following additional updates for {{ number }} visors were found:",
+    "update-instructions": "Click the 'Install updates' button to continue.",
+    "updating": "The update operation has been started, you can open this window again for checking the progress:",
+    "version-change": "From {{ currentVersion }} to {{ newVersion }}",
+    "downloaded-file-name-prefix": "Downloading: ",
+    "speed-prefix": "Speed: ",
+    "time-downloading-prefix": "Time downloading: ",
+    "time-left-prefix": "Aprox. time left: ",
+    "starting": "Preparing to update",
+    "finished": "Status connection finished",
+    "install": "Install updates"
   },
 
   "apps": {
@@ -322,15 +317,46 @@
     },
     "skysocks-client-settings": {
       "title": "Skysocks-Client Settings",
-      "remote-visor-tab": "Remote Visor",
+      "discovery-tab": "Search visor",
+      "remote-visor-tab": "Enter manually",
       "history-tab": "History",
+      "use": "Use this data",
+      "change-note": "Change note",
+      "remove-entry": "Remove entry",
+      "note": "Note:",
+      "note-entered-manually": "Entered manually",
+      "note-obtained": "Obtained from the discovery service",
+      "key": "Key:",
+      "port": "Port:",
+      "location": "Location:",
+      "state-available": "Available",
+      "state-offline": "Offline",
       "public-key": "Remote visor public key",
+      "no-elements": "Currently there are no elements to show. Please try again later.",
+      "no-elements-for-filters": "There are no elements that meet the filter criteria.",
+      "no-filter": "No filter has been selected",
+      "click-to-change": "Click to change",
       "remote-key-length-error": "The public key must be 66 characters long.",
       "remote-key-chars-error": "The public key must only contain hexadecimal characters.",
       "save": "Save",
+      "remove-from-history-confirmation": "Are you sure you want to remove the entry from the history?",
       "change-key-confirmation": "Are you sure you want to change the remote visor public key?",
       "changes-made": "The changes have been made.",
-      "no-history": "This tab will show the last {{ number }} public keys used."
+      "no-history": "This tab will show the last {{ number }} public keys used.",
+      "default-note-warning": "The default note has been used.",
+      "pagination-info": "{{ currentElementsRange }} of {{ totalElements }}",
+
+      "change-note-dialog": {
+        "title": "Change Note",
+        "note": "Note"
+      },
+
+      "filter-dialog": {
+        "title": "Filters",
+        "location": "The location must contain",
+        "pub-key": "The public key must contain",
+        "apply": "Apply"
+      }
     },
     "stop-app": "Stop",
     "start-app": "Start",

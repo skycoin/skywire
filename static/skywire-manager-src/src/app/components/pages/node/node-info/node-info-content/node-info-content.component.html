@@ -30,10 +30,6 @@
       {{ node.build_info.version ? node.build_info.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.app-protocol-version' | translate }}</span>
-      {{ node.app_protocol_version }}
-    </span>
-    <span class="info-line">
       <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
       {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
 
