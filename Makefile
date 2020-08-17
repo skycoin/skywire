@@ -27,11 +27,11 @@ DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker con
 TEST_OPTS_BASE:=-cover -timeout=5m -mod=vendor
 
 RACE_FLAG:=-race
-GOARCH:=$(shell go env GOARCH)
+#GOARCH:=$(shell go env GOARCH)
 
-ifneq (,$(findstring 64,$(GOARCH)))
-    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
-endif
+#ifneq (,$(findstring 64,$(GOARCH)))
+#    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
+#endif
 
 TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
 TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
