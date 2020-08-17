@@ -75,8 +75,38 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
 
-install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
+all: bin host-apps
+
+install: all ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
+	mkdir -p $(DESTDIR)/opt/skywire/apps
+	mkdir -p $(DESTDIR)/usr/bin
+	install -m 0755 skywire-visor $(DESTDIR)/opt/skywire/skywire-visor
+	install -m 0755 skywire-cli $(DESTDIR)/opt/skywire/skywire-cli
+	install -m 0755 apps/skychat $(DESTDIR)/opt/skywire/apps/skychat
+	install -m 0755 apps/skysocks $(DESTDIR)/opt/skywire/apps/skysocks
+	install -m 0755 apps/skysocks-client $(DESTDIR)/opt/skywire/apps/skysocks-client
+	install -m 0755 apps/vpn-server $(DESTDIR)/opt/skywire/apps/vpn-server
+	install -m 0755 apps/vpn-client $(DESTDIR)/opt/skywire/apps/vpn-client
+	ln -s /opt/skywire/skywire-visor $(DESTDIR)/usr/bin/skywire-visor
+	ln -s /opt/skywire/skywire-cli $(DESTDIR)/usr/bin/skywire-cli
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor
+
+uninstall:
+	rm -rf $(DESTDIR)/usr/bin/skywire-visor
+	rm -rf $(DESTDIR)/usr/bin/skywire-cli
+	rm -rf $(DESTDIR)/opt/skywire
+
+clean:
+	rm -rf ./skywire-visor
+	rm -rf ./skywire-cli
+	rm -rf ./setup-node
+	rm -rf ./hypervisor
+	rm -rf ./apps
+
+distclean: clean
+	rm -rf ./hypervisor-config.json
+	rm -rf ./skywire-config.json
+	rm -rf ./transport_logs
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
