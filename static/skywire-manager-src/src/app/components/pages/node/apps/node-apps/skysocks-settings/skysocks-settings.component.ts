@@ -14,7 +14,7 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 import { Application } from 'src/app/app.datatypes';
 
 /**
- * Modal window used for configuring the Skysocks app.
+ * Modal window used for configuring the Skysocks and Vpn-Server apps.
  */
 @Component({
   selector: 'app-skysocks-settings',
@@ -25,6 +25,9 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
   form: FormGroup;
+
+  // True if configuring Vpn-Server, false if configuring Skysocks.
+  configuringVpn = false;
 
   private operationSubscription: Subscription;
   private formSubscription: Subscription;
@@ -48,7 +51,11 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     private dialogRef: MatDialogRef<SkysocksSettingsComponent>,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
-  ) { }
+  ) {
+    if (data.name.toLocaleLowerCase().indexOf('vpn') !== -1) {
+      this.configuringVpn = true;
+    }
+  }
 
   ngOnInit() {
     this.form = this.formBuilder.group({
@@ -81,7 +88,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     // Ask for confirmation.
 
     const confirmationMsg = this.form.get('password').value ?
-      'apps.skysocks-settings.change-passowrd-confirmation' : 'apps.skysocks-settings.remove-passowrd-confirmation';
+      'apps.vpn-socks-server-settings.change-passowrd-confirmation' : 'apps.vpn-socks-server-settings.remove-passowrd-confirmation';
 
     const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationMsg);
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
@@ -106,7 +113,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
 
   private onSuccess() {
     NodeComponent.refreshCurrentDisplayedData();
-    this.snackbarService.showDone('apps.skysocks-settings.changes-made');
+    this.snackbarService.showDone('apps.vpn-socks-server-settings.changes-made');
     this.dialogRef.close();
   }
 
