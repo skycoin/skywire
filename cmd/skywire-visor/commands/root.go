@@ -201,7 +201,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = defaultConfigName
+			confPath = "/opt/skywire/" + defaultConfigName
 		}
 
 		fallthrough
