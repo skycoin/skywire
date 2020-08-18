@@ -27,11 +27,11 @@ DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker con
 TEST_OPTS_BASE:=-cover -timeout=5m -mod=vendor
 
 RACE_FLAG:=-race
-#GOARCH:=$(shell go env GOARCH)
+GOARCH:=$(shell go env GOARCH)
 
-#ifneq (,$(findstring 64,$(GOARCH)))
-#    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
-#endif
+ifneq (,$(findstring 64,$(GOARCH)))
+    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
+endif
 
 TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
 TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
@@ -46,12 +46,9 @@ BUILDINFO?=-ldflags="$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)"
 
 BUILD_OPTS?=$(BUILDINFO)
 
-all:
-	echo "dummy"
-
 check: lint test ## Run linters and tests
 
-#build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
@@ -79,28 +76,7 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
-	mkdir -p $(DESTDIR)/opt/skywire/apps
-	mkdir -p $(DESTDIR)/usr/bin
-	install -m 0755 skywire-visor $(DESTDIR)/opt/skywire/skywire-visor
-	install -m 0755 skywire-cli $(DESTDIR)/opt/skywire/skywire-cli
-	install -m 0755 apps/skychat $(DESTDIR)/opt/skywire/apps/skychat
-	install -m 0755 apps/skysocks $(DESTDIR)/opt/skywire/apps/skysocks
-	install -m 0755 apps/skysocks-client $(DESTDIR)/opt/skywire/apps/skysocks-client
-	install -m 0755 apps/vpn-server $(DESTDIR)/opt/skywire/apps/vpn-server
-	install -m 0755 apps/vpn-client $(DESTDIR)/opt/skywire/apps/vpn-client
-	ln -s /opt/skywire/skywire-visor $(DESTDIR)/usr/bin/skywire-visor
-	ln -s /opt/skywire/skywire-cli $(DESTDIR)/usr/bin/skywire-cli
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor
-
-uninstall:
-	rm -rf $(DESTDIR)/usr/bin/skywire-visor
-	rm -rf $(DESTDIR)/usr/bin/skywire-cli
-	rm -rf $(DESTDIR)/opt/skywire
-
-distclean: clean
-	rm -rf ./hypervisor-config.json
-	rm -rf ./skywire-config.json
-	rm -rf ./transport_logs
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -126,14 +102,14 @@ vendorcheck:  ## Run vendorcheck
 	GO111MODULE=off vendorcheck ./cmd/skywire-cli/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-visor/...
 
-#test: ## Run tests
-#	-go clean -testcache &>/dev/null
-#	${OPTS} go test ${TEST_OPTS} ./internal/...
-#	${OPTS} go test ${TEST_OPTS} ./pkg/...
+test: ## Run tests
+	-go clean -testcache &>/dev/null
+	${OPTS} go test ${TEST_OPTS} ./internal/...
+	${OPTS} go test ${TEST_OPTS} ./pkg/...
 
-#test-no-ci: ## Run no_ci tests
-#	-go clean -testcache
-#	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
+test-no-ci: ## Run no_ci tests
+	-go clean -testcache
+	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
