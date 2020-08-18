@@ -239,6 +239,7 @@ func (rc *rpcClient) AddTransport(remote cipher.PubKey, tpType string, public bo
 		Public:   public,
 		Timeout:  timeout,
 	}, &summary)
+
 	return &summary, err
 }
 
