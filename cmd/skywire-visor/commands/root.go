@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
+	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -142,6 +143,11 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 			log.AddHook(hook)
 			log.Out = ioutil.Discard
 		}
+	}
+
+	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+		hook := discord.NewHook(tag, discordWebhookURL)
+		log.AddHook(hook)
 	}
 
 	return log
