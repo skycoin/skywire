@@ -385,7 +385,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 
 		conn, err := client.Dial(ctx, pk, port)
 		if err != nil {
-			return nil, fmt.Errorf("sudph client: %w", err)
+			return nil, fmt.Errorf("dial: %w", err)
 		}
 
 		log.Infof("Dialed %v, conn local address %q, remote address %q", network, conn.LocalAddr(), conn.RemoteAddr())
@@ -411,7 +411,7 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 
 		lis, err := client.Listen(port)
 		if err != nil {
-			return nil, fmt.Errorf("sudph client: %w", err)
+			return nil, fmt.Errorf("listen: %w", err)
 		}
 
 		return makeListener(lis, network), nil
