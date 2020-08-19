@@ -339,6 +339,12 @@ func StopVisor() string {
 
 	atomic.StoreInt32(&isVPNReady, 0)
 
+	nextDmsgSocketIdxMx.Lock()
+	nextDmsgSocketIdx = -1
+	nextDmsgSocketIdxMx.Unlock()
+
+	mobileAppAddrCh = make(chan *net.UDPAddr, 2)
+
 	return ""
 }
 
