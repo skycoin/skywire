@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -32,6 +33,10 @@ var (
 )
 
 func main() {
+	if runtime.GOOS != "linux" {
+		log.Fatalln("OS is not supported")
+	}
+
 	flag.Parse()
 
 	localPK := cipher.PubKey{}
@@ -46,17 +51,6 @@ func main() {
 		if err := localSK.UnmarshalText([]byte(*localSKStr)); err != nil {
 			log.WithError(err).Fatalln("Invalid local SK")
 		}
-	}
-
-	var noiseCreds vpn.NoiseCredentials
-	if localPK.Null() && !localSK.Null() {
-		var err error
-		noiseCreds, err = vpn.NewNoiseCredentialsFromSK(localSK)
-		if err != nil {
-			log.WithError(err).Fatalln("error creating noise credentials")
-		}
-	} else {
-		noiseCreds = vpn.NewNoiseCredentials(localSK, localPK)
 	}
 
 	appClient := app.NewClient(nil)
@@ -78,8 +72,7 @@ func main() {
 	log.Infof("Got app listener, bound to %d", vpnPort)
 
 	srvCfg := vpn.ServerConfig{
-		Passcode:    *passcode,
-		Credentials: noiseCreds,
+		Passcode: *passcode,
 	}
 	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {
@@ -90,11 +83,19 @@ func main() {
 			log.WithError(err).Errorln("Error closing server")
 		}
 	}()
+
+	errCh := make(chan error)
 	go func() {
 		if err := srv.Serve(l); err != nil {
-			log.WithError(err).Errorln("Error serving")
+			errCh <- err
 		}
+
+		close(errCh)
 	}()
 
-	<-osSigs
+	select {
+	case <-osSigs:
+	case err := <-errCh:
+		log.WithError(err).Errorln("Error serving")
+	}
 }

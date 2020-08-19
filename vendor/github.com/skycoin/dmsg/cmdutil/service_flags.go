@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/dmsg/promutil"
 )
 
@@ -142,6 +143,11 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 				WithField("addr", sf.Syslog).
 				Fatal("Failed to connect to syslog daemon.")
 		}
+		logging.AddHook(hook)
+	}
+
+	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+		hook := discord.NewHook(sf.Tag, discordWebhookURL)
 		logging.AddHook(hook)
 	}
 

@@ -14,7 +14,8 @@
     "logout-error": "Error cerrando la sesión.",
     "time-in-ms": "{{ time }}ms",
     "ok": "Ok",
-    "unknown": "Desconocido"
+    "unknown": "Desconocido",
+    "close": "Cerrar"
   },
 
   "labeled-element": {
@@ -91,7 +92,6 @@
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
         "node-version": "Versión del visor:",
-        "app-protocol-version": "Versión del protocolo de app:",
         "time": {
           "title": "Tiempo online:",
           "seconds": "unos segundos",
@@ -128,7 +128,8 @@
   "nodes": {
     "title": "Lista de visores",
     "dmsg-title": "DMSG",
-    "update-all": "Actualizar todo",
+    "update-hypervisor": "Actualizar hypervisor",
+    "update-all": "Actualizar todos los visores",
     "state": "Estado",
     "state-tooltip": "Estado actual",
     "label": "Etiqueta",
@@ -150,6 +151,7 @@
     "deleted-singular": "1 visor offline removido.",
     "deleted-plural": "{{ number }} visores offline removidos.",
     "no-offline-nodes": "No se encontraron visores offline.",
+    "no-visors-to-update": "No hay visores para actualizar.",
     "filter-dialog": {
       "online": "El visor debe estar",
       "label": "La etiqueta debe contener",
@@ -161,24 +163,6 @@
         "online": "Online",
         "offline": "Offline"
       }
-    },
-
-    "update": {
-      "no-visors": "No hay visores para actualizar. Por favor espere.",
-      "title": "Actualizar visores",
-      "processing": "Buscando actualizaciones...",
-      "processing-button": "Por favor espere",
-      "no-update": "Actualmente no hay nuevas actualizaciones para los visores.",
-      "update-available-single": "Hay una actualización disponible para 1 visor:",
-      "update-available-multiple": "Hay actualizaciones disponibles para {{ number }} visores:",
-      "update-available-confirmation": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
-      "version-change": "De {{ currentVersion }} a {{ newVersion }}",
-      "done": "El visor {{ name }} está siendo actualizado.",
-      "done-all": "Operación completada. Todos los visores están siendo actualizandos.",
-      "update-error": "No se pudo instalar la actualización en el visor {{name}}. Por favor, inténtelo de nuevo más tarde.",
-      "all-failed-error": "No se pudo actualizar ninguno de los visores. Por favor, inténtelo de nuevo más tarde.",
-      "some-updated-error": "{{ updatedNumber }} visores fueron actualizados y hubo problemas para actualizar {{ failedNumber }}. Por favor, inténtelo de nuevo más tarde.",
-      "install": "Instalar actualizaciones"
     }
   },
 
@@ -214,6 +198,22 @@
         "default-password": "No utilice la contraseña por defecto (1234)."
       }
     },
+    "updater-config" : {
+      "open-link": "Mostrar la configuración del actualizador",
+      "open-confirmation": "La configuración del actualizador es sólo para usuarios experimentados. Seguro que desea continuar?",
+      "help": "Utilice este formulario para modificar la configuración que utilizará el actualizador. Se ignorarán todos los campos vacíos. La configuración se utilizará para todas las operaciones de actualización, sin importar qué elemento se esté actualizando, así que por favor tenga cuidado.",
+      "channel": "Canal",
+      "version": "Versión",
+      "archive-url": "URL del archivo",
+      "checksum-url": "URL del checksum",
+      "not-saved": "Los cambios aún no se han guardado.",
+      "save": "Guardar cambios",
+      "remove-settings": "Remover la configuración",
+      "saved": "Las configuracion personalizada ha sido guardada.",
+      "removed": "Las configuracion personalizada ha sido removida.",
+      "save-confirmation": "¿Seguro que desea aplicar la configuración personalizada?",
+      "remove-confirmation": "¿Seguro que desea remover la configuración personalizada?"
+    },
     "change-password": "Cambiar contraseña",
     "refresh-rate": "Frecuencia de refrescado",
     "refresh-rate-help": "Tiempo que el sistema espera para actualizar automáticamente los datos.",
@@ -246,19 +246,42 @@
       "title": "Terminal",
       "input-start": "Terminal de Skywire para {{address}}",
       "error": "Error inesperado mientras se intentaba ejecutar el comando."
-    },
-    "update": {
-      "title": "Actualizar",
-      "processing": "Buscando actualizaciones...",
-      "processing-button": "Por favor espere",
-      "no-update": "Actualmente no hay ninguna actualización para el visor. La versión instalada actualmente es:",
-      "update-available1": "Hay una actualización disponible para el visor:",
-      "update-available2": "Haga clic en el botón 'Instalar actualización' para instalarla.",
-      "version-change": "De {{ currentVersion }} a {{ newVersion }}",
-      "done": "El visor está siendo actualizado.",
-      "update-error": "No se pudo instalar la actualización. Por favor inténtelo nuevamente luego.",
-      "install": "Instalar actualización"
     }
+  },
+
+  "update": {
+    "title": "Actualizar",
+    "error-title": "Error",
+    "processing": "Buscando actualizaciones...",
+    "no-update": "No hay ninguna actualización para el visor. La versión instalada actualmente es:",
+    "no-updates": "No se encontraron nuevas actualizaciones.",
+    "already-updating": "Algunos visores ya están siendo actualizandos:",
+    "update-available": "Las siguientes actualizaciones fueron encontradas:",
+    "update-available-singular": "Las siguientes actualizaciones para 1 visor fueron encontradas:",
+    "update-available-plural": "Las siguientes actualizaciones para {{ number }} visores fueron encontradas:",
+    "update-available-additional-singular": "Las siguientes actualizaciones adicionales para 1 visor fueron encontradas:",
+    "update-available-additional-plural": "Las siguientes actualizaciones adicionales para {{ number }} visores fueron encontradas:",
+    "update-instructions": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
+    "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
+    "version-change": "De {{ currentVersion }} a {{ newVersion }}",
+    "downloaded-file-name-prefix": "Descargando: ",
+    "speed-prefix": "Velocidad: ",
+    "time-downloading-prefix": "Tiempo descargando: ",
+    "time-left-prefix": "Tiempo aprox. faltante: ",
+    "starting": "Preparando para actualizar",
+    "finished": "Conexión de estado terminada",
+    "install": "Instalar actualizaciones"
+  },
+
+  "update-hypervisor": {
+    "title": "Actualizar Hypervisor",
+    "label": "Hypervisor",
+    "processing": "Buscando actualizaciones...",
+    "no-update": "No hay ninguna actualización para el hypervisor. La versión instalada actualmente es:",
+    "update-available": "Las siguiente actualización fue encontrada:",
+    "update-instructions": "Haga clic en el botón 'Instalar actualización' para continuar.",
+    "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
+    "install": "Instalar actualización"
   },
 
   "apps": {
@@ -310,8 +333,9 @@
         }
       }
     },
-    "skysocks-settings": {
-      "title": "Configuración de Skysocks",
+    "vpn-socks-server-settings": {
+      "socks-title": "Configuración de Skysocks",
+      "vpn-title": "Configuración de VPN-Server",
       "new-password": "Nueva contraseña (dejar en blanco para eliminar la contraseña)",
       "repeat-password": "Repita la contraseña",
       "passwords-not-match": "Las contraseñas no coinciden.",
@@ -320,17 +344,51 @@
       "change-passowrd-confirmation": "¿Seguro que desea cambiar la contraseña?",
       "changes-made": "Los cambios han sido realizados."
     },
-    "skysocks-client-settings": {
-      "title": "Configuración de Skysocks-Client",
-      "remote-visor-tab": "Visor Remoto",
+    "vpn-socks-client-settings": {
+      "socks-title": "Configuración de Skysocks-Client",
+      "vpn-title": "Configuración de VPN-Client",
+      "discovery-tab": "Buscar",
+      "remote-visor-tab": "Introducir manualmente",
       "history-tab": "Historial",
+      "use": "Usar estos datos",
+      "change-note": "Cambiar nota",
+      "remove-entry": "Remover entrada",
+      "note": "Nota:",
+      "note-entered-manually": "Introducido manualmente",
+      "note-obtained": "Obtenido del servicio de descubrimiento",
+      "key": "Llave:",
+      "port": "Puerto:",
+      "location": "Ubicación:",
+      "state-available": "Disponible",
+      "state-offline": "Offline",
       "public-key": "Llave pública del visor remoto",
+      "no-elements": "Actualmente no hay elementos para mostrar. Por favor, inténtelo de nuevo más tarde.",
+      "no-elements-for-filters": "No hay elementos que cumplan los criterios de filtro.",
+      "no-filter": "No se ha seleccionado ningún filtro",
+      "click-to-change": "Haga clic para cambiar",
       "remote-key-length-error": "La llave pública debe tener 66 caracteres.",
       "remote-key-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
       "save": "Guardar",
+      "remove-from-history-confirmation": "¿Seguro de que desea eliminar la entrada del historial?",
       "change-key-confirmation": "¿Seguro que desea cambiar la llave pública del visor remoto?",
       "changes-made": "Los cambios han sido realizados.",
-      "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas."
+      "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas.",
+      "default-note-warning": "La nota por defecto ha sido utilizada.",
+      "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
+
+      "change-note-dialog": {
+        "title": "Cambiar Nota",
+        "note": "Nota"
+      },
+
+      "filter-dialog": {
+        "title": "Filtros",
+        "country": "El país debe ser",
+        "any-country": "Cualquiera",
+        "location": "La ubicación debe contener",
+        "pub-key": "La llave pública debe contener",
+        "apply": "Aplicar"
+      }
     },
     "stop-app": "Detener",
     "start-app": "Iniciar",

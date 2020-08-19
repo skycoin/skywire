@@ -108,6 +108,10 @@ var addTpCmd = &cobra.Command{
 				logger.WithError(err).Fatalf("Failed to establish %v transport", transportType)
 			}
 
+			if !tp.IsUp {
+				logger.Fatalf("Established %v transport to %v with ID %v, but it isn't up", transportType, pk, tp.ID)
+			}
+
 			logger.Infof("Established %v transport to %v", transportType, pk)
 		} else {
 			transportTypes := []string{

@@ -15,25 +15,25 @@ import (
 
 // DoClientHandshake performs client/server handshake from the client side.
 func DoClientHandshake(log logrus.FieldLogger, conn net.Conn,
-	cHello ClientHello) (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
+	cHello ClientHello) (TUNIP, TUNGateway net.IP, err error) {
 	log.Debugf("Sending client hello: %v", cHello)
 
 	if err := WriteJSON(conn, &cHello); err != nil {
-		return nil, nil, false, fmt.Errorf("error sending client hello: %w", err)
+		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
 	}
 
 	var sHello ServerHello
 	if err := ReadJSON(conn, &sHello); err != nil {
-		return nil, nil, false, fmt.Errorf("error reading server hello: %w", err)
+		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
 	}
 
 	log.Debugf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, false, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
+		return nil, nil, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)
 	}
 
-	return sHello.TUNIP, sHello.TUNGateway, sHello.EncryptionEnabled, nil
+	return sHello.TUNIP, sHello.TUNGateway, nil
 }
 
 // WriteJSON marshals `data` and sends it over the `conn`.

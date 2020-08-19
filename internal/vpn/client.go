@@ -84,7 +84,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		cfg:            cfg,
 		log:            l,
 		conn:           conn,
-		directIPs:      directIPs,
+		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
 		closeC:         make(chan struct{}),
 	}, nil
@@ -92,7 +92,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
 func (c *Client) Serve() error {
-	tunIP, tunGateway, encrypt, err := c.shakeHands()
+	tunIP, tunGateway, err := c.shakeHands()
 	if err != nil {
 		return fmt.Errorf("error during client/server handshake: %w", err)
 	}
@@ -138,34 +138,20 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
-	rw := io.ReadWriter(c.conn)
-	if encrypt {
-		c.log.Infoln("Enabling encryption...")
-
-		rw, err = WrapRWWithNoise(c.conn, true, c.cfg.Credentials.PK, c.cfg.Credentials.SK)
-		if err != nil {
-			return fmt.Errorf("failed to enable encryption: %w", err)
-		}
-
-		c.log.Infoln("Encryption enabled")
-	} else {
-		c.log.Infoln("Encryption disabled")
-	}
-
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	// read all system traffic and pass it to the remote VPN server
 	go func() {
 		defer close(connToTunDoneCh)
 
-		if _, err := io.Copy(tun, rw); err != nil {
+		if _, err := io.Copy(tun, c.conn); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN server", tun.Name())
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
-		if _, err := io.Copy(rw, tun); err != nil {
+		if _, err := io.Copy(c.conn, tun); err != nil {
 			c.log.WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())
 		}
 	}()
@@ -214,9 +200,9 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 func (c *Client) setupDirectRoutes() error {
 	for _, ip := range c.directIPs {
 		if !ip.IsLoopback() {
-			c.log.Infof("Adding direct route to %s", ip.String())
+			c.log.Infof("Adding direct route to %s, via %s", ip.String(), c.defaultGateway.String())
 			if err := AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
-				return fmt.Errorf("error adding direct route to %s", ip.String())
+				return fmt.Errorf("error adding direct route to %s: %w", ip.String(), err)
 			}
 		}
 	}
@@ -303,10 +289,10 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	return stcpEntities, nil
 }
 
-func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
+func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 	unavailableIPs, err := LocalNetworkInterfaceIPs()
 	if err != nil {
-		return nil, nil, false, fmt.Errorf("error getting unavailable private IPs: %w", err)
+		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
 
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
@@ -314,7 +300,6 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error
 	cHello := ClientHello{
 		UnavailablePrivateIPs: unavailableIPs,
 		Passcode:              c.cfg.Passcode,
-		EnableEncryption:      c.cfg.Credentials.IsValid(),
 	}
 
 	return DoClientHandshake(c.log, c.conn, cHello)
@@ -330,4 +315,20 @@ func ipFromEnv(key string) (net.IP, error) {
 	}
 
 	return ip, nil
+}
+
+func filterOutEqualIPs(ips []net.IP) []net.IP {
+	ipsSet := make(map[string]struct{})
+	var filteredIPs []net.IP
+	for _, ip := range ips {
+		ipStr := ip.String()
+
+		if _, ok := ipsSet[ipStr]; !ok {
+			filteredIPs = append(filteredIPs, ip)
+			ipsSet[ip.String()] = struct{}{}
+		}
+	}
+
+	return filteredIPs
+
 }

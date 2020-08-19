@@ -178,16 +178,38 @@ $responsive-table-colors: (
 
 // Styles for the headers shown above most of the tables.
 .generic-title-container {
-  padding-right: 5px;
+  @media (min-width: map-get($grid-breakpoints, md)) {
+    & {
+      padding-right: 5px;
+    }
+  }
+
+  @media (max-width: (map-get($grid-breakpoints, md) - 1)) {
+    & {
+      margin-right: -15px;
+    }
+  }
 
   .title {
     margin-right: auto;
     font-size: $font-size-base;
     font-weight: bold;
 
+    @media (min-width: map-get($grid-breakpoints, md)) {
+      & {
+        margin-left: 1.25rem !important;
+      }
+    }
+
     .filter-label {
       font-size: $font-size-mini;
       font-weight: lighter;
+    }
+
+    .help {
+      opacity: 0.5;
+      font-size: 14px;
+      cursor: default;
     }
   }
 

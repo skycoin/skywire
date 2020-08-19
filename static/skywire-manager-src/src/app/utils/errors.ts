@@ -57,7 +57,7 @@ export function processErrorMsg(msg: string): string {
  */
 export function processServiceError(error: any): OperationError {
   // Check if the provided error is already an OperationError instance.
-  if (error && error.type) {
+  if (error && error.type && !error.srcElement) {
     return error;
   }
 
