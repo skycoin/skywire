@@ -120,10 +120,6 @@ var (
 	stopVisorFuncMx sync.Mutex
 	stopVisorFunc   func()
 
-	keyPairMx sync.Mutex
-	visorSK   cipher.SecKey
-	visorPK   cipher.PubKey
-
 	vpnClient  *vpn.ClientMobile
 	tunCredsMx sync.Mutex
 	tunIP      net.IP
@@ -264,16 +260,8 @@ func PrepareVPNClient(srvPKStr, passcode string) string {
 
 	log.Infoln("Wrapped app conn")
 
-	keyPairMx.Lock()
-	localSK := visorSK
-	localPK := visorPK
-	keyPairMx.Unlock()
-
-	noiseCreds := vpn.NewNoiseCredentials(localSK, localPK)
-
 	vpnClientCfg := vpn.ClientConfig{
-		Passcode:    passcode,
-		Credentials: noiseCreds,
+		Passcode: passcode,
 	}
 
 	vpnCl, err := vpn.NewClientMobile(vpnClientCfg, logrus.New(), conn)
@@ -290,7 +278,7 @@ func PrepareVPNClient(srvPKStr, passcode string) string {
 
 // ShakeHands performs VPN client/server handshake.
 func ShakeHands() string {
-	tunIPInternal, tunGatewayInternal, _, err := vpnClient.ShakeHands()
+	tunIPInternal, tunGatewayInternal, err := vpnClient.ShakeHands()
 	if err != nil {
 		return fmt.Errorf("handshake error: %w", err).Error()
 	}
@@ -371,10 +359,6 @@ func WaitForVisorToStop() string {
 
 func initConfig(mLog *logging.MasterLogger, confPath string) (*visorconfig.V1, error) {
 	pk, sk := cipher.GenerateKeyPair()
-	keyPairMx.Lock()
-	visorPK = pk
-	visorSK = sk
-	keyPairMx.Unlock()
 
 	parsedConf := strings.ReplaceAll(visorConfig, "${SK}", sk.String())
 	parsedConf = strings.ReplaceAll(parsedConf, "${PK}", pk.String())

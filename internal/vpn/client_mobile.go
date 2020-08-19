@@ -40,7 +40,7 @@ func (c *ClientMobile) Close() {
 }
 
 // ShakeHands performs client/server handshake.
-func (c *ClientMobile) ShakeHands() (TUNIP, TUNGateway net.IP, encrypt bool, err error) {
+func (c *ClientMobile) ShakeHands() (TUNIP, TUNGateway net.IP, err error) {
 	cHello := ClientHello{
 		Passcode: c.cfg.Passcode,
 	}
