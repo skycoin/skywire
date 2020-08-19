@@ -37,7 +37,7 @@ Returns non-empty string with error in case of failure;
 
 ## Mobile/Go Communication
 API may seem a bit complicated at first. Currently tested for Android devices, should be used with caution on iOS. 
-Mobile app communicate with the Go part via UDP. All the packets are sent to the Go part via UDP and then get resent 
+Mobile app communicates with the Go part via UDP. All the packets are sent to the Go part via UDP and then get resent 
 to the Skywire network. 
 
 To setup the Go side properly you need to call at least:
