@@ -13,7 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/vpn"
@@ -115,10 +114,8 @@ func IsVPNReady() bool {
 var log = logging.NewMasterLogger()
 
 var (
-	globalVisor *visor.Visor
-
-	stopVisorFuncMx sync.Mutex
-	stopVisorFunc   func()
+	globalVisorMx sync.Mutex
+	globalVisor   *visor.Visor
 
 	vpnClient  *vpn.ClientMobile
 	tunCredsMx sync.Mutex
@@ -321,16 +318,17 @@ func TUNGateway() string {
 
 // StopVisor stops running visor. Returns non-empty error string on failure.
 func StopVisor() string {
-	stopVisorFuncMx.Lock()
-	stopFunc := stopVisorFunc
-	stopVisorFunc = nil
-	stopVisorFuncMx.Unlock()
+	globalVisorMx.Lock()
+	v := globalVisor
+	globalVisorMx.Unlock()
 
-	if stopFunc == nil {
+	if v == nil {
 		return "visor is not running"
 	}
 
-	stopFunc()
+	if err := v.Close(); err != nil {
+		log.WithError(err).Errorf("Failed to stop visor")
+	}
 
 	vpnClient.Close()
 	if err := udpConn.Close(); err != nil {
@@ -344,23 +342,6 @@ func StopVisor() string {
 	nextDmsgSocketIdxMx.Unlock()
 
 	mobileAppAddrCh = make(chan *net.UDPAddr, 2)
-
-	return ""
-}
-
-// WaitForVisorToStop blocks until visor exits. Returns non-empty error string on failure.
-func WaitForVisorToStop() string {
-	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	stopVisorFuncMx.Lock()
-	stopVisorFunc = cancel
-	stopVisorFuncMx.Unlock()
-
-	// Wait.
-	<-ctx.Done()
-
-	if err := globalVisor.Close(); err != nil {
-		return fmt.Errorf("failed to close visor: %w", err).Error()
-	}
 
 	return ""
 }

@@ -30,7 +30,6 @@ Returns non-empty string with error in case of failure;
 - `TUNIP() string`: Requires `ShakeHands` to be called first. Returns the assigned TUN IP;
 - `TUNGateway() string`: Requires `ShakeHands` to be called first. Returns the assigned TUN gateway;
 - `StopVisor() string`: Stops currently running visor. Returns non-empty string with error in case of failure;
-- `WaitForVisorToStop() string`: Blocks until visor exits. Returns non-empty string with error in case of failure;
 - `SetMobileAppAddr(string)`: Passes address of the UDP connection opened on the mobile application side;
 - `ServeVPN()`: Starts off the goroutine serving VPN connection. After this call `IsVPNReady` starts returning `true`;
 - `StartListeningUDP() string`: Opens UDP listener on the Go side. Returns non-empty string with error in case of failure.
