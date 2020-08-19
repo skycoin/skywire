@@ -76,6 +76,11 @@ func InitNetworkers(v *Visor) bool {
 		return report(fmt.Errorf("failed to add DMSG networker: %w", err))
 	}
 
+	v.pushCloseStack("networkers", func() bool {
+		appnet.ClearNetworkers()
+		return true
+	})
+
 	return report(nil)
 }
 
