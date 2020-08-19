@@ -152,8 +152,9 @@ func PrepareVisor() string {
 
 	log.Infoln("Initialized config")
 
-	v, ok := visor.NewVisor(conf, nil)
-	if !ok {
+	v := visor.NewVisor(conf, nil)
+
+	if ok := v.Start(context.Background()); !ok {
 		return errors.New("failed to start visor").Error()
 	}
 
@@ -326,11 +327,9 @@ func StopVisor() string {
 		return "visor is not running"
 	}
 
-	if err := v.Close(); err != nil {
-		log.WithError(err).Errorf("Failed to stop visor")
-	}
-
+	v.Close()
 	vpnClient.Close()
+
 	if err := udpConn.Close(); err != nil {
 		log.WithError(err).Errorln("Failed to close mobile app UDP conn")
 	}

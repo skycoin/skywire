@@ -107,8 +107,9 @@ var rootCmd = &cobra.Command{
 
 		conf := initConfig(log, args, confPath)
 
-		v, ok := visor.NewVisor(conf, restartCtx)
-		if !ok {
+		v := visor.NewVisor(conf, restartCtx)
+
+		if ok := v.Start(context.Background()); !ok {
 			log.Fatal("Failed to start visor.")
 		}
 
@@ -118,9 +119,7 @@ var rootCmd = &cobra.Command{
 		// Wait.
 		<-ctx.Done()
 
-		if err := v.Close(); err != nil {
-			log.WithError(err).Error("Visor closed with error.")
-		}
+		v.Close()
 	},
 	Version: buildinfo.Version(),
 }

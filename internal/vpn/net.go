@@ -3,14 +3,9 @@ package vpn
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/noise"
-
-	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 // DoClientHandshake performs client/server handshake from the client side.
@@ -79,30 +74,4 @@ func ReadJSON(conn net.Conn, data interface{}) error {
 	}
 
 	return nil
-}
-
-// WrapRWWithNoise wraps `conn` with noise.
-func WrapRWWithNoise(conn net.Conn, initiator bool, pk cipher.PubKey, sk cipher.SecKey) (io.ReadWriter, error) {
-	remoteAddr, isAppConn := conn.RemoteAddr().(appnet.Addr)
-	if isAppConn {
-		ns, err := noise.New(noise.HandshakeKK, noise.Config{
-			LocalPK:   pk,
-			LocalSK:   sk,
-			RemotePK:  remoteAddr.PubKey,
-			Initiator: initiator,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare stream noise object: %w", err)
-		}
-
-		rw := noise.NewReadWriter(conn, ns)
-		if err := rw.Handshake(HSTimeout); err != nil {
-			return nil, fmt.Errorf("error performing noise handshake: %w", err)
-		}
-
-		return rw, nil
-	}
-
-	// shouldn't happen, but no encryption in this case
-	return conn, nil
 }
