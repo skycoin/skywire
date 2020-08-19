@@ -301,6 +301,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 func (r *router) Serve(ctx context.Context) error {
 	r.logger.Info("Starting router")
 
+	r.wg.Add(1)
 	go r.serveTransportManager(ctx)
 
 	r.wg.Add(1)
@@ -316,6 +317,8 @@ func (r *router) Serve(ctx context.Context) error {
 }
 
 func (r *router) serveTransportManager(ctx context.Context) {
+	defer r.wg.Done()
+
 	for {
 		packet, err := r.tm.ReadPacket()
 		if err != nil {
@@ -630,9 +633,11 @@ func (r *router) Close() error {
 		r.logger.WithError(err).Warnf("closing route_manager returned error")
 	}
 
+	// first we close the tp manager, then wait for the associated goroutine to complete
+	err := r.tm.Close()
 	r.wg.Wait()
 
-	return r.tm.Close()
+	return err
 }
 
 func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule routing.Rule) error {
