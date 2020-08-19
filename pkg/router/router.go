@@ -434,6 +434,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 		if err := nrg.Close(); err != nil {
 			r.logger.Errorf("Failed to close noise RG (%s): %v", &nrg.rg.desc, err)
+			r.logger.Errorf("Failed to close noise RG (%s): %v", &nrg.rg.desc, err)
 		}
 
 		return nil, ErrRouterClosed

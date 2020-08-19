@@ -337,6 +337,8 @@ func StopVisor() string {
 		log.WithError(err).Errorln("Failed to close mobile app UDP conn")
 	}
 
+	atomic.StoreInt32(&isVPNReady, 0)
+
 	return ""
 }
 
