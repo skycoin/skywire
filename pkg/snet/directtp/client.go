@@ -220,11 +220,11 @@ func (c *client) acceptConn() error {
 
 	wrappedConn, err := tpconn.NewConn(connConfig)
 	if err != nil {
-		return fmt.Errorf("newConn: %w", err)
+		return err
 	}
 
 	if err := lis.Introduce(wrappedConn); err != nil {
-		return fmt.Errorf("introduce: %w", err)
+		return err
 	}
 
 	return nil
