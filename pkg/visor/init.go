@@ -35,7 +35,7 @@ import (
 )
 
 // InitFunc is an initializing function for some of the visor modules.
-type InitFunc func(v *Visor) bool
+type InitFunc func(ctx context.Context, v *Visor) bool
 
 var initStack = func() []InitFunc {
 	return []InitFunc{
@@ -62,7 +62,7 @@ func SetInitStack(f func() []InitFunc) {
 }
 
 // InitNetworkers initializes networkers.
-func InitNetworkers(v *Visor) bool {
+func InitNetworkers(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("networkers")
 	log := v.MasterLogger().PackageLogger("networkers")
 
@@ -85,7 +85,7 @@ func InitNetworkers(v *Visor) bool {
 }
 
 // InitUpdater initializes updater.
-func InitUpdater(v *Visor) bool {
+func InitUpdater(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("updater")
 
 	restartCheckDelay, err := time.ParseDuration(v.conf.RestartCheckDelay)
@@ -100,7 +100,7 @@ func InitUpdater(v *Visor) bool {
 }
 
 // InitEventBroadcaster initializes event broadcaster.
-func InitEventBroadcaster(v *Visor) bool {
+func InitEventBroadcaster(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("event_broadcaster")
 
 	log := v.MasterLogger().PackageLogger("event_broadcaster")
@@ -116,7 +116,7 @@ func InitEventBroadcaster(v *Visor) bool {
 }
 
 // InitSNet initializes skywire network.
-func InitSNet(v *Visor) bool {
+func InitSNet(ctx context.Context, v *Visor) bool {
 	report := v.makeReporter("snet")
 
 	nc := snet.NetworkConfigs{
@@ -133,12 +133,12 @@ func InitSNet(v *Visor) bool {
 		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
-	n, err := snet.New(conf, v.ebc)
+	n, err := snet.New(ctx, conf, v.ebc)
 	if err != nil {
 		return report(err)
 	}
 
-	if err := n.Init(); err != nil {
+	if err := n.Init(ctx); err != nil {
 		return report(err)
 	}
 
@@ -155,6 +155,9 @@ func InitSNet(v *Visor) bool {
 			log.Warn("Failed to connect to the dmsg network, will try again later.")
 		case <-n.Dmsg().Ready():
 			log.Info("Connected to the dmsg network.")
+		case <-ctx.Done():
+			log.Infoln("SNet initialization interrupted")
+			return false
 		}
 
 		// dmsgctrl setup
@@ -174,7 +177,7 @@ func InitSNet(v *Visor) bool {
 }
 
 // InitAddressResolver initializes address resolver.
-func InitAddressResolver(v *Visor) bool {
+func InitAddressResolver(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("address-resolver")
 	conf := v.conf.Transport
 
@@ -189,11 +192,11 @@ func InitAddressResolver(v *Visor) bool {
 }
 
 // InitTransport initializes transport manager.
-func InitTransport(v *Visor) bool {
+func InitTransport(ctx context.Context, v *Visor) bool {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
-	tpdC, err := connectToTpDisc(v)
+	tpdC, err := connectToTpDisc(ctx, v)
 	if err != nil {
 		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
 	}
@@ -224,13 +227,13 @@ func InitTransport(v *Visor) bool {
 		return report(fmt.Errorf("failed to start transport manager: %w", err))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	cancellableCtx, cancel := context.WithCancel(ctx)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		tpM.Serve(ctx)
+		tpM.Serve(cancellableCtx)
 	}()
 
 	v.pushCloseStack("transport.manager", func() bool {
@@ -246,7 +249,7 @@ func InitTransport(v *Visor) bool {
 }
 
 // InitRouter initializes router.
-func InitRouter(v *Visor) bool {
+func InitRouter(ctx context.Context, v *Visor) bool {
 	report := v.makeReporter("router")
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
@@ -267,13 +270,13 @@ func InitRouter(v *Visor) bool {
 		return report(fmt.Errorf("failed to create router: %w", err))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	cancellableCtx, cancel := context.WithCancel(ctx)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		if err := r.Serve(ctx); err != nil {
+		if err := r.Serve(cancellableCtx); err != nil {
 			report(fmt.Errorf("serve router stopped: %w", err))
 		}
 	}()
@@ -292,7 +295,7 @@ func InitRouter(v *Visor) bool {
 }
 
 // InitDiscovery initializes app discovery.
-func InitDiscovery(v *Visor) bool {
+func InitDiscovery(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("discovery")
 
 	// Prepare app discovery factory.
@@ -315,7 +318,7 @@ func InitDiscovery(v *Visor) bool {
 }
 
 // InitLauncher initializes app launcher.
-func InitLauncher(v *Visor) bool {
+func InitLauncher(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("launcher")
 	conf := v.conf.Launcher
 
@@ -412,7 +415,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 }
 
 // InitCLI initializes CLI.
-func InitCLI(v *Visor) bool {
+func InitCLI(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("cli")
 
 	if v.conf.CLIAddr == "" {
@@ -439,7 +442,7 @@ func InitCLI(v *Visor) bool {
 }
 
 // InitHypervisors initializes hypervisor clients.
-func InitHypervisors(v *Visor) bool {
+func InitHypervisors(ctx context.Context, v *Visor) bool {
 	report := v.makeReporter("hypervisors")
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
@@ -456,13 +459,13 @@ func InitHypervisors(v *Visor) bool {
 			return report(fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err))
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		cancellableCtx, cancel := context.WithCancel(ctx)
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
-			ServeRPCClient(ctx, log, v.net, rpcS, addr, hvErrs)
+			ServeRPCClient(cancellableCtx, log, v.net, rpcS, addr, hvErrs)
 		}(hvErrs)
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() bool {
@@ -476,7 +479,7 @@ func InitHypervisors(v *Visor) bool {
 }
 
 // InitUptimeTracker initializes uptime tracker client.
-func InitUptimeTracker(v *Visor) bool {
+func InitUptimeTracker(ctx context.Context, v *Visor) bool {
 	const tickDuration = 10 * time.Second
 
 	report := v.makeReporter("uptime_tracker")
@@ -500,7 +503,6 @@ func InitUptimeTracker(v *Visor) bool {
 
 	go func() {
 		for range ticker.C {
-			ctx := context.Background()
 			log.Infof("DICK: UPDATING UPTIME")
 			if err := ut.UpdateVisorUptime(ctx); err != nil {
 				log.WithError(err).Warn("Failed to update visor uptime.")
@@ -519,15 +521,21 @@ func InitUptimeTracker(v *Visor) bool {
 }
 
 // InitTrustedVisors initializes trusted visors.
-func InitTrustedVisors(v *Visor) bool {
+func InitTrustedVisors(ctx context.Context, v *Visor) bool {
 	const trustedVisorsTransportType = tptypes.STCPR
 
 	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		time.Sleep(transport.TrustedVisorsDelay)
 		for _, pk := range v.tpM.Conf.DefaultVisors {
 			v.log.WithField("pk", pk).Infof("Adding trusted visor")
 
-			if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType); err != nil {
+			if _, err := v.tpM.SaveTransport(ctx, pk, trustedVisorsTransportType); err != nil {
 				v.log.
 					WithError(err).
 					WithField("pk", pk).
@@ -545,7 +553,7 @@ func InitTrustedVisors(v *Visor) bool {
 	return true
 }
 
-func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
+func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
 		maxBO  = 10 * time.Second
@@ -563,7 +571,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK)
+		tpdC, err = tpdclient.NewHTTP(ctx, conf.Discovery, v.conf.PK, v.conf.SK)
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
@@ -572,7 +580,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 		return nil
 	}
 
-	if err := tpdCRetrier.Do(context.Background(), retryFunc); err != nil {
+	if err := tpdCRetrier.Do(ctx, retryFunc); err != nil {
 		return nil, err
 	}
 

@@ -15,7 +15,7 @@ import (
 )
 
 // InitDmsgpty initializes dmsgpty.
-func InitDmsgpty(v *Visor) bool {
+func InitDmsgpty(ctx context.Context, v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
 
@@ -54,13 +54,13 @@ func InitDmsgpty(v *Visor) bool {
 	pty := dmsgpty.NewHost(dmsgC, wl)
 
 	if ptyPort := conf.Port; ptyPort != 0 {
-		ctx, cancel := context.WithCancel(context.Background())
+		cancellableCtx, cancel := context.WithCancel(ctx)
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
-			if err := pty.ListenAndServe(ctx, ptyPort); err != nil {
+			if err := pty.ListenAndServe(cancellableCtx, ptyPort); err != nil {
 				report(fmt.Errorf("listen and serve stopped: %w", err))
 			}
 		}()
@@ -84,13 +84,13 @@ func InitDmsgpty(v *Visor) bool {
 			return report(fmt.Errorf("failed to start dmsgpty cli listener: %w", err))
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		cancellableCtx, cancel := context.WithCancel(ctx)
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
-			if err := pty.ServeCLI(ctx, cliL); err != nil {
+			if err := pty.ServeCLI(cancellableCtx, cliL); err != nil {
 				report(fmt.Errorf("serve cli stopped: %w", err))
 			}
 		}()

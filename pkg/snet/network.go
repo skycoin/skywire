@@ -112,7 +112,7 @@ type Network struct {
 }
 
 // New creates a network from a config.
-func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
+func New(ctx context.Context, conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	clients := NetworkClients{
 		Direct: make(map[string]directtp.Client),
 	}
@@ -124,14 +124,14 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 				OnSessionDial: func(network, addr string) error {
 					data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
 					event := appevent.NewEvent(appevent.TCPDial, data)
-					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+					_ = eb.Broadcast(ctx, event) //nolint:errcheck
 					// @evanlinjin: An error is not returned here as this will cancel the session dial.
 					return nil
 				},
 				OnSessionDisconnect: func(network, addr string, _ error) {
 					data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
 					event := appevent.NewEvent(appevent.TCPClose, data)
-					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+					_ = eb.Broadcast(ctx, event) //nolint:errcheck
 				},
 			},
 		}
@@ -195,16 +195,16 @@ func NewRaw(conf Config, clients NetworkClients) *Network {
 }
 
 // Init initiates server connections.
-func (n *Network) Init() error {
+func (n *Network) Init(ctx context.Context) error {
 	if n.clients.DmsgC != nil {
 		time.Sleep(200 * time.Millisecond)
-		go n.clients.DmsgC.Serve()
+		go n.clients.DmsgC.Serve(ctx)
 		time.Sleep(200 * time.Millisecond)
 	}
 
 	if n.conf.NetworkConfigs.STCP != nil {
 		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
-			if err := client.Serve(); err != nil {
+			if err := client.Serve(ctx); err != nil {
 				return fmt.Errorf("failed to initiate 'stcp': %w", err)
 			}
 		} else {
@@ -214,7 +214,7 @@ func (n *Network) Init() error {
 
 	if n.conf.ARClient != nil {
 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
-			if err := client.Serve(); err != nil {
+			if err := client.Serve(ctx); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
 
@@ -226,7 +226,7 @@ func (n *Network) Init() error {
 		}
 
 		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
-			if err := client.Serve(); err != nil {
+			if err := client.Serve(ctx); err != nil {
 				return fmt.Errorf("failed to initiate 'sudph': %w", err)
 			}
 		} else {

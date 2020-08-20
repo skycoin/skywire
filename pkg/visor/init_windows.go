@@ -2,8 +2,10 @@
 
 package visor
 
+import "context"
+
 // InitDmsgpty initializes dmsgpty.
-func InitDmsgpty(v *Visor) bool {
+func InitDmsgpty(_ context.Context, v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
 

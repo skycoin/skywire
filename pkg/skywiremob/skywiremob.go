@@ -2,7 +2,6 @@ package skywiremob
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -114,8 +113,10 @@ func IsVPNReady() bool {
 var log = logging.NewMasterLogger()
 
 var (
-	globalVisorMx sync.Mutex
-	globalVisor   *visor.Visor
+	globalVisorMx     sync.Mutex
+	globalVisor       *visor.Visor
+	globalVisorDone   = make(chan struct{})
+	globalVisorCancel func()
 
 	vpnClient  *vpn.ClientMobile
 	tunCredsMx sync.Mutex
@@ -154,13 +155,28 @@ func PrepareVisor() string {
 
 	v := visor.NewVisor(conf, nil)
 
-	if ok := v.Start(context.Background()); !ok {
-		return errors.New("failed to start visor").Error()
-	}
+	ctx, cancel := context.WithCancel(context.Background())
 
+	globalVisorMx.Lock()
 	globalVisor = v
+	globalVisorCancel = cancel
+	globalVisorMx.Unlock()
 
-	log.Infoln("Started visor")
+	go func() {
+		<-ctx.Done()
+		v.Close()
+		globalVisorMx.Lock()
+		close(globalVisorDone)
+		globalVisorMx.Unlock()
+	}()
+
+	go func() {
+		if ok := v.Start(ctx); !ok {
+			log.Errorln("Failed to start visor")
+		} else {
+			log.Infoln("Started visor")
+		}
+	}()
 
 	return ""
 }
@@ -190,7 +206,15 @@ func getNextDmsgSocketIdx(ln int) int {
 // NextDmsgSocket returns next file descriptor of Dmsg socket. If no descriptors
 // left or in case of error returns 0.
 func NextDmsgSocket() int {
-	allSessions := globalVisor.Network().Dmsg().AllSessions()
+	globalVisorMx.Lock()
+	v := globalVisor
+	globalVisorMx.Unlock()
+
+	if v == nil {
+		return 0
+	}
+
+	allSessions := v.Network().Dmsg().AllSessions()
 	log.Infof("Dmsg sockets count: %d\n", len(allSessions))
 
 	nextDmsgSocketIdx := getNextDmsgSocketIdx(len(allSessions))
@@ -227,12 +251,20 @@ func NextDmsgSocket() int {
 
 // PrepareVPNClient creates and runs VPN client instance.
 func PrepareVPNClient(srvPKStr, passcode string) string {
+	globalVisorMx.Lock()
+	v := globalVisor
+	globalVisorMx.Unlock()
+
+	if v == nil {
+		return "visor is not ready yet"
+	}
+
 	var srvPK cipher.PubKey
 	if err := srvPK.UnmarshalText([]byte(srvPKStr)); err != nil {
 		return fmt.Errorf("invalid remote PK: %w", err).Error()
 	}
 
-	if _, err := globalVisor.SaveTransport(context.Background(), srvPK, dmsg.Type); err != nil {
+	if _, err := v.SaveTransport(context.Background(), srvPK, dmsg.Type); err != nil {
 		return fmt.Errorf("failed to save transport to VPN server: %w", err).Error()
 	}
 
@@ -321,13 +353,17 @@ func TUNGateway() string {
 func StopVisor() string {
 	globalVisorMx.Lock()
 	v := globalVisor
+	cancel := globalVisorCancel
+	vDone := globalVisorDone
 	globalVisorMx.Unlock()
 
-	if v == nil {
+	if v == nil || cancel == nil {
 		return "visor is not running"
 	}
 
-	v.Close()
+	cancel()
+	<-vDone
+
 	vpnClient.Close()
 
 	if err := udpConn.Close(); err != nil {
@@ -341,6 +377,12 @@ func StopVisor() string {
 	nextDmsgSocketIdxMx.Unlock()
 
 	mobileAppAddrCh = make(chan *net.UDPAddr, 2)
+
+	globalVisorMx.Lock()
+	globalVisor = nil
+	globalVisorCancel = nil
+	globalVisorDone = make(chan struct{})
+	globalVisorMx.Unlock()
 
 	return ""
 }
