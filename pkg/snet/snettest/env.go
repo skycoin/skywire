@@ -1,6 +1,7 @@
 package snettest
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
@@ -100,7 +101,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 		if hasDmsg {
 			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go clients.DmsgC.Serve()
+			go clients.DmsgC.Serve(context.Background())
 		}
 
 		addressResolver := new(arclient.MockAPIClient)
@@ -146,7 +147,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		}
 
 		n := snet.NewRaw(snetConfig, clients)
-		require.NoError(t, n.Init())
+		require.NoError(t, n.Init(context.Background()))
 		ns[i] = n
 	}
 

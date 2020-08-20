@@ -163,7 +163,7 @@ func (v *Visor) Start(ctx context.Context) bool {
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(initStack())))
 		log.Info("Starting module...")
 
-		if ok := startFn(v); !ok {
+		if ok := startFn(ctx, v); !ok {
 			log.WithField("elapsed", time.Since(start)).Error("Failed to start module.")
 			v.processReports(log, nil)
 			return ok
