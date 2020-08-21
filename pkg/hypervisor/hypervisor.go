@@ -752,7 +752,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 }
 
 func (hv *Hypervisor) appConnections() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		summary, err := ctx.RPC.GetAppConnectionsSummary(ctx.App.Name)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
