@@ -6,23 +6,27 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-type noiseRouteGroup struct {
+type NoiseRouteGroup struct {
 	rg *RouteGroup
 	net.Conn
 }
 
-func (nrg *noiseRouteGroup) LocalAddr() net.Addr {
+func (nrg *NoiseRouteGroup) LocalAddr() net.Addr {
 	return nrg.rg.LocalAddr()
 }
 
-func (nrg *noiseRouteGroup) RemoteAddr() net.Addr {
+func (nrg *NoiseRouteGroup) RemoteAddr() net.Addr {
 	return nrg.rg.RemoteAddr()
 }
 
-func (nrg *noiseRouteGroup) isClosed() bool {
+func (nrg *NoiseRouteGroup) IsAlive() bool {
+	return nrg.rg.IsAlive()
+}
+
+func (nrg *NoiseRouteGroup) isClosed() bool {
 	return nrg.rg.isClosed()
 }
 
-func (nrg *noiseRouteGroup) handlePacket(packet routing.Packet) error {
+func (nrg *NoiseRouteGroup) handlePacket(packet routing.Packet) error {
 	return nrg.rg.handlePacket(packet)
 }
