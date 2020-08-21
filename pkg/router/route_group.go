@@ -233,6 +233,11 @@ func (rg *RouteGroup) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
+// IsAlive checks whether connection is alive.
+func (rg *RouteGroup) IsAlive() bool {
+	return !rg.isClosed() && !rg.isRemoteClosed()
+}
+
 // read reads incoming data. It tries to fetch the data from the internal buffer.
 // If buffer is empty it blocks on receiving from the data channel
 func (rg *RouteGroup) read(p []byte) (int, error) {
