@@ -64,7 +64,7 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net
 
 	return &SkywireConn{
 		Conn:     conn,
-		rg:       conn.(*router.RouteGroup),
+		nrg:      conn.(*router.NoiseRouteGroup),
 		freePort: freePort,
 	}, nil
 }
@@ -182,7 +182,7 @@ func (l *skywireListener) Accept() (net.Conn, error) {
 
 	return &SkywireConn{
 		Conn: conn,
-		rg:   conn.(*router.RouteGroup),
+		nrg:  conn.(*router.NoiseRouteGroup),
 	}, nil
 }
 
@@ -212,7 +212,7 @@ func (l *skywireListener) putConn(conn net.Conn) {
 // skywireConn is a connection wrapper for skynet.
 type SkywireConn struct {
 	net.Conn
-	rg         *router.RouteGroup
+	nrg        *router.NoiseRouteGroup
 	freePort   func()
 	freePortMx sync.RWMutex
 	once       sync.Once
@@ -220,7 +220,7 @@ type SkywireConn struct {
 
 // IsAlive checks whether connection is alive.
 func (c *SkywireConn) IsAlive() bool {
-	return c.rg.IsAlive()
+	return c.nrg.IsAlive()
 }
 
 // Close closes connection.
