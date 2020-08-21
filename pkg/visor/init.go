@@ -133,20 +133,15 @@ func InitSNet(ctx context.Context, v *Visor) bool {
 		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
-	log := v.MasterLogger()
-
-	log.Infoln("BEFORE SNET NEW")
 	n, err := snet.New(ctx, conf, v.ebc)
 	if err != nil {
 		return report(err)
 	}
 
-	log.Infoln("BEFORE SNET INIT")
 	if err := n.Init(ctx); err != nil {
 		return report(err)
 	}
 
-	log.Infoln("BEFORE SNET PUSH CLOSE STACK")
 	v.pushCloseStack("snet", func() bool {
 		return report(n.Close())
 	})
