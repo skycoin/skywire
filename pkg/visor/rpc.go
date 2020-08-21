@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
+
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
@@ -335,6 +337,18 @@ func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
 
 	return r.visor.setAppPK(in.AppName, in.PK)
+}
+
+func (r *RPC) GetAppConnectionsSummary(appName *string, out *[]appserver.ConnectionSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppConnectionsSummary", appName)(out, &err)
+
+	summary, err := r.visor.procM.ConnectionsSummary(*appName)
+	if err != nil {
+		return err
+	}
+
+	*out = summary
+	return nil
 }
 
 /*
