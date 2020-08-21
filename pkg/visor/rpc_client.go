@@ -626,6 +626,10 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 	return mc.logS.LogsSince(timestamp)
 }
 
+func (mc *mockRPCClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+	return nil, nil
+}
+
 // TransportTypes implements RPCClient.
 func (mc *mockRPCClient) TransportTypes() ([]string, error) {
 	return mc.tpTypes, nil
