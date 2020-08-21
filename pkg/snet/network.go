@@ -196,12 +196,14 @@ func NewRaw(conf Config, clients NetworkClients) *Network {
 
 // Init initiates server connections.
 func (n *Network) Init(ctx context.Context) error {
+	log.Infoln("BEFORE SNET INIT DMSGC")
 	if n.clients.DmsgC != nil {
 		time.Sleep(200 * time.Millisecond)
 		go n.clients.DmsgC.Serve(ctx)
 		time.Sleep(200 * time.Millisecond)
 	}
 
+	log.Infoln("BEFORE SNET INIT STCP")
 	if n.conf.NetworkConfigs.STCP != nil {
 		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
 			if err := client.Serve(ctx); err != nil {
@@ -212,8 +214,10 @@ func (n *Network) Init(ctx context.Context) error {
 		}
 	}
 
+	log.Infoln("BEFORE SNET INIT ARCLIENT")
 	if n.conf.ARClient != nil {
 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
+			log.Infoln("BEFORE SNET INIT ARCLIENT DIRECT STCPR")
 			if err := client.Serve(ctx); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
@@ -226,6 +230,7 @@ func (n *Network) Init(ctx context.Context) error {
 		}
 
 		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
+			log.Infoln("BEFORE SNET INIT ARCLIENT DIRECT SUDPH")
 			if err := client.Serve(ctx); err != nil {
 				return fmt.Errorf("failed to initiate 'sudph': %w", err)
 			}

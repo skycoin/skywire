@@ -131,7 +131,9 @@ public class SkywireVPNService extends VpnService implements Handler.Callback {
     }
     private void disconnect() {
         mHandler.sendEmptyMessage(R.string.disconnected);
-        connectionRunnable.Stop();
+        if (connectionRunnable != null) {
+            connectionRunnable.Stop();
+        }
         setConnectingThread(null);
         setConnection(null);
         stopForeground(true);

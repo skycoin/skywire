@@ -55,6 +55,13 @@ public class VisorRunnable implements Runnable {
         }
         Skywiremob.printString("Prepared visor");
 
+        err = Skywiremob.waitVisorReady();
+        if (!err.isEmpty()) {
+            Skywiremob.printString(err);
+            showToast(err);
+            return;
+        }
+
         err = Skywiremob.prepareVPNClient(this.RemotePK, this.Passcode);
         if (!err.isEmpty()) {
             Skywiremob.printString(err);
@@ -77,7 +84,12 @@ public class VisorRunnable implements Runnable {
             return;
         }
 
-        Skywiremob.serveVPN();
+        err = Skywiremob.serveVPN();
+        if (!err.isEmpty()) {
+            Skywiremob.printString(err);
+            showToast(err);
+            return;
+        }
 
         activity.runOnUiThread(new Runnable() {
             public void run() {
@@ -85,11 +97,11 @@ public class VisorRunnable implements Runnable {
             }
         });
 
-        err = Skywiremob.waitForVisorToStop();
+        /*err = Skywiremob.waitForVisorToStop();
         if (!err.isEmpty()) {
             Skywiremob.printString(err);
             showToast(err);
             return;
-        }
+        }*/
     }
 }
