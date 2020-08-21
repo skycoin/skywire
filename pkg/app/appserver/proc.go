@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/skycoin/skywire/pkg/app/appnet"
+
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -38,6 +40,7 @@ type Proc struct {
 	waitMx    sync.Mutex
 	waitErr   error
 
+	rpcGWMu  sync.Mutex
 	rpcGW    *RPCIngressGateway // gateway shared over 'conn' - introduced AFTER proc is started
 	conn     net.Conn           // connection to proc - introduced AFTER proc is started
 	connCh   chan struct{}      // push here when conn is received - protected by 'connOnce'
@@ -94,7 +97,9 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 	p.connOnce.Do(func() {
 		ok = true
 		p.conn = conn
+		p.rpcGWMu.Lock()
 		p.rpcGW = NewRPCGateway(p.log)
+		p.rpcGWMu.Unlock()
 
 		// Send ready signal.
 		p.connCh <- struct{}{}
@@ -253,4 +258,42 @@ func (p *Proc) Wait() error {
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
+}
+
+type ConnectionSummary struct {
+	IsAlive bool   `json:"is_alive"`
+	Error   string `json:"error"`
+}
+
+func (p *Proc) ConnectionsSummary() []ConnectionSummary {
+	p.rpcGWMu.Lock()
+	rpcGW := p.rpcGW
+	p.rpcGWMu.Unlock()
+
+	if rpcGW == nil {
+		return nil
+	}
+
+	var summaries []ConnectionSummary
+	rpcGW.cm.DoRange(func(id uint16, v interface{}) bool {
+		conn := v.(net.Conn)
+
+		wrappedConn := conn.(*appnet.WrappedConn)
+
+		skywireConn, isSkywireConn := wrappedConn.Conn.(*appnet.SkywireConn)
+		if !isSkywireConn {
+			summaries = append(summaries, ConnectionSummary{
+				Error: "Can't get such info from this conn",
+			})
+			return true
+		}
+
+		summaries = append(summaries, ConnectionSummary{
+			IsAlive: skywireConn.IsAlive(),
+		})
+
+		return true
+	})
+
+	return summaries
 }

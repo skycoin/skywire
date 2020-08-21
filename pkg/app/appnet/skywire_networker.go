@@ -62,7 +62,7 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net
 		return nil, err
 	}
 
-	return &skywireConn{
+	return &SkywireConn{
 		Conn:     conn,
 		rg:       conn.(*router.RouteGroup),
 		freePort: freePort,
@@ -180,7 +180,7 @@ func (l *skywireListener) Accept() (net.Conn, error) {
 		return nil, errors.New("listening on closed connection")
 	}
 
-	return &skywireConn{
+	return &SkywireConn{
 		Conn: conn,
 		rg:   conn.(*router.RouteGroup),
 	}, nil
@@ -210,7 +210,7 @@ func (l *skywireListener) putConn(conn net.Conn) {
 }
 
 // skywireConn is a connection wrapper for skynet.
-type skywireConn struct {
+type SkywireConn struct {
 	net.Conn
 	rg         *router.RouteGroup
 	freePort   func()
@@ -219,12 +219,12 @@ type skywireConn struct {
 }
 
 // IsAlive checks whether connection is alive.
-func (c *skywireConn) IsAlive() bool {
+func (c *SkywireConn) IsAlive() bool {
 	return c.rg.IsAlive()
 }
 
 // Close closes connection.
-func (c *skywireConn) Close() error {
+func (c *SkywireConn) Close() error {
 	var err error
 
 	c.once.Do(func() {
