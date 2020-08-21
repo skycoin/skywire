@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
+
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
@@ -51,6 +53,7 @@ type RPCClient interface {
 	SetAppPassword(appName, password string) error
 	SetAppPK(appName string, pk cipher.PubKey) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
+	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
 	TransportTypes() ([]string, error)
 	Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error)
@@ -203,6 +206,16 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	}
 
 	return res, nil
+}
+
+func (rc *rpcClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+	var summary []appserver.ConnectionSummary
+
+	if err := rc.Call("GetAppConnectionsSummary", &appName, &summary); err != nil {
+		return nil, err
+	}
+
+	return summary, nil
 }
 
 // TransportTypes calls TransportTypes.

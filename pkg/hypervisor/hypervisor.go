@@ -217,6 +217,7 @@ func (hv *Hypervisor) makeMux() *chi.Mux {
 				r.Get("/visors/{pk}/apps/{app}", hv.getApp())
 				r.Put("/visors/{pk}/apps/{app}", hv.putApp())
 				r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
+				r.Get("/visors/{pk}/apps/{app}/connections", hv.appConnections())
 				r.Get("/visors/{pk}/transport-types", hv.getTransportTypes())
 				r.Get("/visors/{pk}/transports", hv.getTransports())
 				r.Post("/visors/{pk}/transports", hv.postTransport())
@@ -747,6 +748,18 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 			LastLogTimestamp: appcommon.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
+	})
+}
+
+func (hv *Hypervisor) appConnections() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		summary, err := ctx.RPC.GetAppConnectionsSummary(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, &summary)
 	})
 }
 
