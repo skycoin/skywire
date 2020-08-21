@@ -139,7 +139,7 @@ type router struct {
 	trustedVisors map[cipher.PubKey]struct{}
 	tm            *transport.Manager
 	rt            routing.Table
-	rgsNs         map[routing.RouteDescriptor]*noiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
+	rgsNs         map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
 	rgsRaw        map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
@@ -169,7 +169,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		tm:            config.TransportManager,
 		rt:            routing.NewTable(),
 		sl:            sl,
-		rgsNs:         make(map[routing.RouteDescriptor]*noiseRouteGroup),
+		rgsNs:         make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw:        make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
@@ -363,7 +363,7 @@ func (r *router) serveSetup() {
 	}
 }
 
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*noiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
 	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
@@ -412,7 +412,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 		return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
 	}
 
-	nrg = &noiseRouteGroup{
+	nrg = &NoiseRouteGroup{
 		rg:   rg,
 		Conn: wrappedRG,
 	}
@@ -752,7 +752,7 @@ func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
 	return ids, err
 }
 
-func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
+func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*NoiseRouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
@@ -766,7 +766,7 @@ func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGr
 	return nrg, true
 }
 
-func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
+func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*NoiseRouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
