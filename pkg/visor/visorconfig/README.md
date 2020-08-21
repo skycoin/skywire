@@ -17,11 +17,12 @@
 - `public_trusted_visor` (bool)
 
 
-# V1Routing
+# V1Dmsgpty
 
-- `setup_nodes` ()
-- `route_finder` (string)
-- `route_finder_timeout` (Duration)
+- `port` (uint16)
+- `authorization_file` (string)
+- `cli_network` (string)
+- `cli_address` (string)
 
 
 # V1Transport
@@ -30,14 +31,6 @@
 - `address_resolver` (string)
 - `log_store` (*[V1LogStore](#V1LogStore))
 - `trusted_visors` ()
-
-
-# V1Dmsgpty
-
-- `port` (uint16)
-- `authorization_file` (string)
-- `cli_network` (string)
-- `cli_address` (string)
 
 
 # V1UptimeTracker
@@ -52,6 +45,13 @@
 - `server_addr` (string)
 - `bin_path` (string)
 - `local_path` (string)
+
+
+# V1Routing
+
+- `setup_nodes` ()
+- `route_finder` (string)
+- `route_finder_timeout` (Duration)
 
 
 # V1LogStore
@@ -75,6 +75,21 @@
 - `pk` (PubKey)
 
 
+# RWMutex
+
+- `w` ([Mutex](#Mutex))
+- `writerSem` (uint32)
+- `readerSem` (uint32)
+- `readerCount` (int32)
+- `readerWait` (int32)
+
+
+# Mutex
+
+- `state` (int32)
+- `sema` (uint32)
+
+
 # AppConfig
 
 - `name` (string)
@@ -93,28 +108,13 @@
 - `` (FieldLogger)
 
 
-# RWMutex
+# DmsgConfig
 
-- `w` ([Mutex](#Mutex))
-- `writerSem` (uint32)
-- `readerSem` (uint32)
-- `readerCount` (int32)
-- `readerWait` (int32)
-
-
-# Mutex
-
-- `state` (int32)
-- `sema` (uint32)
+- `discovery` (string)
+- `sessions_count` (int)
 
 
 # STCPConfig
 
 - `pk_table` ()
 - `local_address` (string)
-
-
-# DmsgConfig
-
-- `discovery` (string)
-- `sessions_count` (int)

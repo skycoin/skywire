@@ -41,6 +41,29 @@ func (_m *MockProcManager) Close() error {
 	return r0
 }
 
+// ConnectionsSummary provides a mock function with given fields: appName
+func (_m *MockProcManager) ConnectionsSummary(appName string) ([]ConnectionSummary, error) {
+	ret := _m.Called(appName)
+
+	var r0 []ConnectionSummary
+	if rf, ok := ret.Get(0).(func(string) []ConnectionSummary); ok {
+		r0 = rf(appName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]ConnectionSummary)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(appName)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ProcByName provides a mock function with given fields: appName
 func (_m *MockProcManager) ProcByName(appName string) (*Proc, bool) {
 	ret := _m.Called(appName)
