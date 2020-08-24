@@ -116,7 +116,7 @@ func checkRtIDKeysOfRouterRules(t *testing.T, r *mockRouterGateway) {
 	var rtIDKeys []routing.RouteID
 
 	for _, edge := range r.edgeRules {
-		rtIDKeys = append(rtIDKeys, edge.Forward.KeyRouteID(), edge.Reverse.KeyRouteID())
+		rtIDKeys = append(rtIDKeys, edge.Forward[0].KeyRouteID(), edge.Reverse[0].KeyRouteID())
 	}
 	for _, rules := range r.interRules {
 		for _, rule := range rules {
@@ -163,8 +163,8 @@ func biRouteFromKeys(fwdPKs, revPKs []cipher.PubKey, srcPort, dstPort routing.Po
 	return routing.BidirectionalRouteList{
 		Desc:      routing.NewRouteDescriptor(fwdPKs[0], revPKs[0], srcPort, dstPort),
 		KeepAlive: 0,
-		Forward:   fwdHops,
-		Reverse:   revHops,
+		Forward:   [][]routing.Hop{fwdHops},
+		Reverse:   [][]routing.Hop{revHops},
 	}
 }
 

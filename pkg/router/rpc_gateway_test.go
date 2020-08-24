@@ -20,8 +20,8 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 
 	rules := routing.EdgeRulesList{
 		Desc:    desc,
-		Forward: routing.Rule{0, 0, 0},
-		Reverse: routing.Rule{1, 1, 1},
+		Forward: []routing.Rule{{0, 0, 0}},
+		Reverse: []routing.Rule{{1, 1, 1}},
 	}
 
 	t.Run("ok", func(t *testing.T) {

@@ -62,7 +62,7 @@ func Test_router_NoiseRouteGroups(t *testing.T) {
 	}
 
 	// Route that will be established
-	route := routing.BidirectionalRouteList{
+	route := routing.BidirectionalRoute{
 		Desc:      desc,
 		KeepAlive: DefaultRouteKeepAlive,
 		Forward:   forwardHops,
@@ -101,7 +101,7 @@ func Test_router_NoiseRouteGroups(t *testing.T) {
 	revRules0 := routing.ConsumeRule(route.KeepAlive, 3, srcPK, dstPK, 1, 1)
 
 	// Edge rules to be returned from route group dialer
-	initEdge := routing.EdgeRulesList{Desc: revRt.Desc, Forward: fwdRules0, Reverse: revRules0}
+	initEdge := routing.EdgeRules{Desc: revRt.Desc, Forward: fwdRules0, Reverse: revRules0}
 
 	setupCl0 := &setupclient.MockRouteGroupDialer{}
 	setupCl0.On("Dial", mock.Anything, r0Logger, nEnv.Nets[0], mock.Anything, route).
@@ -162,7 +162,7 @@ func Test_router_NoiseRouteGroups(t *testing.T) {
 	revRules1 := routing.ConsumeRule(route.KeepAlive, 2, dstPK, srcPK, 1, 1)
 
 	// This edge is returned by the setup node to accepting router
-	respEdge := routing.EdgeRulesList{Desc: fwdRt.Desc, Forward: fwdRules1, Reverse: revRules1}
+	respEdge := routing.EdgeRulesList{Desc: fwdRt.Desc, Forward: []routing.Rule{fwdRules1}, Reverse: []routing.Rule{revRules1}}
 
 	// Unblock AcceptRoutes, imitates setup node request with EdgeRulesList
 	r1.accept <- respEdge
@@ -403,12 +403,12 @@ func testClosePacketRemote(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubKey,
 
 	rules := routing.EdgeRulesList{
 		Desc:    fwdRtDesc.Invert(),
-		Forward: fwdRule,
-		Reverse: cnsmRule,
+		Forward: []routing.Rule{fwdRule},
+		Reverse: []routing.Rule{cnsmRule},
 	}
 
 	rg1 := NewRouteGroup(DefaultRouteGroupConfig(), r1.rt, rules.Desc)
-	rg1.appendRules(rules.Forward, rules.Reverse, r1.tm.Transport(rules.Forward.NextTransportID()))
+	rg1.appendRules(rules.Forward[0], rules.Reverse[0], r1.tm.Transport(rules.Forward[0].NextTransportID()))
 
 	nrg1 := &noiseRouteGroup{rg: rg1}
 	r1.rgsNs[rg1.desc] = nrg1
@@ -464,12 +464,12 @@ func testClosePacketInitiator(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubK
 
 	rules := routing.EdgeRulesList{
 		Desc:    fwdRtDesc.Invert(),
-		Forward: fwdRule,
-		Reverse: cnsmRule,
+		Forward: []routing.Rule{fwdRule},
+		Reverse: []routing.Rule{cnsmRule},
 	}
 
 	rg1 := NewRouteGroup(DefaultRouteGroupConfig(), r1.rt, rules.Desc)
-	rg1.appendRules(rules.Forward, rules.Reverse, r1.tm.Transport(rules.Forward.NextTransportID()))
+	rg1.appendRules(rules.Forward[0], rules.Reverse[0], r1.tm.Transport(rules.Forward[0].NextTransportID()))
 
 	nrg1 := &noiseRouteGroup{rg: rg1}
 	r1.rgsNs[rg1.desc] = nrg1
@@ -514,9 +514,9 @@ func testForwardRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	err = r0.rt.SaveRule(fwdRule)
 	require.NoError(t, err)
 
-	rules := routing.EdgeRulesList{Desc: fwdRule.RouteDescriptor(), Forward: fwdRule, Reverse: nil}
+	rules := routing.EdgeRulesList{Desc: fwdRule.RouteDescriptor(), Forward: []routing.Rule{fwdRule}, Reverse: nil}
 	rg0 := NewRouteGroup(DefaultRouteGroupConfig(), r0.rt, rules.Desc)
-	rg0.appendRules(rules.Forward, rules.Reverse, r0.tm.Transport(rules.Forward.NextTransportID()))
+	rg0.appendRules(rules.Forward[0], rules.Reverse[0], r0.tm.Transport(rules.Forward[0].NextTransportID()))
 
 	nrg0 := &noiseRouteGroup{rg: rg0}
 	r0.rgsNs[rg0.desc] = nrg0
@@ -590,12 +590,12 @@ func testConsumeRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 
 	rules := routing.EdgeRulesList{
 		Desc:    fwdRtDesc.Invert(),
-		Forward: fwdRule,
-		Reverse: cnsmRule,
+		Forward: []routing.Rule{fwdRule},
+		Reverse: []routing.Rule{cnsmRule},
 	}
 
 	rg1 := NewRouteGroup(DefaultRouteGroupConfig(), r1.rt, rules.Desc)
-	rg1.appendRules(rules.Forward, rules.Reverse, r1.tm.Transport(rules.Forward.NextTransportID()))
+	rg1.appendRules(rules.Forward[0], rules.Reverse[0], r1.tm.Transport(rules.Forward[0].NextTransportID()))
 
 	nrg1 := &noiseRouteGroup{rg: rg1}
 	r1.rgsNs[rg1.desc] = nrg1

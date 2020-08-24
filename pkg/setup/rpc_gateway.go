@@ -48,7 +48,7 @@ func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *rou
 	return nil
 }
 
-// DialRouteGroup dials RouteGroups for route and rules.
+// DialRouteGroupMultiple dials RouteGroups for list of routes and rules.
 func (g *RPCGateway) DialRouteGroupMultiple(route routing.BidirectionalRouteList, rules *routing.EdgeRulesList) (err error) {
 	log := logging.MustGetLogger("request:" + g.ReqPK.String())
 	defer g.Metrics.RecordRouteListRequest(route)(rules, &err)
