@@ -2,6 +2,7 @@ package router
 
 import (
 	"net"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -21,6 +22,18 @@ func (nrg *NoiseRouteGroup) RemoteAddr() net.Addr {
 
 func (nrg *NoiseRouteGroup) IsAlive() bool {
 	return nrg.rg.IsAlive()
+}
+
+func (nrg *NoiseRouteGroup) Latency() time.Duration {
+	return nrg.rg.Latency()
+}
+
+func (nrg *NoiseRouteGroup) Throughput() uint32 {
+	return nrg.rg.Throughput()
+}
+
+func (nrg *NoiseRouteGroup) BandwidthSent() uint32 {
+	return nrg.rg.BandwidthSent()
 }
 
 func (nrg *NoiseRouteGroup) isClosed() bool {

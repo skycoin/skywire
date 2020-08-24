@@ -251,6 +251,20 @@ func (rg *RouteGroup) IsAlive() bool {
 	return !rg.isClosed() && !rg.isRemoteClosed()
 }
 
+func (rg *RouteGroup) Latency() time.Duration {
+	latencyMs := atomic.LoadUint32(&rg.latency)
+
+	return time.Duration(latencyMs) * time.Millisecond
+}
+
+func (rg *RouteGroup) Throughput() uint32 {
+	return atomic.LoadUint32(&rg.throughput)
+}
+
+func (rg *RouteGroup) BandwidthSent() uint32 {
+	return atomic.LoadUint32(&rg.bandwidthSent)
+}
+
 // read reads incoming data. It tries to fetch the data from the internal buffer.
 // If buffer is empty it blocks on receiving from the data channel
 func (rg *RouteGroup) read(p []byte) (int, error) {
