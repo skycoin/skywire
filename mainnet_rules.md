@@ -235,6 +235,7 @@ The following hardware is accepted in the Skywire mainnet:
      - NEO-Core
      - NEO-Core2
      - NEO2
+     - NEO2-Black
      - S2
      - Smart4418
 
