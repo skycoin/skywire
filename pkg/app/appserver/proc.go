@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 
@@ -261,8 +262,11 @@ func (p *Proc) IsRunning() bool {
 }
 
 type ConnectionSummary struct {
-	IsAlive bool   `json:"is_alive"`
-	Error   string `json:"error"`
+	IsAlive       bool          `json:"is_alive"`
+	Latency       time.Duration `json:"latency"`
+	Throughput    uint32        `json:"throughput"`
+	BandwidthSent uint32        `json:"bandwidth_sent"`
+	Error         string        `json:"error"`
 }
 
 func (p *Proc) ConnectionsSummary() []ConnectionSummary {
@@ -289,7 +293,10 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 		}
 
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive: skywireConn.IsAlive(),
+			IsAlive:       skywireConn.IsAlive(),
+			Latency:       skywireConn.Latency(),
+			Throughput:    skywireConn.Throughput(),
+			BandwidthSent: skywireConn.BandwidthSent(),
 		})
 
 		return true

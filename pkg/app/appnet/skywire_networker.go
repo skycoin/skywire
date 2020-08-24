@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/netutil"
@@ -221,6 +222,18 @@ type SkywireConn struct {
 // IsAlive checks whether connection is alive.
 func (c *SkywireConn) IsAlive() bool {
 	return c.nrg.IsAlive()
+}
+
+func (c *SkywireConn) Latency() time.Duration {
+	return c.nrg.Latency()
+}
+
+func (c *SkywireConn) Throughput() uint32 {
+	return c.nrg.Throughput()
+}
+
+func (c *SkywireConn) BandwidthSent() uint32 {
+	return c.nrg.BandwidthSent()
 }
 
 // Close closes connection.
