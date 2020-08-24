@@ -171,16 +171,16 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	copy(rules, rg.fwd)
 	rg.mu.Unlock()
 
-	if len(tps) != len(rules) {
-		return 0, ErrRuleTransportMismatch
-	}
-
 	if len(tps) == 0 {
 		return 0, ErrNoTransports
 	}
 
 	if len(rules) == 0 {
 		return 0, ErrNoRules
+	}
+
+	if len(tps) != len(rules) {
+		return 0, ErrRuleTransportMismatch
 	}
 
 	rg.logger.Warnf("[!!!] RouteGroup Write, len(tps) = %v, len(fwd) = %v, len(rvs) = %v", len(tps), len(rules), len(rg.rvs))
