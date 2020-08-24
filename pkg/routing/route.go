@@ -121,7 +121,7 @@ func (br *BidirectionalRouteList) ForwardAndReverse() (forward, reverse []Route)
 	}
 
 	for _, route := range br.Reverse {
-		forwardRoutes = append(forwardRoutes, Route{
+		reverseRoutes = append(reverseRoutes, Route{
 			Desc:      br.Desc.Invert(),
 			Hops:      route,
 			KeepAlive: br.KeepAlive,
