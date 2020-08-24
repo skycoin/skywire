@@ -21,6 +21,7 @@ import (
 
 const (
 	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
+	defaultNetworkProbeInterval        = 3 * time.Second
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 )
@@ -44,16 +45,18 @@ func (timeoutError) Temporary() bool { return true }
 
 // RouteGroupConfig configures RouteGroup.
 type RouteGroupConfig struct {
-	ReadChBufSize     int
-	KeepAliveInterval time.Duration
+	ReadChBufSize        int
+	KeepAliveInterval    time.Duration
+	NetworkProbeInterval time.Duration
 }
 
 // DefaultRouteGroupConfig returns default RouteGroup config.
 // Used by default if config is nil.
 func DefaultRouteGroupConfig() *RouteGroupConfig {
 	return &RouteGroupConfig{
-		KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
-		ReadChBufSize:     defaultReadChBufSize,
+		KeepAliveInterval:    defaultRouteGroupKeepAliveInterval,
+		NetworkProbeInterval: defaultNetworkProbeInterval,
+		ReadChBufSize:        defaultReadChBufSize,
 	}
 }
 
@@ -125,6 +128,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
+	go rg.networkProbeLoop(cfg.NetworkProbeInterval)
 
 	return rg
 }
@@ -355,6 +359,51 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 	}
 
 	return tp, nil
+}
+
+// TODO (darkrengarius): get rid of copy-paste
+func (rg *RouteGroup) sendNetworkProbe() error {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		// if no transports, no rules, then no latency probe
+		return nil
+	}
+
+	for i := 0; i < len(rg.tps); i++ {
+		tp := rg.tps[i]
+		rule := rg.fwd[i]
+
+		if tp == nil {
+			continue
+		}
+
+		packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), time.Now().UnixNano()/int64(time.Millisecond), 0)
+
+		if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (rg *RouteGroup) networkProbeLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-rg.remoteClosed:
+			rg.logger.Infoln("Remote got closed, stopping network probe loop")
+			return
+		case <-ticker.C:
+			if err := rg.sendNetworkProbe(); err != nil {
+				rg.logger.Warnf("Failed to send network probe: %v", err)
+			}
+		}
+	}
 }
 
 func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
