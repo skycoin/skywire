@@ -41,6 +41,8 @@ func (t PacketType) String() string {
 		return "ClosePacket"
 	case KeepAlivePacket:
 		return "KeepAlivePacket"
+	case NetworkProbePacket:
+		return "NetworkProbe"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -54,6 +56,7 @@ const (
 	DataPacket PacketType = iota
 	ClosePacket
 	KeepAlivePacket
+	NetworkProbePacket
 )
 
 // CloseCode represents close code for ClosePacket.
@@ -112,6 +115,18 @@ func MakeKeepAlivePacket(id RouteID) Packet {
 	packet[PacketTypeOffset] = byte(KeepAlivePacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(0))
+
+	return packet
+}
+
+func MakeNetworkProbePacket(id RouteID, timestamp, throughput int64) Packet {
+	packet := make([]byte, PacketHeaderSize+16)
+
+	packet[PacketTypeOffset] = byte(NetworkProbePacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(17))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
 
 	return packet
 }
