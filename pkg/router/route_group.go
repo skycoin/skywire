@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -95,6 +96,13 @@ type RouteGroup struct {
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
 
+	bandwidthSent               uint32
+	bandwidthReceived           uint32
+	bandwidthReceivedRecStartMu sync.Mutex
+	bandwidthReceivedRecStart   time.Time
+	latency                     uint32
+	throughput                  uint32
+
 	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated   int32
 	remoteClosedOnce sync.Once
@@ -112,19 +120,20 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	rg := &RouteGroup{
-		cfg:           cfg,
-		logger:        logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
-		desc:          desc,
-		rt:            rt,
-		tps:           make([]*transport.ManagedTransport, 0),
-		fwd:           make([]routing.Rule, 0),
-		rvs:           make([]routing.Rule, 0),
-		readCh:        make(chan []byte, cfg.ReadChBufSize),
-		readBuf:       bytes.Buffer{},
-		remoteClosed:  make(chan struct{}),
-		closed:        make(chan struct{}),
-		readDeadline:  deadline.MakePipeDeadline(),
-		writeDeadline: deadline.MakePipeDeadline(),
+		cfg:                       cfg,
+		logger:                    logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		desc:                      desc,
+		rt:                        rt,
+		tps:                       make([]*transport.ManagedTransport, 0),
+		fwd:                       make([]routing.Rule, 0),
+		rvs:                       make([]routing.Rule, 0),
+		readCh:                    make(chan []byte, cfg.ReadChBufSize),
+		readBuf:                   bytes.Buffer{},
+		remoteClosed:              make(chan struct{}),
+		closed:                    make(chan struct{}),
+		readDeadline:              deadline.MakePipeDeadline(),
+		writeDeadline:             deadline.MakePipeDeadline(),
+		bandwidthReceivedRecStart: time.Now(),
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
@@ -325,6 +334,10 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	err := tp.WritePacket(ctx, packet)
 	// note equality here. update activity only if there was NO error
 	if err == nil {
+		if packet.Type() == routing.DataPacket {
+			atomic.AddUint32(&rg.bandwidthSent, uint32(packet.Size()))
+		}
+
 		if err := rg.rt.UpdateActivity(ruleID); err != nil {
 			rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
 		}
@@ -371,19 +384,26 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 		return nil
 	}
 
-	for i := 0; i < len(rg.tps); i++ {
-		tp := rg.tps[i]
-		rule := rg.fwd[i]
+	tp := rg.tps[0]
+	rule := rg.fwd[0]
 
-		if tp == nil {
-			continue
-		}
+	if tp == nil {
+		return nil
+	}
 
-		packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), time.Now().UnixNano()/int64(time.Millisecond), 0)
+	rg.bandwidthReceivedRecStartMu.Lock()
+	timePassed := time.Since(rg.bandwidthReceivedRecStart)
+	rg.bandwidthReceivedRecStart = time.Now()
+	rg.bandwidthReceivedRecStartMu.Unlock()
 
-		if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-			return err
-		}
+	bandwidth := atomic.LoadUint32(&rg.bandwidthReceived)
+
+	throughput := float64(bandwidth) / timePassed.Seconds()
+
+	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), time.Now().UnixNano()/int64(time.Millisecond), int64(throughput))
+
+	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+		return err
 	}
 
 	return nil
@@ -518,12 +538,32 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
 		return rg.handleDataPacket(packet)
+	case routing.NetworkProbePacket:
+		return rg.handleNetworkProbePacket(packet)
 	}
 
 	return nil
 }
 
+func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
+	payload := packet.Payload()
+
+	sentAtMs := binary.BigEndian.Uint64(payload)
+	throughput := binary.BigEndian.Uint64(payload[8:])
+
+	ms := sentAtMs % 1000
+	sentAtMs = sentAtMs / 1000
+	sentAt := time.Unix(int64(sentAtMs), int64(ms)*1000)
+
+	atomic.StoreUint32(&rg.latency, uint32(time.Since(sentAt).Milliseconds()))
+	atomic.StoreUint32(&rg.throughput, uint32(throughput))
+
+	return nil
+}
+
 func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
+	atomic.AddUint32(&rg.bandwidthReceived, uint32(packet.Size()))
+
 	select {
 	case <-rg.closed:
 		return io.ErrClosedPipe
