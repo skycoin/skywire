@@ -115,7 +115,7 @@ type Router interface {
 	AcceptRoutes(context.Context) (net.Conn, error)
 	SaveRoutingRules(rules ...routing.Rule) error
 	ReserveKeys(n int) ([]routing.RouteID, error)
-	IntroduceRules(rules routing.EdgeRules) error
+	IntroduceRules(rules routing.EdgeRulesList) error
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
 
@@ -142,7 +142,7 @@ type router struct {
 	rgsNs         map[routing.RouteDescriptor]*noiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
 	rgsRaw        map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rpcSrv        *rpc.Server
-	accept        chan routing.EdgeRules
+	accept        chan routing.EdgeRulesList
 	done          chan struct{}
 	wg            sync.WaitGroup
 	once          sync.Once
@@ -172,7 +172,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		rgsNs:         make(map[routing.RouteDescriptor]*noiseRouteGroup),
 		rgsRaw:        make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
-		accept:        make(chan routing.EdgeRules, acceptSize),
+		accept:        make(chan routing.EdgeRulesList, acceptSize),
 		done:          make(chan struct{}),
 		trustedVisors: trustedVisors,
 	}
@@ -215,7 +215,7 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("route finder: %w", err)
 	}
 
-	req := routing.BidirectionalRoute{
+	req := routing.BidirectionalRouteList{
 		Desc:      forwardDesc,
 		KeepAlive: DefaultRouteKeepAlive,
 		Forward:   forwardPath,
@@ -258,7 +258,7 @@ func (r *router) DialRoutes(
 // - Return the RoutingGroup.
 func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	var (
-		rules routing.EdgeRules
+		rules routing.EdgeRulesList
 		ok    bool
 	)
 
@@ -365,7 +365,7 @@ func (r *router) serveSetup() {
 	}
 }
 
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*noiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(rules routing.EdgeRulesList, nsConf noise.Config) (*noiseRouteGroup, error) {
 	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
@@ -797,7 +797,7 @@ func (r *router) removeNoiseRouteGroup(desc routing.RouteDescriptor) {
 	delete(r.rgsNs, desc)
 }
 
-func (r *router) IntroduceRules(rules routing.EdgeRules) error {
+func (r *router) IntroduceRules(rules routing.EdgeRulesList) error {
 	select {
 	case <-r.done:
 		return io.ErrClosedPipe

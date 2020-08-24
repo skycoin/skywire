@@ -17,21 +17,6 @@
 - `public_trusted_visor` (bool)
 
 
-# V1Routing
-
-- `setup_nodes` ()
-- `route_finder` (string)
-- `route_finder_timeout` (Duration)
-
-
-# V1Transport
-
-- `discovery` (string)
-- `address_resolver` (string)
-- `log_store` (*[V1LogStore](#V1LogStore))
-- `trusted_visors` ()
-
-
 # V1Dmsgpty
 
 - `port` (uint16)
@@ -40,9 +25,12 @@
 - `cli_address` (string)
 
 
-# V1UptimeTracker
+# V1Transport
 
-- `addr` (string)
+- `discovery` (string)
+- `address_resolver` (string)
+- `log_store` (*[V1LogStore](#V1LogStore))
+- `trusted_visors` ()
 
 
 # V1Launcher
@@ -66,6 +54,18 @@
 - `proxy_discovery_addr` (string)
 
 
+# V1Routing
+
+- `setup_nodes` ()
+- `route_finder` (string)
+- `route_finder_timeout` (Duration)
+
+
+# V1UptimeTracker
+
+- `addr` (string)
+
+
 # Common
 
 - `path` (string)
@@ -73,6 +73,12 @@
 - `version` (string)
 - `sk` (SecKey)
 - `pk` (PubKey)
+
+
+# STCPConfig
+
+- `pk_table` ()
+- `local_address` (string)
 
 
 # AppConfig
@@ -106,12 +112,6 @@
 
 - `state` (int32)
 - `sema` (uint32)
-
-
-# STCPConfig
-
-- `pk_table` ()
-- `local_address` (string)
 
 
 # DmsgConfig

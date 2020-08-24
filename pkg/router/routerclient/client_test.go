@@ -37,7 +37,7 @@ func TestClient_AddEdgeRules(t *testing.T) {
 
 	desc := routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort)
 
-	rules := routing.EdgeRules{
+	rules := routing.EdgeRulesList{
 		Desc:    desc,
 		Forward: routing.Rule{0, 0, 0},
 		Reverse: routing.Rule{1, 1, 1},

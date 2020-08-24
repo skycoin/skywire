@@ -29,7 +29,7 @@ func (r Route) String() string {
 	return res
 }
 
-// Errors associated with BidirectionalRoute
+// Errors associated with BidirectionalRoute/BidirectionalRouteList.
 var (
 	ErrBiRouteHasNoForwardHops = errors.New("bidirectional route does not have forward hops")
 	ErrBiRouteHasNoReverseHops = errors.New("bidirectional route does not have reverse hops")
@@ -40,12 +40,75 @@ var (
 type BidirectionalRoute struct {
 	Desc      RouteDescriptor
 	KeepAlive time.Duration
+	Forward   []Hop
+	Reverse   []Hop
+}
+
+// ForwardAndReverse generate forward and reverse routes for bidirectional route.
+func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse Route) {
+	forwardRoute := Route{
+		Desc:      br.Desc,
+		Hops:      br.Forward,
+		KeepAlive: br.KeepAlive,
+	}
+
+	reverseRoute := Route{
+		Desc:      br.Desc.Invert(),
+		Hops:      br.Reverse,
+		KeepAlive: br.KeepAlive,
+	}
+
+	return forwardRoute, reverseRoute
+}
+
+// Check checks whether the bidirectional route is valid.
+func (br *BidirectionalRoute) Check() error {
+	if len(br.Forward) == 0 {
+		return ErrBiRouteHasNoForwardHops
+	}
+
+	if len(br.Reverse) == 0 {
+		return ErrBiRouteHasNoReverseHops
+	}
+
+	if srcPK := br.Desc.SrcPK(); br.Forward[0].From != srcPK || br.Reverse[len(br.Reverse)-1].To != srcPK {
+		return ErrBiRouteHasInvalidDesc
+	}
+
+	if dstPK := br.Desc.DstPK(); br.Reverse[0].From != dstPK || br.Forward[len(br.Forward)-1].To != dstPK {
+		return ErrBiRouteHasInvalidDesc
+	}
+
+	return nil
+}
+
+// String implements fmt.Stringer
+func (br *BidirectionalRoute) String() string {
+	m := map[string]interface{}{
+		"descriptor": br.Desc.String(),
+		"keep_alive": br.KeepAlive.String(),
+		"fwd_hops":   br.Forward,
+		"rev_hops":   br.Reverse,
+	}
+
+	j, err := json.MarshalIndent(m, "", "\t")
+	if err != nil {
+		panic(err) // should never happen
+	}
+
+	return string(j)
+}
+
+// BidirectionalRouteList is a list of Route's with both forward and reverse Paths.
+type BidirectionalRouteList struct {
+	Desc      RouteDescriptor
+	KeepAlive time.Duration
 	Forward   [][]Hop
 	Reverse   [][]Hop
 }
 
 // ForwardAndReverse generate forward and reverse routes for bidirectional route.
-func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse []Route) {
+func (br *BidirectionalRouteList) ForwardAndReverse() (forward, reverse []Route) {
 	forwardRoutes := make([]Route, 0)
 	reverseRoutes := make([]Route, 0)
 
@@ -69,7 +132,7 @@ func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse []Route) {
 }
 
 // Check checks whether the bidirectional route is valid.
-func (br *BidirectionalRoute) Check() error {
+func (br *BidirectionalRouteList) Check() error {
 	if len(br.Forward) == 0 {
 		return ErrBiRouteHasNoForwardHops
 	}
@@ -92,7 +155,7 @@ func (br *BidirectionalRoute) Check() error {
 }
 
 // String implements fmt.Stringer
-func (br *BidirectionalRoute) String() string {
+func (br *BidirectionalRouteList) String() string {
 	m := map[string]interface{}{
 		"descriptor": br.Desc.String(),
 		"keep_alive": br.KeepAlive.String(),
@@ -111,12 +174,37 @@ func (br *BidirectionalRoute) String() string {
 // EdgeRules represents edge forward and reverse rules. Edge rules are forward and consume rules.
 type EdgeRules struct {
 	Desc    RouteDescriptor
+	Forward Rule
+	Reverse Rule
+}
+
+// String implements fmt.Stringer
+func (er EdgeRules) String() string {
+	m := map[string]interface{}{
+		"descriptor": er.Desc.String(),
+		"routing_rules": []string{
+			er.Forward.String(),
+			er.Reverse.String(),
+		},
+	}
+
+	j, err := json.MarshalIndent(m, "", "\t")
+	if err != nil {
+		panic(err)
+	}
+
+	return string(j)
+}
+
+// EdgeRulesList represents a list of edge forward and reverse rules. Edge rules are forward and consume rules.
+type EdgeRulesList struct {
+	Desc    RouteDescriptor
 	Forward []Rule
 	Reverse []Rule
 }
 
 // String implements fmt.Stringer
-func (er EdgeRules) String() string {
+func (er EdgeRulesList) String() string {
 	m := map[string]interface{}{
 		"descriptor":    er.Desc.String(),
 		"forward_rules": er.Forward,
