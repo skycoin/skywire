@@ -164,21 +164,47 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	tp, err := rg.tp()
-	if err != nil {
-		rg.mu.Unlock()
-		return 0, err
-	}
+	tps := make([]*transport.ManagedTransport, len(rg.tps))
+	copy(tps, rg.tps)
 
-	rule, err := rg.rule()
-	if err != nil {
-		rg.mu.Unlock()
-		return 0, err
-	}
-	// we don't need to keep holding mutex from this point on
+	rules := make([]routing.Rule, len(rg.fwd))
+	copy(rules, rg.fwd)
 	rg.mu.Unlock()
 
-	return rg.write(p, tp, rule)
+	if len(tps) != len(rules) {
+		return 0, ErrRuleTransportMismatch
+	}
+
+	if len(tps) == 0 {
+		return 0, ErrNoTransports
+	}
+
+	if len(rules) == 0 {
+		return 0, ErrNoRules
+	}
+
+	rg.logger.Warnf("[!!!] RouteGroup Write, len(tps) = %v, len(fwd) = %v, len(rvs) = %v", len(tps), len(rules), len(rg.rvs))
+
+	for i := range tps {
+		rule := rules[i]
+		tp := tps[i]
+
+		if tp == nil {
+			rg.logger.Infof("Bad transport at index %v, using the next one", i)
+			continue
+		}
+
+		n, err := rg.write(p, tp, rule)
+		if err == nil {
+			rg.logger.Warnf("[!!!] RouteGroup Write, index %v ok", i)
+			return n, nil
+		}
+
+		rg.logger.Infof("Failed to write to transport at index %v: %v", i, err)
+	}
+
+	rg.logger.Infof("Failed to write to any existing transport")
+	return 0, ErrBadTransport
 }
 
 // Close closes a RouteGroup.
@@ -322,34 +348,6 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	}
 
 	return err
-}
-
-// rule fetches first available forward rule.
-// NOTE: not thread-safe.
-func (rg *RouteGroup) rule() (routing.Rule, error) {
-	if len(rg.fwd) == 0 {
-		return nil, ErrNoRules
-	}
-
-	rule := rg.fwd[0]
-
-	return rule, nil
-}
-
-// tp fetches first available transport.
-// NOTE: not thread-safe.
-func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
-	if len(rg.tps) == 0 {
-		return nil, ErrNoTransports
-	}
-
-	tp := rg.tps[0]
-
-	if tp == nil {
-		return nil, ErrBadTransport
-	}
-
-	return tp, nil
 }
 
 func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {

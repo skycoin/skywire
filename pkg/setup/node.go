@@ -103,8 +103,8 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 // The following steps are taken:
 // * Check the validity of bi route input.
 // * Route IDs are reserved from the routers.
-// * Intermediary rules are broadcasted to the intermediary routers.
-// * Edge rules are broadcasted to the responding router.
+// * Intermediary rules are broadcast to the intermediary routers.
+// * Edge rules are broadcast to the responding router.
 // * Edge rules is returned (to the initiating router).
 func CreateRouteGroup(ctx context.Context, dialer snet.Dialer, biRt routing.BidirectionalRoute) (resp routing.EdgeRules, err error) {
 	start := time.Now()
@@ -139,12 +139,14 @@ func CreateRouteGroup(ctx context.Context, dialer snet.Dialer, biRt routing.Bidi
 
 	// Generate routing rules (for edge and intermediary routers) that are to be sent.
 	// Rules are grouped by rule type [FWD, REV, INTER].
-	fwdRules, revRules, interRules, err := GenerateRules(rtIDR, []routing.Route{fwdRt, revRt})
+	routes := append(fwdRt, revRt...)
+	fwdRules, revRules, interRules, err := GenerateRules(rtIDR, routes)
+
 	if err != nil {
 		return routing.EdgeRules{}, err
 	}
-	initEdge := routing.EdgeRules{Desc: revRt.Desc, Forward: fwdRules[srcPK][0], Reverse: revRules[srcPK][0]}
-	respEdge := routing.EdgeRules{Desc: fwdRt.Desc, Forward: fwdRules[dstPK][0], Reverse: revRules[dstPK][0]}
+	initEdge := routing.EdgeRules{Desc: biRt.Desc.Invert(), Forward: fwdRules[srcPK], Reverse: revRules[srcPK]}
+	respEdge := routing.EdgeRules{Desc: biRt.Desc, Forward: fwdRules[dstPK], Reverse: revRules[dstPK]}
 
 	log.Infof("Generated routing rules:\nInitiating edge: %v\nResponding edge: %v\nIntermediaries: %v",
 		initEdge.String(), respEdge.String(), interRules.String())
@@ -175,7 +177,9 @@ func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer snet.Di
 		}
 	}()
 
-	idR, err = NewIDReserver(ctx, dialer, [][]routing.Hop{route.Forward, route.Reverse})
+	routes := append(route.Forward, route.Reverse...)
+
+	idR, err = NewIDReserver(ctx, dialer, routes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate route id reserver: %w", err)
 	}

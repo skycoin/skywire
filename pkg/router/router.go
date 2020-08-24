@@ -228,7 +228,8 @@ func (r *router) DialRoutes(
 		return nil, err
 	}
 
-	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+	rulesList := append(rules.Forward, rules.Reverse...)
+	if err := r.SaveRoutingRules(rulesList...); err != nil {
 		r.logger.WithError(err).Error("Error saving routing rules")
 		return nil, err
 	}
@@ -278,7 +279,8 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		return nil, err
 	}
 
-	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+	rulesList := append(rules.Forward, rules.Reverse...)
+	if err := r.SaveRoutingRules(rulesList...); err != nil {
 		return nil, fmt.Errorf("SaveRoutingRules: %w", err)
 	}
 
@@ -385,7 +387,11 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 	r.logger.Infof("Creating new route group rule with desc: %s", &rules.Desc)
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc)
-	rg.appendRules(rules.Forward, rules.Reverse, r.tm.Transport(rules.Forward.NextTransportID()))
+
+	for i := range rules.Forward {
+		rg.appendRules(rules.Forward[i], rules.Reverse[i], r.tm.Transport(rules.Forward[i].NextTransportID()))
+	}
+
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
@@ -689,7 +695,7 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 	}
 }
 
-func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev [][]routing.Hop, err error) {
 	// TODO(nkryuchkov): use opts
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
@@ -720,7 +726,7 @@ fetchRoutesAgain:
 
 	r.logger.Infof("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
 
-	return paths[forward][0], paths[backward][0], nil
+	return paths[forward], paths[backward], nil
 }
 
 // SetupIsTrusted checks if setup node is trusted.

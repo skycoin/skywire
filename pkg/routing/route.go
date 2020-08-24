@@ -40,25 +40,32 @@ var (
 type BidirectionalRoute struct {
 	Desc      RouteDescriptor
 	KeepAlive time.Duration
-	Forward   []Hop
-	Reverse   []Hop
+	Forward   [][]Hop
+	Reverse   [][]Hop
 }
 
 // ForwardAndReverse generate forward and reverse routes for bidirectional route.
-func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse Route) {
-	forwardRoute := Route{
-		Desc:      br.Desc,
-		Hops:      br.Forward,
-		KeepAlive: br.KeepAlive,
+func (br *BidirectionalRoute) ForwardAndReverse() (forward, reverse []Route) {
+	forwardRoutes := make([]Route, 0)
+	reverseRoutes := make([]Route, 0)
+
+	for _, route := range br.Forward {
+		forwardRoutes = append(forwardRoutes, Route{
+			Desc:      br.Desc,
+			Hops:      route,
+			KeepAlive: br.KeepAlive,
+		})
 	}
 
-	reverseRoute := Route{
-		Desc:      br.Desc.Invert(),
-		Hops:      br.Reverse,
-		KeepAlive: br.KeepAlive,
+	for _, route := range br.Reverse {
+		forwardRoutes = append(forwardRoutes, Route{
+			Desc:      br.Desc.Invert(),
+			Hops:      route,
+			KeepAlive: br.KeepAlive,
+		})
 	}
 
-	return forwardRoute, reverseRoute
+	return forwardRoutes, reverseRoutes
 }
 
 // Check checks whether the bidirectional route is valid.
@@ -71,12 +78,14 @@ func (br *BidirectionalRoute) Check() error {
 		return ErrBiRouteHasNoReverseHops
 	}
 
-	if srcPK := br.Desc.SrcPK(); br.Forward[0].From != srcPK || br.Reverse[len(br.Reverse)-1].To != srcPK {
-		return ErrBiRouteHasInvalidDesc
-	}
+	for i := range br.Forward {
+		if srcPK := br.Desc.SrcPK(); br.Forward[i][0].From != srcPK || br.Reverse[len(br.Reverse)-i-1][len(br.Reverse[i])-1].To != srcPK {
+			return ErrBiRouteHasInvalidDesc
+		}
 
-	if dstPK := br.Desc.DstPK(); br.Reverse[0].From != dstPK || br.Forward[len(br.Forward)-1].To != dstPK {
-		return ErrBiRouteHasInvalidDesc
+		if dstPK := br.Desc.DstPK(); br.Reverse[i][0].From != dstPK || br.Forward[len(br.Forward)-i-1][len(br.Forward[i])-1].To != dstPK {
+			return ErrBiRouteHasInvalidDesc
+		}
 	}
 
 	return nil
@@ -102,18 +111,16 @@ func (br *BidirectionalRoute) String() string {
 // EdgeRules represents edge forward and reverse rules. Edge rules are forward and consume rules.
 type EdgeRules struct {
 	Desc    RouteDescriptor
-	Forward Rule
-	Reverse Rule
+	Forward []Rule
+	Reverse []Rule
 }
 
 // String implements fmt.Stringer
 func (er EdgeRules) String() string {
 	m := map[string]interface{}{
-		"descriptor": er.Desc.String(),
-		"routing_rules": []string{
-			er.Forward.String(),
-			er.Reverse.String(),
-		},
+		"descriptor":    er.Desc.String(),
+		"forward_rules": er.Forward,
+		"reverse_rules": er.Reverse,
 	}
 
 	j, err := json.MarshalIndent(m, "", "\t")
