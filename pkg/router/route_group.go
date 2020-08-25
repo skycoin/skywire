@@ -582,8 +582,11 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	rg.logger.Infof("NEW SENT AT MS: %v", sentAtMs)
 	sentAt := time.Unix(int64(sentAtMs), int64(ms)*int64(time.Millisecond))
 
+	now := time.Now()
 	rg.logger.Infof("SENT AT: %s", sentAt)
-	rg.logger.Infof("NOW IS: %s", time.Now())
+	rg.logger.Infof("NOW IS: %s", now)
+
+	latency := now.Sub(sentAt).Milliseconds()
 
 	atomic.StoreUint32(&rg.latency, uint32(time.Since(sentAt).Milliseconds()))
 	atomic.StoreUint32(&rg.throughput, uint32(throughput))
