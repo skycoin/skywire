@@ -261,6 +261,7 @@ func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
 }
 
+// ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
 	IsAlive       bool          `json:"is_alive"`
 	Latency       time.Duration `json:"latency"`
@@ -269,6 +270,7 @@ type ConnectionSummary struct {
 	Error         string        `json:"error"`
 }
 
+// ConnectionsSummary returns all of the proc's connections stats.
 func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	p.rpcGWMu.Lock()
 	rpcGW := p.rpcGW
