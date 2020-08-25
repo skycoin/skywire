@@ -245,6 +245,8 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
 
+	nrg.rg.startOffServiceLoops()
+
 	r.logger.Infof("Created new routes to %s on port %d", rPK, lPort)
 
 	return nrg, nil
@@ -293,6 +295,8 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
+
+	nrg.rg.startOffServiceLoops()
 
 	return nrg, nil
 }
@@ -434,6 +438,8 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.handleClosePacket(ctx, packet)
 	case routing.KeepAlivePacket:
 		return r.handleKeepAlivePacket(ctx, packet)
+	case routing.NetworkProbePacket:
+		return r.handleNetworkProbePacket(ctx, packet)
 	default:
 		return ErrUnknownPacketType
 	}
