@@ -282,9 +282,13 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	rpcGW.cm.DoRange(func(id uint16, v interface{}) bool {
 		if v == nil {
 			summaries = append(summaries, ConnectionSummary{})
+			return true
 		}
 
-		conn := v.(net.Conn)
+		conn, ok := v.(net.Conn)
+		if !ok {
+			summaries = append(summaries, ConnectionSummary{})
+		}
 
 		wrappedConn := conn.(*appnet.WrappedConn)
 
