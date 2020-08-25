@@ -74,27 +74,6 @@ func NewRPCGateway(log *logging.Logger) *RPCIngressGateway {
 	}
 }
 
-// ConnIsAlive checks if connection is alive. Only works for connections created by
-// `appnet.SkywireNetworker`.
-func (r *RPCIngressGateway) ConnIsAlive(connID *uint16, isAlive *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "ConnIsAlive", connID)(isAlive, &err)
-
-	conn, err := r.getConn(*connID)
-	if err != nil {
-		return err
-	}
-
-	wrappedConn := conn.(*appnet.WrappedConn)
-
-	skywireConn, isSkywireConn := wrappedConn.Conn.(*appnet.SkywireConn)
-	if !isSkywireConn {
-		return errors.New("no way to get such info from conn")
-	}
-
-	*isAlive = skywireConn.IsAlive()
-	return nil
-}
-
 // DialResp contains response parameters for `Dial`.
 type DialResp struct {
 	ConnID    uint16
