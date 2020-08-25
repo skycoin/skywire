@@ -574,8 +574,12 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 	sentAtMs := binary.BigEndian.Uint64(payload)
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
+	rg.logger.Infof("INITIAL SENT AT MS: %v", sentAtMs)
+
 	ms := sentAtMs % 1000
+	rg.logger.Infof("MS: %v", ms)
 	sentAtMs = sentAtMs / 1000
+	rg.logger.Infof("NEW SENT AT MS: %v", sentAtMs)
 	sentAt := time.Unix(int64(sentAtMs), int64(ms)*1000)
 
 	atomic.StoreUint32(&rg.latency, uint32(time.Since(sentAt).Milliseconds()))
