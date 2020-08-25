@@ -419,13 +419,13 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), time.Now().UnixNano()/int64(time.Millisecond), int64(throughput))
 
-	rg.logger.Infoln("SENDING NETWORK PROBE")
+	/*rg.logger.Infoln("SENDING NETWORK PROBE")
 	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
 		rg.logger.Errorf("ERROR SENDING NETWORK PROBE: %v", err)
 		return err
 	}
 
-	rg.logger.Infoln("SENT NETWORK PROBE")
+	rg.logger.Infoln("SENT NETWORK PROBE")*/
 
 	return nil
 }
