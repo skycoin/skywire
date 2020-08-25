@@ -124,7 +124,7 @@ func MakeNetworkProbePacket(id RouteID, timestamp, throughput int64) Packet {
 
 	packet[PacketTypeOffset] = byte(NetworkProbePacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(17))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
 
