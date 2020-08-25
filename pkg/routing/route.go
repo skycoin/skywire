@@ -142,11 +142,11 @@ func (br *BidirectionalRouteList) Check() error {
 	}
 
 	for i := range br.Forward {
-		if srcPK := br.Desc.SrcPK(); br.Forward[i][0].From != srcPK || br.Reverse[len(br.Reverse)-i-1][len(br.Reverse[i])-1].To != srcPK {
+		if srcPK := br.Desc.SrcPK(); br.Forward[i][0].From != srcPK || br.Reverse[i][len(br.Reverse[i])-1].To != srcPK {
 			return ErrBiRouteHasInvalidDesc
 		}
 
-		if dstPK := br.Desc.DstPK(); br.Reverse[i][0].From != dstPK || br.Forward[len(br.Forward)-i-1][len(br.Forward[i])-1].To != dstPK {
+		if dstPK := br.Desc.DstPK(); br.Reverse[i][0].From != dstPK || br.Forward[i][len(br.Forward[i])-1].To != dstPK {
 			return ErrBiRouteHasInvalidDesc
 		}
 	}
