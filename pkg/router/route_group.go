@@ -136,9 +136,6 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		bandwidthReceivedRecStart: time.Now(),
 	}
 
-	go rg.keepAliveLoop(cfg.KeepAliveInterval)
-	go rg.networkProbeLoop(cfg.NetworkProbeInterval)
-
 	return rg
 }
 
@@ -388,18 +385,24 @@ func (rg *RouteGroup) tp() (*transport.ManagedTransport, error) {
 	return tp, nil
 }
 
+func (rg *RouteGroup) startOffServiceLoops() {
+	go rg.keepAliveLoop(rg.cfg.KeepAliveInterval)
+	go rg.networkProbeLoop(rg.cfg.NetworkProbeInterval)
+}
+
 // TODO (darkrengarius): get rid of copy-paste
 func (rg *RouteGroup) sendNetworkProbe() error {
 	rg.mu.Lock()
-	defer rg.mu.Unlock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		rg.mu.Unlock()
 		// if no transports, no rules, then no latency probe
 		return nil
 	}
 
 	tp := rg.tps[0]
 	rule := rg.fwd[0]
+	rg.mu.Unlock()
 
 	if tp == nil {
 		return nil
@@ -417,6 +420,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), time.Now().UnixNano()/int64(time.Millisecond), int64(throughput))
 
 	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+		rg.logger.Errorf("ERROR SENDING NETWORK PROBE: %v", err)
 		return err
 	}
 
@@ -560,6 +564,7 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
+	rg.logger.Infoln("GOT NETWORK PROBE PACKET")
 	payload := packet.Payload()
 
 	sentAtMs := binary.BigEndian.Uint64(payload)
