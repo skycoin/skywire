@@ -12,8 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app/appserver"
-
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
@@ -21,6 +19,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
