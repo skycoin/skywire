@@ -414,6 +414,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	rg.bandwidthReceivedRecStartMu.Unlock()
 
 	bandwidth := atomic.LoadUint32(&rg.bandwidthReceived)
+	atomic.StoreUint32(&rg.bandwidthReceived, 0)
 
 	throughput := float64(bandwidth) / timePassed.Seconds()
 
