@@ -193,7 +193,7 @@ func (rc *rpcClient) SetAppPK(appName string, pk cipher.PubKey) error {
 	}, &struct{}{})
 }
 
-// LogsSince calls LogsSince
+// LogsSince calls LogsSince.
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)
 
@@ -208,6 +208,7 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	return res, nil
 }
 
+// GetAppConnectionsSummary get connections stats for the app.
 func (rc *rpcClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
 	var summary []appserver.ConnectionSummary
 
@@ -621,11 +622,12 @@ func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	})
 }
 
-// LogsSince implements RPCClient. Manually set (*mockRPPClient).logS before calling this function
+// LogsSince implements RPCClient. Manually set (*mockRPPClient).logS before calling this function.
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.logS.LogsSince(timestamp)
 }
 
+// GetAppConnectionsSummary implements RPCClient.
 func (mc *mockRPCClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
 	return nil, nil
 }
