@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/netutil"
@@ -208,49 +207,4 @@ func (l *skywireListener) Addr() net.Addr {
 // via `Accept`.
 func (l *skywireListener) putConn(conn net.Conn) {
 	l.connsCh <- conn
-}
-
-// skywireConn is a connection wrapper for skynet.
-type SkywireConn struct {
-	net.Conn
-	nrg        *router.NoiseRouteGroup
-	freePort   func()
-	freePortMx sync.RWMutex
-	once       sync.Once
-}
-
-// IsAlive checks whether connection is alive.
-func (c *SkywireConn) IsAlive() bool {
-	return c.nrg.IsAlive()
-}
-
-func (c *SkywireConn) Latency() time.Duration {
-	return c.nrg.Latency()
-}
-
-func (c *SkywireConn) Throughput() uint32 {
-	return c.nrg.Throughput()
-}
-
-func (c *SkywireConn) BandwidthSent() uint32 {
-	return c.nrg.BandwidthSent()
-}
-
-// Close closes connection.
-func (c *SkywireConn) Close() error {
-	var err error
-
-	c.once.Do(func() {
-		defer func() {
-			c.freePortMx.RLock()
-			defer c.freePortMx.RUnlock()
-			if c.freePort != nil {
-				c.freePort()
-			}
-		}()
-
-		err = c.Conn.Close()
-	})
-
-	return err
 }
