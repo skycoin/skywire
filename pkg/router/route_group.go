@@ -251,7 +251,7 @@ func (rg *RouteGroup) IsAlive() bool {
 func (rg *RouteGroup) Latency() time.Duration {
 	latencyMs := atomic.LoadUint32(&rg.latency)
 
-	return time.Duration(latencyMs) * time.Millisecond
+	return time.Duration(latencyMs)
 }
 
 func (rg *RouteGroup) Throughput() uint32 {
