@@ -560,8 +560,8 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
 		return rg.handleDataPacket(packet)
-		/*case routing.NetworkProbePacket:
-		return rg.handleNetworkProbePacket(packet)*/
+	case routing.NetworkProbePacket:
+		return rg.handleNetworkProbePacket(packet)
 	}
 
 	return nil
