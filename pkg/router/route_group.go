@@ -433,9 +433,9 @@ func (rg *RouteGroup) networkProbeLoop(interval time.Duration) {
 			rg.logger.Infoln("Remote got closed, stopping network probe loop")
 			return
 		case <-ticker.C:
-			/*if err := rg.sendNetworkProbe(); err != nil {
+			if err := rg.sendNetworkProbe(); err != nil {
 				rg.logger.Warnf("Failed to send network probe: %v", err)
-			}*/
+			}
 		}
 	}
 }
