@@ -245,14 +245,17 @@ func (rg *RouteGroup) IsAlive() bool {
 	return !rg.isClosed() && !rg.isRemoteClosed()
 }
 
+// Latency returns latency till remote (ms).
 func (rg *RouteGroup) Latency() time.Duration {
 	return rg.networkStats.Latency()
 }
 
+// Throughput returns throughput till remote (bytes/s).
 func (rg *RouteGroup) Throughput() uint32 {
 	return rg.networkStats.LocalThroughput()
 }
 
+// BandwidthSent returns amount of bandwidth sent (bytes).
 func (rg *RouteGroup) BandwidthSent() uint32 {
 	return rg.networkStats.BandwidthSent()
 }

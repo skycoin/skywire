@@ -119,6 +119,7 @@ func MakeKeepAlivePacket(id RouteID) Packet {
 	return packet
 }
 
+// MakeNetworkProbePacket constructs a new NetworkProbePacket.
 func MakeNetworkProbePacket(id RouteID, timestamp, throughput int64) Packet {
 	packet := make([]byte, PacketHeaderSize+16)
 
