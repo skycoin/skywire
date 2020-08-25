@@ -280,6 +280,10 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 
 	var summaries []ConnectionSummary
 	rpcGW.cm.DoRange(func(id uint16, v interface{}) bool {
+		if v == nil {
+			summaries = append(summaries, ConnectionSummary{})
+		}
+
 		conn := v.(net.Conn)
 
 		wrappedConn := conn.(*appnet.WrappedConn)
