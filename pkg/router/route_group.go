@@ -406,17 +406,13 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 	}
 
 	throughput := rg.networkStats.RemoteThroughput()
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
 
-	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), time.Now().UnixNano()/int64(time.Millisecond), throughput)
-	_ = packet
-	rg.logger.Infof("NETWORK PROBE: %v", packet)
-	rg.logger.Infoln("SENDING NETWORK PROBE")
+	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
+
 	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-		rg.logger.Errorf("ERROR SENDING NETWORK PROBE: %v", err)
 		return err
 	}
-
-	rg.logger.Infoln("SENT NETWORK PROBE")
 
 	return nil
 }
@@ -551,26 +547,13 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
-	rg.logger.Infoln("GOT NETWORK PROBE PACKET")
 	payload := packet.Payload()
 
 	sentAtMs := binary.BigEndian.Uint64(payload)
 	throughput := binary.BigEndian.Uint64(payload[8:])
 
-	rg.logger.Infof("INITIAL SENT AT MS: %v", sentAtMs)
-
 	ms := sentAtMs % 1000
-	rg.logger.Infof("MS: %v", ms)
-	sentAtMs = sentAtMs / 1000
-	rg.logger.Infof("NEW SENT AT MS: %v", sentAtMs)
-	sentAt := time.Unix(int64(sentAtMs), int64(ms)*int64(time.Millisecond))
-
-	now := time.Now()
-	rg.logger.Infof("SENT AT: %s", sentAt)
-	rg.logger.Infof("NOW IS: %s", now)
-
-	latency := now.Sub(sentAt).Milliseconds()
-	rg.logger.Infof("LATENCY: %v", latency)
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
 
 	rg.networkStats.SetLatency(time.Since(sentAt))
 	rg.networkStats.SetLocalThroughput(uint32(throughput))
