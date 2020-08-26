@@ -34,8 +34,10 @@ const (
 	DefaultRulesGCInterval = 5 * time.Second
 	acceptSize             = 1024
 
-	minHops = 0
-	maxHops = 50
+	minHops       = 0
+	maxHops       = 50
+	retryDuration = 10 * time.Second
+	retryInterval = 500 * time.Millisecond
 )
 
 var (
@@ -697,7 +699,7 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 
 	r.logger.Infof("Requesting new routes from %s to %s", src, dst)
 
-	timer := time.NewTimer(time.Second * 10)
+	timer := time.NewTimer(retryDuration)
 	defer timer.Stop()
 
 	forward := [2]cipher.PubKey{src, dst}
@@ -718,6 +720,7 @@ fetchRoutesAgain:
 		case <-timer.C:
 			return nil, nil, err
 		default:
+			time.Sleep(retryInterval)
 			goto fetchRoutesAgain
 		}
 	}
