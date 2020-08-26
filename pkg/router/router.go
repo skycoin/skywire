@@ -709,6 +709,10 @@ fetchRoutesAgain:
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
 		&rfclient.RouteOptions{MinHops: minHops, MaxHops: maxHops})
 
+	if err == rfclient.ErrTransportNotFound {
+		return nil, nil, err
+	}
+
 	if err != nil {
 		select {
 		case <-timer.C:
