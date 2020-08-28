@@ -7,7 +7,7 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 const (

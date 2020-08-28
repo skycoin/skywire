@@ -5,11 +5,11 @@ package visor
 import (
 	"net/http"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/dmsgpty"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/dmsgpty"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // dmsgPtyUI servers as a wrapper for `*dmsgpty.UI`. this way source file with

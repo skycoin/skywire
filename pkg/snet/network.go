@@ -10,17 +10,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
-	"github.com/SkycoinProject/dmsg/disc"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appdisc"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appevent"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/arclient"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/pktable"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
+	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp"
+	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -377,7 +377,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 
 		conn, err := client.Dial(ctx, pk, port)
 		if err != nil {
-			return nil, fmt.Errorf("sudph client: %w", err)
+			return nil, fmt.Errorf("dial: %w", err)
 		}
 
 		log.Infof("Dialed %v, conn local address %q, remote address %q", network, conn.LocalAddr(), conn.RemoteAddr())
@@ -403,7 +403,7 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 
 		lis, err := client.Listen(port)
 		if err != nil {
-			return nil, fmt.Errorf("sudph client: %w", err)
+			return nil, fmt.Errorf("listen: %w", err)
 		}
 
 		return makeListener(lis, network), nil

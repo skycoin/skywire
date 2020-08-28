@@ -27,11 +27,7 @@
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>
-      {{ node.build_info.version }}
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-info.app-protocol-version' | translate }}</span>
-      {{ node.app_protocol_version }}
+      {{ node.build_info.version ? node.build_info.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
@@ -52,48 +48,75 @@
     <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.status' | translate }}</span>
-      <i *ngIf="node.health.status && node.health.status === 200" class="dot-green"></i>
-      <i *ngIf="!node.health.status || node.health.status !== 200" class="dot-red"></i>
-      {{ node.health.status ? node.health.status : ('node.details.node-health.element-offline' | translate) }}
+      <ng-container *ngIf="node.health.status && node.health.status === 200">
+        <i class="dot-green"></i>
+        {{ 'common.ok' | translate }}
+      </ng-container>
+      <ng-container *ngIf="!node.health.status || node.health.status !== 200">
+        <i class="dot-red"></i>
+        {{ node.health.status ? node.health.status : ('node.details.node-health.element-offline' | translate) }}
+      </ng-container>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.transport-discovery' | translate }}</span>
-      <i *ngIf="node.health.transport_discovery && node.health.transport_discovery === 200" class="dot-green"></i>
-      <i *ngIf="!node.health.transport_discovery || node.health.transport_discovery !== 200" class="dot-red"></i>
-      {{ node.health.transport_discovery ? node.health.transport_discovery : ('node.details.node-health.element-offline' | translate) }}
+      <ng-container *ngIf="node.health.transport_discovery && node.health.transport_discovery === 200">
+        <i class="dot-green"></i>
+        {{ 'common.ok' | translate }}
+      </ng-container>
+      <ng-container *ngIf="!node.health.transport_discovery || node.health.transport_discovery !== 200">
+        <i class="dot-red"></i>
+        {{ node.health.transport_discovery ? node.health.transport_discovery : ('node.details.node-health.element-offline' | translate) }}
+      </ng-container>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.route-finder' | translate }}</span>
-      <i *ngIf="node.health.route_finder && node.health.route_finder === 200" class="dot-green"></i>
-      <i *ngIf="!node.health.route_finder || node.health.route_finder !== 200" class="dot-red"></i>
-      {{ node.health.route_finder ? node.health.route_finder : ('node.details.node-health.element-offline' | translate) }}
+      <ng-container *ngIf="node.health.route_finder && node.health.route_finder === 200">
+        <i class="dot-green"></i>
+        {{ 'common.ok' | translate }}
+      </ng-container>
+      <ng-container *ngIf="!node.health.route_finder || node.health.route_finder !== 200">
+        <i class="dot-red"></i>
+        {{ node.health.route_finder ? node.health.route_finder : ('node.details.node-health.element-offline' | translate) }}
+      </ng-container>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.setup-node' | translate }}</span>
-      <i *ngIf="node.health.setup_node && node.health.setup_node === 200" class="dot-green"></i>
-      <i *ngIf="!node.health.setup_node || node.health.setup_node !== 200" class="dot-red"></i>
-      {{ node.health.setup_node ? node.health.setup_node : ('node.details.node-health.element-offline' | translate) }}
+      <ng-container *ngIf="node.health.setup_node && node.health.setup_node === 200">
+        <i class="dot-green"></i>
+        {{ 'common.ok' | translate }}
+      </ng-container>
+      <ng-container *ngIf="!node.health.setup_node || node.health.setup_node !== 200">
+        <i class="dot-red"></i>
+        {{ node.health.setup_node ? node.health.setup_node : ('node.details.node-health.element-offline' | translate) }}
+      </ng-container>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
-      <i *ngIf="node.health.uptime_tracker && node.health.uptime_tracker === 200" class="dot-green"></i>
-      <i *ngIf="!node.health.uptime_tracker || node.health.uptime_tracker !== 200" class="dot-red"></i>
-      {{ node.health.uptime_tracker ? node.health.uptime_tracker : ('node.details.node-health.element-offline' | translate) }}
+      <ng-container *ngIf="node.health.uptime_tracker && node.health.uptime_tracker === 200">
+        <i class="dot-green"></i>
+        {{ 'common.ok' | translate }}
+      </ng-container>
+      <ng-container *ngIf="!node.health.uptime_tracker || node.health.uptime_tracker !== 200">
+        <i class="dot-red"></i>
+        {{ node.health.uptime_tracker ? node.health.uptime_tracker : ('node.details.node-health.element-offline' | translate) }}
+      </ng-container>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-health.address-resolver' | translate }}</span>
-      <i *ngIf="node.health.address_resolver && node.health.address_resolver === 200" class="dot-green"></i>
-      <i *ngIf="!node.health.address_resolver || node.health.address_resolver !== 200" class="dot-red"></i>
-      {{ node.health.address_resolver ? node.health.address_resolver : ('node.details.node-health.element-offline' | translate) }}
+      <ng-container *ngIf="node.health.address_resolver && node.health.address_resolver === 200">
+        <i class="dot-green"></i>
+        {{ 'common.ok' | translate }}
+      </ng-container>
+      <ng-container *ngIf="!node.health.address_resolver || node.health.address_resolver !== 200">
+        <i class="dot-red"></i>
+        {{ node.health.address_resolver ? node.health.address_resolver : ('node.details.node-health.element-offline' | translate) }}
+      </ng-container>
     </span>
   </div>
   <div class="separator"></div>
   <!-- Traffic info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
-    <app-charts
-      class="d-flex flex-column justify-content-end mt-3"
-      [transports]="node.transports"
-    ></app-charts>
+    <app-charts class="d-flex flex-column justify-content-end mt-3"></app-charts>
   </div>
 </div>

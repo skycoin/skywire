@@ -5,11 +5,11 @@ import (
 	"net/rpc"
 	"time"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/netutil"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/netutil"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 func isDone(ctx context.Context) bool {

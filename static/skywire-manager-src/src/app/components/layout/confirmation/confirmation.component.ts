@@ -63,8 +63,8 @@ enum ConfirmationStates {
   styleUrls: ['./confirmation.component.scss'],
 })
 export class ConfirmationComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('cancelButton', { static: false }) cancelButton: ButtonComponent;
-  @ViewChild('confirmButton', { static: false }) confirmButton: ButtonComponent;
+  @ViewChild('cancelButton') cancelButton: ButtonComponent;
+  @ViewChild('confirmButton') confirmButton: ButtonComponent;
 
   disableDismiss = false;
   state = ConfirmationStates.Asking;

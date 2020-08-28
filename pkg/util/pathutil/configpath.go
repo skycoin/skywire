@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 var log = logging.MustGetLogger("pathutil")
@@ -81,7 +81,7 @@ func VisorDefaults() ConfigPaths {
 	}
 
 	paths[HomeLoc] = filepath.Join(HomeDir(), ".skycoin/skywire/skywire-config.json")
-	paths[LocalLoc] = "/usr/local/SkycoinProject/skywire-mainnet/skywire-config.json"
+	paths[LocalLoc] = "/usr/local/skycoin/skywire/skywire-config.json"
 
 	return paths
 }
