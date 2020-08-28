@@ -226,11 +226,11 @@ func (c *client) acceptConn() error {
 
 	wrappedConn, err := tpconn.NewConn(connConfig)
 	if err != nil {
-		return fmt.Errorf("newConn: %w", err)
+		return err
 	}
 
 	if err := lis.Introduce(wrappedConn); err != nil {
-		return fmt.Errorf("introduce: %w", err)
+		return err
 	}
 
 	return nil
@@ -420,7 +420,12 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 		}
 	}
 
-	return c.dial(visorData.RemoteAddr)
+	addr := visorData.RemoteAddr
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		addr = net.JoinHostPort(addr, visorData.Port)
+	}
+
+	return c.dial(addr)
 }
 
 // Listen creates a new listener for sudp.
