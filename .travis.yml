@@ -11,7 +11,7 @@ matrix:
     - os: osx
       # Do not start osx build for PR
       if: type != pull_request
-      osx_image: xcode8
+      osx_image: xcode8.3
 
 before_install:
   - nvm install 10.16

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
 // Updater updates the associated app discovery
