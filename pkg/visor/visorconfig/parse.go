@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -119,6 +121,21 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 			Port:      oa.Port,
 		}
 	}
+
+	vpnApps := []launcher.AppConfig{
+		{
+			Name:      skyenv.VPNServerName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNServerPort),
+		},
+		{
+			Name:      skyenv.VPNClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNClientPort),
+		},
+	}
+
+	conf.Launcher.Apps = append(conf.Launcher.Apps, vpnApps...)
 
 	conf.Launcher.BinPath = old.AppsPath
 	conf.Launcher.LocalPath = old.LocalPath

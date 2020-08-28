@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/httputil"
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
+	"github.com/skycoin/dmsg/httputil"
+	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
 const (

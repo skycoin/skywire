@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SkycoinProject/skycoin/src/util/logging"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Broadcaster combines multiple RPCClients (which connects to the RPCGateway of the apps).

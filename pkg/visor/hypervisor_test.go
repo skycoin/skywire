@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/usermanager"
 )
 
 // nolint: gosec

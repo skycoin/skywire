@@ -5,8 +5,8 @@ package visor
 import (
 	"net/http"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // dmsgPtyUI is a dummy to exclude `*dmsgpty.UI` source file from building for Windows.

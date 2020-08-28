@@ -1,12 +1,9 @@
-module github.com/SkycoinProject/skywire-mainnet
+module github.com/skycoin/skywire
 
 go 1.14
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
-	github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab
-	github.com/SkycoinProject/skycoin v0.27.0
-	github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/go-chi/chi v4.1.2+incompatible
@@ -20,11 +17,13 @@ require (
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.7.1
-	github.com/prometheus/common v0.10.0 // indirect
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/sirupsen/logrus v1.6.0
+	github.com/skycoin/dmsg v0.0.0-20200807121624-24253f9d3721
+	github.com/skycoin/skycoin v0.26.0
+	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.0.0
 	github.com/stretchr/testify v1.6.1
@@ -36,7 +35,8 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
 	golang.zx2c4.com/wireguard v0.0.20200320
+	nhooyr.io/websocket v1.8.2
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-// replace github.com/SkycoinProject/dmsg => ../dmsg
+//replace github.com/skycoin/dmsg => ../dmsg

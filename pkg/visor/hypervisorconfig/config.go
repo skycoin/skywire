@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 //go:generate readmegen -n Config -o ./README.md ./config.go
@@ -88,7 +88,7 @@ func GenerateHomeConfig(testenv bool) Config {
 // GenerateLocalConfig generates a config with default values and uses db from shared folder.
 func GenerateLocalConfig(testenv bool) Config {
 	c := MakeConfig(testenv)
-	c.DBPath = "/usr/local/SkycoinProject/hypervisor/users.db"
+	c.DBPath = "/usr/local/skycoin/hypervisor/users.db"
 	return c
 }
 

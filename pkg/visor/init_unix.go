@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/SkycoinProject/dmsg/dmsgpty"
+	"github.com/skycoin/dmsg/dmsgpty"
 )
 
 const ownerRWX = 0700

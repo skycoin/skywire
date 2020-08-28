@@ -3,11 +3,11 @@ package visorconfig
 import (
 	"sync"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/snet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
 //go:generate readmegen -n V1 -o ./README.md ./v1.go
@@ -123,8 +123,6 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 		VisorPK:    v1.PK,
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
-		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
 	})
 	return v1.flush(v1)
 }
@@ -164,8 +162,7 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value st
 		VisorPK:    v1.PK,
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
-		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
 	})
+
 	return v1.flush(v1)
 }
