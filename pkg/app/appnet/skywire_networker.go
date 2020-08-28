@@ -78,8 +78,7 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 	const bufSize = 1000000
 
 	lis := &skywireListener{
-		addr: addr,
-		// TODO: pass buf size
+		addr:     addr,
 		connsCh:  make(chan net.Conn, bufSize),
 		freePort: nil,
 	}
