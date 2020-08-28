@@ -16,6 +16,7 @@
     - [Windows](#windows)
   - [Apps](#Apps)
     - [App Programming API](#app-programming-api)
+    - [VPN Access Point](#vpn-access-point)
   - [Transports](#Transports)
   - [Creating a GitHub release](#creating-a-github-release)
     - [How to create a GitHub release](#how-to-create-a-github-release)
@@ -235,6 +236,35 @@ Basically, apps on different visors communicate with each other through Skywire 
 #### Visor RPC API
 
 Full info on each call input and output may be found in the [corresponding file](./pkg/app/appserver/rpc_gateway.go). Here will be just a list of minor details. If you're coming from the language different than Go, you'll have to communicate with the RPC gateway directly. 2 important concepts are listener ID and connection ID. Server gives these in response for some of the app's calls. Each time connection is being created (as a result of `Dial` and `Accept` calls for example) server will return connection ID to the app. In order to communicate over this connection, its ID must be passed with the needed RPC call input. This is also true for the listener ID. Each time listener is created (result of `Listen` call), listener ID is being returned to the client. This ID may be used to `Accept` connections for example. For developers working with go, there is a client available which may be constructed by `app.NewClient` call. For details you may consult any of Skywire standard apps and [client code](./pkg/app/client.go). Each connection obtained from this client should be treated as a connection between the current app instance and the remote app.
+
+### VPN Access Point
+
+In order to use Skywire VPN as a VPN access point (AP) for a set of devices you will need a machine with 2 separate network interfaces. One should be used to access the Internet and the other one should be used for other devices to connect to the AP machine via local network. Let'call this 2nd one `lan0` and say that it has IP `172.16.0.1`.
+
+#### AP Machine Setup
+
+1. Run Skywire visor with the VPN client and enable VPN client.
+2. Find the TUN interface created by VPN client. May be done with `ifconfig` or something similair. Usually it's called `tun0` on Linux machines but may differ. For simplicity of this example let's say it's `tun0`.
+3. Run the following:
+
+```bash
+$ syctl -w net.ipv4.ip_forward=1
+$ iptables -A FORWARD -i lan0 -o tun0 -j ACCEPT
+$ iptables -A FORWARD -i tun0 -o lan0 -m state --state ESTABLISHED,RELATED -j ACCEPT
+$ iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE
+``` 
+
+All commands should be executed with `sudo` or as `root`. This way we simply redirect all the traffic from `lan0` to `tun0` and make `tun0` serve in NAT mode.. This traffic will be handled by the VPN client.
+
+#### Local Machine Setup
+
+This one is pretty simple. Let's say that local machine has interface `lan0` which is in the same network as `lan0` from AP machine. Then we should just change the default gateway to be IP of `lan0` of AP machine. Like this:
+
+```bash
+$ ip r add default via 172.16.0.1
+```
+
+Again, this command should be done with `sudo` or as `root`.
 
 ### Transports
 
