@@ -10,19 +10,21 @@
       "prefix": "app",
       "schematics": {
         "@schematics/angular:component": {
-          "styleext": "scss"
+          "style": "scss"
         }
       },
       "architect": {
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
+            "aot": true,
             "outputPath": "dist",
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": "src/polyfills.ts",
             "tsConfig": "src/tsconfig.app.json",
             "assets": [
+              "src/assets",
               "src/favicon.ico",
               "src/assets/img"
             ],
@@ -35,10 +37,20 @@
                 "src/assets/scss"
               ]
             },
-            "scripts": ["src/assets/scripts/terminal.js"]
+            "scripts": ["src/assets/scripts/terminal.js"],
+            "allowedCommonJsDependencies": [
+              "bignumber.js",
+              "chart.js"
+            ]
           },
           "configurations": {
             "production": {
+              "budgets": [
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "6kb"
+                }
+              ],
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",

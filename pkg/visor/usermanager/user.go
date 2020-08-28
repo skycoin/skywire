@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/SkycoinProject/dmsg/cipher"
+	"github.com/skycoin/dmsg/cipher"
 	"go.etcd.io/bbolt"
 )
 

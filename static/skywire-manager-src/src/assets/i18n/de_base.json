@@ -181,7 +181,7 @@
       "processing-button": "Please wait",
       "no-update": "Currently, there is no update for the visor. The currently installed version is {{ version }}.",
       "update-available": "There is an update available for the visor. Click the 'Install update' button to continue. The currently installed version is {{ currentVersion }} and the new version is {{ newVersion }}.",
-      "done": "The visor is being updated.",
+      "done": "The visor is updated.",
       "update-error": "Could not install the update. Please, try again later.",
       "install": "Install update"
     }

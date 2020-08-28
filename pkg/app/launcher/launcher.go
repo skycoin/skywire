@@ -12,16 +12,16 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/SkycoinProject/dmsg"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appcommon"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appnet"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/appserver"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/router"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/pathutil"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
 const (
@@ -113,7 +113,13 @@ func (l *Launcher) ResetConfig(conf Config) {
 		apps[ac.Name] = ac
 	}
 	l.apps = apps
-	l.conf = conf
+
+	// we shouldn't change directories of apps, it causes
+	// all kinds of troubles and also doesn't make sense.
+	// So, just changing individual fields
+	l.conf.VisorPK = conf.VisorPK
+	l.conf.Apps = conf.Apps
+	l.conf.ServerAddr = conf.ServerAddr
 }
 
 // AutoStart auto-starts marked apps.
@@ -251,7 +257,8 @@ func (l *Launcher) RestartApp(name string) error {
 	}
 
 	cmd := proc.Cmd()
-	if err := l.StartApp(name, cmd.Args, cmd.Env); err != nil {
+	// complete list of args includes binary name which is not needed, so omit it
+	if err := l.StartApp(name, cmd.Args[1:], cmd.Env); err != nil {
 		return fmt.Errorf("failed to start %s: %w", name, err)
 	}
 

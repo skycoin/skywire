@@ -39,8 +39,8 @@ export interface BasicTerminalData {
   styleUrls: ['./basic-terminal.component.scss']
 })
 export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('terminal', { static: false }) terminalElement: ElementRef<HTMLDivElement>;
-  @ViewChild('dialogContent', { static: false }) dialogContentElement: ElementRef<HTMLDivElement>;
+  @ViewChild('terminal') terminalElement: ElementRef<HTMLDivElement>;
+  @ViewChild('dialogContent') dialogContentElement: ElementRef<HTMLDivElement>;
   private terminal: any;
   private subscription: Subscription;
 

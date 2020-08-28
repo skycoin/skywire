@@ -1,32 +1,6 @@
 # github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
 ## explicit
 github.com/AudriusButkevicius/pfilter
-# github.com/SkycoinProject/dmsg v0.2.3-0.20200626071453-e2e73212a9ab
-## explicit
-github.com/SkycoinProject/dmsg
-github.com/SkycoinProject/dmsg/buildinfo
-github.com/SkycoinProject/dmsg/cipher
-github.com/SkycoinProject/dmsg/cmdutil
-github.com/SkycoinProject/dmsg/disc
-github.com/SkycoinProject/dmsg/dmsgctrl
-github.com/SkycoinProject/dmsg/dmsgpty
-github.com/SkycoinProject/dmsg/dmsgtest
-github.com/SkycoinProject/dmsg/httputil
-github.com/SkycoinProject/dmsg/ioutil
-github.com/SkycoinProject/dmsg/netutil
-github.com/SkycoinProject/dmsg/noise
-github.com/SkycoinProject/dmsg/servermetrics
-# github.com/SkycoinProject/skycoin v0.27.0
-## explicit
-github.com/SkycoinProject/skycoin/src/cipher
-github.com/SkycoinProject/skycoin/src/cipher/base58
-github.com/SkycoinProject/skycoin/src/cipher/ripemd160
-github.com/SkycoinProject/skycoin/src/cipher/secp256k1-go
-github.com/SkycoinProject/skycoin/src/cipher/secp256k1-go/secp256k1-go2
-github.com/SkycoinProject/skycoin/src/util/logging
-# github.com/SkycoinProject/yamux v0.0.0-20191213015001-a36efeefbf6a
-## explicit
-github.com/SkycoinProject/yamux
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 ## explicit
 github.com/StackExchange/wmi
@@ -103,6 +77,8 @@ github.com/klauspost/pgzip
 github.com/klauspost/reedsolomon
 # github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
+# github.com/kz/discordrus v1.2.0
+github.com/kz/discordrus
 # github.com/mattn/go-colorable v0.1.6
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
@@ -151,7 +127,6 @@ github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.2.0
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.10.0
-## explicit
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
@@ -176,6 +151,34 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
+# github.com/skycoin/dmsg v0.0.0-20200807121624-24253f9d3721
+## explicit
+github.com/skycoin/dmsg
+github.com/skycoin/dmsg/buildinfo
+github.com/skycoin/dmsg/cipher
+github.com/skycoin/dmsg/cmdutil
+github.com/skycoin/dmsg/disc
+github.com/skycoin/dmsg/discord
+github.com/skycoin/dmsg/dmsgctrl
+github.com/skycoin/dmsg/dmsgpty
+github.com/skycoin/dmsg/dmsgtest
+github.com/skycoin/dmsg/httputil
+github.com/skycoin/dmsg/ioutil
+github.com/skycoin/dmsg/netutil
+github.com/skycoin/dmsg/noise
+github.com/skycoin/dmsg/promutil
+github.com/skycoin/dmsg/servermetrics
+# github.com/skycoin/skycoin v0.26.0
+## explicit
+github.com/skycoin/skycoin/src/cipher
+github.com/skycoin/skycoin/src/cipher/base58
+github.com/skycoin/skycoin/src/cipher/ripemd160
+github.com/skycoin/skycoin/src/cipher/secp256k1-go
+github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
+github.com/skycoin/skycoin/src/util/logging
+# github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
+## explicit
+github.com/skycoin/yamux
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
@@ -310,6 +313,7 @@ google.golang.org/protobuf/types/known/timestamppb
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
 # nhooyr.io/websocket v1.8.2
+## explicit
 nhooyr.io/websocket
 nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd

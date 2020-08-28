@@ -4,21 +4,22 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/SkycoinProject/dmsg/buildinfo"
-	"github.com/SkycoinProject/dmsg/cipher"
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/SkycoinProject/skywire-mainnet/pkg/app/launcher"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/routing"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/skyenv"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/transport"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/util/updater"
-	"github.com/SkycoinProject/skywire-mainnet/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
 
 // API represents visor API.
@@ -56,7 +57,9 @@ type API interface {
 	Restart() error
 	Exec(command string) ([]byte, error)
 	Update(config updater.UpdateConfig) (bool, error)
+	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
+	UpdateStatus() (string, error)
 }
 
 // Summary provides a summary of a Skywire Visor.
@@ -529,6 +532,69 @@ func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
 	return updated, nil
 }
 
+// UpdateWithStatus implements API.
+// UpdateWithStatus combines results of Update and UpdateStatus.
+func (v *Visor) UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage {
+	ch := make(chan StatusMessage, 512)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				status, err := v.UpdateStatus()
+				if err != nil {
+					v.log.WithError(err).Errorf("Failed to check update status")
+					status = ""
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					switch status {
+					case "", io.EOF.Error():
+
+					default:
+						ch <- StatusMessage{
+							Text: status,
+						}
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+			}
+		}
+	}()
+
+	go func() {
+		defer func() {
+			cancel()
+			close(ch)
+		}()
+
+		updated, err := v.Update(config)
+		if err != nil {
+			ch <- StatusMessage{
+				Text:    err.Error(),
+				IsError: true,
+			}
+		} else if updated {
+			ch <- StatusMessage{
+				Text: "Finished",
+			}
+		} else {
+			ch <- StatusMessage{
+				Text: "No update found",
+			}
+		}
+	}()
+
+	return ch
+}
+
 // UpdateAvailable implements API.
 // UpdateAvailable checks if visor update is available.
 func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
@@ -539,4 +605,9 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 	}
 
 	return version, nil
+}
+
+// UpdateStatus returns status of the current updating operation.
+func (v *Visor) UpdateStatus() (string, error) {
+	return v.updater.Status(), nil
 }
