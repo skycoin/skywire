@@ -147,6 +147,7 @@
     "empty-with-filter": "Ningun visor coincide con los criterios de filtrado seleccionados.",
     "delete-node-confirmation": "¿Seguro que desea remover el visor de la lista?",
     "delete-all-offline-confirmation": "¿Seguro que desea remover todos los visores offline de la lista?",
+    "delete-all-filtered-offline-confirmation": "Todos los visores offline que satisfagan los criterios de filtrado actuales serán removidos de la lista. ¿Seguro que desea continuar?",
     "deleted": "Visor removido.",
     "deleted-singular": "1 visor offline removido.",
     "deleted-plural": "{{ number }} visores offline removidos.",
@@ -413,6 +414,9 @@
 
   "transports": {
     "title": "Transportes",
+    "remove-all-offline": "Remover todos los transportes offline",
+    "remove-all-offline-confirmation": "¿Seguro que desea remover todos los transportes offline?",
+    "remove-all-filtered-offline-confirmation": "Todos los transportes offline que satisfagan los criterios de filtrado actuales serán removidos. ¿Seguro que desea continuar?",
     "list-title": "Lista de transportes",
     "state": "Estado",
     "state-tooltip": "Estado actual",
