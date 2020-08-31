@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
+	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -41,6 +42,11 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
 			}
+			logging.AddHook(hook)
+		}
+
+		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+			hook := discord.NewHook(tag, discordWebhookURL)
 			logging.AddHook(hook)
 		}
 
