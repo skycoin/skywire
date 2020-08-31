@@ -19,8 +19,8 @@ ifneq (,$(findstring 64,$(GOARCH)))
     TEST_OPTS:=$(TEST_OPTS) $(RACE_FLAG)
 endif
 
-SKYWIRE_MAINNET := github.com/skycoin/skywire
-BUILDINFO_PATH := $(SKYWIRE_MAINNET)/pkg/util/buildinfo
+DMSG_REPO := github.com/skycoin/dmsg
+BUILDINFO_PATH := $(DMSG_REPO)/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)

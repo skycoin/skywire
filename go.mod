@@ -14,13 +14,13 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/sirupsen/logrus v1.4.2
-	github.com/skycoin/dmsg v0.0.0-20200807121748-518564603fc3
+	github.com/skycoin/dmsg v0.0.0-20200831144948-62ac73c727f9
 	github.com/skycoin/skycoin v0.26.0
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.4.0
 	go.etcd.io/bbolt v1.3.4
-	golang.org/x/net v0.0.0-20191204025024-5ee1b9f4859a
+	golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
