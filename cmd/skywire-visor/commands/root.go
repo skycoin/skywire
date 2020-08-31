@@ -21,6 +21,7 @@ import (
 
 	"github.com/pkg/profile"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
+	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -139,6 +140,11 @@ func (cfg *runCfg) startLogger() *runCfg {
 			cfg.masterLogger.AddHook(hook)
 			cfg.masterLogger.Out = ioutil.Discard
 		}
+	}
+
+	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+		hook := discord.NewHook(cfg.tag, discordWebhookURL)
+		logging.AddHook(hook)
 	}
 
 	return cfg

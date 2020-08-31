@@ -7,6 +7,7 @@ require (
 	github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
 	github.com/go-redis/redis v6.15.6+incompatible
 	github.com/gorilla/handlers v1.4.2
+	github.com/kz/discordrus v1.2.0
 	github.com/prometheus/client_golang v1.3.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/skycoin/skycoin v0.26.0
