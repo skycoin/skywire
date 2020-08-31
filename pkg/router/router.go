@@ -393,6 +393,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	r.mx.Unlock()
 
 	if nsConf.Initiator {
+		rg.logger.Infoln("INITIATOR, SENDING HANDSHAKE PACKET")
 		if err := rg.sendHandshake(true); err != nil {
 			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
 				&rules.Desc, err)
@@ -409,7 +410,9 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 	select {
 	case <-rg.handshakeProcessed:
+		rg.logger.Infoln("HANDSHAKE PROCESSED")
 	case <-ctx.Done():
+		rg.logger.Infoln("TIMED OUT AWAITING FOR HANDSHAKE PACKET, COMMUNICATING WITH THE OLD VISOR")
 		// remote should send handshake packet during initialization,
 		// if no packet received during timeout interval, we're dealing
 		// with the old visor
@@ -431,6 +434,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	}
 
 	if rg.encrypt {
+		rg.logger.Infoln("ENCRYPTING")
 		// wrapping rg with noise
 		wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
 		if err != nil {
@@ -447,6 +451,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			Conn: wrappedRG,
 		}
 	} else {
+		rg.logger.Infoln("NO ENCRYPTION SUPPORTED")
 		nrg = &noiseRouteGroup{
 			rg:   rg,
 			Conn: rg,
