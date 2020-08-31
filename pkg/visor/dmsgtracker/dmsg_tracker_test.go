@@ -1,4 +1,4 @@
-package hypervisor
+package dmsgtracker
 
 import (
 	"context"
@@ -103,7 +103,7 @@ func TestDmsgTrackerManager_MustGet(t *testing.T) {
 				// act
 				sum, err := tm.MustGet(ctx, pk)
 				require.NoError(t, err)
-				updateAllTrackers(ctx, tm.dm)
+				tm.updateAllTrackers(ctx, tm.dm)
 
 				// assert
 				assert.Equal(t, pk, sum.PK)
@@ -118,7 +118,7 @@ func TestDmsgTrackerManager_MustGet(t *testing.T) {
 
 				// act
 				assert.NoError(t, c.Close())
-				updateAllTrackers(ctx, tm.dm)
+				tm.updateAllTrackers(ctx, tm.dm)
 
 				// assert
 				_, ok = tm.Get(pk)
