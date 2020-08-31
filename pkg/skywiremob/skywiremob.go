@@ -111,6 +111,20 @@ func IsVPNReady() bool {
 	return atomic.LoadInt32(&isVPNReady) == 1
 }
 
+var isVisorStarting int32
+
+// IsVisorStarting checks if the visor is starting up.
+func IsVisorStarting() bool {
+	return atomic.LoadInt32(&isVisorStarting) == 1
+}
+
+var isVisorRunning int32
+
+// IsVisorRunning checks if the visor is running.
+func IsVisorRunning() bool {
+	return atomic.LoadInt32(&isVisorRunning) == 1
+}
+
 var log = logging.NewMasterLogger()
 
 var (
@@ -175,11 +189,15 @@ func PrepareVisor() string {
 	}()
 
 	go func(ctx context.Context) {
+		atomic.StoreInt32(&isVisorStarting, 1)
+
 		var err error
 		if ok := v.Start(ctx); !ok {
 			log.Errorln("Failed to start visor")
 			err = errors.New("failed to start visor")
 		} else {
+			atomic.StoreInt32(&isVisorStarting, 0)
+			atomic.StoreInt32(&isVisorRunning, 1)
 			log.Infoln("Started visor")
 		}
 
@@ -192,14 +210,13 @@ func PrepareVisor() string {
 	return ""
 }
 
+// WaitVisorReady blocks until visor gets fully initialized.
 func WaitVisorReady() string {
 	globalVisorMx.Lock()
 	ready := globalVisorReady
 	globalVisorMx.Unlock()
 
-	err := <-ready
-
-	if err != nil {
+	if err := <-ready; err != nil {
 		return err.Error()
 	}
 
@@ -400,6 +417,9 @@ func StopVisor() string {
 	cancel()
 	<-vDone
 	<-ready
+
+	atomic.StoreInt32(&isVisorStarting, 0)
+	atomic.StoreInt32(&isVisorRunning, 0)
 
 	vpnClientMx.Lock()
 	if vpnClient != nil {

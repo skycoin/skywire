@@ -32,7 +32,10 @@ Returns non-empty string with error in case of failure;
 - `StopVisor() string`: Stops currently running visor. Returns non-empty string with error in case of failure;
 - `SetMobileAppAddr(string)`: Passes address of the UDP connection opened on the mobile application side;
 - `ServeVPN()`: Starts off the goroutine serving VPN connection. After this call `IsVPNReady` starts returning `true`;
-- `StartListeningUDP() string`: Opens UDP listener on the Go side. Returns non-empty string with error in case of failure.
+- `StartListeningUDP() string`: Opens UDP listener on the Go side. Returns non-empty string with error in case of failure;
+- `IsVisorStarting() bool`: Checks if visor is starting. Will get `false` when it's fully functional;
+- `IsVisorRunning() bool`: Checks if visor is running. Will get `true` whn visor is fully functional;
+- `WaitVisorReady() string`: Blocks until visor gets fully initialized. Returns non-empty error string in case of failure.
 
 ## Mobile/Go Communication
 API may seem a bit complicated at first. Currently tested for Android devices, should be used with caution on iOS. 
