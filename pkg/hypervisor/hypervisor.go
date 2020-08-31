@@ -484,6 +484,7 @@ func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
 			Available        bool   `json:"available"`
 			CurrentVersion   string `json:"current_version"`
 			AvailableVersion string `json:"available_version,omitempty"`
+			ReleaseURL       string `json:"release_url,omitempty"`
 		}{
 			Available:      version != nil,
 			CurrentVersion: buildinfo.Version(),
@@ -491,6 +492,7 @@ func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
 
 		if version != nil {
 			output.AvailableVersion = version.String()
+			output.ReleaseURL = version.ReleaseURL()
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
@@ -1189,6 +1191,7 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 			Available        bool   `json:"available"`
 			CurrentVersion   string `json:"current_version"`
 			AvailableVersion string `json:"available_version,omitempty"`
+			ReleaseURL       string `json:"release_url,omitempty"`
 		}{
 			Available:      version != nil,
 			CurrentVersion: summary.BuildInfo.Version,
@@ -1196,6 +1199,7 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 
 		if version != nil {
 			output.AvailableVersion = version.String()
+			output.ReleaseURL = version.ReleaseURL()
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
