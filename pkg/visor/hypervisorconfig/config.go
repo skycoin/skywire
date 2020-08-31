@@ -1,8 +1,9 @@
-package hypervisor
+package hypervisorconfig
 
 import (
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,20 +47,21 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // Config configures the hypervisor.
 type Config struct {
-	PK            cipher.PubKey `json:"public_key"`
-	SK            cipher.SecKey `json:"secret_key"`
-	DBPath        string        `json:"db_path"`        // Path to store database file.
-	EnableAuth    bool          `json:"enable_auth"`    // Whether to enable user management.
-	Cookies       CookieConfig  `json:"cookies"`        // Configures cookies (for session management).
-	DmsgDiscovery string        `json:"dmsg_discovery"` // Dmsg discovery address.
-	DmsgPort      uint16        `json:"dmsg_port"`      // Dmsg port to serve on.
-	HTTPAddr      string        `json:"http_addr"`      // HTTP address to serve API/web UI on.
-	EnableTLS     bool          `json:"enable_tls"`     // Whether to enable TLS.
-	TLSCertFile   string        `json:"tls_cert_file"`  // TLS cert file location.
-	TLSKeyFile    string        `json:"tls_key_file"`   // TLS key file location.
+	PK            cipher.PubKey `json:"-"`
+	SK            cipher.SecKey `json:"-"`
+	DBPath        string        `json:"db_path"`             // Path to store database file.
+	EnableAuth    bool          `json:"enable_auth"`         // Whether to enable user management.
+	Cookies       CookieConfig  `json:"cookies"`             // Configures cookies (for session management).
+	DmsgDiscovery string        `json:"-"`                   // Dmsg discovery address.
+	DmsgPort      uint16        `json:"dmsg_port,omitempty"` // Dmsg port to serve on.
+	HTTPAddr      string        `json:"http_addr"`           // HTTP address to serve API/web UI on.
+	EnableTLS     bool          `json:"enable_tls"`          // Whether to enable TLS.
+	TLSCertFile   string        `json:"tls_cert_file"`       // TLS cert file location.
+	TLSKeyFile    string        `json:"tls_key_file"`        // TLS key file location.
 }
 
-func makeConfig(testenv bool) Config {
+// MakeConfig returns hypervisor config.
+func MakeConfig(testenv bool) Config {
 	var c Config
 	c.FillDefaults(testenv)
 	return c
@@ -71,21 +73,21 @@ func GenerateWorkDirConfig(testenv bool) Config {
 	if err != nil {
 		log.Fatalf("failed to generate WD config: %s", dir)
 	}
-	c := makeConfig(testenv)
+	c := MakeConfig(testenv)
 	c.DBPath = filepath.Join(dir, "users.db")
 	return c
 }
 
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
 func GenerateHomeConfig(testenv bool) Config {
-	c := makeConfig(testenv)
+	c := MakeConfig(testenv)
 	c.DBPath = filepath.Join(pathutil.HomeDir(), ".skycoin/hypervisor/users.db")
 	return c
 }
 
 // GenerateLocalConfig generates a config with default values and uses db from shared folder.
 func GenerateLocalConfig(testenv bool) Config {
-	c := makeConfig(testenv)
+	c := MakeConfig(testenv)
 	c.DBPath = "/usr/local/skycoin/hypervisor/users.db"
 	return c
 }
@@ -99,6 +101,7 @@ func (c *Config) FillDefaults(testEnv bool) {
 	if len(c.Cookies.HashKey) != hashKeyLen {
 		c.Cookies.HashKey = cipher.RandByte(hashKeyLen)
 	}
+
 	if len(c.Cookies.BlockKey) != blockKeyLen {
 		c.Cookies.BlockKey = cipher.RandByte(blockKeyLen)
 	}
@@ -110,10 +113,15 @@ func (c *Config) FillDefaults(testEnv bool) {
 			c.DmsgDiscovery = skyenv.DefaultDmsgDiscAddr
 		}
 	}
+
 	if c.DmsgPort == 0 {
 		c.DmsgPort = skyenv.DmsgHypervisorPort
 	}
-	c.HTTPAddr = defaultHTTPAddr
+
+	if c.HTTPAddr == "" {
+		c.HTTPAddr = defaultHTTPAddr
+	}
+
 	c.Cookies.FillDefaults()
 }
 
