@@ -291,8 +291,6 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		Initiator: false,
 	}
 
-	time.Sleep(1 * time.Second)
-
 	nrg, err := r.saveRouteGroupRules(rules, nsConf)
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
@@ -394,15 +392,17 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
 
-	rg.logger.Infoln("SENDING HANDSHAKE PACKET")
-	if err := rg.sendHandshake(true); err != nil {
-		r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
-			&rules.Desc, err)
-		if err := rg.Close(); err != nil {
-			r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
-		}
+	if nsConf.Initiator {
+		rg.logger.Infoln("INITIATOR, SENDING HANDSHAKE PACKET")
+		if err := rg.sendHandshake(true); err != nil {
+			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
+				&rules.Desc, err)
+			if err := rg.Close(); err != nil {
+				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+			}
 
-		return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
+			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), handshakeAwaitTimeout)
@@ -420,6 +420,19 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			rg.encrypt = false
 			close(rg.handshakeProcessed)
 		})
+	}
+
+	if !nsConf.Initiator {
+		rg.logger.Infoln("RESPONDER, SENDING HANDSHAKE PACKET")
+		if err := rg.sendHandshake(true); err != nil {
+			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
+				&rules.Desc, err)
+			if err := rg.Close(); err != nil {
+				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+			}
+
+			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
+		}
 	}
 
 	if ok && nrg != nil {
