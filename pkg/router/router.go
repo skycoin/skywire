@@ -392,17 +392,15 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
 
-	if nsConf.Initiator {
-		rg.logger.Infoln("INITIATOR, SENDING HANDSHAKE PACKET")
-		if err := rg.sendHandshake(true); err != nil {
-			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
-				&rules.Desc, err)
-			if err := rg.Close(); err != nil {
-				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
-			}
-
-			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
+	rg.logger.Infoln("SENDING HANDSHAKE PACKET")
+	if err := rg.sendHandshake(true); err != nil {
+		r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
+			&rules.Desc, err)
+		if err := rg.Close(); err != nil {
+			r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 		}
+
+		return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), handshakeAwaitTimeout)
