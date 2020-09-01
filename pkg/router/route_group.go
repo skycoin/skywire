@@ -60,9 +60,6 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 // RouteGroup should implement 'io.ReadWriteCloser'.
 // It implements 'net.Conn'.
 type RouteGroup struct {
-	// atomic requires 64-bit alignment for struct field access
-	lastSent int64
-
 	mu sync.Mutex
 
 	cfg    *RouteGroupConfig
@@ -100,6 +97,9 @@ type RouteGroup struct {
 	// used to wait for all the `Close` packets to run through the loop and come back
 	closeDone sync.WaitGroup
 	once      sync.Once
+
+	lastSentMu sync.RWMutex
+	lastSent   map[routing.RouteID]int64
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -122,6 +122,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		closed:        make(chan struct{}),
 		readDeadline:  deadline.MakePipeDeadline(),
 		writeDeadline: deadline.MakePipeDeadline(),
+		lastSent:      make(map[routing.RouteID]int64),
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
@@ -314,7 +315,9 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 			return 0, err
 		}
 
-		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
+		rg.lastSentMu.Lock()
+		rg.lastSent[rule.KeyRouteID()] = time.Now().UnixNano()
+		rg.lastSentMu.Unlock()
 
 		return len(data), nil
 	}
@@ -322,7 +325,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 
 func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet,
 	ruleID routing.RouteID) chan error {
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	go func() {
 		defer close(errCh)
 		err := rg.writePacket(ctx, tp, packet, ruleID)
@@ -360,20 +363,14 @@ func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
 			rg.logger.Infoln("Remote got closed, stopping keep-alive loop")
 			return
 		case <-ticker.C:
-			lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
-
-			if time.Since(lastSent) < interval {
-				continue
-			}
-
-			if err := rg.sendKeepAlive(); err != nil {
+			if err := rg.sendKeepAlive(interval); err != nil {
 				rg.logger.Warnf("Failed to send keepalive: %v", err)
 			}
 		}
 	}
 }
 
-func (rg *RouteGroup) sendKeepAlive() error {
+func (rg *RouteGroup) sendKeepAlive(interval time.Duration) error {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
@@ -384,9 +381,18 @@ func (rg *RouteGroup) sendKeepAlive() error {
 
 	for i := 0; i < len(rg.tps); i++ {
 		tp := rg.tps[i]
-		rule := rg.fwd[i]
 
 		if tp == nil {
+			continue
+		}
+
+		rule := rg.fwd[i]
+
+		rg.lastSentMu.RLock()
+		lastSent := time.Unix(0, rg.lastSent[rule.KeyRouteID()])
+		rg.lastSentMu.RUnlock()
+
+		if time.Since(lastSent) < interval {
 			continue
 		}
 
