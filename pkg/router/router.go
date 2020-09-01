@@ -291,6 +291,8 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		Initiator: false,
 	}
 
+	time.Sleep(1 * time.Second)
+
 	nrg, err := r.saveRouteGroupRules(rules, nsConf)
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
@@ -466,7 +468,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 }
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
-	r.logger.Infof("HANDLING PACKET %s", packet.Type())
+	r.logger.Infof("HANDLING PACKET %s TO ROUTE %d", packet.Type(), packet.RouteID())
 
 	switch packet.Type() {
 	case routing.DataPacket:
