@@ -485,19 +485,19 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 
 	switch packet.Type() {
 	case routing.DataPacket:
-		return r.handleDataPacket(ctx, packet)
+		return r.handleDataHandshakePacket(ctx, packet)
 	case routing.ClosePacket:
 		return r.handleClosePacket(ctx, packet)
 	case routing.KeepAlivePacket:
 		return r.handleKeepAlivePacket(ctx, packet)
 	case routing.HandshakePacket:
-		return r.handleDataPacket(ctx, packet)
+		return r.handleDataHandshakePacket(ctx, packet)
 	default:
 		return ErrUnknownPacketType
 	}
 }
 
-func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) error {
+func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
 		return err
