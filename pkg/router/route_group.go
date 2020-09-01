@@ -494,7 +494,6 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
 		rg.handshakeProcessedOnce.Do(func() {
-			rg.logger.Infoln("FIRST PACKET IS DATA PACKET, COMMUNICATING WITH THE OLD VISOR")
 			// first packet is data packet, so we're communicating with the old visor
 			rg.encrypt = false
 			close(rg.handshakeProcessed)
@@ -507,8 +506,6 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			if packet.Payload()[0] == 0 {
 				rg.encrypt = false
 			}
-
-			rg.logger.Infof("FIRST PACKET IS HANDSHAKE PACKET, ENCRYPTION: %v", rg.encrypt)
 
 			close(rg.handshakeProcessed)
 		})
