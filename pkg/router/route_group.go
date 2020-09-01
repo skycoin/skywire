@@ -486,7 +486,6 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 }
 
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
-	// TODO(darkrengarius): make separate method to be called from noise route group when handshake is done
 	switch packet.Type() {
 	case routing.ClosePacket:
 		rg.mu.Lock()
