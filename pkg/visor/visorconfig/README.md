@@ -15,6 +15,7 @@
 - `shutdown_timeout` (Duration)
 - `restart_check_delay` (string)
 - `public_trusted_visor` (bool)
+- `hypervisor` (*[Config](#Config))
 
 
 # V1Routing
@@ -22,14 +23,6 @@
 - `setup_nodes` ()
 - `route_finder` (string)
 - `route_finder_timeout` (Duration)
-
-
-# V1Transport
-
-- `discovery` (string)
-- `address_resolver` (string)
-- `log_store` (*[V1LogStore](#V1LogStore))
-- `trusted_visors` ()
 
 
 # V1Dmsgpty
@@ -40,9 +33,18 @@
 - `cli_address` (string)
 
 
-# V1UptimeTracker
+# V1Transport
 
-- `addr` (string)
+- `discovery` (string)
+- `address_resolver` (string)
+- `log_store` (*[V1LogStore](#V1LogStore))
+- `trusted_visors` ()
+
+
+# V1LogStore
+
+- `type` (string) - Type defines the log store type. Valid values: file, memory.
+- `location` (string)
 
 
 # V1Launcher
@@ -54,10 +56,9 @@
 - `local_path` (string)
 
 
-# V1LogStore
+# V1UptimeTracker
 
-- `type` (string) - Type defines the log store type. Valid values: file, memory.
-- `location` (string)
+- `addr` (string)
 
 
 # V1AppDisc
@@ -73,24 +74,6 @@
 - `version` (string)
 - `sk` (SecKey)
 - `pk` (PubKey)
-
-
-# AppConfig
-
-- `name` (string)
-- `args` ([]string)
-- `auto_start` (bool)
-- `port` (Port)
-
-
-# MasterLogger
-
-- `` (*[Logger](#Logger))
-
-
-# Logger
-
-- `` (FieldLogger)
 
 
 # RWMutex
@@ -114,7 +97,50 @@
 - `local_address` (string)
 
 
+# AppConfig
+
+- `name` (string)
+- `args` ([]string)
+- `auto_start` (bool)
+- `port` (Port)
+
+
 # DmsgConfig
 
 - `discovery` (string)
 - `sessions_count` (int)
+
+
+# Config
+
+- `-` (PubKey)
+- `-` (SecKey)
+- `db_path` (string)
+- `enable_auth` (bool)
+- `cookies` ([CookieConfig](#CookieConfig))
+- `-` (string)
+- `dmsg_port` (uint16)
+- `http_addr` (string)
+- `enable_tls` (bool)
+- `tls_cert_file` (string)
+- `tls_key_file` (string)
+
+
+# CookieConfig
+
+- `hash_key` (Key)
+- `block_key` (Key)
+- `expires_duration` (Duration)
+- `path` (string)
+- `domain` (string)
+- `-` (bool)
+
+
+# MasterLogger
+
+- `` (*[Logger](#Logger))
+
+
+# Logger
+
+- `` (FieldLogger)

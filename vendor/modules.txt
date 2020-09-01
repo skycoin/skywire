@@ -77,6 +77,8 @@ github.com/klauspost/pgzip
 github.com/klauspost/reedsolomon
 # github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
+# github.com/kz/discordrus v1.2.0
+github.com/kz/discordrus
 # github.com/mattn/go-colorable v0.1.6
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
@@ -149,13 +151,14 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20200804132826-472848513595
+# github.com/skycoin/dmsg v0.0.0-20200807121624-24253f9d3721
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
 github.com/skycoin/dmsg/cipher
 github.com/skycoin/dmsg/cmdutil
 github.com/skycoin/dmsg/disc
+github.com/skycoin/dmsg/discord
 github.com/skycoin/dmsg/dmsgctrl
 github.com/skycoin/dmsg/dmsgpty
 github.com/skycoin/dmsg/dmsgtest
