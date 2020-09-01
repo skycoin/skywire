@@ -128,7 +128,8 @@
   "nodes": {
     "title": "Lista de visores",
     "dmsg-title": "DMSG",
-    "update-all": "Actualizar todo",
+    "update-hypervisor": "Actualizar hypervisor",
+    "update-all": "Actualizar todos los visores",
     "state": "Estado",
     "state-tooltip": "Estado actual",
     "label": "Etiqueta",
@@ -197,6 +198,22 @@
         "default-password": "No utilice la contraseña por defecto (1234)."
       }
     },
+    "updater-config" : {
+      "open-link": "Mostrar la configuración del actualizador",
+      "open-confirmation": "La configuración del actualizador es sólo para usuarios experimentados. Seguro que desea continuar?",
+      "help": "Utilice este formulario para modificar la configuración que utilizará el actualizador. Se ignorarán todos los campos vacíos. La configuración se utilizará para todas las operaciones de actualización, sin importar qué elemento se esté actualizando, así que por favor tenga cuidado.",
+      "channel": "Canal",
+      "version": "Versión",
+      "archive-url": "URL del archivo",
+      "checksum-url": "URL del checksum",
+      "not-saved": "Los cambios aún no se han guardado.",
+      "save": "Guardar cambios",
+      "remove-settings": "Remover la configuración",
+      "saved": "Las configuracion personalizada ha sido guardada.",
+      "removed": "Las configuracion personalizada ha sido removida.",
+      "save-confirmation": "¿Seguro que desea aplicar la configuración personalizada?",
+      "remove-confirmation": "¿Seguro que desea remover la configuración personalizada?"
+    },
     "change-password": "Cambiar contraseña",
     "refresh-rate": "Frecuencia de refrescado",
     "refresh-rate-help": "Tiempo que el sistema espera para actualizar automáticamente los datos.",
@@ -256,6 +273,17 @@
     "install": "Instalar actualizaciones"
   },
 
+  "update-hypervisor": {
+    "title": "Actualizar Hypervisor",
+    "label": "Hypervisor",
+    "processing": "Buscando actualizaciones...",
+    "no-update": "No hay ninguna actualización para el hypervisor. La versión instalada actualmente es:",
+    "update-available": "Las siguiente actualización fue encontrada:",
+    "update-instructions": "Haga clic en el botón 'Instalar actualización' para continuar.",
+    "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
+    "install": "Instalar actualización"
+  },
+
   "apps": {
     "log": {
       "title": "Log",
@@ -305,8 +333,9 @@
         }
       }
     },
-    "skysocks-settings": {
-      "title": "Configuración de Skysocks",
+    "vpn-socks-server-settings": {
+      "socks-title": "Configuración de Skysocks",
+      "vpn-title": "Configuración de VPN-Server",
       "new-password": "Nueva contraseña (dejar en blanco para eliminar la contraseña)",
       "repeat-password": "Repita la contraseña",
       "passwords-not-match": "Las contraseñas no coinciden.",
@@ -315,9 +344,10 @@
       "change-passowrd-confirmation": "¿Seguro que desea cambiar la contraseña?",
       "changes-made": "Los cambios han sido realizados."
     },
-    "skysocks-client-settings": {
-      "title": "Configuración de Skysocks-Client",
-      "discovery-tab": "Buscar visor",
+    "vpn-socks-client-settings": {
+      "socks-title": "Configuración de Skysocks-Client",
+      "vpn-title": "Configuración de VPN-Client",
+      "discovery-tab": "Buscar",
       "remote-visor-tab": "Introducir manualmente",
       "history-tab": "Historial",
       "use": "Usar estos datos",
@@ -353,6 +383,8 @@
 
       "filter-dialog": {
         "title": "Filtros",
+        "country": "El país debe ser",
+        "any-country": "Cualquiera",
         "location": "La ubicación debe contener",
         "pub-key": "La llave pública debe contener",
         "apply": "Aplicar"

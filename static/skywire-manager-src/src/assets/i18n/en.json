@@ -131,7 +131,8 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
-    "update-all": "Update all",
+    "update-hypervisor": "Update hypervisor",
+    "update-all": "Update all visors",
     "state": "State",
     "state-tooltip": "Current state",
     "label": "Label",
@@ -200,6 +201,22 @@
         "default-password": "Don't use the default password (1234)."
       }
     },
+    "updater-config" : {
+      "open-link": "Show updater settings",
+      "open-confirmation": "The updater settings are for experienced users only. Are you sure you want to continue?",
+      "help": "Use this form for overriding the settings that will be used by the updater. All empty fields will be ignored. The settings will be used for all updating operations, no mater which element is being updated, so please be careful.",
+      "channel": "Channel",
+      "version": "Version",
+      "archive-url": "Archive URL",
+      "checksum-url": "Checksum URL",
+      "not-saved": "The changes have not been saved yet.",
+      "save": "Save changes",
+      "remove-settings": "Remove the settings",
+      "saved": "The custom settings have been saved.",
+      "removed": "The custom settings have been removed.",
+      "save-confirmation": "Are you sure you want to apply the custom settings?",
+      "remove-confirmation": "Are you sure you want to remove the custom settings?"
+    },
     "change-password": "Change password",
     "refresh-rate": "Refresh rate",
     "refresh-rate-help": "Time the system waits to update the data automatically.",
@@ -259,6 +276,17 @@
     "install": "Install updates"
   },
 
+  "update-hypervisor": {
+    "title": "Update Hypervisor",
+    "label": "Hypervisor",
+    "processing": "Looking for updates...",
+    "no-update": "There is no update for the hypervisor. The currently installed version is:",
+    "update-available": "The following update was found:",
+    "update-instructions": "Click the 'Install update' button to continue.",
+    "updating": "The update operation has been started, you can open this window again for checking the progress:",
+    "install": "Install update"
+  },
+
   "apps": {
     "log": {
       "title": "Log",
@@ -308,8 +336,9 @@
         }
       }
     },
-    "skysocks-settings": {
-      "title": "Skysocks Settings",
+    "vpn-socks-server-settings": {
+      "socks-title": "Skysocks Settings",
+      "vpn-title": "VPN-Server Settings",
       "new-password": "New password (Leave empty to remove the password)",
       "repeat-password": "Repeat password",
       "passwords-not-match": "Passwords do not match.",
@@ -318,9 +347,10 @@
       "change-passowrd-confirmation": "Are you sure you want to change the password?",
       "changes-made": "The changes have been made."
     },
-    "skysocks-client-settings": {
-      "title": "Skysocks-Client Settings",
-      "discovery-tab": "Search visor",
+    "vpn-socks-client-settings": {
+      "socks-title": "Skysocks-Client Settings",
+      "vpn-title": "VPN-Client Settings",
+      "discovery-tab": "Search",
       "remote-visor-tab": "Enter manually",
       "history-tab": "History",
       "use": "Use this data",
@@ -356,6 +386,8 @@
 
       "filter-dialog": {
         "title": "Filters",
+        "country": "The country must be",
+        "any-country": "Any",
         "location": "The location must contain",
         "pub-key": "The public key must contain",
         "apply": "Apply"

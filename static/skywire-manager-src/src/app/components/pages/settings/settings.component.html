@@ -15,5 +15,9 @@
     <app-label-list
       [showShortList]="true">
     </app-label-list>
+    <div class="d-block mt-4" *ngIf="!mustShowUpdaterSettings" (click)="showUpdaterSettings()">
+      <span class="show-link">{{ 'settings.updater-config.open-link' | translate }}</span>
+    </div>
+    <app-updater-config class="d-block mt-4" *ngIf="mustShowUpdaterSettings"></app-updater-config>
   </div>
 </div>

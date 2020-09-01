@@ -35,6 +35,7 @@ const (
 )
 
 // Dmsg port constants.
+// TODO(evanlinjin): Define these properly. These are currently random.
 const (
 	DmsgCtrlPort       uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
 	DmsgSetupPort      uint16 = 36  // Listening port of a setup node.
@@ -75,7 +76,7 @@ const (
 	VPNServerPort uint16 = 44
 
 	VPNClientName = "vpn-client"
-	// TODO: this one's not needed for the app to run but lack of it causes errors
+	// TODO(darkrengarius): this one's not needed for the app to run but lack of it causes errors
 	VPNClientPort uint16 = 43
 )
 
@@ -102,6 +103,11 @@ const (
 const (
 	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
 	TestTpLogStore    = TestSkywirePath + "/transport_logs"
+)
+
+// Default hypervisor constants
+const (
+	DefaultHypervisorDB = ".skycoin/hypervisor/users.db"
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.

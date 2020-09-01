@@ -86,19 +86,6 @@ func VisorDefaults() ConfigPaths {
 	return paths
 }
 
-// HypervisorDefaults returns the default config paths for hypervisor.
-func HypervisorDefaults() ConfigPaths {
-	paths := make(ConfigPaths)
-	if wd, err := os.Getwd(); err == nil {
-		paths[WorkingDirLoc] = filepath.Join(wd, "hypervisor-config.json")
-	}
-
-	paths[HomeLoc] = filepath.Join(HomeDir(), ".skycoin/hypervisor/hypervisor-config.json")
-	paths[LocalLoc] = "/usr/local/skycoin/hypervisor/hypervisor-config.json"
-
-	return paths
-}
-
 // FindConfigPath is used by a service to find a config file path in the following order:
 // - From CLI argument.
 // - From ENV.

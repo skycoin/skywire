@@ -213,7 +213,7 @@ var _escData = map[string]*_escFile{
 		name:    "index.html",
 		local:   "static/index.html",
 		size:    5825,
-		modtime: 1589625972,
+		modtime: 1594811593,
 		compressed: `
 H4sIAAAAAAAC/7xYbW/juBH+nl8xqyxONi6WnWyS3smSi2u7xbW4vSuaA/phEVxoaWwRS5EqSSVxDf/3
 gtS7LDm+LlDngyW+DJ955uHMOMG7WER6lyEkOmWri4vAfAMjfBs6yJ3VBUCQIInNA0CQoiYQJUQq1KGT
