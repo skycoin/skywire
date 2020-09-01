@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
 )
 
@@ -26,9 +27,9 @@ type Client struct {
 
 // NewClient creates a new Client.
 func NewClient(ctx context.Context, dialer snet.Dialer, rPK cipher.PubKey) (*Client, error) {
-	s, err := dialer.Dial(ctx, rPK, snet.AwaitSetupPort)
+	s, err := dialer.Dial(ctx, rPK, skyenv.DmsgAwaitSetupPort)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dial %v@%v: %w", rPK, skyenv.DmsgAwaitSetupPort, err)
 	}
 	return NewClientFromRaw(s, rPK), nil
 }

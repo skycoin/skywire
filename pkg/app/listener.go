@@ -42,7 +42,6 @@ func (l *Listener) Accept() (net.Conn, error) {
 		remote: remote,
 	}
 
-	// TODO: discuss
 	// lock is needed, since the conn is already added to the manager,
 	// but has no `freeConn`. It shouldn't really happen under usual
 	// circumstances, but the data race is possible. If we try to close
