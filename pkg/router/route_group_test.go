@@ -577,6 +577,9 @@ func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 			if !safeSend(ctx, to, payload) {
 				return
 			}
+		case routing.HandshakePacket:
+			// error won't happen with the handshake packet
+			_ = to.handlePacket(packet) //nolint:errcheck
 		default:
 			panic(fmt.Sprintf("wrong packet type %v", packet.Type()))
 		}
