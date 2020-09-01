@@ -3,7 +3,7 @@ github.com/alecthomas/template
 github.com/alecthomas/template/parse
 # github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4
 github.com/alecthomas/units
-# github.com/andybalholm/brotli v0.0.0-20190621154722-5f990b63d2d6
+# github.com/andybalholm/brotli v1.0.0
 github.com/andybalholm/brotli
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 github.com/armon/go-socks5
@@ -11,7 +11,7 @@ github.com/armon/go-socks5
 github.com/beorn7/perks/quantile
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
-# github.com/creack/pty v1.1.9
+# github.com/creack/pty v1.1.11
 github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -22,36 +22,35 @@ github.com/dsnet/compress/bzip2/internal/sais
 github.com/dsnet/compress/internal
 github.com/dsnet/compress/internal/errors
 github.com/dsnet/compress/internal/prefix
+# github.com/felixge/httpsnoop v1.0.1
+github.com/felixge/httpsnoop
 # github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
 github.com/flynn/noise
-# github.com/go-chi/chi v4.0.2+incompatible
+# github.com/go-chi/chi v4.1.2+incompatible
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
-# github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
-github.com/golang/gddo/httputil
-github.com/golang/gddo/httputil/header
 # github.com/golang/protobuf v1.4.2
 github.com/golang/protobuf/proto
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
-# github.com/google/uuid v1.1.1
+# github.com/google/uuid v1.1.2
 github.com/google/uuid
-# github.com/gorilla/handlers v1.4.2
+# github.com/gorilla/handlers v1.5.0
 github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
 github.com/gorilla/securecookie
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/klauspost/compress v1.10.0
+# github.com/klauspost/compress v1.10.11
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
 github.com/klauspost/compress/snappy
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/klauspost/pgzip v1.2.1
+# github.com/klauspost/pgzip v1.2.4
 github.com/klauspost/pgzip
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/kz/discordrus v1.2.0
 github.com/kz/discordrus
@@ -67,9 +66,9 @@ github.com/mgutz/ansi
 github.com/mholt/archiver/v3
 # github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 github.com/mitchellh/colorstring
-# github.com/nwaples/rardecode v1.0.0
+# github.com/nwaples/rardecode v1.1.0
 github.com/nwaples/rardecode
-# github.com/pierrec/lz4 v2.0.5+incompatible
+# github.com/pierrec/lz4 v2.5.2+incompatible
 github.com/pierrec/lz4
 github.com/pierrec/lz4/internal/xxh32
 # github.com/pkg/profile v1.3.0
@@ -96,7 +95,7 @@ github.com/prometheus/procfs/internal/util
 github.com/rakyll/statik/fs
 # github.com/schollz/progressbar/v2 v2.15.0
 github.com/schollz/progressbar/v2
-# github.com/sirupsen/logrus v1.4.2
+# github.com/sirupsen/logrus v1.6.0
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
 # github.com/skycoin/dmsg v0.0.0-20200831144948-62ac73c727f9
@@ -118,26 +117,26 @@ github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
 # github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 github.com/skycoin/yamux
-# github.com/spf13/cobra v0.0.5
+# github.com/spf13/cobra v1.0.0
 github.com/spf13/cobra
-# github.com/spf13/pflag v1.0.3
+# github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
-# github.com/stretchr/objx v0.1.1
+# github.com/stretchr/objx v0.3.0
 github.com/stretchr/objx
-# github.com/stretchr/testify v1.4.0
+# github.com/stretchr/testify v1.6.1
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
-# github.com/ulikunitz/xz v0.5.6
+# github.com/ulikunitz/xz v0.5.8
 github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
 github.com/ulikunitz/xz/internal/xlog
 github.com/ulikunitz/xz/lzma
 # github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8
 github.com/xi2/xz
-# go.etcd.io/bbolt v1.3.4
+# go.etcd.io/bbolt v1.3.5
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
+# golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/chacha20
@@ -146,12 +145,12 @@ golang.org/x/crypto/curve25519
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7
+# golang.org/x/net v0.0.0-20200822124328-c89045814202
 golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20200519105757-fe76b779f299
+# golang.org/x/sys v0.0.0-20200831180312-196b9ba8737a
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
@@ -188,9 +187,9 @@ google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 gopkg.in/alecthomas/kingpin.v2
-# gopkg.in/yaml.v2 v2.3.0
-gopkg.in/yaml.v2
-# nhooyr.io/websocket v1.8.2
+# gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
+gopkg.in/yaml.v3
+# nhooyr.io/websocket v1.8.6
 nhooyr.io/websocket
 nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
