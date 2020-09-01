@@ -475,6 +475,8 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.handleClosePacket(ctx, packet)
 	case routing.KeepAlivePacket:
 		return r.handleKeepAlivePacket(ctx, packet)
+	case routing.HandshakePacket:
+		return r.handleDataPacket(ctx, packet)
 	default:
 		return ErrUnknownPacketType
 	}
