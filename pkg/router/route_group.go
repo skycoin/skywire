@@ -183,8 +183,6 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 		return 0, ErrRuleTransportMismatch
 	}
 
-	rg.logger.Warnf("[!!!] RouteGroup Write, len(tps) = %v, len(fwd) = %v, len(rvs) = %v", len(tps), len(rules), len(rg.rvs))
-
 	for i := range tps {
 		rule := rules[i]
 		tp := tps[i]
@@ -194,13 +192,15 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 			continue
 		}
 
+		rg.logger.Infof("Attempting to use TP %v (%v -> %v) (%v of %v) for writing",
+			tp.Entry.ID, tp.Entry.Edges[0], tp.Entry.Edges[1], i+1, len(tps))
+
 		n, err := rg.write(p, tp, rule)
 		if err == nil {
-			rg.logger.Warnf("[!!!] RouteGroup Write, index %v ok", i)
 			return n, nil
 		}
 
-		rg.logger.Infof("Failed to write to transport at index %v: %v", i, err)
+		rg.logger.Infof("Failed to write to transport %v: %v", tp.Entry.ID, err)
 	}
 
 	rg.logger.Infof("Failed to write to any existing transport")
