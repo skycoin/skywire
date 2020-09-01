@@ -113,19 +113,20 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	rg := &RouteGroup{
-		cfg:           cfg,
-		logger:        logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
-		desc:          desc,
-		rt:            rt,
-		tps:           make([]*transport.ManagedTransport, 0),
-		fwd:           make([]routing.Rule, 0),
-		rvs:           make([]routing.Rule, 0),
-		readCh:        make(chan []byte, cfg.ReadChBufSize),
-		readBuf:       bytes.Buffer{},
-		remoteClosed:  make(chan struct{}),
-		closed:        make(chan struct{}),
-		readDeadline:  deadline.MakePipeDeadline(),
-		writeDeadline: deadline.MakePipeDeadline(),
+		cfg:                cfg,
+		logger:             logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		desc:               desc,
+		rt:                 rt,
+		tps:                make([]*transport.ManagedTransport, 0),
+		fwd:                make([]routing.Rule, 0),
+		rvs:                make([]routing.Rule, 0),
+		readCh:             make(chan []byte, cfg.ReadChBufSize),
+		readBuf:            bytes.Buffer{},
+		remoteClosed:       make(chan struct{}),
+		closed:             make(chan struct{}),
+		readDeadline:       deadline.MakePipeDeadline(),
+		writeDeadline:      deadline.MakePipeDeadline(),
+		handshakeProcessed: make(chan struct{}),
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
