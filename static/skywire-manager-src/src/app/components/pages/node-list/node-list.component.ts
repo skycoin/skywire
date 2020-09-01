@@ -59,6 +59,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   allNodes: Node[];
   filteredNodes: Node[];
   nodesToShow: Node[];
+  hasOfflineNodes = false;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
@@ -166,6 +167,15 @@ export class NodeListComponent implements OnInit, OnDestroy {
     );
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredNodes = data;
+
+      // Check if there are offline nodes.
+      this.hasOfflineNodes = false;
+      this.filteredNodes.forEach(node => {
+        if (!node.online) {
+          this.hasOfflineNodes = true;
+        }
+      });
+
       this.dataSorter.setData(this.filteredNodes);
     });
 
@@ -596,14 +606,19 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * Removes all offline nodes from the list, until seeing them online again.
    */
   removeOffline() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'nodes.delete-all-offline-confirmation');
+    let confirmationText = 'nodes.delete-all-offline-confirmation';
+    if (this.dataFilterer.currentFiltersTexts && this.dataFilterer.currentFiltersTexts.length > 0) {
+      confirmationText = 'nodes.delete-all-filtered-offline-confirmation';
+    }
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
 
       // Prepare all offline nodes to be removed.
       const nodesToRemove: string[] = [];
-      this.allNodes.forEach(node => {
+      this.filteredNodes.forEach(node => {
         if (!node.online) {
           nodesToRemove.push(node.local_pk);
         }
@@ -620,8 +635,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
         } else {
           this.snackbarService.showDone('nodes.deleted-plural', { number: nodesToRemove.length });
         }
-      } else {
-        this.snackbarService.showWarning('nodes.no-offline-nodes');
       }
     });
   }
