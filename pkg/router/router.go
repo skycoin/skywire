@@ -478,14 +478,12 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
 	switch packet.Type() {
-	case routing.DataPacket:
+	case routing.DataPacket, routing.HandshakePacket:
 		return r.handleDataHandshakePacket(ctx, packet)
 	case routing.ClosePacket:
 		return r.handleClosePacket(ctx, packet)
 	case routing.KeepAlivePacket:
 		return r.handleKeepAlivePacket(ctx, packet)
-	case routing.HandshakePacket:
-		return r.handleDataHandshakePacket(ctx, packet)
 	default:
 		return ErrUnknownPacketType
 	}

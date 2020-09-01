@@ -119,6 +119,7 @@ func MakeKeepAlivePacket(id RouteID) Packet {
 	return packet
 }
 
+// MakeHandshakePacket constructs a new HandshakePacket.
 func MakeHandshakePacket(id RouteID, supportEncryption bool) Packet {
 	packet := make([]byte, PacketHeaderSize+1)
 
