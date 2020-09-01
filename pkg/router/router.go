@@ -466,6 +466,8 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 }
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
+	r.logger.Infof("HANDLING PACKET %s", packet.Type())
+
 	switch packet.Type() {
 	case routing.DataPacket:
 		return r.handleDataPacket(ctx, packet)
