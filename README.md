@@ -37,7 +37,7 @@ $ cd skywire
 # Build.
 $ make build # installs all dependencies, build binaries and skywire apps
 
-# Install skywire-visor, skywire-cli, hypervisor and app CLI execs.
+# Install skywire-visor, skywire-cli and app CLI execs.
 $ make install
 ```
 
@@ -54,7 +54,7 @@ $ skywire-cli visor gen-config
 Additional options are displayed when `skywire-cli visor gen-config -h` is run.
 
 If you are trying to test features from the develop branch, 
-you should use the `-t ` flag when generating config files for either `skywire-visor` or `hypervisor`. 
+you should use the `-t ` flag when generating config files for `skywire-visor`. 
 
 We will cover certain fields of the configuration file below.
 
@@ -85,7 +85,7 @@ In the above example, we have two other visors running on localhost (that we wis
 
 #### `hypervisor` setup
 
-Every node can be controlled by one or more hypervisors. The hypervisor allows to control and configure multiple visors. 
+Every node can be controlled by one or more hypervisors. The hypervisor allows controlling and configuring multiple visors. 
 In order to allow a hypervisor to access a visor, 
 the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
 
@@ -121,19 +121,19 @@ $ skywire-cli -h
 
 ### Run `hypervisor`
 
-In order to run the hypervisor, generate a hypervisor config file with 
+In order to run the visor UI, generate a visor config file with `--hypervisor` flag 
 
 ```bash
-$ hypervisor gen-config
+$ skywire-cli visor gen-config --hypervisor
 ```
 
-Then you can start a hypervisor with:
+Then visor will start visor UI when it is run:
 
 ```bash
-$ hypervisor 
+$ skywire-visor 
 ```
 
-You can open up the hypervisor UI on `localhost:8000`. 
+You can open up the visor UI on `localhost:8000`. 
 
 ### Windows
 

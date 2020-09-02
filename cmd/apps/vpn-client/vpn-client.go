@@ -46,7 +46,7 @@ func main() {
 	flag.Parse()
 
 	if *serverPKStr == "" {
-		// TODO: fix args passage for Windows
+		// TODO(darkrengarius): fix args passage for Windows
 		//*serverPKStr = "03e9019b3caa021dbee1c23e6295c6034ab4623aec50802fcfdd19764568e2958d"
 		log.Fatalln("VPN server pub key is missing")
 	}

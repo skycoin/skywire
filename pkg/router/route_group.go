@@ -494,7 +494,6 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 		return nil
 	}
 
-	// TODO: use `close` with some close code if we decide that it should be different from the current one
 	return rg.close(code)
 }
 

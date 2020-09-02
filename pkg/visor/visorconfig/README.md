@@ -15,6 +15,7 @@
 - `shutdown_timeout` (Duration)
 - `restart_check_delay` (string)
 - `public_trusted_visor` (bool)
+- `hypervisor` (*[Config](#Config))
 
 
 # V1Dmsgpty
@@ -33,25 +34,9 @@
 - `trusted_visors` ()
 
 
-# V1Launcher
+# V1UptimeTracker
 
-- `discovery` (*[V1AppDisc](#V1AppDisc))
-- `apps` ([][AppConfig](#AppConfig))
-- `server_addr` (string)
-- `bin_path` (string)
-- `local_path` (string)
-
-
-# V1LogStore
-
-- `type` (string) - Type defines the log store type. Valid values: file, memory.
-- `location` (string)
-
-
-# V1AppDisc
-
-- `update_interval` (Duration)
-- `proxy_discovery_addr` (string)
+- `addr` (string)
 
 
 # V1Routing
@@ -61,9 +46,25 @@
 - `route_finder_timeout` (Duration)
 
 
-# V1UptimeTracker
+# V1LogStore
 
-- `addr` (string)
+- `type` (string) - Type defines the log store type. Valid values: file, memory.
+- `location` (string)
+
+
+# V1Launcher
+
+- `discovery` (*[V1AppDisc](#V1AppDisc))
+- `apps` ([][AppConfig](#AppConfig))
+- `server_addr` (string)
+- `bin_path` (string)
+- `local_path` (string)
+
+
+# V1AppDisc
+
+- `update_interval` (Duration)
+- `proxy_discovery_addr` (string)
 
 
 # Common
@@ -75,28 +76,35 @@
 - `pk` (PubKey)
 
 
+# Config
+
+- `-` (PubKey)
+- `-` (SecKey)
+- `db_path` (string)
+- `enable_auth` (bool)
+- `cookies` ([CookieConfig](#CookieConfig))
+- `-` (string)
+- `dmsg_port` (uint16)
+- `http_addr` (string)
+- `enable_tls` (bool)
+- `tls_cert_file` (string)
+- `tls_key_file` (string)
+
+
+# CookieConfig
+
+- `hash_key` (Key)
+- `block_key` (Key)
+- `expires_duration` (Duration)
+- `path` (string)
+- `domain` (string)
+- `-` (bool)
+
+
 # STCPConfig
 
 - `pk_table` ()
 - `local_address` (string)
-
-
-# AppConfig
-
-- `name` (string)
-- `args` ([]string)
-- `auto_start` (bool)
-- `port` (Port)
-
-
-# MasterLogger
-
-- `` (*[Logger](#Logger))
-
-
-# Logger
-
-- `` (FieldLogger)
 
 
 # RWMutex
@@ -118,3 +126,21 @@
 
 - `discovery` (string)
 - `sessions_count` (int)
+
+
+# AppConfig
+
+- `name` (string)
+- `args` ([]string)
+- `auto_start` (bool)
+- `port` (Port)
+
+
+# MasterLogger
+
+- `` (*[Logger](#Logger))
+
+
+# Logger
+
+- `` (FieldLogger)
