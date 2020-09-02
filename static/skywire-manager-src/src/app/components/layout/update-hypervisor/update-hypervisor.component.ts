@@ -84,6 +84,7 @@ export class UpdateProgressInfo {
 interface UpdateVersion {
   currentVersion: string;
   newVersion: string;
+  updateLink: string;
 }
 
 /**
@@ -146,10 +147,6 @@ export class UpdateHypervisorComponent implements AfterViewInit, OnDestroy {
    * Checks if the hypervisor is already being updated.
    */
   private startChecking() {
-    // NOTE: This code is needed for checking if the hypervisor is currently being updated, but
-    // is commented due to a bug with the Hypervisor API. Must be reactivated, and the last
-    // cuerrently uncommented line deleted, after the bug is solved.
-    /*
     this.subscription = this.nodeService.checkIfUpdating(null).subscribe(result => {
       if (result.running) {
         this.update();
@@ -160,8 +157,6 @@ export class UpdateHypervisorComponent implements AfterViewInit, OnDestroy {
       this.changeState(UpdatingStates.Error);
       this.errorText = processServiceError(err).translatableErrorMsg;
     });
-    */
-    this.checkUpdates();
   }
 
   /**
@@ -173,8 +168,9 @@ export class UpdateHypervisorComponent implements AfterViewInit, OnDestroy {
         // Save the update.
         this.updateFound = {
           currentVersion: result.current_version ?
-          result.current_version : this.translateService.instant('common.unknown'),
+            result.current_version : this.translateService.instant('common.unknown'),
           newVersion: result.available_version,
+          updateLink: result.release_url,
         };
 
         // Go to the next step.
