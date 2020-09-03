@@ -34,6 +34,8 @@ var (
 	ErrBadTransport = errors.New("bad transport")
 	// ErrRuleTransportMismatch is returned when number of forward rules does not equal to number of transports.
 	ErrRuleTransportMismatch = errors.New("rule/transport mismatch")
+	// ErrRuleTransportMismatch is returned when no suitable transport was found.
+	ErrNoSuitableTransport = errors.New("no suitable transport")
 )
 
 type timeoutError struct{}
@@ -409,27 +411,34 @@ func (rg *RouteGroup) sendKeepAlive() error {
 
 func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	rg.mu.Lock()
+	defer rg.mu.Unlock()
 
 	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
-		rg.mu.Unlock()
 		// if no transports, no rules, then no keepalive
 		return nil
 	}
 
-	rule := rg.fwd[0]
-	tp := rg.tps[0]
-	rg.mu.Unlock()
-	if tp == nil {
-		return errors.New("no suitable transport")
+	for i := 0; i < len(rg.tps); i++ {
+		tp := rg.tps[i]
+
+		if tp == nil {
+			continue
+		}
+
+		rule := rg.fwd[i]
+		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt)
+
+		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+		if err == nil {
+			rg.logger.Infof("Sent handshake via transport %v", tp.Entry.ID)
+			return nil
+		}
+
+		rg.logger.Infof("Failed to send handshake via transport %v: %v [%v/%v]",
+			tp.Entry.ID, err, i+1, len(rg.tps))
 	}
 
-	packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt)
-
-	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-		return err
-	}
-
-	return nil
+	return ErrNoSuitableTransport
 }
 
 // Close closes a RouteGroup with the specified close `code`:
