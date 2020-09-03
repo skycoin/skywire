@@ -34,6 +34,8 @@ var (
 	ErrBadTransport = errors.New("bad transport")
 	// ErrRuleTransportMismatch is returned when number of forward rules does not equal to number of transports.
 	ErrRuleTransportMismatch = errors.New("rule/transport mismatch")
+	// ErrNoSuitableTransport is returned when no suitable transport was found.
+	ErrNoSuitableTransport = errors.New("no suitable transport")
 )
 
 type timeoutError struct{}
@@ -69,6 +71,10 @@ type RouteGroup struct {
 	logger *logging.Logger
 	desc   routing.RouteDescriptor // describes the route group
 	rt     routing.Table
+
+	handshakeProcessed     chan struct{}
+	handshakeProcessedOnce sync.Once
+	encrypt                bool
 
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
@@ -109,19 +115,20 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	rg := &RouteGroup{
-		cfg:           cfg,
-		logger:        logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
-		desc:          desc,
-		rt:            rt,
-		tps:           make([]*transport.ManagedTransport, 0),
-		fwd:           make([]routing.Rule, 0),
-		rvs:           make([]routing.Rule, 0),
-		readCh:        make(chan []byte, cfg.ReadChBufSize),
-		readBuf:       bytes.Buffer{},
-		remoteClosed:  make(chan struct{}),
-		closed:        make(chan struct{}),
-		readDeadline:  deadline.MakePipeDeadline(),
-		writeDeadline: deadline.MakePipeDeadline(),
+		cfg:                cfg,
+		logger:             logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		desc:               desc,
+		rt:                 rt,
+		tps:                make([]*transport.ManagedTransport, 0),
+		fwd:                make([]routing.Rule, 0),
+		rvs:                make([]routing.Rule, 0),
+		readCh:             make(chan []byte, cfg.ReadChBufSize),
+		readBuf:            bytes.Buffer{},
+		remoteClosed:       make(chan struct{}),
+		closed:             make(chan struct{}),
+		readDeadline:       deadline.MakePipeDeadline(),
+		writeDeadline:      deadline.MakePipeDeadline(),
+		handshakeProcessed: make(chan struct{}),
 	}
 
 	go rg.keepAliveLoop(cfg.KeepAliveInterval)
@@ -402,6 +409,38 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	return nil
 }
 
+func (rg *RouteGroup) sendHandshake(encrypt bool) error {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		// if no transports, no rules, then no keepalive
+		return nil
+	}
+
+	for i := 0; i < len(rg.tps); i++ {
+		tp := rg.tps[i]
+
+		if tp == nil {
+			continue
+		}
+
+		rule := rg.fwd[i]
+		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt)
+
+		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+		if err == nil {
+			rg.logger.Infof("Sent handshake via transport %v", tp.Entry.ID)
+			return nil
+		}
+
+		rg.logger.Infof("Failed to send handshake via transport %v: %v [%v/%v]",
+			tp.Entry.ID, err, i+1, len(rg.tps))
+	}
+
+	return ErrNoSuitableTransport
+}
+
 // Close closes a RouteGroup with the specified close `code`:
 // - Send Close packet for all ForwardRules with the code `code`.
 // - Delete all rules (ForwardRules and ConsumeRules) from routing table.
@@ -463,7 +502,22 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
+		rg.handshakeProcessedOnce.Do(func() {
+			// first packet is data packet, so we're communicating with the old visor
+			rg.encrypt = false
+			close(rg.handshakeProcessed)
+		})
 		return rg.handleDataPacket(packet)
+	case routing.HandshakePacket:
+		rg.handshakeProcessedOnce.Do(func() {
+			// first packet is handshake packet, so we're communicating with the new visor
+			rg.encrypt = true
+			if packet.Payload()[0] == 0 {
+				rg.encrypt = false
+			}
+
+			close(rg.handshakeProcessed)
+		})
 	}
 
 	return nil
