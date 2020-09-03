@@ -34,7 +34,7 @@ var (
 	ErrBadTransport = errors.New("bad transport")
 	// ErrRuleTransportMismatch is returned when number of forward rules does not equal to number of transports.
 	ErrRuleTransportMismatch = errors.New("rule/transport mismatch")
-	// ErrRuleTransportMismatch is returned when no suitable transport was found.
+	// ErrNoSuitableTransport is returned when no suitable transport was found.
 	ErrNoSuitableTransport = errors.New("no suitable transport")
 )
 
