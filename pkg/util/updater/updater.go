@@ -495,6 +495,7 @@ func (u *Updater) downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
+	// TODO(nkryuchkov): use syscall.Dup
 	out := io.MultiWriter(f, u.progressBar(resp.ContentLength, filename))
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
