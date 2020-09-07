@@ -495,7 +495,7 @@ func (u *Updater) downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
-	// TODO(nkryuchkov): use syscall.Dup
+	// TODO(nkryuchkov): use syscall.Dup to block stdout for all messages except updater logs (https://play.golang.org/p/Xg2iajdiuNN)
 	out := io.MultiWriter(f, u.progressBar(resp.ContentLength, filename))
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
