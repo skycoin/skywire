@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	setChildPgidToParentPgidOrPgid()
+	solution()
 }
 
 func setChildPgidToTtyPgid() {
@@ -460,6 +460,73 @@ func setChildPgidToPgid() {
 		i++
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func solution() {
+	pid := os.Getpid()
+	ppid := os.Getppid()
+
+	pgrp, err := syscall.Getpgid(pid)
+	if err != nil {
+		panic(err)
+	}
+
+	ppgrp, err := syscall.Getpgid(ppid)
+	if err != nil {
+		panic(err)
+	}
+
+	signal.Ignore(syscall.SIGTTIN, syscall.SIGTTOU)
+
+	go func() {
+		time.Sleep(5 * time.Second)
+
+		const ttyDevice = "/dev/tty" // /dev/tty is an alias for the current process TTY
+		tty, err := os.OpenFile(ttyDevice, os.O_RDWR, 0)
+		if err != nil {
+			panic(err)
+		}
+
+		cmd := exec.Command(os.Args[0], os.Args[1:]...)
+
+		// TODO: use syscall.Dup
+		cmd.Stdout = os.Stdout
+		cmd.Stdin = os.Stdin
+		cmd.Stderr = os.Stderr
+		cmd.Env = os.Environ()
+
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+		cmd.SysProcAttr.Foreground = true
+		cmd.SysProcAttr.Setpgid = true
+		cmd.SysProcAttr.Ctty = int(tty.Fd())
+
+		if pgidExists(ppgrp) {
+			cmd.SysProcAttr.Pgid = ppgrp
+		} else if pgidExists(pgrp) {
+			cmd.SysProcAttr.Pgid = pgrp
+		}
+
+		if err := cmd.Start(); err != nil {
+			panic(err)
+		}
+
+		signal.Reset()
+
+		time.Sleep(1 * time.Second)
+		os.Exit(0)
+	}()
+
+	i := 0
+	for {
+		logrus.Info(i)
+		i++
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func pgidExists(pgid int) bool {
+	n, err := syscall.Getpgid(pgid)
+	return err == nil && n >= 0
 }
 
 func Ioctl(fd, req, arg uintptr) (err syscall.Errno) {
