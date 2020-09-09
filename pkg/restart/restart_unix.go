@@ -19,6 +19,13 @@ func attachTTY(cmd *exec.Cmd) {
 		return
 	}
 
+	fd := int(tty.Fd())
+
+	nfd, err := syscall.Dup(fd)
+	if err != nil {
+		panic(err)
+	}
+
 	pgid, err := childPgid()
 	if err != nil {
 		// If a process group ID for child process cannot be determined,
@@ -29,7 +36,7 @@ func attachTTY(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Foreground: true,
 		Setpgid:    true,
-		Ctty:       int(tty.Fd()),
+		Ctty:       nfd,
 		Pgid:       pgid,
 	}
 }
