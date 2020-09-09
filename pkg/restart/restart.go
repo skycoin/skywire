@@ -127,6 +127,8 @@ func (c *Context) Restart() (err error) {
 		return err
 	}
 
+	signal.Reset()
+
 	// Let RPC calls complete and then exit.
 	go c.exitAfterDelay(exitDelay)
 
