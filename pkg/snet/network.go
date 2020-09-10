@@ -306,10 +306,12 @@ func (n *Network) Close() error {
 		if v != nil {
 			wg.Add(1)
 			go func() {
-				directErrorsMu.Lock()
-				defer directErrorsMu.Unlock()
+				err := v.Close()
 
-				directErrors[k] = v.Close()
+				directErrorsMu.Lock()
+				directErrors[k] = err
+				directErrorsMu.Unlock()
+
 				wg.Done()
 			}()
 		}
