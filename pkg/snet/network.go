@@ -299,13 +299,19 @@ func (n *Network) Close() error {
 		}()
 	}
 
+	var directErrorsMu sync.Mutex
 	directErrors := make(map[string]error)
 
 	for k, v := range n.clients.Direct {
 		if v != nil {
 			wg.Add(1)
 			go func() {
-				directErrors[k] = v.Close()
+				err := v.Close()
+
+				directErrorsMu.Lock()
+				directErrors[k] = err
+				directErrorsMu.Unlock()
+
 				wg.Done()
 			}()
 		}
