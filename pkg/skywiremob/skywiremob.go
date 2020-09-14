@@ -509,7 +509,12 @@ func ServeVPN() string {
 	}
 
 	go func() {
-		tunAddr := <-mobileAppAddrCh
+		tunAddr, ok := <-mobileAppAddrCh
+		if !ok {
+			log.Infoln("DIDN'T GET UDP ADDR, VISOR IS STOPPED, RETURNING...")
+			return
+		}
+
 		log.Infof("Got mobile app UDP addr: %s\n", tunAddr.String())
 		wr := vpn.NewUDPConnWriter(udpConn, tunAddr)
 

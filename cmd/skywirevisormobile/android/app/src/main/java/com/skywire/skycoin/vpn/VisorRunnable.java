@@ -91,6 +91,13 @@ public class VisorRunnable implements Runnable {
             return;
         }
 
+        try {
+            Skywiremob.printString("VPN IS READY, SLEEPING...");
+            Thread.sleep(1 * 1000 * 10);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
         activity.runOnUiThread(new Runnable() {
             public void run() {
                 activity.startVPNService();
