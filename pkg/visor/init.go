@@ -5,15 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
+	"github.com/rakyll/statik/fs"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
+	"github.com/skycoin/skycoin/src/util/logging"
 
+	_ "github.com/skycoin/skywire/cmd/skywire-visor/statik" // embedded static files
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -31,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -53,6 +58,7 @@ var initStack = func() []InitFunc {
 		InitHypervisors,
 		InitUptimeTracker,
 		InitTrustedVisors,
+		InitHypervisor,
 	}
 }
 
@@ -553,6 +559,60 @@ func InitTrustedVisors(ctx context.Context, v *Visor) bool {
 	return true
 }
 
+// InitHypervisor initializes hypervisor.
+func InitHypervisor(ctx context.Context, v *Visor) bool {
+	if v.conf.Hypervisor == nil {
+		return true
+	}
+
+	v.log.Infof("Initializing hypervisor")
+
+	cancellableCtx, cancel := context.WithCancel(ctx)
+
+	assets, err := fs.New()
+	if err != nil {
+		v.log.Fatalf("Failed to obtain embedded static files: %v", err)
+	}
+
+	conf := *v.conf.Hypervisor
+	conf.PK = v.conf.PK
+	conf.SK = v.conf.SK
+	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
+
+	conf.FillDefaults(false)
+
+	// Prepare hypervisor.
+	hv, err := New(conf, assets, v, v.net.Dmsg())
+	if err != nil {
+		v.log.Fatalln("Failed to start hypervisor:", err)
+	}
+
+	serveDmsg(cancellableCtx, v.log, hv, conf)
+
+	// Serve HTTP(s).
+	v.log.WithField("addr", conf.HTTPAddr).
+		WithField("tls", conf.EnableTLS).
+		Info("Serving hypervisor...")
+
+	go func() {
+		if handler := hv.HTTPHandler(); conf.EnableTLS {
+			err = http.ListenAndServeTLS(conf.HTTPAddr, conf.TLSCertFile, conf.TLSKeyFile, handler)
+		} else {
+			err = http.ListenAndServe(conf.HTTPAddr, handler)
+		}
+
+		if err != nil {
+			v.log.WithError(err).Fatal("Hypervisor exited with error.")
+		}
+
+		cancel()
+	}()
+
+	v.log.Infof("Hypervisor initialized")
+
+	return true
+}
+
 func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
@@ -585,4 +645,14 @@ func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, 
 	}
 
 	return tpdC, nil
+}
+
+func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hypervisorconfig.Config) {
+	go func() {
+		if err := hv.ServeRPC(ctx, conf.DmsgPort); err != nil {
+			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+		}
+	}()
+	log.WithField("addr", dmsg.Addr{PK: conf.PK, Port: conf.DmsgPort}).
+		Info("Serving RPC client over dmsg.")
 }

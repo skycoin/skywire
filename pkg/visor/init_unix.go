@@ -14,6 +14,8 @@ import (
 	"github.com/skycoin/dmsg/dmsgpty"
 )
 
+const ownerRWX = 0700
+
 // InitDmsgpty initializes dmsgpty.
 func InitDmsgpty(ctx context.Context, v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
@@ -26,7 +28,7 @@ func InitDmsgpty(ctx context.Context, v *Visor) bool {
 
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
-		if err := UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+		if err := unlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
 			return report(err)
 		}
 	}

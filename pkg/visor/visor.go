@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -25,7 +24,6 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -40,7 +38,6 @@ var (
 
 const (
 	supportedProtocolVersion = "0.1.0"
-	ownerRWX                 = 0700
 	shortHashLen             = 6
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
@@ -238,144 +235,28 @@ func (v *Visor) Close() {
 	log.Info("Shutdown complete. Goodbye!")
 }
 
-// TpDiscClient is a convenience function to obtain transport discovery client.
-func (v *Visor) TpDiscClient() transport.DiscoveryClient {
+// tpDiscClient is a convenience function to obtain transport discovery client.
+func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
 }
 
-// RouteFinderClient is a convenience function to obtain route finder client.
-func (v *Visor) RouteFinderClient() rfclient.Client {
+// routeFinderClient is a convenience function to obtain route finder client.
+func (v *Visor) routeFinderClient() rfclient.Client {
 	return v.rfClient
 }
 
-// UptimeTrackerClient is a convenience function to obtain uptime tracker client.
-func (v *Visor) UptimeTrackerClient() utclient.APIClient {
+// uptimeTrackerClient is a convenience function to obtain uptime tracker client.
+func (v *Visor) uptimeTrackerClient() utclient.APIClient {
 	return v.uptimeTracker
 }
 
-// AddressResolverClient is a convenience function to obtain uptime address resovler client.
-func (v *Visor) AddressResolverClient() arclient.APIClient {
+// addressResolverClient is a convenience function to obtain uptime address resovler client.
+func (v *Visor) addressResolverClient() arclient.APIClient {
 	return v.arClient
 }
 
-// Exec executes a shell command. It returns combined stdout and stderr output and an error.
-func (v *Visor) Exec(command string) ([]byte, error) {
-	args := strings.Split(command, " ")
-	cmd := exec.Command(args[0], args[1:]...) // nolint: gosec
-	return cmd.CombinedOutput()
-}
-
-// Update updates visor.
-// It checks if visor update is available.
-// If it is, the method downloads a new visor versions, starts it and kills the current process.
-func (v *Visor) Update(updateConfig updater.UpdateConfig) (bool, error) {
-	updated, err := v.updater.Update(updateConfig)
-	if err != nil {
-		v.log.Errorf("Failed to update visor: %v", err)
-		return false, err
-	}
-
-	return updated, nil
-}
-
-// UpdateAvailable checks if visor update is available.
-func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, error) {
-	version, err := v.updater.UpdateAvailable(channel)
-	if err != nil {
-		v.log.Errorf("Failed to check if visor update is available: %v", err)
-		return nil, err
-	}
-
-	return version, nil
-}
-
-// UpdateStatus returns status of the current updating operation.
-func (v *Visor) UpdateStatus() string {
-	return v.updater.Status()
-}
-
-func (v *Visor) setAutoStart(appName string, autoStart bool) error {
-	if _, ok := v.appL.AppState(appName); !ok {
-		return ErrAppProcNotRunning
-	}
-
-	v.log.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
-	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
-}
-
-func (v *Visor) setAppPassword(appName, password string) error {
-	allowedToChangePassword := func(appName string) bool {
-		allowedApps := map[string]struct{}{
-			skyenv.SkysocksName:  {},
-			skyenv.VPNClientName: {},
-			skyenv.VPNServerName: {},
-		}
-
-		_, ok := allowedApps[appName]
-		return ok
-	}
-
-	if !allowedToChangePassword(appName) {
-		return fmt.Errorf("app %s is not allowed to change password", appName)
-	}
-
-	v.log.Infof("Changing %s password to %q", appName, password)
-
-	const (
-		passcodeArgName = "-passcode"
-	)
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
-		return err
-	}
-
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v password, restarting it", appName)
-		return v.appL.RestartApp(appName)
-	}
-
-	v.log.Infof("Updated %v password", appName)
-
-	return nil
-}
-
-func (v *Visor) setAppPK(appName string, pk cipher.PubKey) error {
-	allowedToChangePK := func(appName string) bool {
-		allowedApps := map[string]struct{}{
-			skyenv.SkysocksClientName: {},
-			skyenv.VPNClientName:      {},
-		}
-
-		_, ok := allowedApps[appName]
-		return ok
-	}
-
-	if !allowedToChangePK(appName) {
-		return fmt.Errorf("app %s is not allowed to change PK", appName)
-	}
-
-	v.log.Infof("Changing %s PK to %q", appName, pk)
-
-	const (
-		pkArgName = "-srv"
-	)
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
-		return err
-	}
-
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v PK, restarting it", appName)
-		return v.appL.RestartApp(appName)
-	}
-
-	v.log.Infof("Updated %v PK", appName)
-
-	return nil
-}
-
-// UnlinkSocketFiles removes unix socketFiles from file system
-func UnlinkSocketFiles(socketFiles ...string) error {
+// unlinkSocketFiles removes unix socketFiles from file system
+func unlinkSocketFiles(socketFiles ...string) error {
 	for _, f := range socketFiles {
 		if err := syscall.Unlink(f); err != nil {
 			if !strings.Contains(err.Error(), "no such file or directory") {
