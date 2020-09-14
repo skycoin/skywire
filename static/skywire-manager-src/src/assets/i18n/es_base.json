@@ -363,6 +363,8 @@
       "state-available": "Available",
       "state-offline": "Offline",
       "public-key": "Remote visor public key",
+      "password": "Password",
+      "password-history-warning": "Note: the password will not be saved in the history.",
       "no-elements": "Currently there are no elements to show. Please try again later.",
       "no-elements-for-filters": "There are no elements that meet the filter criteria.",
       "no-filter": "No filter has been selected",
@@ -380,6 +382,13 @@
       "change-note-dialog": {
         "title": "Change Note",
         "note": "Note"
+      },
+
+      "password-dialog": {
+        "title": "Enter Password",
+        "password": "Password",
+        "info": "You are being asked for a password because a a password was set when the selected entry was created, but the it was not saved for security reasons. You can leave the password empty if needed.",
+        "continue-button": "Continue"
       },
 
       "filter-dialog": {
