@@ -161,7 +161,6 @@ func updateArg(conf *V1Launcher, appName, argName, value string) bool {
 				if conf.Apps[i].Args[j] == argName && j+1 < len(conf.Apps[i].Args) {
 					if value == "" {
 						conf.Apps[i].Args = append(conf.Apps[i].Args[:j], conf.Apps[i].Args[j+2:]...)
-						l -= 2
 						j--
 					} else {
 						conf.Apps[i].Args[j+1] = value
