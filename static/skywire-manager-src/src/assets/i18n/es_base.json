@@ -387,7 +387,7 @@
       "password-dialog": {
         "title": "Enter Password",
         "password": "Password",
-        "info": "You are being asked for a password because a a password was set when the selected entry was created, but the it was not saved for security reasons. You can leave the password empty if needed.",
+        "info": "You are being asked for a password because a password was set when the selected entry was created, but the it was not saved for security reasons. You can leave the password empty if needed.",
         "continue-button": "Continue"
       },
 
