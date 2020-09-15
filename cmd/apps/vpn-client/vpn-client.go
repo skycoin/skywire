@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appevent"
+
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/netutil"
@@ -70,7 +72,29 @@ func main() {
 		}
 	}
 
-	appClient := app.NewClient(nil)
+	var directIPsCh = make(chan net.IP, 100)
+
+	eventSub := appevent.NewSubscriber()
+
+	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
+		log.WithField("event_type", data.Type()).
+			WithField("event_data", data).
+			Info("GOT EVENT")
+
+		ip, ok, err := vpn.ParseIP(data.RemoteAddr)
+		if err != nil {
+			log.WithError(err).Errorf("Failed to parse IP %s", data.RemoteAddr)
+			return
+		}
+		if !ok {
+			log.Errorf("Failed to parse IP %s", data.RemoteAddr)
+			return
+		}
+
+		directIPsCh <- ip
+	})
+
+	appClient := app.NewClient(eventSub)
 	defer appClient.Close()
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
@@ -104,6 +128,26 @@ func main() {
 	go func() {
 		<-osSigs
 		vpnClient.Close()
+	}()
+
+	var directRoutesDone bool
+	for !directRoutesDone {
+		select {
+		case ip := <-directIPsCh:
+			if err := vpnClient.AddDirectRoute(ip); err != nil {
+				log.WithError(err).Errorf("Failed to setup direct route to %s", ip.String())
+			}
+		default:
+			directRoutesDone = true
+		}
+	}
+
+	go func() {
+		for ip := range directIPsCh {
+			if err := vpnClient.AddDirectRoute(ip); err != nil {
+				log.WithError(err).Errorf("Failed to setup direct route to %s", ip.String())
+			}
+		}
 	}()
 
 	if err := vpnClient.Serve(); err != nil {
