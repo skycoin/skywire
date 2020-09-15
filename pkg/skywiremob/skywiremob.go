@@ -401,6 +401,7 @@ func TUNGateway() string {
 	return tunGateway.String()
 }
 
+// StopVPNClient stops VPN client.
 func StopVPNClient() {
 	vpnClientMx.Lock()
 	if vpnClient != nil {
@@ -557,6 +558,7 @@ func StartListeningUDP() string {
 	return ""
 }
 
+// StopListeningUDP closes UDP socket.
 func StopListeningUDP() {
 	globalUDPConnMu.Lock()
 	if globalUDPConn != nil {

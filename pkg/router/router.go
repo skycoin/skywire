@@ -45,7 +45,7 @@ var (
 	// ErrRemoteEmptyPK occurs when the specified remote public key is empty.
 	ErrRemoteEmptyPK = errors.New("empty remote public key")
 
-	// ErrRouterCloesd occurs when router is closed.
+	// ErrRouterClosed occurs when router is closed.
 	ErrRouterClosed = errors.New("router is closed")
 )
 

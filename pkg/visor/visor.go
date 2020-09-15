@@ -140,6 +140,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) *Visor {
 	return v
 }
 
+// Start starts visor.
 func (v *Visor) Start(ctx context.Context) bool {
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", v.conf.PK).
