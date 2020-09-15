@@ -22,7 +22,7 @@
           </ng-template>
         </mat-form-field>
 
-        <mat-form-field>
+        <mat-form-field *ngIf="configuringVpn">
           <input
             id="password"
             type="password"
