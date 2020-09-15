@@ -101,7 +101,17 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 // - IP with port;
 // - IP without port.
 func IPFromEnv(key string) (net.IP, bool, error) {
-	addr := os.Getenv(key)
+	return ParseIP(os.Getenv(key))
+}
+
+// ParseIP parses IP string `addr`. `addr` may be on of:
+// - full URL with port;
+// - full URL without port;
+// - domain with port;
+// - domain without port;
+// - IP with port;
+// - IP without port.
+func ParseIP(addr string) (net.IP, bool, error) {
 	if addr == "" {
 		return nil, false, nil
 	}
