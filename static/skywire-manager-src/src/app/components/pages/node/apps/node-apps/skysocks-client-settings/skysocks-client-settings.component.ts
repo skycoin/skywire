@@ -361,7 +361,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
 
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
-        this.useFronHistory(historyEntry);
+        this.useFromHistory(historyEntry);
       } else if (selectedOption === 2) {
         this.changeNote(historyEntry);
       } else if (selectedOption === 3) {
@@ -416,7 +416,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
    * Makes the app use the data from a history entry.
    * @param entry Entry to be used.
    */
-  useFronHistory(entry: HistoryEntry) {
+  useFromHistory(entry: HistoryEntry) {
     // If the entry was created without a password, use it inmediatelly.
     if (!entry.hasPassword) {
       this.saveChanges(entry.key, null, entry.enteredManually, entry.location, entry.note);
@@ -476,10 +476,12 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     this.working = true;
 
     const data = { pk: publicKey };
-    if (password) {
-      data['passcode'] = password;
-    } else {
-      data['passcode'] = '';
+    if (this.configuringVpn) {
+      if (password) {
+        data['passcode'] = password;
+      } else {
+        data['passcode'] = '';
+      }
     }
 
     this.operationSubscription = this.appsService.changeAppSettings(
