@@ -25,6 +25,7 @@ type Client struct {
 	cfg            ClientConfig
 	log            logrus.FieldLogger
 	conn           net.Conn
+	directIPSMu    sync.Mutex
 	directIPs      []net.IP
 	defaultGateway net.IP
 	closeC         chan struct{}
@@ -88,6 +89,25 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		defaultGateway: defaultGateway,
 		closeC:         make(chan struct{}),
 	}, nil
+}
+
+func (c *Client) AddDirectRoute(ip net.IP) error {
+	c.directIPSMu.Lock()
+	defer c.directIPSMu.Unlock()
+
+	for _, storedIP := range c.directIPs {
+		if ip.Equal(storedIP) {
+			return nil
+		}
+	}
+
+	c.directIPs = append(c.directIPs, ip)
+
+	if err := c.setupDirectRoute(ip); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
@@ -197,12 +217,23 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 }
 
 func (c *Client) setupDirectRoutes() error {
+	c.directIPSMu.Lock()
+	defer c.directIPSMu.Unlock()
+
 	for _, ip := range c.directIPs {
-		if !ip.IsLoopback() {
-			c.log.Infof("Adding direct route to %s, via %s", ip.String(), c.defaultGateway.String())
-			if err := AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
-				return fmt.Errorf("error adding direct route to %s: %w", ip.String(), err)
-			}
+		if err := c.setupDirectRoute(ip); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) setupDirectRoute(ip net.IP) error {
+	if !ip.IsLoopback() {
+		c.log.Infof("Adding direct route to %s, via %s", ip.String(), c.defaultGateway.String())
+		if err := AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
+			return fmt.Errorf("error adding direct route to %s: %w", ip.String(), err)
 		}
 	}
 
@@ -210,6 +241,9 @@ func (c *Client) setupDirectRoutes() error {
 }
 
 func (c *Client) removeDirectRoutes() {
+	c.directIPSMu.Lock()
+	defer c.directIPSMu.Unlock()
+
 	for _, ip := range c.directIPs {
 		if !ip.IsLoopback() {
 			c.log.Infof("Removing direct route to %s", ip.String())
@@ -294,6 +328,12 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
 
+	if c.defaultGateway == nil {
+		c.log.Infoln("DEFAULT GATEWAY IS NIL")
+	}
+	if unavailableIPs == nil {
+		c.log.Infoln("UNAVAILABLE IPS IS NIL")
+	}
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
 
 	cHello := ClientHello{
