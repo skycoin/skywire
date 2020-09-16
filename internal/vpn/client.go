@@ -97,6 +97,8 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 	}, nil
 }
 
+// AddDirectRoute adds new direct route. Packets destined to `ip` will
+// go directly, ignoring VPN.
 func (c *Client) AddDirectRoute(ip net.IP) error {
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()

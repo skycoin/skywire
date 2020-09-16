@@ -111,10 +111,6 @@ type Network struct {
 	onNewNetworkType   func(netType string)
 }
 
-func (n *Network) Conf() Config {
-	return n.conf
-}
-
 // New creates a network from a config.
 func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 	clients := NetworkClients{
@@ -208,6 +204,11 @@ func NewRaw(conf Config, clients NetworkClients) *Network {
 	}
 
 	return n
+}
+
+// Conf gets network configuration.
+func (n *Network) Conf() Config {
+	return n.conf
 }
 
 // Init initiates server connections.
