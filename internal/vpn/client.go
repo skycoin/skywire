@@ -323,8 +323,6 @@ func tpRemoteIPsFromEnv() ([]net.IP, error) {
 			return nil, fmt.Errorf("env arg %s is not provided", key)
 		}
 
-		fmt.Printf("PARSING TP REMOTE IP %s\n", ipStr)
-
 		ip, err := ipFromEnv(key)
 		if err != nil {
 			return nil, fmt.Errorf("error getting TP remote IP: %w", err)
@@ -370,12 +368,6 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
 
-	if c.defaultGateway == nil {
-		c.log.Infoln("DEFAULT GATEWAY IS NIL")
-	}
-	if unavailableIPs == nil {
-		c.log.Infoln("UNAVAILABLE IPS IS NIL")
-	}
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
 
 	cHello := ClientHello{

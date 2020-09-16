@@ -9,14 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app/appevent"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/netutil"
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
