@@ -21,6 +21,22 @@
             {{ 'apps.vpn-socks-client-settings.remote-key-chars-error' | translate }}
           </ng-template>
         </mat-form-field>
+
+        <mat-form-field *ngIf="configuringVpn">
+          <input
+            id="password"
+            type="password"
+            formControlName="password"
+            maxlength="100"
+            [placeholder]="'apps.vpn-socks-client-settings.password' | translate"
+            matInput
+          >
+        </mat-form-field>
+
+        <div class="password-history-warning" *ngIf="form && form.get('password').value">
+          <mat-icon [inline]="true">warning</mat-icon>
+          {{ 'apps.vpn-socks-client-settings.password-history-warning' | translate }}
+        </div>
     
         <app-button
           #button
@@ -79,7 +95,7 @@
           <button
             mat-button
             class="list-button grey-button-background w-100"
-            (click)="saveChanges(proxy.pk, false, proxy.location)"
+            (click)="saveChanges(proxy.pk, null, false, proxy.location)"
           >
             <div class="button-content">
               <div class="item">
@@ -133,7 +149,7 @@
         <button
           mat-button
           class="list-button grey-button-background w-100 d-none d-md-inline"
-          (click)="saveChanges(entry.key, entry.enteredManually, entry.location, entry.note)"
+          (click)="useFronHistory(entry)"
         >
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </button>
