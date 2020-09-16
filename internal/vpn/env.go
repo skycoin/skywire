@@ -35,7 +35,9 @@ const (
 	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
 	STCPValueEnvPrefix = "STCP_TABLE_"
 
+	// TPRemoteIPsLenEnvKey is env arg holding TP remote IPs length.
 	TPRemoteIPsLenEnvKey = "TP_REMOTE_IPS_LEN"
+	// TPRemoteIPsEnvPrefix is prefix for each env arg holding TP remote IP.
 	TPRemoteIPsEnvPrefix = "ADDR_TP_REMOTE_"
 )
 
