@@ -76,10 +76,6 @@ func main() {
 	eventSub := appevent.NewSubscriber()
 
 	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
-		log.WithField("event_type", data.Type()).
-			WithField("event_data", data).
-			Info("GOT EVENT")
-
 		ip, ok, err := vpn.ParseIP(data.RemoteAddr)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to parse IP %s", data.RemoteAddr)
