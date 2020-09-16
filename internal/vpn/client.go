@@ -64,11 +64,17 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
 	}
 
+	tpRemoteIPs, err := tpRemoteIPsFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("error getting TP remote IPs: %w", err)
+	}
+
 	requiredDirectIPs := []net.IP{dmsgDiscIP, tpDiscIP, rfIP}
-	directIPs := make([]net.IP, 0, len(requiredDirectIPs)+len(dmsgSrvAddrs)+len(stcpEntities))
+	directIPs := make([]net.IP, 0, len(requiredDirectIPs)+len(dmsgSrvAddrs)+len(stcpEntities)+len(tpRemoteIPs))
 	directIPs = append(directIPs, requiredDirectIPs...)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
+	directIPs = append(directIPs, tpRemoteIPs...)
 
 	if arIP != nil {
 		directIPs = append(directIPs, arIP)
@@ -262,7 +268,7 @@ func dmsgDiscIPFromEnv() (net.IP, error) {
 func dmsgSrvAddrsFromEnv() ([]net.IP, error) {
 	dmsgSrvCountStr := os.Getenv(DmsgAddrsCountEnvKey)
 	if dmsgSrvCountStr == "" {
-		return nil, errors.New("dmsg servers count is not provi")
+		return nil, errors.New("dmsg servers count is not provided")
 	}
 	dmsgSrvCount, err := strconv.Atoi(dmsgSrvCountStr)
 	if err != nil {
@@ -292,6 +298,40 @@ func addressResolverIPFromEnv() (net.IP, error) {
 
 func rfIPFromEnv() (net.IP, error) {
 	return ipFromEnv(RFAddrEnvKey)
+}
+
+func tpRemoteIPsFromEnv() ([]net.IP, error) {
+	var ips []net.IP
+	ipsLenStr := os.Getenv(TPRemoteIPsLenEnvKey)
+	if ipsLenStr == "" {
+		return nil, nil
+	}
+
+	ipsLen, err := strconv.Atoi(ipsLenStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid TPs remote IPs len: %s: %w", ipsLenStr, err)
+	}
+
+	ips = make([]net.IP, 0, ipsLen)
+	for i := 0; i < ipsLen; i++ {
+		key := TPRemoteIPsEnvPrefix + strconv.Itoa(i)
+
+		ipStr := os.Getenv(key)
+		if ipStr == "" {
+			return nil, fmt.Errorf("env arg %s is not provided", key)
+		}
+
+		fmt.Printf("PARSING TP REMOTE IP %s\n", ipStr)
+
+		ip, err := ipFromEnv(key)
+		if err != nil {
+			return nil, fmt.Errorf("error getting TP remote IP: %w", err)
+		}
+
+		ips = append(ips, ip)
+	}
+
+	return ips, nil
 }
 
 func stcpEntitiesFromEnv() ([]net.IP, error) {

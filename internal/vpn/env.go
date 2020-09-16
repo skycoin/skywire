@@ -34,6 +34,9 @@ const (
 	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
 	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
 	STCPValueEnvPrefix = "STCP_TABLE_"
+
+	TPRemoteIPsLenEnvKey = "TP_REMOTE_IPS_LEN"
+	TPRemoteIPsEnvPrefix = "ADDR_TP_REMOTE_"
 )
 
 // DirectRoutesEnvConfig contains all the addresses which need to be communicated directly,
@@ -45,6 +48,7 @@ type DirectRoutesEnvConfig struct {
 	RF              string
 	UptimeTracker   string
 	AddressResolver string
+	TPRemoteIPs     []string
 	STCPTable       map[cipher.PubKey]string
 }
 
@@ -87,6 +91,14 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 
 		for i := range config.DmsgServers {
 			envs[DmsgAddrEnvPrefix+strconv.FormatInt(int64(i), 10)] = config.DmsgServers[i]
+		}
+	}
+
+	if len(config.TPRemoteIPs) != 0 {
+		envs[TPRemoteIPsLenEnvKey] = strconv.FormatInt(int64(len(config.TPRemoteIPs)), 10)
+
+		for i := range config.TPRemoteIPs {
+			envs[TPRemoteIPsEnvPrefix+strconv.FormatInt(int64(i), 10)] = config.TPRemoteIPs[i]
 		}
 	}
 
