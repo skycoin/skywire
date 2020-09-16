@@ -331,7 +331,8 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	return mTp, nil
 }
 
-func (tm *Manager) RemoteAddrs() []string {
+// STCPRRemoteAddrs gets remote IPs for all known STCPR transports.
+func (tm *Manager) STCPRRemoteAddrs() []string {
 	var addrs []string
 
 	tm.mx.RLock()
