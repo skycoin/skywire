@@ -281,7 +281,7 @@ func (r *RPC) StartApp(name *string, _ *struct{}) (err error) {
 
 	var envs []string
 	if *name == skyenv.VPNClientName {
-		envs, err = makeVPNEnvs(r.visor.conf, r.visor.net)
+		envs, err = makeVPNEnvs(r.visor.conf, r.visor.net, r.visor.tpM.STCPRRemoteAddrs())
 		if err != nil {
 			return err
 		}
