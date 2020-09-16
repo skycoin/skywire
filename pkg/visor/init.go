@@ -307,8 +307,8 @@ func initLauncher(v *Visor) bool {
 	}
 
 	err = launch.AutoStart(map[string]func() ([]string, error){
-		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
-		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
+		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs()) },
+		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, nil) },
 	})
 
 	if err != nil {
@@ -321,7 +321,7 @@ func initLauncher(v *Visor) bool {
 	return report(nil)
 }
 
-func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
+func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) ([]string, error) {
 	var envCfg vpn.DirectRoutesEnvConfig
 
 	if conf.Dmsg != nil {
@@ -361,6 +361,8 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
 	}
+
+	envCfg.TPRemoteIPs = tpRemoteAddrs
 
 	envMap := vpn.AppEnvArgs(envCfg)
 
