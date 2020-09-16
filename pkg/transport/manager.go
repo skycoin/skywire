@@ -9,10 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/snet/arclient"
-
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
-
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -20,6 +16,8 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/snettest"
 )
 
