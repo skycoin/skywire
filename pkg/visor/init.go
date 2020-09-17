@@ -194,6 +194,16 @@ func initTransport(v *Visor) bool {
 		return report(fmt.Errorf("failed to start transport manager: %w", err))
 	}
 
+	tpM.OnAfterTPClosed(func(network, addr string) {
+		if network == tptypes.STCPR && addr != "" {
+			data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
+			event := appevent.NewEvent(appevent.TCPClose, data)
+			if err := v.ebc.Broadcast(context.Background(), event); err != nil {
+				v.log.WithError(err).Errorln("Failed to broadcast TCPClose event")
+			}
+		}
+	})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
