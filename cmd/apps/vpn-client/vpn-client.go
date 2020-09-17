@@ -71,22 +71,36 @@ func main() {
 		}
 	}
 
-	var directIPsCh = make(chan net.IP, 100)
+	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
+	defer close(directIPsCh)
+	defer close(nonDirectIPsCh)
 
 	eventSub := appevent.NewSubscriber()
 
-	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
-		ip, ok, err := vpn.ParseIP(data.RemoteAddr)
+	parseIP := func(addr string) net.IP {
+		ip, ok, err := vpn.ParseIP(addr)
 		if err != nil {
-			log.WithError(err).Errorf("Failed to parse IP %s", data.RemoteAddr)
-			return
+			log.WithError(err).Errorf("Failed to parse IP %s", addr)
+			return nil
 		}
 		if !ok {
-			log.Errorf("Failed to parse IP %s", data.RemoteAddr)
-			return
+			log.Errorf("Failed to parse IP %s", addr)
+			return nil
 		}
 
-		directIPsCh <- ip
+		return ip
+	}
+
+	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
+		if ip := parseIP(data.RemoteAddr); ip != nil {
+			directIPsCh <- ip
+		}
+	})
+
+	eventSub.OnTCPClose(func(data appevent.TCPCloseData) {
+		if ip := parseIP(data.RemoteAddr); ip != nil {
+			nonDirectIPsCh <- ip
+		}
 	})
 
 	appClient := app.NewClient(eventSub)
@@ -141,6 +155,14 @@ func main() {
 		for ip := range directIPsCh {
 			if err := vpnClient.AddDirectRoute(ip); err != nil {
 				log.WithError(err).Errorf("Failed to setup direct route to %s", ip.String())
+			}
+		}
+	}()
+
+	go func() {
+		for ip := range nonDirectIPsCh {
+			if err := vpnClient.RemoveDirectRoute(ip); err != nil {
+				log.WithError(err).Errorf("Failed to remove direct route to %s", ip.String())
 			}
 		}
 	}()
