@@ -150,10 +150,10 @@
     "empty-with-filter": "No visor matches the selected filtering criteria.",
     "delete-node-confirmation": "Are you sure you want to remove the visor from the list?",
     "delete-all-offline-confirmation": "Are you sure you want to remove all offline visors from the list?",
+    "delete-all-filtered-offline-confirmation": "All offline visors satisfying the current filtering criteria will be removed from the list. Are you sure you want to continue?",
     "deleted": "Visor removed.",
     "deleted-singular": "1 offline visor removed.",
     "deleted-plural": "{{ number }} offline visors removed.",
-    "no-offline-nodes": "No offline visors found.",
     "no-visors-to-update": "There are no visors to update.",
     "filter-dialog": {
       "online": "The visor must be",
@@ -365,6 +365,8 @@
       "state-available": "Available",
       "state-offline": "Offline",
       "public-key": "Remote visor public key",
+      "password": "Password",
+      "password-history-warning": "Note: the password will not be saved in the history.",
       "no-elements": "Currently there are no elements to show. Please try again later.",
       "no-elements-for-filters": "There are no elements that meet the filter criteria.",
       "no-filter": "No filter has been selected",
@@ -382,6 +384,13 @@
       "change-note-dialog": {
         "title": "Change Note",
         "note": "Note"
+      },
+
+      "password-dialog": {
+        "title": "Enter Password",
+        "password": "Password",
+        "info": "You are being asked for a password because a password was set when the selected entry was created, but the it was not saved for security reasons. You can leave the password empty if needed.",
+        "continue-button": "Continue"
       },
 
       "filter-dialog": {
@@ -416,6 +425,9 @@
 
   "transports": {
     "title": "Transports",
+    "remove-all-offline": "Remove all offline transports",
+    "remove-all-offline-confirmation": "Are you sure you want to remove all offline transports?",
+    "remove-all-filtered-offline-confirmation": "All offline transports satisfying the current filtering criteria will be removed. Are you sure you want to continue?",
     "info": "Connections you have with remote Skywire visors, to allow local Skywire apps to communicate with apps running on those remote visors.",
     "list-title": "Transport list",
     "state": "State",

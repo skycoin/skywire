@@ -34,8 +34,12 @@ const (
 	DefaultRulesGCInterval = 5 * time.Second
 	acceptSize             = 1024
 
-	minHops = 0
-	maxHops = 50
+	handshakeAwaitTimeout = 2 * time.Second
+
+	minHops       = 0
+	maxHops       = 50
+	retryDuration = 10 * time.Second
+	retryInterval = 500 * time.Millisecond
 )
 
 var (
@@ -390,6 +394,45 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
 
+	if nsConf.Initiator {
+		if err := rg.sendHandshake(true); err != nil {
+			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
+				&rules.Desc, err)
+			if err := rg.Close(); err != nil {
+				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+			}
+
+			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), handshakeAwaitTimeout)
+	defer cancel()
+
+	select {
+	case <-rg.handshakeProcessed:
+	case <-ctx.Done():
+		// remote should send handshake packet during initialization,
+		// if no packet received during timeout interval, we're dealing
+		// with the old visor
+		rg.handshakeProcessedOnce.Do(func() {
+			rg.encrypt = false
+			close(rg.handshakeProcessed)
+		})
+	}
+
+	if !nsConf.Initiator {
+		if err := rg.sendHandshake(true); err != nil {
+			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
+				&rules.Desc, err)
+			if err := rg.Close(); err != nil {
+				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+			}
+
+			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
+		}
+	}
+
 	if ok && nrg != nil {
 		// if already functioning wrapped rg exists, we safely close it here
 		r.logger.Infof("Noise route group with desc %s already exists, closing the old one and replacing...", &rules.Desc)
@@ -401,20 +444,27 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 		r.logger.Infoln("Successfully closed old noise route group")
 	}
 
-	// wrapping rg with noise
-	wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
-	if err != nil {
-		r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
-		if err := rg.Close(); err != nil {
-			r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+	if rg.encrypt {
+		// wrapping rg with noise
+		wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
+		if err != nil {
+			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
+			if err := rg.Close(); err != nil {
+				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+			}
+
+			return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
 		}
 
-		return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
-	}
-
-	nrg = &noiseRouteGroup{
-		rg:   rg,
-		Conn: wrappedRG,
+		nrg = &noiseRouteGroup{
+			rg:   rg,
+			Conn: wrappedRG,
+		}
+	} else {
+		nrg = &noiseRouteGroup{
+			rg:   rg,
+			Conn: rg,
+		}
 	}
 
 	r.mx.Lock()
@@ -428,8 +478,8 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
 	switch packet.Type() {
-	case routing.DataPacket:
-		return r.handleDataPacket(ctx, packet)
+	case routing.DataPacket, routing.HandshakePacket:
+		return r.handleDataHandshakePacket(ctx, packet)
 	case routing.ClosePacket:
 		return r.handleClosePacket(ctx, packet)
 	case routing.KeepAlivePacket:
@@ -439,7 +489,7 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 	}
 }
 
-func (r *router) handleDataPacket(ctx context.Context, packet routing.Packet) error {
+func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
 		return err
@@ -697,7 +747,7 @@ func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd
 
 	r.logger.Infof("Requesting new routes from %s to %s", src, dst)
 
-	timer := time.NewTimer(time.Second * 10)
+	timer := time.NewTimer(retryDuration)
 	defer timer.Stop()
 
 	forward := [2]cipher.PubKey{src, dst}
@@ -709,11 +759,16 @@ fetchRoutesAgain:
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
 		&rfclient.RouteOptions{MinHops: minHops, MaxHops: maxHops})
 
+	if err == rfclient.ErrTransportNotFound {
+		return nil, nil, err
+	}
+
 	if err != nil {
 		select {
 		case <-timer.C:
 			return nil, nil, err
 		default:
+			time.Sleep(retryInterval)
 			goto fetchRoutesAgain
 		}
 	}
