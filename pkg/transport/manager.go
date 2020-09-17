@@ -16,6 +16,8 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/snettest"
 )
 
@@ -302,6 +304,19 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 
 	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
+	if mTp.netName == tptypes.STCPR {
+		ar := mTp.n.Conf().ARClient
+		if ar != nil {
+			visorData, err := ar.Resolve(context.Background(), mTp.netName, remote)
+			if err == nil {
+				mTp.remoteAddrs = append(mTp.remoteAddrs, visorData.RemoteAddr)
+			} else {
+				if err != arclient.ErrNoEntry {
+					return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
+				}
+			}
+		}
+	}
 	go func() {
 		mTp.Serve(tm.readCh)
 		tm.mx.Lock()
@@ -312,6 +327,22 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
 	return mTp, nil
+}
+
+// STCPRRemoteAddrs gets remote IPs for all known STCPR transports.
+func (tm *Manager) STCPRRemoteAddrs() []string {
+	var addrs []string
+
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+
+	for _, tp := range tm.tps {
+		if tp.Entry.Type == tptypes.STCPR && len(tp.remoteAddrs) > 0 {
+			addrs = append(addrs, tp.remoteAddrs...)
+		}
+	}
+
+	return addrs
 }
 
 // DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.

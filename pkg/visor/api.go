@@ -239,7 +239,7 @@ func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
 	if appName == skyenv.VPNClientName {
-		envs, err = makeVPNEnvs(v.conf, v.net)
+		envs, err = makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
 		if err != nil {
 			return err
 		}

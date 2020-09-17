@@ -55,7 +55,7 @@
             *ngIf="dataSource.length > 0"
           >more_horiz</mat-icon>
           <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
-            <div mat-menu-item (click)="removeOffline()">
+            <div mat-menu-item disabled="{{ !hasOfflineNodes }}" (click)="removeOffline()">
               {{ 'nodes.delete-all-offline' | translate }}
             </div>
           </mat-menu>
