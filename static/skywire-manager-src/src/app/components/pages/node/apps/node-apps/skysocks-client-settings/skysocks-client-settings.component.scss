@@ -21,6 +21,13 @@ form {
   height: 100px;
 }
 
+.password-history-warning {
+  font-size: $font-size-mini;
+  opacity: 0.7;
+  position: relative;
+  top: -5px;
+}
+
 .list-button {
   border-bottom: solid 1px $grey-separator;
 

@@ -74,6 +74,8 @@ type ManagedTransport struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
+
+	remoteAddrs []string
 }
 
 // NewManagedTransport creates a new ManagedTransport.
