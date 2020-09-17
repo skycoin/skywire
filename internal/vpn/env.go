@@ -34,6 +34,11 @@ const (
 	STCPKeyEnvPrefix = "STCP_TABLE_KEY_"
 	// STCPValueEnvPrefix is prefix for each env arg holding STCP entity value.
 	STCPValueEnvPrefix = "STCP_TABLE_"
+
+	// TPRemoteIPsLenEnvKey is env arg holding TP remote IPs length.
+	TPRemoteIPsLenEnvKey = "TP_REMOTE_IPS_LEN"
+	// TPRemoteIPsEnvPrefix is prefix for each env arg holding TP remote IP.
+	TPRemoteIPsEnvPrefix = "ADDR_TP_REMOTE_"
 )
 
 // DirectRoutesEnvConfig contains all the addresses which need to be communicated directly,
@@ -45,6 +50,7 @@ type DirectRoutesEnvConfig struct {
 	RF              string
 	UptimeTracker   string
 	AddressResolver string
+	TPRemoteIPs     []string
 	STCPTable       map[cipher.PubKey]string
 }
 
@@ -90,6 +96,14 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 		}
 	}
 
+	if len(config.TPRemoteIPs) != 0 {
+		envs[TPRemoteIPsLenEnvKey] = strconv.FormatInt(int64(len(config.TPRemoteIPs)), 10)
+
+		for i := range config.TPRemoteIPs {
+			envs[TPRemoteIPsEnvPrefix+strconv.FormatInt(int64(i), 10)] = config.TPRemoteIPs[i]
+		}
+	}
+
 	return envs
 }
 
@@ -101,7 +115,17 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 // - IP with port;
 // - IP without port.
 func IPFromEnv(key string) (net.IP, bool, error) {
-	addr := os.Getenv(key)
+	return ParseIP(os.Getenv(key))
+}
+
+// ParseIP parses IP string `addr`. `addr` may be on of:
+// - full URL with port;
+// - full URL without port;
+// - domain with port;
+// - domain without port;
+// - IP with port;
+// - IP without port.
+func ParseIP(addr string) (net.IP, bool, error) {
 	if addr == "" {
 		return nil, false, nil
 	}

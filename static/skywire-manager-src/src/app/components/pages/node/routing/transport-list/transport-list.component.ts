@@ -1,6 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, Subscription, forkJoin } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -72,6 +72,7 @@ export class TransportListComponent implements OnDestroy {
   allTransports: Transport[];
   filteredTransports: Transport[];
   transportsToShow: Transport[];
+  hasOfflineTransports = false;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
@@ -161,6 +162,15 @@ export class TransportListComponent implements OnDestroy {
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredTransports = data;
+
+      // Check if there are offline transports.
+      this.hasOfflineTransports = false;
+      this.filteredTransports.forEach(transport => {
+        if (!transport.is_up) {
+          this.hasOfflineTransports = true;
+        }
+      });
+
       this.dataSorter.setData(this.filteredTransports);
     });
 
@@ -281,6 +291,36 @@ export class TransportListComponent implements OnDestroy {
       });
 
       this.deleteRecursively(elementsToRemove, confirmationDialog);
+    });
+  }
+
+  /**
+   * Removes all offline transports.
+   */
+  removeOffline() {
+    let confirmationText = 'transports.remove-all-offline-confirmation';
+    if (this.dataFilterer.currentFiltersTexts && this.dataFilterer.currentFiltersTexts.length > 0) {
+      confirmationText = 'transports.remove-all-filtered-offline-confirmation';
+    }
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      // Prepare all offline transports to be removed.
+      const transportsToRemove: string[] = [];
+      this.filteredTransports.forEach(transport => {
+        if (!transport.is_up) {
+          transportsToRemove.push(transport.id);
+        }
+      });
+
+      if (transportsToRemove.length > 0) {
+        // Remove the transports.
+        confirmationDialog.componentInstance.showProcessing();
+        this.deleteRecursively(transportsToRemove, confirmationDialog);
+      } else {
+        confirmationDialog.close();
+      }
     });
   }
 
