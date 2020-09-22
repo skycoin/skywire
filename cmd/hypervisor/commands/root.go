@@ -122,7 +122,7 @@ func prepareConfig(args []string) (conf hypervisor.Config) {
 
 func prepareDmsg(conf hypervisor.Config) *dmsg.Client {
 	dmsgC := dmsg.NewClient(conf.PK, conf.SK, disc.NewHTTP(conf.DmsgDiscovery), dmsg.DefaultConfig())
-	go dmsgC.Serve()
+	go dmsgC.Serve(context.Background())
 
 	<-dmsgC.Ready()
 	return dmsgC

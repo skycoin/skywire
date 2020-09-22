@@ -215,7 +215,7 @@ func (n *Network) Conf() Config {
 func (n *Network) Init() error {
 	if n.clients.DmsgC != nil {
 		time.Sleep(200 * time.Millisecond)
-		go n.clients.DmsgC.Serve()
+		go n.clients.DmsgC.Serve(context.Background())
 		time.Sleep(200 * time.Millisecond)
 	}
 
