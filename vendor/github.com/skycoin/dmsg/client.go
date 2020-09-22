@@ -133,12 +133,12 @@ func (*Client) Type() string {
 
 // Serve serves the client.
 // It blocks until the client is closed.
-func (ce *Client) Serve() {
+func (ce *Client) Serve(ctx context.Context) {
 	defer func() {
 		ce.log.Info("Stopped serving client!")
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	cancellabelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	go func(ctx context.Context) {
@@ -147,7 +147,7 @@ func (ce *Client) Serve() {
 		case <-ce.done:
 			cancel()
 		}
-	}(ctx)
+	}(cancellabelCtx)
 
 	// Ensure we start updateClientEntryLoop once only.
 	updateEntryLoopOnce := new(sync.Once)
@@ -158,9 +158,12 @@ func (ce *Client) Serve() {
 		}
 
 		ce.log.Info("Discovering dmsg servers...")
-		entries, err := ce.discoverServers(ctx)
+		entries, err := ce.discoverServers(cancellabelCtx)
 		if err != nil {
 			ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
+			if err == context.Canceled || err == context.DeadlineExceeded {
+				return
+			}
 			time.Sleep(time.Second) // TODO(evanlinjin): Implement exponential back off.
 			continue
 		}
@@ -187,13 +190,16 @@ func (ce *Client) Serve() {
 				}
 			}
 
-			if err := ce.ensureSession(ctx, entry); err != nil {
+			if err := ce.ensureSession(cancellabelCtx, entry); err != nil {
 				ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
+				if err == context.Canceled || err == context.DeadlineExceeded {
+					return
+				}
 				time.Sleep(serveWait)
 			}
 
 			// Only start the update entry loop once we have at least one session established.
-			updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(ctx, ce.done) })
+			updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done) })
 		}
 	}
 }
