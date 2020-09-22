@@ -73,7 +73,7 @@ func (w *jsonFileWhitelist) Remove(pks ...cipher.PubKey) error {
 }
 
 func (w *jsonFileWhitelist) open(perm int, fn func(pkMap map[cipher.PubKey]bool, f *os.File) error) error {
-	f, err := os.OpenFile(w.fileName, perm, 0600)
+	f, err := os.OpenFile(w.fileName, perm, 0600) // nolint:gosec
 	if err != nil {
 		return err
 	}
