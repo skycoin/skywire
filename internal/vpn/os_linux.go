@@ -5,6 +5,7 @@ package vpn
 import (
 	"fmt"
 	"strconv"
+	"syscall"
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
@@ -41,4 +42,36 @@ func AddRoute(ip, gateway string) error {
 // DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
 func DeleteRoute(ip, gateway string) error {
 	return run("ip", "r", "del", ip, "via", gateway)
+}
+
+var (
+	errEAGAIN error = syscall.EAGAIN
+	errEINVAL error = syscall.EINVAL
+	errENOENT error = syscall.ENOENT
+)
+
+// errnoErr returns common boxed Errno values, to prevent
+// allocations at runtime.
+func errnoErr(e syscall.Errno) error {
+	switch e {
+	case 0:
+		return nil
+	case syscall.EAGAIN:
+		return errEAGAIN
+	case syscall.EINVAL:
+		return errEINVAL
+	case syscall.ENOENT:
+		return errENOENT
+	}
+	return e
+}
+
+// Setuid sets uid of current OS user.
+func Setuid(uid int) (err error) {
+	// due to iss. 1435 `syscall.Setuid` is disabled for Linux system, so we'
+	_, _, e1 := syscall.RawSyscall(syscall.SYS_SETUID, uintptr(uid), 0, 0)
+	if e1 != 0 {
+		err = errnoErr(e1)
+	}
+	return
 }

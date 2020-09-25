@@ -5,6 +5,7 @@ package vpn
 import (
 	"fmt"
 	"strconv"
+	"syscall"
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
@@ -35,4 +36,9 @@ func DeleteRoute(ipCIDR, gateway string) error {
 	}
 
 	return run("route", "delete", "-net", ip, gateway, netmask)
+}
+
+// Setuid sets uid of current OS user.
+func Setuid(uid int) error {
+	return syscall.Setuid(uid)
 }
