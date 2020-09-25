@@ -67,7 +67,7 @@ func CaptureContext() *Context {
 	path := os.Args[0]
 
 	ppid := os.Getppid()
-	parentPPID := parentPPID()
+	parentPPID := ppidByPid(ppid)
 
 	attachTTY(cmd)
 
@@ -226,10 +226,10 @@ func (c *Context) errorLogger() func(string, ...interface{}) {
 	return logger.Printf
 }
 
-func parentPPID() int {
+func ppidByPid(pid int) int {
 	parentPPID := 0
 
-	parentProcess, err := process.NewProcess(int32(os.Getppid()))
+	parentProcess, err := process.NewProcess(int32(pid))
 	if err == nil {
 		if parPPID, err := parentProcess.Ppid(); err == nil {
 			parentPPID = int(parPPID)
