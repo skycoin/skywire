@@ -55,12 +55,12 @@ func childPgid() (int, error) {
 		return 0, err
 	}
 
-	if pgid == ppgid {
-		pppid := parentPPID()
+	for pgid == ppgid && ppgid != 0 {
+		ppid = ppidByPid(ppid)
 
-		pppgid, err := syscall.Getpgid(pppid)
-		if err == nil && pgidExists(pppgid) {
-			return pppgid, nil
+		ppgid, err = syscall.Getpgid(ppid)
+		if err != nil {
+			return 0, err
 		}
 	}
 
