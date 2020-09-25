@@ -64,19 +64,12 @@ func CaptureContext() *Context {
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
-	attachTTY(cmd)
-
 	path := os.Args[0]
+
 	ppid := os.Getppid()
+	parentPPID := parentPPID()
 
-	parentPPID := -1
-
-	parentProcess, err := process.NewProcess(int32(ppid))
-	if err == nil {
-		if parPPID, err := parentProcess.Ppid(); err == nil {
-			parentPPID = int(parPPID)
-		}
-	}
+	attachTTY(cmd)
 
 	return &Context{
 		cmd:        cmd,
@@ -231,4 +224,17 @@ func (c *Context) errorLogger() func(string, ...interface{}) {
 	logger := log.New(os.Stdout, "[ERROR] ", log.LstdFlags)
 
 	return logger.Printf
+}
+
+func parentPPID() int {
+	parentPPID := 0
+
+	parentProcess, err := process.NewProcess(int32(os.Getppid()))
+	if err == nil {
+		if parPPID, err := parentProcess.Ppid(); err == nil {
+			parentPPID = int(parPPID)
+		}
+	}
+
+	return parentPPID
 }
