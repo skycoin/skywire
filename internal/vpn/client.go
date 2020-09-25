@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -111,6 +112,13 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 
 	c.directIPs = append(c.directIPs, ip)
 
+	suid, err := c.gainRoot()
+	if err != nil {
+		return fmt.Errorf("failed to gain root: %w", err)
+	}
+
+	defer c.releaseRoot(suid)
+
 	if err := c.setupDirectRoute(ip); err != nil {
 		return err
 	}
@@ -128,6 +136,13 @@ func (c *Client) Serve() error {
 	c.log.Infof("Performed handshake with %s", c.conn.RemoteAddr())
 	c.log.Infof("Local TUN IP: %s", tunIP.String())
 	c.log.Infof("Local TUN gateway: %s", tunGateway.String())
+
+	suid, err := c.gainRoot()
+	if err != nil {
+		return fmt.Errorf("failed to gain root: %w", err)
+	}
+
+	defer c.releaseRoot(suid)
 
 	tun, err := newTUNDevice()
 	if err != nil {
@@ -393,6 +408,40 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 	}
 
 	return sHello.TUNIP, sHello.TUNGateway, nil
+}
+
+func (c *Client) gainRoot() (suid int, err error) {
+	if runtime.GOOS == "windows" {
+		// behavior is unknown atm, just skip it for Windows.
+		return 0, nil
+	}
+
+	if runtime.GOOS == "linux" {
+		runtime.LockOSThread()
+	}
+
+	suid = syscall.Getuid()
+
+	if err := Setuid(0); err != nil {
+		return 0, fmt.Errorf("failed to setuid 0: %w", err)
+	}
+
+	return suid, nil
+}
+
+func (c *Client) releaseRoot(suid int) {
+	if runtime.GOOS == "windows" {
+		// behavior is unknown atm, just skip it for Windows.
+		return
+	}
+
+	if err := Setuid(suid); err != nil {
+		c.log.WithError(err).Errorf("Failed to set uid %d", suid)
+	}
+
+	if runtime.GOOS == "linux" {
+		runtime.UnlockOSThread()
+	}
 }
 
 func ipFromEnv(key string) (net.IP, error) {
