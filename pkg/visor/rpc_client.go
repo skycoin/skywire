@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -173,6 +174,17 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	}
 
 	return res, nil
+}
+
+// GetAppConnectionsSummary get connections stats for the app.
+func (rc *rpcClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+	var summary []appserver.ConnectionSummary
+
+	if err := rc.Call("GetAppConnectionsSummary", &appName, &summary); err != nil {
+		return nil, err
+	}
+
+	return summary, nil
 }
 
 // TransportTypes calls TransportTypes.
@@ -633,6 +645,11 @@ func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 // LogsSince implements API. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.logS.LogsSince(timestamp)
+}
+
+// GetAppConnectionsSummary get connections stats for the app.
+func (mc *mockRPCClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+	return nil, nil
 }
 
 // TransportTypes implements API.
