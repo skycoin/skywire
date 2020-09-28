@@ -74,6 +74,8 @@ type ManagedTransport struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
+
+	remoteAddrs []string
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -237,7 +239,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 	defer mt.connMx.Unlock()
 
 	if conn.Network() != mt.netName {
-		return errors.New("wrong network") // TODO: Make global var.
+		return ErrWrongNetwork
 	}
 
 	if !mt.isServing() {
