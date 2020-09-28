@@ -10,6 +10,28 @@
   color: $blue-medium;
   word-break: break-word;
 
+  .list-element {
+    display: flex;
+
+    .left-part {
+      width: 12px;
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    .right-part {
+      flex-grow: 1;
+
+      a {
+        text-decoration: none;
+        color: $blue-medium;
+        font-size: $font-size-mini;
+        line-height: 1;
+        display: block;
+      }
+    }
+  }
+
   .details {
     color: $light-gray;
   }
