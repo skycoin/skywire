@@ -7,8 +7,8 @@ import (
 )
 
 type networkStats struct {
-	bandwidthSent     uint32
-	bandwidthReceived uint32
+	bandwidthSent     uint64
+	bandwidthReceived uint64
 	latency           uint32
 	throughput        uint32
 
@@ -40,16 +40,16 @@ func (s *networkStats) LocalThroughput() uint32 {
 	return atomic.LoadUint32(&s.throughput)
 }
 
-func (s *networkStats) BandwidthSent() uint32 {
-	return atomic.LoadUint32(&s.bandwidthSent)
+func (s *networkStats) BandwidthSent() uint64 {
+	return atomic.LoadUint64(&s.bandwidthSent)
 }
 
-func (s *networkStats) AddBandwidthSent(amount uint32) {
-	atomic.AddUint32(&s.bandwidthSent, amount)
+func (s *networkStats) AddBandwidthSent(amount uint64) {
+	atomic.AddUint64(&s.bandwidthSent, amount)
 }
 
-func (s *networkStats) AddBandwidthReceived(amount uint32) {
-	atomic.AddUint32(&s.bandwidthReceived, amount)
+func (s *networkStats) AddBandwidthReceived(amount uint64) {
+	atomic.AddUint64(&s.bandwidthReceived, amount)
 }
 
 func (s *networkStats) RemoteThroughput() int64 {
@@ -58,8 +58,8 @@ func (s *networkStats) RemoteThroughput() int64 {
 	s.bandwidthReceivedRecStart = time.Now()
 	s.bandwidthReceivedRecStartMu.Unlock()
 
-	bandwidth := atomic.LoadUint32(&s.bandwidthReceived)
-	atomic.StoreUint32(&s.bandwidthReceived, 0)
+	bandwidth := atomic.LoadUint64(&s.bandwidthReceived)
+	atomic.StoreUint64(&s.bandwidthReceived, 0)
 
 	throughput := float64(bandwidth) / timePassed.Seconds()
 

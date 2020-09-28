@@ -256,7 +256,7 @@ func (rg *RouteGroup) Throughput() uint32 {
 }
 
 // BandwidthSent returns amount of bandwidth sent (bytes).
-func (rg *RouteGroup) BandwidthSent() uint32 {
+func (rg *RouteGroup) BandwidthSent() uint64 {
 	return rg.networkStats.BandwidthSent()
 }
 
@@ -344,7 +344,7 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	// note equality here. update activity only if there was NO error
 	if err == nil {
 		if packet.Type() == routing.DataPacket {
-			rg.networkStats.AddBandwidthSent(uint32(packet.Size()))
+			rg.networkStats.AddBandwidthSent(uint64(packet.Size()))
 		}
 
 		if err := rg.rt.UpdateActivity(ruleID); err != nil {
@@ -562,7 +562,7 @@ func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
 }
 
 func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
-	rg.networkStats.AddBandwidthReceived(uint32(packet.Size()))
+	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	select {
 	case <-rg.closed:
