@@ -285,7 +285,7 @@ func (c *Client) removeDirectRoutes() {
 	for _, ip := range c.directIPs {
 		if err := c.removeDirectRoute(ip); err != nil {
 			// shouldn't return, just keep on trying the other IPs
-			c.log.WithError(err).Errorf("Error removing direct route to %s", ip.String())
+			c.log.WithError(err).Warnf("Error removing direct route to %s", ip.String())
 		}
 	}
 }

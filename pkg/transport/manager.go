@@ -230,8 +230,14 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 
-		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(),
-			lis.Network(), tm.afterTPClosed)
+		mTp = NewManagedTransport(ManagedTransportConfig{
+			Net:         tm.n,
+			DC:          tm.Conf.DiscoveryClient,
+			LS:          tm.Conf.LogStore,
+			RemotePK:    conn.RemotePK(),
+			NetName:     lis.Network(),
+			AfterClosed: tm.afterTPClosed,
+		})
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -324,7 +330,15 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 
 	afterTPClosed := tm.afterTPClosed
 
-	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName, afterTPClosed)
+	mTp := NewManagedTransport(ManagedTransportConfig{
+		Net:         tm.n,
+		DC:          tm.Conf.DiscoveryClient,
+		LS:          tm.Conf.LogStore,
+		RemotePK:    remote,
+		NetName:     netName,
+		AfterClosed: afterTPClosed,
+	})
+
 	if mTp.netName == tptypes.STCPR {
 		ar := mTp.n.Conf().ARClient
 		if ar != nil {
