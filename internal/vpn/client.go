@@ -118,6 +118,25 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 	return nil
 }
 
+// RemoveDirectRoute removes direct route. Packets destined to `ip` will
+// go through VPN.
+func (c *Client) RemoveDirectRoute(ip net.IP) error {
+	c.directIPSMu.Lock()
+	defer c.directIPSMu.Unlock()
+
+	for i, storedIP := range c.directIPs {
+		if ip.Equal(storedIP) {
+			c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
+
+			if err := c.removeDirectRoute(ip); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
 func (c *Client) Serve() error {
 	tunIP, tunGateway, err := c.shakeHands()
@@ -248,17 +267,25 @@ func (c *Client) setupDirectRoute(ip net.IP) error {
 	return nil
 }
 
+func (c *Client) removeDirectRoute(ip net.IP) error {
+	if !ip.IsLoopback() {
+		c.log.Infof("Removing direct route to %s", ip.String())
+		if err := DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (c *Client) removeDirectRoutes() {
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()
 
 	for _, ip := range c.directIPs {
-		if !ip.IsLoopback() {
-			c.log.Infof("Removing direct route to %s", ip.String())
-			if err := DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
-				// shouldn't return, just keep on trying the other IPs
-				c.log.WithError(err).Errorf("Error removing direct route to %s", ip.String())
-			}
+		if err := c.removeDirectRoute(ip); err != nil {
+			// shouldn't return, just keep on trying the other IPs
+			c.log.WithError(err).Warnf("Error removing direct route to %s", ip.String())
 		}
 	}
 }
