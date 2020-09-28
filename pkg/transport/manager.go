@@ -26,6 +26,9 @@ const (
 	TrustedVisorsDelay = 5 * time.Second
 )
 
+// TPCloseCallback triggers after a session is closed.
+type TPCloseCallback func(network, addr string)
+
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
 	PubKey          cipher.PubKey
@@ -53,6 +56,8 @@ type Manager struct {
 	serveOnce     sync.Once // ensure we only serve once.
 	closeOnce     sync.Once // ensure we only close once.
 	done          chan struct{}
+
+	afterTPClosed TPCloseCallback
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -71,6 +76,19 @@ func NewManager(log *logging.Logger, n *snet.Network, config *ManagerConfig) (*M
 		done:        make(chan struct{}),
 	}
 	return tm, nil
+}
+
+// OnAfterTPClosed sets callback which will fire after transport gets closed.
+func (tm *Manager) OnAfterTPClosed(f TPCloseCallback) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+
+	tm.afterTPClosed = f
+
+	// set callback for all already known tps
+	for _, tp := range tm.tps {
+		tp.onAfterClosed(f)
+	}
 }
 
 // Serve runs listening loop across all registered factories.
@@ -212,7 +230,14 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 
-		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
+		mTp = NewManagedTransport(ManagedTransportConfig{
+			Net:         tm.n,
+			DC:          tm.Conf.DiscoveryClient,
+			LS:          tm.Conf.LogStore,
+			RemotePK:    conn.RemotePK(),
+			NetName:     lis.Network(),
+			AfterClosed: tm.afterTPClosed,
+		})
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -303,13 +328,23 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 		return oldMTp, nil
 	}
 
-	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
+	afterTPClosed := tm.afterTPClosed
+
+	mTp := NewManagedTransport(ManagedTransportConfig{
+		Net:         tm.n,
+		DC:          tm.Conf.DiscoveryClient,
+		LS:          tm.Conf.LogStore,
+		RemotePK:    remote,
+		NetName:     netName,
+		AfterClosed: afterTPClosed,
+	})
+
 	if mTp.netName == tptypes.STCPR {
 		ar := mTp.n.Conf().ARClient
 		if ar != nil {
 			visorData, err := ar.Resolve(context.Background(), mTp.netName, remote)
 			if err == nil {
-				mTp.remoteAddrs = append(mTp.remoteAddrs, visorData.RemoteAddr)
+				mTp.remoteAddr = visorData.RemoteAddr
 			} else {
 				if err != arclient.ErrNoEntry {
 					return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
@@ -337,8 +372,8 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.Entry.Type == tptypes.STCPR && len(tp.remoteAddrs) > 0 {
-			addrs = append(addrs, tp.remoteAddrs...)
+		if tp.Entry.Type == tptypes.STCPR && tp.remoteAddr != "" {
+			addrs = append(addrs, tp.remoteAddr)
 		}
 	}
 
