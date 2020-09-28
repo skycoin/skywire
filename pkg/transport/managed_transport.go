@@ -43,6 +43,16 @@ const (
 	tpFactor = 1.3
 )
 
+// ManagedTransportConfig is a configuration for managed transport.
+type ManagedTransportConfig struct {
+	Net         *snet.Network
+	DC          DiscoveryClient
+	LS          LogStore
+	RemotePK    cipher.PubKey
+	NetName     string
+	AfterClosed TPCloseCallback
+}
+
 // ManagedTransport manages a direct line of communication between two visor nodes.
 // There is a single underlying connection between two edges.
 // Initial dialing can be requested by either edge of the connection.
@@ -82,20 +92,19 @@ type ManagedTransport struct {
 }
 
 // NewManagedTransport creates a new ManagedTransport.
-func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK cipher.PubKey,
-	netName string, afterClosed TPCloseCallback) *ManagedTransport {
+func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	mt := &ManagedTransport{
-		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", rPK.String()[:6])),
-		rPK:         rPK,
-		netName:     netName,
-		n:           n,
-		dc:          dc,
-		ls:          ls,
-		Entry:       makeEntry(n.LocalPK(), rPK, netName),
+		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		rPK:         conf.RemotePK,
+		netName:     conf.NetName,
+		n:           conf.Net,
+		dc:          conf.DC,
+		ls:          conf.LS,
+		Entry:       makeEntry(conf.Net.LocalPK(), conf.RemotePK, conf.NetName),
 		LogEntry:    new(LogEntry),
 		connCh:      make(chan struct{}, 1),
 		done:        make(chan struct{}),
-		afterClosed: afterClosed,
+		afterClosed: conf.AfterClosed,
 	}
 	mt.wg.Add(2)
 	return mt
