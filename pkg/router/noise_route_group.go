@@ -40,7 +40,7 @@ func (nrg *NoiseRouteGroup) Throughput() uint32 {
 }
 
 // BandwidthSent returns amount of bandwidth sent (bytes).
-func (nrg *NoiseRouteGroup) BandwidthSent() uint32 {
+func (nrg *NoiseRouteGroup) BandwidthSent() uint64 {
 	return nrg.rg.BandwidthSent()
 }
 

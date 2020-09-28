@@ -265,7 +265,7 @@ type ConnectionSummary struct {
 	IsAlive       bool          `json:"is_alive"`
 	Latency       time.Duration `json:"latency"`
 	Throughput    uint32        `json:"throughput"`
-	BandwidthSent uint32        `json:"bandwidth_sent"`
+	BandwidthSent uint64        `json:"bandwidth_sent"`
 	Error         string        `json:"error"`
 }
 

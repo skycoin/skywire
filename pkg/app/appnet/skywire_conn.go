@@ -33,7 +33,7 @@ func (c *SkywireConn) Throughput() uint32 {
 }
 
 // BandwidthSent returns amount of bandwidth sent (bytes).
-func (c *SkywireConn) BandwidthSent() uint32 {
+func (c *SkywireConn) BandwidthSent() uint64 {
 	return c.nrg.BandwidthSent()
 }
 
