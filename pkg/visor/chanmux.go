@@ -1,20 +1,18 @@
-package hypervisor
+package visor
 
 import (
 	"sync"
 	"sync/atomic"
-
-	"github.com/skycoin/skywire/pkg/visor"
 )
 
 type chanMux struct {
 	finished  uint32
 	mu        sync.Mutex
-	ch        <-chan visor.StatusMessage
-	consumers []chan<- visor.StatusMessage
+	ch        <-chan StatusMessage
+	consumers []chan<- StatusMessage
 }
 
-func newChanMux(ch <-chan visor.StatusMessage, consumers []chan<- visor.StatusMessage) *chanMux {
+func newChanMux(ch <-chan StatusMessage, consumers []chan<- StatusMessage) *chanMux {
 	m := &chanMux{
 		ch:        ch,
 		consumers: consumers,
@@ -45,7 +43,7 @@ func (m *chanMux) worker() {
 	}
 }
 
-func (m *chanMux) addConsumer(consumer chan<- visor.StatusMessage) {
+func (m *chanMux) addConsumer(consumer chan<- StatusMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

@@ -1,6 +1,6 @@
 //+build windows
 
-package hypervisor
+package visor
 
 import (
 	"net/http"
