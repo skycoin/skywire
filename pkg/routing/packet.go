@@ -43,6 +43,8 @@ func (t PacketType) String() string {
 		return "KeepAlivePacket"
 	case NetworkProbePacket:
 		return "NetworkProbe"
+	case HandshakePacket:
+		return "Handshake"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -56,6 +58,7 @@ const (
 	DataPacket PacketType = iota
 	ClosePacket
 	KeepAlivePacket
+	HandshakePacket
 	NetworkProbePacket
 )
 
@@ -128,6 +131,23 @@ func MakeNetworkProbePacket(id RouteID, timestamp, throughput int64) Packet {
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(16))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp))
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+8:], uint64(throughput))
+
+	return packet
+}
+
+// MakeHandshakePacket constructs a new HandshakePacket.
+func MakeHandshakePacket(id RouteID, supportEncryption bool) Packet {
+	packet := make([]byte, PacketHeaderSize+1)
+
+	supportEncryptionVal := 1
+	if !supportEncryption {
+		supportEncryptionVal = 0
+	}
+
+	packet[PacketTypeOffset] = byte(HandshakePacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(1))
+	packet[PacketPayloadOffset] = byte(supportEncryptionVal)
 
 	return packet
 }

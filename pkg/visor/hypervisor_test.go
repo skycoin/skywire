@@ -1,4 +1,4 @@
-package hypervisor
+package visor
 
 import (
 	"encoding/json"
@@ -13,26 +13,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/usermanager"
 )
-
-func TestMain(m *testing.M) {
-	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
-	if ok {
-		lvl, err := logging.LevelFromString(loggingLevel)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		logging.SetLevel(lvl)
-	} else {
-		logging.Disable()
-	}
-
-	os.Exit(m.Run())
-}
 
 // nolint: gosec
 const (
@@ -43,7 +29,7 @@ const (
 )
 
 func TestNewNode(t *testing.T) {
-	config := makeConfig(false)
+	config := hypervisorconfig.MakeConfig(false)
 	config.EnableAuth = true
 	config.FillDefaults(false)
 
@@ -77,7 +63,7 @@ func TestNewNode(t *testing.T) {
 	})
 }
 
-func makeStartNode(t *testing.T, config Config) (string, *http.Client, func()) {
+func makeStartNode(t *testing.T, config hypervisorconfig.Config) (string, *http.Client, func()) {
 	// nolint: gomnd
 	defaultMockConfig := MockConfig{
 		Visors:            5,
@@ -145,7 +131,7 @@ func testCase(t *testing.T, addr string, client *http.Client, tc TestCase, testT
 	}
 }
 
-func testNodeNoAccessWithoutLogin(t *testing.T, config Config) {
+func testNodeNoAccessWithoutLogin(t *testing.T, config hypervisorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -158,7 +144,7 @@ func testNodeNoAccessWithoutLogin(t *testing.T, config Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, ErrBadSession.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrBadSession.Error(), body.Error)
 			},
 		}
 	}
@@ -170,7 +156,7 @@ func testNodeNoAccessWithoutLogin(t *testing.T, config Config) {
 	})
 }
 
-func testNodeOnlyAdminAccountAllowed(t *testing.T, config Config) {
+func testNodeOnlyAdminAccountAllowed(t *testing.T, config hypervisorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -183,7 +169,7 @@ func testNodeOnlyAdminAccountAllowed(t *testing.T, config Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, ErrNameNotAllowed.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrNameNotAllowed.Error(), body.Error)
 			},
 		},
 		{
@@ -200,7 +186,7 @@ func testNodeOnlyAdminAccountAllowed(t *testing.T, config Config) {
 	})
 }
 
-func testNodeCannotLoginTwice(t *testing.T, config Config) {
+func testNodeCannotLoginTwice(t *testing.T, config hypervisorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -235,13 +221,13 @@ func testNodeCannotLoginTwice(t *testing.T, config Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, ErrNotLoggedOut.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrNotLoggedOut.Error(), body.Error)
 			},
 		},
 	})
 }
 
-func testNodeAccessAfterLogin(t *testing.T, config Config) {
+func testNodeAccessAfterLogin(t *testing.T, config hypervisorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -281,7 +267,7 @@ func testNodeAccessAfterLogin(t *testing.T, config Config) {
 	})
 }
 
-func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
+func testNodeNoAccessAfterLogout(t *testing.T, config hypervisorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -325,7 +311,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, ErrBadSession.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrBadSession.Error(), body.Error)
 			},
 		},
 		{
@@ -335,7 +321,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				body, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, ErrBadSession.Error(), body.Error)
+				assert.Equal(t, usermanager.ErrBadSession.Error(), body.Error)
 			},
 		},
 	})
@@ -349,7 +335,7 @@ func testNodeNoAccessAfterLogout(t *testing.T, config Config) {
 // - Login with old password (should fail).
 // - Login with new password (should succeed).
 // nolint: funlen
-func testNodeChangePassword(t *testing.T, config Config) {
+func testNodeChangePassword(t *testing.T, config hypervisorconfig.Config) {
 	addr, client, stop := makeStartNode(t, config)
 	defer stop()
 
@@ -419,7 +405,7 @@ func testNodeChangePassword(t *testing.T, config Config) {
 			RespBody: func(t *testing.T, r *http.Response) {
 				b, err := decodeErrorBody(r.Body)
 				assert.NoError(t, err)
-				require.Equal(t, ErrBadLogin.Error(), b.Error)
+				require.Equal(t, usermanager.ErrBadLogin.Error(), b.Error)
 			},
 		},
 		{

@@ -1,4 +1,4 @@
-package hypervisor
+package usermanager
 
 import (
 	"context"
@@ -12,6 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
 	"github.com/skycoin/dmsg/httputil"
+	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
 const (
@@ -47,7 +50,8 @@ type Session struct {
 
 // UserManager manages the users and sessions.
 type UserManager struct {
-	c        CookieConfig
+	log      *logging.Logger
+	c        hypervisorconfig.CookieConfig
 	db       UserStore
 	sessions map[uuid.UUID]Session
 	crypto   *securecookie.SecureCookie
@@ -55,8 +59,9 @@ type UserManager struct {
 }
 
 // NewUserManager creates a new UserManager.
-func NewUserManager(users UserStore, config CookieConfig) *UserManager {
+func NewUserManager(users UserStore, config hypervisorconfig.CookieConfig) *UserManager {
 	return &UserManager{
+		log:      logging.MustGetLogger("user_manager"),
 		db:       users,
 		c:        config,
 		sessions: make(map[uuid.UUID]Session),
@@ -80,7 +85,7 @@ func (s *UserManager) Login() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &rb); err != nil {
 			if err != io.EOF {
-				log.Warnf("Login request: %v", err)
+				s.log.Warnf("Login request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -96,7 +101,7 @@ func (s *UserManager) Login() http.HandlerFunc {
 		user, err := s.db.User(rb.Username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.WithError(err).Errorf("Failed to get user %q", rb.Username)
+			s.log.WithError(err).Errorf("Failed to get user %q", rb.Username)
 
 			return
 		}
@@ -112,7 +117,7 @@ func (s *UserManager) Login() http.HandlerFunc {
 		}
 
 		if err := s.newSession(w, session); err != nil {
-			log.WithError(err).Errorf("Failed to create a new session")
+			s.log.WithError(err).Errorf("Failed to create a new session")
 			w.WriteHeader(http.StatusInternalServerError)
 
 			return
@@ -162,7 +167,7 @@ func (s *UserManager) ChangePassword() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &rb); err != nil {
 			if err != io.EOF {
-				log.Warnf("ChangePassword request: %v", err)
+				s.log.Warnf("ChangePassword request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -182,7 +187,7 @@ func (s *UserManager) ChangePassword() http.HandlerFunc {
 		}
 
 		if err := s.db.SetUser(user); err != nil {
-			log.WithError(err).Errorf("Failed to update user %q data", user.Name)
+			s.log.WithError(err).Errorf("Failed to update user %q data", user.Name)
 			w.WriteHeader(http.StatusInternalServerError)
 
 			return
@@ -203,7 +208,7 @@ func (s *UserManager) CreateAccount() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &rb); err != nil {
 			if err != io.EOF {
-				log.Warnf("CreateAccount request: %v", err)
+				s.log.Warnf("CreateAccount request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -228,7 +233,7 @@ func (s *UserManager) CreateAccount() http.HandlerFunc {
 				return
 			}
 
-			log.WithError(err).Errorf("Failed to create user %q account", user.Name)
+			s.log.WithError(err).Errorf("Failed to create user %q account", user.Name)
 			w.WriteHeader(http.StatusInternalServerError)
 
 			return
@@ -356,7 +361,7 @@ func (s *UserManager) session(r *http.Request) (User, Session, bool) {
 
 	var sid uuid.UUID
 	if err := s.crypto.Decode(sessionCookieName, cookie.Value, &sid); err != nil {
-		log.WithError(err).Warn("Failed to decode session cookie value")
+		s.log.WithError(err).Warn("Failed to decode session cookie value")
 		return User{}, Session{}, false
 	}
 
@@ -370,7 +375,7 @@ func (s *UserManager) session(r *http.Request) (User, Session, bool) {
 
 	user, err := s.db.User(session.User)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to fetch user %q data", user.Name)
+		s.log.WithError(err).Errorf("Failed to fetch user %q data", user.Name)
 		return User{}, Session{}, false
 	}
 

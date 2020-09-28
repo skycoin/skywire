@@ -80,7 +80,7 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	cc.PK = pk
 
 	// Start with default config as template.
-	conf, err := defaultConfigFromCommon(cc)
+	conf, err := defaultConfigFromCommon(cc, false)
 	if err != nil {
 		return nil, err
 	}
