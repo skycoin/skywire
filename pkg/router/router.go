@@ -143,7 +143,7 @@ type router struct {
 	trustedVisors map[cipher.PubKey]struct{}
 	tm            *transport.Manager
 	rt            routing.Table
-	rgsNs         map[routing.RouteDescriptor]*noiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
+	rgsNs         map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
 	rgsRaw        map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
@@ -173,7 +173,7 @@ func New(n *snet.Network, config *Config) (Router, error) {
 		tm:            config.TransportManager,
 		rt:            routing.NewTable(),
 		sl:            sl,
-		rgsNs:         make(map[routing.RouteDescriptor]*noiseRouteGroup),
+		rgsNs:         make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw:        make(map[routing.RouteDescriptor]*RouteGroup),
 		rpcSrv:        rpc.NewServer(),
 		accept:        make(chan routing.EdgeRules, acceptSize),
@@ -249,6 +249,8 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
 
+	nrg.rg.startOffServiceLoops()
+
 	r.logger.Infof("Created new routes to %s on port %d", rPK, lPort)
 
 	return nrg, nil
@@ -297,6 +299,8 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 	}
+
+	nrg.rg.startOffServiceLoops()
 
 	return nrg, nil
 }
@@ -367,7 +371,7 @@ func (r *router) serveSetup() {
 	}
 }
 
-func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*noiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
 	r.logger.Infof("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
@@ -456,12 +460,12 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			return nil, fmt.Errorf("WrapConn (%s): %w", &rules.Desc, err)
 		}
 
-		nrg = &noiseRouteGroup{
+		nrg = &NoiseRouteGroup{
 			rg:   rg,
 			Conn: wrappedRG,
 		}
 	} else {
-		nrg = &noiseRouteGroup{
+		nrg = &NoiseRouteGroup{
 			rg:   rg,
 			Conn: rg,
 		}
@@ -484,6 +488,8 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.handleClosePacket(ctx, packet)
 	case routing.KeepAlivePacket:
 		return r.handleKeepAlivePacket(ctx, packet)
+	case routing.NetworkProbePacket:
+		return r.handleNetworkProbePacket(ctx, packet)
 	default:
 		return ErrUnknownPacketType
 	}
@@ -599,6 +605,58 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}
 
 	return nil
+}
+
+func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Packet) error {
+	rule, err := r.GetRule(packet.RouteID())
+	if err != nil {
+		return err
+	}
+
+	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
+		r.logger.Debugf("Handling packet of type %s with route ID %d and next ID %d", packet.Type(),
+			packet.RouteID(), rule.NextRouteID())
+		return r.forwardPacket(ctx, packet, rule)
+	}
+
+	r.logger.Debugf("Handling packet of type %s with route ID %d", packet.Type(), packet.RouteID())
+
+	desc := rule.RouteDescriptor()
+	nrg, ok := r.noiseRouteGroup(desc)
+
+	r.logger.Infof("Handling packet with descriptor %s", &desc)
+
+	if ok {
+		if nrg == nil {
+			return errors.New("noiseRouteGroup is nil")
+		}
+
+		// in this case we have already initialized nrg and may use it straightforward
+		r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+			len(packet.Payload()), packet.RouteID(), rule)
+
+		return nrg.handlePacket(packet)
+	}
+
+	// we don't have nrg for this packet. it's either handshake message or
+	// we don't have route for this one completely
+
+	rg, ok := r.initializingRouteGroup(desc)
+	if !ok {
+		// no route, just return error
+		r.logger.Infof("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
+		return errors.New("route descriptor does not exist")
+	}
+
+	if rg == nil {
+		return errors.New("initializing RouteGroup is nil")
+	}
+
+	// handshake packet, handling with the raw rg
+	r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		len(packet.Payload()), packet.RouteID(), rule)
+
+	return rg.handlePacket(packet)
 }
 
 func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
@@ -807,7 +865,7 @@ func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
 	return ids, err
 }
 
-func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
+func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*NoiseRouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
@@ -821,7 +879,7 @@ func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGr
 	return nrg, true
 }
 
-func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*noiseRouteGroup, bool) {
+func (r *router) noiseRouteGroup(desc routing.RouteDescriptor) (*NoiseRouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
