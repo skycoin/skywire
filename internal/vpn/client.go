@@ -22,14 +22,15 @@ const (
 
 // Client is a VPN client.
 type Client struct {
-	cfg            ClientConfig
-	log            logrus.FieldLogger
-	conn           net.Conn
-	directIPSMu    sync.Mutex
-	directIPs      []net.IP
-	defaultGateway net.IP
-	closeC         chan struct{}
-	closeOnce      sync.Once
+	cfg             ClientConfig
+	log             logrus.FieldLogger
+	conn            net.Conn
+	directIPSMu     sync.Mutex
+	directIPs       []net.IP
+	defaultGateway  net.IP
+	sysPrivilegesMx sync.Mutex
+	closeC          chan struct{}
+	closeOnce       sync.Once
 }
 
 // NewClient creates VPN client instance.
@@ -111,6 +112,13 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 
 	c.directIPs = append(c.directIPs, ip)
 
+	suid, err := c.setupSysPrivileges()
+	if err != nil {
+		return fmt.Errorf("failed to setup system privileges: %w", err)
+	}
+
+	defer c.releaseSysPrivileges(suid)
+
 	if err := c.setupDirectRoute(ip); err != nil {
 		return err
 	}
@@ -148,8 +156,14 @@ func (c *Client) Serve() error {
 	c.log.Infof("Local TUN IP: %s", tunIP.String())
 	c.log.Infof("Local TUN gateway: %s", tunGateway.String())
 
+	suid, err := c.setupSysPrivileges()
+	if err != nil {
+		return fmt.Errorf("failed to setup system privileges: %w", err)
+	}
+
 	tun, err := newTUNDevice()
 	if err != nil {
+		c.releaseSysPrivileges(suid)
 		return fmt.Errorf("error allocating TUN interface: %w", err)
 	}
 	defer func() {
@@ -157,6 +171,8 @@ func (c *Client) Serve() error {
 		if err := tun.Close(); err != nil {
 			c.log.WithError(err).Errorf("Error closing TUN %s", tunName)
 		}
+
+		c.releaseSysPrivileges(suid)
 	}()
 
 	c.log.Infof("Allocated TUN %s", tun.Name())
@@ -184,6 +200,9 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
+	// we release privileges here (user is not root for Mac OS systems from here on)suid
+	c.releaseSysPrivileges(suid)
+
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	// read all system traffic and pass it to the remote VPN server
@@ -207,6 +226,12 @@ func (c *Client) Serve() error {
 	case <-connToTunDoneCh:
 	case <-tunToConnCh:
 	case <-c.closeC:
+	}
+
+	// we setup system privileges again here, so that the deferred call could perform clean up
+	suid, err = c.setupSysPrivileges()
+	if err != nil {
+		c.log.WithError(err).Errorln("Failed to setup system privileges for clean up")
 	}
 
 	return nil
