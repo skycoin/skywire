@@ -56,3 +56,10 @@ func DeleteRoute(ipCIDR, gateway string) error {
 	cmd := fmt.Sprintf(deleteRouteCMDFmt, ip, netmask, gateway)
 	return run("cmd", "/C", cmd)
 }
+
+// Setuid sets uid of current OS user.
+func Setuid(_ int) (err error) {
+	// this is unsupported yet, but we allow app to be run with super user,
+	// so no privilege escalation, and no error here.
+	return nil
+}
