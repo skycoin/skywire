@@ -54,3 +54,11 @@ func EnableIPMasquerading(_ string) error {
 func DisableIPMasquerading(_ string) error {
 	return errServerMethodsNotSupported
 }
+
+func setupServerSysPrivileges() (suid int, err error) {
+	return 0, errServerMethodsNotSupported
+}
+
+func releaseServerSysPrivileges(suid int) error {
+	return errServerMethodsNotSupported
+}
