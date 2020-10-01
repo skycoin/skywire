@@ -5,6 +5,10 @@ package vpn
 import (
 	"fmt"
 	"strconv"
+	"sync"
+
+	"github.com/syndtr/gocapability/capability"
+	"golang.org/x/sys/unix"
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
@@ -41,4 +45,44 @@ func AddRoute(ip, gateway string) error {
 // DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
 func DeleteRoute(ip, gateway string) error {
 	return run("ip", "r", "del", ip, "via", gateway)
+}
+
+var setupOnce sync.Once
+
+func setupSysPrivileges() (suid int, err error) {
+	setupOnce.Do(func() {
+		var caps capability.Capabilities
+
+		caps, err = capability.NewPid2(0)
+		if err != nil {
+			err = fmt.Errorf("failed to init capabilities: %w", err)
+			return
+		}
+
+		err = caps.Load()
+		if err != nil {
+			err = fmt.Errorf("failed to load capabilities: %w", err)
+			return
+		}
+
+		// set `CAP_NET_ADMIN` capability to needed caps sets.
+		caps.Set(capability.CAPS|capability.BOUNDS|capability.AMBIENT, capability.CAP_NET_ADMIN)
+		if err := caps.Apply(capability.CAPS | capability.BOUNDS | capability.AMBIENT); err != nil {
+			err = fmt.Errorf("failed to apply capabilties: %w", err)
+			return
+		}
+
+		// let child process keep caps sets from the parent, so we may do calls to
+		// system utilities with these caps.
+		if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
+			err = fmt.Errorf("failed to set PR_SET_KEEPCAPS: %w", err)
+			return
+		}
+	})
+
+	return 0, nil
+}
+
+func releaseSysPrivileges(_ int) error {
+	return nil
 }

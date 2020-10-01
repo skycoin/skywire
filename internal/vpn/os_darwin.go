@@ -5,6 +5,7 @@ package vpn
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"syscall"
 )
 
@@ -38,7 +39,22 @@ func DeleteRoute(ipCIDR, gateway string) error {
 	return run("route", "delete", "-net", ip, gateway, netmask)
 }
 
-// Setuid sets uid of current OS user.
-func Setuid(uid int) error {
-	return syscall.Setuid(uid)
+var sysPrivilegesMx sync.Mutex
+
+func setupSysPrivileges() (suid int, err error) {
+	sysPrivilegesMx.Lock()
+
+	suid = syscall.Getuid()
+
+	if err := syscall.Setuid(0); err != nil {
+		return 0, fmt.Errorf("failed to setuid 0: %w", err)
+	}
+
+	return suid, nil
+}
+
+func releaseSysPrivileges(suid int) error {
+	err := syscall.Setuid(suid)
+	sysPrivilegesMx.Unlock()
+	return err
 }
