@@ -25,6 +25,19 @@ type Server struct {
 
 // NewServer creates VPN server instance.
 func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
+	suid, err := setupSysPrivileges()
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup system privileges")
+	}
+
+	s := &Server{
+		cfg:   cfg,
+		log:   l,
+		ipGen: NewIPGenerator(),
+	}
+
+	defer s.releaseSysPrivileges(suid)
+
 	defaultNetworkIfc, err := DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
@@ -44,20 +57,25 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 	l.Infoln("Old IP forwarding values:")
 	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
-	return &Server{
-		cfg:                     cfg,
-		log:                     l,
-		ipGen:                   NewIPGenerator(),
-		defaultNetworkInterface: defaultNetworkIfc,
-		ipv4ForwardingVal:       ipv4ForwardingVal,
-		ipv6ForwardingVal:       ipv6ForwardingVal,
-	}, nil
+	s.defaultNetworkInterface = defaultNetworkIfc
+	s.ipv4ForwardingVal = ipv4ForwardingVal
+	s.ipv6ForwardingVal = ipv6ForwardingVal
+
+	return s, nil
 }
 
 // Serve accepts connections from `l` and serves them.
 func (s *Server) Serve(l net.Listener) error {
 	serveErr := errors.New("already serving")
 	s.serveOnce.Do(func() {
+		suid, err := setupSysPrivileges()
+		if err != nil {
+			serveErr = fmt.Errorf("failed to setup system privileges: %w", err)
+			return
+		}
+		// this is the first defer in stack, so this will be executed last
+		defer s.releaseSysPrivileges(suid)
+
 		if err := EnableIPv4Forwarding(); err != nil {
 			serveErr = fmt.Errorf("error enabling IPv4 forwarding: %w", err)
 			return
@@ -96,6 +114,16 @@ func (s *Server) Serve(l net.Listener) error {
 				s.log.WithError(err).Errorf("Error disabling IP masquerading for %s", s.defaultNetworkInterface)
 			} else {
 				s.log.Infof("Disabled IP masquerading for %s", s.defaultNetworkInterface)
+			}
+		}()
+
+		// we release it here, so that the further work might be done without it
+		s.releaseSysPrivileges(suid)
+		defer func() {
+			// this will be executed first on return, so we setup privileges once again,
+			// so other deferred clear up calls may be done successfully
+			if _, err := setupSysPrivileges(); err != nil {
+				s.log.WithError(err).Errorln("Failed to setup system privileges to clear up")
 			}
 		}()
 
@@ -147,6 +175,13 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
+	suid, err := setupSysPrivileges()
+	if err != nil {
+		s.log.WithError(err).Errorln("Failed to setup system privileges")
+		return
+	}
+	defer s.releaseSysPrivileges(suid)
+
 	tun, err := newTUNDevice()
 	if err != nil {
 		s.log.WithError(err).Errorln("Error allocating TUN interface")
@@ -164,6 +199,14 @@ func (s *Server) serveConn(conn net.Conn) {
 	if err := SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
 		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
+	}
+
+	// it's safe to release privileges here and work as usual
+	s.releaseSysPrivileges(suid)
+	// this will be executed first on return, so we setup privileges once again,
+	// so other deferred clear up calls may be done successfully
+	if _, err := setupSysPrivileges(); err != nil {
+		s.log.WithError(err).Errorln("Failed to setup system privileges to clear up")
 	}
 
 	connToTunDoneCh := make(chan struct{})
@@ -263,4 +306,10 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	}
 
 	return sTUNIP, sTUNGateway, nil
+}
+
+func (s *Server) releaseSysPrivileges(suid int) {
+	if err := releaseSysPrivileges(suid); err != nil {
+		s.log.WithError(err).Errorln("Failed to release system privileges")
+	}
 }
