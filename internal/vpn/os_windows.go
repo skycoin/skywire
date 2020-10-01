@@ -56,11 +56,3 @@ func DeleteRoute(ipCIDR, gateway string) error {
 	cmd := fmt.Sprintf(deleteRouteCMDFmt, ip, netmask, gateway)
 	return run("cmd", "/C", cmd)
 }
-
-func setupSysPrivileges() (suid int, err error) {
-	return 0, nil
-}
-
-func releaseSysPrivileges(suid int) {
-	return
-}
