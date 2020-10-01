@@ -201,6 +201,11 @@ func (c *Client) Serve() error {
 
 	// we release privileges here (user is not root for Mac OS systems from here on)suid
 	c.releaseSysPrivileges(suid)
+	// this will be executed first on return, so we setup privileges once again,
+	// so other deferred clear up calls may be done successfully
+	if _, err := setupSysPrivileges(); err != nil {
+		c.log.WithError(err).Errorln("Failed to setup system privileges to clear up")
+	}
 
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
@@ -225,12 +230,6 @@ func (c *Client) Serve() error {
 	case <-connToTunDoneCh:
 	case <-tunToConnCh:
 	case <-c.closeC:
-	}
-
-	// we setup system privileges again here, so that the deferred call could perform clean up
-	suid, err = setupSysPrivileges()
-	if err != nil {
-		c.log.WithError(err).Errorln("Failed to setup system privileges for clean up")
 	}
 
 	return nil
