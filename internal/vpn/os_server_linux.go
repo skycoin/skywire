@@ -142,7 +142,8 @@ func setupServerSysPrivileges() (suid int, err error) {
 		}
 
 		// set `CAP_NET_ADMIN` capability to needed caps sets.
-		caps.Set(capability.CAPS|capability.BOUNDS|capability.AMBIENT, capability.CAP_NET_ADMIN, capability.CAP_NET_RAW)
+		caps.Set(capability.CAPS|capability.BOUNDS|capability.AMBIENT, capability.CAP_NET_ADMIN, capability.CAP_NET_RAW,
+			capability.CAP_DAC_READ_SEARCH)
 		if err := caps.Apply(capability.CAPS | capability.BOUNDS | capability.AMBIENT); err != nil {
 			err = fmt.Errorf("failed to apply capabilties: %w", err)
 			return
