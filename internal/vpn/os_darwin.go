@@ -5,8 +5,6 @@ package vpn
 import (
 	"fmt"
 	"strconv"
-	"sync"
-	"syscall"
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
@@ -37,24 +35,4 @@ func DeleteRoute(ipCIDR, gateway string) error {
 	}
 
 	return run("route", "delete", "-net", ip, gateway, netmask)
-}
-
-var sysPrivilegesMx sync.Mutex
-
-func setupSysPrivileges() (suid int, err error) {
-	sysPrivilegesMx.Lock()
-
-	suid = syscall.Getuid()
-
-	if err := syscall.Setuid(0); err != nil {
-		return 0, fmt.Errorf("failed to setuid 0: %w", err)
-	}
-
-	return suid, nil
-}
-
-func releaseSysPrivileges(suid int) error {
-	err := syscall.Setuid(suid)
-	sysPrivilegesMx.Unlock()
-	return err
 }

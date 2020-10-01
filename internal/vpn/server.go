@@ -25,7 +25,7 @@ type Server struct {
 
 // NewServer creates VPN server instance.
 func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
-	suid, err := setupSysPrivileges()
+	suid, err := setupServerSysPrivileges()
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup system privileges")
 	}
@@ -68,7 +68,7 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 func (s *Server) Serve(l net.Listener) error {
 	serveErr := errors.New("already serving")
 	s.serveOnce.Do(func() {
-		suid, err := setupSysPrivileges()
+		suid, err := setupServerSysPrivileges()
 		if err != nil {
 			serveErr = fmt.Errorf("failed to setup system privileges: %w", err)
 			return
@@ -122,7 +122,7 @@ func (s *Server) Serve(l net.Listener) error {
 		defer func() {
 			// this will be executed first on return, so we setup privileges once again,
 			// so other deferred clear up calls may be done successfully
-			if _, err := setupSysPrivileges(); err != nil {
+			if _, err := setupServerSysPrivileges(); err != nil {
 				s.log.WithError(err).Errorln("Failed to setup system privileges to clear up")
 			}
 		}()
@@ -175,7 +175,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		return
 	}
 
-	suid, err := setupSysPrivileges()
+	suid, err := setupServerSysPrivileges()
 	if err != nil {
 		s.log.WithError(err).Errorln("Failed to setup system privileges")
 		return
@@ -205,7 +205,7 @@ func (s *Server) serveConn(conn net.Conn) {
 	s.releaseSysPrivileges(suid)
 	// this will be executed first on return, so we setup privileges once again,
 	// so other deferred clear up calls may be done successfully
-	if _, err := setupSysPrivileges(); err != nil {
+	if _, err := setupServerSysPrivileges(); err != nil {
 		s.log.WithError(err).Errorln("Failed to setup system privileges to clear up")
 	}
 
@@ -309,7 +309,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 }
 
 func (s *Server) releaseSysPrivileges(suid int) {
-	if err := releaseSysPrivileges(suid); err != nil {
+	if err := releaseServerSysPrivileges(suid); err != nil {
 		s.log.WithError(err).Errorln("Failed to release system privileges")
 	}
 }
