@@ -22,15 +22,14 @@ const (
 
 // Client is a VPN client.
 type Client struct {
-	cfg             ClientConfig
-	log             logrus.FieldLogger
-	conn            net.Conn
-	directIPSMu     sync.Mutex
-	directIPs       []net.IP
-	defaultGateway  net.IP
-	sysPrivilegesMx sync.Mutex
-	closeC          chan struct{}
-	closeOnce       sync.Once
+	cfg            ClientConfig
+	log            logrus.FieldLogger
+	conn           net.Conn
+	directIPSMu    sync.Mutex
+	directIPs      []net.IP
+	defaultGateway net.IP
+	closeC         chan struct{}
+	closeOnce      sync.Once
 }
 
 // NewClient creates VPN client instance.
@@ -112,7 +111,7 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 
 	c.directIPs = append(c.directIPs, ip)
 
-	suid, err := c.setupSysPrivileges()
+	suid, err := setupSysPrivileges()
 	if err != nil {
 		return fmt.Errorf("failed to setup system privileges: %w", err)
 	}
@@ -156,7 +155,7 @@ func (c *Client) Serve() error {
 	c.log.Infof("Local TUN IP: %s", tunIP.String())
 	c.log.Infof("Local TUN gateway: %s", tunGateway.String())
 
-	suid, err := c.setupSysPrivileges()
+	suid, err := setupSysPrivileges()
 	if err != nil {
 		return fmt.Errorf("failed to setup system privileges: %w", err)
 	}
@@ -229,7 +228,7 @@ func (c *Client) Serve() error {
 	}
 
 	// we setup system privileges again here, so that the deferred call could perform clean up
-	suid, err = c.setupSysPrivileges()
+	suid, err = setupSysPrivileges()
 	if err != nil {
 		c.log.WithError(err).Errorln("Failed to setup system privileges for clean up")
 	}
@@ -445,6 +444,12 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 	}
 
 	return sHello.TUNIP, sHello.TUNGateway, nil
+}
+
+func (c *Client) releaseSysPrivileges(suid int) {
+	if err := releaseSysPrivileges(suid); err != nil {
+		c.log.WithError(err).Errorln("Failed to release system privileges")
+	}
 }
 
 func ipFromEnv(key string) (net.IP, error) {
