@@ -111,7 +111,7 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 
 	c.directIPs = append(c.directIPs, ip)
 
-	suid, err := setupSysPrivileges()
+	suid, err := setupClientSysPrivileges()
 	if err != nil {
 		return fmt.Errorf("failed to setup system privileges: %w", err)
 	}
@@ -155,7 +155,7 @@ func (c *Client) Serve() error {
 	c.log.Infof("Local TUN IP: %s", tunIP.String())
 	c.log.Infof("Local TUN gateway: %s", tunGateway.String())
 
-	suid, err := setupSysPrivileges()
+	suid, err := setupClientSysPrivileges()
 	if err != nil {
 		return fmt.Errorf("failed to setup system privileges: %w", err)
 	}
@@ -203,7 +203,7 @@ func (c *Client) Serve() error {
 	c.releaseSysPrivileges(suid)
 	// this will be executed first on return, so we setup privileges once again,
 	// so other deferred clear up calls may be done successfully
-	if _, err := setupSysPrivileges(); err != nil {
+	if _, err := setupClientSysPrivileges(); err != nil {
 		c.log.WithError(err).Errorln("Failed to setup system privileges to clear up")
 	}
 
@@ -446,7 +446,7 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 }
 
 func (c *Client) releaseSysPrivileges(suid int) {
-	if err := releaseSysPrivileges(suid); err != nil {
+	if err := releaseClientSysPrivileges(suid); err != nil {
 		c.log.WithError(err).Errorln("Failed to release system privileges")
 	}
 }
