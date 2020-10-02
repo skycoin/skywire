@@ -6,10 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
-	"sync"
-
-	"github.com/syndtr/gocapability/capability"
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -121,45 +117,4 @@ func parseIPForwardingOutput(output []byte) (string, error) {
 	}
 
 	return string(bytes.Trim(outTokens[1], " ")), nil
-}
-
-var setupServerOnce sync.Once
-
-func setupServerSysPrivileges() (suid int, err error) {
-	setupServerOnce.Do(func() {
-		var caps capability.Capabilities
-
-		caps, err = capability.NewPid2(0)
-		if err != nil {
-			err = fmt.Errorf("failed to init capabilities: %w", err)
-			return
-		}
-
-		err = caps.Load()
-		if err != nil {
-			err = fmt.Errorf("failed to load capabilities: %w", err)
-			return
-		}
-
-		// set `CAP_NET_ADMIN` capability to needed caps sets.
-		caps.Set(capability.CAPS|capability.BOUNDS|capability.AMBIENT, capability.CAP_NET_ADMIN, capability.CAP_NET_RAW,
-			capability.CAP_DAC_READ_SEARCH, capability.CAP_NET_BIND_SERVICE)
-		if err := caps.Apply(capability.CAPS | capability.BOUNDS | capability.AMBIENT); err != nil {
-			err = fmt.Errorf("failed to apply capabilties: %w", err)
-			return
-		}
-
-		// let child process keep caps sets from the parent, so we may do calls to
-		// system utilities with these caps.
-		if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
-			err = fmt.Errorf("failed to set PR_SET_KEEPCAPS: %w", err)
-			return
-		}
-	})
-
-	return 0, nil
-}
-
-func releaseServerSysPrivileges(_ int) error {
-	return nil
 }
