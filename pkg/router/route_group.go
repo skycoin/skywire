@@ -199,8 +199,8 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 			continue
 		}
 
-		rg.logger.Infof("Attempting to use TP %v (%v -> %v) (%v of %v) for writing",
-			tp.Entry.ID, tp.Entry.Edges[0], tp.Entry.Edges[1], i+1, len(tps))
+		rg.logger.Debug("Attempting to use TP %v (%v -> %v) (%v of %v) for writing",
+			tp.Entry.ID, tp.Entry.Edges[0], tp.Entry.Edges[1], i+1, len(rg.tps))
 
 		n, err := rg.write(p, tp, rule)
 		if err == nil {
