@@ -14,6 +14,7 @@
 /apps/
 /skywire/
 /local*
+/transport_logs
 
 pkg/visor/apps/
 pkg/visor/bar/

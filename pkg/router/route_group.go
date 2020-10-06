@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 
 const (
 	defaultRouteGroupKeepAliveInterval = DefaultRouteKeepAlive / 2
+	defaultNetworkProbeInterval        = 3 * time.Second
 	defaultReadChBufSize               = 1024
 	closeRoutineTimeout                = 2 * time.Second
 )
@@ -34,6 +36,8 @@ var (
 	ErrBadTransport = errors.New("bad transport")
 	// ErrRuleTransportMismatch is returned when number of forward rules does not equal to number of transports.
 	ErrRuleTransportMismatch = errors.New("rule/transport mismatch")
+	// ErrNoSuitableTransport is returned when no suitable transport was found.
+	ErrNoSuitableTransport = errors.New("no suitable transport")
 )
 
 type timeoutError struct{}
@@ -42,18 +46,22 @@ func (timeoutError) Error() string   { return "timeout" }
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
 
+type sendServicePacketFn func(interval time.Duration)
+
 // RouteGroupConfig configures RouteGroup.
 type RouteGroupConfig struct {
-	ReadChBufSize     int
-	KeepAliveInterval time.Duration
+	ReadChBufSize        int
+	KeepAliveInterval    time.Duration
+	NetworkProbeInterval time.Duration
 }
 
 // DefaultRouteGroupConfig returns default RouteGroup config.
 // Used by default if config is nil.
 func DefaultRouteGroupConfig() *RouteGroupConfig {
 	return &RouteGroupConfig{
-		KeepAliveInterval: defaultRouteGroupKeepAliveInterval,
-		ReadChBufSize:     defaultReadChBufSize,
+		KeepAliveInterval:    defaultRouteGroupKeepAliveInterval,
+		NetworkProbeInterval: defaultNetworkProbeInterval,
+		ReadChBufSize:        defaultReadChBufSize,
 	}
 }
 
@@ -66,6 +74,10 @@ type RouteGroup struct {
 	logger *logging.Logger
 	desc   routing.RouteDescriptor // describes the route group
 	rt     routing.Table
+
+	handshakeProcessed     chan struct{}
+	handshakeProcessedOnce sync.Once
+	encrypt                bool
 
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
@@ -89,6 +101,8 @@ type RouteGroup struct {
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
 
+	networkStats *networkStats
+
 	// used as a bool to indicate if this particular route group initiated close loop
 	closeInitiated   int32
 	remoteClosedOnce sync.Once
@@ -109,23 +123,23 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	}
 
 	rg := &RouteGroup{
-		cfg:           cfg,
-		logger:        logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
-		desc:          desc,
-		rt:            rt,
-		tps:           make([]*transport.ManagedTransport, 0),
-		fwd:           make([]routing.Rule, 0),
-		rvs:           make([]routing.Rule, 0),
-		readCh:        make(chan []byte, cfg.ReadChBufSize),
-		readBuf:       bytes.Buffer{},
-		remoteClosed:  make(chan struct{}),
-		closed:        make(chan struct{}),
-		readDeadline:  deadline.MakePipeDeadline(),
-		writeDeadline: deadline.MakePipeDeadline(),
-		lastSent:      make(map[routing.RouteID]int64),
+		cfg:                cfg,
+		logger:             logging.MustGetLogger(fmt.Sprintf("RouteGroup %s", desc.String())),
+		desc:               desc,
+		rt:                 rt,
+		tps:                make([]*transport.ManagedTransport, 0),
+		fwd:                make([]routing.Rule, 0),
+		rvs:                make([]routing.Rule, 0),
+		readCh:             make(chan []byte, cfg.ReadChBufSize),
+		readBuf:            bytes.Buffer{},
+		remoteClosed:       make(chan struct{}),
+		closed:             make(chan struct{}),
+		readDeadline:       deadline.MakePipeDeadline(),
+		writeDeadline:      deadline.MakePipeDeadline(),
+		lastSent:           make(map[routing.RouteID]int64),
+		handshakeProcessed: make(chan struct{}),
+		networkStats:       newNetworkStats(),
 	}
-
-	go rg.keepAliveLoop(cfg.KeepAliveInterval)
 
 	return rg
 }
@@ -260,6 +274,26 @@ func (rg *RouteGroup) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
+// IsAlive checks whether connection is alive.
+func (rg *RouteGroup) IsAlive() bool {
+	return !rg.isClosed() && !rg.isRemoteClosed()
+}
+
+// Latency returns latency till remote (ms).
+func (rg *RouteGroup) Latency() time.Duration {
+	return rg.networkStats.Latency()
+}
+
+// Throughput returns throughput till remote (bytes/s).
+func (rg *RouteGroup) Throughput() uint32 {
+	return rg.networkStats.LocalThroughput()
+}
+
+// BandwidthSent returns amount of bandwidth sent (bytes).
+func (rg *RouteGroup) BandwidthSent() uint64 {
+	return rg.networkStats.BandwidthSent()
+}
+
 // read reads incoming data. It tries to fetch the data from the internal buffer.
 // If buffer is empty it blocks on receiving from the data channel
 func (rg *RouteGroup) read(p []byte) (int, error) {
@@ -345,6 +379,10 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	err := tp.WritePacket(ctx, packet)
 	// note equality here. update activity only if there was NO error
 	if err == nil {
+		if packet.Type() == routing.DataPacket {
+			rg.networkStats.AddBandwidthSent(uint64(packet.Size()))
+		}
+
 		if err := rg.rt.UpdateActivity(ruleID); err != nil {
 			rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
 		}
@@ -353,20 +391,70 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	return err
 }
 
-func (rg *RouteGroup) keepAliveLoop(interval time.Duration) {
+func (rg *RouteGroup) startOffServiceLoops() {
+	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
+	go rg.servicePacketLoop("network probe", rg.cfg.NetworkProbeInterval, rg.networkProbeServiceFn)
+}
+
+func (rg *RouteGroup) sendNetworkProbe() error {
+	rg.mu.Lock()
+
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		rg.mu.Unlock()
+		// if no transports, no rules, then no latency probe
+		return nil
+	}
+
+	tp := rg.tps[0]
+	rule := rg.fwd[0]
+	rg.mu.Unlock()
+
+	if tp == nil {
+		return nil
+	}
+
+	throughput := rg.networkStats.RemoteThroughput()
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+
+	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
+
+	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {
+	if err := rg.sendNetworkProbe(); err != nil {
+		rg.logger.Warnf("Failed to send network probe: %v", err)
+	}
+}
+
+func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-rg.remoteClosed:
-			rg.logger.Infoln("Remote got closed, stopping keep-alive loop")
+			rg.logger.Infof("Remote got closed, stopping %s loop", name)
 			return
 		case <-ticker.C:
-			if err := rg.sendKeepAlive(interval); err != nil {
-				rg.logger.Warnf("Failed to send keepalive: %v", err)
-			}
+			f(interval)
 		}
+	}
+}
+
+func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
+	lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
+
+	if time.Since(lastSent) < interval {
+		return
+	}
+
+	if err := rg.sendKeepAlive(); err != nil {
+		rg.logger.Warnf("Failed to send keepalive: %v", err)
 	}
 }
 
@@ -404,6 +492,38 @@ func (rg *RouteGroup) sendKeepAlive(interval time.Duration) error {
 	}
 
 	return nil
+}
+
+func (rg *RouteGroup) sendHandshake(encrypt bool) error {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+		// if no transports, no rules, then no keepalive
+		return nil
+	}
+
+	for i := 0; i < len(rg.tps); i++ {
+		tp := rg.tps[i]
+
+		if tp == nil {
+			continue
+		}
+
+		rule := rg.fwd[i]
+		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt)
+
+		err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+		if err == nil {
+			rg.logger.Infof("Sent handshake via transport %v", tp.Entry.ID)
+			return nil
+		}
+
+		rg.logger.Infof("Failed to send handshake via transport %v: %v [%v/%v]",
+			tp.Entry.ID, err, i+1, len(rg.tps))
+	}
+
+	return ErrNoSuitableTransport
 }
 
 // Close closes a RouteGroup with the specified close `code`:
@@ -467,13 +587,47 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 
 		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
 	case routing.DataPacket:
+		rg.handshakeProcessedOnce.Do(func() {
+			// first packet is data packet, so we're communicating with the old visor
+			rg.encrypt = false
+			close(rg.handshakeProcessed)
+		})
 		return rg.handleDataPacket(packet)
+	case routing.NetworkProbePacket:
+		return rg.handleNetworkProbePacket(packet)
+	case routing.HandshakePacket:
+		rg.handshakeProcessedOnce.Do(func() {
+			// first packet is handshake packet, so we're communicating with the new visor
+			rg.encrypt = true
+			if packet.Payload()[0] == 0 {
+				rg.encrypt = false
+			}
+
+			close(rg.handshakeProcessed)
+		})
 	}
 
 	return nil
 }
 
+func (rg *RouteGroup) handleNetworkProbePacket(packet routing.Packet) error {
+	payload := packet.Payload()
+
+	sentAtMs := binary.BigEndian.Uint64(payload)
+	throughput := binary.BigEndian.Uint64(payload[8:])
+
+	ms := sentAtMs % 1000
+	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond))
+
+	rg.networkStats.SetLatency(time.Since(sentAt))
+	rg.networkStats.SetLocalThroughput(uint32(throughput))
+
+	return nil
+}
+
 func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
+	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
+
 	select {
 	case <-rg.closed:
 		return io.ErrClosedPipe

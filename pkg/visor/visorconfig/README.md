@@ -18,12 +18,9 @@
 - `hypervisor` (*[Config](#Config))
 
 
-# V1Dmsgpty
+# V1UptimeTracker
 
-- `port` (uint16)
-- `authorization_file` (string)
-- `cli_network` (string)
-- `cli_address` (string)
+- `addr` (string)
 
 
 # V1Transport
@@ -32,24 +29,6 @@
 - `address_resolver` (string)
 - `log_store` (*[V1LogStore](#V1LogStore))
 - `trusted_visors` ()
-
-
-# V1UptimeTracker
-
-- `addr` (string)
-
-
-# V1Routing
-
-- `setup_nodes` ()
-- `route_finder` (string)
-- `route_finder_timeout` (Duration)
-
-
-# V1LogStore
-
-- `type` (string) - Type defines the log store type. Valid values: file, memory.
-- `location` (string)
 
 
 # V1Launcher
@@ -67,6 +46,27 @@
 - `proxy_discovery_addr` (string)
 
 
+# V1LogStore
+
+- `type` (string) - Type defines the log store type. Valid values: file, memory.
+- `location` (string)
+
+
+# V1Dmsgpty
+
+- `port` (uint16)
+- `authorization_file` (string)
+- `cli_network` (string)
+- `cli_address` (string)
+
+
+# V1Routing
+
+- `setup_nodes` ()
+- `route_finder` (string)
+- `route_finder_timeout` (Duration)
+
+
 # Common
 
 - `path` (string)
@@ -74,6 +74,12 @@
 - `version` (string)
 - `sk` (SecKey)
 - `pk` (PubKey)
+
+
+# DmsgConfig
+
+- `discovery` (string)
+- `sessions_count` (int)
 
 
 # Config
@@ -101,12 +107,6 @@
 - `-` (bool)
 
 
-# STCPConfig
-
-- `pk_table` ()
-- `local_address` (string)
-
-
 # RWMutex
 
 - `w` ([Mutex](#Mutex))
@@ -122,18 +122,10 @@
 - `sema` (uint32)
 
 
-# DmsgConfig
+# STCPConfig
 
-- `discovery` (string)
-- `sessions_count` (int)
-
-
-# AppConfig
-
-- `name` (string)
-- `args` ([]string)
-- `auto_start` (bool)
-- `port` (Port)
+- `pk_table` ()
+- `local_address` (string)
 
 
 # MasterLogger
@@ -144,3 +136,11 @@
 # Logger
 
 - `` (FieldLogger)
+
+
+# AppConfig
+
+- `name` (string)
+- `args` ([]string)
+- `auto_start` (bool)
+- `port` (Port)

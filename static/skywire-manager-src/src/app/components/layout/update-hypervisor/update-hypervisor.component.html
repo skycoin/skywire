@@ -15,7 +15,9 @@
 
   <!-- Current version, shown if no update was found. -->
   <div *ngIf="state === updatingStates.NoUpdatesFound" class="list-container">
-    - {{ currentNodeVersion ? currentNodeVersion : ('common.unknown' | translate) }}
+    <div class="list-element">
+      <div class="left-part">-</div><div class="right-part">{{ currentNodeVersion ? currentNodeVersion : ('common.unknown' | translate) }}</div>
+    </div>
   </div>
 
   <!-- Text asking for confirmation before installing the update. -->
@@ -24,7 +26,13 @@
       {{ 'update-hypervisor.update-available' | translate }}
     </div>
     <div class="list-container">
-      - {{ 'update.version-change' | translate:updateFound }}
+      <div class="list-element">
+        <div class="left-part">-</div>
+        <div class="right-part">
+          {{ 'update.version-change' | translate:updateFound }}
+          <a [href]="updateFound.updateLink" target="_blank" rel="noreferrer nofollow noopener">{{ updateFound.updateLink }}</a>
+        </div>
+      </div>
     </div>
     <div class="text-container">
       {{ 'update-hypervisor.update-instructions' | translate }}
@@ -40,9 +48,14 @@
     <div>
       <!-- Raw progress text shown if it was not possible to parse it for showing the progrss bar. -->
       <div *ngIf="!progressInfo.errorMsg && !progressInfo.dataParsed" class="list-container">
-        - <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!progressInfo.closed"></mat-spinner> {{ 'update-hypervisor.label' | translate }}
-        : <span class="details">{{ progressInfo.rawMsg }}</span>
-        <span *ngIf="progressInfo.closed" class="closed-indication">&nbsp;({{ 'update.finished' | translate }})</span>
+        <div class="list-element">
+          <div class="left-part">-</div>
+          <div class="right-part">
+            <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!progressInfo.closed"></mat-spinner> {{ 'update-hypervisor.label' | translate }}
+            : <span class="details">{{ progressInfo.rawMsg }}</span>
+            <span *ngIf="progressInfo.closed" class="closed-indication">&nbsp;({{ 'update.finished' | translate }})</span>
+          </div>
+        </div>
       </div>
       <!-- Progress bar. -->
       <div *ngIf="!progressInfo.errorMsg && progressInfo.dataParsed" class="progress-container">
@@ -75,7 +88,12 @@
       </div>
       <!-- Msg shown if there was an error during the operation. -->
       <div *ngIf="progressInfo.errorMsg" class="list-container">
-        - {{ 'update-hypervisor.label' | translate }}: <span class="red-text">{{ progressInfo.errorMsg | translate }}</span>
+        <div class="list-element">
+          <div class="left-part">-</div>
+          <div class="right-part">
+            {{ 'update-hypervisor.label' | translate }}: <span class="red-text">{{ progressInfo.errorMsg | translate }}</span>
+          </div>
+        </div>
       </div>
     </div>
   </ng-container>
