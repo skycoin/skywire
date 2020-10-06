@@ -447,13 +447,7 @@ func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f s
 }
 
 func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
-	lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
-
-	if time.Since(lastSent) < interval {
-		return
-	}
-
-	if err := rg.sendKeepAlive(); err != nil {
+	if err := rg.sendKeepAlive(interval); err != nil {
 		rg.logger.Warnf("Failed to send keepalive: %v", err)
 	}
 }
