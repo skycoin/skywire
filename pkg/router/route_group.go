@@ -178,29 +178,21 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	rg.mu.Lock()
-	tps := make([]*transport.ManagedTransport, len(rg.tps))
-	copy(tps, rg.tps)
-
-	rules := make([]routing.Rule, len(rg.fwd))
-	copy(rules, rg.fwd)
-	rg.mu.Unlock()
-
-	if len(tps) == 0 {
+	if len(rg.tps) == 0 {
 		return 0, ErrNoTransports
 	}
 
-	if len(rules) == 0 {
+	if len(rg.fwd) == 0 {
 		return 0, ErrNoRules
 	}
 
-	if len(tps) != len(rules) {
+	if len(rg.tps) != len(rg.fwd) {
 		return 0, ErrRuleTransportMismatch
 	}
 
-	for i := range tps {
-		rule := rules[i]
-		tp := tps[i]
+	for i := range rg.tps {
+		rule := rg.fwd[i]
+		tp := rg.tps[i]
 
 		if tp == nil {
 			rg.logger.Infof("Bad transport at index %v, using the next one", i)
