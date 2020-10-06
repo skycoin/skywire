@@ -89,7 +89,6 @@ type RouteGroup struct {
 	// - the corresponding element of tps should have tpID of the corresponding rule in fwd.
 	// - fwd references 'ForwardRule' rules for writes.
 	fwd []routing.Rule // forward rules (for writing)
-	rvs []routing.Rule // reverse rules (for reading)
 
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
@@ -129,7 +128,6 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		rt:                 rt,
 		tps:                make([]*transport.ManagedTransport, 0),
 		fwd:                make([]routing.Rule, 0),
-		rvs:                make([]routing.Rule, 0),
 		readCh:             make(chan []byte, cfg.ReadChBufSize),
 		readBuf:            bytes.Buffer{},
 		remoteClosed:       make(chan struct{}),
@@ -684,13 +682,11 @@ func (rg *RouteGroup) isClosed() bool {
 	return chanClosed(rg.closed)
 }
 
-func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.ManagedTransport) {
+func (rg *RouteGroup) appendRules(forward, _ routing.Rule, tp *transport.ManagedTransport) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
 	rg.fwd = append(rg.fwd, forward)
-	rg.rvs = append(rg.rvs, reverse)
-
 	rg.tps = append(rg.tps, tp)
 }
 
