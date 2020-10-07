@@ -56,6 +56,10 @@ var rootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		log := initLogger(tag, syslogAddr)
 
+		// Workaround for Discord logger hook. Actually, it's Info.
+		log.Error(discord.StartLogMessage)
+		defer log.Error(discord.StopLogMessage)
+
 		delayDuration, err := time.ParseDuration(delay)
 		if err != nil {
 			log.WithError(err).Error("Failed to parse delay duration.")
