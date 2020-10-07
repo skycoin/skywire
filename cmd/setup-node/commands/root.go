@@ -62,6 +62,10 @@ var rootCmd = &cobra.Command{
 			logging.AddHook(hook)
 		}
 
+		// Workaround for Discord logger hook. Actually, it's Info.
+		log.Error(discord.StartLogMessage)
+		defer log.Error(discord.StopLogMessage)
+
 		var rdr io.Reader
 		var err error
 
