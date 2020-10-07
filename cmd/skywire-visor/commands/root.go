@@ -56,9 +56,14 @@ var rootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		log := initLogger(tag, syslogAddr)
 
-		// Workaround for Discord logger hook. Actually, it's Info.
-		log.Error(discord.StartLogMessage)
-		defer log.Error(discord.StopLogMessage)
+		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+			// Workaround for Discord logger hook. Actually, it's Info.
+			log.Error(discord.StartLogMessage)
+			defer log.Error(discord.StopLogMessage)
+		} else {
+			log.Info(discord.StartLogMessage)
+			defer log.Info(discord.StopLogMessage)
+		}
 
 		delayDuration, err := time.ParseDuration(delay)
 		if err != nil {
