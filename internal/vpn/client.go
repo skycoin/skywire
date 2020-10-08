@@ -199,7 +199,7 @@ func (c *Client) Serve() error {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
-	// we release privileges here (user is not root for Mac OS systems from here on)suid
+	// we release privileges here (user is not root for Mac OS systems from here on)
 	c.releaseSysPrivileges(suid)
 	// this will be executed first on return, so we setup privileges once again,
 	// so other deferred clear up calls may be done successfully
