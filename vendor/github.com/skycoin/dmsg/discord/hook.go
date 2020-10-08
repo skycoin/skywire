@@ -11,13 +11,15 @@ import (
 const webhookURLEnvName = "DISCORD_WEBHOOK_URL"
 
 const (
-	loggedLevel                     = logrus.ErrorLevel
-	startAndShutdownMessageLogLevel = logrus.InfoLevel
+	loggedLevel       = logrus.ErrorLevel
+	startStopLogLevel = logrus.InfoLevel
 )
 
 const (
+	// StartLogMessage defines a message on binary starting.
 	StartLogMessage = "Starting"
-	StopLogMessage  = "Stopping"
+	// StopLogMessage defines a message on binary stopping.
+	StopLogMessage = "Stopping"
 )
 
 // Hook is a Discord logger hook.
@@ -57,11 +59,11 @@ func NewHook(tag, webHookURL string, opts ...Option) logrus.Hook {
 func (h *Hook) Fire(entry *logrus.Entry) error {
 	switch entry.Message {
 	case StartLogMessage, StopLogMessage:
-		// Start and shutdown messages should be logged by Hook but they should have Info level.
+		// Start and stop messages should be logged by Hook but they should have Info level.
 		// With Info level, they would not be passed to hook.
 		// So we can use Error level in the codebase and change level to Info in the hook,
 		// then it appears as Info in logs.
-		entry.Level = startAndShutdownMessageLogLevel
+		entry.Level = startStopLogLevel
 	}
 
 	if h.shouldFire(entry) {
