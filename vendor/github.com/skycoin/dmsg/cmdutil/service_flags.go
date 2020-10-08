@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/sirupsen/logrus"
@@ -147,7 +148,7 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 	}
 
 	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		hook := discord.NewHook(sf.Tag, discordWebhookURL)
+		hook := discord.NewHook(sf.Tag, discordWebhookURL, discord.WithLimit(10*time.Minute))
 		logging.AddHook(hook)
 	}
 

@@ -60,6 +60,13 @@ var rootCmd = &cobra.Command{
 		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
 			hook := discord.NewHook(tag, discordWebhookURL)
 			logging.AddHook(hook)
+
+			// Workaround for Discord logger hook. Actually, it's Info.
+			log.Error(discord.StartLogMessage)
+			defer log.Error(discord.StopLogMessage)
+		} else {
+			log.Info(discord.StartLogMessage)
+			defer log.Info(discord.StopLogMessage)
 		}
 
 		var rdr io.Reader
