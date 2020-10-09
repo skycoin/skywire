@@ -4,7 +4,6 @@ go 1.14
 
 require (
 	github.com/creack/pty v1.1.9
-	github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
 	github.com/go-redis/redis v6.15.6+incompatible
 	github.com/gorilla/handlers v1.4.2
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
@@ -16,6 +15,7 @@ require (
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/prometheus/client_golang v1.3.0
 	github.com/sirupsen/logrus v1.4.2
+	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 	github.com/skycoin/skycoin v0.26.0
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/spf13/cast v1.3.0
