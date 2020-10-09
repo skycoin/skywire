@@ -24,8 +24,6 @@ github.com/dsnet/compress/bzip2/internal/sais
 github.com/dsnet/compress/internal
 github.com/dsnet/compress/internal/errors
 github.com/dsnet/compress/internal/prefix
-# github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
-github.com/flynn/noise
 # github.com/go-chi/chi v4.1.2+incompatible
 ## explicit
 github.com/go-chi/chi
@@ -151,7 +149,7 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20201008074402-acbe6d76d785
+# github.com/skycoin/dmsg v0.0.0-20201009105839-3b0627b4ffa6
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
@@ -168,6 +166,8 @@ github.com/skycoin/dmsg/netutil
 github.com/skycoin/dmsg/noise
 github.com/skycoin/dmsg/promutil
 github.com/skycoin/dmsg/servermetrics
+# github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
+github.com/skycoin/noise
 # github.com/skycoin/skycoin v0.26.0
 ## explicit
 github.com/skycoin/skycoin/src/cipher
