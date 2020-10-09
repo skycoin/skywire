@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flynn/noise"
+	"github.com/skycoin/noise"
 
 	"github.com/skycoin/dmsg/cipher"
 )
