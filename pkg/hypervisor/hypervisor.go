@@ -176,7 +176,7 @@ func (hv *Hypervisor) HTTPHandler() http.Handler {
 	return hv.makeMux()
 }
 
-func (hv *Hypervisor) makeMux() *chi.Mux {
+func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
