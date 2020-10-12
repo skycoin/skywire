@@ -50,3 +50,11 @@ func DefaultNetworkGateway() (net.IP, error) {
 
 	return nil, errCouldFindDefaultNetworkGateway
 }
+
+func setupSysPrivileges() (suid int, err error) {
+	return 0, nil
+}
+
+func releaseSysPrivileges(suid int) {
+	return
+}
