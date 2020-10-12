@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 import { ApiService } from './api.service';
 import { Route } from '../app.datatypes';
@@ -19,7 +20,15 @@ export class RouteService {
    * Get a list with the routes of a node.
    */
   getRoutes(nodeKey: string): Observable<Route[]> {
-    return this.apiService.get(`visors/${nodeKey}/routes`);
+    return this.apiService.get(`visors/${nodeKey}/routes`).pipe(
+      map(val => {
+        if (!val) {
+          return [];
+        }
+
+        return val;
+      })
+    );
   }
 
   /**
