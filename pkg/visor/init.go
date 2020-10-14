@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/visor/visorerr"
+
 	"github.com/rakyll/statik/fs"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
@@ -40,7 +42,7 @@ import (
 )
 
 // InitFunc is an initializing function for some of the visor modules.
-type InitFunc func(ctx context.Context, v *Visor) bool
+type InitFunc func(ctx context.Context, v *Visor) error
 
 var initStack = func() []InitFunc {
 	return []InitFunc{
@@ -68,7 +70,7 @@ func SetInitStack(f func() []InitFunc) {
 }
 
 // InitNetworkers initializes networkers.
-func InitNetworkers(_ context.Context, v *Visor) bool {
+func InitNetworkers(_ context.Context, v *Visor) error {
 	report := v.makeReporter("networkers")
 	log := v.MasterLogger().PackageLogger("networkers")
 
@@ -82,16 +84,16 @@ func InitNetworkers(_ context.Context, v *Visor) bool {
 		return report(fmt.Errorf("failed to add DMSG networker: %w", err))
 	}
 
-	v.pushCloseStack("networkers", func() bool {
+	v.pushCloseStack("networkers", func() error {
 		appnet.ClearNetworkers()
-		return true
+		return nil
 	})
 
 	return report(nil)
 }
 
 // InitUpdater initializes updater.
-func InitUpdater(_ context.Context, v *Visor) bool {
+func InitUpdater(_ context.Context, v *Visor) error {
 	report := v.makeReporter("updater")
 
 	restartCheckDelay, err := time.ParseDuration(v.conf.RestartCheckDelay)
@@ -106,14 +108,14 @@ func InitUpdater(_ context.Context, v *Visor) bool {
 }
 
 // InitEventBroadcaster initializes event broadcaster.
-func InitEventBroadcaster(_ context.Context, v *Visor) bool {
+func InitEventBroadcaster(_ context.Context, v *Visor) error {
 	report := v.makeReporter("event_broadcaster")
 
 	log := v.MasterLogger().PackageLogger("event_broadcaster")
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
 
-	v.pushCloseStack("event_broadcaster", func() bool {
+	v.pushCloseStack("event_broadcaster", func() error {
 		return report(ebc.Close())
 	})
 
@@ -122,7 +124,7 @@ func InitEventBroadcaster(_ context.Context, v *Visor) bool {
 }
 
 // InitSNet initializes skywire network.
-func InitSNet(ctx context.Context, v *Visor) bool {
+func InitSNet(ctx context.Context, v *Visor) error {
 	report := v.makeReporter("snet")
 
 	nc := snet.NetworkConfigs{
@@ -139,16 +141,13 @@ func InitSNet(ctx context.Context, v *Visor) bool {
 		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
-	n, err := snet.New(ctx, conf, v.ebc)
-	if err != nil {
-		return report(err)
-	}
+	n := snet.New(ctx, conf, v.ebc)
 
 	if err := n.Init(ctx); err != nil {
 		return report(err)
 	}
 
-	v.pushCloseStack("snet", func() bool {
+	v.pushCloseStack("snet", func() error {
 		return report(n.Close())
 	})
 
@@ -163,15 +162,15 @@ func InitSNet(ctx context.Context, v *Visor) bool {
 			log.Info("Connected to the dmsg network.")
 		case <-ctx.Done():
 			log.Infoln("SNet initialization interrupted")
-			return false
+			return nil
 		}
 
 		// dmsgctrl setup
 		cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
 		if err != nil {
-			return report(err)
+			return report(visorerr.NewErrorWithCode(err, visorerr.ErrCodeDmsgListenFailed))
 		}
-		v.pushCloseStack("snet.dmsgctrl", func() bool {
+		v.pushCloseStack("snet.dmsgctrl", func() error {
 			return report(cl.Close())
 		})
 
@@ -183,13 +182,14 @@ func InitSNet(ctx context.Context, v *Visor) bool {
 }
 
 // InitAddressResolver initializes address resolver.
-func InitAddressResolver(_ context.Context, v *Visor) bool {
+func InitAddressResolver(_ context.Context, v *Visor) error {
 	report := v.makeReporter("address-resolver")
 	conf := v.conf.Transport
 
 	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
 	if err != nil {
-		return report(fmt.Errorf("failed to create address resolver client: %w", err))
+		err = visorerr.NewErrorWithCode(fmt.Errorf("failed to create address resolver client: %w", err), visorerr.ErrCodeInvalidAddrResolverURL)
+		return report(err)
 	}
 
 	v.arClient = arClient
@@ -198,13 +198,14 @@ func InitAddressResolver(_ context.Context, v *Visor) bool {
 }
 
 // InitTransport initializes transport manager.
-func InitTransport(ctx context.Context, v *Visor) bool {
+func InitTransport(ctx context.Context, v *Visor) error {
 	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(ctx, v)
 	if err != nil {
-		return report(fmt.Errorf("failed to create transport discovery client: %w", err))
+		err = fmt.Errorf("failed to create transport discovery client: %w", err)
+		return report(visorerr.NewErrorWithCode(err, visorerr.ErrCodeTpDiscUnavailable))
 	}
 
 	var logS transport.LogStore
@@ -228,10 +229,7 @@ func InitTransport(ctx context.Context, v *Visor) bool {
 		LogStore:        logS,
 	}
 
-	tpM, err := transport.NewManager(v.MasterLogger().PackageLogger("transport_manager"), v.net, &tpMConf)
-	if err != nil {
-		return report(fmt.Errorf("failed to start transport manager: %w", err))
-	}
+	tpM := transport.NewManager(v.MasterLogger().PackageLogger("transport_manager"), v.net, &tpMConf)
 
 	cancellableCtx, cancel := context.WithCancel(ctx)
 	wg := new(sync.WaitGroup)
@@ -242,11 +240,11 @@ func InitTransport(ctx context.Context, v *Visor) bool {
 		tpM.Serve(cancellableCtx)
 	}()
 
-	v.pushCloseStack("transport.manager", func() bool {
+	v.pushCloseStack("transport.manager", func() error {
 		cancel()
-		ok := report(tpM.Close())
+		err := report(tpM.Close())
 		wg.Wait()
-		return ok
+		return err
 	})
 
 	v.tpM = tpM
@@ -255,7 +253,7 @@ func InitTransport(ctx context.Context, v *Visor) bool {
 }
 
 // InitRouter initializes router.
-func InitRouter(ctx context.Context, v *Visor) bool {
+func InitRouter(ctx context.Context, v *Visor) error {
 	report := v.makeReporter("router")
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
@@ -273,7 +271,8 @@ func InitRouter(ctx context.Context, v *Visor) bool {
 
 	r, err := router.New(v.net, &rConf)
 	if err != nil {
-		return report(fmt.Errorf("failed to create router: %w", err))
+		err = fmt.Errorf("failed to create router: %w", err)
+		return report(visorerr.NewErrorWithCode(err, visorerr.ErrCodeFailedToStartRouter))
 	}
 
 	cancellableCtx, cancel := context.WithCancel(ctx)
@@ -287,7 +286,7 @@ func InitRouter(ctx context.Context, v *Visor) bool {
 		}
 	}()
 
-	v.pushCloseStack("router.serve", func() bool {
+	v.pushCloseStack("router.serve", func() error {
 		cancel()
 		ok := report(r.Close())
 		wg.Wait()
@@ -301,7 +300,7 @@ func InitRouter(ctx context.Context, v *Visor) bool {
 }
 
 // InitDiscovery initializes app discovery.
-func InitDiscovery(_ context.Context, v *Visor) bool {
+func InitDiscovery(_ context.Context, v *Visor) error {
 	report := v.makeReporter("discovery")
 
 	// Prepare app discovery factory.
@@ -324,7 +323,7 @@ func InitDiscovery(_ context.Context, v *Visor) bool {
 }
 
 // InitLauncher initializes app launcher.
-func InitLauncher(_ context.Context, v *Visor) bool {
+func InitLauncher(_ context.Context, v *Visor) error {
 	report := v.makeReporter("launcher")
 	conf := v.conf.Launcher
 
@@ -334,7 +333,7 @@ func InitLauncher(_ context.Context, v *Visor) bool {
 		return report(fmt.Errorf("failed to start proc_manager: %w", err))
 	}
 
-	v.pushCloseStack("launcher.proc_manager", func() bool {
+	v.pushCloseStack("launcher.proc_manager", func() error {
 		return report(procM.Close())
 	})
 
@@ -421,7 +420,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 }
 
 // InitCLI initializes CLI.
-func InitCLI(_ context.Context, v *Visor) bool {
+func InitCLI(_ context.Context, v *Visor) error {
 	report := v.makeReporter("cli")
 
 	if v.conf.CLIAddr == "" {
@@ -434,7 +433,7 @@ func InitCLI(_ context.Context, v *Visor) bool {
 		return report(err)
 	}
 
-	v.pushCloseStack("cli.listener", func() bool {
+	v.pushCloseStack("cli.listener", func() error {
 		return report(cliL.Close())
 	})
 
@@ -448,7 +447,7 @@ func InitCLI(_ context.Context, v *Visor) bool {
 }
 
 // InitHypervisors initializes hypervisor clients.
-func InitHypervisors(ctx context.Context, v *Visor) bool {
+func InitHypervisors(ctx context.Context, v *Visor) error {
 	report := v.makeReporter("hypervisors")
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
@@ -462,7 +461,8 @@ func InitHypervisors(ctx context.Context, v *Visor) bool {
 		addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
 		rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
 		if err != nil {
-			return report(fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err))
+			err = fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
+			return report(visorerr.NewErrorWithCode(err, visorerr.ErrCodeFailedToSetupHVGateway))
 		}
 
 		cancellableCtx, cancel := context.WithCancel(ctx)
@@ -474,10 +474,10 @@ func InitHypervisors(ctx context.Context, v *Visor) bool {
 			ServeRPCClient(cancellableCtx, log, v.net, rpcS, addr, hvErrs)
 		}(hvErrs)
 
-		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() bool {
+		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
 			cancel()
 			wg.Wait()
-			return true
+			return nil
 		})
 	}
 
@@ -485,7 +485,7 @@ func InitHypervisors(ctx context.Context, v *Visor) bool {
 }
 
 // InitUptimeTracker initializes uptime tracker client.
-func InitUptimeTracker(ctx context.Context, v *Visor) bool {
+func InitUptimeTracker(ctx context.Context, v *Visor) error {
 	const tickDuration = 10 * time.Second
 
 	report := v.makeReporter("uptime_tracker")
@@ -493,7 +493,7 @@ func InitUptimeTracker(ctx context.Context, v *Visor) bool {
 
 	if conf == nil {
 		v.log.Info("'uptime_tracker' is not configured, skipping.")
-		return true
+		return nil
 	}
 
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
@@ -501,7 +501,7 @@ func InitUptimeTracker(ctx context.Context, v *Visor) bool {
 		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
 		// return report(err)
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
-		return true
+		return nil
 	}
 
 	log := v.MasterLogger().PackageLogger("uptime_tracker")
@@ -509,25 +509,24 @@ func InitUptimeTracker(ctx context.Context, v *Visor) bool {
 
 	go func() {
 		for range ticker.C {
-			log.Infof("DICK: UPDATING UPTIME")
 			if err := ut.UpdateVisorUptime(ctx); err != nil {
 				log.WithError(err).Warn("Failed to update visor uptime.")
 			}
 		}
 	}()
 
-	v.pushCloseStack("uptime_tracker", func() bool {
+	v.pushCloseStack("uptime_tracker", func() error {
 		ticker.Stop()
 		return report(nil)
 	})
 
 	v.uptimeTracker = ut
 
-	return true
+	return nil
 }
 
 // InitTrustedVisors initializes trusted visors.
-func InitTrustedVisors(ctx context.Context, v *Visor) bool {
+func InitTrustedVisors(ctx context.Context, v *Visor) error {
 	const trustedVisorsTransportType = tptypes.STCPR
 
 	go func() {
@@ -556,13 +555,13 @@ func InitTrustedVisors(ctx context.Context, v *Visor) bool {
 		}
 	}()
 
-	return true
+	return nil
 }
 
 // InitHypervisor initializes hypervisor.
-func InitHypervisor(ctx context.Context, v *Visor) bool {
+func InitHypervisor(ctx context.Context, v *Visor) error {
 	if v.conf.Hypervisor == nil {
-		return true
+		return nil
 	}
 
 	v.log.Infof("Initializing hypervisor")
@@ -610,7 +609,7 @@ func InitHypervisor(ctx context.Context, v *Visor) bool {
 
 	v.log.Infof("Hypervisor initialized")
 
-	return true
+	return nil
 }
 
 func connectToTpDisc(ctx context.Context, v *Visor) (transport.DiscoveryClient, error) {

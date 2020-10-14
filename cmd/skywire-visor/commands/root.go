@@ -109,7 +109,7 @@ var rootCmd = &cobra.Command{
 
 		v := visor.NewVisor(conf, restartCtx)
 
-		if ok := v.Start(context.Background()); !ok {
+		if err := v.Start(context.Background()); err != nil {
 			log.Fatal("Failed to start visor.")
 		}
 

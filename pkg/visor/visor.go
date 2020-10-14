@@ -76,12 +76,12 @@ type vReport struct {
 	err error
 }
 
-type reportFunc func(err error) bool
+type reportFunc func(err error) error
 
 func (v *Visor) makeReporter(src string) reportFunc {
-	return func(err error) bool {
+	return func(err error) error {
 		v.reportCh <- vReport{src: src, err: err}
-		return err == nil
+		return err
 	}
 }
 
@@ -107,10 +107,10 @@ func (v *Visor) processReports(log logrus.FieldLogger, ok *bool) {
 
 type closeElem struct {
 	src string
-	fn  func() bool
+	fn  func() error
 }
 
-func (v *Visor) pushCloseStack(src string, fn func() bool) {
+func (v *Visor) pushCloseStack(src string, fn func() error) {
 	v.closeStack = append(v.closeStack, closeElem{src: src, fn: fn})
 }
 
@@ -141,7 +141,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) *Visor {
 }
 
 // Start starts visor.
-func (v *Visor) Start(ctx context.Context) bool {
+func (v *Visor) Start(ctx context.Context) error {
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", v.conf.PK).
 		Info("Begin startup.")
@@ -150,7 +150,7 @@ func (v *Visor) Start(ctx context.Context) bool {
 		select {
 		// quit immediately if startup was interrupted
 		case <-ctx.Done():
-			return false
+			return nil
 		default:
 		}
 
@@ -161,10 +161,10 @@ func (v *Visor) Start(ctx context.Context) bool {
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(initStack())))
 		log.Info("Starting module...")
 
-		if ok := startFn(ctx, v); !ok {
+		if err := startFn(ctx, v); err != nil {
 			log.WithField("elapsed", time.Since(start)).Error("Failed to start module.")
 			v.processReports(log, nil)
-			return ok
+			return err
 		}
 
 		log.WithField("elapsed", time.Since(start)).Info("Module started successfully.")
@@ -173,12 +173,12 @@ func (v *Visor) Start(ctx context.Context) bool {
 	ok := true
 	if v.processReports(log, &ok); !ok {
 		log.Error("Failed to startup visor.")
-		return ok
+		return errors.New("failed to startup visor")
 	}
 
 	log.Info("Startup complete!")
 
-	return true
+	return nil
 }
 
 // Network returns skywire network.
@@ -204,7 +204,7 @@ func (v *Visor) Close() {
 		ce := v.closeStack[i]
 
 		start := time.Now()
-		done := make(chan bool, 1)
+		done := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", ce.src)).
@@ -217,10 +217,10 @@ func (v *Visor) Close() {
 		}(ce)
 
 		select {
-		case ok := <-done:
+		case err := <-done:
 			t.Stop()
 
-			if !ok {
+			if err != nil {
 				log.WithField("elapsed", time.Since(start)).Warn("Module stopped with unexpected result.")
 				v.processReports(log, nil)
 				continue

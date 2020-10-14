@@ -18,13 +18,13 @@ type ClientMobile struct {
 }
 
 // NewClientMobile create VPN client instance to be used on mobile devices.
-func NewClientMobile(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*ClientMobile, error) {
+func NewClientMobile(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) *ClientMobile {
 	return &ClientMobile{
 		cfg:    cfg,
 		log:    l,
 		conn:   conn,
 		closeC: make(chan struct{}),
-	}, nil
+	}
 }
 
 // GetConn returns VPN server connection.
