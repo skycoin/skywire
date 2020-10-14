@@ -153,5 +153,10 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
 	}
 
+	conf.Dmsgpty.AuthFile = skyenv.TestDmsgPtyWhiteList
+	conf.Transport.LogStore.Location = skyenv.TestTpLogStore
+	conf.Launcher.LocalPath = skyenv.TestAppLocalPath
+	conf.Launcher.BinPath = skyenv.TestAppBinPath
+
 	return conf, nil
 }

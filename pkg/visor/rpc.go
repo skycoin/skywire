@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -256,6 +257,18 @@ func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
 
 	return r.visor.SetAppPK(in.AppName, in.PK)
+}
+
+// GetAppConnectionsSummary returns connections stats for the app.
+func (r *RPC) GetAppConnectionsSummary(appName *string, out *[]appserver.ConnectionSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppConnectionsSummary", appName)(out, &err)
+
+	summary, err := r.visor.GetAppConnectionsSummary(*appName)
+	if summary != nil {
+		*out = summary
+	}
+
+	return err
 }
 
 /*
