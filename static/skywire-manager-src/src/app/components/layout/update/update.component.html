@@ -15,7 +15,9 @@
 
   <!-- Current version, shown if no update was found and only one node was going to be updated. -->
   <div *ngIf="state === updatingStates.NoUpdatesFound && data.length === 1" class="list-container">
-    - {{ currentNodeVersion ? currentNodeVersion : ('common.unknown' | translate) }}
+    <div class="list-element">
+      <div class="left-part">-</div><div class="right-part">{{ currentNodeVersion ? currentNodeVersion : ('common.unknown' | translate) }}</div>
+    </div>
   </div>
 
   <!-- List with the nodes currently being updated, shown while asking for confirmation before installing the updates. -->
@@ -24,8 +26,8 @@
       {{ 'update.already-updating' | translate }}
     </div>
     <div class="list-container">
-      <div *ngFor="let index of indexesAlreadyBeingUpdated">
-        - {{ nodesToUpdate[index].label }}
+      <div *ngFor="let index of indexesAlreadyBeingUpdated" class="list-element">
+        <div class="left-part">-</div><div class="right-part">{{ nodesToUpdate[index].label }}</div>
       </div>
     </div>
   </ng-container>
@@ -35,8 +37,12 @@
       {{ updateAvailableText | translate:{number: nodesForUpdatesFound} }}
     </div>
     <div class="list-container">
-      <div *ngFor="let update of updatesFound">
-        - {{ 'update.version-change' | translate:update }}
+      <div *ngFor="let update of updatesFound" class="list-element">
+        <div class="left-part">-</div>
+        <div class="right-part">
+          {{ 'update.version-change' | translate:update }}
+          <a [href]="update.updateLink" target="_blank" rel="noreferrer nofollow noopener">{{ update.updateLink }}</a>
+        </div>
       </div>
     </div>
     <div class="text-container">
@@ -55,9 +61,14 @@
         <ng-container *ngIf="node.update">
           <!-- Raw progress text shown if it was not possible to parse it for showing the progrss bar. -->
           <div *ngIf="!node.updateProgressInfo.errorMsg && !node.updateProgressInfo.dataParsed" class="list-container">
-            - <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!node.updateProgressInfo.closed"></mat-spinner> {{ node.label }}
-            : <span class="details">{{ node.updateProgressInfo.rawMsg }}</span>
-            <span *ngIf="node.updateProgressInfo.closed" class="closed-indication">&nbsp;({{ 'update.finished' | translate }})</span>
+            <div class="list-element">
+              <div class="left-part">-</div>
+              <div class="right-part">
+                <mat-spinner class="loading-indicator" [diameter]="12" *ngIf="!node.updateProgressInfo.closed"></mat-spinner> {{ node.label }}
+                : <span class="details">{{ node.updateProgressInfo.rawMsg }}</span>
+                <span *ngIf="node.updateProgressInfo.closed" class="closed-indication">&nbsp;({{ 'update.finished' | translate }})</span>
+              </div>
+            </div>
           </div>
           <!-- Progress bar. -->
           <div *ngIf="!node.updateProgressInfo.errorMsg && node.updateProgressInfo.dataParsed" class="progress-container">
@@ -90,7 +101,12 @@
           </div>
           <!-- Msg shown if there was an error during the operation. -->
           <div *ngIf="node.updateProgressInfo.errorMsg" class="list-container">
-            - {{ node.label }}: <span class="red-text">{{ node.updateProgressInfo.errorMsg }}</span>
+            <div class="list-element">
+              <div class="left-part">-</div>
+              <div class="right-part">
+                {{ node.label }}: <span class="red-text">{{ node.updateProgressInfo.errorMsg }}</span>
+              </div>
+            </div>
           </div>
         </ng-container>
       </ng-container>

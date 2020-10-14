@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -70,7 +71,39 @@ func main() {
 		}
 	}
 
-	appClient := app.NewClient(nil)
+	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
+	defer close(directIPsCh)
+	defer close(nonDirectIPsCh)
+
+	eventSub := appevent.NewSubscriber()
+
+	parseIP := func(addr string) net.IP {
+		ip, ok, err := vpn.ParseIP(addr)
+		if err != nil {
+			log.WithError(err).Errorf("Failed to parse IP %s", addr)
+			return nil
+		}
+		if !ok {
+			log.Errorf("Failed to parse IP %s", addr)
+			return nil
+		}
+
+		return ip
+	}
+
+	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
+		if ip := parseIP(data.RemoteAddr); ip != nil {
+			directIPsCh <- ip
+		}
+	})
+
+	eventSub.OnTCPClose(func(data appevent.TCPCloseData) {
+		if ip := parseIP(data.RemoteAddr); ip != nil {
+			nonDirectIPsCh <- ip
+		}
+	})
+
+	appClient := app.NewClient(eventSub)
 	defer appClient.Close()
 
 	log.Infof("Connecting to VPN server %s", serverPK.String())
@@ -104,6 +137,34 @@ func main() {
 	go func() {
 		<-osSigs
 		vpnClient.Close()
+	}()
+
+	var directRoutesDone bool
+	for !directRoutesDone {
+		select {
+		case ip := <-directIPsCh:
+			if err := vpnClient.AddDirectRoute(ip); err != nil {
+				log.WithError(err).Errorf("Failed to setup direct route to %s", ip.String())
+			}
+		default:
+			directRoutesDone = true
+		}
+	}
+
+	go func() {
+		for ip := range directIPsCh {
+			if err := vpnClient.AddDirectRoute(ip); err != nil {
+				log.WithError(err).Errorf("Failed to setup direct route to %s", ip.String())
+			}
+		}
+	}()
+
+	go func() {
+		for ip := range nonDirectIPsCh {
+			if err := vpnClient.RemoveDirectRoute(ip); err != nil {
+				log.WithError(err).Errorf("Failed to remove direct route to %s", ip.String())
+			}
+		}
 	}()
 
 	if err := vpnClient.Serve(); err != nil {

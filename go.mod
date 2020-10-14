@@ -30,6 +30,7 @@ require (
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.0.0
 	github.com/stretchr/testify v1.6.1
+	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tjfoc/gmsm v1.3.2 // indirect
@@ -39,7 +40,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de // indirect
 	golang.org/x/mobile v0.0.0-20200721161523-bcce01171201 // indirect
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
-	golang.org/x/sys v0.0.0-20200819171115-d785dc25833f // indirect
+	golang.org/x/sys v0.0.0-20200929083018-4d22bbb62b3c
 	golang.zx2c4.com/wireguard v0.0.20200320
 	google.golang.org/protobuf v1.25.0 // indirect
 	nhooyr.io/websocket v1.8.2

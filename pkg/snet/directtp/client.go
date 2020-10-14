@@ -64,38 +64,45 @@ type Client interface {
 
 // Config configures Client.
 type Config struct {
-	Type            string
-	PK              cipher.PubKey
-	SK              cipher.SecKey
-	LocalAddr       string
-	Table           pktable.PKTable
-	AddressResolver arclient.APIClient
+	Type               string
+	PK                 cipher.PubKey
+	SK                 cipher.SecKey
+	LocalAddr          string
+	Table              pktable.PKTable
+	AddressResolver    arclient.APIClient
+	BeforeDialCallback BeforeDialCallback
 }
 
+// BeforeDialCallback is triggered before client dials.
+// If a non-nil error is returned, the dial is instantly terminated.
+type BeforeDialCallback func(network, addr string) (err error)
+
 type client struct {
-	conf              Config
-	mu                sync.Mutex
-	done              chan struct{}
-	once              sync.Once
-	log               *logging.Logger
-	porter            *porter.Porter
-	listener          net.Listener
-	listening         chan struct{}
-	listeners         map[uint16]*tplistener.Listener // key: lPort
-	sudphPacketFilter *pfilter.PacketFilter
-	sudphListener     net.PacketConn
-	sudphVisorsConn   net.PacketConn
+	conf               Config
+	mu                 sync.Mutex
+	done               chan struct{}
+	once               sync.Once
+	log                *logging.Logger
+	porter             *porter.Porter
+	listener           net.Listener
+	listening          chan struct{}
+	listeners          map[uint16]*tplistener.Listener // key: lPort
+	sudphPacketFilter  *pfilter.PacketFilter
+	sudphListener      net.PacketConn
+	sudphVisorsConn    net.PacketConn
+	beforeDialCallback BeforeDialCallback
 }
 
 // NewClient creates a net Client.
 func NewClient(conf Config) Client {
 	return &client{
-		conf:      conf,
-		log:       logging.MustGetLogger(conf.Type),
-		porter:    porter.New(porter.MinEphemeral),
-		listeners: make(map[uint16]*tplistener.Listener),
-		done:      make(chan struct{}),
-		listening: make(chan struct{}),
+		conf:               conf,
+		log:                logging.MustGetLogger(conf.Type),
+		porter:             porter.New(porter.MinEphemeral),
+		listeners:          make(map[uint16]*tplistener.Listener),
+		done:               make(chan struct{}),
+		listening:          make(chan struct{}),
+		beforeDialCallback: conf.BeforeDialCallback,
 	}
 }
 
@@ -413,6 +420,12 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
 
+			if c.beforeDialCallback != nil {
+				if err := c.beforeDialCallback(c.conf.Type, addr); err != nil {
+					return nil, err
+				}
+			}
+
 			conn, err := c.dial(addr)
 			if err == nil {
 				return conn, nil
@@ -423,6 +436,12 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 	addr := visorData.RemoteAddr
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		addr = net.JoinHostPort(addr, visorData.Port)
+	}
+
+	if c.beforeDialCallback != nil {
+		if err := c.beforeDialCallback(c.conf.Type, addr); err != nil {
+			return nil, err
+		}
 	}
 
 	return c.dial(addr)

@@ -26,6 +26,12 @@ type Server struct {
 
 // NewServer creates VPN server instance.
 func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
+	s := &Server{
+		cfg:   cfg,
+		log:   l,
+		ipGen: NewIPGenerator(),
+	}
+
 	defaultNetworkIfc, err := DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
@@ -45,14 +51,11 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 	l.Infoln("Old IP forwarding values:")
 	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
-	return &Server{
-		cfg:                     cfg,
-		log:                     l,
-		ipGen:                   NewIPGenerator(),
-		defaultNetworkInterface: defaultNetworkIfc,
-		ipv4ForwardingVal:       ipv4ForwardingVal,
-		ipv6ForwardingVal:       ipv6ForwardingVal,
-	}, nil
+	s.defaultNetworkInterface = defaultNetworkIfc
+	s.ipv4ForwardingVal = ipv4ForwardingVal
+	s.ipv6ForwardingVal = ipv6ForwardingVal
+
+	return s, nil
 }
 
 // Serve accepts connections from `l` and serves them.

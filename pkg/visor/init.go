@@ -232,6 +232,16 @@ func InitTransport(ctx context.Context, v *Visor) error {
 	tpM := transport.NewManager(v.MasterLogger().PackageLogger("transport_manager"), v.net, &tpMConf)
 
 	cancellableCtx, cancel := context.WithCancel(ctx)
+	tpM.OnAfterTPClosed(func(network, addr string) {
+		if network == tptypes.STCPR && addr != "" {
+			data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
+			event := appevent.NewEvent(appevent.TCPClose, data)
+			if err := v.ebc.Broadcast(context.Background(), event); err != nil {
+				v.log.WithError(err).Errorln("Failed to broadcast TCPClose event")
+			}
+		}
+	})
+
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
@@ -354,8 +364,8 @@ func InitLauncher(_ context.Context, v *Visor) error {
 	}
 
 	err = launch.AutoStart(map[string]func() ([]string, error){
-		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
-		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net) },
+		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs()) },
+		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, nil) },
 	})
 
 	if err != nil {
@@ -368,7 +378,7 @@ func InitLauncher(_ context.Context, v *Visor) error {
 	return report(nil)
 }
 
-func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
+func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) ([]string, error) {
 	var envCfg vpn.DirectRoutesEnvConfig
 
 	if conf.Dmsg != nil {
@@ -408,6 +418,8 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network) ([]string, error) {
 	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
 		envCfg.STCPTable = conf.STCP.PKTable
 	}
+
+	envCfg.TPRemoteIPs = tpRemoteAddrs
 
 	envMap := vpn.AppEnvArgs(envCfg)
 
