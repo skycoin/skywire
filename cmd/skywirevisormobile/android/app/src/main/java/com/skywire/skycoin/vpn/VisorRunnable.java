@@ -105,12 +105,13 @@ public class VisorRunnable implements Runnable {
             e.printStackTrace();
         }
 
+
         activity.runOnUiThread(new Runnable() {
             public void run() {
                 activity.startVPNService();
             }
         });
-
+        
         /*err = Skywiremob.waitForVisorToStop();
         if (!err.isEmpty()) {
             Skywiremob.printString(err);

@@ -37,7 +37,12 @@ Returns non-empty string with error in case of failure;
 - `IsVisorRunning() bool`: Checks if visor is running. Will get `true` whn visor is fully functional;
 - `WaitVisorReady() string`: Blocks until visor gets fully initialized. Returns non-empty error string in case of failure;
 - `StopVPNClient`: Stops VPN client without stopping visor itself;
-- `StopListeningUDP`: Closes UDP socket.
+- `StopListeningUDP`: Closes UDP socket;
+- `VPNBandwidthSent`: Returns amount of bandwidth sent over VPN (bytes);
+- `VPNBandwidthReceived`: Returns amount of bandwidth received over VPN (bytes);
+- `VPNLatency`: Returns latency (ms);
+- `VPNThroughput`: Returns throughput (bytes/s).
+
 
 ## Mobile/Go Communication
 API may seem a bit complicated at first. Currently tested for Android devices, should be used with caution on iOS. 

@@ -121,10 +121,10 @@ func IsPKValid(pkStr string) int {
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
 		log.WithError(err).Errorln("Invalid PK")
-		return int(ErrCodeInvalidPK)
+		return ErrCodeInvalidPK
 	}
 
-	return int(ErrCodeNoError)
+	return ErrCodeNoError
 }
 
 // GetMTU returns VPN connection MTU.
@@ -413,6 +413,61 @@ func ShakeHands() int {
 	log.Println("Set TUN IP and gateway")
 
 	return ErrCodeNoError
+}
+
+func getVPNSkywireConn() (*appnet.SkywireConn, bool) {
+	vpnClientMx.Lock()
+	vpnCl := vpnClient
+	vpnClientMx.Unlock()
+
+	if vpnCl == nil {
+		return nil, false
+	}
+
+	wrappedConn := vpnCl.GetConn().(*appnet.WrappedConn)
+	skywireConn := wrappedConn.Conn.(*appnet.SkywireConn)
+
+	return skywireConn, true
+}
+
+// VPNBandwidthSent returns amount of bandwidth sent (bytes).
+func VPNBandwidthSent() int64 {
+	conn, ok := getVPNSkywireConn()
+	if !ok {
+		return 0
+	}
+
+	return int64(conn.BandwidthSent())
+}
+
+// VPNBandwidthReceived returns amount of bandwidth received (bytes).
+func VPNBandwidthReceived() int64 {
+	conn, ok := getVPNSkywireConn()
+	if !ok {
+		return 0
+	}
+
+	return int64(conn.BandwidthReceived())
+}
+
+// VPNLatency returns latency till remote (ms).
+func VPNLatency() int64 {
+	conn, ok := getVPNSkywireConn()
+	if !ok {
+		return 0
+	}
+
+	return conn.Latency().Milliseconds()
+}
+
+// VPNThroughput returns throughput till remote (bytes/s).
+func VPNThroughput() int64 {
+	conn, ok := getVPNSkywireConn()
+	if !ok {
+		return 0
+	}
+
+	return int64(conn.Throughput())
 }
 
 // TUNIP gets assigned TUN IP address.
