@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/go-chi/chi"
@@ -150,7 +149,8 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 	}
 
 	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		hook := discord.NewHook(sf.Tag, discordWebhookURL, discord.WithLimit(10*time.Minute))
+		discordOpts := discord.GetDefaultOpts()
+		hook := discord.NewHook(sf.Tag, discordWebhookURL, discordOpts...)
 		logging.AddHook(hook)
 	}
 
