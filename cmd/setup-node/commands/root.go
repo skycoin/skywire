@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
@@ -122,6 +123,11 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 
 	m := setupmetrics.New(tag)
 	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	// TODO: The following should be replaced by promutil.AddMetricsHandle
 	reg := prometheus.NewPedanticRegistry()
