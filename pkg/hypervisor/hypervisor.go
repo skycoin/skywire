@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
@@ -176,9 +177,14 @@ func (hv *Hypervisor) HTTPHandler() http.Handler {
 	return hv.makeMux()
 }
 
-func (hv *Hypervisor) makeMux() *chi.Mux {
+func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Route("/", func(r chi.Router) {
 		r.Route("/api", func(r chi.Router) {
@@ -255,10 +261,14 @@ func (hv *Hypervisor) makeMux() *chi.Mux {
 	return r
 }
 
+func (hv *Hypervisor) log(r *http.Request) logrus.FieldLogger {
+	return httputil.GetLogger(r)
+}
+
 func (hv *Hypervisor) getPong() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
-			log.WithError(err).Warn("getPong: Failed to send PONG!")
+			hv.log(r).WithError(err).Warn("getPong: Failed to send PONG!")
 		}
 	}
 }
@@ -284,7 +294,7 @@ func (hv *Hypervisor) updateHypervisor() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
 			if err != io.EOF {
-				log.Warnf("update visor request: %v", err)
+				hv.log(r).Warnf("update visor request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -316,7 +326,7 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
-			log.WithError(err).Warnf("Failed to upgrade to websocket.")
+			hv.log(r).WithError(err).Warnf("Failed to upgrade to websocket.")
 			w.WriteHeader(http.StatusInternalServerError)
 
 			return
@@ -324,7 +334,7 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 
 		defer func() {
 			if err := ws.Close(websocket.StatusNormalClosure, "response sent"); err != nil {
-				log.WithError(err).Warnf("Failed to close WebSocket connection")
+				hv.log(r).WithError(err).Warnf("Failed to close WebSocket connection")
 			}
 		}()
 
@@ -338,7 +348,7 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 		}
 
 		if err := json.Unmarshal(raw, &updateConfig); err != nil {
-			log.Warnf("update visor request %v: %v", string(raw), err)
+			hv.log(r).Warnf("update visor request %v: %v", string(raw), err)
 			w.WriteHeader(http.StatusBadRequest)
 
 			return
@@ -369,7 +379,7 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 		for status := range consumer {
 			if status.IsError {
 				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
-					log.WithError(err).Warnf("failed to close WebSocket (abnormal)")
+					hv.log(r).WithError(err).Warnf("failed to close WebSocket (abnormal)")
 					return
 				}
 			}
@@ -380,17 +390,17 @@ func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
 
 			rawOutput, err := json.Marshal(output)
 			if err != nil {
-				log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+				hv.log(r).WithError(err).Errorf("Failed to marshal JSON: %#v", output)
 				return
 			}
 
 			if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
-				log.WithError(err).Warnf("Failed to write WebSocket response")
+				hv.log(r).WithError(err).Warnf("Failed to write WebSocket response")
 			}
 		}
 
 		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
-			log.WithError(err).Warnf("failed to close WebSocket (normal)")
+			hv.log(r).WithError(err).Warnf("failed to close WebSocket (normal)")
 		}
 	}
 }
@@ -474,7 +484,7 @@ func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
 
 		version, err := hv.updater.UpdateAvailable(channel)
 		if err != nil {
-			log.Errorf("Failed to check if hypervisor update is available: %v", err)
+			hv.log(r).Errorf("Failed to check if hypervisor update is available: %v", err)
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 
 			return
@@ -583,7 +593,7 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 
 		for pk, c := range hv.visors {
 			go func(pk cipher.PubKey, c VisorConn, i int) {
-				log := log.
+				log := hv.log(r).
 					WithField("visor_addr", c.Addr).
 					WithField("func", "getVisors")
 
@@ -663,7 +673,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
-				log.Warnf("putApp request: %v", err)
+				hv.log(r).Warnf("putApp request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -799,7 +809,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
-				log.Warnf("postTransport request: %v", err)
+				hv.log(r).Warnf("postTransport request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -882,7 +892,7 @@ func (hv *Hypervisor) postRoute() http.HandlerFunc {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
 			if err != io.EOF {
-				log.Warnf("postRoute request: %v", err)
+				hv.log(r).Warnf("postRoute request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -928,7 +938,7 @@ func (hv *Hypervisor) putRoute() http.HandlerFunc {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
 			if err != io.EOF {
-				log.Warnf("putRoute request: %v", err)
+				hv.log(r).Warnf("putRoute request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -1016,7 +1026,7 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
-				log.Warnf("exec request: %v", err)
+				hv.log(r).Warnf("exec request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -1032,7 +1042,7 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 		output := struct {
 			Output string `json:"output"`
-		}{string(out)}
+		}{strings.TrimSpace(string(out))}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
@@ -1043,7 +1053,7 @@ func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 		var updateConfig updater.UpdateConfig
 
 		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
-			log.Warnf("update visor request: %v", err)
+			hv.log(r).Warnf("update visor request: %v", err)
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
 
 			return
@@ -1073,7 +1083,7 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		ws, err := websocket.Accept(w, r, nil)
 		if err != nil {
-			log.WithError(err).Warnf("Failed to upgrade to websocket.")
+			hv.log(r).WithError(err).Warnf("Failed to upgrade to websocket.")
 			w.WriteHeader(http.StatusInternalServerError)
 
 			return
@@ -1081,7 +1091,7 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 
 		defer func() {
 			if err := ws.Close(websocket.StatusNormalClosure, "response sent"); err != nil {
-				log.WithError(err).Warnf("Failed to close WebSocket connection")
+				hv.log(r).WithError(err).Warnf("Failed to close WebSocket connection")
 			}
 		}()
 
@@ -1094,7 +1104,7 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 
 		var updateConfig updater.UpdateConfig
 		if err := json.Unmarshal(raw, &updateConfig); err != nil {
-			log.Warnf("update visor request %v: %v", string(raw), err)
+			hv.log(r).Warnf("update visor request %v: %v", string(raw), err)
 			w.WriteHeader(http.StatusBadRequest)
 
 			return
@@ -1125,7 +1135,7 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 		for status := range consumer {
 			if status.IsError {
 				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
-					log.WithError(err).Warnf("failed to close WebSocket (abnormal)")
+					hv.log(r).WithError(err).Warnf("failed to close WebSocket (abnormal)")
 					return
 				}
 			}
@@ -1136,17 +1146,17 @@ func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 
 			rawOutput, err := json.Marshal(output)
 			if err != nil {
-				log.WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+				hv.log(r).WithError(err).Errorf("Failed to marshal JSON: %#v", output)
 				return
 			}
 
 			if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
-				log.WithError(err).Warnf("Failed to write WebSocket response")
+				hv.log(r).WithError(err).Warnf("Failed to write WebSocket response")
 			}
 		}
 
 		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
-			log.WithError(err).Warnf("failed to close WebSocket (normal)")
+			hv.log(r).WithError(err).Warnf("failed to close WebSocket (normal)")
 		}
 	})
 }
