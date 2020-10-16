@@ -155,7 +155,8 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 	}
 
 	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		hook := discord.NewHook(tag, discordWebhookURL)
+		discordOpts := discord.GetDefaultOpts()
+		hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
 		log.AddHook(hook)
 	}
 
