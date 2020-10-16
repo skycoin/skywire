@@ -28,6 +28,8 @@ github.com/dsnet/compress/internal/prefix
 ## explicit
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
+# github.com/go-chi/httprate v0.4.0
+## explicit
 # github.com/go-ole/go-ole v1.2.4
 ## explicit
 github.com/go-ole/go-ole
@@ -52,8 +54,6 @@ github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 ## explicit
 github.com/google/uuid
-# github.com/gorilla/handlers v1.4.2
-github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
 ## explicit
 github.com/gorilla/securecookie
@@ -149,7 +149,7 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20201009105839-3b0627b4ffa6
+# github.com/skycoin/dmsg v0.0.0-20201009105839-3b0627b4ffa6 => ../dmsg
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
@@ -319,3 +319,4 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# github.com/skycoin/dmsg => ../dmsg
