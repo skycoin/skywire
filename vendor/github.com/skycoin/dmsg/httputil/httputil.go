@@ -1,15 +1,15 @@
 package httputil
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/gorilla/handlers"
+	"github.com/go-chi/chi/middleware"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 )
 
@@ -57,23 +57,6 @@ func BoolFromQuery(r *http.Request, key string, defaultVal bool) (bool, error) {
 	}
 }
 
-// WriteLog writes request and response parameters using format that
-// works well with logging.Logger.
-func WriteLog(writer io.Writer, params handlers.LogFormatterParams) {
-	host, _, err := net.SplitHostPort(params.Request.RemoteAddr)
-	if err != nil {
-		host = params.Request.RemoteAddr
-	}
-
-	_, err = fmt.Fprintf(
-		writer, "%s - \"%s %s %s\" %d\n",
-		host, params.Request.Method, params.URL.String(), params.Request.Proto, params.StatusCode,
-	)
-	if err != nil {
-		log.WithError(err).Warn("Failed to write log")
-	}
-}
-
 // SplitRPCAddr returns host and port and whatever error results from parsing the rpc address interface
 func SplitRPCAddr(rpcAddr string) (host string, port uint16, err error) {
 	addrToken := strings.Split(rpcAddr, ":")
@@ -83,4 +66,33 @@ func SplitRPCAddr(rpcAddr string) (host string, port uint16, err error) {
 	}
 
 	return addrToken[0], uint16(uint64port), nil
+}
+
+type ctxKeyLogger int
+
+// LoggerKey defines logger HTTP context key.
+const LoggerKey ctxKeyLogger = -1
+
+// GetLogger returns logger from HTTP context.
+func GetLogger(r *http.Request) logrus.FieldLogger {
+	if log, ok := r.Context().Value(LoggerKey).(logrus.FieldLogger); ok && log != nil {
+		return log
+	}
+
+	return logging.NewMasterLogger()
+}
+
+// SetLoggerMiddleware sets logger to context of HTTP requests.
+func SetLoggerMiddleware(log logrus.FieldLogger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+
+			if reqID := middleware.GetReqID(ctx); reqID != "" && log != nil {
+				ctx = context.WithValue(ctx, LoggerKey, log.WithField("RequestID", reqID))
+			}
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
+		return http.HandlerFunc(fn)
+	}
 }
