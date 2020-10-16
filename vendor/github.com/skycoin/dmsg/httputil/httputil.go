@@ -89,8 +89,7 @@ func SetLoggerMiddleware(log logrus.FieldLogger) func(next http.Handler) http.Ha
 			ctx := r.Context()
 
 			if reqID := middleware.GetReqID(ctx); reqID != "" && log != nil {
-				log = log.WithField("RequestID", reqID)
-				ctx = context.WithValue(ctx, LoggerKey, log)
+				ctx = context.WithValue(ctx, LoggerKey, log.WithField("RequestID", reqID))
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		}
