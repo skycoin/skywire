@@ -60,9 +60,11 @@ func TestClientAuth(t *testing.T) {
 
 func TestUpdateVisorUptime(t *testing.T) {
 	urlCh := make(chan string, 1)
+
 	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		urlCh <- r.URL.String()
 	})))
+
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
@@ -76,6 +78,7 @@ func TestUpdateVisorUptime(t *testing.T) {
 
 func authHandler(next http.Handler) http.Handler {
 	r := chi.NewRouter()
+
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
@@ -83,6 +86,8 @@ func authHandler(next http.Handler) http.Handler {
 			}
 		},
 	))
+
 	r.Handle("/*", next)
+
 	return r
 }
