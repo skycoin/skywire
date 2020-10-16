@@ -1036,7 +1036,7 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 		output := struct {
 			Output string `json:"output"`
-		}{string(out)}
+		}{strings.TrimSpace(string(out))}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
