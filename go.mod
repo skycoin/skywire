@@ -7,7 +7,6 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/go-chi/chi v4.1.2+incompatible
-	github.com/go-chi/httprate v0.4.0 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0 // indirect
@@ -22,7 +21,7 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/sirupsen/logrus v1.6.0
-	github.com/skycoin/dmsg v0.0.0-20201009105839-3b0627b4ffa6
+	github.com/skycoin/dmsg v0.0.0-20201016144448-04234238b961
 	github.com/skycoin/skycoin v0.26.0
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -40,4 +39,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-replace github.com/skycoin/dmsg => ../dmsg
+//replace github.com/skycoin/dmsg => ../dmsg

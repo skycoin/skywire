@@ -22,9 +22,12 @@ const (
 	StopLogMessage = "Stopping"
 )
 
+// DefaultRateLimiterThreshold defines default rate limiter threshold.
+const DefaultRateLimiterThreshold = 10 * time.Minute
+
 // Hook is a Discord logger hook.
 type Hook struct {
-	logrus.Hook
+	*discordrus.Hook
 	limit      time.Duration
 	timestamps map[string]time.Time
 }
@@ -37,6 +40,13 @@ func WithLimit(limit time.Duration) Option {
 	return func(h *Hook) {
 		h.limit = limit
 		h.timestamps = make(map[string]time.Time)
+	}
+}
+
+// WithAuthor sets log entry author.
+func WithAuthor(author string) Option {
+	return func(h *Hook) {
+		h.Hook.Opts.Author = author
 	}
 }
 
@@ -97,4 +107,14 @@ func discordOpts(tag string) *discordrus.Opts {
 // GetWebhookURLFromEnv extracts webhook URL from an environment variable.
 func GetWebhookURLFromEnv() string {
 	return os.Getenv(webhookURLEnvName)
+}
+
+// GetDefaultOpts returns default options.
+func GetDefaultOpts() []Option {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "<unknown hostname>"
+	}
+
+	return []Option{WithLimit(DefaultRateLimiterThreshold), WithAuthor(hostname)}
 }
