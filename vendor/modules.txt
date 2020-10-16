@@ -149,7 +149,7 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20201015193122-1cc2b71b0393
+# github.com/skycoin/dmsg v0.0.0-20201015193122-1cc2b71b0393 => ../dmsg
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
@@ -319,3 +319,4 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# github.com/skycoin/dmsg => ../dmsg

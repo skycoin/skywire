@@ -58,7 +58,8 @@ var rootCmd = &cobra.Command{
 		}
 
 		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-			hook := discord.NewHook(tag, discordWebhookURL)
+			discordOpts := discord.GetDefaultOpts()
+			hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
 			logging.AddHook(hook)
 
 			// Workaround for Discord logger hook. Actually, it's Info.
