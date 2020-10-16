@@ -178,7 +178,11 @@ func (hv *Hypervisor) HTTPHandler() http.Handler {
 
 func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	r.Route("/", func(r chi.Router) {
 		r.Route("/api", func(r chi.Router) {
