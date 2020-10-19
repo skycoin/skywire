@@ -16,6 +16,7 @@
     - [Run `hypervisor`](#run-hypervisor)
     - [Windows](#windows)
   - [Apps](#Apps)
+    - [Using the Skywire VPN](#using-the-skywire-vpn)
     - [App Programming API](#app-programming-api)
   - [Transports](#Transports)
   - [Creating a GitHub release](#creating-a-github-release)
@@ -178,7 +179,15 @@ Refer to the following for usage of the apps:
 - [Skychat](/cmd/apps/skychat)
 - [Skysocks](/cmd/apps/skysocks) ([Client](/cmd/apps/skysocks-client))
 
-### App Programming API
+#### Using the Skywire VPN
+
+If you are interested in running the Skywire VPN as either a client or a server, please refer to the following guides:
+
+- [Setup the Skywire VPN](https://github.com/skycoin/skywire/wiki/Setting-up-Skywire-VPN)
+- [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Setting-up-Skywire-VPN-server)
+
+
+#### App Programming API
 
 Skywire supports building custom apps. In order for visor to run a custom app, app binary should be put into the correct directory. This directory is specified in the visor config as `apps_path`. Each app has a list of parameters:
 - `app` (required) - contains application name. This should be equal to the binary name stored in the `apps_path` directory to be correctly resolved by the visor;
