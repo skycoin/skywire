@@ -10,7 +10,7 @@ import { Chart } from 'chart.js';
   styleUrls: ['./line-chart.component.scss']
 })
 export class LineChartComponent implements AfterViewInit, DoCheck {
-  @ViewChild('chart', { static: false }) chartElement: ElementRef;
+  @ViewChild('chart') chartElement: ElementRef;
   @Input() data: number[];
   chart: any;
 
@@ -32,8 +32,8 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
         labels: Array.from(Array(this.data.length).keys()),
         datasets: [{
           data: this.data,
-          backgroundColor: ['#0B6DB0'],
-          borderColor: ['#0B6DB0'],
+          backgroundColor: ['rgba(10, 15, 22, 0.4)'],
+          borderColor: ['rgba(10, 15, 22, 0.4)'],
           borderWidth: 1,
         }],
       },

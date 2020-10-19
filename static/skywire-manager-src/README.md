@@ -1,8 +1,6 @@
 # Skywire Manager
 
-Frontend application that allows to manage a group of Skywire nodes through a Hypervisor instance.
-
-Note: The software is still under heavy development and the current version is intended for public testing purposes only.
+Frontend application that allows to manage a group of Skywire visors through a Hypervisor instance.
 
 ## Prerequisites
 
@@ -38,7 +36,7 @@ change any of the source files.
 
 ## Build
 
-Run `npm run build` to build the project. The build artifacts will be stored in the `dist/` directory.
+Run `make build-ui` in the top directory of this repo to rebuild the UI. The build artifacts will be stored in the `dist/` directory.
 
 ## Translations
 

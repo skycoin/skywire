@@ -25,6 +25,10 @@ Legend:
 
 The connection between a `dmsg.Client` and `dmsg.Server` is called a `dmsg.Session`. A connection between two `dmsg.Client`s (via a `dmsg.Server`) is called a `dmsg.Stream`. A data unit of the dmsg network is called a `dmsg.Frame`.
 
+## Dmsg tools and libraries
+
+- [`dmsgget`](./docs/dmsgget.md) - Simplified `wget` over `dmsg`.
+
 ## Additional resources
 - [`dmsg` examples.](./examples)
 - [`dmsg.Discovery` documentation.](./cmd/dmsg-discovery/README.md)

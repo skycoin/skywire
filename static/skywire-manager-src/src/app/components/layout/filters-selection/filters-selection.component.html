@@ -1,0 +1,35 @@
+<app-dialog [headline]="'filters.filter-action' | translate">
+  <form [formGroup]="form">
+    <!-- Form fields. -->
+    <ng-container *ngFor="let fieldParams of data.filterPropertiesList">
+      <mat-form-field>
+        <!-- Text input. -->
+        <input
+          *ngIf="fieldParams.type === filterFieldTypes.TextInput"
+          [formControlName]="fieldParams.keyNameInFiltersObject"
+          [maxlength]="fieldParams.maxlength"
+          [placeholder]="fieldParams.filterName | translate"
+          matInput
+        >
+        <!-- Select. -->
+        <mat-select
+          *ngIf="fieldParams.type === filterFieldTypes.Select"
+          [formControlName]="fieldParams.keyNameInFiltersObject"
+          [placeholder]="fieldParams.filterName | translate"
+        >
+          <mat-option *ngFor="let option of fieldParams.printableLabelsForValues" [value]="option.value">{{ option.label | translate }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </ng-container>
+
+    <!-- button. -->
+    <app-button
+      #button
+      (action)="apply()"
+      color="primary"
+      class="float-right"
+    >
+      {{ 'common.ok' | translate }}
+    </app-button>
+  </form>
+</app-dialog>

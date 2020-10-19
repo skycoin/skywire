@@ -1,17 +1,19 @@
-# github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
-github.com/alecthomas/template
-github.com/alecthomas/template/parse
-# github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4
-github.com/alecthomas/units
-# github.com/andybalholm/brotli v1.0.0
+# github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
+## explicit
+github.com/AudriusButkevicius/pfilter
+# github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
+## explicit
+github.com/StackExchange/wmi
+# github.com/andybalholm/brotli v0.0.0-20190621154722-5f990b63d2d6
 github.com/andybalholm/brotli
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
+## explicit
 github.com/armon/go-socks5
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
-# github.com/creack/pty v1.1.11
+# github.com/creack/pty v1.1.9
 github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -22,93 +24,150 @@ github.com/dsnet/compress/bzip2/internal/sais
 github.com/dsnet/compress/internal
 github.com/dsnet/compress/internal/errors
 github.com/dsnet/compress/internal/prefix
-# github.com/felixge/httpsnoop v1.0.1
-github.com/felixge/httpsnoop
-# github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
-github.com/flynn/noise
 # github.com/go-chi/chi v4.1.2+incompatible
+## explicit
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
+# github.com/go-ole/go-ole v1.2.4
+## explicit
+github.com/go-ole/go-ole
+github.com/go-ole/go-ole/oleutil
+# github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
+github.com/golang/gddo/httputil
+github.com/golang/gddo/httputil/header
 # github.com/golang/protobuf v1.4.2
 github.com/golang/protobuf/proto
+github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/ptypes/any
+github.com/golang/protobuf/ptypes/duration
+github.com/golang/protobuf/ptypes/timestamp
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
-# github.com/google/uuid v1.1.2
+# github.com/google/go-github v17.0.0+incompatible
+## explicit
+github.com/google/go-github/github
+# github.com/google/go-querystring v1.0.0
+## explicit
+github.com/google/go-querystring/query
+# github.com/google/uuid v1.1.1
+## explicit
 github.com/google/uuid
-# github.com/gorilla/handlers v1.5.0
-github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
+## explicit
 github.com/gorilla/securecookie
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/klauspost/compress v1.10.11
+# github.com/klauspost/compress v1.10.0
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
 github.com/klauspost/compress/snappy
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/klauspost/pgzip v1.2.4
+# github.com/klauspost/cpuid v1.2.4
+github.com/klauspost/cpuid
+# github.com/klauspost/pgzip v1.2.1
 github.com/klauspost/pgzip
+# github.com/klauspost/reedsolomon v1.9.9
+## explicit
+github.com/klauspost/reedsolomon
 # github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/kz/discordrus v1.2.0
 github.com/kz/discordrus
-# github.com/mattn/go-colorable v0.1.7
+# github.com/mattn/go-colorable v0.1.6
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
 github.com/mattn/go-isatty
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
+# github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b
 github.com/mgutz/ansi
 # github.com/mholt/archiver/v3 v3.3.0
+## explicit
 github.com/mholt/archiver/v3
 # github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 github.com/mitchellh/colorstring
-# github.com/nwaples/rardecode v1.1.0
+# github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061
+## explicit
+github.com/mmcloughlin/avo/attr
+github.com/mmcloughlin/avo/build
+github.com/mmcloughlin/avo/buildtags
+github.com/mmcloughlin/avo/gotypes
+github.com/mmcloughlin/avo/internal/prnt
+github.com/mmcloughlin/avo/internal/stack
+github.com/mmcloughlin/avo/ir
+github.com/mmcloughlin/avo/operand
+github.com/mmcloughlin/avo/pass
+github.com/mmcloughlin/avo/printer
+github.com/mmcloughlin/avo/reg
+github.com/mmcloughlin/avo/src
+github.com/mmcloughlin/avo/x86
+# github.com/nwaples/rardecode v1.0.0
 github.com/nwaples/rardecode
-# github.com/pierrec/lz4 v2.5.2+incompatible
+# github.com/pierrec/lz4 v2.0.5+incompatible
 github.com/pierrec/lz4
 github.com/pierrec/lz4/internal/xxh32
-# github.com/pkg/profile v1.3.0
+# github.com/pkg/errors v0.8.1
+github.com/pkg/errors
+# github.com/pkg/profile v1.5.0
+## explicit
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/prometheus/client_golang v1.3.0
+# github.com/prometheus/client_golang v1.7.1
+## explicit
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
-github.com/prometheus/client_golang/prometheus/promauto
 github.com/prometheus/client_golang/prometheus/promhttp
-# github.com/prometheus/client_model v0.1.0
+# github.com/prometheus/client_model v0.2.0
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.7.0
+# github.com/prometheus/common v0.10.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
-github.com/prometheus/common/log
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.0.8
+# github.com/prometheus/procfs v0.1.3
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
 # github.com/rakyll/statik v0.1.7
+## explicit
 github.com/rakyll/statik/fs
 # github.com/schollz/progressbar/v2 v2.15.0
+## explicit
 github.com/schollz/progressbar/v2
+# github.com/shirou/gopsutil v2.20.5+incompatible
+## explicit
+github.com/shirou/gopsutil/cpu
+github.com/shirou/gopsutil/internal/common
+github.com/shirou/gopsutil/mem
+github.com/shirou/gopsutil/net
+github.com/shirou/gopsutil/process
 # github.com/sirupsen/logrus v1.6.0
+## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20200831144948-62ac73c727f9
+# github.com/skycoin/dmsg v0.0.0-20201018132543-a08c07be4640
+## explicit
 github.com/skycoin/dmsg
+github.com/skycoin/dmsg/buildinfo
 github.com/skycoin/dmsg/cipher
+github.com/skycoin/dmsg/cmdutil
 github.com/skycoin/dmsg/disc
 github.com/skycoin/dmsg/discord
+github.com/skycoin/dmsg/dmsgctrl
 github.com/skycoin/dmsg/dmsgpty
+github.com/skycoin/dmsg/dmsgtest
 github.com/skycoin/dmsg/httputil
 github.com/skycoin/dmsg/ioutil
 github.com/skycoin/dmsg/netutil
 github.com/skycoin/dmsg/noise
+github.com/skycoin/dmsg/promutil
+github.com/skycoin/dmsg/servermetrics
+# github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
+github.com/skycoin/noise
 # github.com/skycoin/skycoin v0.26.0
+## explicit
 github.com/skycoin/skycoin/src/cipher
 github.com/skycoin/skycoin/src/cipher/base58
 github.com/skycoin/skycoin/src/cipher/ripemd160
@@ -116,47 +175,108 @@ github.com/skycoin/skycoin/src/cipher/secp256k1-go
 github.com/skycoin/skycoin/src/cipher/secp256k1-go/secp256k1-go2
 github.com/skycoin/skycoin/src/util/logging
 # github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
+## explicit
 github.com/skycoin/yamux
+# github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+## explicit
+github.com/songgao/water
 # github.com/spf13/cobra v1.0.0
+## explicit
 github.com/spf13/cobra
-# github.com/spf13/pflag v1.0.5
+# github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
-# github.com/stretchr/objx v0.3.0
+# github.com/stretchr/objx v0.1.1
 github.com/stretchr/objx
 # github.com/stretchr/testify v1.6.1
+## explicit
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
-# github.com/ulikunitz/xz v0.5.8
+# github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161
+## explicit
+github.com/templexxx/cpufeat
+# github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b
+## explicit
+github.com/templexxx/xor
+# github.com/tjfoc/gmsm v1.3.2
+## explicit
+github.com/tjfoc/gmsm/sm4
+# github.com/ulikunitz/xz v0.5.6
 github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
 github.com/ulikunitz/xz/internal/xlog
 github.com/ulikunitz/xz/lzma
 # github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8
 github.com/xi2/xz
+# github.com/xtaci/kcp-go v5.4.20+incompatible
+## explicit
+github.com/xtaci/kcp-go
+# github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
+## explicit
 # go.etcd.io/bbolt v1.3.5
+## explicit
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
+# golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
+golang.org/x/crypto/blowfish
+golang.org/x/crypto/cast5
 golang.org/x/crypto/chacha20
 golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/curve25519
 golang.org/x/crypto/internal/subtle
+golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/poly1305
+golang.org/x/crypto/salsa20
+golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20200822124328-c89045814202
+golang.org/x/crypto/tea
+golang.org/x/crypto/twofish
+golang.org/x/crypto/xtea
+# golang.org/x/net v0.0.0-20200625001655-4c5254603344
+## explicit
+golang.org/x/net/bpf
 golang.org/x/net/context
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
 golang.org/x/net/internal/socks
+golang.org/x/net/ipv4
+golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20200831180312-196b9ba8737a
+# golang.org/x/sys v0.0.0-20200615200032-f1bc736245b1
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-golang.org/x/sys/windows/svc/eventlog
+# golang.org/x/text v0.3.2
+golang.org/x/text/transform
+golang.org/x/text/unicode/norm
+# golang.org/x/tools v0.0.0-20200425043458-8463f397d07c
+golang.org/x/tools/go/gcexportdata
+golang.org/x/tools/go/internal/gcimporter
+golang.org/x/tools/go/internal/packagesdriver
+golang.org/x/tools/go/packages
+golang.org/x/tools/internal/event
+golang.org/x/tools/internal/event/core
+golang.org/x/tools/internal/event/keys
+golang.org/x/tools/internal/event/label
+golang.org/x/tools/internal/gocommand
+golang.org/x/tools/internal/packagesinternal
+# golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
+golang.org/x/xerrors
+golang.org/x/xerrors/internal
+# golang.zx2c4.com/wireguard v0.0.20200320
+## explicit
+golang.zx2c4.com/wireguard/rwcancel
+golang.zx2c4.com/wireguard/tun
+golang.zx2c4.com/wireguard/tun/wintun
+golang.zx2c4.com/wireguard/tun/wintun/iphlpapi
+golang.zx2c4.com/wireguard/tun/wintun/namespaceapi
+golang.zx2c4.com/wireguard/tun/wintun/nci
+golang.zx2c4.com/wireguard/tun/wintun/registry
+golang.zx2c4.com/wireguard/tun/wintun/setupapi
 # google.golang.org/protobuf v1.23.0
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
@@ -185,11 +305,13 @@ google.golang.org/protobuf/reflect/protoreflect
 google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
-# gopkg.in/alecthomas/kingpin.v2 v2.2.6
-gopkg.in/alecthomas/kingpin.v2
-# gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
+google.golang.org/protobuf/types/known/anypb
+google.golang.org/protobuf/types/known/durationpb
+google.golang.org/protobuf/types/known/timestamppb
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
-# nhooyr.io/websocket v1.8.6
+# nhooyr.io/websocket v1.8.2
+## explicit
 nhooyr.io/websocket
 nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd

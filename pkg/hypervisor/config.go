@@ -14,6 +14,8 @@ import (
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
 
+//go:generate readmegen -n Config -o ./README.md ./config.go
+
 const (
 	defaultHTTPAddr         = ":8000"
 	defaultCookieExpiration = 12 * time.Hour

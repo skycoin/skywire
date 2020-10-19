@@ -17,7 +17,7 @@ func TestConsumeRule(t *testing.T) {
 	rule := ConsumeRule(keepAlive, 1, localPK, remotePK, 2, 3)
 
 	assert.Equal(t, keepAlive, rule.KeepAlive())
-	assert.Equal(t, RuleConsume, rule.Type())
+	assert.Equal(t, RuleReverse, rule.Type())
 	assert.Equal(t, RouteID(1), rule.KeyRouteID())
 
 	rd := rule.RouteDescriptor()
@@ -59,7 +59,7 @@ func TestIntermediaryForwardRule(t *testing.T) {
 	rule := IntermediaryForwardRule(keepAlive, 1, 2, trID)
 
 	assert.Equal(t, keepAlive, rule.KeepAlive())
-	assert.Equal(t, RuleIntermediaryForward, rule.Type())
+	assert.Equal(t, RuleIntermediary, rule.Type())
 	assert.Equal(t, RouteID(1), rule.KeyRouteID())
 	assert.Equal(t, RouteID(2), rule.NextRouteID())
 	assert.Equal(t, trID, rule.NextTransportID())

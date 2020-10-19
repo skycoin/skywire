@@ -2,23 +2,27 @@ package commands
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"log"
-	"log/syslog"
 	"net/http"
 	"os"
 
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
+	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/metrics"
 	"github.com/skycoin/skywire/pkg/setup"
-	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
+	"github.com/skycoin/skywire/pkg/syslog"
 )
 
 var (
@@ -28,26 +32,44 @@ var (
 	cfgFromStdin bool
 )
 
+func init() {
+	rootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
+	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
+	rootCmd.Flags().StringVar(&tag, "tag", "setup_node", "logging tag")
+	rootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "setup-node [config.json]",
 	Short: "Route Setup Node for skywire",
 	Run: func(_ *cobra.Command, args []string) {
-		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
-			log.Printf("Failed to output build info: %v", err)
+		mLog := logging.NewMasterLogger()
+		log := logging.MustGetLogger(tag)
+
+		if _, err := buildinfo.Get().WriteTo(mLog.Out); err != nil {
+			mLog.Printf("Failed to output build info: %v", err)
 		}
 
-		logger := logging.MustGetLogger(tag)
 		if syslogAddr != "" {
-			hook, err := logrussyslog.NewSyslogHook("udp", syslogAddr, syslog.LOG_INFO, tag)
+			hook, err := syslog.SetupHook(syslogAddr, tag)
 			if err != nil {
-				logger.Fatalf("Unable to connect to syslog daemon on %v", syslogAddr)
+				log.Fatalf("Error setting up syslog: %v", err)
 			}
+
 			logging.AddHook(hook)
 		}
 
 		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-			hook := discord.NewHook(tag, discordWebhookURL)
+			discordOpts := discord.GetDefaultOpts()
+			hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
 			logging.AddHook(hook)
+
+			// Workaround for Discord logger hook. Actually, it's Info.
+			log.Error(discord.StartLogMessage)
+			defer log.Error(discord.StopLogMessage)
+		} else {
+			log.Info(discord.StartLogMessage)
+			defer log.Info(discord.StopLogMessage)
 		}
 
 		var rdr io.Reader
@@ -61,10 +83,10 @@ var rootCmd = &cobra.Command{
 			}
 			rdr, err = os.Open(configFile)
 			if err != nil {
-				log.Fatalf("Failed to open config: %s", err)
+				log.Fatalf("Failed to open config: %v", err)
 			}
 		} else {
-			logger.Info("Reading config from STDIN")
+			log.Info("Reading config from STDIN")
 			rdr = bufio.NewReader(os.Stdin)
 		}
 
@@ -72,41 +94,60 @@ var rootCmd = &cobra.Command{
 
 		raw, err := ioutil.ReadAll(rdr)
 		if err != nil {
-			logger.Fatalf("Failed to read config: %v", err)
+			log.Fatalf("Failed to read config: %v", err)
 		}
 
 		if err := json.Unmarshal(raw, &conf); err != nil {
-			logger.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
+			log.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
 		}
 
-		logger.Infof("Config: %#v", conf)
+		log.Infof("Config: %#v", conf)
 
-		sn, err := setup.NewNode(conf, metrics.NewPrometheus("setupnode"))
+		sn, err := setup.NewNode(conf)
 		if err != nil {
-			logger.Fatal("Failed to create a setup node: ", err)
+			log.Fatal("Failed to create a setup node: ", err)
 		}
 
-		go func() {
-			http.Handle("/metrics", promhttp.Handler())
-			if err := http.ListenAndServe(metricsAddr, nil); err != nil {
-				logger.Println("Failed to start metrics API:", err)
-			}
-		}()
+		m := prepareMetrics(log)
 
-		logger.Fatal(sn.Serve())
+		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+		defer cancel()
+
+		log.Fatal(sn.Serve(ctx, m))
 	},
 }
 
-func init() {
-	rootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", ":2121", "address to bind metrics API to")
-	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVar(&tag, "tag", "setup-node", "logging tag")
-	rootCmd.Flags().BoolVarP(&cfgFromStdin, "stdin", "i", false, "read config from STDIN")
+func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
+	if metricsAddr == "" {
+		return setupmetrics.NewEmpty()
+	}
+
+	m := setupmetrics.New(tag)
+	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	// TODO: The following should be replaced by promutil.AddMetricsHandle
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	reg.MustRegister(prometheus.NewGoCollector())
+	reg.MustRegister(m.Collectors()...)
+	h := promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
+	r.Handle("/metrics", h)
+
+	log.WithField("addr", metricsAddr).Info("Serving metrics...")
+	go func() { log.Fatal(http.ListenAndServe(metricsAddr, r)) }()
+
+	return m
 }
 
 // Execute executes root CLI command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }

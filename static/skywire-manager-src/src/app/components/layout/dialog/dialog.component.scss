@@ -3,15 +3,20 @@
 @import 'utilities/utilities';
 @import 'text';
 
+:host {
+  color: $black;
+}
+
 .header {
   margin-top: -$mat-dialog-padding;
   margin-left: -$mat-dialog-padding;
   margin-right: -$mat-dialog-padding;
   margin-bottom: 0;
-  color: $blue-dark;
+  color: $blue-medium;
   padding: 0px ($mat-dialog-padding - 10) 0px $mat-dialog-padding;
   font-size: $font-size-base;
   text-transform: uppercase;
+  font-weight: bold;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -29,7 +34,7 @@
   span {
     @extend .reactivate-mouse;
     line-height: $font-size-base;
-    margin: 17px 0;
+    margin: 18px 0;
   }
 
   .mat-icon-button {
@@ -47,4 +52,16 @@
       }
     }
   }
+}
+
+.header-separator {
+  height: 1px;
+  background-color: $modal-separator;
+  margin-left: -12px;
+  margin-right: -12px;
+}
+
+.content-margin {
+  padding-top: 18px;
+  padding-bottom: $mat-dialog-padding !important;
 }

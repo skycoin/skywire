@@ -12,32 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_extractLatestVersion(t *testing.T) {
-	tests := []struct {
-		name   string
-		buffer string
-		want   string
-	}{
-		{
-			name:   "Simple HTML",
-			buffer: `<a href="/skycoin/skywire/releases/tag/v0.1.0">`,
-			want:   "v0.1.0",
-		},
-		{
-			name:   "Empty buffer",
-			buffer: "",
-			want:   "",
-		},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			got := extractLatestVersion(tc.buffer)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
-
 func Test_getChecksum(t *testing.T) {
 	tests := []struct {
 		name      string

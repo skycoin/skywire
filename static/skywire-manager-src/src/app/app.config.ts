@@ -8,6 +8,10 @@ export const AppConfig = {
    * How many elements the full lists can have per page.
    */
   maxFullListElements: 40,
+  /**
+   * How many ms the system will wait before retrying to get the data if there is an error.
+   */
+  connectionRetryDelay: 5000,
 
   /**
    * Available languages.
@@ -22,6 +26,11 @@ export const AppConfig = {
       code: 'es',
       name: 'Español',
       iconName: 'es.png',
+    },
+    {
+      code: 'de',
+      name: 'Deutsch',
+      iconName: 'de.png',
     },
   ],
   /**

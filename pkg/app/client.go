@@ -1,109 +1,81 @@
 package app
 
 import (
-	"errors"
-	"fmt"
+	"io"
 	"net"
 	"net/rpc"
-	"os"
 	"strings"
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-var (
-	// ErrVisorPKNotProvided is returned when the visor PK is not provided.
-	ErrVisorPKNotProvided = errors.New("visor PK is not provided")
-	// ErrVisorPKInvalid is returned when the visor PK is invalid.
-	ErrVisorPKInvalid = errors.New("visor PK is invalid")
-	// ErrServerAddrNotProvided is returned when app server address is not provided.
-	ErrServerAddrNotProvided = errors.New("server address is not provided")
-	// ErrAppKeyNotProvided is returned when the app key is not provided.
-	ErrAppKeyNotProvided = errors.New("app key is not provided")
-)
-
-// ClientConfig is a configuration for `Client`.
-type ClientConfig struct {
-	VisorPK    cipher.PubKey
-	ServerAddr string
-	AppKey     appcommon.Key
-}
-
-// ClientConfigFromEnv creates client config from the ENV args.
-func ClientConfigFromEnv() (ClientConfig, error) {
-	appKey := os.Getenv(appcommon.EnvAppKey)
-	if appKey == "" {
-		return ClientConfig{}, ErrAppKeyNotProvided
-	}
-
-	serverAddr := os.Getenv(appcommon.EnvServerAddr)
-	if serverAddr == "" {
-		return ClientConfig{}, ErrServerAddrNotProvided
-	}
-
-	visorPKStr := os.Getenv(appcommon.EnvVisorPK)
-	if visorPKStr == "" {
-		return ClientConfig{}, ErrVisorPKNotProvided
-	}
-
-	var visorPK cipher.PubKey
-	if err := visorPK.UnmarshalText([]byte(visorPKStr)); err != nil {
-		return ClientConfig{}, ErrVisorPKInvalid
-	}
-
-	return ClientConfig{
-		VisorPK:    visorPK,
-		ServerAddr: serverAddr,
-		AppKey:     appcommon.Key(appKey),
-	}, nil
-}
-
 // Client is used by skywire apps.
 type Client struct {
-	log     *logging.Logger
-	visorPK cipher.PubKey
-	rpc     RPCClient
+	log     logrus.FieldLogger
+	conf    appcommon.ProcConfig
+	rpcC    appserver.RPCIngressClient
 	lm      *idmanager.Manager // contains listeners associated with their IDs
 	cm      *idmanager.Manager // contains connections associated with their IDs
+	closers []io.Closer        // additional things to close on close
 }
 
-// NewClient creates a new `Client`. The `Client` needs to be provided with:
-// - log: logger instance.
-// - config: client configuration.
-func NewClient(log *logging.Logger, config ClientConfig) (*Client, error) {
-	rpcCl, err := rpc.Dial("tcp", config.ServerAddr)
+// NewClient creates a new Client, panicking on any error.
+func NewClient(eventSubs *appevent.Subscriber) *Client {
+	log := logrus.New()
+
+	conf, err := appcommon.ProcConfigFromEnv()
 	if err != nil {
-		return nil, fmt.Errorf("error connecting to the app server: %v", err)
+		log.WithError(err).Fatal("Failed to obtain proc config.")
+	}
+	client, err := NewClientFromConfig(log, conf, eventSubs)
+	if err != nil {
+		log.WithError(err).Panic("Failed to create app client.")
+	}
+	return client
+}
+
+// NewClientFromConfig creates a new client from a given proc config.
+func NewClientFromConfig(log logrus.FieldLogger, conf appcommon.ProcConfig, subs *appevent.Subscriber) (*Client, error) {
+	conn, closers, err := appevent.DoReqHandshake(conf, subs)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Client{
 		log:     log,
-		visorPK: config.VisorPK,
-		rpc:     NewRPCClient(rpcCl, config.AppKey),
+		conf:    conf,
+		rpcC:    appserver.NewRPCIngressClient(rpc.NewClient(conn), conf.ProcKey),
 		lm:      idmanager.New(),
 		cm:      idmanager.New(),
+		closers: closers,
 	}, nil
+}
+
+// Config returns the underlying proc config.
+func (c *Client) Config() appcommon.ProcConfig {
+	return c.conf
 }
 
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
-	connID, localPort, err := c.rpc.Dial(remote)
+	connID, localPort, err := c.rpcC.Dial(remote)
 	if err != nil {
 		return nil, err
 	}
 
 	conn := &Conn{
 		id:  connID,
-		rpc: c.rpc,
+		rpc: c.rpcC,
 		local: appnet.Addr{
 			Net:    remote.Net,
-			PubKey: c.visorPK,
+			PubKey: c.conf.VisorPK,
 			Port:   localPort,
 		},
 		remote: remote,
@@ -117,7 +89,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 		conn.freeConnMx.Unlock()
 
 		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			c.log.WithError(err).Error("Unexpected error while closing conn.")
+			c.log.WithError(err).Error("Received unexpected error when closing conn.")
 		}
 
 		return nil, err
@@ -134,11 +106,11 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) {
 	local := appnet.Addr{
 		Net:    n,
-		PubKey: c.visorPK,
+		PubKey: c.conf.VisorPK,
 		Port:   port,
 	}
 
-	lisID, err := c.rpc.Listen(local)
+	lisID, err := c.rpcC.Listen(local)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +118,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 	listener := &Listener{
 		log:  c.log,
 		id:   lisID,
-		rpc:  c.rpc,
+		rpc:  c.rpcC,
 		addr: local,
 		cm:   idmanager.New(),
 	}
@@ -158,7 +130,7 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 		listener.freeLisMx.Unlock()
 
 		if err := listener.Close(); err != nil {
-			c.log.WithError(err).Error("error closing listener")
+			c.log.WithError(err).Error("Unexpected error while closing listener.")
 		}
 
 		return nil, err
@@ -174,41 +146,45 @@ func (c *Client) Listen(n appnet.Type, port routing.Port) (net.Listener, error) 
 // Close closes client/server communication entirely. It closes all open
 // listeners and connections.
 func (c *Client) Close() {
-	var listeners []net.Listener
+	var (
+		listeners []net.Listener
+		conns     []net.Conn
+	)
 
+	// Fill listeners and connections.
 	c.lm.DoRange(func(_ uint16, v interface{}) bool {
 		lis, err := idmanager.AssertListener(v)
 		if err != nil {
 			c.log.Error(err)
 			return true
 		}
-
 		listeners = append(listeners, lis)
 		return true
 	})
-
-	var conns []net.Conn
-
 	c.cm.DoRange(func(_ uint16, v interface{}) bool {
 		conn, err := idmanager.AssertConn(v)
 		if err != nil {
 			c.log.Error(err)
 			return true
 		}
-
 		conns = append(conns, conn)
 		return true
 	})
 
+	// Close everything.
 	for _, lis := range listeners {
-		if err := lis.Close(); err != nil {
+		if err := lis.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			c.log.WithError(err).Error("Error closing listener.")
 		}
 	}
-
 	for _, conn := range conns {
 		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-			c.log.WithError(err).Error("Unexpected error while closing conn.")
+			c.log.WithError(err).Error("Error closing conn.")
+		}
+	}
+	for _, v := range c.closers {
+		if err := v.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			c.log.WithError(err).Error("Error closing closer.")
 		}
 	}
 }
