@@ -140,6 +140,9 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		if err := resp.Body.Close(); err != nil {
 			log.WithError(err).Warn("Failed to close HTTP response body")
 		}
+
+		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+
 		resp, err = c.doRequest(client, req, body)
 		if err != nil {
 			return nil, err
