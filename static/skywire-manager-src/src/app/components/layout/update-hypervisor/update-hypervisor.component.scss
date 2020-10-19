@@ -1,0 +1,78 @@
+@import 'variables';
+
+.text-container {
+  word-break: break-word;
+}
+
+.list-container {
+  font-size: 14px;
+  margin: 10px;
+  color: $blue-medium;
+  word-break: break-word;
+
+  .list-element {
+    display: flex;
+
+    .left-part {
+      width: 12px;
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    .right-part {
+      flex-grow: 1;
+
+      a {
+        text-decoration: none;
+        color: $blue-medium;
+        font-size: $font-size-mini;
+        line-height: 1;
+        display: block;
+      }
+    }
+  }
+
+  .details {
+    color: $light-gray;
+  }
+}
+
+.buttons {
+  margin-top: 15px;
+  text-align: right;
+
+  app-button {
+    margin-left: 5px;
+  }
+}
+
+.progress-container {
+  margin: 10px 0;
+
+  .name {
+    font-size: $font-size-mini;
+    color: $blue-medium;
+  }
+
+  ::ng-deep {
+    .mat-progress-bar-fill::after {
+      background-color: $blue-medium !important;
+    }
+  }
+
+  .details {
+    font-size: $font-size-mini;
+    text-align: right;
+    color: $light-gray;
+  }
+}
+
+.closed-indication {
+  color: $yellow;
+}
+
+.loading-indicator {
+  display: inline-block;
+  position: relative;
+  top: 2px;
+}

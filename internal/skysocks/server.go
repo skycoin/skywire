@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/armon/go-socks5"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
 )
 
@@ -14,12 +14,12 @@ import (
 type Server struct {
 	socks    *socks5.Server
 	listener net.Listener
-	log      *logging.MasterLogger
+	log      logrus.FieldLogger
 	closed   uint32
 }
 
 // NewServer constructs a new Server.
-func NewServer(passcode string, l *logging.MasterLogger) (*Server, error) {
+func NewServer(passcode string, l logrus.FieldLogger) (*Server, error) {
 	var credentials socks5.CredentialStore
 	if passcode != "" {
 		credentials = passcodeCredentials(passcode)
@@ -27,7 +27,7 @@ func NewServer(passcode string, l *logging.MasterLogger) (*Server, error) {
 
 	s, err := socks5.New(&socks5.Config{Credentials: credentials})
 	if err != nil {
-		return nil, fmt.Errorf("socks5: %s", err)
+		return nil, fmt.Errorf("socks5: %w", err)
 	}
 
 	return &Server{socks: s, log: l}, nil
@@ -52,7 +52,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 			s.log.WithError(err).Debugln("Failed to accept skysocks connection")
 
-			return fmt.Errorf("accept: %s", err)
+			return fmt.Errorf("accept: %w", err)
 		}
 
 		s.log.Infoln("Accepted new skysocks connection")
@@ -61,7 +61,7 @@ func (s *Server) Serve(l net.Listener) error {
 		sessionCfg.EnableKeepAlive = false
 		session, err := yamux.Server(conn, sessionCfg)
 		if err != nil {
-			return fmt.Errorf("yamux server failure: %s", err)
+			return fmt.Errorf("yamux server failure: %w", err)
 		}
 
 		go func() {

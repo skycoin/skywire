@@ -294,3 +294,42 @@ func TestVersion_Cmp(t *testing.T) {
 		})
 	}
 }
+
+func TestVersion_ReleaseURL(t *testing.T) {
+	type fields struct {
+		Major      int
+		Minor      int
+		Patch      int
+		Additional string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		{
+			"Case 1",
+			fields{
+				Major:      1,
+				Minor:      2,
+				Patch:      3,
+				Additional: "test",
+			},
+			"https://github.com/skycoin/skywire/releases/tag/v1.2.3-test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &Version{
+				Major:      tt.fields.Major,
+				Minor:      tt.fields.Minor,
+				Patch:      tt.fields.Patch,
+				Additional: tt.fields.Additional,
+			}
+			if got := v.ReleaseURL(); got != tt.want {
+				t.Errorf("ReleaseURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

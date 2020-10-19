@@ -2,8 +2,13 @@ package updater
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
+)
+
+const (
+	semverLen = 3
 )
 
 var (
@@ -61,6 +66,11 @@ func (v *Version) String() string {
 	return version
 }
 
+// ReleaseURL returns GitHub release URL for this version.
+func (v *Version) ReleaseURL() string {
+	return fmt.Sprintf("%s/tag/%s", releaseURL, v.String())
+}
+
 // VersionFromString parses a Version from a string.
 func VersionFromString(s string) (*Version, error) {
 	s = strings.TrimPrefix(s, "v")
@@ -73,7 +83,7 @@ func VersionFromString(s string) (*Version, error) {
 	}
 
 	strs = strings.Split(strs[0], ".")
-	if len(strs) != 3 {
+	if len(strs) != semverLen {
 		return nil, ErrMalformedVersion
 	}
 

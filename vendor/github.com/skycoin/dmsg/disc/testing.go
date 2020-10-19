@@ -13,45 +13,54 @@ import (
 // MockClient is an APIClient mock. The mock doesn't reply with the same errors as the
 // real client, and it mimics it's functionality not being 100% accurate.
 type mockClient struct {
-	entriesLock sync.RWMutex
-	listLock    sync.RWMutex
-	entries     map[string]Entry
-	list        []*Entry
+	entries map[cipher.PubKey]Entry
+	mx      sync.RWMutex
+
+	timeout time.Duration
 }
 
 // NewMock constructs  a new mock APIClient.
-func NewMock() APIClient {
+func NewMock(timeout time.Duration) APIClient {
 	return &mockClient{
-		entries: make(map[string]Entry),
-		list:    []*Entry{},
+		entries: make(map[cipher.PubKey]Entry),
+		timeout: timeout,
 	}
 }
 
-func (m *mockClient) entry(key string) (Entry, bool) {
-	m.entriesLock.RLock()
-	defer m.entriesLock.RUnlock()
+func (m *mockClient) entry(pk cipher.PubKey) (Entry, bool) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
 
-	e, ok := m.entries[key]
+	e, ok := m.entries[pk]
 	return e, ok
 }
 
-func (m *mockClient) setEntry(key string, entry Entry) {
-	m.entriesLock.Lock()
-	defer m.entriesLock.Unlock()
+func (m *mockClient) setEntry(entry Entry) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
 
-	m.entries[key] = entry
-}
+	// timeout trigger
+	if m.timeout != 0 {
+		go func(pk cipher.PubKey) {
+			<-time.After(m.timeout)
 
-func (m *mockClient) setServer(entry *Entry) {
-	m.listLock.Lock()
-	defer m.listLock.Unlock()
+			m.mx.Lock()
+			defer m.mx.Unlock()
 
-	m.list = append(m.list, entry)
+			if entry, ok := m.entries[pk]; ok {
+				if ts := time.Unix(0, entry.Timestamp); time.Since(ts) > m.timeout {
+					delete(m.entries, entry.Static)
+				}
+			}
+		}(entry.Static)
+	}
+
+	m.entries[entry.Static] = entry
 }
 
 // Entry returns the mock client static public key associated entry
-func (m *mockClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry, error) {
-	entry, ok := m.entry(publicKey.Hex())
+func (m *mockClient) Entry(_ context.Context, pk cipher.PubKey) (*Entry, error) {
+	entry, ok := m.entry(pk)
 	if !ok {
 		return nil, errors.New(HTTPMessage{ErrKeyNotFound.Error(), http.StatusNotFound}.String())
 	}
@@ -61,24 +70,20 @@ func (m *mockClient) Entry(ctx context.Context, publicKey cipher.PubKey) (*Entry
 }
 
 // PostEntry sets an entry on the APIClient mock
-func (m *mockClient) PostEntry(ctx context.Context, e *Entry) error {
-	previousEntry, ok := m.entry(e.Static.Hex())
+func (m *mockClient) PostEntry(_ context.Context, entry *Entry) error {
+	previousEntry, ok := m.entry(entry.Static)
 	if ok {
-		err := previousEntry.ValidateIteration(e)
+		err := previousEntry.ValidateIteration(entry)
 		if err != nil {
 			return err
 		}
-		err = e.VerifySignature()
+		err = entry.VerifySignature()
 		if err != nil {
 			return err
 		}
 	}
 
-	m.setEntry(e.Static.Hex(), *e)
-	if e.Server != nil {
-		m.setServer(e)
-	}
-
+	m.setEntry(*entry)
 	return nil
 }
 
@@ -113,8 +118,14 @@ func (m *mockClient) PutEntry(ctx context.Context, sk cipher.SecKey, e *Entry) e
 }
 
 // AvailableServers returns all the servers that the APIClient mock has
-func (m *mockClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
-	m.listLock.RLock()
-	defer m.listLock.RUnlock()
-	return m.list, nil
+func (m *mockClient) AvailableServers(_ context.Context) ([]*Entry, error) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+	list := make([]*Entry, 0, len(m.entries))
+	for _, e := range m.entries {
+		if e := e; e.Server != nil {
+			list = append(list, &e)
+		}
+	}
+	return list, nil
 }

@@ -1,0 +1,20 @@
+<app-dialog [headline]="'apps.log.title' | translate" [includeVerticalMargins]="false" [includeScrollableArea]="false">
+  <div class="filter-link-container">
+    <div class="filter-link subtle-transparent-button" (click)="filter()">
+      <span class="transparent">{{ 'apps.log.filter-button' | translate }}</span>&nbsp;
+      <span>{{ currentFilter.text | translate }}</span>
+    </div>
+  </div>
+  <mat-dialog-content #content>
+    <div *ngFor="let message of logMessages" class="app-log-message">
+      <span class="transparent">
+        {{ message.time }}
+      </span>
+      {{ message.msg }}
+    </div>
+    <div class="app-log-empty mt-3" *ngIf="!loading && (!logMessages || logMessages.length === 0)">
+      {{ 'apps.log.empty' | translate }}
+    </div>
+    <app-loading-indicator [showWhite]="false" *ngIf="loading"></app-loading-indicator>
+  </mat-dialog-content>
+</app-dialog>
