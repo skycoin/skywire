@@ -13,7 +13,10 @@ import (
 	"golang.org/x/net/nettest"
 
 	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/snet/stcp"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp"
+	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 )
 
 // KeyPair holds a public/private key pair.
@@ -49,9 +52,8 @@ type Env struct {
 // NewEnv creates a `network.Network` test environment.
 // `nPairs` is the public/private key pairs of all the `network.Network`s to be created.
 func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
-
 	// Prepare `dmsg`.
-	dmsgD := disc.NewMock()
+	dmsgD := disc.NewMock(0)
 	dmsgS, dmsgSErr := createDmsgSrv(t, dmsgD)
 
 	const baseSTCPPort = 7033
@@ -61,51 +63,91 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 		tableEntries[pair.PK] = "127.0.0.1:" + strconv.Itoa(baseSTCPPort+i)
 	}
 
-	table := stcp.NewTable(tableEntries)
+	table := pktable.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp bool
+	var hasDmsg, hasStcp, hasStcpr, hasSudph bool
 
 	for _, network := range networks {
 		switch network {
 		case dmsg.Type:
 			hasDmsg = true
-		case stcp.Type:
+		case tptypes.STCP:
 			hasStcp = true
+		case tptypes.STCPR:
+			hasStcpr = true
+		case tptypes.SUDPH:
+			hasSudph = true
 		}
 	}
 
 	// Prepare `snets`.
 	ns := make([]*snet.Network, len(keys))
 
+	const stcpBasePort = 7033
+
 	for i, pairs := range keys {
-		var dmsgClient *dmsg.Client
-		var stcpClient *stcp.Client
+		networkConfigs := snet.NetworkConfigs{
+			Dmsg: &snet.DmsgConfig{
+				SessionsCount: 1,
+			},
+			STCP: &snet.STCPConfig{
+				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
+			},
+		}
+
+		clients := snet.NetworkClients{
+			Direct: make(map[string]directtp.Client),
+		}
 
 		if hasDmsg {
-			dmsgClient = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go dmsgClient.Serve()
+			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
+			go clients.DmsgC.Serve(context.Background())
 		}
+
+		addressResolver := new(arclient.MockAPIClient)
 
 		if hasStcp {
-			stcpClient = stcp.NewClient(pairs.PK, pairs.SK, table)
+			conf := directtp.Config{
+				Type:      tptypes.STCP,
+				PK:        pairs.PK,
+				SK:        pairs.SK,
+				Table:     table,
+				LocalAddr: networkConfigs.STCP.LocalAddr,
+			}
+
+			clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 		}
 
-		port := 7033
-		n := snet.NewRaw(
-			snet.Config{
-				PubKey: pairs.PK,
-				SecKey: pairs.SK,
-				Dmsg: &snet.DmsgConfig{
-					SessionsCount: 1,
-				},
-				STCP: &snet.STCPConfig{
-					LocalAddr: "127.0.0.1:" + strconv.Itoa(port+i),
-				},
-			},
-			dmsgClient,
-			stcpClient,
-		)
-		require.NoError(t, n.Init(context.TODO()))
+		if hasStcpr {
+			conf := directtp.Config{
+				Type:            tptypes.STCPR,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
+
+			clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
+		}
+
+		if hasSudph {
+			conf := directtp.Config{
+				Type:            tptypes.SUDPH,
+				PK:              pairs.PK,
+				SK:              pairs.SK,
+				AddressResolver: addressResolver,
+			}
+
+			clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf)
+		}
+
+		snetConfig := snet.Config{
+			PubKey:         pairs.PK,
+			SecKey:         pairs.SK,
+			NetworkConfigs: networkConfigs,
+		}
+
+		n := snet.NewRaw(snetConfig, clients)
+		require.NoError(t, n.Init())
 		ns[i] = n
 	}
 
@@ -135,14 +177,20 @@ func (e *Env) Teardown() { e.teardown() }
 func createDmsgSrv(t *testing.T, dc disc.APIClient) (srv *dmsg.Server, srvErr <-chan error) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("s"))
 	require.NoError(t, err)
+
 	l, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
-	srv = dmsg.NewServer(pk, sk, dc, 100)
+
+	srv = dmsg.NewServer(pk, sk, dc, &dmsg.ServerConfig{MaxSessions: 100}, nil)
+
 	errCh := make(chan error, 1)
+
 	go func() {
 		errCh <- srv.Serve(l, "")
 		close(errCh)
 	}()
+
 	<-srv.Ready()
+
 	return srv, errCh
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -11,11 +12,28 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/dmsg/netutil"
+	"github.com/skycoin/dmsg/servermetrics"
 )
+
+// ServerConfig configues the Server
+type ServerConfig struct {
+	MaxSessions    int
+	UpdateInterval time.Duration
+}
+
+// DefaultServerConfig returns the default server config.
+func DefaultServerConfig() *ServerConfig {
+	return &ServerConfig{
+		MaxSessions:    DefaultMaxSessions,
+		UpdateInterval: DefaultUpdateInterval,
+	}
+}
 
 // Server represents a dsmg server entity.
 type Server struct {
 	EntityCommon
+
+	m servermetrics.Metrics
 
 	ready     chan struct{} // Closed once dmsg.Server is serving.
 	readyOnce sync.Once
@@ -33,20 +51,27 @@ type Server struct {
 }
 
 // NewServer creates a new dmsg server entity.
-func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, maxSessions int) *Server {
+func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *ServerConfig, m servermetrics.Metrics) *Server {
+	if conf == nil {
+		conf = DefaultServerConfig()
+	}
+	if m == nil {
+		m = servermetrics.NewEmpty()
+	}
+	log := logging.MustGetLogger("dmsg_server")
+
 	s := new(Server)
-	s.EntityCommon.init(pk, sk, dc, logging.MustGetLogger("dmsg_server"))
+	s.EntityCommon.init(pk, sk, dc, log, conf.UpdateInterval)
+	s.m = m
 	s.ready = make(chan struct{})
 	s.done = make(chan struct{})
 	s.addrDone = make(chan struct{})
-	s.maxSessions = maxSessions
+	s.maxSessions = conf.MaxSessions
 	s.setSessionCallback = func(ctx context.Context, sessionCount int) error {
-		available := s.maxSessions - sessionCount
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), available)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
 	}
 	s.delSessionCallback = func(ctx context.Context, sessionCount int) error {
-		available := s.maxSessions - sessionCount
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), available)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
 	}
 	return s
 }
@@ -78,13 +103,14 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 		s.wg.Done()
 	}()
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		<-s.done
-		log.WithError(lis.Close()).
-			Info("Stopping server, net.Listener closed.")
+		cancel()
+		log.WithError(lis.Close()).Info("Stopping server...")
 	}()
 
-	if err := s.updateEntryLoop(); err != nil {
+	if err := s.startUpdateEntryLoop(ctx); err != nil {
 		return err
 	}
 
@@ -116,6 +142,18 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 	}
 }
 
+func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
+	err := netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
+	})
+	if err != nil {
+		return err
+	}
+
+	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.maxSessions)
+	return nil
+}
+
 // AdvertisedAddr returns the TCP address in which the dmsg server is advertised by.
 // This is the TCP address that should be contained within the dmsg discovery entry of this server.
 func (s *Server) AdvertisedAddr() string {
@@ -139,30 +177,13 @@ func (s *Server) Ready() <-chan struct{} {
 	return s.ready
 }
 
-func (s *Server) updateEntryLoop() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		select {
-		case <-ctx.Done():
-		case <-s.done:
-			cancel()
-		}
-	}()
-	return netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions)
-	})
-}
-
 func (s *Server) handleSession(conn net.Conn) {
 	log := logrus.FieldLogger(s.log.WithField("remote_tcp", conn.RemoteAddr()))
 
-	dSes, err := makeServerSession(&s.EntityCommon, conn)
+	dSes, err := makeServerSession(s.m, &s.EntityCommon, conn)
 	if err != nil {
-		log = log.WithError(err)
 		if err := conn.Close(); err != nil {
-			s.log.WithError(err).
-				Debug("On handleSession() failure, close connection resulted in error.")
+			log.WithError(err).Debug("On handleSession() failure, close connection resulted in error.")
 		}
 		return
 	}

@@ -41,6 +41,8 @@ func (t PacketType) String() string {
 		return "ClosePacket"
 	case KeepAlivePacket:
 		return "KeepAlivePacket"
+	case HandshakePacket:
+		return "Handshake"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -54,6 +56,7 @@ const (
 	DataPacket PacketType = iota
 	ClosePacket
 	KeepAlivePacket
+	HandshakePacket
 )
 
 // CloseCode represents close code for ClosePacket.
@@ -112,6 +115,23 @@ func MakeKeepAlivePacket(id RouteID) Packet {
 	packet[PacketTypeOffset] = byte(KeepAlivePacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(0))
+
+	return packet
+}
+
+// MakeHandshakePacket constructs a new HandshakePacket.
+func MakeHandshakePacket(id RouteID, supportEncryption bool) Packet {
+	packet := make([]byte, PacketHeaderSize+1)
+
+	supportEncryptionVal := 1
+	if !supportEncryption {
+		supportEncryptionVal = 0
+	}
+
+	packet[PacketTypeOffset] = byte(HandshakePacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(1))
+	packet[PacketPayloadOffset] = byte(supportEncryptionVal)
 
 	return packet
 }

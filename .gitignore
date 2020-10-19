@@ -14,6 +14,8 @@
 /apps/
 /skywire/
 /local*
+/transport_logs
+/dmsgpty
 
 pkg/visor/apps/
 pkg/visor/bar/
@@ -30,10 +32,12 @@ pkg/visor/foo/
 /*.json
 /*.sh
 /*.log
-dmsgpty
 
 # Ignore backup go.mod after running '/ci_scripts/go_mod_replace.sh'.
 go.mod-e
 
-# goreleaser
+# goreleaser and frontend builds
 dist
+
+# release
+*.deb

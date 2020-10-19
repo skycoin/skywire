@@ -3,16 +3,19 @@ package appserver
 import (
 	"errors"
 	"fmt"
-	"io"
+	"net"
+	"net/rpc"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
 )
 
 var (
@@ -20,50 +23,117 @@ var (
 	errProcNotStarted     = errors.New("process is not started")
 )
 
-// Proc is a wrapper for a skywire app. Encapsulates
-// the running process itself and the RPC server for
-// app/visor communication.
+// Proc is an instance of a skywire app. It encapsulates the running process itself and the RPC server for app/visor
+// communication.
+// TODO(evanlinjin): In the future, we will implement the ability to run multiple instances (procs) of a single app.
 type Proc struct {
-	key       appcommon.Key
-	config    appcommon.Config
-	log       *logging.Logger
+	disc appdisc.Updater // app discovery client
+	conf appcommon.ProcConfig
+	log  *logging.Logger
+
+	logDB appcommon.LogStore
+
 	cmd       *exec.Cmd
 	isRunning int32
 	waitMx    sync.Mutex
 	waitErr   error
+
+	rpcGW    *RPCIngressGateway // gateway shared over 'conn' - introduced AFTER proc is started
+	conn     net.Conn           // connection to proc - introduced AFTER proc is started
+	connCh   chan struct{}      // push here when conn is received - protected by 'connOnce'
+	connOnce sync.Once          // ensures we only push to 'connCh' once
+
+	m       ProcManager
+	appName string
 }
 
 // NewProc constructs `Proc`.
-func NewProc(log *logging.Logger, c appcommon.Config, args []string, stdout, stderr io.Writer) (*Proc, error) {
-	key := appcommon.GenerateAppKey()
+func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc.Updater, m ProcManager,
+	appName string) *Proc {
+	if mLog == nil {
+		mLog = logging.NewMasterLogger()
+	}
+	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
-	binaryPath := getBinaryPath(c.BinaryDir, c.Name)
+	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	cmd.Dir = conf.ProcWorkDir
+	cmd.Env = append(os.Environ(), conf.Envs()...)
 
-	const (
-		appKeyEnvFormat     = appcommon.EnvAppKey + "=%s"
-		serverAddrEnvFormat = appcommon.EnvServerAddr + "=%s"
-		visorPKEnvFormat    = appcommon.EnvVisorPK + "=%s"
-	)
-
-	env := make([]string, 0, 4)
-	env = append(env, fmt.Sprintf(appKeyEnvFormat, key))
-	env = append(env, fmt.Sprintf(serverAddrEnvFormat, c.ServerAddr))
-	env = append(env, fmt.Sprintf(visorPKEnvFormat, c.VisorPK))
-
-	cmd := exec.Command(binaryPath, args...) // nolint:gosec
-
-	cmd.Env = env
-	cmd.Dir = c.WorkDir
-
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
+	appLog, appLogDB := appcommon.NewProcLogger(conf)
+	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
+	cmd.Stderr = appLog.WithField("_module", moduleName).WithField("func", "(STDERR)").Writer()
 
 	return &Proc{
-		key:    key,
-		config: c,
-		log:    log,
-		cmd:    cmd,
-	}, nil
+		disc:    disc,
+		conf:    conf,
+		log:     mLog.PackageLogger(moduleName),
+		logDB:   appLogDB,
+		cmd:     cmd,
+		connCh:  make(chan struct{}, 1),
+		m:       m,
+		appName: appName,
+	}
+}
+
+// Logs obtains the log store.
+func (p *Proc) Logs() appcommon.LogStore {
+	return p.logDB
+}
+
+// Cmd returns the internal cmd name.
+func (p *Proc) Cmd() *exec.Cmd {
+	return p.cmd
+}
+
+// InjectConn introduces the connection to the Proc after it is started.
+// Only the first call will return true.
+// It also prepares the RPC gateway.
+func (p *Proc) InjectConn(conn net.Conn) bool {
+	ok := false
+
+	p.connOnce.Do(func() {
+		ok = true
+		p.conn = conn
+		p.rpcGW = NewRPCGateway(p.log)
+
+		// Send ready signal.
+		p.connCh <- struct{}{}
+		close(p.connCh)
+	})
+
+	return ok
+}
+
+func (p *Proc) awaitConn() bool {
+	rpcS := rpc.NewServer()
+	if err := rpcS.RegisterName(p.conf.ProcKey.String(), p.rpcGW); err != nil {
+		panic(err)
+	}
+
+	connDelta := p.rpcGW.cm.AddDeltaInformer()
+	go func() {
+		for n := range connDelta.Chan() {
+			if err := p.disc.ChangeValue(appdisc.ConnCountValue, []byte(strconv.Itoa(n))); err != nil {
+				p.log.WithError(err).WithField("value", appdisc.ConnCountValue).
+					Error("Failed to change app discovery value.")
+			}
+		}
+	}()
+
+	lisDelta := p.rpcGW.lm.AddDeltaInformer()
+	go func() {
+		for n := range lisDelta.Chan() {
+			if err := p.disc.ChangeValue(appdisc.ListenerCountValue, []byte(strconv.Itoa(n))); err != nil {
+				p.log.WithError(err).WithField("value", appdisc.ListenerCountValue).
+					Error("Failed to change app discovery value.")
+			}
+		}
+	}()
+
+	go rpcS.ServeConn(p.conn)
+
+	p.log.Info("Associated and serving proc conn.")
+	return true
 }
 
 // Start starts the application.
@@ -72,15 +142,73 @@ func (p *Proc) Start() error {
 		return errProcAlreadyRunning
 	}
 
+	// Acquire lock immediately.
+	p.waitMx.Lock()
+
 	if err := p.cmd.Start(); err != nil {
+		p.waitMx.Unlock()
 		return err
 	}
 
-	// acquire lock immediately
-	p.waitMx.Lock()
 	go func() {
-		defer p.waitMx.Unlock()
-		p.waitErr = p.cmd.Wait()
+		waitErrCh := make(chan error)
+		go func() {
+			waitErrCh <- p.cmd.Wait()
+			close(waitErrCh)
+		}()
+
+		select {
+		case _, ok := <-p.connCh:
+			if !ok {
+				// in this case app got stopped from the outer code before initializing the connection,
+				// just kill the process and exit.
+				_ = p.cmd.Process.Kill() //nolint:errcheck
+				p.waitMx.Unlock()
+
+				return
+			}
+		case waitErr := <-waitErrCh:
+			// in this case app process finished before initializing the connection. Happens if an
+			// error occurred during app startup.
+			p.waitErr = waitErr
+			p.waitMx.Unlock()
+
+			// channel won't get closed outside, close it now.
+			p.connOnce.Do(func() { close(p.connCh) })
+
+			// here will definitely be an error notifying that the process
+			// is already stopped. We do this to remove proc from the manager,
+			// therefore giving the correct app status to hypervisor.
+			_ = p.m.Stop(p.appName) //nolint:errcheck
+
+			return
+		}
+
+		// here, the connection is established, so we're not blocked by awaiting it anymore,
+		// execution may be continued as usual.
+
+		if ok := p.awaitConn(); !ok {
+			_ = p.cmd.Process.Kill() //nolint:errcheck
+			p.waitMx.Unlock()
+			return
+		}
+
+		// App discovery start/stop.
+		p.disc.Start()
+		defer p.disc.Stop()
+
+		// Wait for proc to exit.
+		p.waitErr = <-waitErrCh
+
+		// Close proc conn and associated listeners and connections.
+		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
+		}
+		p.rpcGW.cm.CloseAll()
+		p.rpcGW.lm.CloseAll()
+
+		// Unlock.
+		p.waitMx.Unlock()
 	}()
 
 	return nil
@@ -88,18 +216,23 @@ func (p *Proc) Start() error {
 
 // Stop stops the application.
 func (p *Proc) Stop() error {
-	if atomic.LoadInt32(&p.isRunning) != 1 {
+	if atomic.LoadInt32(&p.isRunning) == 0 {
 		return errProcNotStarted
 	}
 
-	err := p.cmd.Process.Signal(os.Interrupt)
-	if err != nil {
-		return err
+	if p.cmd.Process != nil {
+		err := p.cmd.Process.Signal(os.Interrupt)
+		if err != nil {
+			return err
+		}
 	}
 
 	// the lock will be acquired as soon as the cmd finishes its work
 	p.waitMx.Lock()
-	defer p.waitMx.Unlock()
+	defer func() {
+		p.waitMx.Unlock()
+		p.connOnce.Do(func() { close(p.connCh) })
+	}()
 
 	return nil
 }
@@ -120,9 +253,4 @@ func (p *Proc) Wait() error {
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
-}
-
-// getBinaryPath formats binary path using app dir, name and version.
-func getBinaryPath(dir, name string) string {
-	return filepath.Join(dir, name)
 }

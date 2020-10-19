@@ -2,13 +2,15 @@
 package hypervisor
 
 import (
+	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
-	"net/rpc"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,22 +19,25 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/dmsg/httputil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"nhooyr.io/websocket"
 
-	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
 const (
-	healthTimeout = 5 * time.Second
-	httpTimeout   = 30 * time.Second
+	httpTimeout = 30 * time.Second
 )
 
 const (
@@ -47,21 +52,30 @@ var (
 // VisorConn represents a visor connection.
 type VisorConn struct {
 	Addr  dmsg.Addr
+	SrvPK cipher.PubKey
 	RPC   visor.RPCClient
-	PtyUI *dmsgpty.UI
+	PtyUI *dmsgPtyUI
 }
 
 // Hypervisor manages visors.
 type Hypervisor struct {
-	c      Config
-	assets http.FileSystem             // Web UI.
-	visors map[cipher.PubKey]VisorConn // connected remote visors.
-	users  *UserManager
-	mu     *sync.RWMutex
+	c                 Config
+	dmsgC             *dmsg.Client
+	assets            http.FileSystem             // web UI
+	visors            map[cipher.PubKey]VisorConn // connected remote visors
+	trackers          *DmsgTrackerManager         // dmsg trackers
+	users             *UserManager
+	restartCtx        *restart.Context
+	updater           *updater.Updater
+	mu                *sync.RWMutex
+	visorMu           sync.Mutex
+	visorChanMux      map[cipher.PubKey]*chanMux
+	hypervisorMu      sync.Mutex
+	hypervisorChanMux *chanMux
 }
 
 // New creates a new Hypervisor.
-func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
+func New(config Config, assets http.FileSystem, restartCtx *restart.Context, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := NewBoltUserStore(config.DBPath)
@@ -71,32 +85,55 @@ func New(assets http.FileSystem, config Config) (*Hypervisor, error) {
 
 	singleUserDB := NewSingleUserStore("admin", boltUserDB)
 
-	return &Hypervisor{
-		c:      config,
-		assets: assets,
-		visors: make(map[cipher.PubKey]VisorConn),
-		users:  NewUserManager(singleUserDB, config.Cookies),
-		mu:     new(sync.RWMutex),
-	}, nil
+	u := updater.New(log, restartCtx, "")
+
+	hv := &Hypervisor{
+		c:            config,
+		dmsgC:        dmsgC,
+		assets:       assets,
+		visors:       make(map[cipher.PubKey]VisorConn),
+		trackers:     NewDmsgTrackerManager(nil, dmsgC, 0, 0),
+		users:        NewUserManager(singleUserDB, config.Cookies),
+		restartCtx:   restartCtx,
+		updater:      u,
+		mu:           new(sync.RWMutex),
+		visorChanMux: make(map[cipher.PubKey]*chanMux),
+	}
+
+	return hv, nil
 }
 
 // ServeRPC serves RPC of a Hypervisor.
-func (hv *Hypervisor) ServeRPC(dmsgC *dmsg.Client, lis *dmsg.Listener) error {
+func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
+	lis, err := hv.dmsgC.Listen(dmsgPort)
+	if err != nil {
+		return err
+	}
+
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
 			return err
 		}
+
 		addr := conn.RawRemoteAddr()
-		ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: addr.PK, Port: skyenv.DmsgPtyPort})
-		visorConn := VisorConn{
+		log := logging.MustGetLogger(fmt.Sprintf("rpc_client:%s", addr.PK))
+
+		visorConn := &VisorConn{
 			Addr:  addr,
-			RPC:   visor.NewRPCClient(rpc.NewClient(conn), visor.RPCPrefix),
-			PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+			SrvPK: conn.ServerPK(),
+			RPC:   visor.NewRPCClient(log, conn, visor.RPCPrefix, skyenv.DefaultRPCTimeout),
+			PtyUI: setupDmsgPtyUI(hv.dmsgC, addr.PK),
 		}
-		log.WithField("remote_addr", addr).Info("Accepted.")
+
+		if _, err := hv.trackers.MustGet(ctx, addr.PK); err != nil {
+			log.WithError(err).Warn("Failed to dial tracker stream.")
+		}
+
+		log.Info("Accepted.")
+
 		hv.mu.Lock()
-		hv.visors[addr.PK] = visorConn
+		hv.visors[addr.PK] = *visorConn
 		hv.mu.Unlock()
 	}
 }
@@ -111,7 +148,7 @@ type MockConfig struct {
 
 // AddMockData adds mock data to Hypervisor.
 func (hv *Hypervisor) AddMockData(config MockConfig) error {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
 
 	for i := 0; i < config.Visors; i++ {
 		pk, client, err := visor.NewMockRPCClient(r, config.MaxTpsPerVisor, config.MaxRoutesPerVisor)
@@ -135,10 +172,19 @@ func (hv *Hypervisor) AddMockData(config MockConfig) error {
 	return nil
 }
 
-// ServeHTTP implements http.Handler
-func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+// HTTPHandler returns a http handler.
+func (hv *Hypervisor) HTTPHandler() http.Handler {
+	return hv.makeMux()
+}
+
+func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Route("/", func(r chi.Router) {
 		r.Route("/api", func(r chi.Router) {
@@ -158,9 +204,17 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
+
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
 				r.Get("/about", hv.getAbout())
+				r.Post("/update", hv.updateHypervisor())
+				r.Get("/update/ws", hv.updateHypervisorWS())
+				r.Get("/update/ws/running", hv.isHypervisorWSUpdateRunning())
+				r.Post("/update/available", hv.hypervisorUpdateAvailable())
+				r.Post("/update/available/{channel}", hv.hypervisorUpdateAvailable())
+				r.Get("/dmsg", hv.getDmsg())
+
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -182,28 +236,39 @@ func (hv *Hypervisor) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
-				r.Post("/visors/{pk}/update", hv.update())
-				r.Get("/visors/{pk}/update/available", hv.updateAvailable())
+				r.Post("/visors/{pk}/update", hv.updateVisor())
+				r.Get("/visors/{pk}/update/ws", hv.updateVisorWS())
+				r.Get("/visors/{pk}/update/ws/running", hv.isVisorWSUpdateRunning())
+				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
+				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 			})
 		})
 
-		r.Route("/pty", func(r chi.Router) {
-			if hv.c.EnableAuth {
-				r.Use(hv.users.Authorize)
-			}
-			r.Get("/{pk}", hv.getPty())
-		})
+		// we don't enable `dmsgpty` endpoints for Windows
+		if runtime.GOOS != "windows" {
+			r.Route("/pty", func(r chi.Router) {
+				if hv.c.EnableAuth {
+					r.Use(hv.users.Authorize)
+				}
+
+				r.Get("/{pk}", hv.getPty())
+			})
+		}
 
 		r.Handle("/*", http.FileServer(hv.assets))
 	})
 
-	r.ServeHTTP(w, req)
+	return r
+}
+
+func (hv *Hypervisor) log(r *http.Request) logrus.FieldLogger {
+	return httputil.GetLogger(r)
 }
 
 func (hv *Hypervisor) getPong() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, err := w.Write([]byte(`"PONG!"`)); err != nil {
-			log.WithError(err).Warn("getPong: Failed to send PONG!")
+			hv.log(r).WithError(err).Warn("getPong: Failed to send PONG!")
 		}
 	}
 }
@@ -220,6 +285,242 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 			PubKey: hv.c.PK,
 			Build:  buildinfo.Get(),
 		})
+	}
+}
+
+func (hv *Hypervisor) updateHypervisor() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var updateConfig updater.UpdateConfig
+
+		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("update visor request: %v", err)
+			}
+
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetHypervisor
+
+		updated, err := hv.updater.Update(updateConfig)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		output := struct {
+			Updated bool `json:"updated"`
+		}{updated}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
+	}
+}
+
+func (hv *Hypervisor) updateHypervisorWS() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			hv.log(r).WithError(err).Warnf("Failed to upgrade to websocket.")
+			w.WriteHeader(http.StatusInternalServerError)
+
+			return
+		}
+
+		defer func() {
+			if err := ws.Close(websocket.StatusNormalClosure, "response sent"); err != nil {
+				hv.log(r).WithError(err).Warnf("Failed to close WebSocket connection")
+			}
+		}()
+
+		var updateConfig updater.UpdateConfig
+
+		_, raw, err := ws.Read(context.Background())
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		if err := json.Unmarshal(raw, &updateConfig); err != nil {
+			hv.log(r).Warnf("update visor request %v: %v", string(raw), err)
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetHypervisor
+
+		consumer := make(chan visor.StatusMessage, 512)
+		hv.hypervisorMu.Lock()
+		if hv.hypervisorChanMux == nil {
+			ch := hv.updateHVWithStatus(updateConfig)
+			hv.hypervisorChanMux = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+		} else {
+			hv.hypervisorChanMux.addConsumer(consumer)
+		}
+		hv.hypervisorMu.Unlock()
+
+		defer func() {
+			hv.hypervisorMu.Lock()
+			hv.hypervisorChanMux = nil
+			hv.hypervisorMu.Unlock()
+		}()
+
+		for status := range consumer {
+			if status.IsError {
+				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
+					hv.log(r).WithError(err).Warnf("failed to close WebSocket (abnormal)")
+					return
+				}
+			}
+
+			output := struct {
+				Status string `json:"status"`
+			}{status.Text}
+
+			rawOutput, err := json.Marshal(output)
+			if err != nil {
+				hv.log(r).WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+				return
+			}
+
+			if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
+				hv.log(r).WithError(err).Warnf("Failed to write WebSocket response")
+			}
+		}
+
+		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
+			hv.log(r).WithError(err).Warnf("failed to close WebSocket (normal)")
+		}
+	}
+}
+
+func (hv *Hypervisor) isHypervisorWSUpdateRunning() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		running := false
+		hv.hypervisorMu.Lock()
+		running = hv.hypervisorChanMux != nil
+		hv.hypervisorMu.Unlock()
+
+		resp := struct {
+			Running bool `json:"running"`
+		}{
+			running,
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	}
+}
+
+func (hv *Hypervisor) updateHVWithStatus(config updater.UpdateConfig) <-chan visor.StatusMessage {
+	ch := make(chan visor.StatusMessage, 512)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				status := hv.updater.Status()
+
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if status != "" {
+						ch <- visor.StatusMessage{
+							Text: status,
+						}
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+			}
+		}
+	}()
+
+	go func() {
+		defer func() {
+			cancel()
+			close(ch)
+		}()
+
+		if updated, err := hv.updater.Update(config); err != nil {
+			ch <- visor.StatusMessage{
+				Text:    err.Error(),
+				IsError: true,
+			}
+		} else if updated {
+			ch <- visor.StatusMessage{
+				Text: "Finished",
+			}
+		} else {
+			ch <- visor.StatusMessage{
+				Text: "No update found",
+			}
+		}
+	}()
+
+	return ch
+}
+
+func (hv *Hypervisor) hypervisorUpdateAvailable() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channel := updater.Channel(chi.URLParam(r, "channel"))
+		if channel == "" {
+			channel = updater.ChannelStable
+		}
+
+		version, err := hv.updater.UpdateAvailable(channel)
+		if err != nil {
+			hv.log(r).Errorf("Failed to check if hypervisor update is available: %v", err)
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+
+			return
+		}
+
+		output := struct {
+			Available        bool   `json:"available"`
+			CurrentVersion   string `json:"current_version"`
+			AvailableVersion string `json:"available_version,omitempty"`
+			ReleaseURL       string `json:"release_url,omitempty"`
+		}{
+			Available:      version != nil,
+			CurrentVersion: buildinfo.Version(),
+		}
+
+		if version != nil {
+			output.AvailableVersion = version.String()
+			output.ReleaseURL = version.ReleaseURL()
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, output)
+	}
+}
+
+func (hv *Hypervisor) getDmsg() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hv.mu.RLock()
+		defer hv.mu.RUnlock()
+
+		pks := make([]cipher.PubKey, 0, len(hv.visors))
+		for pk := range hv.visors {
+			pks = append(pks, pk)
+		}
+
+		out := hv.trackers.GetBulk(pks)
+		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
 }
 
@@ -240,7 +541,7 @@ func (hv *Hypervisor) getHealth() http.HandlerFunc {
 		}
 
 		resCh := make(chan healthRes)
-		tCh := time.After(healthTimeout)
+		tCh := time.After(visor.HealthTimeout)
 
 		go func() {
 			hi, err := ctx.RPC.Health()
@@ -292,7 +593,7 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 
 		for pk, c := range hv.visors {
 			go func(pk cipher.PubKey, c VisorConn, i int) {
-				log := log.
+				log := hv.log(r).
 					WithField("visor_addr", c.Addr).
 					WithField("func", "getVisors")
 
@@ -339,12 +640,6 @@ func (hv *Hypervisor) getVisor() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) getPty() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		ctx.PtyUI.Handler()(w, r)
-	})
-}
-
 // returns app summaries of a given node of pk
 func (hv *Hypervisor) getApps() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
@@ -378,7 +673,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
-				log.Warnf("putApp request: %v", err)
+				hv.log(r).Warnf("putApp request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -395,22 +690,15 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		const (
-			skysocksName       = "skysocks"
-			skysocksClientName = "skysocks-client"
-		)
-
-		if reqBody.Passcode != nil && ctx.App.Name == skysocksName {
-			if err := ctx.RPC.SetSocksPassword(*reqBody.Passcode); err != nil {
+		if reqBody.Passcode != nil {
+			if err := ctx.RPC.SetAppPassword(ctx.App.Name, *reqBody.Passcode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
 
-		if reqBody.PK != nil && ctx.App.Name == skysocksClientName {
-			log.Errorf("SETTING PK: %s", *reqBody.PK)
-			if err := ctx.RPC.SetSocksClientPK(*reqBody.PK); err != nil {
-				log.Errorf("ERROR SETTING PK")
+		if reqBody.PK != nil {
+			if err := ctx.RPC.SetAppPK(ctx.App.Name, *reqBody.PK); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -425,7 +713,6 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 				}
 			case statusStart:
 				if err := ctx.RPC.StartApp(ctx.App.Name); err != nil {
-					log.Errorf("ERROR STARTING APP")
 					httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 					return
 				}
@@ -469,7 +756,7 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, &LogsRes{
-			LastLogTimestamp: app.TimestampFromLog(logs[len(logs)-1]),
+			LastLogTimestamp: appcommon.TimestampFromLog(logs[len(logs)-1]),
 			Logs:             logs,
 		})
 	})
@@ -522,7 +809,7 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
-				log.Warnf("postTransport request: %v", err)
+				hv.log(r).Warnf("postTransport request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -605,7 +892,7 @@ func (hv *Hypervisor) postRoute() http.HandlerFunc {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
 			if err != io.EOF {
-				log.Warnf("postRoute request: %v", err)
+				hv.log(r).Warnf("postRoute request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -651,7 +938,7 @@ func (hv *Hypervisor) putRoute() http.HandlerFunc {
 		var summary routing.RuleSummary
 		if err := httputil.ReadJSON(r, &summary); err != nil {
 			if err != io.EOF {
-				log.Warnf("putRoute request: %v", err)
+				hv.log(r).Warnf("putRoute request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -739,7 +1026,7 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
-				log.Warnf("exec request: %v", err)
+				hv.log(r).Warnf("exec request: %v", err)
 			}
 
 			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
@@ -755,15 +1042,30 @@ func (hv *Hypervisor) exec() http.HandlerFunc {
 
 		output := struct {
 			Output string `json:"output"`
-		}{string(out)}
+		}{strings.TrimSpace(string(out))}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
 	})
 }
 
-func (hv *Hypervisor) update() http.HandlerFunc {
+func (hv *Hypervisor) updateVisor() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		updated, err := ctx.RPC.Update()
+		var updateConfig updater.UpdateConfig
+
+		if err := httputil.ReadJSON(r, &updateConfig); err != nil {
+			hv.log(r).Warnf("update visor request: %v", err)
+			httputil.WriteJSON(w, r, http.StatusBadRequest, ErrMalformedRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetVisor
+
+		updated, err := ctx.RPC.Update(updateConfig)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -777,9 +1079,119 @@ func (hv *Hypervisor) update() http.HandlerFunc {
 	})
 }
 
-func (hv *Hypervisor) updateAvailable() http.HandlerFunc {
+func (hv *Hypervisor) updateVisorWS() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		version, err := ctx.RPC.UpdateAvailable()
+		ws, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			hv.log(r).WithError(err).Warnf("Failed to upgrade to websocket.")
+			w.WriteHeader(http.StatusInternalServerError)
+
+			return
+		}
+
+		defer func() {
+			if err := ws.Close(websocket.StatusNormalClosure, "response sent"); err != nil {
+				hv.log(r).WithError(err).Warnf("Failed to close WebSocket connection")
+			}
+		}()
+
+		_, raw, err := ws.Read(context.Background())
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		var updateConfig updater.UpdateConfig
+		if err := json.Unmarshal(raw, &updateConfig); err != nil {
+			hv.log(r).Warnf("update visor request %v: %v", string(raw), err)
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
+
+		if updateConfig.Channel == "" {
+			updateConfig.Channel = updater.ChannelStable
+		}
+
+		updateConfig.Target = updater.TargetVisor
+
+		consumer := make(chan visor.StatusMessage, 512)
+		hv.visorMu.Lock()
+		if mux := hv.visorChanMux[ctx.Addr.PK]; mux == nil {
+			ch := ctx.RPC.UpdateWithStatus(updateConfig)
+			hv.visorChanMux[ctx.Addr.PK] = newChanMux(ch, []chan<- visor.StatusMessage{consumer})
+		} else {
+			hv.visorChanMux[ctx.Addr.PK].addConsumer(consumer)
+		}
+		hv.visorMu.Unlock()
+
+		defer func() {
+			hv.visorMu.Lock()
+			delete(hv.visorChanMux, ctx.Addr.PK)
+			hv.visorMu.Unlock()
+		}()
+
+		for status := range consumer {
+			if status.IsError {
+				if err := ws.Close(websocket.StatusAbnormalClosure, status.Text); err != nil {
+					hv.log(r).WithError(err).Warnf("failed to close WebSocket (abnormal)")
+					return
+				}
+			}
+
+			output := struct {
+				Status string `json:"status"`
+			}{status.Text}
+
+			rawOutput, err := json.Marshal(output)
+			if err != nil {
+				hv.log(r).WithError(err).Errorf("Failed to marshal JSON: %#v", output)
+				return
+			}
+
+			if err := ws.Write(context.Background(), websocket.MessageText, rawOutput); err != nil {
+				hv.log(r).WithError(err).Warnf("Failed to write WebSocket response")
+			}
+		}
+
+		if err := ws.Close(websocket.StatusNormalClosure, "finished"); err != nil {
+			hv.log(r).WithError(err).Warnf("failed to close WebSocket (normal)")
+		}
+	})
+}
+
+func (hv *Hypervisor) isVisorWSUpdateRunning() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		running := false
+		hv.visorMu.Lock()
+		running = hv.visorChanMux != nil && hv.visorChanMux[ctx.Addr.PK] != nil
+		hv.visorMu.Unlock()
+
+		resp := struct {
+			Running bool `json:"running"`
+		}{
+			running,
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	})
+}
+
+func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		channel := updater.Channel(chi.URLParam(r, "channel"))
+		if channel == "" {
+			channel = updater.ChannelStable
+		}
+
+		version, err := ctx.RPC.UpdateAvailable(channel)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		summary, err := ctx.RPC.Summary()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -789,13 +1201,15 @@ func (hv *Hypervisor) updateAvailable() http.HandlerFunc {
 			Available        bool   `json:"available"`
 			CurrentVersion   string `json:"current_version"`
 			AvailableVersion string `json:"available_version,omitempty"`
+			ReleaseURL       string `json:"release_url,omitempty"`
 		}{
 			Available:      version != nil,
-			CurrentVersion: buildinfo.Version(),
+			CurrentVersion: summary.BuildInfo.Version,
 		}
 
 		if version != nil {
 			output.AvailableVersion = version.String()
+			output.ReleaseURL = version.ReleaseURL()
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
@@ -819,7 +1233,7 @@ type httpCtx struct {
 	VisorConn
 
 	// App
-	App *visor.AppState
+	App *launcher.AppState
 
 	// Transport
 	Tp *visor.TransportSummary
@@ -848,7 +1262,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		return nil, false
 	}
 
-	visor, ok := hv.visorConn(pk)
+	v, ok := hv.visorConn(pk)
 
 	if !ok {
 		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
@@ -856,7 +1270,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	}
 
 	return &httpCtx{
-		VisorConn: visor,
+		VisorConn: v,
 	}, true
 }
 

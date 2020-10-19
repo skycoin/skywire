@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 )
 
 func init() {
@@ -38,7 +38,7 @@ var lsAppsCmd = &cobra.Command{
 
 		for _, state := range states {
 			status := "stopped"
-			if state.Status == visor.AppStatusRunning {
+			if state.Status == launcher.AppStatusRunning {
 				status = "running"
 			}
 			_, err = fmt.Fprintf(w, "%s\t%s\t%t\t%s\n", state.Name, strconv.Itoa(int(state.Port)), state.AutoStart, status)

@@ -9,6 +9,8 @@ import (
 )
 
 var (
+	// ErrRuleNotFound is returned while trying to access non-existing rule
+	ErrRuleNotFound = errors.New("rule not found")
 	// ErrRuleTimedOut is being returned while trying to access the rule which timed out
 	ErrRuleTimedOut = errors.New("rule keep-alive timeout exceeded")
 	// ErrNoAvailableRoutes is returned when there're no more available routeIDs
@@ -113,7 +115,7 @@ func (mt *memTable) Rule(key RouteID) (Rule, error) {
 
 	rule, ok := mt.rules[key]
 	if !ok {
-		return nil, fmt.Errorf("rule of id %v not found", key)
+		return nil, ErrRuleNotFound
 	}
 
 	if mt.ruleIsTimedOut(key, rule) {
@@ -123,7 +125,7 @@ func (mt *memTable) Rule(key RouteID) (Rule, error) {
 	// crucial, we do this when we have nowhere in the network to forward packet to.
 	// In this case we update activity immediately not to acquire the lock for the second time
 	ruleType := rule.Type()
-	if ruleType == RuleConsume {
+	if ruleType == RuleReverse {
 		mt.activity[key] = time.Now()
 	}
 

@@ -70,7 +70,6 @@ go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/skycoin/skywire/pkg/transport -run TestTransportManagerReEstablishTransports >> ./logs/pkg/TestTransportManagerReEstablishTransports.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/skycoin/skywire/pkg/transport -run TestTransportManagerLogs >> ./logs/pkg/TestTransportManagerLogs.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/skycoin/skywire/pkg/transport -run TestTCPFactory >> ./logs/pkg/TestTCPFactory.log
-go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/skycoin/skywire/pkg/transport -run TestFilePKTable >> ./logs/pkg/TestFilePKTable.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/skycoin/skywire/pkg/transport-discovery/client -run TestClientAuth >> ./logs/pkg/TestClientAuth.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/skycoin/skywire/pkg/transport-discovery/client -run TestRegisterTransportResponses >> ./logs/pkg/TestRegisterTransportResponses.log
 go clean -testcache &> /dev/null || go test -race -tags no_ci -cover -timeout=5m github.com/skycoin/skywire/pkg/transport-discovery/client -run TestRegisterTransports >> ./logs/pkg/TestRegisterTransports.log

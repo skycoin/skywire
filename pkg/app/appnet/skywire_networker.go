@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/netutil"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -23,14 +23,14 @@ var (
 
 // SkywireNetworker implements `Networker` for skynet.
 type SkywireNetworker struct {
-	log       *logging.Logger
+	log       logrus.FieldLogger
 	r         router.Router
 	porter    *netutil.Porter
 	isServing int32
 }
 
 // NewSkywireNetworker constructs skywire networker.
-func NewSkywireNetworker(l *logging.Logger, r router.Router) Networker {
+func NewSkywireNetworker(l logrus.FieldLogger, r router.Router) Networker {
 	return &SkywireNetworker{
 		log:    l,
 		r:      r,
@@ -57,13 +57,13 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net
 		}
 	}()
 
-	rg, err := r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
+	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, router.DefaultDialOptions())
 	if err != nil {
 		return nil, err
 	}
 
 	return &skywireConn{
-		Conn:     rg,
+		Conn:     conn,
 		freePort: freePort,
 	}, nil
 }
@@ -111,18 +111,18 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 	for {
 		log.Debug("Awaiting to accept route group...")
 
-		rg, err := r.r.AcceptRoutes(ctx)
+		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
 			log.WithError(err).Info("Stopped accepting routes.")
 			return err
 		}
 
 		log.
-			WithField("local", rg.LocalAddr()).
-			WithField("remote", rg.RemoteAddr()).
+			WithField("local", conn.LocalAddr()).
+			WithField("remote", conn.RemoteAddr()).
 			Info("Accepted route group.")
 
-		go r.serve(rg)
+		go r.serve(conn)
 	}
 }
 
