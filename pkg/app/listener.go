@@ -5,18 +5,19 @@ import (
 	"net"
 	"sync"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 )
 
 // Listener is a listener for app server connections.
 // Implements `net.Listener`.
 type Listener struct {
-	log       *logging.Logger
+	log       logrus.FieldLogger
 	id        uint16
-	rpc       RPCClient
+	rpc       appserver.RPCIngressClient
 	addr      appnet.Addr
 	cm        *idmanager.Manager // contains conns associated with their IDs
 	freeLis   func() bool

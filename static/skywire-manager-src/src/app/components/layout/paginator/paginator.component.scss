@@ -18,7 +18,7 @@
     border-left: $separator solid 1px;
     min-width: 40px;
     text-align: center;
-    color: $white;
+    color: scale-color($white, $alpha: -50%);
     text-decoration: none;
     display: flex;
     align-items: center;
@@ -39,14 +39,13 @@
   }
 
   .selected {
-    color: $black;
-    background: theme-color(translucid-hover);
-    font-weight: bold;
+    color: $white;
+    background: scale-color(theme-color(translucid-hover), $alpha: 20%);
     padding: $elements-padding ($elements-padding * 2);
     cursor: pointer;
 
     &:hover {
-      background: adjust-color(theme-color(translucid-hover), $alpha: 0.2);
+      background: scale-color(theme-color(translucid-hover), $alpha: 50%);
     }
   }
 

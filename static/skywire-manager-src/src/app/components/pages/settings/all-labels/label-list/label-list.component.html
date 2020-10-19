@@ -1,0 +1,195 @@
+<!-- Header. -->
+<div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
+  <div class="title">
+    <span *ngIf="showShortList_" class="uppercase">
+      {{ 'labels.title' | translate }}
+      <mat-icon [inline]="true" class="help d-none d-md-inline" [matTooltip]="'labels.info' | translate">help</mat-icon>
+    </span>
+    <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
+      <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
+        <span>{{ filterTexts.filterName | translate }}: </span>
+        <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
+        <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
+      </div>
+      <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
+    </div>
+  </div>
+  <div class="options">
+    <div class="options-container">
+      <mat-icon
+        [inline]="true"
+        (click)="dataFilterer.changeFilters()"
+        [matTooltip]="'filters.filter-action' | translate"
+        class="small-icon"
+        *ngIf="allLabels && allLabels.length > 0"
+      >filter_list</mat-icon>
+      <mat-icon
+        [inline]="true"
+        [matMenuTriggerFor]="selectionMenu"
+        *ngIf="dataSource && dataSource.length > 0"
+      >more_horiz</mat-icon>
+      <mat-menu #selectionMenu="matMenu" [overlapTrigger]="false">
+        <div mat-menu-item (click)="changeAllSelections(true)">
+          {{ 'selection.select-all' | translate }}
+        </div>
+        <div mat-menu-item (click)="changeAllSelections(false)">
+          {{ 'selection.unselect-all' | translate }}
+        </div>
+        <div mat-menu-item disabled="{{ !hasSelectedElements() }}" (click)="deleteSelected()">
+          {{ 'selection.delete-all' | translate }}
+        </div>
+      </mat-menu>
+    </div>
+    <!-- Upper paginator. -->
+    <app-paginator
+      *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
+      [currentPage]="currentPage"
+      [numberOfPages]="numberOfPages"
+      [linkParts]="['/settings', 'labels']"
+      [queryParams]="dataFilterer.currentUrlQueryParams">
+    </app-paginator>
+  </div>
+</div>
+
+<div
+  class="rounded-elevated-box mt-3"
+  *ngIf="dataSource && dataSource.length > 0"
+><div class="box-internal-container overflow" [ngClass]="{'small-node-list-margins': showShortList_, 'full-node-list-margins': !showShortList_}">
+  <!-- Table for large screens. -->
+  <table
+    class="responsive-table-translucid d-none d-md-table"
+    [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
+    cellspacing="0" cellpadding="0"
+  >
+    <!-- Column names. -->
+    <tr>
+      <th></th>
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(labelSortData)">
+        {{ 'labels.label' | translate }}
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === labelSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+      </th>
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(idSortData)">
+        {{ 'labels.id' | translate }}
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === idSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+      </th>
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(typeSortData)">
+        {{ 'labels.type' | translate }}
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === typeSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+      </th>
+      <th class="actions"></th>
+    </tr>
+    <!-- Values. -->
+    <tr *ngFor="let label of dataSource">
+      <td class="selection-col">
+        <mat-checkbox
+          [checked]="selections.get(label.id)"
+          (change)="changeSelection(label)">
+        </mat-checkbox>
+      </td>
+      <td>
+        {{ label.label }}
+      </td>
+      <td>
+        {{ label.id }}
+      </td>
+      <td>
+        {{ getLabelTypeIdentification(label)[0] }} - {{ getLabelTypeIdentification(label)[1] | translate }}
+      </td>
+      <td class="actions">
+        <button
+          (click)="delete(label.id)"
+          mat-icon-button
+          [matTooltip]="'labels.delete' | translate"
+          class="action-button transparent-button"
+        >
+          <mat-icon [inline]="true">close</mat-icon>
+        </button>
+      </td>
+    </tr>
+  </table>
+
+  <!-- List for small screens. -->
+  <table
+    class="responsive-table-translucid d-md-none"
+    [ngClass]="{'d-lg-table d-xl-none': showShortList_}"
+    cellspacing="0" cellpadding="0"
+  >
+    <!-- Sorting button. -->
+    <tr class="selectable" (click)="dataSorter.openSortingOrderModal()"><td>
+      <div class="list-item-container">
+        <div class="left-part">
+          <div class="title">{{ 'tables.sorting-title' | translate }}</div>
+          <div>{{ dataSorter.currentSortingColumn.label | translate }}
+            <ng-container *ngIf="dataSorter.currentlySortingByLabel">{{ 'tables.label' | translate }}</ng-container>
+            <ng-container *ngIf="dataSorter.sortingInReverseOrder">{{ 'tables.inverted-order' | translate }}</ng-container>
+          </div>
+        </div>
+        <div class="right-part">
+          <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+        </div>
+      </div>
+    </td></tr>
+    <!-- Values. -->
+    <tr *ngFor="let label of dataSource"><td>
+      <div class="list-item-container">
+        <div class="check-part">
+          <mat-checkbox
+            [checked]="selections.get(label.id)"
+            (change)="changeSelection(label)">
+          </mat-checkbox>
+        </div>
+        <div class="left-part">
+          <div class="list-row">
+            <span class="title">{{ 'labels.label' | translate }}</span>:
+            {{ label.label }}
+          </div>
+          <div class="list-row long-content">
+            <span class="title">{{ 'labels.id' | translate }}</span>:
+            {{ label.id }}
+          </div>
+          <div class="list-row">
+            <span class="title">{{ 'labels.type' | translate }}</span>:
+            {{ getLabelTypeIdentification(label)[0] }} - {{ getLabelTypeIdentification(label)[1] | translate }}
+          </div>
+        </div>
+        <div class="margin-part"></div>
+        <div class="right-part">
+          <button
+            (click)="$event.stopPropagation(); showOptionsDialog(label)"
+            mat-icon-button
+            [matTooltip]="'common.options' | translate"
+            class="transparent-button"
+          >
+            <mat-icon>{{ 'add' }}</mat-icon>
+          </button>
+        </div>
+      </div>
+    </td></tr>
+  </table>
+
+  <!-- Link for accessing the full list. -->
+  <app-view-all-link
+    [numberOfElements]="filteredLabels.length"
+    [linkParts]="['/settings', 'labels']"
+    [queryParams]="dataFilterer.currentUrlQueryParams"
+    *ngIf="showShortList_ && numberOfPages > 1"
+  ></app-view-all-link>
+</div></div>
+
+<!-- Msg shown if the list is empty. -->
+<div class="rounded-elevated-box mt-3" *ngIf="!dataSource || dataSource.length === 0">
+  <div class="box-internal-container">
+    <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+    <span class="font-sm" *ngIf="allLabels.length === 0">{{ 'labels.empty' | translate }}</span>
+    <span class="font-sm" *ngIf="allLabels.length !== 0">{{ 'labels.empty-with-filter' | translate }}</span>
+  </div>
+</div>
+
+<!-- Upper paginator. -->
+<app-paginator
+  *ngIf="!showShortList_ && numberOfPages > 1 && dataSource"
+  [currentPage]="currentPage"
+  [numberOfPages]="numberOfPages"
+  [linkParts]="['/settings', 'labels']"
+  [queryParams]="dataFilterer.currentUrlQueryParams">
+</app-paginator>

@@ -86,11 +86,11 @@ func makeStartNode(t *testing.T, config Config) (string, *http.Client, func()) {
 		EnableAuth:        true,
 	}
 
-	visor, err := New(nil, config)
+	visor, err := New(config, nil, nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, visor.AddMockData(defaultMockConfig))
 
-	srv := httptest.NewTLSServer(visor)
+	srv := httptest.NewTLSServer(visor.HTTPHandler())
 	visor.c.Cookies.Domain = srv.Listener.Addr().String()
 
 	client := srv.Client()

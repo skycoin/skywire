@@ -2,6 +2,7 @@ import { Injectable, NgZone } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { webSocket } from 'rxjs/webSocket';
 import { Router } from '@angular/router';
 
 import { processServiceError } from '../utils/errors';
@@ -40,6 +41,13 @@ export class ApiService {
    */
   private readonly apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ?
     'http-api/' : 'api/';
+
+  /**
+   * Similar to apiPrefix, but for web sockets.
+   */
+  private readonly wsApiPrefix = !environment.production ?
+    (location.protocol.indexOf('http:') !== -1 ? 'ws-api/' : 'wss-api/') :
+    'api/';
 
   constructor(
     private http: HttpClient,
@@ -80,11 +88,29 @@ export class ApiService {
   }
 
   /**
+   * Makes a request to a WebSocket endpoint.
+   * @param url Endpoint URL, after the "/api/" part.
+   */
+  ws(url: string, body: any = {}): Observable<any> {
+    const wsProtocol = (location.protocol.startsWith('https')) ? 'wss://' : 'ws://';
+    const wsUrl = wsProtocol + location.host + '/' + this.wsApiPrefix + url;
+    const ws = webSocket(wsUrl);
+
+    ws.next(body);
+    return ws;
+  }
+
+  /**
    * Makes the actual call to the API.
    */
   private request(method: string, url: string, body: any, options: RequestOptions) {
     body = body ? body : {};
     options = options ? options : new RequestOptions();
+
+    // Sanitize the URL.
+    if (url.startsWith('/')) {
+      url = url.substr(1, url.length - 1);
+    }
 
     return this.http.request(method, this.apiPrefix + url, {
       ...this.getRequestOptions(options),

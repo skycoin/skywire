@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/go-chi/chi"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestClientAuth(t *testing.T) {
 
 			case fmt.Sprintf("/security/nonces/%s", testPubKey):
 				if _, err := fmt.Fprintf(w, `{"edge": "%s", "next_nonce": 1}`, testPubKey); err != nil {
-					t.Errorf("Failed to write nonce response: %s", err)
+					t.Errorf("Failed to write nonce response: %v", err)
 				}
 
 			default:
@@ -59,9 +60,11 @@ func TestClientAuth(t *testing.T) {
 
 func TestUpdateVisorUptime(t *testing.T) {
 	urlCh := make(chan string, 1)
+
 	srv := httptest.NewServer(authHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		urlCh <- r.URL.String()
 	})))
+
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
@@ -70,18 +73,21 @@ func TestUpdateVisorUptime(t *testing.T) {
 	err = c.UpdateVisorUptime(context.TODO())
 	require.NoError(t, err)
 
-	assert.Equal(t, "/update", <-urlCh)
+	assert.Equal(t, "/v2/update", <-urlCh)
 }
 
 func authHandler(next http.Handler) http.Handler {
-	m := http.NewServeMux()
-	m.Handle("/security/nonces/", http.HandlerFunc(
+	r := chi.NewRouter()
+
+	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
 				log.WithError(err).Error("Failed to encode nonce response")
 			}
 		},
 	))
-	m.Handle("/", next)
-	return m
+
+	r.Handle("/*", next)
+
+	return r
 }

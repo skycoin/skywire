@@ -22,8 +22,8 @@ import { OperationError } from 'src/app/utils/operation-error';
   styleUrls: ['./create-transport.component.scss']
 })
 export class CreateTransportComponent implements OnInit, OnDestroy {
-  @ViewChild('button', { static: false }) button: ButtonComponent;
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
   types: string[];
   form: FormGroup;
 
@@ -120,10 +120,18 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       flatMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey()))
     ).subscribe(
       types => {
+        // Sort the types and select dmsg as default, if posible.
+        types.sort((a, b) => a.localeCompare(b));
+        let defaultIndex = types.findIndex(type => type.toLowerCase() === 'dmsg');
+        defaultIndex = defaultIndex !== -1 ? defaultIndex : 0;
+
+        // Prepare the form.
+        this.types = types;
+        this.form.get('type').setValue(types[defaultIndex]);
+
+        // Prepare the UI change.
         this.snackbarService.closeCurrentIfTemporaryError();
         setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
-        this.types = types;
-        this.form.get('type').setValue(types[0]);
       },
       err => {
         err = processServiceError(err);
@@ -135,7 +143,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
         }
 
         // Retry after a small delay.
-        this.loadData(3000);
+        this.loadData(AppConfig.connectionRetryDelay);
       },
     );
   }
