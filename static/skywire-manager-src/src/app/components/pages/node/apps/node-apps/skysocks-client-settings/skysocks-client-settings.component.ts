@@ -22,6 +22,7 @@ import {
 } from './skysocks-client-filter/skysocks-client-filter.component';
 import { countriesList } from 'src/app/utils/countries-list';
 import { SkysocksClientPasswordComponent } from './skysocks-client-password/skysocks-client-password.component';
+import { ClipboardService } from 'src/app/services/clipboard.service';
 
 /**
  * Data of the entries from the history.
@@ -126,6 +127,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
     private proxyDiscoveryService: ProxyDiscoveryService,
+    private clipboardService: ClipboardService,
   ) {
     if (data.name.toLocaleLowerCase().indexOf('vpn') !== -1) {
       this.configuringVpn = true;
@@ -470,6 +472,19 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Copies a public key.
+   * @param publicKey Key to copy.
+   */
+  copyPk(publicKey: string) {
+    // Copy the key and inform the result.
+    if (this.clipboardService.copy(publicKey)) {
+      this.snackbarService.showDone('apps.vpn-socks-client-settings.copied-pk-info');
+    } else {
+      this.snackbarService.showError('apps.vpn-socks-client-settings.copy-pk-error');
+    }
+  }
+
   // Makes the call to the hypervisor API for changing the configuration.
   private continueSavingChanges(publicKey: string, password: string, enteredManually: boolean, location: string, note: string) {
     this.button.showLoading();
@@ -521,13 +536,18 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       this.history.splice(this.history.length - itemsToRemove, itemsToRemove);
     }
 
+    // Update the form.
+    this.form.get('pk').setValue(publicKey);
+
     const dataToSave = JSON.stringify(this.history);
     localStorage.setItem(this.configuringVpn ? this.vpnHistoryStorageKey : this.socksHistoryStorageKey, dataToSave);
 
-    // Close the window.
     NodeComponent.refreshCurrentDisplayedData();
     this.snackbarService.showDone('apps.vpn-socks-client-settings.changes-made');
-    this.dialogRef.close();
+
+    // Allow to continue using the component.
+    this.working = false;
+    this.button.reset();
   }
 
   private onError(err: OperationError) {
