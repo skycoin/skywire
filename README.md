@@ -1,12 +1,13 @@
 [![Build Status](https://travis-ci.com/skycoin/skywire.svg?branch=master)](https://travis-ci.com/skycoin/skywire)
 
-# Skywire Mainnet
+# Skywire 
 
-- [Skywire Mainnet](#skywire)
+
+- [Skywire](#skywire)
   - [Build and run](#build-and-run)
     - [Requirements](#requirements)
     - [Build](#build)
-    - [Configure](#configure)
+    - [Configure](#conigure)
       - [`stcp` setup](#stcp-setup)
       - [`dmsgpty` setup](#dmsgpty-setup)
       - [`hypervisor` setup](#hypervisor-setup)
@@ -90,11 +91,7 @@ In order to allow a hypervisor to access a visor,
 the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
 
 ```json
-{
-  "hypervisors": [{
-    "public_key":"02b72766f0ebade8e06d6969b5aeedaff8bf8efd7867f362bb4a63135ab6009775"
-  }]
-}
+  "hypervisors":["024a2dd77de324d543561a6d9e62791723be26ddf6b9587060a10b9ba498e096f1"],
 ```
 
 ### Run `skywire-visor`
@@ -104,7 +101,7 @@ that apps can use to implement communication protocols.
 App binaries are spawned by the visor, 
 communication between visor and app is performed via unix pipes provided on app startup.
 
-Note that `skywire-visor` requires a valid configuration file in order to execute.
+Note that `skywire-visor` requires a valid configuration file in order to execute. If you want to run the VPN client application distributed with Skywire you need to run the following command with `sudo`
 
 ```bash
 # Run skywire-visor. It takes one argument; the path of a configuration file (`skywire-config.json` if unspecified).
@@ -250,6 +247,14 @@ $ skywire-cli visor add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebe
 # List established transports.
 $ skywire-cli visor ls-tp
 ```
+
+Currently there are 4 available transport types. 
+
+- [stcpr](https://github.com/skycoin/skywire/wiki/Transports#stcpr)
+- [sudph](https://github.com/skycoin/skywire/wiki/Transports#sudph)
+- [stcp](https://github.com/skycoin/skywire/wiki/Transports#stcp)
+- [dmsg](https://github.com/skycoin/skywire/wiki/Transports#dmsg)
+
 
 ## Creating a GitHub release
 
