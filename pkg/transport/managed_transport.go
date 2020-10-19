@@ -74,6 +74,8 @@ type ManagedTransport struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
+
+	remoteAddrs []string
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -92,6 +94,14 @@ func NewManagedTransport(n *snet.Network, dc DiscoveryClient, ls LogStore, rPK c
 	}
 	mt.wg.Add(2)
 	return mt
+}
+
+// IsUp returns true if transport status is up.
+func (mt *ManagedTransport) IsUp() bool {
+	mt.isUpMux.Lock()
+	isUp := mt.isUp && mt.isUpErr == nil
+	mt.isUpMux.Unlock()
+	return isUp
 }
 
 // Serve serves and manages the transport.
@@ -246,7 +256,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 
 	mt.log.Debug("Performing settlement handshake...")
 	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.n.LocalSK()); err != nil {
-		return fmt.Errorf("settlement handshake failed: %v", err)
+		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
 	mt.log.Debug("Setting underlying connection...")
@@ -271,16 +281,21 @@ func (mt *ManagedTransport) Dial(ctx context.Context) error {
 func (mt *ManagedTransport) dial(ctx context.Context) error {
 	tp, err := mt.n.Dial(ctx, mt.netName, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
-		return err
+		return fmt.Errorf("snet.Dial: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
 	if err := MakeSettlementHS(true).Do(ctx, mt.dc, tp, mt.n.LocalSK()); err != nil {
-		return fmt.Errorf("settlement handshake failed: %v", err)
+		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
-	return mt.setConn(tp)
+
+	if err := mt.setConn(tp); err != nil {
+		return fmt.Errorf("setConn: %w", err)
+	}
+
+	return nil
 }
 
 // redial only actually dials if transport is still registered in transport discovery.
@@ -291,7 +306,6 @@ func (mt *ManagedTransport) redial(ctx context.Context) error {
 	}
 
 	if _, err := mt.dc.GetTransportByID(ctx, mt.Entry.ID); err != nil {
-
 		// If the error is a temporary network error, we should retry at a later stage.
 		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
 
@@ -374,7 +388,7 @@ func (mt *ManagedTransport) setConn(newConn *snet.Conn) error {
 	}
 
 	if err := mt.updateStatus(true, 1); err != nil {
-		return fmt.Errorf("failed to update transport status: %v", err)
+		return fmt.Errorf("failed to update transport status: %w", err)
 	}
 
 	// Set new underlying connection.
@@ -497,7 +511,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 				mt.wg.Wait()
 			}
 
-			return fmt.Errorf("failed to redial underlying connection: %v", err)
+			return fmt.Errorf("failed to redial underlying connection: %w", err)
 		}
 	}
 

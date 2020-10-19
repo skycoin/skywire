@@ -1,7 +1,13 @@
 <app-dialog class="info-dialog" [headline]="'transports.details.title' | translate">
   <div>
     <div class="title mt-0">
-      {{ 'transports.details.basic.title' | translate }}
+      <mat-icon [inline]="true">list</mat-icon>{{ 'transports.details.basic.title' | translate }}
+    </div>
+    <div class="item">
+      <span>{{ 'transports.details.basic.state' | translate }}</span>
+      <div [class]="'d-inline ' + (data.is_up ? 'green-text' : 'red-text')">
+        {{ ('transports.statuses.' + (data.is_up ? 'online' : 'offline')) | translate }}
+      </div>
     </div>
     <div class="item">
       <span>{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}
@@ -17,7 +23,7 @@
     </div>
 
     <div class="title">
-      {{ 'transports.details.data.title' | translate }}
+      <mat-icon [inline]="true">import_export</mat-icon>{{ 'transports.details.data.title' | translate }}
     </div>
     <div class="item">
       <span>{{ 'transports.details.data.uploaded' | translate }}</span> {{ data.log.sent | autoScale }}

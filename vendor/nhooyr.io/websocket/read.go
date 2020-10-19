@@ -52,7 +52,7 @@ func (c *Conn) Read(ctx context.Context) (MessageType, []byte, error) {
 //
 // Call CloseRead when you do not expect to read any more messages.
 // Since it actively reads from the connection, it will ensure that ping, pong and close
-// frames are responded to. This means c.Ping and c.Close will still work as expected.
+// frames are responded to.
 func (c *Conn) CloseRead(ctx context.Context) context.Context {
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
@@ -109,16 +109,11 @@ func (mr *msgReader) putFlateReader() {
 }
 
 func (mr *msgReader) close() {
-	mr.c.readMu.forceLock()
+	mr.c.readMu.Lock(context.Background())
 	mr.putFlateReader()
 	mr.dict.close()
 	if mr.flateBufio != nil {
 		putBufioReader(mr.flateBufio)
-	}
-
-	if mr.c.client {
-		putBufioReader(mr.c.br)
-		mr.c.br = nil
 	}
 }
 
@@ -297,16 +292,14 @@ func (c *Conn) handleControl(ctx context.Context, h header) (err error) {
 func (c *Conn) reader(ctx context.Context) (_ MessageType, _ io.Reader, err error) {
 	defer errd.Wrap(&err, "failed to get reader")
 
-	err = c.readMu.lock(ctx)
+	err = c.readMu.Lock(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
-	defer c.readMu.unlock()
+	defer c.readMu.Unlock()
 
 	if !c.msgReader.fin {
-		err = errors.New("previous message not read to completion")
-		c.close(fmt.Errorf("failed to get reader: %w", err))
-		return 0, nil, err
+		return 0, nil, errors.New("previous message not read to completion")
 	}
 
 	h, err := c.readLoop(ctx)
@@ -363,24 +356,28 @@ func (mr *msgReader) setFrame(h header) {
 }
 
 func (mr *msgReader) Read(p []byte) (n int, err error) {
-	err = mr.c.readMu.lock(mr.ctx)
+	defer func() {
+		if errors.Is(err, io.ErrUnexpectedEOF) && mr.fin && mr.flate {
+			err = io.EOF
+		}
+		if errors.Is(err, io.EOF) {
+			err = io.EOF
+			mr.putFlateReader()
+			return
+		}
+		errd.Wrap(&err, "failed to read")
+	}()
+
+	err = mr.c.readMu.Lock(mr.ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read: %w", err)
+		return 0, err
 	}
-	defer mr.c.readMu.unlock()
+	defer mr.c.readMu.Unlock()
 
 	n, err = mr.limitReader.Read(p)
 	if mr.flate && mr.flateContextTakeover() {
 		p = p[:n]
 		mr.dict.write(p)
-	}
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) && mr.fin && mr.flate {
-		mr.putFlateReader()
-		return n, io.EOF
-	}
-	if err != nil {
-		err = fmt.Errorf("failed to read: %w", err)
-		mr.c.close(err)
 	}
 	return n, err
 }

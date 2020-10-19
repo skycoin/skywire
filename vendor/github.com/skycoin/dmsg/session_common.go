@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/yamux"
@@ -28,6 +29,11 @@ type SessionCommon struct {
 	wMx     sync.Mutex
 
 	log logrus.FieldLogger
+}
+
+// GetConn returns underlying TCP `net.Conn`.
+func (sc *SessionCommon) GetConn() net.Conn {
+	return sc.netConn
 }
 
 func (sc *SessionCommon) initClient(entity *EntityCommon, conn net.Conn, rPK cipher.PubKey) error {
@@ -143,13 +149,17 @@ func (sc *SessionCommon) LocalTCPAddr() net.Addr { return sc.netConn.LocalAddr()
 // RemoteTCPAddr returns the remote address of the underlying TCP connection.
 func (sc *SessionCommon) RemoteTCPAddr() net.Addr { return sc.netConn.RemoteAddr() }
 
+// Ping obtains the round trip latency of the session.
+func (sc *SessionCommon) Ping() (time.Duration, error) { return sc.ys.Ping() }
+
 // Close closes the session.
-func (sc *SessionCommon) Close() (err error) {
-	if sc != nil {
-		err = sc.ys.Close()
-		sc.rMx.Lock()
-		sc.nMap = nil
-		sc.rMx.Unlock()
+func (sc *SessionCommon) Close() error {
+	if sc == nil {
+		return nil
 	}
+	err := sc.ys.Close()
+	sc.rMx.Lock()
+	sc.nMap = nil
+	sc.rMx.Unlock()
 	return err
 }

@@ -25,11 +25,11 @@ type RuleType byte
 
 func (rt RuleType) String() string {
 	switch rt {
-	case RuleConsume:
+	case RuleReverse:
 		return "Consume"
 	case RuleForward:
 		return "Forward"
-	case RuleIntermediaryForward:
+	case RuleIntermediary:
 		return "IntermediaryForward"
 	}
 
@@ -37,17 +37,17 @@ func (rt RuleType) String() string {
 }
 
 const (
-	// RuleConsume represents a hop to the route's destination visor.
+	// RuleReverse represents a hop to the route's destination visor.
 	// A packet referencing this rule is to be consumed locally.
-	RuleConsume = RuleType(0)
+	RuleReverse = RuleType(0)
 
 	// RuleForward represents a hop from the route's source visor.
 	// A packet referencing this rule is to be sent to a remote visor.
 	RuleForward = RuleType(1)
 
-	// RuleIntermediaryForward represents a hop which is not from the route's source,
+	// RuleIntermediary represents a hop which is not from the route's source,
 	// nor to the route's destination.
-	RuleIntermediaryForward = RuleType(2)
+	RuleIntermediary = RuleType(2)
 )
 
 // Rule represents a routing rule.
@@ -111,7 +111,7 @@ func (r Rule) Body() []byte {
 // RouteDescriptor returns RouteDescriptor from the rule.
 func (r Rule) RouteDescriptor() RouteDescriptor {
 	switch t := r.Type(); t {
-	case RuleConsume, RuleForward:
+	case RuleReverse, RuleForward:
 		r.assertLen(RuleHeaderSize + routeDescriptorSize)
 
 		var desc RouteDescriptor
@@ -132,7 +132,7 @@ func (r Rule) NextRouteID() RouteID {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-	case RuleIntermediaryForward:
+	case RuleIntermediary:
 		r.assertLen(offset + 4)
 		return RouteID(binary.BigEndian.Uint32(r[offset : offset+4]))
 	default:
@@ -148,7 +148,7 @@ func (r Rule) setNextRouteID(id RouteID) {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-	case RuleIntermediaryForward:
+	case RuleIntermediary:
 		r.assertLen(offset + 4)
 		binary.BigEndian.PutUint32(r[offset:offset+4], uint32(id))
 	default:
@@ -164,7 +164,7 @@ func (r Rule) NextTransportID() uuid.UUID {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-	case RuleIntermediaryForward:
+	case RuleIntermediary:
 		r.assertLen(offset + 4)
 
 		return uuid.Must(uuid.FromBytes(r[offset : offset+uuidSize]))
@@ -181,7 +181,7 @@ func (r Rule) setNextTransportID(id uuid.UUID) {
 	case RuleForward:
 		offset += routeDescriptorSize
 		fallthrough
-	case RuleIntermediaryForward:
+	case RuleIntermediary:
 		r.assertLen(offset + 4)
 		copy(r[offset:offset+uuidSize], id[:])
 	default:
@@ -192,7 +192,7 @@ func (r Rule) setNextTransportID(id uuid.UUID) {
 // setSrcPK sets source public key of a rule.
 func (r Rule) setSrcPK(pk cipher.PubKey) {
 	switch t := r.Type(); t {
-	case RuleConsume, RuleForward:
+	case RuleReverse, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize)
 		copy(r[RuleHeaderSize:RuleHeaderSize+pkSize], pk[:])
 	default:
@@ -203,7 +203,7 @@ func (r Rule) setSrcPK(pk cipher.PubKey) {
 // setDstPK sets destination public key of a rule.
 func (r Rule) setDstPK(pk cipher.PubKey) {
 	switch t := r.Type(); t {
-	case RuleConsume, RuleForward:
+	case RuleReverse, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize*2)
 		copy(r[RuleHeaderSize+pkSize:RuleHeaderSize+pkSize*2], pk[:])
 	default:
@@ -214,7 +214,7 @@ func (r Rule) setDstPK(pk cipher.PubKey) {
 // setSrcPort sets source port of a rule.
 func (r Rule) setSrcPort(port Port) {
 	switch t := r.Type(); t {
-	case RuleConsume, RuleForward:
+	case RuleReverse, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize*2 + 2)
 		binary.BigEndian.PutUint16(r[RuleHeaderSize+pkSize*2:RuleHeaderSize+pkSize*2+2], uint16(port))
 	default:
@@ -225,7 +225,7 @@ func (r Rule) setSrcPort(port Port) {
 // setDstPort sets destination port of a rule.
 func (r Rule) setDstPort(port Port) {
 	switch t := r.Type(); t {
-	case RuleConsume, RuleForward:
+	case RuleReverse, RuleForward:
 		r.assertLen(RuleHeaderSize + pkSize*2 + 2*2)
 		binary.BigEndian.PutUint16(r[RuleHeaderSize+pkSize*2+2:RuleHeaderSize+pkSize*2+2*2], uint16(port))
 	default:
@@ -236,16 +236,16 @@ func (r Rule) setDstPort(port Port) {
 // String returns rule's string representation.
 func (r Rule) String() string {
 	switch t := r.Type(); t {
-	case RuleConsume:
+	case RuleReverse:
 		rd := r.RouteDescriptor()
-		return fmt.Sprintf("APP(keyRtID:%d, %s)",
+		return fmt.Sprintf("REV(keyRtID:%d, %s)",
 			r.KeyRouteID(), rd.String())
 	case RuleForward:
 		rd := r.RouteDescriptor()
 		return fmt.Sprintf("FWD(keyRtID:%d, nxtRtID:%d, nxtTpID:%s, %s)",
 			r.KeyRouteID(), r.NextRouteID(), r.NextTransportID(), rd.String())
-	case RuleIntermediaryForward:
-		return fmt.Sprintf("IFWD(keyRtID:%d, nxtRtID:%d, nxtTpID:%s)",
+	case RuleIntermediary:
+		return fmt.Sprintf("INTER(keyRtID:%d, nxtRtID:%d, nxtTpID:%s)",
 			r.KeyRouteID(), r.NextRouteID(), r.NextTransportID())
 	default:
 		panic(fmt.Sprintf("invalid rule: %v", t.String()))
@@ -291,7 +291,7 @@ type RuleSummary struct {
 // ToRule converts RoutingRuleSummary to RoutingRule.
 func (rs *RuleSummary) ToRule() (Rule, error) {
 	switch {
-	case rs.Type == RuleConsume:
+	case rs.Type == RuleReverse:
 		if rs.ConsumeFields == nil || rs.ForwardFields != nil || rs.IntermediaryForwardFields != nil {
 			return nil, errors.New("invalid routing rule summary")
 		}
@@ -309,7 +309,7 @@ func (rs *RuleSummary) ToRule() (Rule, error) {
 		d := f.RouteDescriptor
 
 		return ForwardRule(rs.KeepAlive, rs.KeyRouteID, f.NextRID, f.NextTID, d.SrcPK, d.DstPK, d.SrcPort, d.DstPort), nil
-	case rs.Type == RuleIntermediaryForward:
+	case rs.Type == RuleIntermediary:
 		if rs.ConsumeFields != nil || rs.ForwardFields != nil || rs.IntermediaryForwardFields == nil {
 			return nil, errors.New("invalid routing rule summary")
 		}
@@ -331,7 +331,7 @@ func (r Rule) Summary() *RuleSummary {
 	}
 
 	switch t := summary.Type; t {
-	case RuleConsume:
+	case RuleReverse:
 		rd := r.RouteDescriptor()
 
 		summary.ConsumeFields = &RuleConsumeFields{
@@ -355,7 +355,7 @@ func (r Rule) Summary() *RuleSummary {
 			NextRID: r.NextRouteID(),
 			NextTID: r.NextTransportID(),
 		}
-	case RuleIntermediaryForward:
+	case RuleIntermediary:
 		summary.IntermediaryForwardFields = &RuleIntermediaryForwardFields{
 			NextRID: r.NextRouteID(),
 			NextTID: r.NextTransportID(),
@@ -372,7 +372,7 @@ func ConsumeRule(keepAlive time.Duration, key RouteID, lPK, rPK cipher.PubKey, l
 	rule := Rule(make([]byte, RuleHeaderSize+routeDescriptorSize))
 
 	rule.setKeepAlive(keepAlive)
-	rule.setType(RuleConsume)
+	rule.setType(RuleReverse)
 	rule.SetKeyRouteID(key)
 
 	rule.setSrcPK(lPK)
@@ -412,7 +412,7 @@ func IntermediaryForwardRule(keepAlive time.Duration, key, nextRoute RouteID, ne
 	rule := Rule(make([]byte, RuleHeaderSize+4+pkSize))
 
 	rule.setKeepAlive(keepAlive)
-	rule.setType(RuleIntermediaryForward)
+	rule.setType(RuleIntermediary)
 	rule.SetKeyRouteID(key)
 	rule.setNextRouteID(nextRoute)
 	rule.setNextTransportID(nextTransport)

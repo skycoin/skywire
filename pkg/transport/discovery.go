@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ type DiscoveryClient interface {
 	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*EntryWithStatus, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
 	UpdateStatuses(ctx context.Context, statuses ...*Status) ([]*EntryWithStatus, error)
+	Health(ctx context.Context) (int, error)
 }
 
 type mockDiscoveryClient struct {
@@ -114,4 +116,8 @@ func (td *mockDiscoveryClient) UpdateStatuses(ctx context.Context, statuses ...*
 	}
 
 	return res, nil
+}
+
+func (td *mockDiscoveryClient) Health(_ context.Context) (int, error) {
+	return http.StatusOK, nil
 }

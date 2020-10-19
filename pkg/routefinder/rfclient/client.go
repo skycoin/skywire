@@ -16,9 +16,14 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+//go:generate mockery -name Client -case underscore -inpkg
+
 const defaultContextTimeout = 10 * time.Second
 
 var log = logging.MustGetLogger("routefinder")
+
+// ErrTransportNotFound is returned when transport is not found.
+var ErrTransportNotFound = errors.New("transport not found")
 
 // RouteOptions represents options for FindRoutesRequest
 type RouteOptions struct {
@@ -46,7 +51,8 @@ type HTTPError struct {
 
 // Client implements route finding operations.
 type Client interface {
-	FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][]routing.Path, error)
+	FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][][]routing.Hop, error)
+	Health(ctx context.Context) (int, error)
 }
 
 // APIClient implements Client interface
@@ -71,7 +77,7 @@ func NewHTTP(addr string, apiTimeout time.Duration) Client {
 
 // FindRoutes returns routes from source skywire visor to destiny, that has at least the given minHops and as much
 // the given maxHops as well as the reverse routes from destiny to source.
-func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][]routing.Path, error) {
+func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opts *RouteOptions) (map[routing.PathEdges][][]routing.Hop, error) {
 	requestBody := &FindRoutesRequest{
 		Edges: rts,
 		Opts:  opts,
@@ -85,9 +91,12 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+
 	ctx, cancel := context.WithTimeout(ctx, c.apiTimeout)
 	defer cancel()
+
 	req = req.WithContext(ctx)
 
 	res, err := c.client.Do(req)
@@ -98,8 +107,13 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 			}
 		}()
 	}
+
 	if err != nil {
 		return nil, err
+	}
+
+	if res.StatusCode == http.StatusNotFound {
+		return nil, ErrTransportNotFound
 	}
 
 	if res.StatusCode != http.StatusOK {
@@ -113,13 +127,36 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 		return nil, errors.New(apiErr.Error.Message)
 	}
 
-	var paths map[routing.PathEdges][]routing.Path
+	var paths map[routing.PathEdges][][]routing.Hop
 	err = json.NewDecoder(res.Body).Decode(&paths)
 	if err != nil {
 		return nil, err
 	}
 
 	return paths, nil
+}
+
+// Health checks route finder health.
+func (c *apiClient) Health(ctx context.Context) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr+"/health", nil)
+	if err != nil {
+		return 0, err
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+
+	if res != nil {
+		defer func() {
+			if err := res.Body.Close(); err != nil {
+				log.WithError(err).Warn("Failed to close HTTP response body")
+			}
+		}()
+	}
+
+	return res.StatusCode, nil
 }
 
 func sanitizedAddr(addr string) string {
