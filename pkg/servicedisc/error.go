@@ -15,8 +15,8 @@ type HTTPResponse struct {
 
 // HTTPError represents an HTTP error.
 type HTTPError struct {
-	HTTPStatus int    `json:"http_status"` // HTTP Status.
-	Msg        string `json:"error"`       // Message describing error intended for client.
+	HTTPStatus int    `json:"code"`    // HTTP Status.
+	Msg        string `json:"message"` // Message describing error intended for client.
 
 	// Actual error. This is hidden as it may be purposely obscured by the server.
 	Err error `json:"-"`
