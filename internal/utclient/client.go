@@ -17,6 +17,8 @@ import (
 	"github.com/skycoin/skywire/internal/httpauth"
 )
 
+//go:generate mockery -name APIClient -case underscore -inpkg
+
 var log = logging.MustGetLogger("utclient")
 
 // Error is the object returned to the client when there's an error.
@@ -24,9 +26,10 @@ type Error struct {
 	Error string `json:"error"`
 }
 
-// APIClient implements DMSG discovery API client.
+// APIClient implements uptime tracker API client.
 type APIClient interface {
 	UpdateVisorUptime(context.Context) error
+	Health(ctx context.Context) (int, error)
 }
 
 // httpClient implements Client for uptime tracker API.
@@ -45,7 +48,7 @@ type httpClient struct {
 func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error) {
 	client, err := httpauth.NewClient(context.Background(), addr, pk, sk)
 	if err != nil {
-		return nil, fmt.Errorf("httpauth: %s", err)
+		return nil, fmt.Errorf("uptime tracker httpauth: %w", err)
 	}
 
 	return &httpClient{client: client, pk: pk, sk: sk}, nil
@@ -53,7 +56,7 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, error)
 
 // Get performs a new GET request.
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", c.client.Addr()+path, new(bytes.Buffer))
+	req, err := http.NewRequest(http.MethodGet, c.client.Addr()+path, new(bytes.Buffer))
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +66,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 
 // UpdateVisorUptime updates visor uptime.
 func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
-	resp, err := c.Get(ctx, "/update")
+	resp, err := c.Get(ctx, "/v2/update")
 	if err != nil {
 		return err
 	}
@@ -75,10 +78,27 @@ func (c *httpClient) UpdateVisorUptime(ctx context.Context) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: %d, error: %v", resp.StatusCode, extractError(resp.Body))
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
 	return nil
+}
+
+// UpdateVisorUptime updates visor uptime.
+func (c *httpClient) Health(ctx context.Context) (int, error) {
+	resp, err := c.Get(ctx, "/health")
+	if err != nil {
+		return 0, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+
+	return resp.StatusCode, nil
+
 }
 
 // extractError returns the decoded error message from Body.

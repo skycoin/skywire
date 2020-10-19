@@ -3,6 +3,7 @@
 package updater
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -15,15 +16,16 @@ import (
 	"runtime"
 	"strings"
 	"sync/atomic"
-	"time"
 	"unicode"
 
+	"github.com/google/go-github/github"
 	"github.com/mholt/archiver/v3"
 	"github.com/schollz/progressbar/v2"
+	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/restart"
-	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/rename"
 )
 
@@ -32,15 +34,14 @@ const (
 	gitProjectName    = "skywire"
 	projectName       = "skywire"
 	releaseURL        = "https://github.com/" + owner + "/" + gitProjectName + "/releases"
-	urlText           = "/" + owner + "/" + gitProjectName + "/releases/tag/"
 	checksumsFilename = "checksums.txt"
 	checkSumLength    = 64
 	permRWX           = 0755
-	exitDelay         = 100 * time.Millisecond
 	oldSuffix         = ".old"
 	appsSubfolder     = "apps"
 	archiveFormat     = ".tar.gz"
 	visorBinary       = "skywire-visor"
+	hypervisorBinary  = "hypervisor"
 	cliBinary         = "skywire-cli"
 )
 
@@ -51,6 +52,14 @@ var (
 	ErrMalformedChecksumFile = errors.New("malformed checksum file")
 	// ErrAlreadyStarted is returned when updating is already started.
 	ErrAlreadyStarted = errors.New("updating already started")
+	// ErrTagNameEmpty is returned when tag name is empty.
+	ErrTagNameEmpty = errors.New("tag name is empty")
+	// ErrUnknownChannel is returned when channel is unknown.
+	ErrUnknownChannel = errors.New("channel is unknown")
+	// ErrUnknownTarget is returned when target is unknown.
+	ErrUnknownTarget = errors.New("target is unknown")
+	// ErrNoReleases is returned when no releases are found.
+	ErrNoReleases = errors.New("no releases found")
 )
 
 // Updater checks if a new version of skywire is available, downloads its binary files
@@ -60,6 +69,7 @@ type Updater struct {
 	restartCtx *restart.Context
 	appsPath   string
 	updating   int32
+	status     *status
 }
 
 // New returns a new Updater.
@@ -68,37 +78,77 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 		log:        log,
 		restartCtx: restartCtx,
 		appsPath:   appsPath,
+		status:     newStatus(),
 	}
 }
 
+// UpdateConfig defines a config for updater.
+// If a config field is not empty, a default value is overridden.
+// Version overrides Channel.
+// ArchiveURL/ChecksumURL override Version and channel.
+type UpdateConfig struct {
+	Target       Target
+	Channel      Channel `json:"channel"`
+	Version      string  `json:"version"`
+	ArchiveURL   string  `json:"archive_url"`
+	ChecksumsURL string  `json:"checksums_url"`
+}
+
+// Target defines what binary target to update.
+type Target int
+
+const (
+	// TargetVisor updates visor.
+	TargetVisor Target = iota
+	// TargetHypervisor updates hypervisor.
+	TargetHypervisor
+)
+
+// Channel defines channel for updating.
+type Channel string
+
+const (
+	// ChannelStable is the latest release.
+	ChannelStable Channel = "stable"
+	// ChannelTesting is the latest draft, pre-release or release.
+	ChannelTesting Channel = "testing"
+)
+
 // Update performs an update operation.
 // NOTE: Update may call os.Exit.
-func (u *Updater) Update() (updated bool, err error) {
+func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	if !atomic.CompareAndSwapInt32(&u.updating, 0, 1) {
 		return false, ErrAlreadyStarted
 	}
 	defer atomic.StoreInt32(&u.updating, 0)
 
-	latestVersion, err := u.UpdateAvailable()
+	u.status.Set("Started, checking update")
+
+	version, err := u.getVersion(updateConfig)
 	if err != nil {
-		return false, fmt.Errorf("failed to get last Skywire version: %w", err)
+		return false, err
 	}
 
-	if latestVersion == nil {
+	// No update is available.
+	if version == "" {
 		return false, nil
 	}
 
-	u.log.Infof("Update found, version: %q", latestVersion.String())
+	u.status.Set(fmt.Sprintf("Found version %q, downloading", version))
 
-	downloadedBinariesPath, err := u.download(latestVersion.String())
+	downloadedBinariesPath, err := u.download(updateConfig, version)
 	if err != nil {
 		return false, err
 	}
 
+	u.status.Set("Downloading completed, updating binaries")
+
 	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
-	if err := u.updateBinaries(downloadedBinariesPath, currentBasePath); err != nil {
+	if err := u.updateBinaries(updateConfig.Target, downloadedBinariesPath, currentBasePath); err != nil {
 		return false, err
 	}
+
+	u.status.Set("Binaries updated, restarting current process")
 
 	if err := u.restartCurrentProcess(); err != nil {
 		currentVisorPath := filepath.Join(currentBasePath, visorBinary)
@@ -109,25 +159,28 @@ func (u *Updater) Update() (updated bool, err error) {
 		return false, err
 	}
 
+	u.status.Set("Removing downloaded files")
+
 	u.removeFiles(downloadedBinariesPath)
 
-	// Let RPC call complete and then exit.
-	defer func() {
-		if err == nil {
-			go u.exitAfterDelay(exitDelay)
-		}
-	}()
+	u.status.Set("")
 
 	return true, nil
+}
+
+// Status returns status of the current update operation.
+// An empty string is returned if no operation is running.
+func (u *Updater) Status() string {
+	return u.status.Get()
 }
 
 // UpdateAvailable checks if an update is available.
 // If it is, the method returns the last available version.
 // Otherwise, it returns nil.
-func (u *Updater) UpdateAvailable() (*Version, error) {
+func (u *Updater) UpdateAvailable(channel Channel) (*Version, error) {
 	u.log.Infof("Looking for updates")
 
-	latestVersion, err := latestVersion()
+	latestVersion, err := latestVersion(channel)
 	if err != nil {
 		return nil, err
 	}
@@ -142,34 +195,65 @@ func (u *Updater) UpdateAvailable() (*Version, error) {
 	return latestVersion, nil
 }
 
-func (u *Updater) exitAfterDelay(delay time.Duration) {
-	time.Sleep(delay)
-	u.log.Infof("Exiting")
-	os.Exit(0)
+func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
+	version := updateConfig.Version
+	if version == "" {
+		latestVersion, err := u.UpdateAvailable(updateConfig.Channel)
+		if err != nil {
+			return "", fmt.Errorf("failed to get last Skywire version: %w", err)
+		}
+
+		// No update is available.
+		if latestVersion == nil {
+			return "", nil
+		}
+
+		version = latestVersion.String()
+	}
+
+	u.log.Infof("Update found, version: %q", version)
+
+	return version, nil
 }
 
-func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath string) error {
-	for _, app := range apps() {
-		if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", app, err)
+func (u *Updater) updateBinaries(target Target, downloadedBinariesPath string, currentBasePath string) error {
+	switch target {
+	case TargetHypervisor:
+		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, hypervisorBinary); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", hypervisorBinary, err)
 		}
-	}
 
-	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
-	}
+		return nil
+	case TargetVisor:
+		for _, app := range apps() {
+			if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
+				return fmt.Errorf("failed to update %s binary: %w", app, err)
+			}
+		}
 
-	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
-		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
-	}
+		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
+		}
 
-	return nil
+		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
+		}
+
+		return nil
+	default:
+		return ErrUnknownTarget
+	}
 }
 
 func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) error {
 	downloadedBinaryPath := filepath.Join(downloadedBinariesPath, binary)
 	if _, err := os.Stat(downloadedBinaryPath); os.IsNotExist(err) {
 		downloadedBinaryPath = filepath.Join(downloadedBinariesPath, appsSubfolder, binary)
+	}
+
+	if _, err := os.Stat(downloadedBinaryPath); os.IsNotExist(err) {
+		u.log.Warnf("%v is not found in update, skipping", binary)
+		return nil
 	}
 
 	currentBinaryPath := filepath.Join(basePath, binary)
@@ -181,14 +265,21 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 		}
 	}
 
-	if err := rename.Rename(currentBinaryPath, oldBinaryPath); err != nil {
-		return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
+	currentBinaryExists := false
+	if _, err := os.Stat(currentBinaryPath); err == nil {
+		currentBinaryExists = true
+
+		if err := rename.Rename(currentBinaryPath, oldBinaryPath); err != nil {
+			return fmt.Errorf("rename %s to %s: %w", currentBinaryPath, oldBinaryPath, err)
+		}
 	}
 
 	if err := rename.Rename(downloadedBinaryPath, currentBinaryPath); err != nil {
 		// Try to revert previous rename.
-		if err := rename.Rename(oldBinaryPath, currentBinaryPath); err != nil {
-			u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
+		if currentBinaryExists {
+			if err := rename.Rename(oldBinaryPath, currentBinaryPath); err != nil {
+				u.log.Errorf("Failed to rename file %q to %q: %v", oldBinaryPath, currentBinaryPath, err)
+			}
 		}
 
 		return fmt.Errorf("rename %s to %s: %w", downloadedBinaryPath, currentBinaryPath, err)
@@ -199,19 +290,27 @@ func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) 
 }
 
 // restore restores old binary file.
-func (u *Updater) restore(currentBinaryPath string, toBeRemoved string) {
-	u.removeFiles(currentBinaryPath)
+func (u *Updater) restore(currentPath, oldPath string) {
+	if _, err := os.Stat(oldPath); err != nil {
+		return
+	}
 
-	if err := rename.Rename(toBeRemoved, currentBinaryPath); err != nil {
-		u.log.Errorf("Failed to rename file %q to %q: %v", toBeRemoved, currentBinaryPath, err)
+	u.removeFiles(currentPath)
+
+	if err := rename.Rename(oldPath, currentPath); err != nil {
+		u.log.Errorf("Failed to rename file %q to %q: %v", oldPath, currentPath, err)
 	}
 }
 
-func (u *Updater) download(version string) (string, error) {
+func (u *Updater) download(updateConfig UpdateConfig, version string) (string, error) {
 	checksumsURL := fileURL(version, checksumsFilename)
+	if updateConfig.ChecksumsURL != "" {
+		checksumsURL = updateConfig.ChecksumsURL
+	}
+
 	u.log.Infof("Checksums file URL: %q", checksumsURL)
 
-	checksums, err := downloadChecksums(checksumsURL)
+	checksums, err := u.downloadChecksums(checksumsURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download checksums: %w", err)
 	}
@@ -229,9 +328,13 @@ func (u *Updater) download(version string) (string, error) {
 	u.log.Infof("Archive checksum should be %q", checksum)
 
 	archiveURL := fileURL(version, archiveFilename)
+	if updateConfig.ArchiveURL != "" {
+		archiveURL = updateConfig.ArchiveURL
+	}
+
 	u.log.Infof("Downloading archive from %q", archiveURL)
 
-	archivePath, err := downloadFile(archiveURL, archiveFilename)
+	archivePath, err := u.downloadFile(archiveURL, archiveFilename)
 	if err != nil {
 		return "", fmt.Errorf("failed to download archive file from URL %q: %w", archiveURL, err)
 	}
@@ -265,7 +368,7 @@ func (u *Updater) download(version string) (string, error) {
 func (u *Updater) restartCurrentProcess() error {
 	u.log.Infof("Starting new file instance")
 
-	if err := u.restartCtx.Start(); err != nil {
+	if err := u.restartCtx.Restart(); err != nil {
 		u.log.Errorf("Failed to start binary: %v", err)
 		return err
 	}
@@ -324,7 +427,7 @@ func getChecksum(checksums, filename string) (string, error) {
 	return checksums[first:last], nil
 }
 
-func downloadChecksums(url string) (checksums string, err error) {
+func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 	resp, err := http.Get(url) // nolint:gosec
 	if err != nil {
 		return "", err
@@ -340,7 +443,7 @@ func downloadChecksums(url string) (checksums string, err error) {
 		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
 	}
 
-	r := io.TeeReader(resp.Body, progressBar(resp.ContentLength))
+	r := io.TeeReader(resp.Body, u.progressBar(resp.ContentLength, checksumsFilename))
 
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -350,15 +453,18 @@ func downloadChecksums(url string) (checksums string, err error) {
 	return string(data), nil
 }
 
-func progressBar(contentLength int64) io.Writer {
-	newline := progressbar.OptionOnCompletion(func() {
-		fmt.Println()
-	})
+func (u *Updater) progressBar(contentLength int64, filename string) io.Writer {
+	width := progressbar.OptionSetWidth(0)
+	desc := progressbar.OptionSetDescription("Downloading " + filename)
+	speed := progressbar.OptionSetBytes64(contentLength)
+	theme := progressbar.OptionSetTheme(progressbar.Theme{})
+	writer := progressbar.OptionSetWriter(io.MultiWriter(os.Stdout, u.status))
+	completion := progressbar.OptionOnCompletion(func() { fmt.Printf("\n") })
 
-	return progressbar.NewOptions64(contentLength, progressbar.OptionSetBytes64(contentLength), newline)
+	return progressbar.NewOptions64(contentLength, speed, completion, width, theme, desc, writer)
 }
 
-func downloadFile(url, filename string) (path string, err error) {
+func (u *Updater) downloadFile(url, filename string) (path string, err error) {
 	resp, err := http.Get(url) // nolint:gosec
 	if err != nil {
 		return "", err
@@ -389,7 +495,7 @@ func downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
-	out := io.MultiWriter(f, progressBar(resp.ContentLength))
+	out := io.MultiWriter(f, u.progressBar(resp.ContentLength, filename))
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return "", err
@@ -424,55 +530,57 @@ func needUpdate(last *Version) bool {
 	return last.Cmp(current) > 0
 }
 
-func latestVersion() (*Version, error) {
-	html, err := latestVersionHTML()
-	if err != nil {
-		return nil, err
-	}
+func latestVersion(channel Channel) (*Version, error) {
+	ctx := context.Background()
+	client := github.NewClient(nil)
 
-	return VersionFromString(extractLatestVersion(string(html)))
+	switch channel {
+	case ChannelStable:
+		release, _, err := client.Repositories.GetLatestRelease(ctx, owner, gitProjectName)
+		if err != nil {
+			return nil, err
+		}
+
+		if release.TagName == nil {
+			return nil, ErrTagNameEmpty
+		}
+
+		return VersionFromString(*release.TagName)
+
+	case ChannelTesting:
+		releases, _, err := client.Repositories.ListReleases(ctx, owner, gitProjectName, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(releases) == 0 {
+			return nil, ErrNoReleases
+		}
+
+		// Latest release should be the first one.
+		release := releases[0]
+
+		if release.TagName == nil {
+			return nil, ErrTagNameEmpty
+		}
+
+		return VersionFromString(*release.TagName)
+
+	default:
+		return nil, ErrUnknownChannel
+	}
 }
 
 func currentVersion() (*Version, error) {
 	return VersionFromString(buildinfo.Version())
 }
 
-func latestVersionHTML() (data []byte, err error) {
-	resp, err := http.Get(releaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	return ioutil.ReadAll(resp.Body)
-}
-
-func extractLatestVersion(buffer string) string {
-	// First occurrence is the latest version.
-	idx := strings.Index(buffer, urlText)
-	if idx == -1 {
-		return ""
-	}
-
-	versionWithRest := buffer[idx+len(urlText):]
-
-	idx = strings.Index(versionWithRest, `"`)
-	if idx == -1 {
-		return versionWithRest
-	}
-
-	return versionWithRest[:idx]
-}
-
 func apps() []string {
 	return []string{
-		"skychat",
-		"skysocks",
-		"skysocks-client",
+		skyenv.SkychatName,
+		skyenv.SkysocksName,
+		skyenv.SkysocksClientName,
+		skyenv.VPNServerName,
+		skyenv.VPNClientName,
 	}
 }

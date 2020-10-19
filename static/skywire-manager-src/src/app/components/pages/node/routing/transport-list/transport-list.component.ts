@@ -1,7 +1,8 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Observable, Subscription } from 'rxjs';
-import { ActivatedRoute } from '@angular/router';
+import { Observable, Subscription, forkJoin } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
+import { TranslateService } from '@ngx-translate/core';
 
 import { Transport } from '../../../../../app.datatypes';
 import { CreateTransportComponent } from './create-transport/create-transport.component';
@@ -12,21 +13,14 @@ import { ConfirmationComponent } from '../../../../layout/confirmation/confirmat
 import GeneralUtils from '../../../../../utils/generalUtils';
 import { TransportDetailsComponent } from './transport-details/transport-details.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
-import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
-
-/**
- * List of the columns that can be used to sort the data.
- */
-enum SortableColumns {
-  Id = 'transports.id',
-  RemotePk = 'transports.remote',
-  Type = 'transports.type',
-  Uploaded = 'common.uploaded',
-  Downloaded = 'common.downloaded',
-}
+import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
+import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
+import { LabeledElementTextComponent } from 'src/app/components/layout/labeled-element-text/labeled-element-text.component';
+import { DataSorter, SortingColumn, SortingModes } from 'src/app/utils/lists/data-sorter';
+import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 
 /**
  * Shows the list of transports of a node. I can be used to show a short preview, with just some
@@ -38,20 +32,24 @@ enum SortableColumns {
   styleUrls: ['./transport-list.component.scss']
 })
 export class TransportListComponent implements OnDestroy {
-  private static sortByInternal = SortableColumns.Id;
-  private static sortReverseInternal = false;
+  // Small text for identifying the list, needed for the helper objects.
+  private readonly listId = 'tr';
 
   @Input() nodePK: string;
 
-  // Vars for keeping track of the column used for sorting the data.
-  sortableColumns = SortableColumns;
-  get sortBy(): SortableColumns { return TransportListComponent.sortByInternal; }
-  set sortBy(val: SortableColumns) { TransportListComponent.sortByInternal = val; }
-  get sortReverse(): boolean { return TransportListComponent.sortReverseInternal; }
-  set sortReverse(val: boolean) { TransportListComponent.sortReverseInternal = val; }
-  get sortingArrow(): string {
-    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
-  }
+  // Vars with the data of the columns used for sorting the data.
+  stateSortData = new SortingColumn(['is_up'], 'transports.state', SortingModes.Boolean);
+  idSortData = new SortingColumn(['id'], 'transports.id', SortingModes.Text, ['id_label']);
+  remotePkSortData = new SortingColumn(['remote_pk'], 'transports.remote-node', SortingModes.Text, ['remote_pk_label']);
+  typeSortData = new SortingColumn(['type'], 'transports.type', SortingModes.Text);
+  uploadedSortData = new SortingColumn(['log', 'sent'], 'common.uploaded', SortingModes.NumberReversed);
+  downloadedSortData = new SortingColumn(['log', 'recv'], 'common.downloaded', SortingModes.NumberReversed);
+
+  private dataSortedSubscription: Subscription;
+  private dataFiltererSubscription: Subscription;
+  // Objects in charge of sorting and filtering the data.
+  dataSorter: DataSorter;
+  dataFilterer: DataFilterer;
 
   dataSource: Transport[];
   /**
@@ -67,29 +65,116 @@ export class TransportListComponent implements OnDestroy {
   showShortList_: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
-    this.recalculateElementsToShow();
+    // Sort the data.
+    this.dataSorter.setData(this.filteredTransports);
   }
 
   allTransports: Transport[];
+  filteredTransports: Transport[];
   transportsToShow: Transport[];
+  hasOfflineTransports = false;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
   @Input() set transports(val: Transport[]) {
     this.allTransports = val;
-    this.recalculateElementsToShow();
+
+    // Add the label data to the array, to be able to use it for filtering and sorting.
+    this.allTransports.forEach(transport => {
+      transport['id_label'] =
+        LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.id);
+
+      transport['remote_pk_label'] =
+        LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.remote_pk);
+    });
+
+    this.dataFilterer.setData(this.allTransports);
   }
+
+  // Array with the properties of the columns that can be used for filtering the data.
+  filterProperties: FilterProperties[] = [
+    {
+      filterName: 'transports.filter-dialog.online',
+      keyNameInElementsArray: 'is_up',
+      type: FilterFieldTypes.Select,
+      printableLabelsForValues: [
+        {
+          value: '',
+          label: 'transports.filter-dialog.online-options.any',
+        },
+        {
+          value: 'true',
+          label: 'transports.filter-dialog.online-options.online',
+        },
+        {
+          value: 'false',
+          label: 'transports.filter-dialog.online-options.offline',
+        }
+      ],
+    },
+    {
+      filterName: 'transports.filter-dialog.id',
+      keyNameInElementsArray: 'id',
+      secondaryKeyNameInElementsArray: 'id_label',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 36,
+    },
+    {
+      filterName: 'transports.filter-dialog.remote-node',
+      keyNameInElementsArray: 'remote_pk',
+      secondaryKeyNameInElementsArray: 'remote_pk_label',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 66,
+    }
+  ];
+
+  labeledElementTypes = LabeledElementTypes;
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
+  private languageSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
     private transportService: TransportService,
     private route: ActivatedRoute,
+    private router: Router,
     private snackbarService: SnackbarService,
+    private translateService: TranslateService,
+    private storageService: StorageService,
   ) {
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.stateSortData,
+      this.idSortData,
+      this.remotePkSortData,
+      this.typeSortData,
+      this.uploadedSortData,
+      this.downloadedSortData,
+    ];
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 1, this.listId);
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allTransports has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredTransports = data;
+
+      // Check if there are offline transports.
+      this.hasOfflineTransports = false;
+      this.filteredTransports.forEach(transport => {
+        if (!transport.is_up) {
+          this.hasOfflineTransports = true;
+        }
+      });
+
+      this.dataSorter.setData(this.filteredTransports);
+    });
+
+    // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
@@ -102,11 +187,52 @@ export class TransportListComponent implements OnDestroy {
         this.recalculateElementsToShow();
       }
     });
+
+    // Refresh the data after languaje changes, to ensure the labels used for filtering
+    // are updated.
+    this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
+      this.transports = this.allTransports;
+    });
   }
 
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
+    this.languageSubscription.unsubscribe();
+
+    this.dataSortedSubscription.unsubscribe();
+    this.dataSorter.dispose();
+
+    this.dataFiltererSubscription.unsubscribe();
+    this.dataFilterer.dispose();
+  }
+
+  /**
+   * Returns the scss class to be used to show the current status of the transport.
+   * @param forDot If true, returns a class for creating a colored dot. If false,
+   * returns a class for a colored text.
+   */
+  transportStatusClass(transport: Transport, forDot: boolean): string {
+    switch (transport.is_up) {
+      case true:
+        return forDot ? 'dot-green' : 'green-text';
+      default:
+        return forDot ? 'dot-red' : 'red-text';
+    }
+  }
+
+  /**
+   * Returns the text to be used to indicate the current status of a transport.
+   * @param forTooltip If true, returns a text for a tooltip. If false, returns a
+   * text for the transport list shown on small screens.
+   */
+  transportStatusText(transport: Transport, forTooltip: boolean): string {
+    switch (transport.is_up) {
+      case true:
+        return 'transports.statuses.online' + (forTooltip ? '-tooltip' : '');
+      default:
+        return 'transports.statuses.offline' + (forTooltip ? '-tooltip' : '');
+    }
   }
 
   /**
@@ -169,6 +295,36 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
+   * Removes all offline transports.
+   */
+  removeOffline() {
+    let confirmationText = 'transports.remove-all-offline-confirmation';
+    if (this.dataFilterer.currentFiltersTexts && this.dataFilterer.currentFiltersTexts.length > 0) {
+      confirmationText = 'transports.remove-all-filtered-offline-confirmation';
+    }
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      // Prepare all offline transports to be removed.
+      const transportsToRemove: string[] = [];
+      this.filteredTransports.forEach(transport => {
+        if (!transport.is_up) {
+          transportsToRemove.push(transport.id);
+        }
+      });
+
+      if (transportsToRemove.length > 0) {
+        // Remove the transports.
+        confirmationDialog.componentInstance.showProcessing();
+        this.deleteRecursively(transportsToRemove, confirmationDialog);
+      } else {
+        confirmationDialog.close();
+      }
+    });
+  }
+
+  /**
    * Shows the transport creation modal window.
    */
   create() {
@@ -190,7 +346,7 @@ export class TransportListComponent implements OnDestroy {
       }
     ];
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.details(transport);
       } else if (selectedOption === 2) {
@@ -229,79 +385,24 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Changes the column and/or order used for sorting the data.
+   * Asks the node data to be refreshed.
    */
-  changeSortingOrder(column: SortableColumns) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
-    } else {
-      this.sortReverse = !this.sortReverse;
-    }
-
-    this.recalculateElementsToShow();
+  refreshData() {
+    NodeComponent.refreshCurrentDisplayedData();
   }
 
   /**
-   * Opens the modal window used on small screens for selecting how to sort the data.
-   */
-  openSortingOrderModal() {
-    // Get the list of sortable columns.
-    const enumKeys = Object.keys(SortableColumns);
-    const columnsMap = new Map<string, SortableColumns>();
-    const columns = enumKeys.map(key => {
-      const val = SortableColumns[key as any];
-      columnsMap.set(val, SortableColumns[key]);
-
-      return val;
-    });
-
-    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
-      if (result) {
-        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
-          this.sortBy = columnsMap.get(result.label);
-          this.sortReverse = result.sortReverse;
-
-          this.recalculateElementsToShow();
-        }
-      }
-    });
-  }
-
-  /**
-   * Sorts the data and recalculates which elements should be shown on the UI.
+   * Recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
     // Needed to prevent racing conditions.
     this.currentPage = this.currentPageInUrl;
 
     // Needed to prevent racing conditions.
-    if (this.allTransports) {
-      // Sort all the data.
-      this.allTransports.sort((a, b) => {
-        const defaultOrder = a.id.localeCompare(b.id);
-
-        let response: number;
-        if (this.sortBy === SortableColumns.Id) {
-          response = !this.sortReverse ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
-        } else if (this.sortBy === SortableColumns.RemotePk) {
-          response = !this.sortReverse ? a.remote_pk.localeCompare(b.remote_pk) : b.remote_pk.localeCompare(a.remote_pk);
-        } else if (this.sortBy === SortableColumns.Type) {
-          response = !this.sortReverse ? a.type.localeCompare(b.type) : b.type.localeCompare(a.type);
-        } else if (this.sortBy === SortableColumns.Uploaded) {
-          response = !this.sortReverse ? b.log.sent - a.log.sent : a.log.sent - b.log.sent;
-        } else if (this.sortBy === SortableColumns.Downloaded) {
-          response = !this.sortReverse ? b.log.recv - a.log.recv : a.log.recv - b.log.recv;
-        } else {
-          response = defaultOrder;
-        }
-
-        return response !== 0 ? response : defaultOrder;
-      });
-
+    if (this.filteredTransports) {
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.allTransports.length / maxElements);
+      this.numberOfPages = Math.ceil(this.filteredTransports.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
@@ -309,7 +410,7 @@ export class TransportListComponent implements OnDestroy {
       // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
-      this.transportsToShow = this.allTransports.slice(start, end);
+      this.transportsToShow = this.filteredTransports.slice(start, end);
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<string, boolean>();

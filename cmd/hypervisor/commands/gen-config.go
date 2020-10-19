@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"path"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -16,6 +19,7 @@ var (
 	replace       bool
 	configLocType = pathutil.WorkingDirLoc
 	testEnv       bool
+	retainKeys    bool
 )
 
 // nolint:gochecknoinits
@@ -30,6 +34,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, replaceUsage)
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", configLocTypeUsage)
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testing-environment", "t", false, testEnvUsage)
+	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
 }
 
 // nolint:gochecknoglobals
@@ -58,6 +63,27 @@ var genConfigCmd = &cobra.Command{
 		default:
 			log.Fatalln("invalid config type:", configLocType)
 		}
+		if replace && retainKeys && pathutil.Exists(output) {
+			if err := fillInOldKeys(output, &conf); err != nil {
+				log.Fatalln("Error retaining old keys", err)
+			}
+		}
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
+}
+
+func fillInOldKeys(confPath string, conf *hypervisor.Config) error {
+	oldConfBytes, err := ioutil.ReadFile(path.Clean(confPath))
+	if err != nil {
+		return fmt.Errorf("error reading old config file: %w", err)
+	}
+
+	var oldConf hypervisor.Config
+	if err := json.Unmarshal(oldConfBytes, &oldConf); err != nil {
+		return fmt.Errorf("invalid old configuration file: %w", err)
+	}
+
+	conf.PK = oldConf.PK
+	conf.SK = oldConf.SK
+	return nil
 }

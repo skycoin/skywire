@@ -1,0 +1,42 @@
+@import "variables";
+
+.mat-dialog-content {
+  font-size: $font-size-sm;
+}
+
+.app-log-message {
+  margin-top: 15px;
+  word-break: break-word;
+
+  .transparent {
+    color: $lighter-gray;
+  }
+}
+
+.app-log-message:first-of-type {
+  margin-top: 0px;
+}
+
+.app-log-message:last-of-type {
+  margin-bottom: $mat-dialog-padding;
+}
+
+.filter-link-container {
+  text-align: center;
+  margin: 15px 0;
+
+  .filter-link {
+    display: inline-block;
+    background: $white;
+    padding: 5px 10px;
+    border-radius: 1000px;
+    font-size: $font-size-sm;
+    text-align: center;
+    color: $blue-medium;
+    cursor: pointer;
+
+    .transparent {
+      color: scale-color($blue-medium, $alpha: -50%);
+    }
+  }
+}

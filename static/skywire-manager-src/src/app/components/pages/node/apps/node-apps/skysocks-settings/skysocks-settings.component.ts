@@ -11,9 +11,10 @@ import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
 import { AppsService } from 'src/app/services/apps.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { Application } from 'src/app/app.datatypes';
 
 /**
- * Modal window used for configuring the Skysocks app.
+ * Modal window used for configuring the Skysocks and Vpn-Server apps.
  */
 @Component({
   selector: 'app-skysocks-settings',
@@ -21,9 +22,12 @@ import GeneralUtils from 'src/app/utils/generalUtils';
   styleUrls: ['./skysocks-settings.component.scss']
 })
 export class SkysocksSettingsComponent implements OnInit, OnDestroy {
-  @ViewChild('button', { static: false }) button: ButtonComponent;
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
   form: FormGroup;
+
+  // True if configuring Vpn-Server, false if configuring Skysocks.
+  configuringVpn = false;
 
   private operationSubscription: Subscription;
   private formSubscription: Subscription;
@@ -31,9 +35,9 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
    */
-  public static openDialog(dialog: MatDialog, appName: string): MatDialogRef<SkysocksSettingsComponent, any> {
+  public static openDialog(dialog: MatDialog, app: Application): MatDialogRef<SkysocksSettingsComponent, any> {
     const config = new MatDialogConfig();
-    config.data = appName;
+    config.data = app;
     config.autoFocus = false;
     config.width = AppConfig.mediumModalWidth;
 
@@ -41,13 +45,17 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   }
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) private data: string,
+    @Inject(MAT_DIALOG_DATA) private data: Application,
     private appsService: AppsService,
     private formBuilder: FormBuilder,
     private dialogRef: MatDialogRef<SkysocksSettingsComponent>,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
-  ) { }
+  ) {
+    if (data.name.toLocaleLowerCase().indexOf('vpn') !== -1) {
+      this.configuringVpn = true;
+    }
+  }
 
   ngOnInit() {
     this.form = this.formBuilder.group({
@@ -80,7 +88,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     // Ask for confirmation.
 
     const confirmationMsg = this.form.get('password').value ?
-      'apps.skysocks-settings.change-passowrd-confirmation' : 'apps.skysocks-settings.remove-passowrd-confirmation';
+      'apps.vpn-socks-server-settings.change-passowrd-confirmation' : 'apps.vpn-socks-server-settings.remove-passowrd-confirmation';
 
     const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationMsg);
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
@@ -95,7 +103,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     this.operationSubscription = this.appsService.changeAppSettings(
       // The node pk is obtained from the currently openned node page.
       NodeComponent.getCurrentNodeKey(),
-      this.data,
+      this.data.name,
       { passcode: this.form.get('password').value },
     ).subscribe({
       next: this.onSuccess.bind(this),
@@ -105,7 +113,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
 
   private onSuccess() {
     NodeComponent.refreshCurrentDisplayedData();
-    this.snackbarService.showDone('apps.skysocks-settings.changes-made');
+    this.snackbarService.showDone('apps.vpn-socks-server-settings.changes-made');
     this.dialogRef.close();
   }
 
