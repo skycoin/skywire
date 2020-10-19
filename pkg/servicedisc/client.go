@@ -153,6 +153,8 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 			return nil, fmt.Errorf("read response body: %w", err)
 		}
 
+		c.log.Warnf("Service discovery returned bad status code: %v, raw response: %v", resp.StatusCode, string(respBody))
+
 		var hErr HTTPResponse
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
 			return nil, err
