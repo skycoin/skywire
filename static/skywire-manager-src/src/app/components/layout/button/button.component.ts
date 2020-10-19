@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, Output, ViewChild, OnDestroy } from '@a
 import { MatButton } from '@angular/material/button';
 
 enum ButtonStates {
-  Normal, Success, Error, Loading
+  Normal, Error, Loading
 }
 
 /**
@@ -14,23 +14,19 @@ enum ButtonStates {
   styleUrls: ['./button.component.scss']
 })
 export class ButtonComponent implements OnDestroy {
-  @ViewChild('button1', { static: false }) button1: MatButton;
-  @ViewChild('button2', { static: false }) button2: MatButton;
+  @ViewChild('button1') button1: MatButton;
+  @ViewChild('button2') button2: MatButton;
 
-  // Should be be 'mat-button' or 'mat-raised-button'.
-  @Input() type = 'mat-button';
+  // If the button will be in front of the dark background.
+  @Input() forDarkBackground = false;
   @Input() disabled = false;
-  @Input() icon: string;
   // Must be one of the colors defined on the default theme.
   @Input() color = '';
   @Input() loadingSize = 24;
   // Click event.
   @Output() action = new EventEmitter();
-  notification = false;
   state = ButtonStates.Normal;
   buttonStates = ButtonStates;
-
-  private readonly successDuration = 3000;
 
   ngOnDestroy() {
     this.action.complete();
@@ -46,7 +42,6 @@ export class ButtonComponent implements OnDestroy {
   reset() {
     this.state = ButtonStates.Normal;
     this.disabled = false;
-    this.notification = false;
   }
 
   focus() {
@@ -71,19 +66,8 @@ export class ButtonComponent implements OnDestroy {
     this.disabled = true;
   }
 
-  showSuccess() {
-    this.state = ButtonStates.Success;
-    this.disabled = false;
-
-    setTimeout(() => this.state = ButtonStates.Normal, this.successDuration);
-  }
-
   showError() {
     this.state = ButtonStates.Error;
     this.disabled = false;
-  }
-
-  notify(notification: boolean) {
-    this.notification = notification;
   }
 }

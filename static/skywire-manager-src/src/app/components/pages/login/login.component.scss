@@ -7,6 +7,14 @@ app-lang-button {
   top: 10px;
 }
 
+.main-container {
+  z-index: 1;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .logo {
   width: 170px;
 }

@@ -1,6 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, Subscription } from 'rxjs';
 
 import { Route } from 'src/app/app.datatypes';
@@ -12,17 +12,12 @@ import GeneralUtils from '../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectOptionComponent, SelectableOption } from 'src/app/components/layout/select-option/select-option.component';
-import { SelectColumnComponent, SelectedColumn } from 'src/app/components/layout/select-column/select-column.component';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
-
-/**
- * List of the columns that can be used to sort the data.
- */
-enum SortableColumns {
-  Key = 'routes.key',
-  Rule = 'routes.rule',
-}
+import { TranslateService } from '@ngx-translate/core';
+import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
+import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
+import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 
 /**
  * Shows the list of routes of a node. I can be used to show a short preview, with just some
@@ -34,20 +29,20 @@ enum SortableColumns {
   styleUrls: ['./route-list.component.scss']
 })
 export class RouteListComponent implements OnDestroy {
-  private static sortByInternal = SortableColumns.Key;
-  private static sortReverseInternal = false;
+  // Small text for identifying the list, needed for the helper objects.
+  private readonly listId = 'rl';
 
   @Input() nodePK: string;
 
-  // Vars for keeping track of the column used for sorting the data.
-  sortableColumns = SortableColumns;
-  get sortBy(): SortableColumns { return RouteListComponent.sortByInternal; }
-  set sortBy(val: SortableColumns) { RouteListComponent.sortByInternal = val; }
-  get sortReverse(): boolean { return RouteListComponent.sortReverseInternal; }
-  set sortReverse(val: boolean) { RouteListComponent.sortReverseInternal = val; }
-  get sortingArrow(): string {
-    return this.sortReverse ? 'keyboard_arrow_up' : 'keyboard_arrow_down';
-  }
+  // Vars with the data of the columns used for sorting the data.
+  keySortData = new SortingColumn(['key'], 'routes.key', SortingModes.Number);
+  ruleSortData = new SortingColumn(['rule'], 'routes.rule', SortingModes.Text);
+
+  private dataSortedSubscription: Subscription;
+  private dataFiltererSubscription: Subscription;
+  // Objects in charge of sorting and filtering the data.
+  dataSorter: DataSorter;
+  dataFilterer: DataFilterer;
 
   dataSource: Route[];
   /**
@@ -63,10 +58,12 @@ export class RouteListComponent implements OnDestroy {
   showShortList_: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
-    this.recalculateElementsToShow();
+    // Sort the data.
+    this.dataSorter.setData(this.filteredRoutes);
   }
 
   allRoutes: Route[];
+  filteredRoutes: Route[];
   routesToShow: Route[];
   numberOfPages = 1;
   currentPage = 1;
@@ -74,8 +71,25 @@ export class RouteListComponent implements OnDestroy {
   currentPageInUrl = 1;
   @Input() set routes(val: Route[]) {
     this.allRoutes = val;
-    this.recalculateElementsToShow();
+
+    this.dataFilterer.setData(this.allRoutes);
   }
+
+  // Array with the properties of the columns that can be used for filtering the data.
+  filterProperties: FilterProperties[] = [
+    {
+      filterName: 'routes.filter-dialog.key',
+      keyNameInElementsArray: 'key',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 8,
+    },
+    {
+      filterName: 'routes.filter-dialog.rule',
+      keyNameInElementsArray: 'rule',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 150,
+    }
+  ];
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -84,8 +98,28 @@ export class RouteListComponent implements OnDestroy {
     private routeService: RouteService,
     private dialog: MatDialog,
     private route: ActivatedRoute,
+    private router: Router,
     private snackbarService: SnackbarService,
+    private translateService: TranslateService,
   ) {
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.keySortData,
+      this.ruleSortData,
+    ];
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, this.listId);
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allRoutes has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredRoutes = data;
+      this.dataSorter.setData(this.filteredRoutes);
+    });
+
+    // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
@@ -103,6 +137,9 @@ export class RouteListComponent implements OnDestroy {
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.operationSubscriptionsGroup.forEach(sub => sub.unsubscribe());
+    this.dataSortedSubscription.unsubscribe();
+    this.dataFiltererSubscription.unsubscribe();
+    this.dataSorter.dispose();
   }
 
   /**
@@ -179,7 +216,7 @@ export class RouteListComponent implements OnDestroy {
       }
     ];
 
-    SelectOptionComponent.openDialog(this.dialog, options).afterClosed().subscribe((selectedOption: number) => {
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
         this.details(route.key.toString());
       } else if (selectedOption === 2) {
@@ -218,73 +255,17 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
-   * Changes the column and/or order used for sorting the data.
-   */
-  changeSortingOrder(column: SortableColumns) {
-    if (this.sortBy !== column) {
-      this.sortBy = column;
-      this.sortReverse = false;
-    } else {
-      this.sortReverse = !this.sortReverse;
-    }
-
-    this.recalculateElementsToShow();
-  }
-
-  /**
-   * Opens the modal window used on small screens for selecting how to sort the data.
-   */
-  openSortingOrderModal() {
-    // Get the list of sortable columns.
-    const enumKeys = Object.keys(SortableColumns);
-    const columnsMap = new Map<string, SortableColumns>();
-    const columns = enumKeys.map(key => {
-      const val = SortableColumns[key as any];
-      columnsMap.set(val, SortableColumns[key]);
-
-      return val;
-    });
-
-    SelectColumnComponent.openDialog(this.dialog, columns).afterClosed().subscribe((result: SelectedColumn) => {
-      if (result) {
-        if (columnsMap.has(result.label) && (result.sortReverse !== this.sortReverse || columnsMap.get(result.label) !== this.sortBy)) {
-          this.sortBy = columnsMap.get(result.label);
-          this.sortReverse = result.sortReverse;
-
-          this.recalculateElementsToShow();
-        }
-      }
-    });
-  }
-
-  /**
-   * Sorts the data and recalculates which elements should be shown on the UI.
+   * Recalculates which elements should be shown on the UI.
    */
   private recalculateElementsToShow() {
     // Needed to prevent racing conditions.
     this.currentPage = this.currentPageInUrl;
 
     // Needed to prevent racing conditions.
-    if (this.allRoutes) {
-      // Sort all the data.
-      this.allRoutes.sort((a, b) => {
-        const defaultOrder = a.key - b.key;
-
-        let response: number;
-        if (this.sortBy === SortableColumns.Key) {
-          response = !this.sortReverse ? a.key - b.key : b.key - a.key;
-        } else if (this.sortBy === SortableColumns.Rule) {
-          response = !this.sortReverse ? a.rule.localeCompare(b.rule) : b.rule.localeCompare(a.rule);
-        } else {
-          response = defaultOrder;
-        }
-
-        return response !== 0 ? response : defaultOrder;
-      });
-
+    if (this.filteredRoutes) {
       // Calculate the pagination values.
       const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.allRoutes.length / maxElements);
+      this.numberOfPages = Math.ceil(this.filteredRoutes.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
@@ -292,7 +273,7 @@ export class RouteListComponent implements OnDestroy {
       // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
-      this.routesToShow = this.allRoutes.slice(start, end);
+      this.routesToShow = this.filteredRoutes.slice(start, end);
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<number, boolean>();

@@ -10,7 +10,11 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 )
 
-const currentVersion = "0.0.1"
+const (
+	currentVersion             = "0.0.1"
+	entryLifetime              = 1 * time.Minute
+	allowedEntryTimestampError = 5 * time.Second
+)
 
 var (
 	// ErrKeyNotFound occurs in case when entry of public key is not found
@@ -40,7 +44,9 @@ var (
 	// ErrValidationWrongSequence occurs in case when sequence field of new entry is not sequence of old entry + 1
 	ErrValidationWrongSequence = NewEntryValidationError("sequence field of new entry is not sequence of old entry + 1")
 	// ErrValidationWrongTime occurs in case when previous entry timestamp is not set before current entry timestamp
-	ErrValidationWrongTime = NewEntryValidationError("previous entry timestamp is not set before current entry timestamp")
+	ErrValidationWrongTime = NewEntryValidationError("advertised entry timestamp is not greater than previous")
+	// ErrValidationOutdatedTime occurs when the timestamp provided is not recent enough.
+	ErrValidationOutdatedTime = NewEntryValidationError("advertised entry has outdated timestamp")
 	// ErrValidationServerAddress occurs in case when client want to advertise wrong Server address
 	ErrValidationServerAddress = NewEntryValidationError("advertising localhost listening address is not allowed in production mode")
 	// ErrValidationEmptyServerAddress occurs when a server entry is submitted with an empty address.
@@ -61,6 +67,7 @@ var (
 		ErrValidationNoClientOrServer.Error():   ErrValidationNoClientOrServer,
 		ErrValidationWrongSequence.Error():      ErrValidationWrongSequence,
 		ErrValidationWrongTime.Error():          ErrValidationWrongTime,
+		ErrValidationOutdatedTime.Error():       ErrValidationOutdatedTime,
 		ErrValidationServerAddress.Error():      ErrValidationServerAddress,
 		ErrValidationEmptyServerAddress.Error(): ErrValidationEmptyServerAddress,
 	}
@@ -258,22 +265,35 @@ func (e *Entry) Validate() error {
 		return ErrValidationEmptyServerAddress
 	}
 
+	now, ts := time.Now(), time.Unix(0, e.Timestamp)
+	earliestAcceptable := now.Add(-entryLifetime)
+	latestAcceptable := now.Add(allowedEntryTimestampError) // in case when time on nodes mismatches a bit
+
+	if ts.After(latestAcceptable) || ts.Before(earliestAcceptable) {
+		log.Warnf("Entry timestamp %v is not correct (now: %v)", ts, now)
+		// Skybian boards have issues with mismatching time because of https://github.com/skycoin/skybian/issues/47.
+		// This causes issues like https://github.com/SkycoinPro/skywire-services/issues/274.
+		// Therefore, the timestamp check needs to be temporarily disabled until the issue is resolved.
+		//
+		// return ErrValidationOutdatedTime
+	}
+
 	return nil
 }
 
 // ValidateIteration verifies Entry's Sequence against nextEntry.
 func (e *Entry) ValidateIteration(nextEntry *Entry) error {
 
-	// Sequence value must be {previous_sequence} + 1
-	if e.Sequence != nextEntry.Sequence-1 {
+	// Sequence value must be greater then current sequence.
+	if nextEntry.Sequence <= e.Sequence {
 		return ErrValidationWrongSequence
 	}
 
-	currentTimeStamp := time.Unix(e.Timestamp, 0)
+	currentTimeStamp := time.Unix(0, e.Timestamp)
+	nextTimeStamp := time.Unix(0, nextEntry.Timestamp)
 
-	nextTimeStamp := time.Unix(nextEntry.Timestamp, 0)
-
-	if !currentTimeStamp.Before(nextTimeStamp) {
+	// Timestamp must be greater than current timestamp.
+	if nextTimeStamp.Before(currentTimeStamp) {
 		return ErrValidationWrongTime
 	}
 
