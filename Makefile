@@ -194,7 +194,7 @@ install-deps-ui:  ## Install the UI dependencies
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
 
-build-ui:  ## Builds the UI
+build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
 	${OPTS} GOBIN=${PWD}/bin go get github.com/rakyll/statik
