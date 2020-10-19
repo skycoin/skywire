@@ -9,7 +9,6 @@
 @import "assets/scss/text";
 @import "assets/scss/icons";
 @import "assets/scss/menu";
-@import "assets/scss/tables";
 @import "assets/scss/responsive_tables";
 @import "assets/scss/forms";
 @import "assets/scss/backgrounds";
@@ -69,12 +68,28 @@ button:focus {
   background-color: rgba(0,0,0,0.05) !important;
 }
 
-.hard-grey-button-background:hover {
-  background-color: rgba(0,0,0,0.1) !important;
-}
-
 .flex-1
 {
   flex: 1;
 }
 
+.mat-snack-bar-container {
+  max-width: 90vw !important;
+}
+
+.transparent-50 {
+  opacity: 0.5;
+}
+
+.flag-container {
+  width: 16px;
+  height: 11px;
+  display: inline-block;
+  margin-right: 5px;
+  background-image: url('/assets/img/flags/unknown.png');
+
+  div {
+    width: 16px;
+    height: 11px;
+  }
+}

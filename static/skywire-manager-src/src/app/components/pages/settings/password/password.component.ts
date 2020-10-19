@@ -19,8 +19,8 @@ import { processServiceError } from '../../../../utils/errors';
   styleUrls: ['./password.component.scss']
 })
 export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild('button', { static: false }) button: ButtonComponent;
-  @ViewChild('firstInput', { static: false }) firstInput: ElementRef;
+  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('firstInput') firstInput: ElementRef;
 
   /**
    * If true, the control is used for setting the password for the first time. If false,

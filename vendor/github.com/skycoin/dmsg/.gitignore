@@ -17,3 +17,5 @@ bin/
 /dmsgpty-cli
 /dmsgpty-host
 /dmsgpty-ui
+
+/hello.txt

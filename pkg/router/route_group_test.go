@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/snettest"
-	"github.com/skycoin/skywire/pkg/snet/stcp"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -152,26 +152,34 @@ func testWrite(t *testing.T, rg1, rg2 *RouteGroup, m1, m2 *transport.Manager) {
 	require.NoError(t, err)
 	require.Equal(t, msg1, recv.Payload())
 
+	rg1.mu.Lock()
 	tpBackup := rg1.tps[0]
 	rg1.tps[0] = nil
+	rg1.mu.Unlock()
 	_, err = rg1.Write(msg1)
 	require.Equal(t, ErrBadTransport, err)
 
+	rg1.mu.Lock()
 	rg1.tps[0] = tpBackup
 
 	tpsBackup := rg1.tps
 	rg1.tps = nil
+	rg1.mu.Unlock()
 	_, err = rg1.Write(msg1)
 	require.Equal(t, ErrNoTransports, err)
 
+	rg1.mu.Lock()
 	rg1.tps = tpsBackup
 
 	fwdBackup := rg1.fwd
 	rg1.fwd = nil
+	rg1.mu.Unlock()
 	_, err = rg1.Write(msg1)
 	require.Equal(t, ErrNoRules, err)
 
+	rg1.mu.Lock()
 	rg1.fwd = fwdBackup
+	rg1.mu.Unlock()
 }
 
 func TestRouteGroup_ReadWrite(t *testing.T) {
@@ -569,6 +577,9 @@ func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 			if !safeSend(ctx, to, payload) {
 				return
 			}
+		case routing.HandshakePacket:
+			// error won't happen with the handshake packet
+			_ = to.handlePacket(packet) //nolint:errcheck
 		default:
 			panic(fmt.Sprintf("wrong packet type %v", packet.Type()))
 		}
@@ -617,12 +628,12 @@ func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager, te
 	pk2 := keys[1].PK
 
 	// create test env
-	nEnv := snettest.NewEnv(t, keys, []string{stcp.Type})
+	nEnv := snettest.NewEnv(t, keys, []string{tptypes.STCP})
 
 	tpDisc := transport.NewDiscoveryMock()
 	tpKeys := snettest.GenKeyPairs(2)
 
-	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, stcp.Type)
+	m1, m2, tp1, tp2, err := transport.CreateTransportPair(tpDisc, tpKeys, nEnv, tptypes.STCP)
 	require.NoError(t, err)
 	require.NotNil(t, tp1)
 	require.NotNil(t, tp2)
@@ -654,14 +665,18 @@ func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager, te
 	require.NoError(t, err)
 
 	r1FwdRtDesc := r1FwdRule.RouteDescriptor()
+	rg1.mu.Lock()
 	rg1.desc = r1FwdRtDesc.Invert()
 	rg1.tps = append(rg1.tps, tp1)
 	rg1.fwd = append(rg1.fwd, r1FwdRule)
+	rg1.mu.Unlock()
 
 	r2FwdRtDesc := r2FwdRule.RouteDescriptor()
+	rg2.mu.Lock()
 	rg2.desc = r2FwdRtDesc.Invert()
 	rg2.tps = append(rg2.tps, tp2)
 	rg2.fwd = append(rg2.fwd, r2FwdRule)
+	rg2.mu.Unlock()
 
 	teardown = func() {
 		nEnv.Teardown()

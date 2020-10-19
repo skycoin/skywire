@@ -3,6 +3,7 @@ package visor
 import (
 	"context"
 	"net/rpc"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
@@ -22,11 +23,14 @@ func isDone(ctx context.Context) bool {
 
 // ServeRPCClient repetitively dials to a remote dmsg address and serves a RPC server to that address.
 func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, n *snet.Network, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
+	const maxBackoff = time.Second * 5
+	retry := netutil.NewRetrier(log, netutil.DefaultInitBackoff, maxBackoff, netutil.DefaultTries, netutil.DefaultFactor)
+
 	for {
 		var conn *snet.Conn
-		err := netutil.NewDefaultRetrier(log).Do(ctx, func() (rErr error) {
+		err := retry.Do(ctx, func() (rErr error) {
 			log.Info("Dialing...")
-			conn, rErr = n.Dial(ctx, snet.DmsgType, rAddr.PK, rAddr.Port)
+			conn, rErr = n.Dial(ctx, dmsg.Type, rAddr.PK, rAddr.Port)
 			return rErr
 		})
 		if err != nil {
@@ -38,8 +42,8 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, n *snet.Network
 			return
 		}
 		if conn == nil {
-			log.WithField("conn == nil", conn == nil).
-				Fatal("An unexpected occurrence happened.")
+			log.WithField("conn == nil", conn == nil).Warn("An unexpected occurrence happened.")
+			continue
 		}
 
 		log.Info("Serving RPC client...")
