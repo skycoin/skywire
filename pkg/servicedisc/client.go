@@ -71,16 +71,16 @@ func (c *HTTPClient) addr(path string, sType string) string {
 }
 
 var (
-	authClientMu sync.RWMutex
+	authClientMu sync.Mutex
 	authClient   *httpauth.Client // Singleton: there should be only one instance per PK.
 )
 
 // Auth returns the internal httpauth.Client
 func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
-	authClientMu.RLock()
-	auth := authClient
-	authClientMu.RUnlock()
+	authClientMu.Lock()
+	defer authClientMu.Unlock()
 
+	auth := authClient
 	if auth != nil {
 		return auth, nil
 	}
@@ -90,9 +90,7 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 		return nil, err
 	}
 
-	authClientMu.Lock()
 	authClient = auth
-	authClientMu.Unlock()
 
 	return auth, nil
 }
