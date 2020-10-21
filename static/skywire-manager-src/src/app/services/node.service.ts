@@ -265,6 +265,7 @@ export class NodeService {
    */
   stopRequestingSpecificNode() {
     if (this.specificNodeRefreshSubscription) {
+      // The delay allows to recover the connection if the user returns to the node page.
       this.specificNodeStopSubscription = of(1).pipe(delay(4000)).subscribe(() => {
         this.specificNodeRefreshSubscription.unsubscribe();
         this.specificNodeRefreshSubscription = null;
@@ -294,6 +295,12 @@ export class NodeService {
       updatingSubject = this.updatingSpecificNodeSubject;
       dataSubject = this.specificNodeSubject;
       operation = this.getNode(this.specificNodeKey);
+
+      // Cancel any pending stop operation.
+      if (this.specificNodeStopSubscription) {
+        this.specificNodeStopSubscription.unsubscribe();
+        this.specificNodeStopSubscription = null;
+      }
 
       if (this.specificNodeRefreshSubscription) {
         this.specificNodeRefreshSubscription.unsubscribe();
