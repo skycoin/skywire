@@ -24,8 +24,6 @@ github.com/dsnet/compress/bzip2/internal/sais
 github.com/dsnet/compress/internal
 github.com/dsnet/compress/internal/errors
 github.com/dsnet/compress/internal/prefix
-# github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
-github.com/flynn/noise
 # github.com/go-chi/chi v4.1.2+incompatible
 ## explicit
 github.com/go-chi/chi
@@ -54,8 +52,6 @@ github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 ## explicit
 github.com/google/uuid
-# github.com/gorilla/handlers v1.4.2
-github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
 ## explicit
 github.com/gorilla/securecookie
@@ -151,7 +147,7 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20200807121624-24253f9d3721
+# github.com/skycoin/dmsg v0.0.0-20201018132543-a08c07be4640
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
@@ -168,6 +164,8 @@ github.com/skycoin/dmsg/netutil
 github.com/skycoin/dmsg/noise
 github.com/skycoin/dmsg/promutil
 github.com/skycoin/dmsg/servermetrics
+# github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
+github.com/skycoin/noise
 # github.com/skycoin/skycoin v0.26.0
 ## explicit
 github.com/skycoin/skycoin/src/cipher

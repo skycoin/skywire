@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
@@ -146,11 +148,17 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		var hErr HTTPError
-		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read response body: %w", err)
+		}
+
+		var hErr HTTPResponse
+		if err = json.Unmarshal(respBody, &hErr); err != nil {
 			return nil, err
 		}
-		return nil, &hErr
+
+		return nil, hErr.Error
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(&c.entry)
