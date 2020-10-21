@@ -137,7 +137,6 @@ dep: ## Sorts dependencies
 # Apps
 host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
@@ -156,7 +155,6 @@ release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without 
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
@@ -166,7 +164,6 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/skywire-cli ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
@@ -213,7 +210,6 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld ./cmd/apps/helloworld
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks ./cmd/apps/skysocks
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client  ./cmd/apps/skysocks-client
 
