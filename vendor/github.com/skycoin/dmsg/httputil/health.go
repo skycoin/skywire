@@ -8,9 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path"
-
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // HealthGrabberFunc grabs a component's health.
@@ -29,11 +26,7 @@ type HealthGrabberEntry struct {
 // One can request the endpoint to return the health of a single component only
 // via the following path:
 //	/<expectedBase>/<componentName>
-func MakeHealthHandler(log logrus.FieldLogger, expectedBase string, entries []HealthGrabberEntry) http.HandlerFunc {
-	if log == nil {
-		log = logging.MustGetLogger("health")
-	}
-
+func MakeHealthHandler(expectedBase string, entries []HealthGrabberEntry) http.HandlerFunc {
 	baseMap := make(map[string]HealthGrabberFunc, len(entries))
 	for _, e := range entries {
 		switch e.Name {
@@ -54,14 +47,14 @@ func MakeHealthHandler(log logrus.FieldLogger, expectedBase string, entries []He
 
 				if code < 200 || code > 299 {
 					if err := writeHTTPText(w, code, msg); err != nil {
-						log.WithError(err).Warn("Failed to write response body.")
+						GetLogger(req).WithError(err).Warn("Failed to write response body.")
 					}
 					return
 				}
 			}
 
 			if err := writeHTTPText(w, http.StatusOK, msg); err != nil {
-				log.WithError(err).Warn("Failed to write response body.")
+				GetLogger(req).WithError(err).Warn("Failed to write response body.")
 			}
 
 		default:
@@ -69,14 +62,14 @@ func MakeHealthHandler(log logrus.FieldLogger, expectedBase string, entries []He
 			if !ok {
 				msg := fmt.Sprintf("unexpected path base: %s", base)
 				if err := writeHTTPText(w, http.StatusBadRequest, msg); err != nil {
-					log.WithError(err).Warn("Failed to write response body.")
+					GetLogger(req).WithError(err).Warn("Failed to write response body.")
 				}
 				return
 			}
 
 			code, msg := grab(req.Context())
 			if err := writeHTTPText(w, code, formatMsg(base, code, msg)); err != nil {
-				log.WithError(err).Warn("Failed to write response body.")
+				GetLogger(req).WithError(err).Warn("Failed to write response body.")
 			}
 		}
 	}

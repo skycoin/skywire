@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/flynn/noise"
+	"github.com/skycoin/noise"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/dmsg/cipher"
