@@ -24,7 +24,7 @@ var RootCmd = &cobra.Command{
 	Short: "Contains sub-commands that interact with the local Skywire Visor",
 }
 
-func rpcClient() visor.RPCClient {
+func rpcClient() visor.API {
 	const rpcDialTimeout = time.Second * 5
 
 	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
