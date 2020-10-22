@@ -2,27 +2,52 @@ package router
 
 import (
 	"net"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-type noiseRouteGroup struct {
+// NoiseRouteGroup is a route group wrapped with noise.
+// Implements net.Conn.
+type NoiseRouteGroup struct {
 	rg *RouteGroup
 	net.Conn
 }
 
-func (nrg *noiseRouteGroup) LocalAddr() net.Addr {
+// LocalAddr returns local address.
+func (nrg *NoiseRouteGroup) LocalAddr() net.Addr {
 	return nrg.rg.LocalAddr()
 }
 
-func (nrg *noiseRouteGroup) RemoteAddr() net.Addr {
+// RemoteAddr returns remote address.
+func (nrg *NoiseRouteGroup) RemoteAddr() net.Addr {
 	return nrg.rg.RemoteAddr()
 }
 
-func (nrg *noiseRouteGroup) isClosed() bool {
+// IsAlive checks if connection is alive.
+func (nrg *NoiseRouteGroup) IsAlive() bool {
+	return nrg.rg.IsAlive()
+}
+
+// Latency returns latency till remote (ms).
+func (nrg *NoiseRouteGroup) Latency() time.Duration {
+	return nrg.rg.Latency()
+}
+
+// Throughput returns throughput till remote (bytes/s).
+func (nrg *NoiseRouteGroup) Throughput() uint32 {
+	return nrg.rg.Throughput()
+}
+
+// BandwidthSent returns amount of bandwidth sent (bytes).
+func (nrg *NoiseRouteGroup) BandwidthSent() uint64 {
+	return nrg.rg.BandwidthSent()
+}
+
+func (nrg *NoiseRouteGroup) isClosed() bool {
 	return nrg.rg.isClosed()
 }
 
-func (nrg *noiseRouteGroup) handlePacket(packet routing.Packet) error {
+func (nrg *NoiseRouteGroup) handlePacket(packet routing.Packet) error {
 	return nrg.rg.handlePacket(packet)
 }
