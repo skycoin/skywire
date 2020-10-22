@@ -4,16 +4,20 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"go.etcd.io/bbolt"
 )
 
-const timeLayout = time.RFC3339Nano
+const (
+	timeLayout = time.RFC3339Nano
+)
 
 // NewProcLogger returns a new proc logger.
 func NewProcLogger(conf ProcConfig) (*logging.MasterLogger, LogStore) {
@@ -24,7 +28,8 @@ func NewProcLogger(conf ProcConfig) (*logging.MasterLogger, LogStore) {
 
 	log := logging.NewMasterLogger()
 	log.Logger.Formatter.(*logging.TextFormatter).TimestampFormat = time.RFC3339Nano
-	log.SetOutput(io.MultiWriter(os.Stdout, db))
+	// log.SetOutput(io.MultiWriter(os.Stdout, db))
+	logrus.AddHook(db)
 
 	return log, db
 }
@@ -47,6 +52,10 @@ type LogStore interface {
 	// the timestamp should exist in the store (you can get it from previous logs),
 	// otherwise the DB will be sequentially iterated until finding entries older than given timestamp
 	LogsSince(t time.Time) ([]string, error)
+
+	Fire(entry *log.Entry) error
+	Levels() []log.Level
+	Flush() error
 }
 
 type bBoltLogStore struct {
@@ -178,6 +187,48 @@ func (l *bBoltLogStore) LogsSince(t time.Time) (logs []string, err error) {
 	})
 
 	return logs, err
+}
+
+func (l *bBoltLogStore) Fire(entry *log.Entry) error {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	db, err := bbolt.Open(l.dbpath, 0600, nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		cErr := db.Close()
+		err = cErr
+	}()
+
+	err = db.Update(func(tx *bbolt.Tx) error {
+		bucket, err := tx.CreateBucketIfNotExists([]byte("logs"))
+		if err != nil {
+			return err
+		}
+		if err != nil {
+			return err
+		}
+		str, err := entry.String()
+		if err != nil {
+			return err
+		}
+		now := time.Now().Format(timeLayout) + "." + fmt.Sprint(rand.Uint32())
+		err = bucket.Put([]byte(now), []byte(str))
+		return err
+	})
+	err = db.Close()
+	return err
+}
+
+func (l *bBoltLogStore) Levels() []log.Level {
+	return log.AllLevels
+}
+
+func (l *bBoltLogStore) Flush() error {
+	return nil
 }
 
 func iterateFromKey(c *bbolt.Cursor) []string {
