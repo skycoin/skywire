@@ -74,10 +74,10 @@ generate: ## Generate mocks and config README's
 
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
-	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
+	-rm -f ./skywire-visor ./skywire-cli ./setup-node
 
-install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor
+install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
+	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -98,7 +98,6 @@ vendorcheck:  ## Run vendorcheck
 	GO111MODULE=off vendorcheck ./internal/...
 	GO111MODULE=off vendorcheck ./pkg/...
 	GO111MODULE=off vendorcheck ./cmd/apps/...
-	GO111MODULE=off vendorcheck ./cmd/hypervisor/...
 	GO111MODULE=off vendorcheck ./cmd/setup-node/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-cli/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-visor/...
@@ -143,17 +142,15 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 # Bin
-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
+bin: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 
-release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without -race flag
+release: ## Build `skywire-visor`, `skywire-cli` and apps without -race flag
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
@@ -195,7 +192,7 @@ build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
 	${OPTS} GOBIN=${PWD}/bin go get github.com/rakyll/statik
-	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/hypervisor -f
+	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/skywire-visor -f
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
@@ -213,7 +210,7 @@ docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` wit
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks ./cmd/apps/skysocks
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client  ./cmd/apps/skysocks-client
 
-docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`. `go build` with  ${DOCKER_OPTS}
+docker-bin: ## Build `skywire-visor`, `skywire-cli`. `go build` with  ${DOCKER_OPTS}
 	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
 
 docker-volume: dep docker-apps docker-bin bin  ## Prepare docker volume for dockerized skywire-visor
