@@ -49,6 +49,7 @@ type Client struct {
 	// atomic requires 64-bit alignment for struct field access
 	nonce       uint64
 	mu          sync.Mutex
+	reqMu       sync.Mutex
 	client      *http.Client
 	reuseClient *http.Client
 	key         cipher.PubKey
@@ -107,6 +108,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 }
 
 func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, error) {
+	c.reqMu.Lock()
+	defer c.reqMu.Unlock()
+
 	body := make([]byte, 0)
 	if req.ContentLength != 0 {
 		auxBody, err := ioutil.ReadAll(req.Body)
