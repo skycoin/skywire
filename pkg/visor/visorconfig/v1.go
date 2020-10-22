@@ -7,6 +7,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
 //go:generate readmegen -n V1 -o ./README.md ./v1.go
@@ -35,6 +36,8 @@ type V1 struct {
 	RestartCheckDelay string   `json:"restart_check_delay,omitempty"`
 
 	PublicTrustedVisor bool `json:"public_trusted_visor,omitempty"`
+
+	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
 
 // V1Dmsgpty configures the dmsgpty-host.

@@ -25,14 +25,6 @@ import (
 
 var log = logging.MustGetLogger("snet")
 
-// Default ports.
-// TODO(evanlinjin): Define these properly. These are currently random.
-const (
-	SetupPort      = uint16(36)  // Listening port of a setup node.
-	AwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
-	TransportPort  = uint16(45)  // Listening port of a visor for incoming transports.
-)
-
 var (
 	// ErrUnknownNetwork occurs on attempt to dial an unknown network type.
 	ErrUnknownNetwork = errors.New("unknown network type")
@@ -396,7 +388,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 
 		conn, err := n.clients.DmsgC.Dial(ctx, addr)
 		if err != nil {
-			return nil, fmt.Errorf("dmsg client: %w", err)
+			return nil, fmt.Errorf("dmsg client dial %v: %w", addr, err)
 		}
 
 		return makeConn(conn, network), nil

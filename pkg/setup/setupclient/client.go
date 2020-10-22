@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
 )
 
@@ -46,7 +47,7 @@ func NewClient(ctx context.Context, log *logging.Logger, n *snet.Network, setupN
 
 func (c *Client) dial(ctx context.Context) (*snet.Conn, error) {
 	for _, sPK := range c.setupNodes {
-		conn, err := c.n.Dial(ctx, dmsg.Type, sPK, snet.SetupPort)
+		conn, err := c.n.Dial(ctx, dmsg.Type, sPK, skyenv.DmsgSetupPort)
 		if err != nil {
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
 			continue
