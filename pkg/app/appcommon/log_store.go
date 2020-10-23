@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math/rand"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"go.etcd.io/bbolt"
@@ -18,6 +17,8 @@ import (
 const (
 	timeLayout = time.RFC3339Nano
 )
+
+var re = regexp.MustCompile(`\x1b?\[[0-9;]*m`)
 
 // NewProcLogger returns a new proc logger.
 func NewProcLogger(conf ProcConfig) (*logging.MasterLogger, LogStore) {
@@ -29,7 +30,7 @@ func NewProcLogger(conf ProcConfig) (*logging.MasterLogger, LogStore) {
 	log := logging.NewMasterLogger()
 	log.Logger.Formatter.(*logging.TextFormatter).TimestampFormat = time.RFC3339Nano
 	// log.SetOutput(io.MultiWriter(os.Stdout, db))
-	logrus.AddHook(db)
+	log.Logger.AddHook(db)
 
 	return log, db
 }
@@ -193,34 +194,38 @@ func (l *bBoltLogStore) Fire(entry *log.Entry) error {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
+	p, err := entry.String()
+	var substitution = ""
+	str := re.ReplaceAllString(p, substitution)
+
+	// ensure there is at least timestamp long bytes
+	if len(p) < len(timeLayout)+2 {
+		return io.ErrShortBuffer
+	}
+
 	db, err := bbolt.Open(l.dbpath, 0600, nil)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		cErr := db.Close()
-		err = cErr
+		if closeErr := db.Close(); err == nil {
+			err = closeErr
+		}
 	}()
 
+	// time in RFC3339Nano is between the bytes 1 and 36. This will change if other time layout is in use
+	t := p[1 : 1+len(timeLayout)]
+
 	err = db.Update(func(tx *bbolt.Tx) error {
-		bucket, err := tx.CreateBucketIfNotExists([]byte("logs"))
-		if err != nil {
-			return err
-		}
-		if err != nil {
-			return err
-		}
-		str, err := entry.String()
-		if err != nil {
-			return err
-		}
-		now := time.Now().Format(timeLayout) + "." + fmt.Sprint(rand.Uint32())
-		err = bucket.Put([]byte(now), []byte(str))
-		return err
+		b := tx.Bucket(l.bucket)
+		return b.Put([]byte(t), []byte(str))
 	})
-	err = db.Close()
-	return err
+
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (l *bBoltLogStore) Levels() []log.Level {
