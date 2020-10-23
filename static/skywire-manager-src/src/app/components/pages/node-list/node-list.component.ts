@@ -21,7 +21,6 @@ import { LabeledElementTextComponent } from '../../layout/labeled-element-text/l
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { UpdateComponent, NodeData } from '../../layout/update/update.component';
-import { UpdateHypervisorComponent } from '../../layout/update-hypervisor/update-hypervisor.component';
 
 /**
  * Page for showing the node list.
@@ -215,11 +214,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     // Options for the menu shown in the top bar.
     this.options = [
       {
-        name: 'nodes.update-hypervisor',
-        actionName: 'updateHypervisor',
-        icon: 'get_app'
-      },
-      {
         name: 'nodes.update-all',
         actionName: 'updateAll',
         icon: 'get_app'
@@ -277,8 +271,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.logout();
     } else if (actionName === 'updateAll') {
       this.updateAll();
-    } else if (actionName === 'updateHypervisor') {
-      this.updateHypervisor();
     }
   }
 
@@ -438,11 +430,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
 
     UpdateComponent.openDialog(this.dialog, nodesData);
-  }
-
-  // Updates the hypervisor.
-  updateHypervisor() {
-    UpdateHypervisorComponent.openDialog(this.dialog);
   }
 
   /**
