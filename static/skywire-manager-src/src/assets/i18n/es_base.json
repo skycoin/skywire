@@ -128,7 +128,6 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
-    "update-hypervisor": "Update hypervisor",
     "update-all": "Update all visors",
     "state": "State",
     "state-tooltip": "Current state",
@@ -272,17 +271,6 @@
     "starting": "Preparing to update",
     "finished": "Status connection finished",
     "install": "Install updates"
-  },
-
-  "update-hypervisor": {
-    "title": "Update Hypervisor",
-    "label": "Hypervisor",
-    "processing": "Looking for updates...",
-    "no-update": "There is no update for the hypervisor. The currently installed version is:",
-    "update-available": "The following update was found:",
-    "update-instructions": "Click the 'Install update' button to continue.",
-    "updating": "The update operation has been started, you can open this window again for checking the progress:",
-    "install": "Install update"
   },
 
   "apps": {
