@@ -214,14 +214,14 @@ func (c *Client) Serve() error {
 		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, c.conn); err != nil {
-		fmt.Printf("Error resending traffic from TUN %s to VPN server. error = %v", tun.Name(), err))
+			fmt.Printf("Error resending traffic from TUN %s to VPN server. error = %v", tun.Name(), err)
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
 		if _, err := io.Copy(c.conn, tun); err != nil {
-		fmt.Printf("Error resending traffic from VPN server to TUN %s. error = %v", tun.Name(), err)
+			fmt.Printf("Error resending traffic from VPN server to TUN %s. error = %v", tun.Name(), err)
 		}
 	}()
 
@@ -255,7 +255,7 @@ func (c *Client) routeTrafficThroughTUN(tunGateway net.IP) error {
 }
 
 func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
-fmt.Println("Routing all traffic through default network gateway")
+	fmt.Println("Routing all traffic through default network gateway")
 
 	// remove main route
 	if err := DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
