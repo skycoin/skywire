@@ -28,8 +28,6 @@ func NewProcLogger(conf ProcConfig) (*logging.MasterLogger, LogStore) {
 	}
 
 	log := logging.NewMasterLogger()
-	log.Logger.Formatter.(*logging.TextFormatter).TimestampFormat = time.RFC3339Nano
-	// log.SetOutput(io.MultiWriter(os.Stdout, db))
 	log.Logger.AddHook(db)
 
 	return log, db
