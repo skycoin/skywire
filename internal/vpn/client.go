@@ -23,7 +23,6 @@ const (
 // Client is a VPN client.
 type Client struct {
 	cfg            ClientConfig
-	log            logrus.FieldLogger
 	conn           net.Conn
 	directIPSMu    sync.Mutex
 	directIPs      []net.IP
@@ -89,7 +88,6 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 
 	return &Client{
 		cfg:            cfg,
-		log:            l,
 		conn:           conn,
 		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
@@ -168,13 +166,13 @@ func (c *Client) Serve() error {
 	defer func() {
 		tunName := tun.Name()
 		if err := tun.Close(); err != nil {
-			fmt.Printf("Error closing TUN %s. error = %v", tunName, err)
+			fmt.Printf("Error closing TUN %s: %v", tunName, err)
 		}
 
 		c.releaseSysPrivileges(suid)
 	}()
 
-	fmt.Printf("Allocated TUN %s. error = %v", tun.Name(), err)
+	fmt.Printf("Allocated TUN %s: %v", tun.Name(), err)
 
 	if err := SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
 		return fmt.Errorf("error setting up TUN %s: %w", tun.Name(), err)
@@ -194,7 +192,7 @@ func (c *Client) Serve() error {
 	}
 
 	defer c.routeTrafficDirectly(tunGateway)
-	fmt.Printf("Routing all traffic through TUN %s. error = %v", tun.Name(), err)
+	fmt.Printf("Routing all traffic through TUN %s: %v", tun.Name(), err)
 	if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
@@ -204,7 +202,7 @@ func (c *Client) Serve() error {
 	// this will be executed first on return, so we setup privileges once again,
 	// so other deferred clear up calls may be done successfully
 	if _, err := setupClientSysPrivileges(); err != nil {
-		fmt.Printf("Failed to setup system privileges to clear up. error = %v", err)
+		fmt.Printf("Failed to setup system privileges to clear up: %v", err)
 	}
 
 	connToTunDoneCh := make(chan struct{})
@@ -214,14 +212,14 @@ func (c *Client) Serve() error {
 		defer close(connToTunDoneCh)
 
 		if _, err := io.Copy(tun, c.conn); err != nil {
-			fmt.Printf("Error resending traffic from TUN %s to VPN server. error = %v", tun.Name(), err)
+			fmt.Printf("Error resending traffic from TUN %s to VPN server: %v", tun.Name(), err)
 		}
 	}()
 	go func() {
 		defer close(tunToConnCh)
 
 		if _, err := io.Copy(c.conn, tun); err != nil {
-			fmt.Printf("Error resending traffic from VPN server to TUN %s. error = %v", tun.Name(), err)
+			fmt.Printf("Error resending traffic from VPN server to TUN %s: %v", tun.Name(), err)
 		}
 	}()
 
@@ -259,10 +257,10 @@ func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
 
 	// remove main route
 	if err := DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
-		fmt.Printf("Error routing traffic through default network gateway. error = %v", err)
+		fmt.Printf("Error routing traffic through default network gateway: %v", err)
 	}
 	if err := DeleteRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
-		fmt.Printf("Error routing traffic through default network gateway. error = %v", err)
+		fmt.Printf("Error routing traffic through default network gateway: %v", err)
 	}
 }
 
@@ -308,7 +306,7 @@ func (c *Client) removeDirectRoutes() {
 	for _, ip := range c.directIPs {
 		if err := c.removeDirectRoute(ip); err != nil {
 			// shouldn't return, just keep on trying the other IPs
-			fmt.Printf("Error removing direct route to %s. error = %v", ip.String(), err)
+			fmt.Printf("Error removing direct route to %s: %v", ip.String(), err)
 		}
 	}
 }
@@ -447,7 +445,7 @@ func (c *Client) shakeHands() (TUNIP, TUNGateway net.IP, err error) {
 
 func (c *Client) releaseSysPrivileges(suid int) {
 	if err := releaseClientSysPrivileges(suid); err != nil {
-		fmt.Printf("Failed to release system privileges. error = %v", err)
+		fmt.Printf("Failed to release system privileges: %v", err)
 	}
 }
 
