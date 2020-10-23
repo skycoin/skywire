@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -62,7 +61,11 @@ func main() {
 	http.HandleFunc("/sse", sseHandler)
 
 	fmt.Print("Serving HTTP on", *addr)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	err := http.ListenAndServe(*addr, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func listenLoop() {

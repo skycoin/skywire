@@ -57,11 +57,17 @@ func main() {
 		<-termCh
 
 		if err := srv.Close(); err != nil {
-			log.Fatalf("Failed to close server: %v", err)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
 		}
 	}()
 
 	if err := srv.Serve(l); err != nil {
-		log.Fatal(err)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
 }
