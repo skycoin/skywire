@@ -36,7 +36,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
   private readonly dmsgListId = 'dl';
 
   // Vars with the data of the columns used for sorting the data.
-  stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
+  hypervisorSortData = new SortingColumn(['isHypervisor'], 'nodes.hypervisor', SortingModes.Boolean);
+  stateSortData = new SortingColumn(['online'], 'nodes.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
   keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
   dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
@@ -145,6 +146,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
+      this.hypervisorSortData,
       this.stateSortData,
       this.labelSortData,
       this.keySortData,
