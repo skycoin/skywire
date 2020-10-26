@@ -86,7 +86,17 @@ func GenerateHomeConfig(testenv bool) Config {
 // GenerateLocalConfig generates a config with default values and uses db from shared folder.
 func GenerateLocalConfig(testenv bool) Config {
 	c := makeConfig(testenv)
-	c.DBPath = "/usr/local/skycoin/hypervisor/users.db"
+	c.DBPath = "/usr/local/skycoin/skywire/hypervisor/users.db"
+	return c
+}
+
+func GeneratePackageConfig(testenv bool) Config {
+	c := makeConfig(testenv)
+	c.DBPath = "/usr/lib/skycoin/skywire/hypervisor/users.db"
+	c.EnableAuth = true
+	c.EnableTLS = true
+	c.TLSCertFile = "/usr/lib/skycoin/skywire/ssl/cert.pem"
+	c.TLSKeyFile = "/usr/lib/skycoin/skywire/ssl/key.pem"
 	return c
 }
 
