@@ -56,14 +56,14 @@ func main() {
 
 	serverPK := cipher.PubKey{}
 	if err := serverPK.UnmarshalText([]byte(*serverPKStr)); err != nil {
-		fmt.Printf("Invalid VPN server pub key. error = %v", err)
+		fmt.Printf("Invalid VPN server pub key: %v", err)
 		os.Exit(1)
 	}
 
 	localPK := cipher.PubKey{}
 	if *localPKStr != "" {
 		if err := localPK.UnmarshalText([]byte(*localPKStr)); err != nil {
-			fmt.Printf("Invalid local PK. error = %v", err)
+			fmt.Printf("Invalid local PK: %v", err)
 			os.Exit(1)
 		}
 	}
@@ -71,7 +71,7 @@ func main() {
 	localSK := cipher.SecKey{}
 	if *localSKStr != "" {
 		if err := localSK.UnmarshalText([]byte(*localSKStr)); err != nil {
-			fmt.Printf("Invalid local SK. error = %v", err)
+			fmt.Printf("Invalid local SK: %v", err)
 			os.Exit(1)
 		}
 	}
@@ -85,7 +85,7 @@ func main() {
 	parseIP := func(addr string) net.IP {
 		ip, ok, err := vpn.ParseIP(addr)
 		if err != nil {
-			fmt.Printf("Failed to parse IP %s. error = %v", addr, err)
+			fmt.Printf("Failed to parse IP %s: %v", addr, err)
 			return nil
 		}
 		if !ok {
@@ -115,11 +115,12 @@ func main() {
 
 	appConn, err := dialServer(appClient, serverPK)
 	if err != nil {
-		log.WithError(err).Fatalln("Error connecting to VPN server")
+		fmt.Println("Error connecting to VPN server")
+		os.Exit(1)
 	}
 	defer func() {
 		if err := appConn.Close(); err != nil {
-			log.WithError(err).Errorln("Error closing connection to the VPN server")
+			fmt.Printf("Error closing connection to the VPN server: %v", err)
 		}
 	}()
 
@@ -130,7 +131,7 @@ func main() {
 	}
 	vpnClient, err := vpn.NewClient(vpnClientCfg, log, appConn)
 	if err != nil {
-		fmt.Printf("Error creating VPN client. error = %v", err)
+		fmt.Printf("Error creating VPN client: %v", err)
 	}
 
 	osSigs := make(chan os.Signal, 2)
@@ -149,7 +150,7 @@ func main() {
 		select {
 		case ip := <-directIPsCh:
 			if err := vpnClient.AddDirectRoute(ip); err != nil {
-				fmt.Printf("Failed to setup direct route to %s. error = %v", ip.String(), err)
+				fmt.Printf("Failed to setup direct route to %s: %v", ip.String(), err)
 			}
 		default:
 			directRoutesDone = true
@@ -159,7 +160,7 @@ func main() {
 	go func() {
 		for ip := range directIPsCh {
 			if err := vpnClient.AddDirectRoute(ip); err != nil {
-				fmt.Printf("Failed to setup direct route to %s. error = %v", ip.String(), err)
+				fmt.Printf("Failed to setup direct route to %s: %v", ip.String(), err)
 			}
 		}
 	}()
@@ -167,13 +168,13 @@ func main() {
 	go func() {
 		for ip := range nonDirectIPsCh {
 			if err := vpnClient.RemoveDirectRoute(ip); err != nil {
-				fmt.Printf("Failed to remove direct route to %s. error = %v", ip.String(), err)
+				fmt.Printf("Failed to remove direct route to %s: %v", ip.String(), err)
 			}
 		}
 	}()
 
 	if err := vpnClient.Serve(); err != nil {
-		fmt.Printf("Error serving VPN. error = %v", err)
+		fmt.Printf("Error serving VPN: %v", err)
 	}
 }
 
