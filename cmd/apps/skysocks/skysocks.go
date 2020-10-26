@@ -57,17 +57,13 @@ func main() {
 		<-termCh
 
 		if err := srv.Close(); err != nil {
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
+			fmt.Println(err)
+			os.Exit(1)
 		}
 	}()
 
 	if err := srv.Serve(l); err != nil {
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
