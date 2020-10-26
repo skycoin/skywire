@@ -17,6 +17,7 @@ import (
 var (
 	output        string
 	replace       bool
+	package1     bool
 	configLocType = pathutil.WorkingDirLoc
 	testEnv       bool
 	retainKeys    bool
@@ -24,14 +25,16 @@ var (
 
 // nolint:gochecknoinits
 func init() {
-	outputUsage := "path of output config file. Uses default of 'type' flag if unspecified."
-	replaceUsage := "whether to allow rewrite of a file that already exists."
+	outputUsage := "specify path to output config file. Uses default of 'type' flag if unspecified."
+	replaceUsage := "rewrite existing config."
+	packageUsage := "use package default configuration."
 	configLocTypeUsage := fmt.Sprintf("config generation mode. Valid values: %v", pathutil.AllConfigLocationTypes())
-	testEnvUsage := "whether to use production or test deployment service."
+	testEnvUsage := "use production (default) or test deployment service."
 
 	rootCmd.AddCommand(genConfigCmd)
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", outputUsage)
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, replaceUsage)
+	genConfigCmd.Flags().BoolVarP(&package1, "package", "p", false, packageUsage)
 	genConfigCmd.Flags().VarP(&configLocType, "type", "m", configLocTypeUsage)
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testing-environment", "t", false, testEnvUsage)
 	genConfigCmd.Flags().BoolVar(&retainKeys, "retain-keys", false, "retain current keys")
@@ -63,11 +66,14 @@ var genConfigCmd = &cobra.Command{
 		default:
 			log.Fatalln("invalid config type:", configLocType)
 		}
-		if replace && retainKeys && pathutil.Exists(output) {
+	 if replace && retainKeys && pathutil.Exists(output) {
 			if err := fillInOldKeys(output, &conf); err != nil {
 				log.Fatalln("Error retaining old keys", err)
 			}
 		}
+		if package1 {
+			conf = hypervisor.GeneratePackageConfig(testEnv)
+	 }
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
 }
