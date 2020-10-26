@@ -146,3 +146,92 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 
 	return conf, nil
 }
+
+// MakePackageConfig returns the default visor config for package-based installations from a given secret key (if specified).
+// The config's 'sk' field will be nil if not specified.
+// Generated config will be saved to 'confPath'.
+// This function always returns the latest config version.
+func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
+	cc, err := NewCommon(log, confPath, V1Name, sk)
+	if err != nil {
+		return nil, err
+	}
+	return packageConfigFromCommon(cc)
+}
+
+func packageConfigFromCommon(cc *Common) (*V1, error) {
+	// Enforce version and keys in 'cc'.
+	cc.Version = V1Name
+	if err := cc.ensureKeys(); err != nil {
+		return nil, err
+	}
+
+	// Actual config generation.
+	conf := MakeBaseConfig(cc)
+
+	conf.Dmsgpty = &V1Dmsgpty{
+		Port:     skyenv.DmsgPtyPort,
+		AuthFile: "/usr/lib/skycoin/skywire/dmsgpty/whitelist.json",
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	}
+
+	conf.STCP = &snet.STCPConfig{
+		LocalAddr: skyenv.DefaultSTCPAddr,
+		PKTable:   nil,
+	}
+
+	conf.Transport.LogStore = &V1LogStore{
+		Type:     "file",
+		Location: "/usr/lib/skycoin/skywire/transport_logs",
+	}
+
+	conf.UptimeTracker = &V1UptimeTracker{
+		Addr: skyenv.DefaultUptimeTrackerAddr,
+	}
+
+	conf.Launcher.Discovery = &V1AppDisc{
+		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
+	}
+
+	conf.Launcher.Apps = []launcher.AppConfig{
+		{
+			Name:      skyenv.SkychatName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkychatPort),
+			Args:      []string{"-addr", skyenv.SkychatAddr},
+		},
+		{
+			Name:      skyenv.SkysocksName,
+			AutoStart: true,
+			Port:      routing.Port(skyenv.SkysocksPort),
+		},
+		{
+			Name:      skyenv.SkysocksClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.SkysocksClientPort),
+		},
+		{
+			Name:      skyenv.VPNServerName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNServerPort),
+		},
+		{
+			Name:      skyenv.VPNClientName,
+			AutoStart: false,
+			Port:      routing.Port(skyenv.VPNClientPort),
+		},
+	}
+
+	conf.Launcher = &V1Launcher{
+		Discovery:  nil,
+		Apps:       nil,
+		ServerAddr: skyenv.DefaultAppSrvAddr,
+		BinPath:    "/usr/bin/apps",
+		LocalPath:  "/usr/lib/skycoin/skywire/local",
+	}
+		conf.Hypervisors = make([]cipher.PubKey, 0)
+
+	return conf, nil
+}
