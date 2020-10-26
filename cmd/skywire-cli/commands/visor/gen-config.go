@@ -23,6 +23,7 @@ var (
 	output     string
 	replace    bool
 	testEnv    bool
+	local      bool
 	hypervisor bool
 )
 
@@ -31,6 +32,7 @@ func init() {
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists (this retains the keys).")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
+	genConfigCmd.Flags().BoolVarP(&local, "local", "l", false, "whether to use local directory for apps and logs.")
 	genConfigCmd.Flags().BoolVar(&hypervisor, "hypervisor", false, "whether to generate hypervisor config.")
 }
 
@@ -68,6 +70,11 @@ var genConfigCmd = &cobra.Command{
 		conf, err := genConf(mLog, output, &sk, hypervisor)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
+		}
+
+		if local {
+			conf.Launcher.BinPath = "./apps"
+			conf.Launcher.LocalPath = "./local"
 		}
 
 		// Save config to file.
