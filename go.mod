@@ -35,7 +35,7 @@ require (
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
-	golang.org/x/sys v0.0.0-20200929083018-4d22bbb62b3c // indirect
+	golang.org/x/sys v0.0.0-20200929083018-4d22bbb62b3c
 	golang.zx2c4.com/wireguard v0.0.20200320
 	nhooyr.io/websocket v1.8.2
 )
