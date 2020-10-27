@@ -136,7 +136,7 @@
     "key": "Llave",
     "dmsg-server": "Servidor DMSG",
     "ping": "Ping",
-    "hypervisor-info": "El visor contiene el Hypervisor utilizado actualmente.",
+    "hypervisor-info": "Este visor es el Hypervisor actual.",
     "copy-key": "Copiar llave",
     "copy-dmsg": "Copiar llave DMSG",
     "copy-data": "Copiar datos",
