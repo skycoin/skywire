@@ -184,8 +184,6 @@ func (tm *Manager) serve(ctx context.Context) {
 }
 
 func (tm *Manager) initTransports(ctx context.Context) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
 
 	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
 	if err != nil {
@@ -199,11 +197,13 @@ func (tm *Manager) initTransports(ctx context.Context) {
 			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
 			tpID   = entry.Entry.ID
 		)
+		tm.mx.Lock()
 		if _, err := tm.saveTransport(remote, tpType); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		} else {
 			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
 		}
+		tm.mx.Unlock()
 	}
 }
 
@@ -263,15 +263,15 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
 
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
 
 	for {
+		tm.mx.Lock()
 		mTp, err := tm.saveTransport(remote, tpType)
+		tm.mx.Unlock()
 		if err != nil {
 			return nil, fmt.Errorf("save transport: %w", err)
 		}
@@ -286,7 +286,9 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
+				tm.mx.Lock()
 				delete(tm.tps, mTp.Entry.ID)
+				tm.mx.Unlock()
 				continue
 			}
 
@@ -297,7 +299,11 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
+				tm.mx.Lock()
 				delete(tm.tps, mTp.Entry.ID)
+
+				tm.mx.Unlock()
+
 				return nil, err
 			}
 
@@ -356,10 +362,9 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 		mTp.Serve(tm.readCh)
 		tm.mx.Lock()
 		delete(tm.tps, mTp.Entry.ID)
-		tm.mx.Unlock()
+		defer tm.mx.Unlock()
 	}()
 	tm.tps[tpID] = mTp
-
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
 	return mTp, nil
 }
