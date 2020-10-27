@@ -282,7 +282,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				tm.DeleteTransport(mTp.Entry.ID)
+				tm.deleteTransport(mTp.Entry.ID)
 				continue
 			}
 
@@ -293,7 +293,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				tm.DeleteTransport(mTp.Entry.ID)
+				tm.deleteTransport(mTp.Entry.ID)
 				return nil, err
 			}
 
@@ -352,9 +352,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 	go func() {
 		mTp.Serve(tm.readCh)
-		tm.mx.Lock()
-		delete(tm.tps, mTp.Entry.ID)
-		tm.mx.Unlock()
+		tm.deleteTransport(mTp.Entry.ID)
 	}()
 	tm.tps[tpID] = mTp
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
@@ -402,6 +400,12 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		tp.close()
 		delete(tm.tps, id)
 	}
+}
+
+func (tm *Manager) deleteTransport(id uuid.UUID) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	delete(tm.tps, id)
 }
 
 // ReadPacket reads data packets from routes.
