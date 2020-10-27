@@ -197,13 +197,11 @@ func (tm *Manager) initTransports(ctx context.Context) {
 			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
 			tpID   = entry.Entry.ID
 		)
-		tm.mx.Lock()
 		if _, err := tm.saveTransport(remote, tpType); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		} else {
 			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
 		}
-		tm.mx.Unlock()
 	}
 }
 
@@ -269,9 +267,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 	}
 
 	for {
-		tm.mx.Lock()
 		mTp, err := tm.saveTransport(remote, tpType)
-		tm.mx.Unlock()
 		if err != nil {
 			return nil, fmt.Errorf("save transport: %w", err)
 		}
@@ -286,9 +282,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				tm.mx.Lock()
-				delete(tm.tps, mTp.Entry.ID)
-				tm.mx.Unlock()
+				tm.DeleteTransport(mTp.Entry.ID)
 				continue
 			}
 
@@ -299,11 +293,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				tm.mx.Lock()
-				delete(tm.tps, mTp.Entry.ID)
-
-				tm.mx.Unlock()
-
+				tm.DeleteTransport(mTp.Entry.ID)
 				return nil, err
 			}
 
@@ -321,6 +311,8 @@ func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
 	if !snet.IsKnownNetwork(netName) {
 		return nil, snet.ErrUnknownNetwork
 	}
@@ -362,7 +354,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 		mTp.Serve(tm.readCh)
 		tm.mx.Lock()
 		delete(tm.tps, mTp.Entry.ID)
-		defer tm.mx.Unlock()
+		tm.mx.Unlock()
 	}()
 	tm.tps[tpID] = mTp
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
