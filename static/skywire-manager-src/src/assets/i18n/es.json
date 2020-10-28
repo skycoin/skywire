@@ -128,14 +128,15 @@
   "nodes": {
     "title": "Lista de visores",
     "dmsg-title": "DMSG",
-    "update-hypervisor": "Actualizar hypervisor",
     "update-all": "Actualizar todos los visores",
+    "hypervisor": "Hypervisor",
     "state": "Estado",
     "state-tooltip": "Estado actual",
     "label": "Etiqueta",
     "key": "Llave",
     "dmsg-server": "Servidor DMSG",
     "ping": "Ping",
+    "hypervisor-info": "Este visor es el Hypervisor actual.",
     "copy-key": "Copiar llave",
     "copy-dmsg": "Copiar llave DMSG",
     "copy-data": "Copiar datos",
@@ -272,17 +273,6 @@
     "starting": "Preparando para actualizar",
     "finished": "Conexión de estado terminada",
     "install": "Instalar actualizaciones"
-  },
-
-  "update-hypervisor": {
-    "title": "Actualizar Hypervisor",
-    "label": "Hypervisor",
-    "processing": "Buscando actualizaciones...",
-    "no-update": "No hay ninguna actualización para el hypervisor. La versión instalada actualmente es:",
-    "update-available": "Las siguiente actualización fue encontrada:",
-    "update-instructions": "Haga clic en el botón 'Instalar actualización' para continuar.",
-    "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
-    "install": "Instalar actualización"
   },
 
   "apps": {
