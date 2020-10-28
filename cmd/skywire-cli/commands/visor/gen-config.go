@@ -19,11 +19,11 @@ func init() {
 }
 
 var (
-	sk      cipher.SecKey
-	output  string
-	replace bool
+	sk       cipher.SecKey
+	output   string
+	replace  bool
 	package1 bool
-	testEnv bool
+	testEnv  bool
 )
 
 func init() {

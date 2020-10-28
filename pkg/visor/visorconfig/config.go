@@ -231,7 +231,7 @@ func packageConfigFromCommon(cc *Common) (*V1, error) {
 		BinPath:    "/usr/bin/apps",
 		LocalPath:  "/usr/lib/skycoin/skywire/local",
 	}
-		conf.Hypervisors = make([]cipher.PubKey, 0)
+	conf.Hypervisors = make([]cipher.PubKey, 0)
 
 	return conf, nil
 }

@@ -90,6 +90,7 @@ func GenerateLocalConfig(testenv bool) Config {
 	return c
 }
 
+// GeneratePackageConfig generates a config with default and specified values and uses db from specified path folder.
 func GeneratePackageConfig(testenv bool) Config {
 	c := makeConfig(testenv)
 	c.DBPath = "/usr/lib/skycoin/skywire/hypervisor/users.db"

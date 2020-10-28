@@ -17,7 +17,7 @@ import (
 var (
 	output        string
 	replace       bool
-	package1     bool
+	package1      bool
 	configLocType = pathutil.WorkingDirLoc
 	testEnv       bool
 	retainKeys    bool
@@ -66,14 +66,14 @@ var genConfigCmd = &cobra.Command{
 		default:
 			log.Fatalln("invalid config type:", configLocType)
 		}
-	 if replace && retainKeys && pathutil.Exists(output) {
+		if replace && retainKeys && pathutil.Exists(output) {
 			if err := fillInOldKeys(output, &conf); err != nil {
 				log.Fatalln("Error retaining old keys", err)
 			}
 		}
 		if package1 {
 			conf = hypervisor.GeneratePackageConfig(testEnv)
-	 }
+		}
 		pathutil.WriteJSONConfig(conf, output, replace)
 	},
 }
