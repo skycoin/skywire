@@ -21,7 +21,6 @@ import { LabeledElementTextComponent } from '../../layout/labeled-element-text/l
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { UpdateComponent, NodeData } from '../../layout/update/update.component';
-import { UpdateHypervisorComponent } from '../../layout/update-hypervisor/update-hypervisor.component';
 
 /**
  * Page for showing the node list.
@@ -37,7 +36,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
   private readonly dmsgListId = 'dl';
 
   // Vars with the data of the columns used for sorting the data.
-  stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
+  hypervisorSortData = new SortingColumn(['isHypervisor'], 'nodes.hypervisor', SortingModes.Boolean);
+  stateSortData = new SortingColumn(['online'], 'nodes.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
   keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
   dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
@@ -146,6 +146,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
+      this.hypervisorSortData,
       this.stateSortData,
       this.labelSortData,
       this.keySortData,
@@ -215,11 +216,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     // Options for the menu shown in the top bar.
     this.options = [
       {
-        name: 'nodes.update-hypervisor',
-        actionName: 'updateHypervisor',
-        icon: 'get_app'
-      },
-      {
         name: 'nodes.update-all',
         actionName: 'updateAll',
         icon: 'get_app'
@@ -277,8 +273,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.logout();
     } else if (actionName === 'updateAll') {
       this.updateAll();
-    } else if (actionName === 'updateHypervisor') {
-      this.updateHypervisor();
     }
   }
 
@@ -438,11 +432,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
 
     UpdateComponent.openDialog(this.dialog, nodesData);
-  }
-
-  // Updates the hypervisor.
-  updateHypervisor() {
-    UpdateHypervisorComponent.openDialog(this.dialog);
   }
 
   /**
