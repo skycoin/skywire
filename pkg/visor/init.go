@@ -418,9 +418,10 @@ func initCLI(v *Visor) bool {
 
 func initHypervisors(v *Visor) bool {
 	report := v.makeReporter("hypervisors")
-
-	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
-	for _, hv := range v.conf.Hypervisors {
+	hypervisors := v.conf.Hypervisors
+	hypervisors = append(hypervisors, v.conf.PK)
+	hvErrs := make(map[cipher.PubKey]chan error, len(hypervisors))
+	for _, hv := range hypervisors {
 		hvErrs[hv] = make(chan error, 1)
 	}
 
