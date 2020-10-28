@@ -104,6 +104,13 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		return err
 	}
 
+	if hv.visor != nil {
+		// Track hypervisor node.
+		if _, err := hv.trackers.MustGet(ctx, hv.visor.conf.PK); err != nil {
+			log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
+		}
+	}
+
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
@@ -290,7 +297,12 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	hv.mu.RLock()
 	defer hv.mu.RUnlock()
 
-	pks := make([]cipher.PubKey, 0, len(hv.visors))
+	pks := make([]cipher.PubKey, 0, len(hv.visors)+1)
+	if hv.visor != nil {
+		// Add hypervisor node.
+		pks = append(pks, hv.visor.conf.PK)
+	}
+
 	for pk := range hv.visors {
 		pks = append(pks, pk)
 	}
