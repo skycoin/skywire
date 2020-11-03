@@ -17,7 +17,8 @@ type IPGenerator struct {
 func NewIPGenerator() *IPGenerator {
 	return &IPGenerator{
 		ranges: []*subnetIPIncrementer{
-			newSubnetIPIncrementer([4]uint8{192, 168, 0, 0}, [4]uint8{192, 168, 255, 255}, 8),
+			// exclude some most commonly used addresses in local networks
+			newSubnetIPIncrementer([4]uint8{192, 168, 2, 0}, [4]uint8{192, 168, 255, 255}, 8),
 			newSubnetIPIncrementer([4]uint8{172, 16, 0, 0}, [4]uint8{172, 31, 255, 255}, 8),
 			newSubnetIPIncrementer([4]uint8{10, 0, 0, 0}, [4]uint8{10, 255, 255, 255}, 8),
 		},
