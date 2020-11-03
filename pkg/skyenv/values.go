@@ -8,8 +8,8 @@ import (
 
 // Constants for skywire root directories.
 const (
-	DefaultSkywirePath = "/opt/skywire"
-	TestSkywirePath    = "."
+	DefaultSkywirePath = "."
+	PackageSkywirePath = "/opt/skywire"
 )
 
 // Constants for default services.
@@ -51,7 +51,7 @@ const (
 	DefaultDmsgPtyCLINet    = "unix"
 	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
 	DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
-	TestDmsgPtyWhiteList    = TestSkywirePath + "/dmsgpty/whitelist.json"
+	PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
 )
 
 // Default STCP constants.
@@ -95,27 +95,26 @@ const (
 	DefaultAppLocalPath   = DefaultSkywirePath + "/local"
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
-	TestAppLocalPath      = TestSkywirePath + "/local"
-	TestAppBinPath        = TestSkywirePath + "/apps"
+	PackageAppLocalPath   = PackageSkywirePath + "/local"
+	PackageAppBinPath     = PackageSkywirePath + "/apps"
 )
 
 // Default routing constants
 const (
 	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
-	TestTpLogStore    = TestSkywirePath + "/transport_logs"
+	PackageTpLogStore = PackageSkywirePath + "/transport_logs"
 )
 
 // Default hypervisor constants
 const (
 	DefaultHypervisorDB = ".skycoin/hypervisor/users.db"
 	DefaultEnableAuth   = true
-	DefaultEnableTLS    = true
+	DefaultEnableTLS    = false
 	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
-	TestEnableAuth      = false
-	TestEnableTLS       = false
-	TestTLSKey          = ""
-	TestTLSCert         = ""
+	PackageEnableTLS    = true
+	PackageTLSKey       = PackageSkywirePath + "/ssl/key.pem"
+	PackageTLSCert      = PackageSkywirePath + "/ssl/cert.pem"
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
