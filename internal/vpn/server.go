@@ -258,6 +258,11 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
 	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
+	sTUNIP = net.IPv4(192, 168, 1, 18)
+	sTUNGateway = net.IPv4(192, 168, 1, 17)
+	cTUNIP = net.IPv4(192, 168, 1, 16)
+	cTUNGateway = net.IPv4(192, 168, 1, 15)
+
 	sHello.TUNIP = cTUNIP
 	sHello.TUNGateway = cTUNGateway
 
