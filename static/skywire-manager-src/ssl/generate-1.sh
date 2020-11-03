@@ -6,7 +6,7 @@ openssl req \
     -newkey rsa:2048 \
     -sha256 \
     -nodes \
-    -keyout server.key \
+    -keyout /opt/skywire/ssl/key.pem \
     -days 3650 \
-    -out server.crt \
-    -config certificate.cnf
+    -out /opt/skywire/ssl/cert.pem \
+    -config /opt/skywire/ssl/certificate.cnf
