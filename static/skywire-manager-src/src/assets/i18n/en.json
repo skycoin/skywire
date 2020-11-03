@@ -131,14 +131,15 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
-    "update-hypervisor": "Update hypervisor",
     "update-all": "Update all visors",
+    "hypervisor": "Hypervisor",
     "state": "State",
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
     "dmsg-server": "DMSG server",
     "ping": "Ping",
+    "hypervisor-info": "This visor is the current Hypervisor.",
     "copy-key": "Copy key",
     "copy-dmsg": "Copy DMSG server key",
     "copy-data": "Copy data",
@@ -276,17 +277,6 @@
     "install": "Install updates"
   },
 
-  "update-hypervisor": {
-    "title": "Update Hypervisor",
-    "label": "Hypervisor",
-    "processing": "Looking for updates...",
-    "no-update": "There is no update for the hypervisor. The currently installed version is:",
-    "update-available": "The following update was found:",
-    "update-instructions": "Click the 'Install update' button to continue.",
-    "updating": "The update operation has been started, you can open this window again for checking the progress:",
-    "install": "Install update"
-  },
-
   "apps": {
     "log": {
       "title": "Log",
@@ -367,6 +357,9 @@
       "public-key": "Remote visor public key",
       "password": "Password",
       "password-history-warning": "Note: the password will not be saved in the history.",
+      "copy-pk-info": "Copy public key.",
+      "copied-pk-info": "The public key has been copied.",
+      "copy-pk-error": "There was a problem copying the public key.",
       "no-elements": "Currently there are no elements to show. Please try again later.",
       "no-elements-for-filters": "There are no elements that meet the filter criteria.",
       "no-filter": "No filter has been selected",

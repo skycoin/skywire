@@ -208,11 +208,9 @@ func (n *Network) Conf() Config {
 // Init initiates server connections.
 func (n *Network) Init(ctx context.Context) error {
 	if n.clients.DmsgC != nil {
-		go func() {
-			time.Sleep(200 * time.Millisecond)
-			n.clients.DmsgC.Serve(ctx)
-			time.Sleep(200 * time.Millisecond)
-		}()
+		time.Sleep(200 * time.Millisecond)
+		go n.clients.DmsgC.Serve(context.Background())
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	if n.conf.NetworkConfigs.STCP != nil {

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
@@ -36,7 +38,6 @@ type HTTPClient struct {
 	conf    Config
 	entry   Service
 	entryMx sync.Mutex // only used if UpdateLoop && UpdateStats functions are used.
-	auth    *httpauth.Client
 	client  http.Client
 }
 
@@ -69,10 +70,19 @@ func (c *HTTPClient) addr(path string, sType string) string {
 	return addr
 }
 
+var (
+	authClientMu sync.Mutex
+	authClient   *httpauth.Client // Singleton: there should be only one instance per PK.
+)
+
 // Auth returns the internal httpauth.Client
 func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
-	if c.auth != nil {
-		return c.auth, nil
+	authClientMu.Lock()
+	defer authClientMu.Unlock()
+
+	auth := authClient
+	if auth != nil {
+		return auth, nil
 	}
 
 	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK)
@@ -80,7 +90,8 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 		return nil, err
 	}
 
-	c.auth = auth
+	authClient = auth
+
 	return auth, nil
 }
 
@@ -146,11 +157,17 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		var hErr HTTPError
-		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read response body: %w", err)
+		}
+
+		var hErr HTTPResponse
+		if err = json.Unmarshal(respBody, &hErr); err != nil {
 			return nil, err
 		}
-		return nil, &hErr
+
+		return nil, hErr.Error
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(&c.entry)
