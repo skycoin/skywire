@@ -31,7 +31,7 @@ pkgdir=${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}
 #add build deps here
 makedepends=(go install npm python python2 sudo)
 #add any runtime deps here
-depends=()
+depends=(openssl)
 
 #check for make dependancies
 for t in ${makedepends} ; do
@@ -107,6 +107,7 @@ package() {
   echo "Priority: optional" >> ${srcdir}/control
   echo "Section: web" >> ${srcdir}/control
   echo "Architecture: ${pkgarch}" >> ${srcdir}/control
+  echo "Depends: ${depends}" >> ${srcdir}/control
   echo "Maintainer: skycoin" >> ${srcdir}/control
   echo "Description: ${pkgdesc}" >> ${srcdir}/control
   info 'installing binaries'
@@ -119,10 +120,11 @@ package() {
   sudo install -Dm755 ${srcdir}/go/apps/skysocks-client ${pkgdir}/opt/skywire/apps/skysocks-client
   sudo install -Dm755 ${srcdir}/go/apps/vpn-server ${pkgdir}/opt/skywire/apps/vpn-server
   sudo install -Dm755 ${srcdir}/go/apps/vpn-client ${pkgdir}/opt/skywire/apps/vpn-server
+  sudo install -Dm755 ${srcdir}/skywire/static/skywire-manager-src/ssl/generate-1.sh ${pkgdir}/usr/bin/skywire-tls-gen
 
   #install the system.d services
-  sudo install -Dm644 ${srcdir}/skywire/init/skywire-hypervisor.service ${pkgdir}/etc/systemd/system/skywire-hypervisor.service
-  #sudo install -Dm644 ${srcdir}/skywire/init/skywire-visor.service ${pkgdir}/etc/systemd/system/skywire-visor.service
+  #sudo install -Dm644 ${srcdir}/skywire/init/skywire-hypervisor.service ${pkgdir}/etc/systemd/system/skywire-hypervisor.service
+  sudo install -Dm644 ${srcdir}/skywire/init/skywire-visor.service ${pkgdir}/etc/systemd/system/skywire-visor.service
   #create the debian package
   dpkg-deb --build ${pkgdir}
 }
