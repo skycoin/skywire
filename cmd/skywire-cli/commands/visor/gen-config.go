@@ -23,6 +23,7 @@ var (
 	output     string
 	replace    bool
 	testEnv    bool
+	packageConfig	bool
 	hypervisor bool
 )
 
@@ -30,6 +31,7 @@ func init() {
 	genConfigCmd.Flags().Var(&sk, "sk", "if unspecified, a random key pair will be generated.")
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "skywire-config.json", "path of output config file.")
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists (this retains the keys).")
+ 	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
 	genConfigCmd.Flags().BoolVar(&hypervisor, "hypervisor", false, "whether to generate hypervisor config.")
 }
@@ -58,7 +60,11 @@ var genConfigCmd = &cobra.Command{
 
 		// Determine config type to generate.
 		var genConf func(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*visorconfig.V1, error)
-		if testEnv {
+
+		// to be improved later
+		if packageConfig {
+			genConf = visorconfig.MakePackageConfig
+		} else if testEnv {
 			genConf = visorconfig.MakeTestConfig
 		} else {
 			genConf = visorconfig.MakeDefaultConfig

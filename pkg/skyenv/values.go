@@ -93,10 +93,10 @@ const (
 	DefaultAppSrvAddr     = "localhost:5505"
 	AppDiscUpdateInterval = 30 * time.Second
 	DefaultAppLocalPath   = DefaultSkywirePath + "/local"
-	TestAppLocalPath      = TestSkywirePath + "/local"
-	TestAppBinPath        = TestSkywirePath + "/apps"
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
+	TestAppLocalPath      = TestSkywirePath + "/local"
+	TestAppBinPath        = TestSkywirePath + "/apps"
 )
 
 // Default routing constants
@@ -107,7 +107,15 @@ const (
 
 // Default hypervisor constants
 const (
-	DefaultHypervisorDB = ".skycoin/hypervisor/users.db"
+	DefaultHypervisorDB	=	".skycoin/hypervisor/users.db"
+	DefaultEnableAuth	=	true
+	DefaultEnableTLS	=	true
+	DefaultTLSKey	=	DefaultSkywirePath + "/ssl/key.pem"
+	DefaultTLSCert	=	DefaultSkywirePath + "/ssl/cert.pem"
+	TestEnableAuth	=	false
+	TestEnableTLS	=	false
+	TestTLSKey	=	""
+	TestTLSCert	=	""
 )
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.

@@ -160,3 +160,19 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 
 	return conf, nil
 }
+
+
+// Same as above but use package config defaults
+func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+	if err != nil {
+		return nil, err
+	}
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
+		conf.Hypervisor.EnableTLS = skyenv.DefaultEnableTLS
+		conf.Hypervisor.TLSKeyFile = skyenv.DefaultTLSKey
+		conf.Hypervisor.TLSCertFile = skyenv.DefaultTLSCert
+	}
+	return conf, nil
+}

@@ -81,7 +81,7 @@ func GenerateWorkDirConfig(testenv bool) Config {
 // GenerateHomeConfig generates a config with default values and uses db from user's home folder.
 func GenerateHomeConfig(testenv bool) Config {
 	c := MakeConfig(testenv)
-	c.DBPath = filepath.Join(pathutil.HomeDir(), ".skycoin/hypervisor/users.db")
+	c.DBPath = filepath.Join(pathutil.HomeDir(), skyenv.DefaultHypervisorDB)
 	return c
 }
 
