@@ -17,8 +17,7 @@ import { AllLabelsComponent } from './components/pages/settings/all-labels/all-l
 const routes: Routes = [
   {
     path: 'login',
-    component: LoginComponent,
-    canActivate: [AuthGuardService]
+    component: LoginComponent
   },
   {
     path: 'nodes',
