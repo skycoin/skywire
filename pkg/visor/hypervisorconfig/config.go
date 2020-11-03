@@ -123,6 +123,14 @@ func (c *Config) FillDefaults(testEnv bool) {
 	}
 
 	c.Cookies.FillDefaults()
+
+	c.EnableAuth = skyenv.DefaultEnableAuth
+
+	c.EnableTLS = skyenv.DefaultEnableTLS
+
+	c.TLSCertFile = skyenv.DefaultTLSCert
+	c.TLSKeyFile = skyenv.DefaultTLSKey
+
 }
 
 // Parse parses the file in path, and decodes to the config.
