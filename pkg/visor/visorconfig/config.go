@@ -161,8 +161,7 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	return conf, nil
 }
 
-
-// Same as above but use package config defaults
+// MakePackageConfig acts like MakeDefaultConfig but use package config defaults
 func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
 	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
 	if err != nil {
