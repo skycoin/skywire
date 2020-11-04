@@ -8,6 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
+	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -76,6 +77,14 @@ var genConfigCmd = &cobra.Command{
 		conf, err := genConf(mLog, output, &sk, hypervisor)
 		if err != nil {
 			logger.WithError(err).Fatal("Failed to create config.")
+		}
+
+		if hypervisorPK != "" {
+			key, err := coinCipher.PubKeyFromHex(hypervisorPK)
+			if err != nil {
+				logger.WithError(err).Fatal("Failed to parse hypervisor private key.")
+			}
+			conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(key))
 		}
 
 		// Save config to file.
