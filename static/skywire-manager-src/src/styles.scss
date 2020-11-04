@@ -80,3 +80,16 @@ button:focus {
 .transparent-50 {
   opacity: 0.5;
 }
+
+.flag-container {
+  width: 16px;
+  height: 11px;
+  display: inline-block;
+  margin-right: 5px;
+  background-image: url('/assets/img/flags/unknown.png');
+
+  div {
+    width: 16px;
+    height: 11px;
+  }
+}

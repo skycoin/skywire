@@ -17,7 +17,6 @@ RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
       -o skywire-visor cmd/skywire-visor/skywire-visor.go &&\
     go build  -mod=vendor -ldflags="-w -s" -o skywire-cli ./cmd/skywire-cli	&&\
     go build  -mod=vendor -ldflags="-w -s" -o ./apps/skychat.v1.0 ./cmd/apps/skychat	&&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/helloworld.v1.0 ./cmd/apps/helloworld &&\
 	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks &&\
 	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
 
