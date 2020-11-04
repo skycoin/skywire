@@ -147,7 +147,7 @@ type MockConfig struct {
 
 // AddMockData adds mock data to Hypervisor.
 func (hv *Hypervisor) AddMockData(config MockConfig) error {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
 
 	for i := 0; i < config.Visors; i++ {
 		pk, client, err := visor.NewMockRPCClient(r, config.MaxTpsPerVisor, config.MaxRoutesPerVisor)
