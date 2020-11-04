@@ -1,64 +1,44 @@
 import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, CanActivate, Router, RouterStateSnapshot, CanActivateChild } from '@angular/router';
 import { Observable, of } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
-import { MatDialog } from '@angular/material/dialog';
 
-import { AuthService, AuthStates } from './auth.service';
-
-/**
- * Redirects unauthorized users to the login page during the first load and always redirects
- * authorized users from the login page to the node list. The api service is in chage of
- * redirecting the unauthorized users to the login page in other cases.
+ /**
+ * Redirects the user to the login page if the forceFail property is set to true. The api
+ * service is in chage of redirecting the unauthorized users to the login page in other cases.
+ * It must be used in the canActivate and canActivateChild properties of the routing module.
  */
 @Injectable({
   providedIn: 'root'
 })
 export class AuthGuardService implements CanActivate, CanActivateChild {
-  private authChecked = false;
+  private forceFailInternal = false;
+  /**
+   * If true, the user will be redirected to the login page.
+   */
+  set forceFail(val: boolean) {
+    this.forceFailInternal = val;
+  }
 
   constructor(
-    private authService: AuthService,
     private router: Router,
-    private matDialog: MatDialog,
   ) { }
 
   canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
-    return this.checkIfCanActivate(route);
+    return this.checkIfCanActivate();
   }
 
   canActivateChild(childRoute: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
-    return this.checkIfCanActivate(childRoute);
+    return this.checkIfCanActivate();
   }
 
-  private checkIfCanActivate(route: ActivatedRouteSnapshot): Observable<boolean> {
-    if (this.authChecked && route.routeConfig.path !== 'login') {
-      return of(true);
+  private checkIfCanActivate(): Observable<boolean> {
+    if (this.forceFailInternal) {
+      // Redirect the user.
+      this.router.navigate(['login'], { replaceUrl: true });
+
+      return of(false);
     }
 
-    return this.authService.checkLogin().pipe(catchError(e => {
-      return of(AuthStates.AuthDisabled);
-    }), map((authState: AuthStates) => {
-      this.authChecked = true;
-
-      // If the user is trying to access "Login" page while he is already logged in or the
-      // auth is disabled, redirect him to "Nodes" page
-      if (route.routeConfig.path === 'login' && (authState === AuthStates.Logged || authState === AuthStates.AuthDisabled)) {
-        this.router.navigate(['nodes'], { replaceUrl: true });
-
-        return false;
-      }
-
-      // If the user is trying to access a protected part of the application while not logged in,
-      // redirect him to "Login" page
-      if (route.routeConfig.path !== 'login' && (authState !== AuthStates.Logged && authState !== AuthStates.AuthDisabled)) {
-        this.router.navigate(['login'], { replaceUrl: true });
-        this.matDialog.closeAll();
-
-        return false;
-      }
-
-      return true;
-    }));
+    return of(true);
   }
 }

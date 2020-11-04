@@ -1,3 +1,5 @@
+@import "variables";
+
 .labels {
   width: 15%;
 }
@@ -10,4 +12,21 @@
 .alert-icon {
   vertical-align: middle;
   margin-right: 10px;
+}
+
+.hypervisor-icon {
+  font-size: 14px !important;
+  line-height: 14px !important;
+  position: relative;
+  top: 2px;
+  margin-left: 2px;
+  color: $yellow;
+}
+
+.gray-text {
+  color: $light-gray !important;
+}
+
+.small-column {
+  width: 1px;
 }

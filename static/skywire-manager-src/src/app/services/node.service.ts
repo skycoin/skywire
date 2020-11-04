@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of, throwError } from 'rxjs';
+import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
 import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
@@ -59,6 +59,20 @@ export class TrafficData {
    * but the service will try it best to provided good data.
    */
   receivedHistory: number[] = [];
+}
+
+/**
+ * Keys for saving custom settings for the calls to the updater API endpoints.
+ */
+export enum UpdaterStorageKeys {
+  /**
+   * If has a value, at least one of the other keys have a value.
+   */
+  UseCustomSettings = 'updaterUseCustomSettings',
+  Channel = 'updaterChannel',
+  Version = 'updaterVersion',
+  ArchiveURL = 'updaterArchiveURL',
+  ChecksumsURL = 'updaterChecksumsURL',
 }
 
 /**
@@ -251,6 +265,7 @@ export class NodeService {
    */
   stopRequestingSpecificNode() {
     if (this.specificNodeRefreshSubscription) {
+      // The delay allows to recover the connection if the user returns to the node page.
       this.specificNodeStopSubscription = of(1).pipe(delay(4000)).subscribe(() => {
         this.specificNodeRefreshSubscription.unsubscribe();
         this.specificNodeRefreshSubscription = null;
@@ -280,6 +295,12 @@ export class NodeService {
       updatingSubject = this.updatingSpecificNodeSubject;
       dataSubject = this.specificNodeSubject;
       operation = this.getNode(this.specificNodeKey);
+
+      // Cancel any pending stop operation.
+      if (this.specificNodeStopSubscription) {
+        this.specificNodeStopSubscription.unsubscribe();
+        this.specificNodeStopSubscription = null;
+      }
 
       if (this.specificNodeRefreshSubscription) {
         this.specificNodeRefreshSubscription.unsubscribe();
@@ -438,6 +459,7 @@ export class NodeService {
    */
   private getNodes(): Observable<Node[]> {
     let nodes: Node[];
+    let dmsgInfo: any[];
 
     return this.apiService.get('visors').pipe(mergeMap((result: Node[]) => {
       // Save the visor list.
@@ -445,7 +467,12 @@ export class NodeService {
 
       // Get the dmsg info.
       return this.apiService.get('dmsg');
-    }), map((dmsgInfo: any[]) => {
+    }), mergeMap((result: any[]) => {
+      dmsgInfo = result;
+
+      // Get the basic info about the hypervisor.
+      return this.apiService.get('about');
+    }), map((aboutInfo: any) => {
       // Create a map to associate the dmsg info with the visors.
       const dmsgInfoMap = new Map<string, any>();
       dmsgInfo.forEach(info => dmsgInfoMap.set(info.public_key, info));
@@ -461,6 +488,8 @@ export class NodeService {
           node.dmsgServerPk = '-';
           node.roundTripPing = '-1';
         }
+
+        node.isHypervisor = node.local_pk === aboutInfo.public_key;
 
         node.ip = this.getAddressPart(node.tcp_addr, 0);
         node.port = this.getAddressPart(node.tcp_addr, 1);
@@ -615,7 +644,7 @@ export class NodeService {
   }
 
   /**
-   * Checks if there are updates available for a node.
+   * Checks if a node is currently being updated.
    */
   checkIfUpdating(nodeKey: string): Observable<any> {
     return this.apiService.get(`visors/${nodeKey}/update/ws/running`);
@@ -636,6 +665,19 @@ export class NodeService {
       channel: 'stable'
       // channel: 'testing' // for debugging updater
     };
+
+    // Use any custom settings saved by the user.
+    const useCustomSettings = localStorage.getItem(UpdaterStorageKeys.UseCustomSettings);
+    if (useCustomSettings) {
+      const channel = localStorage.getItem(UpdaterStorageKeys.Channel);
+      if (channel) { body['channel'] = channel; }
+      const version = localStorage.getItem(UpdaterStorageKeys.Version);
+      if (version) { body['version'] = version; }
+      const archiveURL = localStorage.getItem(UpdaterStorageKeys.ArchiveURL);
+      if (archiveURL) { body['archive_url'] = archiveURL; }
+      const checksumsURL = localStorage.getItem(UpdaterStorageKeys.ChecksumsURL);
+      if (checksumsURL) { body['checksums_url'] = checksumsURL; }
+    }
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
   }

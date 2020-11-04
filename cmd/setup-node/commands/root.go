@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
+	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -54,6 +57,19 @@ var rootCmd = &cobra.Command{
 			}
 
 			logging.AddHook(hook)
+		}
+
+		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+			discordOpts := discord.GetDefaultOpts()
+			hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
+			logging.AddHook(hook)
+
+			// Workaround for Discord logger hook. Actually, it's Info.
+			log.Error(discord.StartLogMessage)
+			defer log.Error(discord.StopLogMessage)
+		} else {
+			log.Info(discord.StartLogMessage)
+			defer log.Info(discord.StopLogMessage)
 		}
 
 		var rdr io.Reader
@@ -107,7 +123,12 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 	}
 
 	m := setupmetrics.New(tag)
-	mux := http.NewServeMux()
+	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	// TODO: The following should be replaced by promutil.AddMetricsHandle
 	reg := prometheus.NewPedanticRegistry()
@@ -115,10 +136,11 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 	reg.MustRegister(prometheus.NewGoCollector())
 	reg.MustRegister(m.Collectors()...)
 	h := promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	mux.Handle("/metrics", h)
+
+	r.Handle("/metrics", h)
 
 	log.WithField("addr", metricsAddr).Info("Serving metrics...")
-	go func() { log.Fatal(http.ListenAndServe(metricsAddr, mux)) }()
+	go func() { log.Fatal(http.ListenAndServe(metricsAddr, r)) }()
 
 	return m
 }

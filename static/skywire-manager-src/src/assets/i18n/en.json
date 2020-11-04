@@ -131,13 +131,15 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
-    "update-all": "Update all",
+    "update-all": "Update all visors",
+    "hypervisor": "Hypervisor",
     "state": "State",
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
     "dmsg-server": "DMSG server",
     "ping": "Ping",
+    "hypervisor-info": "This visor is the current Hypervisor.",
     "copy-key": "Copy key",
     "copy-dmsg": "Copy DMSG server key",
     "copy-data": "Copy data",
@@ -149,10 +151,10 @@
     "empty-with-filter": "No visor matches the selected filtering criteria.",
     "delete-node-confirmation": "Are you sure you want to remove the visor from the list?",
     "delete-all-offline-confirmation": "Are you sure you want to remove all offline visors from the list?",
+    "delete-all-filtered-offline-confirmation": "All offline visors satisfying the current filtering criteria will be removed from the list. Are you sure you want to continue?",
     "deleted": "Visor removed.",
     "deleted-singular": "1 offline visor removed.",
     "deleted-plural": "{{ number }} offline visors removed.",
-    "no-offline-nodes": "No offline visors found.",
     "no-visors-to-update": "There are no visors to update.",
     "filter-dialog": {
       "online": "The visor must be",
@@ -199,6 +201,22 @@
         "passwords-not-match": "Passwords do not match.",
         "default-password": "Don't use the default password (1234)."
       }
+    },
+    "updater-config" : {
+      "open-link": "Show updater settings",
+      "open-confirmation": "The updater settings are for experienced users only. Are you sure you want to continue?",
+      "help": "Use this form for overriding the settings that will be used by the updater. All empty fields will be ignored. The settings will be used for all updating operations, no mater which element is being updated, so please be careful.",
+      "channel": "Channel",
+      "version": "Version",
+      "archive-url": "Archive URL",
+      "checksum-url": "Checksum URL",
+      "not-saved": "The changes have not been saved yet.",
+      "save": "Save changes",
+      "remove-settings": "Remove the settings",
+      "saved": "The custom settings have been saved.",
+      "removed": "The custom settings have been removed.",
+      "save-confirmation": "Are you sure you want to apply the custom settings?",
+      "remove-confirmation": "Are you sure you want to remove the custom settings?"
     },
     "change-password": "Change password",
     "refresh-rate": "Refresh rate",
@@ -308,8 +326,9 @@
         }
       }
     },
-    "skysocks-settings": {
-      "title": "Skysocks Settings",
+    "vpn-socks-server-settings": {
+      "socks-title": "Skysocks Settings",
+      "vpn-title": "VPN-Server Settings",
       "new-password": "New password (Leave empty to remove the password)",
       "repeat-password": "Repeat password",
       "passwords-not-match": "Passwords do not match.",
@@ -318,9 +337,10 @@
       "change-passowrd-confirmation": "Are you sure you want to change the password?",
       "changes-made": "The changes have been made."
     },
-    "skysocks-client-settings": {
-      "title": "Skysocks-Client Settings",
-      "discovery-tab": "Search visor",
+    "vpn-socks-client-settings": {
+      "socks-title": "Skysocks-Client Settings",
+      "vpn-title": "VPN-Client Settings",
+      "discovery-tab": "Search",
       "remote-visor-tab": "Enter manually",
       "history-tab": "History",
       "use": "Use this data",
@@ -335,6 +355,11 @@
       "state-available": "Available",
       "state-offline": "Offline",
       "public-key": "Remote visor public key",
+      "password": "Password",
+      "password-history-warning": "Note: the password will not be saved in the history.",
+      "copy-pk-info": "Copy public key.",
+      "copied-pk-info": "The public key has been copied.",
+      "copy-pk-error": "There was a problem copying the public key.",
       "no-elements": "Currently there are no elements to show. Please try again later.",
       "no-elements-for-filters": "There are no elements that meet the filter criteria.",
       "no-filter": "No filter has been selected",
@@ -354,8 +379,17 @@
         "note": "Note"
       },
 
+      "password-dialog": {
+        "title": "Enter Password",
+        "password": "Password",
+        "info": "You are being asked for a password because a password was set when the selected entry was created, but the it was not saved for security reasons. You can leave the password empty if needed.",
+        "continue-button": "Continue"
+      },
+
       "filter-dialog": {
         "title": "Filters",
+        "country": "The country must be",
+        "any-country": "Any",
         "location": "The location must contain",
         "pub-key": "The public key must contain",
         "apply": "Apply"
@@ -384,6 +418,9 @@
 
   "transports": {
     "title": "Transports",
+    "remove-all-offline": "Remove all offline transports",
+    "remove-all-offline-confirmation": "Are you sure you want to remove all offline transports?",
+    "remove-all-filtered-offline-confirmation": "All offline transports satisfying the current filtering criteria will be removed. Are you sure you want to continue?",
     "info": "Connections you have with remote Skywire visors, to allow local Skywire apps to communicate with apps running on those remote visors.",
     "list-title": "Transport list",
     "state": "State",
