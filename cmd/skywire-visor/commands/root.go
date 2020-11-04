@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
+	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -54,6 +55,15 @@ var rootCmd = &cobra.Command{
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
 		log := initLogger(tag, syslogAddr)
+
+		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+			// Workaround for Discord logger hook. Actually, it's Info.
+			log.Error(discord.StartLogMessage)
+			defer log.Error(discord.StopLogMessage)
+		} else {
+			log.Info(discord.StartLogMessage)
+			defer log.Info(discord.StopLogMessage)
+		}
 
 		delayDuration, err := time.ParseDuration(delay)
 		if err != nil {
@@ -144,6 +154,12 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 		}
 	}
 
+	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+		discordOpts := discord.GetDefaultOpts()
+		hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
+		log.AddHook(hook)
+	}
+
 	return log
 }
 
@@ -201,7 +217,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = defaultConfigName
+			confPath = "/opt/skywire/" + defaultConfigName
 		}
 
 		fallthrough

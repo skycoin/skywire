@@ -24,8 +24,6 @@ github.com/dsnet/compress/bzip2/internal/sais
 github.com/dsnet/compress/internal
 github.com/dsnet/compress/internal/errors
 github.com/dsnet/compress/internal/prefix
-# github.com/flynn/noise v0.0.0-20180327030543-2492fe189ae6
-github.com/flynn/noise
 # github.com/go-chi/chi v4.1.2+incompatible
 ## explicit
 github.com/go-chi/chi
@@ -54,8 +52,6 @@ github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 ## explicit
 github.com/google/uuid
-# github.com/gorilla/handlers v1.4.2
-github.com/gorilla/handlers
 # github.com/gorilla/securecookie v1.1.1
 ## explicit
 github.com/gorilla/securecookie
@@ -77,6 +73,8 @@ github.com/klauspost/pgzip
 github.com/klauspost/reedsolomon
 # github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
+# github.com/kz/discordrus v1.2.0
+github.com/kz/discordrus
 # github.com/mattn/go-colorable v0.1.6
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
@@ -149,13 +147,14 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20200804132826-472848513595
+# github.com/skycoin/dmsg v0.0.0-20201018132543-a08c07be4640
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
 github.com/skycoin/dmsg/cipher
 github.com/skycoin/dmsg/cmdutil
 github.com/skycoin/dmsg/disc
+github.com/skycoin/dmsg/discord
 github.com/skycoin/dmsg/dmsgctrl
 github.com/skycoin/dmsg/dmsgpty
 github.com/skycoin/dmsg/dmsgtest
@@ -165,6 +164,8 @@ github.com/skycoin/dmsg/netutil
 github.com/skycoin/dmsg/noise
 github.com/skycoin/dmsg/promutil
 github.com/skycoin/dmsg/servermetrics
+# github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
+github.com/skycoin/noise
 # github.com/skycoin/skycoin v0.26.0
 ## explicit
 github.com/skycoin/skycoin/src/cipher
@@ -191,6 +192,9 @@ github.com/stretchr/objx
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
+# github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
+## explicit
+github.com/syndtr/gocapability/capability
 # github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161
 ## explicit
 github.com/templexxx/cpufeat
@@ -243,7 +247,8 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20200615200032-f1bc736245b1
+# golang.org/x/sys v0.0.0-20200929083018-4d22bbb62b3c
+## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix

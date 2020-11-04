@@ -1,4 +1,6 @@
-<app-dialog [headline]="'apps.skysocks-settings.title' | translate">
+<app-dialog
+  [headline]="('apps.vpn-socks-server-settings.' + ( configuringVpn ? 'vpn-title' : 'socks-title')) | translate"
+>
   <form [formGroup]="form">
     <mat-form-field>
       <input
@@ -6,7 +8,7 @@
         type="password"
         formControlName="password"
         maxlength="100"
-        [placeholder]="'apps.skysocks-settings.new-password' | translate"
+        [placeholder]="'apps.vpn-socks-server-settings.new-password' | translate"
         #firstInput
         matInput
       >
@@ -17,12 +19,12 @@
         type="password"
         formControlName="passwordConfirmation"
         maxlength="100"
-        [placeholder]="'apps.skysocks-settings.repeat-password' | translate"
+        [placeholder]="'apps.vpn-socks-server-settings.repeat-password' | translate"
         #firstInput
         matInput
       >
       <mat-error>
-        {{ 'apps.skysocks-settings.passwords-not-match' | translate }}
+        {{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}
       </mat-error>
     </mat-form-field>
 
@@ -33,7 +35,7 @@
       color="primary"
       class="float-right"
     >
-      {{ 'apps.skysocks-settings.save' | translate }}
+      {{ 'apps.vpn-socks-server-settings.save' | translate }}
     </app-button>
   </form>
 </app-dialog>
