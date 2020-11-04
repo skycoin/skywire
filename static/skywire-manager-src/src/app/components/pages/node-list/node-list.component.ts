@@ -36,7 +36,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
   private readonly dmsgListId = 'dl';
 
   // Vars with the data of the columns used for sorting the data.
-  stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
+  hypervisorSortData = new SortingColumn(['isHypervisor'], 'nodes.hypervisor', SortingModes.Boolean);
+  stateSortData = new SortingColumn(['online'], 'nodes.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
   keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
   dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
@@ -58,6 +59,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   allNodes: Node[];
   filteredNodes: Node[];
   nodesToShow: Node[];
+  hasOfflineNodes = false;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
@@ -144,6 +146,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
+      this.hypervisorSortData,
       this.stateSortData,
       this.labelSortData,
       this.keySortData,
@@ -165,6 +168,15 @@ export class NodeListComponent implements OnInit, OnDestroy {
     );
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredNodes = data;
+
+      // Check if there are offline nodes.
+      this.hasOfflineNodes = false;
+      this.filteredNodes.forEach(node => {
+        if (!node.online) {
+          this.hasOfflineNodes = true;
+        }
+      });
+
       this.dataSorter.setData(this.filteredNodes);
     });
 
@@ -205,7 +217,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.options = [
       {
         name: 'nodes.update-all',
-        actionName: 'update',
+        actionName: 'updateAll',
         icon: 'get_app'
       },
       {
@@ -259,7 +271,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   performAction(actionName: string) {
     if (actionName === 'logout') {
       this.logout();
-    } else if (actionName === 'update') {
+    } else if (actionName === 'updateAll') {
       this.updateAll();
     }
   }
@@ -583,14 +595,19 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * Removes all offline nodes from the list, until seeing them online again.
    */
   removeOffline() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'nodes.delete-all-offline-confirmation');
+    let confirmationText = 'nodes.delete-all-offline-confirmation';
+    if (this.dataFilterer.currentFiltersTexts && this.dataFilterer.currentFiltersTexts.length > 0) {
+      confirmationText = 'nodes.delete-all-filtered-offline-confirmation';
+    }
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
 
       // Prepare all offline nodes to be removed.
       const nodesToRemove: string[] = [];
-      this.allNodes.forEach(node => {
+      this.filteredNodes.forEach(node => {
         if (!node.online) {
           nodesToRemove.push(node.local_pk);
         }
@@ -607,8 +624,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
         } else {
           this.snackbarService.showDone('nodes.deleted-plural', { number: nodesToRemove.length });
         }
-      } else {
-        this.snackbarService.showWarning('nodes.no-offline-nodes');
       }
     });
   }

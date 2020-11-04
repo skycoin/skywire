@@ -11,14 +11,14 @@ matrix:
     - os: osx
       # Do not start osx build for PR
       if: type != pull_request
-      osx_image: xcode8
+      osx_image: xcode8.3
 
 before_install:
   - nvm install 10.16
 
 install:
   - go get -u github.com/FiloSottile/vendorcheck
-  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.27.0
+  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.31.0
   - make tidy
 
 before_script:

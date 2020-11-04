@@ -22,6 +22,9 @@ const defaultContextTimeout = 10 * time.Second
 
 var log = logging.MustGetLogger("routefinder")
 
+// ErrTransportNotFound is returned when transport is not found.
+var ErrTransportNotFound = errors.New("transport not found")
+
 // RouteOptions represents options for FindRoutesRequest
 type RouteOptions struct {
 	MinHops uint16
@@ -107,6 +110,10 @@ func (c *apiClient) FindRoutes(ctx context.Context, rts []routing.PathEdges, opt
 
 	if err != nil {
 		return nil, err
+	}
+
+	if res.StatusCode == http.StatusNotFound {
+		return nil, ErrTransportNotFound
 	}
 
 	if res.StatusCode != http.StatusOK {

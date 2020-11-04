@@ -25,14 +25,6 @@ import (
 
 var log = logging.MustGetLogger("snet")
 
-// Default ports.
-// TODO(evanlinjin): Define these properly. These are currently random.
-const (
-	SetupPort      = uint16(36)  // Listening port of a setup node.
-	AwaitSetupPort = uint16(136) // Listening port of a visor for setup operations.
-	TransportPort  = uint16(45)  // Listening port of a visor for incoming transports.
-)
-
 var (
 	// ErrUnknownNetwork occurs on attempt to dial an unknown network type.
 	ErrUnknownNetwork = errors.New("unknown network type")
@@ -146,6 +138,12 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			SK:        conf.SecKey,
 			Table:     pktable.NewTable(conf.NetworkConfigs.STCP.PKTable),
 			LocalAddr: conf.NetworkConfigs.STCP.LocalAddr,
+			BeforeDialCallback: func(network, addr string) error {
+				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
+				event := appevent.NewEvent(appevent.TCPDial, data)
+				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+				return nil
+			},
 		}
 		clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 	}
@@ -156,6 +154,12 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
 			AddressResolver: conf.ARClient,
+			BeforeDialCallback: func(network, addr string) error {
+				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
+				event := appevent.NewEvent(appevent.TCPDial, data)
+				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+				return nil
+			},
 		}
 
 		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf)
@@ -194,11 +198,16 @@ func NewRaw(conf Config, clients NetworkClients) *Network {
 	return n
 }
 
+// Conf gets network configuration.
+func (n *Network) Conf() Config {
+	return n.conf
+}
+
 // Init initiates server connections.
 func (n *Network) Init() error {
 	if n.clients.DmsgC != nil {
 		time.Sleep(200 * time.Millisecond)
-		go n.clients.DmsgC.Serve()
+		go n.clients.DmsgC.Serve(context.Background())
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -299,13 +308,19 @@ func (n *Network) Close() error {
 		}()
 	}
 
+	var directErrorsMu sync.Mutex
 	directErrors := make(map[string]error)
 
 	for k, v := range n.clients.Direct {
 		if v != nil {
 			wg.Add(1)
 			go func() {
-				directErrors[k] = v.Close()
+				err := v.Close()
+
+				directErrorsMu.Lock()
+				directErrors[k] = err
+				directErrorsMu.Unlock()
+
 				wg.Done()
 			}()
 		}
@@ -373,7 +388,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 
 		conn, err := n.clients.DmsgC.Dial(ctx, addr)
 		if err != nil {
-			return nil, fmt.Errorf("dmsg client: %w", err)
+			return nil, fmt.Errorf("dmsg client dial %v: %w", addr, err)
 		}
 
 		return makeConn(conn, network), nil
@@ -385,7 +400,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 
 		conn, err := client.Dial(ctx, pk, port)
 		if err != nil {
-			return nil, fmt.Errorf("sudph client: %w", err)
+			return nil, fmt.Errorf("dial: %w", err)
 		}
 
 		log.Infof("Dialed %v, conn local address %q, remote address %q", network, conn.LocalAddr(), conn.RemoteAddr())
@@ -411,7 +426,7 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 
 		lis, err := client.Listen(port)
 		if err != nil {
-			return nil, fmt.Errorf("sudph client: %w", err)
+			return nil, fmt.Errorf("listen: %w", err)
 		}
 
 		return makeListener(lis, network), nil
