@@ -64,15 +64,13 @@ func setupClientSysPrivileges() (suid int, err error) {
 		// set `CAP_NET_ADMIN` capability to needed caps sets.
 		caps.Set(capability.CAPS|capability.BOUNDS|capability.AMBIENT, capability.CAP_NET_ADMIN)
 		if err := caps.Apply(capability.CAPS | capability.BOUNDS | capability.AMBIENT); err != nil {
-			err = fmt.Errorf("failed to apply capabilties: %w", err)
-			return
+			return 0, fmt.Errorf("failed to apply capabilties: %w", err)
 		}
 
 		// let child process keep caps sets from the parent, so we may do calls to
 		// system utilities with these caps.
 		if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
-			err = fmt.Errorf("failed to set PR_SET_KEEPCAPS: %w", err)
-			return
+			return 0, fmt.Errorf("failed to set PR_SET_KEEPCAPS: %w", err)
 		}
 	})
 
