@@ -144,11 +144,12 @@ func (s *Server) closeConn(conn net.Conn) {
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
-	tunIP, tunGateway, err := s.shakeHands(conn)
+	tunIP, tunGateway, allowTraffToLocalNet, err := s.shakeHands(conn)
 	if err != nil {
 		s.log.WithError(err).Errorf("Error negotiating with client %s", conn.RemoteAddr())
 		return
 	}
+	defer allowTraffToLocalNet()
 
 	tun, err := newTUNDevice()
 	if err != nil {
@@ -193,10 +194,10 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error) {
+func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, allowTrafficToLocalNet func(), err error) {
 	var cHello ClientHello
 	if err := ReadJSON(conn, &cHello); err != nil {
-		return nil, nil, fmt.Errorf("error reading client hello: %w", err)
+		return nil, nil, nil, fmt.Errorf("error reading client hello: %w", err)
 	}
 
 	s.log.Debugf("Got client hello: %v", cHello)
@@ -209,7 +210,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
-		return nil, nil, errors.New("got wrong passcode from client")
+		return nil, nil, nil, errors.New("got wrong passcode from client")
 	}
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
@@ -220,7 +221,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 				s.log.WithError(err).Errorln("Error sending server hello")
 			}
 
-			return nil, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
+			return nil, nil, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
 		}
 	}
 
@@ -231,7 +232,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
-		return nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
+		return nil, nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
 	}
 
 	subnetOctets, err := fetchIPv4Octets(subnet)
@@ -241,7 +242,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 			s.log.WithError(err).Errorln("Error sending server hello")
 		}
 
-		return nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
+		return nil, nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
 	}
 
 	// basically IP address comprised of `subnetOctets` items is the IP address of the subnet,
@@ -258,12 +259,29 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
 	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
+	if err := BlockIPToLocalNetwork(cTUNIP); err != nil {
+		sHello.Status = HandshakeStatusInternalError
+		if err := WriteJSON(conn, &sHello); err != nil {
+			s.log.WithError(err).Errorln("Error sending server hello")
+		}
+
+		return nil, nil, nil,
+			fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
+	}
+
+	allowTrafficToLocalNet = func() {
+		if err := AllowIPToLocalNetwork(cTUNIP); err != nil {
+			s.log.WithError(err).Errorln("Error allowing traffic to local network")
+		}
+	}
+
 	sHello.TUNIP = cTUNIP
 	sHello.TUNGateway = cTUNGateway
 
 	if err := WriteJSON(conn, &sHello); err != nil {
-		return nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
+		allowTrafficToLocalNet()
+		return nil, nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
 	}
 
-	return sTUNIP, sTUNGateway, nil
+	return sTUNIP, sTUNGateway, allowTrafficToLocalNet, nil
 }
