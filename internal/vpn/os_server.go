@@ -4,11 +4,24 @@ package vpn
 
 import (
 	"errors"
+	"net"
 )
 
 var (
 	errServerMethodsNotSupported = errors.New("server related methods are not supported for this OS")
 )
+
+// AllowIPToLocalNetwork allows all the packets coming from `source`
+// to private IP ranges.
+func AllowIPToLocalNetwork(source net.IP) error {
+	return errServerMethodsNotSupported
+}
+
+// BlockIPToLocalNetwork blocks all the packets coming from `source`
+// to private IP ranges.
+func BlockIPToLocalNetwork(source net.IP) error {
+	return errServerMethodsNotSupported
+}
 
 // DefaultNetworkInterface fetches default network interface name.
 func DefaultNetworkInterface() (string, error) {
