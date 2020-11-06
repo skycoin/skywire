@@ -245,14 +245,14 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
 	if s.cfg.Secure {
-		if err := BlockIPToLocalNetwork(cTUNIP); err != nil {
+		if err := BlockIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
 			s.sendServerErrHello(conn, HandshakeStatusInternalError)
 			return nil, nil, nil,
 				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
 		}
 
 		allowLocalNetTraff := func() {
-			if err := AllowIPToLocalNetwork(cTUNIP); err != nil {
+			if err := AllowIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
 				s.log.WithError(err).Errorln("Error allowing traffic to local network")
 			}
 		}
