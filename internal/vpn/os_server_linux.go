@@ -18,7 +18,7 @@ const (
 	enableIPMasqueradingCMDFmt  = "iptables -t nat -A POSTROUTING -o %s -j MASQUERADE"
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
 	blockIPToLocalNetCMDFmt     = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I FORWARD -d %s -s %s -j ACCEPT"
-	allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I FORWARD -d %s -s %s -j ACCEPT"
+	allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D FORWARD -d %s -s %s -j ACCEPT"
 	blockSSHCMDFmt              = "iptables -I FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP"
 	allowSSHCMDFmt              = "iptables -D FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP"
 )
