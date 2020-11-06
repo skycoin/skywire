@@ -752,7 +752,7 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	var p routing.Packet
 
 	switch packet.Type() {
-	case routing.DataPacket:
+	case routing.DataPacket, routing.NetworkProbePacket:
 		var err error
 
 		p, err = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
