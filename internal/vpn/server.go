@@ -194,54 +194,39 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, allowTrafficToLocalNet func(), err error) {
+func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVPN func(), err error) {
 	var cHello ClientHello
 	if err := ReadJSON(conn, &cHello); err != nil {
 		return nil, nil, nil, fmt.Errorf("error reading client hello: %w", err)
 	}
 
+	// default value
+	unsecureVPN = func() {}
+
 	s.log.Debugf("Got client hello: %v", cHello)
 
-	var sHello ServerHello
-
 	if s.cfg.Passcode != "" && cHello.Passcode != s.cfg.Passcode {
-		sHello.Status = HandshakeStatusForbidden
-		if err := WriteJSON(conn, &sHello); err != nil {
-			s.log.WithError(err).Errorln("Error sending server hello")
-		}
-
+		s.sendServerErrHello(conn, HandshakeStatusForbidden)
 		return nil, nil, nil, errors.New("got wrong passcode from client")
 	}
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {
 			// this happens only on malformed IP
-			sHello.Status = HandshakeStatusBadRequest
-			if err := WriteJSON(conn, &sHello); err != nil {
-				s.log.WithError(err).Errorln("Error sending server hello")
-			}
-
+			s.sendServerErrHello(conn, HandshakeStatusBadRequest)
 			return nil, nil, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
 		}
 	}
 
 	subnet, err := s.ipGen.Next()
 	if err != nil {
-		sHello.Status = HandshakeNoFreeIPs
-		if err := WriteJSON(conn, &sHello); err != nil {
-			s.log.WithError(err).Errorln("Error sending server hello")
-		}
-
+		s.sendServerErrHello(conn, HandshakeNoFreeIPs)
 		return nil, nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
 	}
 
 	subnetOctets, err := fetchIPv4Octets(subnet)
 	if err != nil {
-		sHello.Status = HandshakeStatusInternalError
-		if err := WriteJSON(conn, &sHello); err != nil {
-			s.log.WithError(err).Errorln("Error sending server hello")
-		}
-
+		s.sendServerErrHello(conn, HandshakeStatusInternalError)
 		return nil, nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
 	}
 
@@ -259,29 +244,55 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, allowTraff
 	cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
 	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
-	if err := BlockIPToLocalNetwork(cTUNIP); err != nil {
-		sHello.Status = HandshakeStatusInternalError
-		if err := WriteJSON(conn, &sHello); err != nil {
-			s.log.WithError(err).Errorln("Error sending server hello")
+	if s.cfg.Secure {
+		if err := BlockIPToLocalNetwork(cTUNIP); err != nil {
+			s.sendServerErrHello(conn, HandshakeStatusInternalError)
+			return nil, nil, nil,
+				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
 		}
 
-		return nil, nil, nil,
-			fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
-	}
+		allowLocalNetTraff := func() {
+			if err := AllowIPToLocalNetwork(cTUNIP); err != nil {
+				s.log.WithError(err).Errorln("Error allowing traffic to local network")
+			}
+		}
 
-	allowTrafficToLocalNet = func() {
-		if err := AllowIPToLocalNetwork(cTUNIP); err != nil {
-			s.log.WithError(err).Errorln("Error allowing traffic to local network")
+		if err := BlockSSH(cTUNIP, sTUNIP); err != nil {
+			s.sendServerErrHello(conn, HandshakeStatusInternalError)
+			allowLocalNetTraff()
+			return nil, nil, nil,
+				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
+		}
+
+		unsecureVPN = func() {
+			allowLocalNetTraff()
+
+			if err := AllowSSH(cTUNIP, sTUNIP); err != nil {
+				s.log.WithError(err).Errorln("Error allowing SSH through")
+			}
 		}
 	}
 
-	sHello.TUNIP = cTUNIP
-	sHello.TUNGateway = cTUNGateway
+	sHello := ServerHello{
+		Status:     HandshakeStatusOK,
+		TUNIP:      cTUNIP,
+		TUNGateway: cTUNGateway,
+	}
 
 	if err := WriteJSON(conn, &sHello); err != nil {
-		allowTrafficToLocalNet()
+		unsecureVPN()
 		return nil, nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
 	}
 
-	return sTUNIP, sTUNGateway, allowTrafficToLocalNet, nil
+	return sTUNIP, sTUNGateway, unsecureVPN, nil
+}
+
+func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
+	sHello := ServerHello{
+		Status: status,
+	}
+
+	if err := WriteJSON(conn, &sHello); err != nil {
+		s.log.WithError(err).Errorln("Error sending server hello")
+	}
 }

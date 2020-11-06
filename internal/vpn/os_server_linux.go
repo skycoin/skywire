@@ -19,7 +19,29 @@ const (
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
 	blockIPToLocalNetCMDFmt     = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
 	allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
+	blockSSHCMDFmt              = "iptables -I FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP"
+	allowSSHCMDFmt              = "iptables -D FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP"
 )
+
+// AllowSSH allows all SSH traffic (via default 22 port) between `src` and `dst`.
+func AllowSSH(src, dst net.IP) error {
+	cmd := fmt.Sprintf(allowSSHCMDFmt, dst, src, dst, src)
+	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
+		return fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	return nil
+}
+
+// BlockSSH blocks all SSH traffic (via default 22 port) between `src` and `dst`.
+func BlockSSH(src, dst net.IP) error {
+	cmd := fmt.Sprintf(blockSSHCMDFmt, dst, src, dst, src)
+	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
+		return fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	return nil
+}
 
 // AllowIPToLocalNetwork allows all the packets coming from `source`
 // to private IP ranges.
