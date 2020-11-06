@@ -23,13 +23,13 @@ func BlockSSH(_, _ net.IP) error {
 
 // AllowIPToLocalNetwork allows all the packets coming from `source`
 // to private IP ranges.
-func AllowIPToLocalNetwork(_ net.IP) error {
+func AllowIPToLocalNetwork(_, _ net.IP) error {
 	return errServerMethodsNotSupported
 }
 
 // BlockIPToLocalNetwork blocks all the packets coming from `source`
 // to private IP ranges.
-func BlockIPToLocalNetwork(_ net.IP) error {
+func BlockIPToLocalNetwork(_, _ net.IP) error {
 	return errServerMethodsNotSupported
 }
 
