@@ -36,7 +36,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&replace, "replace", "r", false, "whether to allow rewrite of a file that already exists (this retains the keys).")
 	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
-	genConfigCmd.Flags().BoolVar(&hypervisor, "hypervisor", false, "whether to generate config to run this visor as a hypervisor.")
+	genConfigCmd.Flags().BoolVar(&hypervisor, "is-hypervisor", false, "whether to generate config to run this visor as a hypervisor.")
 	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
 }
 
