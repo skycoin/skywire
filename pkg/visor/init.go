@@ -538,8 +538,6 @@ func initHypervisor(v *Visor) bool {
 	conf.SK = v.conf.SK
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
-	conf.FillDefaults(false)
-
 	// Prepare hypervisor.
 	hv, err := New(conf, assets, v, v.net.Dmsg())
 	if err != nil {
