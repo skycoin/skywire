@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
@@ -26,7 +27,7 @@ var (
 	testEnv       bool
 	packageConfig bool
 	hypervisor    bool
-	hypervisorPK  string
+	hypervisorPKs string
 )
 
 func init() {
@@ -36,7 +37,7 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&packageConfig, "package", "p", false, "use defaults for package-based installations")
 	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "whether to use production or test deployment service.")
 	genConfigCmd.Flags().BoolVar(&hypervisor, "hypervisor", false, "whether to generate config to run this visor as a hypervisor.")
-	genConfigCmd.Flags().StringVar(&hypervisorPK, "hypervisor-pk", "", "public key of a hypervisor that should be added to this visor")
+	genConfigCmd.Flags().StringVar(&hypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -79,12 +80,16 @@ var genConfigCmd = &cobra.Command{
 			logger.WithError(err).Fatal("Failed to create config.")
 		}
 
-		if hypervisorPK != "" {
-			key, err := coinCipher.PubKeyFromHex(hypervisorPK)
-			if err != nil {
-				logger.WithError(err).Fatal("Failed to parse hypervisor private key.")
+		if hypervisorPKs != "" {
+			keys := strings.Split(hypervisorPKs, ",")
+			for _, key := range keys {
+				keyParsed, err := coinCipher.PubKeyFromHex(key)
+				if err != nil {
+					logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)
+				}
+				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
 			}
-			conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(key))
+
 		}
 
 		// Save config to file.
