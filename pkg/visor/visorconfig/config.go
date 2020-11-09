@@ -153,10 +153,36 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
 	}
 
-	conf.Dmsgpty.AuthFile = skyenv.TestDmsgPtyWhiteList
-	conf.Transport.LogStore.Location = skyenv.TestTpLogStore
-	conf.Launcher.LocalPath = skyenv.TestAppLocalPath
-	conf.Launcher.BinPath = skyenv.TestAppBinPath
+	return conf, nil
+}
 
+// MakePackageConfig acts like MakeDefaultConfig but use package config defaults
+func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+	if err != nil {
+		return nil, err
+	}
+
+	conf.Dmsgpty = &V1Dmsgpty{
+		Port:     skyenv.DmsgPtyPort,
+		AuthFile: skyenv.PackageDmsgPtyWhiteList,
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	}
+
+	conf.Transport.LogStore = &V1LogStore{
+		Type:     "file",
+		Location: skyenv.PackageTpLogStore,
+	}
+
+	conf.Launcher.BinPath = skyenv.PackageAppBinPath
+	conf.Launcher.LocalPath = skyenv.PackageAppLocalPath
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
+		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
+	}
 	return conf, nil
 }

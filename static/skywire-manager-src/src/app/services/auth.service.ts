@@ -7,6 +7,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService, ResponseTypes, RequestOptions } from './api.service';
 import { OperationError } from '../utils/operation-error';
 import { processServiceError } from '../utils/errors';
+import { AuthGuardService } from './auth-guard.service';
 
 export enum AuthStates {
   AuthDisabled, Logged, NotLogged
@@ -22,6 +23,7 @@ export class AuthService {
   constructor(
     private apiService: ApiService,
     private translateService: TranslateService,
+    private authGuardService: AuthGuardService,
   ) { }
 
   /**
@@ -34,6 +36,8 @@ export class AuthService {
           if (status !== true) {
             throw new Error();
           }
+
+          this.authGuardService.forceFail = false;
         }),
       );
   }
@@ -56,6 +60,8 @@ export class AuthService {
 
           // The user is not logged.
           if (err.originalError && (err.originalError as HttpErrorResponse).status === 401) {
+            this.authGuardService.forceFail = true;
+
             return of(AuthStates.NotLogged);
           }
 
@@ -74,6 +80,8 @@ export class AuthService {
           if (status !== true) {
             throw new Error();
           }
+
+          this.authGuardService.forceFail = true;
         }),
       );
   }
