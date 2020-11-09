@@ -25,7 +25,7 @@ const (
 
 // AllowSSH allows all SSH traffic (via default 22 port) between `src` and `dst`.
 func AllowSSH(src, dst net.IP) error {
-	cmd := fmt.Sprintf(allowSSHCMDFmt, dst, src, dst, src)
+	cmd := fmt.Sprintf(allowSSHCMDFmt, dst, src, dst, src, src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
@@ -35,7 +35,7 @@ func AllowSSH(src, dst net.IP) error {
 
 // BlockSSH blocks all SSH traffic (via default 22 port) between `src` and `dst`.
 func BlockSSH(src, dst net.IP) error {
-	cmd := fmt.Sprintf(blockSSHCMDFmt, dst, src, dst, src)
+	cmd := fmt.Sprintf(blockSSHCMDFmt, dst, src, dst, src, src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
