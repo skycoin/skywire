@@ -5,7 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 
-import { AuthService } from '../../../services/auth.service';
+import { AuthService, AuthStates } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { InitialSetupComponent } from './initial-setup/initial-setup.component';
 import { OperationError } from '../../../utils/operation-error';
@@ -23,7 +23,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   form: FormGroup;
   loading = false;
 
-  private subscription: Subscription;
+  private verificationSubscription: Subscription;
+  private loginSubscription: Subscription;
 
   constructor(
     private authService: AuthService,
@@ -33,15 +34,24 @@ export class LoginComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
+    // Check if the user is already logged.
+    this.verificationSubscription = this.authService.checkLogin().subscribe(response => {
+      if (response !== AuthStates.NotLogged) {
+        this.router.navigate(['nodes'], { replaceUrl: true });
+      }
+    });
+
     this.form = new FormGroup({
       'password': new FormControl('', Validators.required),
     });
   }
 
   ngOnDestroy() {
-    if (this.subscription) {
-      this.subscription.unsubscribe();
+    if (this.loginSubscription) {
+      this.loginSubscription.unsubscribe();
     }
+
+    this.verificationSubscription.unsubscribe();
   }
 
   login() {
@@ -50,7 +60,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
 
     this.loading = true;
-    this.subscription = this.authService.login(this.form.get('password').value).subscribe(
+    this.loginSubscription = this.authService.login(this.form.get('password').value).subscribe(
       () => this.onLoginSuccess(),
       err => this.onLoginError(err)
     );

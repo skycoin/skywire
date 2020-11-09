@@ -8,13 +8,26 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const webhookURLEnvName = "DISCORD_WEBHOOK_URL"
+
 const (
-	webhookURLEnvName = "DISCORD_WEBHOOK_URL"
+	loggedLevel       = logrus.ErrorLevel
+	startStopLogLevel = logrus.InfoLevel
 )
+
+const (
+	// StartLogMessage defines a message on binary starting.
+	StartLogMessage = "Starting"
+	// StopLogMessage defines a message on binary stopping.
+	StopLogMessage = "Stopping"
+)
+
+// DefaultRateLimiterThreshold defines default rate limiter threshold.
+const DefaultRateLimiterThreshold = 10 * time.Minute
 
 // Hook is a Discord logger hook.
 type Hook struct {
-	logrus.Hook
+	*discordrus.Hook
 	limit      time.Duration
 	timestamps map[string]time.Time
 }
@@ -30,9 +43,16 @@ func WithLimit(limit time.Duration) Option {
 	}
 }
 
+// WithAuthor sets log entry author.
+func WithAuthor(author string) Option {
+	return func(h *Hook) {
+		h.Hook.Opts.Author = author
+	}
+}
+
 // NewHook returns a new Hook.
 func NewHook(tag, webHookURL string, opts ...Option) logrus.Hook {
-	parent := discordrus.NewHook(webHookURL, logrus.ErrorLevel, discordOpts(tag))
+	parent := discordrus.NewHook(webHookURL, loggedLevel, discordOpts(tag))
 
 	hook := &Hook{
 		Hook: parent,
@@ -47,6 +67,15 @@ func NewHook(tag, webHookURL string, opts ...Option) logrus.Hook {
 
 // Fire checks whether rate is fine and fires the underlying hook.
 func (h *Hook) Fire(entry *logrus.Entry) error {
+	switch entry.Message {
+	case StartLogMessage, StopLogMessage:
+		// Start and stop messages should be logged by Hook but they should have Info level.
+		// With Info level, they would not be passed to hook.
+		// So we can use Error level in the codebase and change level to Info in the hook,
+		// then it appears as Info in logs.
+		entry.Level = startStopLogLevel
+	}
+
 	if h.shouldFire(entry) {
 		return h.Hook.Fire(entry)
 	}
@@ -78,4 +107,14 @@ func discordOpts(tag string) *discordrus.Opts {
 // GetWebhookURLFromEnv extracts webhook URL from an environment variable.
 func GetWebhookURLFromEnv() string {
 	return os.Getenv(webhookURLEnvName)
+}
+
+// GetDefaultOpts returns default options.
+func GetDefaultOpts() []Option {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "<unknown hostname>"
+	}
+
+	return []Option{WithLimit(DefaultRateLimiterThreshold), WithAuthor(hostname)}
 }

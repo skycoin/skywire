@@ -13,7 +13,7 @@ import (
 const (
 	currentVersion             = "0.0.1"
 	entryLifetime              = 1 * time.Minute
-	allowedEntryTimestampError = 100 * time.Millisecond
+	allowedEntryTimestampError = 5 * time.Second
 )
 
 var (
@@ -118,10 +118,6 @@ type Entry struct {
 
 	// Signature for proving authenticity of an Entry.
 	Signature string `json:"signature,omitempty"`
-
-	// NeedTimeout defines whether a timeout is needed for an entry.
-	// It is used to differentiate visors up to v0.2.3 as their entries do not need a timeout.
-	NeedTimeout bool `json:"need_timeout,omitempty"`
 }
 
 func (e *Entry) String() string {
@@ -183,24 +179,22 @@ func (s *Server) String() string {
 // should be signed with the private key before sending it to the server
 func NewClientEntry(pubkey cipher.PubKey, sequence uint64, delegatedServers []cipher.PubKey) *Entry {
 	return &Entry{
-		Version:     currentVersion,
-		Sequence:    sequence,
-		Client:      &Client{delegatedServers},
-		Static:      pubkey,
-		Timestamp:   time.Now().UnixNano(),
-		NeedTimeout: true, // v0.3.0+
+		Version:   currentVersion,
+		Sequence:  sequence,
+		Client:    &Client{delegatedServers},
+		Static:    pubkey,
+		Timestamp: time.Now().UnixNano(),
 	}
 }
 
 // NewServerEntry constructs a new Server entry.
 func NewServerEntry(pk cipher.PubKey, seq uint64, addr string, availableSessions int) *Entry {
 	return &Entry{
-		Version:     currentVersion,
-		Sequence:    seq,
-		Server:      &Server{Address: addr, AvailableSessions: availableSessions},
-		Static:      pk,
-		Timestamp:   time.Now().UnixNano(),
-		NeedTimeout: true, // v0.3.0+
+		Version:   currentVersion,
+		Sequence:  seq,
+		Server:    &Server{Address: addr, AvailableSessions: availableSessions},
+		Static:    pk,
+		Timestamp: time.Now().UnixNano(),
 	}
 }
 
@@ -277,7 +271,11 @@ func (e *Entry) Validate() error {
 
 	if ts.After(latestAcceptable) || ts.Before(earliestAcceptable) {
 		log.Warnf("Entry timestamp %v is not correct (now: %v)", ts, now)
-		return ErrValidationOutdatedTime
+		// Skybian boards have issues with mismatching time because of https://github.com/skycoin/skybian/issues/47.
+		// This causes issues like https://github.com/SkycoinPro/skywire-services/issues/274.
+		// Therefore, the timestamp check needs to be temporarily disabled until the issue is resolved.
+		//
+		// return ErrValidationOutdatedTime
 	}
 
 	return nil

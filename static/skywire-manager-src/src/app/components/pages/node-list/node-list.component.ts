@@ -7,7 +7,7 @@ import { TranslateService } from '@ngx-translate/core';
 
 import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
-import { AuthService } from '../../../services/auth.service';
+import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
@@ -21,7 +21,6 @@ import { LabeledElementTextComponent } from '../../layout/labeled-element-text/l
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { UpdateComponent, NodeData } from '../../layout/update/update.component';
-import { UpdateHypervisorComponent } from '../../layout/update-hypervisor/update-hypervisor.component';
 
 /**
  * Page for showing the node list.
@@ -37,7 +36,8 @@ export class NodeListComponent implements OnInit, OnDestroy {
   private readonly dmsgListId = 'dl';
 
   // Vars with the data of the columns used for sorting the data.
-  stateSortData = new SortingColumn(['online'], 'transports.state', SortingModes.Boolean);
+  hypervisorSortData = new SortingColumn(['isHypervisor'], 'nodes.hypervisor', SortingModes.Boolean);
+  stateSortData = new SortingColumn(['online'], 'nodes.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
   keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
   dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
@@ -107,6 +107,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
   ];
 
+  private authVerificationSubscription: Subscription;
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private updateSubscription: Subscription;
@@ -136,6 +137,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private translateService: TranslateService,
     route: ActivatedRoute,
   ) {
+    // Configure the options menu shown in the top bar.
+    this.updateOptionsMenu(true);
+
+    // Check if logout button must be removed.
+    this.authVerificationSubscription = this.authService.checkLogin().subscribe(response => {
+      if (response === AuthStates.AuthDisabled) {
+        this.updateOptionsMenu(false);
+      }
+    });
+
     // Show the dmsg info if the dmsg url was used.
     this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
 
@@ -146,6 +157,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
+      this.hypervisorSortData,
       this.stateSortData,
       this.labelSortData,
       this.keySortData,
@@ -212,30 +224,33 @@ export class NodeListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    // Options for the menu shown in the top bar.
-    this.options = [
-      {
-        name: 'nodes.update-hypervisor',
-        actionName: 'updateHypervisor',
-        icon: 'get_app'
-      },
-      {
-        name: 'nodes.update-all',
-        actionName: 'updateAll',
-        icon: 'get_app'
-      },
-      {
-        name: 'common.logout',
-        actionName: 'logout',
-        icon: 'power_settings_new'
-      }
-    ];
-
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
       this.nodeService.forceNodeListRefresh();
     });
+  }
+
+  /**
+   * Configures the options menu shown in the top bar.
+   * @param showLogoutOption If the logout option must be included.
+   */
+  private updateOptionsMenu(showLogoutOption: boolean) {
+    this.options = [
+      {
+        name: 'nodes.update-all',
+        actionName: 'updateAll',
+        icon: 'get_app'
+      }
+    ];
+
+    if (showLogoutOption) {
+      this.options.push({
+        name: 'common.logout',
+        actionName: 'logout',
+        icon: 'power_settings_new'
+      });
+    }
   }
 
   ngOnInit() {
@@ -254,6 +269,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.nodeService.stopRequestingNodeList();
+    this.authVerificationSubscription.unsubscribe();
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
@@ -277,8 +293,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.logout();
     } else if (actionName === 'updateAll') {
       this.updateAll();
-    } else if (actionName === 'updateHypervisor') {
-      this.updateHypervisor();
     }
   }
 
@@ -438,11 +452,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     });
 
     UpdateComponent.openDialog(this.dialog, nodesData);
-  }
-
-  // Updates the hypervisor.
-  updateHypervisor() {
-    UpdateHypervisorComponent.openDialog(this.dialog);
   }
 
   /**

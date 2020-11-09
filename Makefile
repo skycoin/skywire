@@ -42,9 +42,10 @@ BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
 BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
 BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
 
-BUILDINFO?=-ldflags="$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)"
+BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
 
-BUILD_OPTS?=$(BUILDINFO)
+BUILD_OPTS?="-ldflags=$(BUILDINFO)"
+BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
@@ -135,7 +136,6 @@ dep: ## Sorts dependencies
 # Apps
 host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
@@ -152,22 +152,28 @@ release: ## Build `skywire-visor`, `skywire-cli` and apps without -race flag
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
-package-amd64: install-deps-ui lint-ui build-ui ## Build the debian package.
+build-deploy: ## Build for deployment Docker images
+	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/skywire-cli ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skychat ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
+
+package-amd64: ## Build the debian package.
 	scripts/dPKGBUILD.sh amd64
 
-package-arm64: install-deps-ui lint-ui build-ui ## Build the debian package.
+package-arm64: ## Build the debian package.
 	scripts/dPKGBUILD.sh arm64
 
-package-armhf:  install-deps-ui lint-ui build-ui ## Build the debian package.
+package-armhf: ## Build the debian package.
 	scripts/dPKGBUILD.sh armhf
 
-all-packages: install-deps-ui lint-ui build-ui
+all-packages: ## Build the debian package.
 	scripts/dPKGBUILD.sh amd64
 	scripts/dPKGBUILD.sh arm64
 	scripts/dPKGBUILD.sh armhf
@@ -182,7 +188,7 @@ install-deps-ui:  ## Install the UI dependencies
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
 
-build-ui:  ## Builds the UI
+build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
 	${OPTS} GOBIN=${PWD}/bin go get github.com/rakyll/statik
@@ -201,7 +207,6 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld ./cmd/apps/helloworld
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks ./cmd/apps/skysocks
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client  ./cmd/apps/skysocks-client
 

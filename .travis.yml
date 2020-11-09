@@ -18,14 +18,14 @@ before_install:
 
 install:
   - go get -u github.com/FiloSottile/vendorcheck
-  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.27.0
+  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $GOPATH/bin v1.31.0
   - make tidy
 
 before_script:
   - ci_scripts/create-ip-aliases.sh
 
 script:
-#  - make lint TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
+  - make lint # TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
   - make test
   - make test-no-ci
   - make install-deps-ui
