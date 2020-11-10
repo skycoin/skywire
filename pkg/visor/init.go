@@ -498,7 +498,7 @@ func InitHypervisors(ctx context.Context, v *Visor) error {
 
 // InitUptimeTracker initializes uptime tracker client.
 func InitUptimeTracker(ctx context.Context, v *Visor) error {
-	const tickDuration = 10 * time.Second
+	const tickDuration = 1 * time.Minute
 
 	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker
@@ -589,8 +589,6 @@ func InitHypervisor(ctx context.Context, v *Visor) error {
 	conf.PK = v.conf.PK
 	conf.SK = v.conf.SK
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
-
-	conf.FillDefaults(false)
 
 	// Prepare hypervisor.
 	hv, err := New(conf, assets, v, v.net.Dmsg())

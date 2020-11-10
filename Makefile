@@ -164,16 +164,16 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-package-amd64: install-deps-ui lint-ui build-ui ## Build the debian package.
+package-amd64: ## Build the debian package.
 	scripts/dPKGBUILD.sh amd64
 
-package-arm64: install-deps-ui lint-ui build-ui ## Build the debian package.
+package-arm64: ## Build the debian package.
 	scripts/dPKGBUILD.sh arm64
 
-package-armhf:  install-deps-ui lint-ui build-ui ## Build the debian package.
+package-armhf: ## Build the debian package.
 	scripts/dPKGBUILD.sh armhf
 
-all-packages: install-deps-ui lint-ui build-ui
+all-packages: ## Build the debian package.
 	scripts/dPKGBUILD.sh amd64
 	scripts/dPKGBUILD.sh arm64
 	scripts/dPKGBUILD.sh armhf

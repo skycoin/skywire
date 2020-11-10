@@ -11,7 +11,7 @@ import (
 // DoClientHandshake performs client/server handshake from the client side.
 func DoClientHandshake(log logrus.FieldLogger, conn net.Conn,
 	cHello ClientHello) (TUNIP, TUNGateway net.IP, err error) {
-	log.Debugf("Sending client hello: %v", cHello)
+	fmt.Printf("Sending client hello: %v", cHello)
 
 	if err := WriteJSON(conn, &cHello); err != nil {
 		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
@@ -22,7 +22,7 @@ func DoClientHandshake(log logrus.FieldLogger, conn net.Conn,
 		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
 	}
 
-	log.Debugf("Got server hello: %v", sHello)
+	fmt.Printf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
 		return nil, nil, fmt.Errorf("got status %d (%s) from the server", sHello.Status, sHello.Status)

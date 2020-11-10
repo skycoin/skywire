@@ -184,8 +184,6 @@ func (tm *Manager) serve(ctx context.Context) {
 }
 
 func (tm *Manager) initTransports(ctx context.Context) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
 
 	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
 	if err != nil {
@@ -263,8 +261,6 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
 
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
@@ -286,7 +282,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				delete(tm.tps, mTp.Entry.ID)
+				tm.deleteTransport(mTp.Entry.ID)
 				continue
 			}
 
@@ -297,7 +293,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				delete(tm.tps, mTp.Entry.ID)
+				tm.deleteTransport(mTp.Entry.ID)
 				return nil, err
 			}
 
@@ -315,6 +311,8 @@ func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
 	if !snet.IsKnownNetwork(netName) {
 		return nil, snet.ErrUnknownNetwork
 	}
@@ -354,12 +352,9 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 	go func() {
 		mTp.Serve(tm.readCh)
-		tm.mx.Lock()
-		delete(tm.tps, mTp.Entry.ID)
-		tm.mx.Unlock()
+		tm.deleteTransport(mTp.Entry.ID)
 	}()
 	tm.tps[tpID] = mTp
-
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
 	return mTp, nil
 }
@@ -405,6 +400,12 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		tp.close()
 		delete(tm.tps, id)
 	}
+}
+
+func (tm *Manager) deleteTransport(id uuid.UUID) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	delete(tm.tps, id)
 }
 
 // ReadPacket reads data packets from routes.

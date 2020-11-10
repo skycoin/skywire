@@ -648,6 +648,10 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 
 func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
 	for i := 0; i < len(rg.tps); i++ {
+		if rg.tps[i] == nil || rg.fwd[i] == nil {
+			continue
+		}
+
 		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
 		if err := rg.writePacket(context.Background(), rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
 			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
