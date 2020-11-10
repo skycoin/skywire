@@ -28,11 +28,10 @@ public class VisorRunnable implements Runnable {
     }
 
     public void stopVisor() {
-        long code = Skywiremob.stopVisor();
-        if (code != Skywiremob.ErrCodeNoError) {
-            String err = "Failed to stop visor: " + ((Long)code).toString();
-            Skywiremob.printString(err);
-            showToast(err);
+        skywiremob.Error err = Skywiremob.stopVisor();
+        if (err.getCode() != Skywiremob.ErrCodeNoError) {
+            Skywiremob.printString(err.getError());
+            showToast(err.getError());
         }
     }
 
@@ -48,53 +47,48 @@ public class VisorRunnable implements Runnable {
     public void run() {
         android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
 
-        long code = Skywiremob.prepareVisor();
-        if (code != Skywiremob.ErrCodeNoError) {
-            String err = "Failed to prepare visor: " + ((Long)code).toString();
-            Skywiremob.printString(err);
-            showToast(err);
+        skywiremob.Error err = Skywiremob.prepareVisor();
+        if (err.getCode() != Skywiremob.ErrCodeNoError) {
+            Skywiremob.printString(err.getError());
+            showToast(err.getError());
             return;
         }
         Skywiremob.printString("Prepared visor");
 
-        code = Skywiremob.waitVisorReady();
-        if (code != Skywiremob.ErrCodeNoError) {
-            String err = "Failed to start visor: " + ((Long)code).toString();
-            Skywiremob.printString(err);
-            showToast(err);
+        err = Skywiremob.waitVisorReady();
+        if (err.getCode() != Skywiremob.ErrCodeNoError) {
+            Skywiremob.printString(err.getError());
+            showToast(err.getError());
             return;
         }
 
-        code = Skywiremob.prepareVPNClient(this.RemotePK, this.Passcode);
-        if (code != Skywiremob.ErrCodeNoError) {
-            String err = "Failed to prepare VPN client: " + ((Long)code).toString();
-            Skywiremob.printString(err);
-            showToast(err);
+        err = Skywiremob.prepareVPNClient(this.RemotePK, this.Passcode);
+        if (err.getCode() != Skywiremob.ErrCodeNoError) {
+            Skywiremob.printString(err.getError());
+            showToast(err.getError());
             return;
         }
         Skywiremob.printString("Prepared VPN client");
 
-        code = Skywiremob.shakeHands();
-        if (code != Skywiremob.ErrCodeNoError) {
-            String err = "Failed to perform client/server handshake: " + ((Long)code).toString();
-            Skywiremob.printString(err);
-            showToast(err);
+        err = Skywiremob.shakeHands();
+        if (err.getCode() != Skywiremob.ErrCodeNoError) {
+            Skywiremob.printString(err.getError());
+            showToast(err.getError());
             return;
         }
 
-        code = Skywiremob.startListeningUDP();
-        if (code != Skywiremob.ErrCodeNoError) {
-            String err = "Failed to start listening UDP: " + ((Long)code).toString();
-            Skywiremob.printString(err);
-            showToast(err);
+        err = Skywiremob.startListeningUDP();
+        if (err.getCode() != Skywiremob.ErrCodeNoError) {
+            Skywiremob.printString(err.getError());
+            showToast(err.getError());
             return;
         }
 
-        code = Skywiremob.serveVPN();
-        if (code != Skywiremob.ErrCodeNoError) {
-            String err = "Failed to serve VPN: " + ((Long)code).toString();
-            Skywiremob.printString(err);
-            showToast(err);
+        err = Skywiremob.serveVPN();
+        if (err.getCode() != Skywiremob.ErrCodeNoError) {
+            String errMsg = "Failed to serve VPN: " + err.getError();
+            Skywiremob.printString(errMsg);
+            showToast(errMsg);
             return;
         }
 
