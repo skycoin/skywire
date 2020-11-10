@@ -3,6 +3,7 @@ package router
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -752,13 +753,17 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	var p routing.Packet
 
 	switch packet.Type() {
-	case routing.DataPacket, routing.NetworkProbePacket:
+	case routing.DataPacket:
 		var err error
 
 		p, err = routing.MakeDataPacket(rule.NextRouteID(), packet.Payload())
 		if err != nil {
 			return err
 		}
+	case routing.NetworkProbePacket:
+		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))
+		throughput := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset+8:]))
+		p = routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:
