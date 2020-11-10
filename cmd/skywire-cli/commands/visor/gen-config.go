@@ -83,7 +83,7 @@ var genConfigCmd = &cobra.Command{
 		if hypervisorPKs != "" {
 			keys := strings.Split(hypervisorPKs, ",")
 			for _, key := range keys {
-				keyParsed, err := coinCipher.PubKeyFromHex(key)
+				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
 				if err != nil {
 					logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)
 				}
