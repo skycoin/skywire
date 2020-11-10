@@ -68,8 +68,8 @@ public class MainActivity extends Activity implements Handler.Callback {
                 String remotePK = mRemotePK.getText().toString();
                 String passcode = mPasscode.getText().toString();
 
-                long code = Skywiremob.isPKValid(remotePK);
-                if (code != Skywiremob.ErrCodeNoError) {
+                skywiremob.Error err = Skywiremob.isPKValid(remotePK);
+                if (err.getCode() != Skywiremob.ErrCodeNoError) {
                     Toast toast = Toast.makeText(getApplicationContext(),
                             "Invalid credentials" , Toast.LENGTH_SHORT);
                     toast.show();

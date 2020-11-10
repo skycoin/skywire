@@ -55,6 +55,37 @@ const (
 	ErrCodeUDPListenFailed
 )
 
+// Error is an error struct to be returned from `skywiremob`.
+type Error struct {
+	Code  int
+	Error string
+}
+
+func newError(code int, err string) *Error {
+	return &Error{
+		Code:  code,
+		Error: err,
+	}
+}
+
+func newNoError() *Error {
+	return &Error{
+		Code: ErrCodeNoError,
+	}
+}
+
+func errorFromVisorErrWithCode(e *visorerr.ErrorWithCode) *Error {
+	err := Error{
+		Code: int(e.Code),
+	}
+
+	if e.Code != visorerr.ErrCodeNoError && e.Err != nil {
+		err.Error = e.Error()
+	}
+
+	return &err
+}
+
 const (
 	visorConfig = `{
 	"version": "v1.0.0",
@@ -117,14 +148,14 @@ func PrintString(str string) {
 }
 
 // IsPKValid checks if pub key is valid. Returns non-empty error string on failure.
-func IsPKValid(pkStr string) int {
+func IsPKValid(pkStr string) *Error {
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
 		log.WithError(err).Errorln("Invalid PK")
-		return ErrCodeInvalidPK
+		return newError(ErrCodeInvalidPK, err.Error())
 	}
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 // GetMTU returns VPN connection MTU.
@@ -176,7 +207,7 @@ var (
 )
 
 // PrepareVisor creates and runs visor instance.
-func PrepareVisor() int {
+func PrepareVisor() *Error {
 	// set the same init stack as usual, but without apps launcher
 	visor.SetInitStack(func() []visor.InitFunc {
 		return []visor.InitFunc{
@@ -196,8 +227,7 @@ func PrepareVisor() int {
 	// we use STDIN not to flush the config
 	conf, err := initConfig(log, visorconfig.StdinName)
 	if err != nil {
-		log.WithError(err).Errorln("Error getting visor config")
-		return ErrCodeInvalidVisorConfig
+		return newError(ErrCodeInvalidVisorConfig, err.Error())
 	}
 
 	log.Infoln("Initialized config")
@@ -237,11 +267,11 @@ func PrepareVisor() int {
 		globalVisorMx.Unlock()
 	}(ctx)
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 // WaitVisorReady blocks until visor gets fully initialized.
-func WaitVisorReady() int {
+func WaitVisorReady() *Error {
 	globalVisorMx.Lock()
 	ready := globalVisorReady
 	globalVisorMx.Unlock()
@@ -250,13 +280,13 @@ func WaitVisorReady() int {
 		log.WithError(err).Errorln("Failed to start up visor")
 		var e *visorerr.ErrorWithCode
 		if errors.As(err, &e) {
-			return int(e.Code)
+			return errorFromVisorErrWithCode(e)
 		}
 
-		return ErrCodeUnknown
+		return newError(ErrCodeUnknown, err.Error())
 	}
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 var (
@@ -328,24 +358,22 @@ func NextDmsgSocket() int {
 }
 
 // PrepareVPNClient creates and runs VPN client instance.
-func PrepareVPNClient(srvPKStr, passcode string) int {
+func PrepareVPNClient(srvPKStr, passcode string) *Error {
 	globalVisorMx.Lock()
 	v := globalVisor
 	globalVisorMx.Unlock()
 
 	if v == nil {
-		return ErrCodeVisorNotRunning
+		return newError(ErrCodeVisorNotRunning, "Visor is not running")
 	}
 
 	var srvPK cipher.PubKey
 	if err := srvPK.UnmarshalText([]byte(srvPKStr)); err != nil {
-		log.WithError(err).Errorln("invalid remote PK")
-		return ErrCodeInvalidRemotePK
+		return newError(ErrCodeInvalidRemotePK, err.Error())
 	}
 
 	if _, err := v.SaveTransport(context.Background(), srvPK, dmsg.Type); err != nil {
-		log.WithError(err).Errorln("failed to save transport to VPN server")
-		return ErrCodeFailedToSaveTransport
+		return newError(ErrCodeFailedToSaveTransport, err.Error())
 	}
 
 	log.Infoln("Saved transport to VPN server")
@@ -358,16 +386,14 @@ func PrepareVPNClient(srvPKStr, passcode string) int {
 		Port:   vpnPort,
 	})
 	if err != nil {
-		log.WithError(err).Errorln("failed to dial VPN server")
-		return ErrCodeVPNServerUnavailable
+		return newError(ErrCodeVPNServerUnavailable, err.Error())
 	}
 
 	log.Infoln("Dialed VPN server")
 
 	conn, err := appnet.WrapConn(connRaw)
 	if err != nil {
-		log.WithError(err).Errorln("failed to wrap app conn")
-		return ErrCodeUnknown
+		return newError(ErrCodeUnknown, fmt.Errorf("failed to wrap app conn: %w", err).Error())
 	}
 
 	log.Infoln("Wrapped app conn")
@@ -384,23 +410,22 @@ func PrepareVPNClient(srvPKStr, passcode string) int {
 
 	log.Infoln("Created VPN client")
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 // ShakeHands performs VPN client/server handshake.
-func ShakeHands() int {
+func ShakeHands() *Error {
 	vpnClientMx.Lock()
 	vpnCl := vpnClient
 	vpnClientMx.Unlock()
 
 	if vpnCl == nil {
-		return ErrCodeVPNClientNotRunning
+		return newError(ErrCodeVPNClientNotRunning, "VPN client is not running")
 	}
 
 	tunIPInternal, tunGatewayInternal, err := vpnCl.ShakeHands()
 	if err != nil {
-		log.WithError(err).Errorln("handshake error")
-		return ErrCodeHandshakeFailed
+		return newError(ErrCodeHandshakeFailed, err.Error())
 	}
 
 	log.Infoln("Shook hands with VPN server")
@@ -412,7 +437,7 @@ func ShakeHands() int {
 
 	log.Println("Set TUN IP and gateway")
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 func getVPNSkywireConn() (*appnet.SkywireConn, bool) {
@@ -510,7 +535,7 @@ func StopVPNClient() {
 }
 
 // StopVisor stops running visor. Returns non-empty error string on failure.
-func StopVisor() int {
+func StopVisor() *Error {
 	globalVisorMx.Lock()
 	v := globalVisor
 	cancel := globalVisorCancel
@@ -519,7 +544,7 @@ func StopVisor() int {
 	globalVisorMx.Unlock()
 
 	if v == nil || cancel == nil {
-		return ErrCodeVisorNotRunning
+		return newError(ErrCodeVisorNotRunning, "Visor is not running")
 	}
 
 	cancel()
@@ -544,7 +569,7 @@ func StopVisor() int {
 	globalVisorReady = make(chan error, 2)
 	globalVisorMx.Unlock()
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 func initConfig(mLog *logging.MasterLogger, confPath string) (*visorconfig.V1, error) {
@@ -563,22 +588,21 @@ func initConfig(mLog *logging.MasterLogger, confPath string) (*visorconfig.V1, e
 var mobileAppAddrCh = make(chan *net.UDPAddr, 2)
 
 // SetMobileAppAddr sets address of the UDP connection opened on the mobile application side.
-func SetMobileAppAddr(addr string) int {
+func SetMobileAppAddr(addr string) *Error {
 	// address passed from the Android device contains `/` prefix, strip it.
 	addr = strings.TrimLeft(addr, " /")
 
 	tokens := strings.Split(addr, ":")
 
 	if len(tokens) != 2 {
-		log.Errorf("Android app addr is invalid (wrong tokens number): %s", addr)
-		return ErrCodeInvalidAddr
+		return newError(ErrCodeInvalidAddr,
+			fmt.Errorf("android app addr is invalid (wrong tokens number): %s", addr).Error())
 	}
 
 	addrIP := net.ParseIP(tokens[0])
 	addrPort, err := strconv.Atoi(tokens[1])
 	if err != nil {
-		log.WithError(err).Errorln("Failed to parse android app port")
-		return ErrCodeInvalidAddr
+		return newError(ErrCodeInvalidAddr, err.Error())
 	}
 
 	mobileAppAddrCh <- &net.UDPAddr{
@@ -587,7 +611,7 @@ func SetMobileAppAddr(addr string) int {
 		Zone: "",
 	}
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 var (
@@ -596,13 +620,13 @@ var (
 )
 
 // ServeVPN starts handling VPN traffic.
-func ServeVPN() int {
+func ServeVPN() *Error {
 	vpnClientMx.Lock()
 	vpnCl := vpnClient
 	vpnClientMx.Unlock()
 
 	if vpnCl == nil {
-		return ErrCodeVPNClientNotRunning
+		return newError(ErrCodeVPNClientNotRunning, "VPN client is not running")
 	}
 
 	go func() {
@@ -631,16 +655,15 @@ func ServeVPN() int {
 
 	atomic.StoreInt32(&isVPNReady, 1)
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 // StartListeningUDP starts listening UDP.
-func StartListeningUDP() int {
+func StartListeningUDP() *Error {
 	globalUDPConnMu.Lock()
 	if globalUDPConn != nil {
 		globalUDPConnMu.Unlock()
-		log.Errorln("UDP connection is already open")
-		return ErrCodeAlreadyListeningUDP
+		return newError(ErrCodeAlreadyListeningUDP, "UDP connection is already open")
 	}
 
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{
@@ -648,8 +671,7 @@ func StartListeningUDP() int {
 		Port: 7890,
 	})
 	if err != nil {
-		log.WithError(err).Errorln("Failed to listen UDP")
-		return ErrCodeUDPListenFailed
+		return newError(ErrCodeUDPListenFailed, err.Error())
 	}
 
 	globalUDPConn = conn
@@ -657,7 +679,7 @@ func StartListeningUDP() int {
 
 	log.Infoln("Listening UDP")
 
-	return ErrCodeNoError
+	return newNoError()
 }
 
 // StopListeningUDP closes UDP socket.
