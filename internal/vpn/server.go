@@ -153,12 +153,12 @@ func (s *Server) closeConn(conn net.Conn) {
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
-	tunIP, tunGateway, allowTraffToLocalNet, err := s.shakeHands(conn)
+	tunIP, tunGateway, allowTrafficToLocalNet, err := s.shakeHands(conn)
 	if err != nil {
 		s.log.WithError(err).Errorf("Error negotiating with client %s", conn.RemoteAddr())
 		return
 	}
-	defer allowTraffToLocalNet()
+	defer allowTrafficToLocalNet()
 
 	tun, err := newTUNDevice()
 	if err != nil {
@@ -260,25 +260,10 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
 		}
 
-		allowLocalNetTraff := func() {
+		unsecureVPN = func() {
 			if err := AllowIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
 				s.log.WithError(err).Errorln("Error allowing traffic to local network")
 			}
-		}
-
-		/*if err := BlockSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
-			s.sendServerErrHello(conn, HandshakeStatusInternalError)
-			allowLocalNetTraff()
-			return nil, nil, nil,
-				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
-		}*/
-
-		unsecureVPN = func() {
-			allowLocalNetTraff()
-
-			/*if err := AllowSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
-				s.log.WithError(err).Errorln("Error allowing SSH through")
-			}*/
 		}
 	}
 
