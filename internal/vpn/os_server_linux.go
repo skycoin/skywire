@@ -60,7 +60,7 @@ func BlockSSH(src, dst net.IP, defaultNetIfcIPs []net.IP) error {
 // to private IP ranges.
 func AllowIPToLocalNetwork(src, dst net.IP) error {
 	//cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, dst, src, dst, src)
-	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src)
+	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
@@ -72,7 +72,7 @@ func AllowIPToLocalNetwork(src, dst net.IP) error {
 // to private IP ranges.
 func BlockIPToLocalNetwork(src, dst net.IP) error {
 	//cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, dst, src, dst, src)
-	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src)
+	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
