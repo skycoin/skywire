@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strings"
 )
 
 const (
@@ -19,13 +20,18 @@ const (
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
 	blockIPToLocalNetCMDFmt     = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I FORWARD -d %s -s %s -j ACCEPT"
 	allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D FORWARD -d %s -s %s -j ACCEPT"
-	blockSSHCMDFmt              = "iptables -I FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP && iptables -I INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -p tcp --dport 22 -j DROP"
-	allowSSHCMDFmt              = "iptables -D FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP && iptables -D INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -p tcp --dport 22 -j DROP"
+	blockSSHCMDFmt              = "iptables -I FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP && iptables -I INPUT -d %s -s %s -j DROP"
+	allowSSHCMDFmt              = "iptables -D FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP && iptables -D INPUT -d %s -s %s -j DROP"
 )
 
 // AllowSSH allows all SSH traffic (via default 22 port) between `src` and `dst`.
-func AllowSSH(src, dst net.IP) error {
-	cmd := fmt.Sprintf(allowSSHCMDFmt, dst, src, dst, src, src)
+func AllowSSH(src, dst net.IP, defaultNetIfcIPs []net.IP) error {
+	defaultNetIfcIPsStr := make([]string, 0, len(defaultNetIfcIPs))
+	for _, ip := range defaultNetIfcIPs {
+		defaultNetIfcIPsStr = append(defaultNetIfcIPsStr, ip.String())
+	}
+
+	cmd := fmt.Sprintf(allowSSHCMDFmt, dst, src, dst, src, strings.Join(defaultNetIfcIPsStr, ","), src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
@@ -34,8 +40,13 @@ func AllowSSH(src, dst net.IP) error {
 }
 
 // BlockSSH blocks all SSH traffic (via default 22 port) between `src` and `dst`.
-func BlockSSH(src, dst net.IP) error {
-	cmd := fmt.Sprintf(blockSSHCMDFmt, dst, src, dst, src, src)
+func BlockSSH(src, dst net.IP, defaultNetIfcIPs []net.IP) error {
+	defaultNetIfcIPsStr := make([]string, 0, len(defaultNetIfcIPs))
+	for _, ip := range defaultNetIfcIPs {
+		defaultNetIfcIPsStr = append(defaultNetIfcIPsStr, ip.String())
+	}
+
+	cmd := fmt.Sprintf(blockSSHCMDFmt, dst, src, dst, src, strings.Join(defaultNetIfcIPsStr, ","), src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}

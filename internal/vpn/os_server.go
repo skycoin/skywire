@@ -12,12 +12,12 @@ var (
 )
 
 // AllowSSH allows all SSH traffic (via default 22 port) between `src` and `dst`.
-func AllowSSH(_, _ net.IP) error {
+func AllowSSH(_, _ net.IP, _ []net.IP) error {
 	return errServerMethodsNotSupported
 }
 
 // BlockSSH blocks all SSH traffic (via default 22 port) between `src` and `dst`.
-func BlockSSH(_, _ net.IP) error {
+func BlockSSH(_, _ net.IP, _ []net.IP) error {
 	return errServerMethodsNotSupported
 }
 
