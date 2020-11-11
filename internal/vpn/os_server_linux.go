@@ -18,10 +18,10 @@ const (
 	setIPv6ForwardingCMDFmt     = "sysctl -w net.ipv6.conf.all.forwarding=%s"
 	enableIPMasqueradingCMDFmt  = "iptables -t nat -A POSTROUTING -o %s -j MASQUERADE"
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
-	blockIPToLocalNetCMDFmt     = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I FORWARD -d %s -s %s -j ACCEPT"
-	allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D FORWARD -d %s -s %s -j ACCEPT"
-	blockSSHCMDFmt              = "iptables -I FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP && iptables -I INPUT -d %s -s %s -j DROP"
-	allowSSHCMDFmt              = "iptables -D FORWARD -p tcp --dport 22 -d %s,%s -s %s,%s -j DROP && iptables -D INPUT -d %s -s %s -j DROP"
+	blockIPToLocalNetCMDFmt     = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I INPUT -d %s -s %s -j DROP && iptables -I FORWARD -d %s -s %s -j ACCEPT"
+	allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D INPUT -d %s -s %s -j DROP && iptables -D FORWARD -d %s -s %s -j ACCEPT"
+	blockSSHCMDFmt              = "iptables -I FORWARD -d %s,%s -s %s,%s -j DROP && iptables -I INPUT -d %s -s %s -j DROP"
+	allowSSHCMDFmt              = "iptables -D FORWARD -d %s,%s -s %s,%s -j DROP && iptables -D INPUT -d %s -s %s -j DROP"
 )
 
 // AllowSSH allows all SSH traffic (via default 22 port) between `src` and `dst`.
@@ -57,7 +57,7 @@ func BlockSSH(src, dst net.IP, defaultNetIfcIPs []net.IP) error {
 // AllowIPToLocalNetwork allows all the packets coming from `source`
 // to private IP ranges.
 func AllowIPToLocalNetwork(src, dst net.IP) error {
-	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, dst, src)
+	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, dst, src, dst, src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}
@@ -68,7 +68,7 @@ func AllowIPToLocalNetwork(src, dst net.IP) error {
 // BlockIPToLocalNetwork blocks all the packets coming from `source`
 // to private IP ranges.
 func BlockIPToLocalNetwork(src, dst net.IP) error {
-	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, dst, src)
+	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, dst, src, dst, src)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
 		return fmt.Errorf("error running command %s: %w", cmd, err)
 	}

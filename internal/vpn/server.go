@@ -266,19 +266,19 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 			}
 		}
 
-		if err := BlockSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
+		/*if err := BlockSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
 			s.sendServerErrHello(conn, HandshakeStatusInternalError)
 			allowLocalNetTraff()
 			return nil, nil, nil,
 				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
-		}
+		}*/
 
 		unsecureVPN = func() {
 			allowLocalNetTraff()
 
-			if err := AllowSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
+			/*if err := AllowSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
 				s.log.WithError(err).Errorln("Error allowing SSH through")
-			}
+			}*/
 		}
 	}
 
