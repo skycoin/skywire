@@ -12,15 +12,16 @@ import (
 
 // Server is a VPN server.
 type Server struct {
-	cfg                     ServerConfig
-	lisMx                   sync.Mutex
-	lis                     net.Listener
-	log                     logrus.FieldLogger
-	serveOnce               sync.Once
-	ipGen                   *IPGenerator
-	defaultNetworkInterface string
-	ipv4ForwardingVal       string
-	ipv6ForwardingVal       string
+	cfg                        ServerConfig
+	lisMx                      sync.Mutex
+	lis                        net.Listener
+	log                        logrus.FieldLogger
+	serveOnce                  sync.Once
+	ipGen                      *IPGenerator
+	defaultNetworkInterface    string
+	defaultNetworkInterfaceIPs []net.IP
+	ipv4ForwardingVal          string
+	ipv6ForwardingVal          string
 }
 
 // NewServer creates VPN server instance.
@@ -38,6 +39,13 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 
 	l.Infof("Got default network interface: %s", defaultNetworkIfc)
 
+	defaultNetworkIfcIPs, err := NetworkInterfaceIPs(defaultNetworkIfc)
+	if err != nil {
+		return nil, fmt.Errorf("error getting IPs of interface %s: %w", defaultNetworkIfc, err)
+	}
+
+	l.Infof("Got IPs of interface %s: %v", defaultNetworkIfc, defaultNetworkIfcIPs)
+
 	ipv4ForwardingVal, err := GetIPv4ForwardingValue()
 	if err != nil {
 		return nil, fmt.Errorf("error getting IPv4 forwarding value: %w", err)
@@ -51,6 +59,7 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
 	s.defaultNetworkInterface = defaultNetworkIfc
+	s.defaultNetworkInterfaceIPs = defaultNetworkIfcIPs
 	s.ipv4ForwardingVal = ipv4ForwardingVal
 	s.ipv6ForwardingVal = ipv6ForwardingVal
 
@@ -257,7 +266,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 			}
 		}
 
-		if err := BlockSSH(cTUNIP, sTUNIP); err != nil {
+		if err := BlockSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
 			s.sendServerErrHello(conn, HandshakeStatusInternalError)
 			allowLocalNetTraff()
 			return nil, nil, nil,
@@ -267,7 +276,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 		unsecureVPN = func() {
 			allowLocalNetTraff()
 
-			if err := AllowSSH(cTUNIP, sTUNIP); err != nil {
+			if err := AllowSSH(cTUNIP, sTUNIP, s.defaultNetworkInterfaceIPs); err != nil {
 				s.log.WithError(err).Errorln("Error allowing SSH through")
 			}
 		}
