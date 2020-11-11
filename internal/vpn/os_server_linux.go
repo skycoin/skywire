@@ -20,8 +20,8 @@ const (
 	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
 	//blockIPToLocalNetCMDFmt     = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I INPUT -d %s -s %s -j DROP && iptables -I FORWARD -d %s -s %s -j ACCEPT"
 	//allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D INPUT -d %s -s %s -j DROP && iptables -D FORWARD -d %s -s %s -j ACCEPT"
-	blockIPToLocalNetCMDFmt = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
-	allowIPToLocalNetCMDFmt = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
+	blockIPToLocalNetCMDFmt = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
+	allowIPToLocalNetCMDFmt = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
 	blockSSHCMDFmt          = "iptables -I FORWARD -d %s,%s -s %s,%s -j DROP && iptables -I INPUT -d %s -s %s -j DROP"
 	allowSSHCMDFmt          = "iptables -D FORWARD -d %s,%s -s %s,%s -j DROP && iptables -D INPUT -d %s -s %s -j DROP"
 )
