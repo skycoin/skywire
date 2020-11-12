@@ -13,6 +13,7 @@ import { AllRoutesComponent } from './components/pages/node/routing/all-routes/a
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
+import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
 
 const routes: Routes = [
   {
@@ -117,6 +118,22 @@ const routes: Routes = [
         path: 'labels/:page',
         component: AllLabelsComponent
       },
+    ],
+  },
+  {
+    path: 'vpn',
+    canActivate: [AuthGuardService],
+    canActivateChild: [AuthGuardService],
+    children: [
+      {
+        path: '',
+        redirectTo: '1',
+        pathMatch: 'full'
+      },
+      {
+        path: ':page',
+        component: ServerListComponent
+      }
     ],
   },
   {
