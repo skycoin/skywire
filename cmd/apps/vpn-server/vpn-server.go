@@ -30,6 +30,7 @@ var (
 	localPKStr = flag.String("pk", "", "Local PubKey")
 	localSKStr = flag.String("sk", "", "Local SecKey")
 	passcode   = flag.String("passcode", "", "Passcode to authenticate connecting users")
+	secure     = flag.Bool("secure", true, "Forbid connections from clients to server local network")
 )
 
 func main() {
@@ -73,6 +74,7 @@ func main() {
 
 	srvCfg := vpn.ServerConfig{
 		Passcode: *passcode,
+		Secure:   *secure,
 	}
 	srv, err := vpn.NewServer(srvCfg, log)
 	if err != nil {
