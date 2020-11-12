@@ -226,11 +226,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/transports", hv.postTransport())
 				r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
 				r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
+				r.Delete("/visors/{pk}/transports/", hv.deleteTransports())
 				r.Get("/visors/{pk}/routes", hv.getRoutes())
 				r.Post("/visors/{pk}/routes", hv.postRoute())
 				r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
 				r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
+				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
@@ -687,6 +689,28 @@ func (hv *Hypervisor) deleteTransport() http.HandlerFunc {
 		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
+func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var transports []string
+		err := json.NewDecoder(r.Body).Decode(&transports)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		for _, transport := range transports {
+			transportBoxed, err := uuid.Parse(transport)
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+				return
+			}
+			if err := ctx.API.RemoveTransport(transportBoxed); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, true)
+	})
+}
 
 type routingRuleResp struct {
 	Key     routing.RouteID      `json:"key"`
@@ -811,6 +835,32 @@ func (hv *Hypervisor) deleteRoute() http.HandlerFunc {
 			return
 		}
 
+		httputil.WriteJSON(w, r, http.StatusOK, true)
+	})
+}
+
+func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rids []string
+		err := json.NewDecoder(r.Body).Decode(&rids)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, err)
+			return
+		}
+		hv.log(r).Info(rids)
+		for _, rid := range rids {
+			hv.log(r).Info(rid)
+			ridUint64, err := strconv.ParseUint(rid, 10, 32)
+			hv.log(r).Info(ridUint64, err)
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+				return
+			}
+			boxedRID := routing.RouteID(ridUint64)
+			if err := ctx.API.RemoveRoutingRule(boxedRID); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			}
+		}
 		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
