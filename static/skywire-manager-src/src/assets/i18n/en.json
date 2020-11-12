@@ -13,7 +13,8 @@
     "logout": "Logout",
     "logout-error": "Error logging out.",
     "logout-confirmation": "Are you sure you want to log out?",
-    "time-in-ms": "{{ time }}ms",
+    "time-in-ms": "{{ time }}ms.",
+    "time-in-segs": "{{ time }}s.",
     "ok": "Ok",
     "unknown": "Unknown",
     "close": "Close"
@@ -60,6 +61,7 @@
 
   "filters": {
     "filter-action": "Filter",
+    "filter-info": "Filter list.",
     "press-to-remove": "(Press to remove the filters)",
     "remove-confirmation": "Are you sure you want to remove the filters?"
   },
@@ -580,5 +582,64 @@
 
   "tabs-window" : {
     "title" : "Change tab"
+  },
+
+  "vpn" : {
+    "title": "VPN Control Panel",
+    "start": "Start",
+    "servers": "Servers",
+    "countries": "Countries",
+    "settings": "Settings",
+
+    "connection-info" : {
+      "state-connected": "Connected",
+      "state-info": "Current connection status",
+      "latency-info": "Current latency.",
+      "upload-info": "Upload speed.",
+      "download-info": "Download speed."
+    },
+
+    "server-list" : {
+      "country-small-table-label": "Country",
+      "country-info": "Country where the server is located.",
+      "name-small-table-label": "Name",
+      "location-small-table-label": "Location",
+      "public-key-small-table-label": "Pk",
+      "public-key-info": "Server public key.",
+      "congestion-rating-small-table-label": "Congestion rating",
+      "congestion-rating-info": "Rating of the server related to how congested it tends to be.",
+      "congestion-small-table-label": "Congestion",
+      "congestion-info": "Current server congestion.",
+      "latency-rating-small-table-label": "Latency rating",
+      "latency-rating-info": "Rating of the server related to how much latency it tends to have.",
+      "latency-small-table-label": "Latency",
+      "latency-info": "Current server latency",
+      "hops-small-table-label": "Hops",
+      "hops-info": "How many hops are needed for connecting with the server.",
+      "note-small-table-label": "Note",
+      "note-info": "Note about the server.",
+      "gold-rating-info": "Gold.",
+      "silver-rating-info": "Silver.",
+      "bronze-rating-info": "Bronze.",
+      "options-info": "Options.",
+      "empty": "Currently there are no VPN servers to show. Please try again later.",
+      "empty-with-filter": "No VPN server matches the selected filtering criteria.",
+      "add-manually-info": "Add server manually.",
+
+      "filter-dialog": {
+        "name": "The name must contain",
+        "location": "The location must contain",
+        "public-key": "The public key must contain",
+        "congestion-rating": "The congestion rating must be",
+        "latency-rating": "The latency rating must be",
+  
+        "rating-options": {
+          "any": "Any",
+          "gold": "Gold",
+          "silver": "Silver",
+          "bronze": "Bronze"
+        }
+      }
+    }
   }
 }
