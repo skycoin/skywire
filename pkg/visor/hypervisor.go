@@ -847,11 +847,8 @@ func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
 		}
-		hv.log(r).Info(rids)
 		for _, rid := range rids {
-			hv.log(r).Info(rid)
 			ridUint64, err := strconv.ParseUint(rid, 10, 32)
-			hv.log(r).Info(ridUint64, err)
 			if err != nil {
 				httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 				return
