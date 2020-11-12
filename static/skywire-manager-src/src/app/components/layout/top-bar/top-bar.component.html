@@ -52,7 +52,7 @@
 
 <div class="main-container">
   <!-- Return button and title text. -->
-  <div class="title d-none d-lg-flex">
+  <div class="main-area"><div class="title d-none d-lg-flex">
     <div *ngIf="returnText" class="return-container">
       <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
         <mat-icon [inline]="true">chevron_left</mat-icon>
@@ -95,7 +95,7 @@
     </div>
     <div class="blank-space"></div>
     <!-- Right buttons area. -->
-    <div class="right-container">
+    <div class="right-container" *ngIf="!showVpnInfo">
       <app-refresh-button
         *ngIf="showUpdateButton"
         [secondsSinceLastUpdate]="secondsSinceLastUpdate"
@@ -113,5 +113,31 @@
         <mat-icon [inline]="true">menu</mat-icon>
       </button>
     </div>
+  </div></div>
+
+  <!-- VPN connection info. -->
+  <div class="vpn-info" *ngIf="showVpnInfo">
+    <table cellspacing="0" cellpadding="0">
+      <tr>
+        <td class="green-clear-text" [matTooltip]="'vpn.connection-info.state-info' | translate">
+          <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+          {{ 'vpn.connection-info.state-connected' | translate }}
+        </td>
+        <td [matTooltip]="'vpn.connection-info.latency-info' | translate">
+          <mat-icon [inline]="true">swap_horiz</mat-icon>
+          123ms.
+        </td>
+      </tr>
+      <tr>
+        <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
+          <mat-icon [inline]="true">arrow_upward</mat-icon>
+          900 kb/s
+        </td>
+        <td [matTooltip]="'vpn.connection-info.download-info' | translate">
+          <mat-icon [inline]="true">arrow_downward</mat-icon>
+          12 kb/s
+        </td>
+      </tr>
+    </table>
   </div>
 </div>
