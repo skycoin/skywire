@@ -1,0 +1,245 @@
+<!-- Content when loading. -->
+<div *ngIf="loading" class="flex-column h-100 w-100">
+  <div>
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="1"
+      [showUpdateButton]="false"
+    ></app-top-bar>
+  </div>
+  <app-loading-indicator class="h-100"></app-loading-indicator>
+</div>
+
+<!-- Content when loaded. -->
+<div *ngIf="!loading" class="row">
+  <div class="col-12">
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="1"
+      [showUpdateButton]="false"
+      [showVpnInfo]="true"
+    ></app-top-bar>
+  </div>
+  <div class="col-12">
+    <div class="center-container mt-4.5">
+      <!-- Tabs. -->
+      <div class="option-bar-container">
+        <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container allow-overflow">
+          <div class="option-bar">
+            <div class="text-option selected">All</div>
+            <div class="text-option">Recent</div>
+            <div class="text-option">Favorites</div>
+            <div class="text-option">Blocked</div>
+          </div>
+        </div></div>
+      </div>
+      <!-- Filter button. -->
+      <div class="option-bar-container option-bar-margin">
+        <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container allow-overflow">
+          <div class="option-bar">
+            <div class="icon-option" (click)="dataFilterer.changeFilters()" [matTooltip]="'filters.filter-info' | translate">
+              <mat-icon [inline]="true">search</mat-icon>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <!-- Add button. -->
+      <div class="option-bar-container option-bar-margin">
+        <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container allow-overflow">
+          <div class="option-bar">
+            <div class="icon-option" [matTooltip]="'vpn.server-list.add-manually-info' | translate">
+              <mat-icon [inline]="true">add</mat-icon>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <br />
+      <!-- Upper paginator. -->
+      <app-paginator
+        *ngIf="numberOfPages > 1"
+        [currentPage]="currentPage"
+        [numberOfPages]="numberOfPages"
+        [linkParts]="['/vpn']"
+        [queryParams]="dataFilterer.currentUrlQueryParams">
+      </app-paginator>
+      <!-- Current filters info. -->
+      <br *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0" />
+      <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
+        <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
+          <span>{{ filterTexts.filterName | translate }}: </span>
+          <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
+          <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
+        </div>
+        <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
+      </div>
+    </div>
+
+    <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container">
+      <!-- Table. -->
+      <table
+        class="responsive-table-translucid d-none d-md-table"
+        *ngIf="dataSource.length > 0"
+        cellspacing="0" cellpadding="0"
+      >
+        <!-- Column names. -->
+        <tr>
+          <th class="sortable-column flag-column center" (click)="dataSorter.changeSortingOrder(countrySortData)" [matTooltip]="'vpn.server-list.country-info' | translate">
+            <mat-icon [inline]="true">flag</mat-icon>
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === countrySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          </th>
+          <th class="sortable-column name-column" (click)="dataSorter.changeSortingOrder(nameSortData)">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.name-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === nameSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column location-column" (click)="dataSorter.changeSortingOrder(locationSortData)">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.location-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === locationSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column medium-column" (click)="dataSorter.changeSortingOrder(pkSortData)" [matTooltip]="'vpn.server-list.public-key-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.public-key-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === pkSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column short-column center" (click)="dataSorter.changeSortingOrder(congestionSortData)" [matTooltip]="'vpn.server-list.congestion-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.congestion-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === congestionSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column mini-column center" (click)="dataSorter.changeSortingOrder(congestionRatingSortData)" [matTooltip]="'vpn.server-list.congestion-rating-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.congestion-rating-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === congestionRatingSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column short-column center" (click)="dataSorter.changeSortingOrder(latencySortData)" [matTooltip]="'vpn.server-list.latency-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.latency-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === latencySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column mini-column center" (click)="dataSorter.changeSortingOrder(latencyRatingSortData)" [matTooltip]="'vpn.server-list.latency-rating-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.latency-rating-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === latencyRatingSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column mini-column center" (click)="dataSorter.changeSortingOrder(hopsSortData)" [matTooltip]="'vpn.server-list.hops-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.hops-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === hopsSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column note-column center" (click)="dataSorter.changeSortingOrder(noteSortData)" [matTooltip]="'vpn.server-list.note-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.note-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === noteSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="actions"></th>
+        </tr>
+
+        <!-- Values. -->
+        <tr *ngFor="let server of dataSource" class="selectable">
+          <td class="flag-column icon-fixer">
+            <div class="flag">
+              <div
+                [style]="'background-image: url(\'assets/img/big-flags/' + server.countryCode.toLocaleLowerCase() + '.png\');'"
+                [matTooltip]="server.country"
+              ></div>
+            </div>
+          </td>
+          <td class="name-column">
+            {{ server.name }}
+          </td>
+          <td class="location-column">
+            {{ server.location }}
+          </td>
+          <td class="medium-column">
+            <app-copy-to-clipboard-text class="d-inline-block w-100" [shortSimple]="true" [text]="server.pk"></app-copy-to-clipboard-text>
+          </td>
+          <td [class]="getCongestionTextColorClass(server.congestion) + ' center short-column'">
+            {{ server.congestion }}%
+          </td>
+          <td class="center mini-column icon-fixer">
+            <div
+              [style]="'background-image: url(\'assets/img/' + getRatingIcon(server.congestionRating) + '.png\');'"
+              class="rating"
+              [matTooltip]="getRatingText(server.congestionRating) | translate"
+            ></div>
+          </td>
+          <td [class]="getLatencyTextColorClass(server.latency) + ' center short-column'">
+            {{ ('common.' + getLatencyValueString(server.latency)) | translate:{ time: getPrintableLatency(server.latency) } }}
+          </td>
+          <td class="center mini-column icon-fixer">
+            <div
+              [style]="'background-image: url(\'assets/img/' + getRatingIcon(server.latencyRating) + '.png\');'"
+              class="rating"
+              [matTooltip]="getRatingText(server.latencyRating) | translate"
+            ></div>
+          </td>
+          <td [class]="getHopsTextColorClass(server.hops) + ' center mini-column'">
+            {{ server.hops }}
+          </td>
+          <td class="center note-column">
+            <mat-icon *ngIf="server.note" [inline]="true" [matTooltip]="server.note" class="note-icon">info_outline</mat-icon>
+          </td>
+          <td (click)="$event.stopPropagation()" class="actions">
+            <button
+              mat-icon-button
+              class="big-action-button transparent-button"
+              [matTooltip]="'vpn.server-list.options-info' | translate"
+            >
+              <mat-icon [inline]="true">settings</mat-icon>
+            </button>
+          </td>
+        </tr>
+      </table>
+    </div></div>
+
+    <div class="center-container">
+      <!-- Lower paginator. -->
+      <app-paginator
+        *ngIf="numberOfPages > 1"
+        [currentPage]="currentPage"
+        [numberOfPages]="numberOfPages"
+        [linkParts]="['/vpn']"
+        [queryParams]="dataFilterer.currentUrlQueryParams">
+      </app-paginator>
+    </div>
+
+    <!-- Msg shown if the list is empty. -->
+    <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length === 0">
+      <div class="box-internal-container font-sm">
+        <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+        <span class="font-sm" *ngIf="allServers.length === 0">{{ 'vpn.server-list.empty' | translate }}</span>
+        <span class="font-sm" *ngIf="allServers.length !== 0">{{ 'vpn.server-list.empty-with-filter' | translate }}</span>
+      </div>
+    </div>
+  </div>
+</div>

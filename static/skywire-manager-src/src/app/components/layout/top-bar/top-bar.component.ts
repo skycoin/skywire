@@ -101,6 +101,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
    */
   @Input() refeshRate = -1;
   @Input() showUpdateButton = true;
+  /**
+   * If true, the vpn info is shown, instead of the refresh button.
+   */
+  @Input() showVpnInfo = false;
 
   /**
    * Event for when the user presses the update button.

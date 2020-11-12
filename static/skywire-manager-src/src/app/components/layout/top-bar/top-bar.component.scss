@@ -3,15 +3,22 @@
 @import "bootstrap_overrides";
 
 $top-bar-height: 56px;
+$selected-tab-background-color: rgba(0, 0, 0, 0.7) !important;
+$selected-tab-border-color: rgba(0, 0, 0, 0.1);
 
 .main-container {
   border-bottom: 1px solid $separator;
   padding-bottom: 10px;
   margin-bottom: -5px;
   height: 100px;
+  display: flex;
 
   @media (max-width: (map-get($grid-breakpoints, lg) - 1)) {
     height: 55px;
+  }
+
+  .main-area {
+    flex-grow: 1;
   }
 
   .title {
@@ -66,8 +73,8 @@ $top-bar-height: 56px;
       &[disabled] {
         opacity: 1 !important;
         color: $white;
-        background: rgba(0, 0, 0, 0.7) !important;
-        border-color: rgba(0, 0, 0, 0.1);
+        background: $selected-tab-background-color;
+        border-color: $selected-tab-border-color;
       }
     
       .mat-icon {
@@ -171,4 +178,36 @@ $top-bar-height: 56px;
 .top-bar-margin {
   margin-top: $top-bar-height;
   flex-shrink: 0;
+}
+
+.vpn-info {
+  font-size: $font-size-mini;
+  background: $selected-tab-background-color;
+  border-color: $selected-tab-border-color;
+  padding: 15px 20px;
+  border-radius: 15px;
+  align-self: center;
+
+  table {
+    tr {
+      td {
+        padding: 2px 0;
+
+        mat-icon {
+          margin-right: 3px;
+          font-size: 12px;
+          position: relative;
+          top: 1px;
+        }
+
+        .state-icon {
+          transform: scale(0.75);
+        }
+      }
+
+      td:first-of-type {
+        padding-right: 30px;
+      }
+    }
+  }
 }
