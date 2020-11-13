@@ -1,5 +1,6 @@
 @import "variables";
 @import "text";
+@import "~bootstrap/scss/functions";
 
 .center-container {
   text-align: center;
@@ -23,12 +24,11 @@
     > div {
       height: 55px;
       line-height: 55px;
-      opacity: 0.8;
       cursor: pointer;
-    }
 
-    > div:hover {
-      opacity: 1;
+      &:hover {
+        background: theme-color(translucid-hover);
+      }
     }
 
     .text-option {
@@ -42,8 +42,11 @@
     }
 
     .selected {
-      background: #00000080;
-      opacity: 1 !important;
+      background: scale-color(theme-color(translucid-hover), $alpha: 20%);
+
+      &:hover {
+        background: scale-color(theme-color(translucid-hover), $alpha: 50%);
+      }
     }
   }
 }
@@ -54,7 +57,13 @@
 
 .filter-label {
   font-size: $font-size-mini;
-  margin-top: 5px;
+  display: inline-block;
+  padding: 5px 10px;
+  margin-bottom: 7px;
+
+  mat-icon {
+    vertical-align: middle;
+  }
 }
 
 table {
@@ -79,10 +88,12 @@ tr {
 }
 
 .location-column {
+  max-width: 0;
+  min-width: 72px;
   @extend .single-line;
 }
 
-.medium-column {
+.pk-column {
   max-width: 0;
   width: 12%;
   @extend .single-line;

@@ -625,8 +625,10 @@
       "empty": "Currently there are no VPN servers to show. Please try again later.",
       "empty-with-filter": "No VPN server matches the selected filtering criteria.",
       "add-manually-info": "Add server manually.",
+      "current-filters": "Current filters (press to remove)",
 
       "filter-dialog": {
+        "country": "The country must be",
         "name": "The name must contain",
         "location": "The location must contain",
         "public-key": "The public key must contain",
@@ -638,6 +640,10 @@
           "gold": "Gold",
           "silver": "Silver",
           "bronze": "Bronze"
+        },
+
+        "country-options": {
+          "any": "Any"
         }
       }
     }

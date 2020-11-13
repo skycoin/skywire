@@ -6,16 +6,18 @@ $top-bar-height: 56px;
 $selected-tab-background-color: rgba(0, 0, 0, 0.7) !important;
 $selected-tab-border-color: rgba(0, 0, 0, 0.1);
 
+.normal-height {
+  @media (max-width: (map-get($grid-breakpoints, lg) - 1)) {
+    height: 55px !important;
+  }
+}
+
 .main-container {
   border-bottom: 1px solid $separator;
   padding-bottom: 10px;
   margin-bottom: -5px;
   height: 100px;
   display: flex;
-
-  @media (max-width: (map-get($grid-breakpoints, lg) - 1)) {
-    height: 55px;
-  }
 
   .main-area {
     flex-grow: 1;
