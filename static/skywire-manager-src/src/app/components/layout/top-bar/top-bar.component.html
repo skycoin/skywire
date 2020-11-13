@@ -1,5 +1,8 @@
-<!-- Top bar shown on small screens. -->
-<div class="top-bar d-lg-none">
+<!-- Top bar shown on small screens. Not shown with the VPN info. -->
+<div
+  class="top-bar"
+  [ngClass]="{'d-lg-none': !showVpnInfo, 'd-none': showVpnInfo}"
+>
   <div class="button-container">
     <button
       mat-icon-button
@@ -29,8 +32,8 @@
   </div>
 </div>
 
-<!-- Margin to prevent the top bar from covering the content. -->
-<div class="top-bar-margin d-lg-none"></div>
+<!-- Margin to prevent the top bar from covering the content. Not shown with the VPN info. -->
+<div class="top-bar-margin" [ngClass]="{'d-lg-none': !showVpnInfo, 'd-none': showVpnInfo}"></div>
 
 <!-- Options menu. -->
 <mat-menu #menu="matMenu" [overlapTrigger]="false">
@@ -50,9 +53,9 @@
   </div>
 </mat-menu>
 
-<div class="main-container">
+<div class="main-container" [ngClass]="{'normal-height': !showVpnInfo}">
   <!-- Return button and title text. -->
-  <div class="main-area"><div class="title d-none d-lg-flex">
+  <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo, 'd-flex': showVpnInfo}">
     <div *ngIf="returnText" class="return-container">
       <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
         <mat-icon [inline]="true">chevron_left</mat-icon>
