@@ -23,10 +23,10 @@
     ></app-top-bar>
   </div>
   <div class="col-12">
-    <div class="center-container mt-4.5">
+    <div class="center-container mt-4.5" [ngClass]="{'mb-3': !dataFilterer.currentFiltersTexts || dataFilterer.currentFiltersTexts.length < 1}">
       <!-- Tabs. -->
       <div class="option-bar-container">
-        <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container allow-overflow">
+        <div class="rounded-elevated-box mt-3"><div class="box-internal-container allow-overflow">
           <div class="option-bar">
             <div class="text-option selected">All</div>
             <div class="text-option">Recent</div>
@@ -37,7 +37,7 @@
       </div>
       <!-- Filter button. -->
       <div class="option-bar-container option-bar-margin">
-        <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container allow-overflow">
+        <div class="rounded-elevated-box mt-3"><div class="box-internal-container allow-overflow">
           <div class="option-bar">
             <div class="icon-option" (click)="dataFilterer.changeFilters()" [matTooltip]="'filters.filter-info' | translate">
               <mat-icon [inline]="true">search</mat-icon>
@@ -47,7 +47,7 @@
       </div>
       <!-- Add button. -->
       <div class="option-bar-container option-bar-margin">
-        <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container allow-overflow">
+        <div class="rounded-elevated-box mt-3"><div class="box-internal-container allow-overflow">
           <div class="option-bar">
             <div class="icon-option" [matTooltip]="'vpn.server-list.add-manually-info' | translate">
               <mat-icon [inline]="true">add</mat-icon>
@@ -55,28 +55,19 @@
           </div>
         </div></div>
       </div>
-      <br />
-      <!-- Upper paginator. -->
-      <app-paginator
-        *ngIf="numberOfPages > 1"
-        [currentPage]="currentPage"
-        [numberOfPages]="numberOfPages"
-        [linkParts]="['/vpn']"
-        [queryParams]="dataFilterer.currentUrlQueryParams">
-      </app-paginator>
       <!-- Current filters info. -->
       <br *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0" />
       <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
+        <div class="transparent-50"><mat-icon [inline]="true">search</mat-icon> {{ 'vpn.server-list.current-filters' | translate }}</div>
         <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
           <span>{{ filterTexts.filterName | translate }}: </span>
           <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
           <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
         </div>
-        <div class="transparent-50">{{ 'filters.press-to-remove' | translate }}</div>
       </div>
     </div>
 
-    <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length !== 0"><div class="box-internal-container">
+    <div class="rounded-elevated-box" *ngIf="dataSource.length !== 0"><div class="box-internal-container">
       <!-- Table. -->
       <table
         class="responsive-table-translucid d-none d-md-table"
@@ -105,7 +96,7 @@
               <mat-icon *ngIf="dataSorter.currentSortingColumn === locationSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
             </div>
           </th>
-          <th class="sortable-column medium-column" (click)="dataSorter.changeSortingOrder(pkSortData)" [matTooltip]="'vpn.server-list.public-key-info' | translate">
+          <th class="sortable-column pk-column" (click)="dataSorter.changeSortingOrder(pkSortData)" [matTooltip]="'vpn.server-list.public-key-info' | translate">
             <div class="header-container">
               <div class="header-text">
                 {{ 'vpn.server-list.public-key-small-table-label' | translate }}
@@ -170,7 +161,7 @@
             <div class="flag">
               <div
                 [style]="'background-image: url(\'assets/img/big-flags/' + server.countryCode.toLocaleLowerCase() + '.png\');'"
-                [matTooltip]="server.country"
+                [matTooltip]="getCountryName(server.countryCode)"
               ></div>
             </div>
           </td>
@@ -180,8 +171,8 @@
           <td class="location-column">
             {{ server.location }}
           </td>
-          <td class="medium-column">
-            <app-copy-to-clipboard-text class="d-inline-block w-100" [shortSimple]="true" [text]="server.pk"></app-copy-to-clipboard-text>
+          <td class="pk-column">
+            <app-copy-to-clipboard-text (click)="$event.stopPropagation()" class="d-inline-block w-100" [shortSimple]="true" [text]="server.pk"></app-copy-to-clipboard-text>
           </td>
           <td [class]="getCongestionTextColorClass(server.congestion) + ' center short-column'">
             {{ server.congestion }}%
@@ -207,7 +198,7 @@
             {{ server.hops }}
           </td>
           <td class="center note-column">
-            <mat-icon *ngIf="server.note" [inline]="true" [matTooltip]="server.note" class="note-icon">info_outline</mat-icon>
+            <mat-icon *ngIf="server.note" (click)="$event.stopPropagation()" [inline]="true" [matTooltip]="server.note" class="note-icon">info_outline</mat-icon>
           </td>
           <td (click)="$event.stopPropagation()" class="actions">
             <button
@@ -222,19 +213,17 @@
       </table>
     </div></div>
 
-    <div class="center-container">
-      <!-- Lower paginator. -->
-      <app-paginator
-        *ngIf="numberOfPages > 1"
-        [currentPage]="currentPage"
-        [numberOfPages]="numberOfPages"
-        [linkParts]="['/vpn']"
-        [queryParams]="dataFilterer.currentUrlQueryParams">
-      </app-paginator>
-    </div>
+    <!-- Lower paginator. -->
+    <app-paginator
+      *ngIf="numberOfPages > 1"
+      [currentPage]="currentPage"
+      [numberOfPages]="numberOfPages"
+      [linkParts]="['/vpn']"
+      [queryParams]="dataFilterer.currentUrlQueryParams">
+    </app-paginator>
 
     <!-- Msg shown if the list is empty. -->
-    <div class="rounded-elevated-box mt-3" *ngIf="dataSource.length === 0">
+    <div class="rounded-elevated-box" *ngIf="dataSource.length === 0">
       <div class="box-internal-container font-sm">
         <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
         <span class="font-sm" *ngIf="allServers.length === 0">{{ 'vpn.server-list.empty' | translate }}</span>

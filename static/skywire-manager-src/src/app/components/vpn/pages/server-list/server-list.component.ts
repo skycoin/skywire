@@ -6,28 +6,10 @@ import { TranslateService } from '@ngx-translate/core';
 
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
-import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
+import { FilterProperties, FilterFieldTypes, PrintableLabel } from 'src/app/utils/filters';
 import { TabButtonData } from '../../../layout/top-bar/top-bar.component';
-
-enum Ratings {
-  Gold = 0,
-  Silver = 1,
-  Bronze = 2,
-}
-
-class VpnServer {
-  country: string;
-  countryCode: string;
-  name: string;
-  location: string;
-  pk: string;
-  congestion: number;
-  congestionRating: Ratings;
-  latency: number;
-  latencyRating: Ratings;
-  hops: number;
-  note: string;
-}
+import { countriesList } from 'src/app/utils/countries-list';
+import { VpnClientDiscoveryService, VpnServer, Ratings } from 'src/app/services/vpn-client-discovery.service';
 
 /**
  * Page for showing the vpn server list.
@@ -45,7 +27,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
   private readonly maxFullListElements = 50;
 
   // Vars with the data of the columns used for sorting the data.
-  countrySortData = new SortingColumn(['country'], 'vpn.server-list.country-small-table-label', SortingModes.Text);
+  countrySortData = new SortingColumn(['countryCode'], 'vpn.server-list.country-small-table-label', SortingModes.Text);
   nameSortData = new SortingColumn(['name'], 'vpn.server-list.name-small-table-label', SortingModes.Text);
   locationSortData = new SortingColumn(['location'], 'vpn.server-list.location-small-table-label', SortingModes.Text);
   pkSortData = new SortingColumn(['pk'], 'vpn.server-list.public-key-small-table-label', SortingModes.Text);
@@ -66,7 +48,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  loading = false;
+  loading = true;
   dataSource: VpnServer[];
   tabsData: TabButtonData[] = [];
 
@@ -148,38 +130,15 @@ export class ServerListComponent implements OnInit, OnDestroy {
   ];
 
   private navigationsSubscription: Subscription;
+  private dataSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
     private router: Router,
     private translateService: TranslateService,
-    route: ActivatedRoute,
+    private route: ActivatedRoute,
+    private vpnClientDiscoveryService: VpnClientDiscoveryService,
   ) {
-    // Initialize the data sorter.
-    const sortableColumns: SortingColumn[] = [
-      this.countrySortData,
-      this.nameSortData,
-      this.locationSortData,
-      this.pkSortData,
-      this.congestionSortData,
-      this.congestionRatingSortData,
-      this.latencySortData,
-      this.latencyRatingSortData,
-      this.hopsSortData,
-      this.noteSortData,
-    ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, this.listId);
-    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
-      // When this happens, the data in allServers has already been sorted.
-      this.recalculateElementsToShow();
-    });
-
-    this.dataFilterer = new DataFilterer(this.dialog, route, this.router, this.filterProperties, this.listId);
-    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
-      this.filteredServers = data;
-      this.dataSorter.setData(this.filteredServers);
-    });
-
     // Get the page requested in the URL.
     this.navigationsSubscription = route.paramMap.subscribe(params => {
       if (params.has('page')) {
@@ -221,7 +180,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     // Load the data.
-    this.loadData();
+    this.loadTestData();
   }
 
   ngOnDestroy() {
@@ -229,13 +188,27 @@ export class ServerListComponent implements OnInit, OnDestroy {
     this.dataFiltererSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
 
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+    }
+
     this.dataFilterer.dispose();
     this.dataSorter.dispose();
   }
 
   private loadData() {
+    // Get the vpn servers from the discovery service.
+    this.dataSubscription = this.vpnClientDiscoveryService.getServers().subscribe(response => {
+      this.allServers = response;
+
+      this.loading = false;
+
+      this.processAllServers();
+    });
+  }
+
+  private loadTestData() {
     this.allServers = [{
-      country: 'Australia',
       countryCode: 'au',
       name: 'Server name',
       location: 'Melbourne - Australia',
@@ -247,7 +220,6 @@ export class ServerListComponent implements OnInit, OnDestroy {
       hops: 3,
       note: 'Note'
     }, {
-      country: 'Brazil',
       countryCode: 'br',
       name: 'Test server 14',
       location: 'Rio de Janeiro - Brazil',
@@ -259,7 +231,6 @@ export class ServerListComponent implements OnInit, OnDestroy {
       hops: 3,
       note: 'Note'
     }, {
-      country: 'Germany',
       countryCode: 'de',
       name: 'Test server 20',
       location: 'Berlin - Germany',
@@ -271,6 +242,74 @@ export class ServerListComponent implements OnInit, OnDestroy {
       hops: 7,
       note: 'Note'
     }];
+
+    this.loading = false;
+
+    this.processAllServers();
+  }
+
+  private processAllServers() {
+    // Get the countries in the server list.
+    const countriesSet = new Set<string>();
+    this.allServers.forEach(server => {
+      countriesSet.add(server.countryCode);
+    });
+
+    // Create a filter option for each country.
+    let countriesFilteringLabels: PrintableLabel[] = [];
+    countriesSet.forEach(v => {
+      countriesFilteringLabels.push({
+        label: this.getCountryName(v),
+        value: v,
+        image: '/assets/img/big-flags/' + v.toLowerCase() + '.png',
+      });
+    });
+
+    // Sort the data and add an empty option at the top.
+    countriesFilteringLabels.sort((a, b) => a.label.localeCompare(b.label));
+    countriesFilteringLabels = [{
+      label: 'vpn.server-list.filter-dialog.country-options.any',
+      value: ''
+    }].concat(countriesFilteringLabels);
+
+    // Include the option for filtering by country.
+    const countryFilter: FilterProperties = {
+      filterName: 'vpn.server-list.filter-dialog.country',
+      keyNameInElementsArray: 'countryCode',
+      type: FilterFieldTypes.Select,
+      printableLabelsForValues: countriesFilteringLabels,
+      printableLabelGeneralSettings: {
+        defaultImage: '/assets/img/big-flags/unknown.png',
+        imageWidth: 20,
+        imageHeight: 15,
+      }
+    };
+    this.filterProperties = [countryFilter].concat(this.filterProperties);
+
+    // Initialize the data sorter.
+    const sortableColumns: SortingColumn[] = [
+      this.countrySortData,
+      this.nameSortData,
+      this.locationSortData,
+      this.pkSortData,
+      this.congestionSortData,
+      this.congestionRatingSortData,
+      this.latencySortData,
+      this.latencyRatingSortData,
+      this.hopsSortData,
+      this.noteSortData,
+    ];
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, this.listId);
+    this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
+      // When this happens, the data in allServers has already been sorted.
+      this.recalculateElementsToShow();
+    });
+
+    this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
+    this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
+      this.filteredServers = data;
+      this.dataSorter.setData(this.filteredServers);
+    });
 
     this.dataFilterer.setData(this.allServers);
   }
@@ -300,6 +339,10 @@ export class ServerListComponent implements OnInit, OnDestroy {
     }
 
     this.dataSource = this.serversToShow;
+  }
+
+  getCountryName(countryCode: string): string {
+    return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
   }
 
   getLatencyValueString(latency: number): string {
