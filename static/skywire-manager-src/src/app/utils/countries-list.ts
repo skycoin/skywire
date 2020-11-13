@@ -3,11 +3,11 @@
  */
 export const countriesList = {
     'AF': 'Afghanistan',
-    'AX': 'Åland Islands',
+    'AX': 'Aland Islands',
     'AL': 'Albania',
     'DZ': 'Algeria',
     'AS': 'American Samoa',
-    'AD': 'AndorrA',
+    'AD': 'Andorra',
     'AO': 'Angola',
     'AI': 'Anguilla',
     'AQ': 'Antarctica',
