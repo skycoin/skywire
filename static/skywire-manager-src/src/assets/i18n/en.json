@@ -599,6 +599,17 @@
       "download-info": "Download speed."
     },
 
+    "status-page": {
+      "start-title": "Start VPN",
+
+      "data": {
+        "ip": "Current IP address:",
+        "country": "IP country:",
+        "local-pk": "Local visor public key:",
+        "remote-pk": "Remote visor public key:"
+      }
+    },
+
     "server-list" : {
       "country-small-table-label": "Country",
       "country-info": "Country where the server is located.",

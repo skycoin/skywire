@@ -25,11 +25,11 @@
   @extend .elevated-box;
   border-radius: $mat-dialog-radius;
   overflow: hidden;
-  padding: 3px;
+  padding: $internal-blue-box-margin;
 
   .box-internal-container {
     border-radius: $mat-dialog-radius;
-    padding: $containers-padding - 3px;
+    padding: $containers-padding - $internal-blue-box-margin;
     border: scale-color($box-border, $alpha: -65%) solid 1px;
     overflow: hidden;
   }

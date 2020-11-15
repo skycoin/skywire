@@ -3,8 +3,6 @@
 @import "bootstrap_overrides";
 
 $top-bar-height: 56px;
-$selected-tab-background-color: rgba(0, 0, 0, 0.7) !important;
-$selected-tab-border-color: rgba(0, 0, 0, 0.1);
 
 .normal-height {
   @media (max-width: (map-get($grid-breakpoints, lg) - 1)) {
@@ -75,8 +73,7 @@ $selected-tab-border-color: rgba(0, 0, 0, 0.1);
       &[disabled] {
         opacity: 1 !important;
         color: $white;
-        background: $selected-tab-background-color;
-        border-color: $selected-tab-border-color;
+        background: $dark-background !important;
       }
     
       .mat-icon {
@@ -184,8 +181,7 @@ $selected-tab-border-color: rgba(0, 0, 0, 0.1);
 
 .vpn-info {
   font-size: $font-size-mini;
-  background: $selected-tab-background-color;
-  border-color: $selected-tab-border-color;
+  background: $dark-background;
   padding: 15px 20px;
   border-radius: 15px;
   align-self: center;

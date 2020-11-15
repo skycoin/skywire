@@ -4,6 +4,7 @@
 
 $white: #F8F9F9;
 $black: #202226;
+$grey: #bbbbbb;
 
 $blue-medium: #215f9e;
 $blue-dark: #154B6C;
@@ -18,6 +19,9 @@ $yellow: #d48b05;
 $yellow-clear: #ffa500;
 $light-gray: #777;
 $lighter-gray: #999;
+
+$dark-background: rgba(0, 0, 0, 0.7);
+$clear-background: #3d67a226;
 
 $modal-background: #e0e5ec;
 $modal-separator: scale-color($blue-medium, $alpha: -80%);
@@ -64,6 +68,7 @@ $mat-dialog-radius: 10px;
 // Container
 //
 $containers-padding: 15px;
+$internal-blue-box-margin: 3px;
 
 //
 // Sizes

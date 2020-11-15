@@ -1,0 +1,114 @@
+<div class="general-container">
+  <div class="row">
+    <div class="col-12">
+      <app-top-bar
+        [titleParts]="['vpn.title']"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="0"
+        [showUpdateButton]="false"
+        [showVpnInfo]="true"
+      ></app-top-bar>
+    </div>
+  </div>
+  <div class="row flex-1">
+    <!-- VPN stopped info. -->
+    <div *ngIf="!showStarted" class="col-7 column left-area">
+      <div class="column-container">
+        <div class="title">{{ 'vpn.status-page.start-title' | translate }}</div>
+        <div>
+          <div class="start-button">
+            <div class="start-button-img-container">
+              <div class="start-button-img"></div>
+            </div>
+            <mat-icon [inline]="true">power_settings_new</mat-icon>
+          </div>
+        </div>
+        <div class="current-server">
+          <div class="flag"></div>
+          <div class="text-container">
+            <div class="top-line">United States - NY</div>
+            <div class="bottom-line">024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- VPN started info. -->
+    <div *ngIf="showStarted" class="col-7 column left-area-connected">
+      <div class="column-container">
+        <div class="time-container">
+          <div class="time-content">
+            <!-- Time. -->
+            <mat-icon [inline]="true">timer</mat-icon>
+            <span>01:12:21</span>
+          </div>
+        </div>
+        <div class="state-title">Your connection is currently:</div>
+        <div class="state-text">Protected</div>
+        <div class="state-explanation">Connection established</div>
+        <!-- Data stats. -->
+        <div class="data-container">
+          <div class="rounded-elevated-box data-box">
+            <div class="chart-container">
+              <app-line-chart [data]="receivedHistory" height="140" color="#00000080"></app-line-chart>
+            </div>
+            <div class="content">
+              <mat-icon [inline]="true" class="download">keyboard_backspace</mat-icon>
+              <div class="speed">1.2 mb/s</div>
+              <div class="total">345 MB total</div>
+            </div>
+          </div>
+          <div class="rounded-elevated-box data-box">
+            <div class="chart-container">
+              <app-line-chart [data]="sentHistory" height="140" color="#00000080"></app-line-chart>
+            </div>
+            <div class="content">
+              <mat-icon [inline]="true" class="upload">keyboard_backspace</mat-icon>
+              <div class="speed">1.2 mb/s</div>
+              <div class="total">345 MB total</div>
+            </div>
+          </div>
+        </div>
+        <!-- Disconnect button. -->
+        <div class="disconnect-button">
+          <div class="disconnect-button-container">
+            <div class="d-inline-flex">
+              <mat-icon [inline]="true">power_settings_new</mat-icon>
+              <span>Disconnect</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right info panel. -->
+    <div class="col-5 column right-area">
+      <div class="column-container">
+        <div class="content-area">
+          <div>
+            <div class="title">{{ 'vpn.status-page.data.ip' | translate }}</div>
+            <div class="big-text">201.102.5.20</div>
+          </div>
+          <div class="margin"></div>
+          <div>
+            <div class="title">{{ 'vpn.status-page.data.country' | translate }}</div>
+            <div class="big-text">United States</div>
+          </div>
+          <div class="margin"></div>
+          <div>
+            <div class="title">{{ 'vpn.status-page.data.local-pk' | translate }}</div>
+            <div class="small-text">
+              <app-copy-to-clipboard-text text="024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"></app-copy-to-clipboard-text>
+            </div>
+          </div>
+          <div class="margin"></div>
+          <div>
+            <div class="title">{{ 'vpn.status-page.data.remote-pk' | translate }}</div>
+            <div class="small-text">
+              <app-copy-to-clipboard-text text="024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"></app-copy-to-clipboard-text>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
