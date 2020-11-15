@@ -86,6 +86,7 @@ import { LabelListComponent } from './components/pages/settings/all-labels/label
 import { UpdateComponent } from './components/layout/update/update.component';
 import { UpdaterConfigComponent } from './components/pages/settings/updater-config/updater-config.component';
 import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
+import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -148,6 +149,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SkysocksClientFilterComponent,
     SkysocksClientPasswordComponent,
     ServerListComponent,
+    VpnStatusComponent,
   ],
   imports: [
     BrowserModule,

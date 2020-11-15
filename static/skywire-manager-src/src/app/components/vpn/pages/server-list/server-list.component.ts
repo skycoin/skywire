@@ -7,9 +7,9 @@ import { TranslateService } from '@ngx-translate/core';
 import { SortingModes, SortingColumn, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { FilterProperties, FilterFieldTypes, PrintableLabel } from 'src/app/utils/filters';
-import { TabButtonData } from '../../../layout/top-bar/top-bar.component';
 import { countriesList } from 'src/app/utils/countries-list';
 import { VpnClientDiscoveryService, VpnServer, Ratings } from 'src/app/services/vpn-client-discovery.service';
+import { vpnTabsData } from '../../vpn-helpers';
 
 /**
  * Page for showing the vpn server list.
@@ -50,7 +50,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
 
   loading = true;
   dataSource: VpnServer[];
-  tabsData: TabButtonData[] = [];
+  tabsData = vpnTabsData;
 
   // Vars for the pagination functionality.
   allServers: VpnServer[];
@@ -152,30 +152,6 @@ export class ServerListComponent implements OnInit, OnDestroy {
         this.recalculateElementsToShow();
       }
     });
-
-    // Data for populating the tab bar.
-    this.tabsData = [
-      {
-        icon: 'view_headline',
-        label: 'vpn.start',
-        linkParts: ['/vpn'],
-      },
-      {
-        icon: 'list',
-        label: 'vpn.servers',
-        linkParts: ['/vpn'],
-      },
-      {
-        icon: 'flag',
-        label: 'vpn.countries',
-        linkParts: ['/vpn'],
-      },
-      {
-        icon: 'settings',
-        label: 'vpn.settings',
-        linkParts: ['/vpn'],
-      },
-    ];
   }
 
   ngOnInit() {

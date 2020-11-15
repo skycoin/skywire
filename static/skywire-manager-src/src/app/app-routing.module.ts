@@ -14,6 +14,7 @@ import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
+import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
 
 const routes: Routes = [
   {
@@ -127,11 +128,20 @@ const routes: Routes = [
     children: [
       {
         path: '',
-        redirectTo: '1',
+        redirectTo: 'status',
         pathMatch: 'full'
       },
       {
-        path: ':page',
+        path: 'status',
+        component: VpnStatusComponent
+      },
+      {
+        path: 'servers',
+        redirectTo: 'servers/1',
+        pathMatch: 'full'
+      },
+      {
+        path: 'servers/:page',
         component: ServerListComponent
       }
     ],
