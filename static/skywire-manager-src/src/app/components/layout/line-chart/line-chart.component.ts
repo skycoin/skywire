@@ -12,6 +12,8 @@ import { Chart } from 'chart.js';
 export class LineChartComponent implements AfterViewInit, DoCheck {
   @ViewChild('chart') chartElement: ElementRef;
   @Input() data: number[];
+  @Input() height = 100;
+  @Input() color = 'rgba(10, 15, 22, 0.4)';
   chart: any;
 
   private differ: IterableDiffer<unknown>;
@@ -32,8 +34,8 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
         labels: Array.from(Array(this.data.length).keys()),
         datasets: [{
           data: this.data,
-          backgroundColor: ['rgba(10, 15, 22, 0.4)'],
-          borderColor: ['rgba(10, 15, 22, 0.4)'],
+          backgroundColor: [this.color],
+          borderColor: [this.color],
           borderWidth: 1,
         }],
       },
