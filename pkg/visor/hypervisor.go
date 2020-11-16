@@ -147,6 +147,11 @@ type MockConfig struct {
 	EnableAuth        bool
 }
 
+type ElementResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+}
+
 // AddMockData adds mock data to Hypervisor.
 func (hv *Hypervisor) AddMockData(config MockConfig) error {
 	r := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
@@ -689,9 +694,11 @@ func (hv *Hypervisor) deleteTransport() http.HandlerFunc {
 		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
+
 func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var transports []string
+		response := make(map[string]ElementResponse)
 		err := json.NewDecoder(r.Body).Decode(&transports)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
@@ -700,15 +707,24 @@ func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
 		for _, transport := range transports {
 			transportBoxed, err := uuid.Parse(transport)
 			if err != nil {
-				httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-				return
+				response[transport] = ElementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
 			}
 			if err := ctx.API.RemoveTransport(transportBoxed); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-				return
+				response[transport] = ElementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			response[transport] = ElementResponse{
+				Success: true,
 			}
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, true)
+		httputil.WriteJSON(w, r, http.StatusOK, response)
 	})
 }
 
@@ -842,6 +858,7 @@ func (hv *Hypervisor) deleteRoute() http.HandlerFunc {
 func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var rids []string
+		response := make(map[string]ElementResponse)
 		err := json.NewDecoder(r.Body).Decode(&rids)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
@@ -850,15 +867,23 @@ func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 		for _, rid := range rids {
 			ridUint64, err := strconv.ParseUint(rid, 10, 32)
 			if err != nil {
-				httputil.WriteJSON(w, r, http.StatusBadRequest, err)
-				return
+				response[rid] = ElementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
 			}
 			boxedRID := routing.RouteID(ridUint64)
 			if err := ctx.API.RemoveRoutingRule(boxedRID); err != nil {
-				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				response[rid] = ElementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+
 			}
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, true)
+		httputil.WriteJSON(w, r, http.StatusOK, response)
 	})
 }
 
