@@ -713,6 +713,18 @@ func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
 				}
 				continue
 			}
+			_, err = ctx.API.Transport(transportBoxed)
+			if err != nil {
+				if err.Error() == ErrNotFound.Error() {
+					errMsg := fmt.Errorf("transport of ID %s is not found", transportBoxed)
+					response[transport] = elementResponse{
+						Success: false,
+						Error:   errMsg.Error(),
+					}
+					continue
+				}
+			}
+
 			if err := ctx.API.RemoveTransport(transportBoxed); err != nil {
 				response[transport] = elementResponse{
 					Success: false,
@@ -864,6 +876,7 @@ func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
 		}
+		rules, _ := ctx.API.RoutingRules()
 		for _, rid := range rids {
 			ridUint64, err := strconv.ParseUint(rid, 10, 32)
 			if err != nil {
@@ -873,14 +886,31 @@ func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 				}
 				continue
 			}
-			boxedRID := routing.RouteID(ridUint64)
-			if err := ctx.API.RemoveRoutingRule(boxedRID); err != nil {
+			routeID := routing.RouteID(ridUint64)
+			contains := false
+			for _, rule := range rules {
+				if rule.KeyRouteID() == routeID {
+					contains = true
+				}
+			}
+			if !contains {
+				errMsg := fmt.Errorf("route of ID %s is not found", rid)
+				response[rid] = elementResponse{
+					Success: false,
+					Error:   errMsg.Error(),
+				}
+				continue
+			}
+
+			if err := ctx.API.RemoveRoutingRule(routeID); err != nil {
 				response[rid] = elementResponse{
 					Success: false,
 					Error:   err.Error(),
 				}
 				continue
-
+			}
+			response[rid] = elementResponse{
+				Success: true,
 			}
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, response)
