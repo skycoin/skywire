@@ -876,7 +876,11 @@ func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
 		}
-		rules, _ := ctx.API.RoutingRules()
+		rules, err := ctx.API.RoutingRules()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, err)
+			return
+		}
 		for _, rid := range rids {
 			ridUint64, err := strconv.ParseUint(rid, 10, 32)
 			if err != nil {
