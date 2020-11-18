@@ -128,7 +128,7 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 		return nil, &hErr
 	}
 	err = json.NewDecoder(resp.Body).Decode(&out)
-	return
+	return out, err
 }
 
 // UpdateEntry calls 'POST /api/services'.
