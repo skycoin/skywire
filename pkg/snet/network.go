@@ -60,8 +60,9 @@ func (c *DmsgConfig) Type() string {
 
 // STCPConfig defines config for STCP network.
 type STCPConfig struct {
-	PKTable   map[cipher.PubKey]string `json:"pk_table"`
-	LocalAddr string                   `json:"local_address"`
+	PKTable       map[cipher.PubKey]string `json:"pk_table"`
+	LocalAddr     string                   `json:"local_address"`
+	PublicAddress string                   `json:"public_address"`
 }
 
 // Type returns STCP type.
@@ -77,6 +78,7 @@ type Config struct {
 	NetworkConfigs NetworkConfigs
 	ServiceDisc    appdisc.Factory
 	PublicTrusted  bool
+	PublicAddress  string
 }
 
 // NetworkConfigs represents all network configs.
@@ -93,11 +95,12 @@ type NetworkClients struct {
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf         Config
-	netsMu       sync.RWMutex
-	nets         map[string]struct{} // networks to be used with transports
-	clients      NetworkClients
-	visorUpdater appdisc.Updater
+	conf               Config
+	netsMu             sync.RWMutex
+	nets               map[string]struct{} // networks to be used with transports
+	clients            NetworkClients
+	visorUpdater       appdisc.Updater
+	publicVisorUpdater appdisc.Updater
 
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
@@ -230,6 +233,9 @@ func (n *Network) Init() error {
 			if n.conf.PublicTrusted {
 				go n.registerPublicTrusted(client)
 			}
+			if n.conf.PublicAddress != "" {
+				go n.registerAsPublicVisor(client)
+			}
 		} else {
 			log.Infof("No config found for stcpr")
 		}
@@ -271,6 +277,33 @@ func (n *Network) registerPublicTrusted(client directtp.Client) {
 	n.visorUpdater.Start()
 
 	log.Infof("Sent request to register visor as public trusted")
+}
+func (n *Network) registerAsPublicVisor(client directtp.Client) {
+	log.Infof("Trying to register visor as public visor")
+
+	la, err := client.LocalAddr()
+	if err != nil {
+		log.WithError(err).Errorf("Failed to get STCPR local addr")
+		return
+	}
+
+	_, portStr, err := net.SplitHostPort(la.String())
+	if err != nil {
+		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		return
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to convert port to int")
+		return
+	}
+
+	n.publicVisorUpdater = n.conf.ServiceDisc.PublicVisorUpdater(uint16(port), n.conf.PublicAddress)
+
+	n.publicVisorUpdater.Start()
+
+	log.Infof("Sent request to register visor as public")
 }
 
 // OnNewNetworkType sets callback to be called when new network type is ready.
