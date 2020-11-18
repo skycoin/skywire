@@ -17,6 +17,8 @@ const (
 	ServiceTypeVPN = "vpn"
 	// ServiceTypeVisor stands for visor.
 	ServiceTypeVisor = "visor"
+	// ServiceTypeVisor stands for type of visors that accessible on pulic address.
+	ServiceTypePublicVisor = "public_visor"
 )
 
 // Errors associated with service discovery types.
@@ -104,10 +106,11 @@ type Stats struct {
 
 // Service represents a service entry in service-discovery.
 type Service struct {
-	Addr  SWAddr       `json:"address"`
-	Type  string       `json:"type"`
-	Stats *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
-	Geo   *GeoLocation `json:"geo,omitempty"`
+	Addr          SWAddr       `json:"address"`
+	Type          string       `json:"type"`
+	PublicAddress string       `json:"public_address,omitempty"`
+	Stats         *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
+	Geo           *GeoLocation `json:"geo,omitempty"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller

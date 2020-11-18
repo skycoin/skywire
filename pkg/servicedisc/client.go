@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +37,7 @@ type Config struct {
 type HTTPClient struct {
 	log     logrus.FieldLogger
 	conf    Config
-	entry   Service
+	Entry   Service
 	entryMx sync.Mutex // only used if UpdateLoop && UpdateStats functions are used.
 	client  http.Client
 }
@@ -51,7 +52,7 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		conf: conf,
-		entry: Service{
+		Entry: Service{
 			Addr:  NewSWAddr(conf.PK, conf.Port),
 			Stats: stats,
 			Type:  conf.Type,
@@ -96,8 +97,12 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 }
 
 // Services calls 'GET /api/services'.
-func (c *HTTPClient) Services(ctx context.Context) (out []Service, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr("/api/services", c.entry.Type), nil)
+func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service, err error) {
+	addr := c.addr("/api/services", c.Entry.Type)
+	if quantity != 0 {
+		addr += "&quantity=" + strconv.Itoa(quantity)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -133,9 +138,9 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 		return nil, err
 	}
 
-	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
+	c.Entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
 
-	raw, err := json.Marshal(&c.entry)
+	raw, err := json.Marshal(&c.Entry)
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +175,8 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 		return nil, hErr.Error
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&c.entry)
-	return &c.entry, err
+	err = json.NewDecoder(resp.Body).Decode(&c.Entry)
+	return &c.Entry, err
 }
 
 // DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
@@ -181,7 +186,7 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/services/"+c.Entry.Addr.String(), c.Entry.Type), nil)
 	if err != nil {
 		return err
 	}
@@ -260,6 +265,6 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 // UpdateStats updates the stats field of the internal service entry state.
 func (c *HTTPClient) UpdateStats(stats Stats) {
 	c.entryMx.Lock()
-	c.entry.Stats = &stats
+	c.Entry.Stats = &stats
 	c.entryMx.Unlock()
 }
