@@ -26,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
@@ -56,6 +57,7 @@ func initStack() []initFunc {
 		initUptimeTracker,
 		initTrustedVisors,
 		initHypervisor,
+		initPublicVisors,
 	}
 }
 
@@ -103,6 +105,7 @@ func initSNet(v *Visor) bool {
 		NetworkConfigs: nc,
 		ServiceDisc:    v.serviceDisc,
 		PublicTrusted:  v.conf.PublicTrustedVisor,
+		PublicAddress:  v.conf.STCP.PublicAddress,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -516,6 +519,52 @@ func initTrustedVisors(v *Visor) bool {
 		}
 	}()
 
+	return true
+}
+
+func initPublicVisors(v *Visor) bool {
+	const trustedVisorsTransportType = tptypes.STCPR
+	if v.conf.Launcher.Discovery.PublicVisorsEnabled {
+		proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
+		if proxyDisc == "" {
+			proxyDisc = skyenv.DefaultServiceDiscAddr
+		}
+		log = logging.MustGetLogger("appdisc")
+
+		conf := servicedisc.Config{
+			Type:     servicedisc.ServiceTypePublicVisor,
+			PK:       v.conf.PK,
+			SK:       v.conf.SK,
+			DiscAddr: proxyDisc,
+		}
+
+		client := servicedisc.NewClient(log, conf)
+		client.Entry.PublicAddress = v.conf.STCP.PublicAddress
+
+		go func() {
+			time.Sleep(transport.TrustedVisorsDelay * 2)
+			services, err := client.Services(context.Background(), 5)
+			if err != nil {
+				log.WithError(err).Error("Can't fetch public visors")
+			}
+			for _, service := range services {
+				pk := service.Addr.PubKey()
+				v.log.WithField("pk", pk).Infof("Adding public visor")
+				if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType); err != nil {
+					v.log.
+						WithError(err).
+						WithField("pk", pk).
+						WithField("type", trustedVisorsTransportType).
+						Warnf("Failed to add transport to public visor via")
+				} else {
+					v.log.
+						WithField("pk", pk).
+						WithField("type", trustedVisorsTransportType).
+						Infof("Added transport to public visor")
+				}
+			}
+		}()
+	}
 	return true
 }
 

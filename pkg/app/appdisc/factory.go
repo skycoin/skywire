@@ -55,6 +55,30 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 	}
 }
 
+// PublicVisorUpdater obtains a visor updater.
+func (f *Factory) PublicVisorUpdater(port uint16, publicAddr string) Updater {
+	// Always return empty updater if keys are not set.
+	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
+		return &emptyUpdater{}
+	}
+
+	conf := servicedisc.Config{
+		Type:     servicedisc.ServiceTypePublicVisor,
+		PK:       f.PK,
+		SK:       f.SK,
+		Port:     port,
+		DiscAddr: f.ProxyDisc,
+	}
+
+	client := servicedisc.NewClient(f.Log, conf)
+	client.Entry.PublicAddress = publicAddr
+
+	return &serviceUpdater{
+		client:   client,
+		interval: f.UpdateInterval,
+	}
+}
+
 // AppUpdater obtains an app updater based on the app name and configuration.
 func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	// Always return empty updater if keys are not set.
