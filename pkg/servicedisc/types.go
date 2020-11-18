@@ -17,7 +17,7 @@ const (
 	ServiceTypeVPN = "vpn"
 	// ServiceTypeVisor stands for visor.
 	ServiceTypeVisor = "visor"
-	// ServiceTypeVisor stands for type of visors that accessible on pulic address.
+	// ServiceTypePublicVisor stands for type of visors that accessible on pulic address.
 	ServiceTypePublicVisor = "public_visor"
 )
 
