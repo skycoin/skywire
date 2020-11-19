@@ -523,29 +523,30 @@ func initTrustedVisors(v *Visor) bool {
 
 func initPublicVisors(v *Visor) bool {
 	const trustedVisorsTransportType = tptypes.STCPR
-	if v.conf.Launcher.Discovery.PublicVisorsEnabled {
-		proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
-		if proxyDisc == "" {
-			proxyDisc = skyenv.DefaultServiceDiscAddr
-		}
-		log = logging.MustGetLogger("appdisc")
+	proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
+	if proxyDisc == "" {
+		proxyDisc = skyenv.DefaultServiceDiscAddr
+	}
+	log = logging.MustGetLogger("appdisc")
 
-		conf := servicedisc.Config{
-			Type:     servicedisc.ServiceTypePublicVisor,
-			PK:       v.conf.PK,
-			SK:       v.conf.SK,
-			DiscAddr: proxyDisc,
-		}
-
-		client := servicedisc.NewClient(log, conf)
+	conf := servicedisc.Config{
+		Type:     servicedisc.ServiceTypePublicVisor,
+		PK:       v.conf.PK,
+		SK:       v.conf.SK,
+		DiscAddr: proxyDisc,
+	}
+	client := servicedisc.NewClient(log, conf)
+	if v.conf.STCP.AddrIsPublic {
 		go func() {
 			time.Sleep(transport.TrustedVisorsDelay * 2)
-			go func() {
-				_, err := client.UpdateEntry(context.Background()) // try to register as public visor
-				if err != nil {
-					log.WithError(err).Warn("can't register as public visor")
-				}
-			}()
+			_, err := client.UpdateEntry(context.Background()) // try to register as public visor
+			if err != nil {
+				log.WithError(err).Warn("can't register as public visor")
+			}
+		}()
+	}
+	if v.conf.Launcher.Discovery.PublicVisorsEnabled {
+		go func() {
 			services, err := client.Services(context.Background(), 5)
 			if err != nil {
 				log.WithError(err).Error("Can't fetch public visors")

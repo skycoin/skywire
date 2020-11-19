@@ -60,8 +60,9 @@ func (c *DmsgConfig) Type() string {
 
 // STCPConfig defines config for STCP network.
 type STCPConfig struct {
-	PKTable   map[cipher.PubKey]string `json:"pk_table"`
-	LocalAddr string                   `json:"local_address"`
+	PKTable      map[cipher.PubKey]string `json:"pk_table"`
+	LocalAddr    string                   `json:"local_address"`
+	AddrIsPublic bool                     `json:"addres_is_public"`
 }
 
 // Type returns STCP type.
