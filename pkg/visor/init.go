@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -528,11 +529,21 @@ func initPublicVisors(v *Visor) bool {
 		proxyDisc = skyenv.DefaultServiceDiscAddr
 	}
 	log = logging.MustGetLogger("appdisc")
-
+	_, portStr, err := net.SplitHostPort(v.conf.STCP.LocalAddr)
+	if err != nil {
+		log.WithError(err).Warn("can't parse address string")
+		return false
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.WithError(err).Warn("can't convert port to integer")
+		return false
+	}
 	conf := servicedisc.Config{
 		Type:     servicedisc.ServiceTypePublicVisor,
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
+		Port:     uint16(port),
 		DiscAddr: proxyDisc,
 	}
 	client := servicedisc.NewClient(log, conf)
