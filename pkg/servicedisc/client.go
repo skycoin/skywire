@@ -45,7 +45,7 @@ type HTTPClient struct {
 // NewClient creates a new HTTPClient.
 func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 	var stats *Stats
-	if conf.Type != ServiceTypeVisor {
+	if conf.Type != ServiceTypeVisor && conf.Type != ServiceTypePublicVisor {
 		stats = &Stats{ConnectedClients: 0}
 	}
 
