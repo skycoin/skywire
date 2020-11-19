@@ -69,6 +69,7 @@ type Hypervisor struct {
 	mu           *sync.RWMutex
 	visorMu      sync.Mutex
 	visorChanMux map[cipher.PubKey]*chanMux
+	selfConn     Conn
 }
 
 // New creates a new Hypervisor.
@@ -82,6 +83,12 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 
 	singleUserDB := usermanager.NewSingleUserStore("admin", boltUserDB)
 
+	selfConn := Conn{
+		Addr:  dmsg.Addr{PK: config.PK, Port: config.DmsgPort},
+		API:   visor,
+		PtyUI: nil,
+	}
+
 	hv := &Hypervisor{
 		c:            config,
 		visor:        visor,
@@ -92,6 +99,7 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 		users:        usermanager.NewUserManager(singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
+		selfConn:     selfConn,
 	}
 
 	return hv, nil
@@ -110,6 +118,9 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 		}
 	}
+
+	// setup
+	hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
 
 	for {
 		conn, err := lis.AcceptStream()
@@ -1115,11 +1126,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	}
 
 	return &httpCtx{
-		Conn: Conn{
-			Addr:  dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort},
-			API:   hv.visor,
-			PtyUI: nil,
-		},
+		Conn: hv.selfConn,
 	}, true
 }
 
