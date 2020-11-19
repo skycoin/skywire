@@ -7,7 +7,7 @@ import { TranslateService } from '@ngx-translate/core';
 
 import { NodeService, BackendData } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
-import { AuthService } from '../../../services/auth.service';
+import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
@@ -107,6 +107,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     }
   ];
 
+  private authVerificationSubscription: Subscription;
   private dataSubscription: Subscription;
   private updateTimeSubscription: Subscription;
   private updateSubscription: Subscription;
@@ -136,6 +137,16 @@ export class NodeListComponent implements OnInit, OnDestroy {
     private translateService: TranslateService,
     route: ActivatedRoute,
   ) {
+    // Configure the options menu shown in the top bar.
+    this.updateOptionsMenu(true);
+
+    // Check if logout button must be removed.
+    this.authVerificationSubscription = this.authService.checkLogin().subscribe(response => {
+      if (response === AuthStates.AuthDisabled) {
+        this.updateOptionsMenu(false);
+      }
+    });
+
     // Show the dmsg info if the dmsg url was used.
     this.showDmsgInfo = this.router.url.indexOf('dmsg') !== -1;
 
@@ -213,25 +224,33 @@ export class NodeListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    // Options for the menu shown in the top bar.
-    this.options = [
-      {
-        name: 'nodes.update-all',
-        actionName: 'updateAll',
-        icon: 'get_app'
-      },
-      {
-        name: 'common.logout',
-        actionName: 'logout',
-        icon: 'power_settings_new'
-      }
-    ];
-
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
       this.nodeService.forceNodeListRefresh();
     });
+  }
+
+  /**
+   * Configures the options menu shown in the top bar.
+   * @param showLogoutOption If the logout option must be included.
+   */
+  private updateOptionsMenu(showLogoutOption: boolean) {
+    this.options = [
+      {
+        name: 'nodes.update-all',
+        actionName: 'updateAll',
+        icon: 'get_app'
+      }
+    ];
+
+    if (showLogoutOption) {
+      this.options.push({
+        name: 'common.logout',
+        actionName: 'logout',
+        icon: 'power_settings_new'
+      });
+    }
   }
 
   ngOnInit() {
@@ -250,6 +269,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.nodeService.stopRequestingNodeList();
+    this.authVerificationSubscription.unsubscribe();
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();

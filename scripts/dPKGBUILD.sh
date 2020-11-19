@@ -7,7 +7,7 @@ pkgname=skywire
 pkgdesc="Skywire Mainnet Node implementation. Skycoin.com"
 pkgver=$(git describe --abbrev=0 | tr --delete v)
 #increment pkgrel with any changes ; reset on updated version
-pkgrel=1
+pkgrel=2
 #default to the system architecture if not provided as an argument to this script
 if [ -z $1 ]; then
   pkgarch=$(dpkg --print-architecture)
@@ -31,7 +31,7 @@ pkgdir=${sourcedir}/${pkgname}-${pkgver}-${pkgrel}-${pkgarch}
 #add build deps here
 makedepends=(go install npm python python2 sudo)
 #add any runtime deps here
-depends=()
+depends=(openssl)
 
 #check for make dependancies
 for t in ${makedepends} ; do
@@ -61,7 +61,6 @@ build() {
   export GOPATH=${srcdir}/go
   export GOBIN=${GOPATH}/bin
   export GOAPPS=${GOPATH}/apps
-  export PATH=${GOPATH}/bin:${PATH}
   cd ${srcdir}/go/src/${pkggopath}
   info 'building binaries'
 	cmddir=${srcdir}/go/src/${pkggopath}/cmd
@@ -75,6 +74,12 @@ build() {
   cd ${cmddir}/apps/skysocks-client
   info 'building skysocks-client binary'
   ${buildwith} go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOAPPS/ .
+  info 'building vpn-client binary'
+  cd ${_cmddir}/apps/vpn-client
+  go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOAPPS/ .
+  info 'building vpn-server binary'
+  cd ${_cmddir}/apps/vpn-server
+  go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOAPPS/ .
   cd ${cmddir}/skywire-visor
   info 'building skywire-visor binary'
   ${buildwith} go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOBIN/ .
@@ -83,9 +88,6 @@ build() {
   ${buildwith} go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOBIN/ .
 	cd ${cmddir}/setup-node
   info 'building setup-node binary'
-  ${buildwith} go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOBIN/ .
-	cd ${cmddir}/hypervisor
-  info 'building hypervisor binary'
   ${buildwith} go build -trimpath -ldflags '-extldflags ${LDFLAGS}' -ldflags=-buildid= -o $GOBIN/ .
   #binary transparency
   cd $GOBIN
@@ -96,8 +98,8 @@ build() {
 
 package() {
   #create directory trees
-  sudo mkdir -p ${pkgdir}/usr/bin/apps
-  sudo mkdir -p ${pkgdir}/etc/skywire
+  sudo mkdir -p ${pkgdir}/opt/skywire/apps/ ${pkgdir}/opt/skywire/dmsgpty/ ${pkgdir}/opt/skywire/local
+  sudo mkdir -p ${pkgdir}/usr/bin
   sudo mkdir -p ${pkgdir}/DEBIAN
   #create control file
   echo "Package: ${pkgname}" > ${srcdir}/control
@@ -105,19 +107,23 @@ package() {
   echo "Priority: optional" >> ${srcdir}/control
   echo "Section: web" >> ${srcdir}/control
   echo "Architecture: ${pkgarch}" >> ${srcdir}/control
+  echo "Depends: ${depends}" >> ${srcdir}/control
   echo "Maintainer: skycoin" >> ${srcdir}/control
   echo "Description: ${pkgdesc}" >> ${srcdir}/control
   info 'installing binaries'
   sudo mv ${srcdir}/control ${pkgdir}/DEBIAN/control
   #install binaries
-  sudo install -Dm755 ${srcdir}/go/bin/hypervisor ${pkgdir}/usr/bin/skywire-hypervisor
   sudo install -Dm755 ${srcdir}/go/bin/skywire-visor ${pkgdir}/usr/bin/skywire-visor
   sudo install -Dm755 ${srcdir}/go/bin/skywire-cli ${pkgdir}/usr/bin/skywire-cli
-  sudo install -Dm755 ${srcdir}/go/apps/skychat ${pkgdir}/usr/bin/apps/skychat
-  sudo install -Dm755 ${srcdir}/go/apps/skysocks ${pkgdir}/usr/bin/apps/skysocks
-  sudo install -Dm755 ${srcdir}/go/apps/skysocks-client ${pkgdir}/usr/bin/apps/skysocks-client
+  sudo install -Dm755 ${srcdir}/go/apps/skychat ${pkgdir}/opt/skywire/apps/skychat
+  sudo install -Dm755 ${srcdir}/go/apps/skysocks ${pkgdir}/opt/skywire/apps/skysocks
+  sudo install -Dm755 ${srcdir}/go/apps/skysocks-client ${pkgdir}/opt/skywire/apps/skysocks-client
+  sudo install -Dm755 ${srcdir}/go/apps/vpn-server ${pkgdir}/opt/skywire/apps/vpn-server
+  sudo install -Dm755 ${srcdir}/go/apps/vpn-client ${pkgdir}/opt/skywire/apps/vpn-server
+  sudo install -Dm755 ${srcdir}/skywire/static/skywire-manager-src/ssl/generate-1.sh ${pkgdir}/usr/bin/skywire-tls-gen
+
   #install the system.d services
-  sudo install -Dm644 ${srcdir}/skywire/init/skywire-hypervisor.service ${pkgdir}/etc/systemd/system/skywire-hypervisor.service
+  #sudo install -Dm644 ${srcdir}/skywire/init/skywire-hypervisor.service ${pkgdir}/etc/systemd/system/skywire-hypervisor.service
   sudo install -Dm644 ${srcdir}/skywire/init/skywire-visor.service ${pkgdir}/etc/systemd/system/skywire-visor.service
   #create the debian package
   dpkg-deb --build ${pkgdir}
