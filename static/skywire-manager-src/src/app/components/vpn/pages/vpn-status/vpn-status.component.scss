@@ -203,6 +203,11 @@
     max-width: 250px;
     text-align: left;
 
+    .none {
+      font-size: $font-size-sm;
+      @extend .single-line;
+    }
+
     .flag {
       background-image: url('/assets/img/big-flags/us.png');
       width: 20px;
@@ -255,4 +260,9 @@
       height: 12px;
     }
   }
+}
+
+.disabled-button {
+  opacity: 0.5;
+  pointer-events: none;
 }

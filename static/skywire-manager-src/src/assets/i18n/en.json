@@ -601,6 +601,9 @@
 
     "status-page": {
       "start-title": "Start VPN",
+      "no-server": "No server selected!",
+      "disconnect": "Disconnect",
+      "disconnect-confirmation": "Are you sure you want to stop the VPN protection?",
 
       "data": {
         "ip": "Current IP address:",

@@ -1,4 +1,17 @@
-<div class="general-container">
+<div *ngIf="loading" class="d-flex flex-column h-100 w-100">
+  <div>
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="0"
+      [showUpdateButton]="false"
+      [showVpnInfo]="true"
+    ></app-top-bar>
+  </div>
+  <app-loading-indicator></app-loading-indicator>
+</div>
+
+<div class="general-container" *ngIf="!loading">
   <div class="row">
     <div class="col-12">
       <app-top-bar
@@ -16,7 +29,7 @@
       <div class="column-container">
         <div class="title">{{ 'vpn.status-page.start-title' | translate }}</div>
         <div>
-          <div class="start-button">
+          <div class="start-button" (click)="start()" [ngClass]="{'disabled-button': waitingResponse}">
             <div class="start-button-img-container">
               <div class="start-button-img"></div>
             </div>
@@ -24,11 +37,18 @@
           </div>
         </div>
         <div class="current-server">
-          <div class="flag"></div>
-          <div class="text-container">
-            <div class="top-line">United States - NY</div>
-            <div class="bottom-line">024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7</div>
-          </div>
+          <ng-container *ngIf="currentRemotePk">
+            <div class="flag"></div>
+            <div class="text-container">
+              <div class="top-line">United States - NY</div>
+              <div class="bottom-line">
+                <app-copy-to-clipboard-text [shortSimple]="true" [text]="currentRemotePk"></app-copy-to-clipboard-text>
+              </div>
+            </div>
+          </ng-container>
+          <ng-container *ngIf="!currentRemotePk">
+            <div class="none">{{ 'vpn.status-page.no-server' | translate }}</div>
+          </ng-container>
         </div>
       </div>
     </div>
@@ -69,11 +89,11 @@
           </div>
         </div>
         <!-- Disconnect button. -->
-        <div class="disconnect-button">
+        <div class="disconnect-button" (click)="stop()" [ngClass]="{'disabled-button': waitingResponse}">
           <div class="disconnect-button-container">
             <div class="d-inline-flex">
               <mat-icon [inline]="true">power_settings_new</mat-icon>
-              <span>Disconnect</span>
+              <span>{{ 'vpn.status-page.disconnect' | translate }}</span>
             </div>
           </div>
         </div>
@@ -97,14 +117,14 @@
           <div>
             <div class="title">{{ 'vpn.status-page.data.local-pk' | translate }}</div>
             <div class="small-text">
-              <app-copy-to-clipboard-text text="024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"></app-copy-to-clipboard-text>
+              <app-copy-to-clipboard-text [text]="currentLocalPk"></app-copy-to-clipboard-text>
             </div>
           </div>
-          <div class="margin"></div>
-          <div>
+          <div class="margin" *ngIf="showStarted"></div>
+          <div *ngIf="showStarted">
             <div class="title">{{ 'vpn.status-page.data.remote-pk' | translate }}</div>
             <div class="small-text">
-              <app-copy-to-clipboard-text text="024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"></app-copy-to-clipboard-text>
+              <app-copy-to-clipboard-text [text]="currentRemotePk"></app-copy-to-clipboard-text>
             </div>
           </div>
         </div>
