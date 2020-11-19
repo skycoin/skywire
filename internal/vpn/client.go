@@ -128,13 +128,16 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 func (c *Client) Serve() {
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
+		fmt.Println("Serve stopped, inside defer")
 		if c.cfg.Killswitch {
+			fmt.Println("Killswitch enabled")
 			err := c.setSysPrivileges()
 			if err != nil {
 				fmt.Printf("Error setting up system privileges: %v\n", err)
 			} else {
 				c.prevTUNGatewayMu.Lock()
 				if len(c.prevTUNGateway) > 0 {
+					fmt.Printf("Routing traffic directly, previous TUN gateway: %s\n", c.prevTUNGateway.String())
 					c.routeTrafficDirectly(c.prevTUNGateway)
 				}
 				c.prevTUNGateway = nil
@@ -147,12 +150,20 @@ func (c *Client) Serve() {
 		if err := c.closeTUN(); err != nil {
 			fmt.Printf("Failed to close TUN: %v\n", err)
 		}
+
+		fmt.Println("Closed TUN")
 	}()
 
-	for !c.isClosed() {
+	for {
 		if err := c.dialServeConn(); err != nil {
 			fmt.Printf("dialServeConn: %v\n", err)
 		}
+
+		if c.isClosed() {
+			return
+		}
+
+		fmt.Println("Connection broke, reconnecting...")
 
 		// TODO: wait for a timeout?
 	}
@@ -338,6 +349,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 	if c.cfg.Killswitch {
 		c.prevTUNGatewayMu.Lock()
 		if len(c.prevTUNGateway) > 0 {
+			fmt.Printf("Routing traffic directly from previous TUN gateway: %v\n", c.prevTUNGateway.String())
 			c.routeTrafficDirectly(c.prevTUNGateway)
 		}
 		c.prevTUNGateway = tunGateway
@@ -346,6 +358,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	defer func() {
 		if !c.cfg.Killswitch {
+			fmt.Println("serveConn done, killswitch disabled, routing traffic directly")
 			c.routeTrafficDirectly(tunGateway)
 		}
 	}()
