@@ -549,7 +549,7 @@ func initPublicVisors(v *Visor) bool {
 	client := servicedisc.NewClient(log, conf)
 	if v.conf.STCP.AddrIsPublic {
 		go func() {
-			time.Sleep(transport.TrustedVisorsDelay * 2)
+			time.Sleep(transport.TrustedVisorsDelay)
 			_, err := client.UpdateEntry(context.Background()) // try to register as public visor
 			if err != nil {
 				log.WithError(err).Warn("can't register as public visor")
@@ -558,6 +558,7 @@ func initPublicVisors(v *Visor) bool {
 	}
 	if v.conf.Launcher.Discovery.PublicVisorsEnabled {
 		go func() {
+			time.Sleep(transport.TrustedVisorsDelay * 2)
 			services, err := client.Services(context.Background(), 5)
 			if err != nil {
 				log.WithError(err).Error("Can't fetch public visors")
