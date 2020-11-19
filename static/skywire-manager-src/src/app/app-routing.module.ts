@@ -123,26 +123,24 @@ const routes: Routes = [
   },
   {
     path: 'vpn',
-    canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService],
     children: [
       {
-        path: '',
-        redirectTo: 'status',
-        pathMatch: 'full'
-      },
-      {
-        path: 'status',
-        component: VpnStatusComponent
-      },
-      {
-        path: 'servers',
-        redirectTo: 'servers/1',
-        pathMatch: 'full'
-      },
-      {
-        path: 'servers/:page',
-        component: ServerListComponent
+        path: ':key',
+        children: [
+          {
+            path: 'status',
+            component: VpnStatusComponent
+          },
+          {
+            path: 'servers',
+            redirectTo: 'servers/1',
+            pathMatch: 'full'
+          },
+          {
+            path: 'servers/:page',
+            component: ServerListComponent
+          }
+        ]
       }
     ],
   },
