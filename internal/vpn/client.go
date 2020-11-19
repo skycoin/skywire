@@ -39,13 +39,15 @@ type Client struct {
 	defaultGateway   net.IP
 	prevTUNGatewayMu sync.Mutex
 	prevTUNGateway   net.IP
-	sysPrivilegesMu  sync.Mutex
-	suid             int
-	tunMu            sync.Mutex
-	tun              TUNDevice
-	tunCreated       bool
 	closeC           chan struct{}
 	closeOnce        sync.Once
+
+	suidMu sync.Mutex
+	suid   int
+
+	tunMu      sync.Mutex
+	tun        TUNDevice
+	tunCreated bool
 }
 
 // NewClient creates VPN client instance.
@@ -216,7 +218,7 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 }
 
 func (c *Client) setSysPrivileges() error {
-	c.sysPrivilegesMu.Lock()
+	c.suidMu.Lock()
 
 	// we don't release the lock here to avoid races,
 	// lock will be released after reverting system privileges
@@ -613,7 +615,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 }
 
 func (c *Client) releaseSysPrivileges() {
-	defer c.sysPrivilegesMu.Unlock()
+	defer c.suidMu.Unlock()
 
 	if err := releaseClientSysPrivileges(c.suid); err != nil {
 		fmt.Printf("Failed to release system privileges: %v\n", err)
