@@ -115,30 +115,6 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey) (APIClient, 
 	return client, nil
 }
 
-func NewReadOnlyHTTP(remoteAddr string) (APIClient, error) {
-	remoteURL, err := url.Parse(remoteAddr)
-	if err != nil {
-		return nil, fmt.Errorf("parse URL: %w", err)
-	}
-
-	remoteUDP := remoteURL.Host
-	if _, _, err := net.SplitHostPort(remoteUDP); err != nil {
-		remoteUDP = net.JoinHostPort(remoteUDP, defaultUDPPort)
-	}
-
-	client := &httpClient{
-		log:            logging.MustGetLogger("address-resolver"),
-		remoteHTTPAddr: remoteAddr,
-		remoteUDPAddr:  remoteUDP,
-		ready:          make(chan struct{}),
-		closed:         make(chan struct{}),
-	}
-
-	client.log.Infof("Remote UDP server: %q", remoteUDP)
-
-	return client, nil
-}
-
 func (c *httpClient) initHTTPClient() {
 	httpAuthClient, err := httpauth.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk)
 	if err != nil {
