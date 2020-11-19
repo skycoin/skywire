@@ -62,7 +62,7 @@ func (c *DmsgConfig) Type() string {
 type STCPConfig struct {
 	PKTable      map[cipher.PubKey]string `json:"pk_table"`
 	LocalAddr    string                   `json:"local_address"`
-	AddrIsPublic bool                     `json:"addres_is_public"`
+	AddrIsPublic bool                     `json:"address_is_public"`
 }
 
 // Type returns STCP type.
