@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultNetworkInterfaceCMD  = "ip addr | awk '/state UP/ {print $2}' | sed 's/.$//'"
+	defaultNetworkInterfaceCMD  = "route | awk '$1 == \"default\" {print $8}'"
 	getIPv4ForwardingCMD        = "sysctl net.ipv4.ip_forward"
 	getIPv6ForwardingCMD        = "sysctl net.ipv6.conf.all.forwarding"
 	setIPv4ForwardingCMDFmt     = "sysctl -w net.ipv4.ip_forward=%s"
@@ -50,11 +50,10 @@ func DefaultNetworkInterface() (string, error) {
 		return "", fmt.Errorf("error running command %s: %w", defaultNetworkInterfaceCMD, err)
 	}
 
+	// just in case
 	outputBytes = bytes.TrimRight(outputBytes, "\n")
 
-	lines := bytes.Split(outputBytes, []byte{'\n'})
-	// take only first one, should be enough in most cases
-	return string(lines[0]), nil
+	return string(outputBytes), nil
 }
 
 // GetIPv4ForwardingValue gets current value of IPv4 forwarding.
