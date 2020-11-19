@@ -67,6 +67,7 @@ func setupClientSysPrivileges() (int, error) {
 		err = caps.Apply(capability.CAPS | capability.BOUNDS | capability.AMBIENT)
 		if err != nil {
 			err = fmt.Errorf("failed to apply capabilties: %w", err)
+
 			return
 		}
 

@@ -4,11 +4,34 @@ package vpn
 
 import (
 	"errors"
+	"net"
 )
 
 var (
 	errServerMethodsNotSupported = errors.New("server related methods are not supported for this OS")
 )
+
+// AllowSSH allows all SSH traffic (via default 22 port) between `src` and `dst`.
+func AllowSSH(_, _ net.IP, _ []net.IP) error {
+	return errServerMethodsNotSupported
+}
+
+// BlockSSH blocks all SSH traffic (via default 22 port) between `src` and `dst`.
+func BlockSSH(_, _ net.IP, _ []net.IP) error {
+	return errServerMethodsNotSupported
+}
+
+// AllowIPToLocalNetwork allows all the packets coming from `source`
+// to private IP ranges.
+func AllowIPToLocalNetwork(_, _ net.IP) error {
+	return errServerMethodsNotSupported
+}
+
+// BlockIPToLocalNetwork blocks all the packets coming from `source`
+// to private IP ranges.
+func BlockIPToLocalNetwork(_, _ net.IP) error {
+	return errServerMethodsNotSupported
+}
 
 // DefaultNetworkInterface fetches default network interface name.
 func DefaultNetworkInterface() (string, error) {

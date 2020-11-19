@@ -456,7 +456,7 @@ func initHypervisors(v *Visor) bool {
 }
 
 func initUptimeTracker(v *Visor) bool {
-	const tickDuration = 10 * time.Second
+	const tickDuration = 1 * time.Minute
 
 	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker
@@ -601,8 +601,6 @@ func initHypervisor(v *Visor) bool {
 	conf.PK = v.conf.PK
 	conf.SK = v.conf.SK
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
-
-	conf.FillDefaults(false)
 
 	// Prepare hypervisor.
 	hv, err := New(conf, assets, v, v.net.Dmsg())
