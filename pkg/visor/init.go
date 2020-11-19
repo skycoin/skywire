@@ -105,7 +105,6 @@ func initSNet(v *Visor) bool {
 		NetworkConfigs: nc,
 		ServiceDisc:    v.serviceDisc,
 		PublicTrusted:  v.conf.PublicTrustedVisor,
-		PublicAddress:  v.conf.STCP.PublicAddress,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -539,10 +538,14 @@ func initPublicVisors(v *Visor) bool {
 		}
 
 		client := servicedisc.NewClient(log, conf)
-		client.Entry.PublicAddress = v.conf.STCP.PublicAddress
-
 		go func() {
 			time.Sleep(transport.TrustedVisorsDelay * 2)
+			go func() {
+				_, err := client.UpdateEntry(context.Background()) // try to register as public visor
+				if err != nil {
+					log.WithError(err).Warn("can't register as public visor")
+				}
+			}()
 			services, err := client.Services(context.Background(), 5)
 			if err != nil {
 				log.WithError(err).Error("Can't fetch public visors")
