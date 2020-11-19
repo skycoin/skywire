@@ -20,7 +20,7 @@ var (
 	localPKStr  = flag.String("pk", "", "Local PubKey")
 	localSKStr  = flag.String("sk", "", "Local SecKey")
 	passcode    = flag.String("passcode", "", "Passcode to authenticate connection")
-	killswitch  = flag.Bool("killswitch", false, "If set, Internet won't be restored during reconnection attempts")
+	killswitch  = flag.Bool("killswitch", false, "If set, the Internet won't be restored during reconnection attempts")
 )
 
 func main() {
