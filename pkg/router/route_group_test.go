@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
@@ -519,7 +521,7 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 }
 
 // TODO(darkrengarius): Uncomment and fix.
-/*
+
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
 		rg1, rg2, m1, m2, teardown := setupEnv(t)
@@ -542,7 +544,6 @@ func TestRouteGroup_TestConn(t *testing.T) {
 
 	nettest.TestConn(t, mp)
 }
-*/
 
 func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 	for {
