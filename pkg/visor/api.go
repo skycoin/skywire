@@ -49,7 +49,7 @@ type API interface {
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
 
-	RoutingRules() ([]routing.Rule, error) // TODO(nkryuchkov): improve API
+	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
