@@ -147,6 +147,11 @@ type MockConfig struct {
 	EnableAuth        bool
 }
 
+type elementResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+}
+
 // AddMockData adds mock data to Hypervisor.
 func (hv *Hypervisor) AddMockData(config MockConfig) error {
 	r := rand.New(rand.NewSource(time.Now().UnixNano())) // nolint:gosec
@@ -226,11 +231,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/transports", hv.postTransport())
 				r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
 				r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
+				r.Delete("/visors/{pk}/transports/", hv.deleteTransports())
 				r.Get("/visors/{pk}/routes", hv.getRoutes())
 				r.Post("/visors/{pk}/routes", hv.postRoute())
 				r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
 				r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
+				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
@@ -688,6 +695,51 @@ func (hv *Hypervisor) deleteTransport() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var transports []string
+		response := make(map[string]elementResponse)
+		err := json.NewDecoder(r.Body).Decode(&transports)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		for _, transport := range transports {
+			transportBoxed, err := uuid.Parse(transport)
+			if err != nil {
+				response[transport] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			_, err = ctx.API.Transport(transportBoxed)
+			if err != nil {
+				if err.Error() == ErrNotFound.Error() {
+					errMsg := fmt.Errorf("transport of ID %s is not found", transportBoxed)
+					response[transport] = elementResponse{
+						Success: false,
+						Error:   errMsg.Error(),
+					}
+					continue
+				}
+			}
+
+			if err := ctx.API.RemoveTransport(transportBoxed); err != nil {
+				response[transport] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			response[transport] = elementResponse{
+				Success: true,
+			}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, response)
+	})
+}
+
 type routingRuleResp struct {
 	Key     routing.RouteID      `json:"key"`
 	Rule    string               `json:"rule"`
@@ -812,6 +864,60 @@ func (hv *Hypervisor) deleteRoute() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, true)
+	})
+}
+
+func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rids []string
+		response := make(map[string]elementResponse)
+		err := json.NewDecoder(r.Body).Decode(&rids)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, err)
+			return
+		}
+		rules, err := ctx.API.RoutingRules()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, err)
+			return
+		}
+		for _, rid := range rids {
+			ridUint64, err := strconv.ParseUint(rid, 10, 32)
+			if err != nil {
+				response[rid] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			routeID := routing.RouteID(ridUint64)
+			contains := false
+			for _, rule := range rules {
+				if rule.KeyRouteID() == routeID {
+					contains = true
+				}
+			}
+			if !contains {
+				errMsg := fmt.Errorf("route of ID %s is not found", rid)
+				response[rid] = elementResponse{
+					Success: false,
+					Error:   errMsg.Error(),
+				}
+				continue
+			}
+
+			if err := ctx.API.RemoveRoutingRule(routeID); err != nil {
+				response[rid] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			response[rid] = elementResponse{
+				Success: true,
+			}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, response)
 	})
 }
 
