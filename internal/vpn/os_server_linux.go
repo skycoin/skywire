@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strings"
 )
 
 const (
@@ -30,7 +31,7 @@ func GetIPTablesForwardPolicy() (string, error) {
 		return "", fmt.Errorf("error running command %s: %w", getIPTablesForwardPolicyCMD, err)
 	}
 
-	return string(outputBytes), nil
+	return strings.TrimRight(string(outputBytes), "\n"), nil
 }
 
 // SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
