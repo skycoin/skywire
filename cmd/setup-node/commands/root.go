@@ -130,7 +130,7 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// TODO: The following should be replaced by promutil.AddMetricsHandle
+	// TODO(evanlinjin): The following should be replaced by promutil.AddMetricsHandle
 	reg := prometheus.NewPedanticRegistry()
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	reg.MustRegister(prometheus.NewGoCollector())

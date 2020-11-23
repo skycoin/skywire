@@ -158,7 +158,7 @@ func biRouteFromKeys(fwdPKs, revPKs []cipher.PubKey, srcPort, dstPort routing.Po
 		revHops[i] = routing.Hop{TpID: determineTpID(srcPK, dstPK), From: srcPK, To: dstPK}
 	}
 
-	// TODO: This should also return a map of format: map[uuid.UUID][]cipher.PubKey
+	// TODO(evanlinjin): This should also return a map of format: map[uuid.UUID][]cipher.PubKey
 	// This way, we can associate transport IDs to the two transport edges, allowing for more checks.
 	return routing.BidirectionalRoute{
 		Desc:      routing.NewRouteDescriptor(fwdPKs[0], revPKs[0], srcPort, dstPort),

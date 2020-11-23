@@ -3,6 +3,7 @@
 package updater
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"unicode"
 
 	"github.com/google/go-github/github"
@@ -420,7 +422,20 @@ func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
 	}
 
-	r := io.TeeReader(resp.Body, u.progressBar(resp.ContentLength, checksumsFilename))
+	output, err := captureOutput()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := output.release(); err != nil {
+			u.log.Errorf("Failed to release output: %w", err)
+		}
+	}()
+
+	origStdoutWriter := os.NewFile(uintptr(output.origStdout), "/dev/stdout")
+
+	r := io.TeeReader(resp.Body, u.progressBar(origStdoutWriter, resp.ContentLength, checksumsFilename))
 
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -430,15 +445,112 @@ func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 	return string(data), nil
 }
 
-func (u *Updater) progressBar(contentLength int64, filename string) io.Writer {
+func (u *Updater) progressBar(w io.Writer, contentLength int64, filename string) io.Writer {
 	width := progressbar.OptionSetWidth(0)
 	desc := progressbar.OptionSetDescription("Downloading " + filename)
 	speed := progressbar.OptionSetBytes64(contentLength)
 	theme := progressbar.OptionSetTheme(progressbar.Theme{})
-	writer := progressbar.OptionSetWriter(io.MultiWriter(os.Stdout, u.status))
+	writer := progressbar.OptionSetWriter(io.MultiWriter(w, u.status))
 	completion := progressbar.OptionOnCompletion(func() { fmt.Printf("\n") })
 
 	return progressbar.NewOptions64(contentLength, speed, completion, width, theme, desc, writer)
+}
+
+func captureOutput() (output, error) {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	if err != nil {
+		return output{}, err
+	}
+
+	oldStdout, err := syscall.Dup(syscall.Stdout)
+	if err != nil {
+		return output{}, err
+	}
+
+	if err := syscall.Dup2(int(stdoutWriter.Fd()), syscall.Stdout); err != nil {
+		return output{}, err
+	}
+
+	stderrReader, stderrWriter, err := os.Pipe()
+	if err != nil {
+		return output{}, err
+	}
+
+	oldStderr, err := syscall.Dup(syscall.Stderr)
+	if err != nil {
+		return output{}, err
+	}
+
+	if err := syscall.Dup2(int(stderrWriter.Fd()), syscall.Stderr); err != nil {
+		return output{}, err
+	}
+
+	output := output{
+		origStdout:   oldStdout,
+		origStderr:   oldStderr,
+		stdoutReader: stdoutReader,
+		stderrReader: stderrReader,
+		stdoutWriter: stdoutWriter,
+		stderrWriter: stderrWriter,
+	}
+
+	return output, nil
+}
+
+type output struct {
+	origStdout   int
+	origStderr   int
+	stdoutReader *os.File
+	stderrReader *os.File
+	stdoutWriter *os.File
+	stderrWriter *os.File
+}
+
+func (o *output) release() error {
+	if err := o.stdoutWriter.Close(); err != nil {
+		return err
+	}
+
+	if err := o.stderrWriter.Close(); err != nil {
+		return err
+	}
+
+	if err := syscall.Close(syscall.Stdout); err != nil {
+		return err
+	}
+
+	if err := syscall.Close(syscall.Stderr); err != nil {
+		return err
+	}
+
+	if err := syscall.Dup2(o.origStdout, syscall.Stdout); err != nil {
+		return err
+	}
+
+	if err := syscall.Dup2(o.origStderr, syscall.Stderr); err != nil {
+		return err
+	}
+
+	var stdoutBuffer bytes.Buffer
+	var stderrBuffer bytes.Buffer
+
+	if _, err := io.Copy(&stdoutBuffer, o.stdoutReader); err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(&stderrBuffer, o.stderrReader); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprint(os.Stdout, stdoutBuffer.String()); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprint(os.Stderr, stderrBuffer.String()); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (u *Updater) downloadFile(url, filename string) (path string, err error) {
@@ -472,8 +584,20 @@ func (u *Updater) downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
-	// TODO(nkryuchkov): use syscall.Dup to block stdout for all messages except updater logs (https://play.golang.org/p/Xg2iajdiuNN)
-	out := io.MultiWriter(f, u.progressBar(resp.ContentLength, filename))
+	output, err := captureOutput()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := output.release(); err != nil {
+			u.log.Errorf("Failed to release output: %w", err)
+		}
+	}()
+
+	origStdoutWriter := os.NewFile(uintptr(output.origStdout), "/dev/stdout")
+
+	out := io.MultiWriter(f, u.progressBar(origStdoutWriter, resp.ContentLength, filename))
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return "", err
