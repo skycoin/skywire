@@ -153,7 +153,7 @@ func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
 }
 
 func (tm *Manager) serve(ctx context.Context) {
-	// TODO(nkryuchkov): to get rid of this callback, we need to have method on future network interface like: `Ready() <-chan struct{}`
+	// TODO: to get rid of this callback, we need to have method on future network interface like: `Ready() <-chan struct{}`
 	// some networks may not be ready yet, so we're setting a callback first
 	tm.n.OnNewNetworkType(func(netType string) {
 		tm.serveNetwork(ctx, netType)

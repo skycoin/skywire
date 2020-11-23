@@ -46,6 +46,10 @@ func initDmsgpty(v *Visor) bool {
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
 		return report(err)
 	}
+	// add itself to the whitelist to allow local pty
+	if err := wl.Add(v.conf.PK); err != nil {
+		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
+	}
 
 	dmsgC := v.net.Dmsg()
 	if dmsgC == nil {
