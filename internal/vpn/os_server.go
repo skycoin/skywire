@@ -11,13 +11,18 @@ var (
 	errServerMethodsNotSupported = errors.New("server related methods are not supported for this OS")
 )
 
-// AllowSSH allows all SSH traffic (via default 22 port) between `src` and `dst`.
-func AllowSSH(_, _ net.IP, _ []net.IP) error {
+// GetIPTablesForwardPolicy gets current policy for iptables `forward` chain.
+func GetIPTablesForwardPolicy() (string, error) {
+	return "", errServerMethodsNotSupported
+}
+
+// SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
+func SetIPTablesForwardPolicy(policy string) error {
 	return errServerMethodsNotSupported
 }
 
-// BlockSSH blocks all SSH traffic (via default 22 port) between `src` and `dst`.
-func BlockSSH(_, _ net.IP, _ []net.IP) error {
+// SetIPTablesForwardAcceptPolicy sets ACCEPT policy for iptables `forward` chain.
+func SetIPTablesForwardAcceptPolicy() error {
 	return errServerMethodsNotSupported
 }
 
