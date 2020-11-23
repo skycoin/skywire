@@ -22,6 +22,7 @@ type Server struct {
 	defaultNetworkInterfaceIPs []net.IP
 	ipv4ForwardingVal          string
 	ipv6ForwardingVal          string
+	iptablesForwardPolicy      string
 }
 
 // NewServer creates VPN server instance.
@@ -58,10 +59,18 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 	l.Infoln("Old IP forwarding values:")
 	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
+	iptablesForwarPolicy, err := GetIPTablesForwardPolicy()
+	if err != nil {
+		return nil, fmt.Errorf("error getting iptables forward policy: %w", err)
+	}
+
+	l.Infof("Old iptables forward policy: %s", iptablesForwarPolicy)
+
 	s.defaultNetworkInterface = defaultNetworkIfc
 	s.defaultNetworkInterfaceIPs = defaultNetworkIfcIPs
 	s.ipv4ForwardingVal = ipv4ForwardingVal
 	s.ipv6ForwardingVal = ipv6ForwardingVal
+	s.iptablesForwardPolicy = iptablesForwarPolicy
 
 	return s, nil
 }
@@ -108,6 +117,21 @@ func (s *Server) Serve(l net.Listener) error {
 				s.log.WithError(err).Errorf("Error disabling IP masquerading for %s", s.defaultNetworkInterface)
 			} else {
 				s.log.Infof("Disabled IP masquerading for %s", s.defaultNetworkInterface)
+			}
+		}()
+
+		if err := SetIPTablesForwardAcceptPolicy(); err != nil {
+			serveErr = fmt.Errorf("error settings iptables forward policy to ACCEPT")
+			return
+		}
+
+		s.log.Infoln("Set iptables forward policy to ACCEPT")
+
+		defer func() {
+			if err := SetIPTablesForwardPolicy(s.iptablesForwardPolicy); err != nil {
+				s.log.WithError(err).Errorf("Error setting iptables forward policy to %s", s.iptablesForwardPolicy)
+			} else {
+				s.log.Infof("Restored iptables forward policy to %s", s.iptablesForwardPolicy)
 			}
 		}()
 
