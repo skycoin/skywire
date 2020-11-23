@@ -99,7 +99,7 @@ var rootCmd = &cobra.Command{
 				log.WithError(err).Infof("Restarted skywire-visor service")
 			}
 
-			// Detach child from parent. TODO: This may be unnecessary.
+			// Detach child from parent.
 			if _, err := syscall.Setsid(); err != nil {
 				log.WithError(err).Errorf("Failed to call setsid()")
 			}

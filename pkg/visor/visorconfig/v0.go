@@ -59,5 +59,5 @@ type V0 struct {
 
 	AppServerAddr string `json:"app_server_addr"`
 
-	RestartCheckDelay string `json:"restart_check_delay,omitempty"`
+	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 }
