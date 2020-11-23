@@ -58,7 +58,6 @@ func CaptureContext() *Context {
 
 	cmd := exec.Command(shellCommand, shellArgs...) // nolint:gosec
 
-	// TODO(nkryuchkov): use syscall.Dup to duplicate descriptors
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
