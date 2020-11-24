@@ -44,7 +44,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
 	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = restart.DefaultCheckDelay.String() // TODO: Use Duration type.
+	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	return conf
 }
 
