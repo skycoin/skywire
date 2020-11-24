@@ -330,6 +330,8 @@
       "new-password": "New password (Leave empty to remove the password)",
       "repeat-password": "Repeat password",
       "passwords-not-match": "Passwords do not match.",
+      "secure-mode-check": "Use secure mode",
+      "secure-mode-info": "When active, the server doesn't allow client/server SSH and doesn't allow any traffic from VPN clients to the server local network.",
       "save": "Save",
       "remove-passowrd-confirmation": "You left the password field empty. Are you sure you want to remove the password?",
       "change-passowrd-confirmation": "Are you sure you want to change the password?",
@@ -341,6 +343,7 @@
       "discovery-tab": "Search",
       "remote-visor-tab": "Enter manually",
       "history-tab": "History",
+      "settings-tab": "Settings",
       "use": "Use this data",
       "change-note": "Change note",
       "remove-entry": "Remove entry",
@@ -371,6 +374,10 @@
       "no-history": "This tab will show the last {{ number }} public keys used.",
       "default-note-warning": "The default note has been used.",
       "pagination-info": "{{ currentElementsRange }} of {{ totalElements }}",
+      "killswitch-check": "Activate killswitch",
+      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem).",
+      "settings-changed-alert": " The changes have not been saved yet.",
+      "save-settings": "Save settings",
 
       "change-note-dialog": {
         "title": "Change Note",
