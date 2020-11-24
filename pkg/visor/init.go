@@ -62,12 +62,7 @@ func initStack() []initFunc {
 func initUpdater(v *Visor) bool {
 	report := v.makeReporter("updater")
 
-	restartCheckDelay, err := time.ParseDuration(v.conf.RestartCheckDelay)
-	if err != nil {
-		return report(err)
-	}
-
-	v.restartCtx.SetCheckDelay(restartCheckDelay)
+	v.restartCtx.SetCheckDelay(time.Duration(v.conf.RestartCheckDelay))
 	v.restartCtx.RegisterLogger(v.log)
 	v.updater = updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
 	return report(nil)
