@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // LocalNetworkInterfaceIPs gets IPs of all local interfaces.
@@ -83,6 +84,8 @@ func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
 
 //nolint:unparam
 func run(bin string, args ...string) error {
+	fmt.Printf("Executing command %s\n", bin+" "+strings.Join(args, " "))
+
 	cmd := exec.Command(bin, args...) //nolint:gosec
 
 	cmd.Stderr = os.Stderr
