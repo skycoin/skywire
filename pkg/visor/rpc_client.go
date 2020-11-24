@@ -161,6 +161,22 @@ func (rc *rpcClient) SetAppPK(appName string, pk cipher.PubKey) error {
 	}, &struct{}{})
 }
 
+// SetAppKillswitch implements API.
+func (rc *rpcClient) SetAppKillswitch(appName string, killswitch bool) error {
+	return rc.Call("SetAppKillswitch", &SetAppBoolIn{
+		AppName: appName,
+		Val:     killswitch,
+	}, &struct{}{})
+}
+
+// SetAppSecure implements API.
+func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
+	return rc.Call("SetAppSecure", &SetAppBoolIn{
+		AppName: appName,
+		Val:     isSecure,
+	}, &struct{}{})
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)
@@ -631,6 +647,36 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppKillswitch implements API.
+func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppSecure implements API.
+func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks"
 
 		for i := range mc.s.Apps {
 			if mc.s.Apps[i].Name == socksName {
