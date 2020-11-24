@@ -41,7 +41,7 @@
         <app-button
           #button
           (action)="saveChanges()"
-          [disabled]="!form.valid"
+          [disabled]="!form.valid || working"
           color="primary"
           class="float-right"
         >
@@ -225,6 +225,37 @@
           </div>
         </ng-template>
       </div>
+    </mat-tab>
+    <!-- Settings. -->
+    <mat-tab [label]="'apps.vpn-socks-client-settings.settings-tab' | translate">
+      <!-- Killswitch option. -->
+      <div class="main-theme settings-option">
+        <mat-checkbox
+          color="primary"
+          [checked]="killswitch"
+          (change)="setKillswitch($event)"
+        >
+          {{ 'apps.vpn-socks-client-settings.killswitch-check' | translate }}
+          <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-client-settings.killswitch-info' | translate">help</mat-icon>
+        </mat-checkbox>
+      </div>
+
+      <!-- Settings changed alert. -->
+      <div class="settings-changed-warning" *ngIf="killswitch !== initialKillswitchSetting">
+        <mat-icon [inline]="true">warning</mat-icon>
+        {{ 'apps.vpn-socks-client-settings.settings-changed-alert' | translate }}
+      </div>
+
+      <!-- Save button. -->
+      <app-button
+        #settingsButton
+        color="primary"
+        class="float-right"
+        [disabled]="killswitch === initialKillswitchSetting || working"
+        (action)="saveSettings()"
+      >
+        {{ 'apps.vpn-socks-client-settings.save-settings' | translate }}
+      </app-button>
     </mat-tab>
   </mat-tab-group>
 </app-dialog>
