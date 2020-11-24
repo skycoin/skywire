@@ -208,4 +208,30 @@ $top-bar-height: 56px;
       }
     }
   }
+
+  mat-spinner ::ng-deep circle {
+    stroke: $white;
+  }
+}
+
+.languaje-button-vpn {
+  font-size: $font-size-mini-plus;
+  text-align: right;
+  margin: -5px 10px 5px 0px;
+
+  .text-container {
+    cursor: pointer;
+    display: inline;
+    opacity: 0.8;
+
+    &:hover {
+      opacity: 1;
+    }
+
+    .language-flag {
+      width: 11px;
+      height: 11px;
+      margin-right: 2px;
+    }
+  }
 }

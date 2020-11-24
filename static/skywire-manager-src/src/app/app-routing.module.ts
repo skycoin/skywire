@@ -139,8 +139,16 @@ const routes: Routes = [
           {
             path: 'servers/:page',
             component: ServerListComponent
+          },
+          {
+            path: '**',
+            redirectTo: '/login'
           }
         ]
+      },
+      {
+        path: '**',
+        redirectTo: '/login'
       }
     ],
   },
