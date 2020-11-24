@@ -34,8 +34,6 @@ export class VpnClientService {
       this.nodeKey = nodeKey;
 
       this.continuallyUpdateData(0);
-    } else {
-      throw new Error('Already initialized');
     }
   }
 

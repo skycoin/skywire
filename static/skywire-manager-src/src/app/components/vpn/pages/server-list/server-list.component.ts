@@ -9,7 +9,7 @@ import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { FilterProperties, FilterFieldTypes, PrintableLabel } from 'src/app/utils/filters';
 import { countriesList } from 'src/app/utils/countries-list';
 import { VpnClientDiscoveryService, VpnServer, Ratings } from 'src/app/services/vpn-client-discovery.service';
-import { vpnTabsData } from '../../vpn-helpers';
+import { VpnHelpers } from '../../vpn-helpers';
 
 /**
  * Page for showing the vpn server list.
@@ -50,7 +50,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
 
   loading = true;
   dataSource: VpnServer[];
-  tabsData = vpnTabsData;
+  tabsData = VpnHelpers.vpnTabsData;
 
   // Vars for the pagination functionality.
   allServers: VpnServer[];
@@ -60,6 +60,8 @@ export class ServerListComponent implements OnInit, OnDestroy {
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
+
+  currentLocalPk: string;
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[] = [
@@ -145,6 +147,12 @@ export class ServerListComponent implements OnInit, OnDestroy {
         let selectedPage = Number.parseInt(params.get('page'), 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
           selectedPage = 1;
+        }
+
+        if (params.has('key')) {
+          this.currentLocalPk = params.get('key');
+          VpnHelpers.changeCurrentPk(this.currentLocalPk);
+          this.tabsData = VpnHelpers.vpnTabsData;
         }
 
         this.currentPageInUrl = selectedPage;
@@ -322,19 +330,11 @@ export class ServerListComponent implements OnInit, OnDestroy {
   }
 
   getLatencyValueString(latency: number): string {
-    if (latency < 1000) {
-      return 'time-in-ms';
-    }
-
-    return 'time-in-segs';
+    return VpnHelpers.getLatencyValueString(latency);
   }
 
   getPrintableLatency(latency: number): string {
-    if (latency < 1000) {
-      return latency + '';
-    }
-
-    return (latency / 1000).toFixed(1);
+    return VpnHelpers.getPrintableLatency(latency);
   }
 
   getCongestionTextColorClass(congestion: number): string {
