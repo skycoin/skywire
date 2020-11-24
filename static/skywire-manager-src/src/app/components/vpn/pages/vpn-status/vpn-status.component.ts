@@ -3,7 +3,7 @@ import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 
-import { vpnTabsData } from '../../vpn-helpers';
+import { VpnHelpers } from '../../vpn-helpers';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 
@@ -13,7 +13,7 @@ import GeneralUtils from 'src/app/utils/generalUtils';
   styleUrls: ['./vpn-status.component.scss'],
 })
 export class VpnStatusComponent implements OnInit, OnDestroy {
-  tabsData = vpnTabsData;
+  tabsData = VpnHelpers.vpnTabsData;
 
   receivedHistory: number[] = [20, 25, 40, 100, 35, 45, 45, 10, 20, 20];
   sentHistory: number[] = [30, 20, 40, 10, 35, 45, 45, 10, 20, 20];
@@ -39,8 +39,9 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('key')) {
-        this.vpnClientService.initialize(params.get('key'));
         this.currentLocalPk = params.get('key');
+        VpnHelpers.changeCurrentPk(this.currentLocalPk);
+        this.tabsData = VpnHelpers.vpnTabsData;
       }
 
       setTimeout(() => this.navigationsSubscription.unsubscribe());

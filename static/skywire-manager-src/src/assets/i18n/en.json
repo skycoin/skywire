@@ -593,7 +593,8 @@
 
     "connection-info" : {
       "state-connected": "Connected",
-      "state-info": "Current connection status",
+      "state-disconnected": "Disconnected",
+      "state-info": "Current connection status.",
       "latency-info": "Current latency.",
       "upload-info": "Upload speed.",
       "download-info": "Download speed."
