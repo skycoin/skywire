@@ -33,6 +33,12 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	return nil
 }
 
+// ChangeRoute changes current route to `ip` to go through the `gateway`
+// in the OS routing table.
+func ChangeRoute(ip, gateway string) error {
+	return run("ip", "r", "change", ip, "via", gateway)
+}
+
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func AddRoute(ip, gateway string) error {
 	return run("ip", "r", "add", ip, "via", gateway)
