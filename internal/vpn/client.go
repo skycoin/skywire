@@ -30,17 +30,18 @@ const (
 
 // Client is a VPN client.
 type Client struct {
-	log              *logrus.Logger
-	cfg              ClientConfig
-	appCl            *app.Client
-	r                *netutil.Retrier
-	directIPSMu      sync.Mutex
-	directIPs        []net.IP
-	defaultGateway   net.IP
-	prevTUNGatewayMu sync.Mutex
+	log            *logrus.Logger
+	cfg            ClientConfig
+	appCl          *app.Client
+	r              *netutil.Retrier
+	directIPSMu    sync.Mutex
+	directIPs      []net.IP
+	defaultGateway net.IP
+	closeC         chan struct{}
+	closeOnce      sync.Once
+
 	prevTUNGateway   net.IP
-	closeC           chan struct{}
-	closeOnce        sync.Once
+	prevTUNGatewayMu sync.Mutex
 
 	suidMu sync.Mutex
 	suid   int
@@ -125,7 +126,28 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 }
 
 // Serve dials VPN server, sets up TUN and establishes VPN session.
-func (c *Client) Serve() {
+func (c *Client) Serve() error {
+	if err := c.setSysPrivileges(); err != nil {
+		return fmt.Errorf("failed to setup system privileges: %w", err)
+	}
+	// we setup direct routes to skywire services once for all the client lifetime since routes don't change.
+	// but if they change, new routes get delivered to the app via callbacks.
+	if err := c.setupDirectRoutes(); err != nil {
+		c.releaseSysPrivileges()
+		return fmt.Errorf("error setting up direct routes: %w", err)
+	}
+	c.releaseSysPrivileges()
+
+	defer func() {
+		if err := c.setSysPrivileges(); err != nil {
+			fmt.Printf("failed to setup system privileges: %v\n", err)
+			return
+		}
+		defer c.releaseSysPrivileges()
+
+		c.removeDirectRoutes()
+	}()
+
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
 		fmt.Println("Serve stopped, inside defer")
@@ -160,12 +182,10 @@ func (c *Client) Serve() {
 		}
 
 		if c.isClosed() {
-			return
+			return nil
 		}
 
 		fmt.Println("Connection broke, reconnecting...")
-
-		// TODO: wait for a timeout?
 	}
 }
 
@@ -332,28 +352,19 @@ func (c *Client) serveConn(conn net.Conn) error {
 		time.Sleep(10 * time.Second)
 	}
 
-	if err := c.setupDirectRoutes(); err != nil {
-		return fmt.Errorf("error setting up direct routes: %w", err)
-	}
-
-	// no need to check the killswitch flag here, since it doesn't affect
-	// the overall system routing, only Skywire services
-	// TODO: think through the possibility of not deferring this call here, might not be necessary
-	defer c.removeDirectRoutes()
-
-	fmt.Printf("Routing all traffic through TUN %s: %v\n", tun.Name(), err)
-	if err := c.routeTrafficThroughTUN(tunGateway); err != nil {
-		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
-	}
-
+	isNewRoute := true
 	if c.cfg.Killswitch {
 		c.prevTUNGatewayMu.Lock()
 		if len(c.prevTUNGateway) > 0 {
-			fmt.Printf("Routing traffic directly from previous TUN gateway: %v\n", c.prevTUNGateway.String())
-			c.routeTrafficDirectly(c.prevTUNGateway)
+			isNewRoute = false
 		}
 		c.prevTUNGateway = tunGateway
 		c.prevTUNGatewayMu.Unlock()
+	}
+
+	fmt.Printf("Routing all traffic through TUN %s: %v\n", tun.Name(), err)
+	if err := c.routeTrafficThroughTUN(tunGateway, isNewRoute); err != nil {
+		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
 	defer func() {
@@ -424,13 +435,22 @@ func (c *Client) dialServeConn() error {
 	return nil
 }
 
-func (c *Client) routeTrafficThroughTUN(tunGateway net.IP) error {
+func (c *Client) routeTrafficThroughTUN(tunGateway net.IP, isNewRoute bool) error {
 	// route all traffic through TUN gateway
-	if err := AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
-		return err
-	}
-	if err := AddRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
-		return err
+	if isNewRoute {
+		if err := AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+			return err
+		}
+		if err := AddRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+			return err
+		}
+	} else {
+		if err := ChangeRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
+			return err
+		}
+		if err := ChangeRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
+			return err
+		}
 	}
 
 	return nil
