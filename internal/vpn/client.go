@@ -326,8 +326,6 @@ func (c *Client) serveConn(conn net.Conn) error {
 	// releasing system privileges after cleanup
 	defer c.releaseSysPrivileges()
 
-	//TODO: setup sys privileges before any deferred call
-
 	tun, err := c.createTUN()
 	if err != nil {
 		return fmt.Errorf("error allocating TUN interface: %w", err)
@@ -713,5 +711,4 @@ func filterOutEqualIPs(ips []net.IP) []net.IP {
 	}
 
 	return filteredIPs
-
 }
