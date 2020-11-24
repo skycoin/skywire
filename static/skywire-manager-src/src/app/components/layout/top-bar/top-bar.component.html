@@ -119,28 +119,43 @@
   </div></div>
 
   <!-- VPN connection info. -->
-  <div class="vpn-info" *ngIf="showVpnInfo">
-    <table cellspacing="0" cellpadding="0">
-      <tr>
-        <td class="green-clear-text" [matTooltip]="'vpn.connection-info.state-info' | translate">
-          <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
-          {{ 'vpn.connection-info.state-connected' | translate }}
-        </td>
-        <td [matTooltip]="'vpn.connection-info.latency-info' | translate">
-          <mat-icon [inline]="true">swap_horiz</mat-icon>
-          123ms.
-        </td>
-      </tr>
-      <tr>
-        <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
-          <mat-icon [inline]="true">arrow_upward</mat-icon>
-          900 kb/s
-        </td>
-        <td [matTooltip]="'vpn.connection-info.download-info' | translate">
-          <mat-icon [inline]="true">arrow_downward</mat-icon>
-          12 kb/s
-        </td>
-      </tr>
-    </table>
+  <div *ngIf="showVpnInfo">
+    <div class="languaje-button-vpn" *ngIf="!hideLanguageButton && language">
+      <div class="text-container" (click)="openLanguageWindow()">
+        <img [src]="'assets/img/lang/' + language.iconName" class="language-flag" />
+        {{ (language ? language.name : '') | translate }}
+      </div>
+    </div>
+    <div class="vpn-info">
+      <!-- Data. -->
+      <table cellspacing="0" cellpadding="0" *ngIf="vpnData">
+        <tr>
+          <td *ngIf="vpnData.showStarted" class="green-clear-text" [matTooltip]="'vpn.connection-info.state-info' | translate">
+            <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+            {{ 'vpn.connection-info.state-connected' | translate }}
+          </td>
+          <td *ngIf="!vpnData.showStarted" class="red-clear-text" [matTooltip]="'vpn.connection-info.state-info' | translate">
+            <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+            {{ 'vpn.connection-info.state-disconnected' | translate }}
+          </td>
+          <td [matTooltip]="'vpn.connection-info.latency-info' | translate">
+            <mat-icon [inline]="true">swap_horiz</mat-icon>
+            {{ ('common.' + getLatencyValueString(vpnData.latency)) | translate:{ time: getPrintableLatency(vpnData.latency) } }}
+          </td>
+        </tr>
+        <tr>
+          <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
+            <mat-icon [inline]="true">arrow_upward</mat-icon>
+            {{ vpnData.uploadSpeed | autoScale }}
+          </td>
+          <td [matTooltip]="'vpn.connection-info.download-info' | translate">
+            <mat-icon [inline]="true">arrow_downward</mat-icon>
+            {{ vpnData.downloadSpeed | autoScale }}
+          </td>
+        </tr>
+      </table>
+      <!-- Loading animation. -->
+      <mat-spinner [diameter]="20" *ngIf="!vpnData"></mat-spinner>
+    </div>
   </div>
 </div>
