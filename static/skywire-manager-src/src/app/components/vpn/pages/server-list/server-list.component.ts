@@ -193,13 +193,14 @@ export class ServerListComponent implements OnInit, OnDestroy {
       let confirmationDialog: MatDialogRef<ConfirmationComponent, any>;
 
       if (data.vpnClient.running && data.vpnClient.serverPk !== server.pk) {
-        confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.change-server-while-connected-confirmation');
+        confirmationDialog =
+          GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.change-server-while-connected-confirmation');
       }
 
       if (confirmationDialog) {
         confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
           confirmationDialog.componentInstance.closeModal();
-    
+
           this.finishSelectingServer(server);
         });
       } else {
@@ -211,7 +212,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
   }
 
   private finishSelectingServer(server: VpnServer) {
-    VpnStatusComponent.requestedPk = server.pk;
+    // VpnStatusComponent.requestedPk = server.pk;
 
     this.router.navigate(['vpn', this.currentLocalPk, 'status']);
   }
