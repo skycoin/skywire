@@ -14,8 +14,10 @@ import { AppsService } from 'src/app/services/apps.service';
   styleUrls: ['./vpn-status.component.scss'],
 })
 export class VpnStatusComponent implements OnInit, OnDestroy {
+  /*
   public static requestedPk: string;
   public static requestedPassword: string;
+  */
 
   tabsData = VpnHelpers.vpnTabsData;
 
@@ -25,7 +27,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   loading = true;
   showStarted = false;
   waitingResponse = false;
-  configuringRequestedData = false;
+  // configuringRequestedData = false;
   waitingSteps = 0;
 
   currentLocalPk: string;
@@ -53,6 +55,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       setTimeout(() => this.navigationsSubscription.unsubscribe());
 
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
+        /*
         if (data && data.vpnClient && !this.configuringRequestedData) {
           if (!VpnStatusComponent.requestedPk || data.vpnClient.serverPk.toUpperCase() === VpnStatusComponent.requestedPk.toUpperCase()) {
             this.showStarted = data.vpnClient.running;
@@ -77,6 +80,15 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
           this.loading = false;
         }
+        */
+        if (data && data.vpnClient) {
+          this.showStarted = data.vpnClient.running;
+          this.currentRemotePk = data.vpnClient.serverPk;
+
+          this.waitingResponse = false;
+
+          this.loading = false;
+        }
       });
     });
   }
@@ -85,9 +97,10 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     this.dataSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.closeOperationSubscription();
-
+/*
     VpnStatusComponent.requestedPk = null;
     VpnStatusComponent.requestedPassword = null;
+    */
   }
 
   start() {
@@ -109,6 +122,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   }
 
   changeAppState(startApp: boolean) {
+    /*
     this.closeOperationSubscription();
 
     // TODO: react in case of errors.
@@ -125,8 +139,16 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
         }
       }, 500);
     });
+    */
+
+    if (startApp) {
+      this.vpnClientService.start();
+    } else {
+      this.vpnClientService.stop();
+    }
   }
 
+  /*
   useRequestedPk() {
     this.closeOperationSubscription();
 
@@ -151,6 +173,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       }
     );
   }
+  */
 
   private closeOperationSubscription() {
     if (this.operationSubscription) {
