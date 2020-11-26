@@ -6,6 +6,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { VpnHelpers } from '../../vpn-helpers';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { AppsService } from 'src/app/services/apps.service';
 
 @Component({
   selector: 'app-vpn-status',
@@ -13,6 +14,9 @@ import GeneralUtils from 'src/app/utils/generalUtils';
   styleUrls: ['./vpn-status.component.scss'],
 })
 export class VpnStatusComponent implements OnInit, OnDestroy {
+  public static requestedPk: string;
+  public static requestedPassword: string;
+
   tabsData = VpnHelpers.vpnTabsData;
 
   receivedHistory: number[] = [20, 25, 40, 100, 35, 45, 45, 10, 20, 20];
@@ -21,6 +25,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   loading = true;
   showStarted = false;
   waitingResponse = false;
+  configuringRequestedData = false;
   waitingSteps = 0;
 
   currentLocalPk: string;
@@ -34,7 +39,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     private vpnClientService: VpnClientService,
     private route: ActivatedRoute,
     private dialog: MatDialog,
-  ) {}
+    private appsService: AppsService,
+  ) { }
 
   ngOnInit() {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
@@ -45,17 +51,33 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       }
 
       setTimeout(() => this.navigationsSubscription.unsubscribe());
-    });
 
-    this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
-      if (data && data.vpnClient) {
-        this.showStarted = data.vpnClient.running;
+      this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
+        if (data && data.vpnClient && !this.configuringRequestedData) {
+          if (!VpnStatusComponent.requestedPk || data.vpnClient.serverPk.toUpperCase() === VpnStatusComponent.requestedPk.toUpperCase()) {
+            this.showStarted = data.vpnClient.running;
+            this.currentRemotePk = data.vpnClient.serverPk;
 
-        this.currentRemotePk = data.vpnClient.serverPk;
+            VpnStatusComponent.requestedPk = null;
 
-        this.loading = false;
-        this.waitingResponse = false;
-      }
+            this.waitingResponse = false;
+          } else {
+            this.showStarted = false;
+            this.waitingResponse = true;
+            this.configuringRequestedData = true;
+
+            this.currentRemotePk = VpnStatusComponent.requestedPk;
+
+            if (data.vpnClient.running) {
+              this.changeAppState(false);
+            } else {
+              this.useRequestedPk();
+            }
+          }
+
+          this.loading = false;
+        }
+      });
     });
   }
 
@@ -63,6 +85,9 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     this.dataSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.closeOperationSubscription();
+
+    VpnStatusComponent.requestedPk = null;
+    VpnStatusComponent.requestedPassword = null;
   }
 
   start() {
@@ -86,11 +111,45 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   changeAppState(startApp: boolean) {
     this.closeOperationSubscription();
 
-    this.vpnClientService.changeAppState(startApp).subscribe(() => {
+    // TODO: react in case of errors.
+    this.operationSubscription = this.vpnClientService.changeAppState(startApp).subscribe(() => {
       setTimeout(() => {
         this.vpnClientService.updateData();
+
+        if (this.configuringRequestedData) {
+          if (!startApp) {
+            this.useRequestedPk();
+          } else {
+            this.configuringRequestedData = false;
+          }
+        }
       }, 500);
     });
+  }
+
+  useRequestedPk() {
+    this.closeOperationSubscription();
+
+    const data = { pk: VpnStatusComponent.requestedPk };
+    if (VpnStatusComponent.requestedPassword) {
+      data['passcode'] = VpnStatusComponent.requestedPassword;
+    } else {
+      data['passcode'] = '';
+    }
+
+    // TODO: react in case of errors.
+    this.operationSubscription = this.appsService.changeAppSettings(
+      this.currentLocalPk,
+      this.vpnClientService.vpnClientAppName,
+      data,
+    ).subscribe(
+      () => {
+        VpnStatusComponent.requestedPk = null;
+        VpnStatusComponent.requestedPassword = null;
+
+        this.changeAppState(true);
+      }
+    );
   }
 
   private closeOperationSubscription() {

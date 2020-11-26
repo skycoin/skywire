@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -10,6 +10,10 @@ import { FilterProperties, FilterFieldTypes, PrintableLabel } from 'src/app/util
 import { countriesList } from 'src/app/utils/countries-list';
 import { VpnClientDiscoveryService, VpnServer, Ratings } from 'src/app/services/vpn-client-discovery.service';
 import { VpnHelpers } from '../../vpn-helpers';
+import { VpnStatusComponent } from '../vpn-status/vpn-status.component';
+import { VpnClientService } from 'src/app/services/vpn-client.service';
+import GeneralUtils from 'src/app/utils/generalUtils';
+import { ConfirmationComponent } from 'src/app/components/layout/confirmation/confirmation.component';
 
 /**
  * Page for showing the vpn server list.
@@ -44,6 +48,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
 
   private dataSortedSubscription: Subscription;
   private dataFiltererSubscription: Subscription;
+  private checkVpnSubscription: Subscription;
   // Objects in charge of sorting and filtering the data.
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
@@ -140,6 +145,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
     private translateService: TranslateService,
     private route: ActivatedRoute,
     private vpnClientDiscoveryService: VpnClientDiscoveryService,
+    private vpnClientService: VpnClientService,
   ) {
     // Get the page requested in the URL.
     this.navigationsSubscription = route.paramMap.subscribe(params => {
@@ -176,8 +182,38 @@ export class ServerListComponent implements OnInit, OnDestroy {
       this.dataSubscription.unsubscribe();
     }
 
+    this.closeCheckVpnSubscription();
+
     this.dataFilterer.dispose();
     this.dataSorter.dispose();
+  }
+
+  selectServer(server: VpnServer) {
+    this.checkVpnSubscription = this.vpnClientService.backendState.subscribe(data => {
+      let confirmationDialog: MatDialogRef<ConfirmationComponent, any>;
+
+      if (data.vpnClient.running && data.vpnClient.serverPk !== server.pk) {
+        confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.change-server-while-connected-confirmation');
+      }
+
+      if (confirmationDialog) {
+        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+          confirmationDialog.componentInstance.closeModal();
+    
+          this.finishSelectingServer(server);
+        });
+      } else {
+        this.finishSelectingServer(server);
+      }
+
+      setTimeout(() => this.checkVpnSubscription.unsubscribe());
+    });
+  }
+
+  private finishSelectingServer(server: VpnServer) {
+    VpnStatusComponent.requestedPk = server.pk;
+
+    this.router.navigate(['vpn', this.currentLocalPk, 'status']);
   }
 
   private loadData() {
@@ -207,7 +243,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
       countryCode: 'br',
       name: 'Test server 14',
       location: 'Rio de Janeiro - Brazil',
-      pk: '024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
+      pk: '034ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
       congestion: 20,
       congestionRating: Ratings.Silver,
       latency: 12345,
@@ -218,7 +254,7 @@ export class ServerListComponent implements OnInit, OnDestroy {
       countryCode: 'de',
       name: 'Test server 20',
       location: 'Berlin - Germany',
-      pk: '024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
+      pk: '044ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
       congestion: 20,
       congestionRating: Ratings.Gold,
       latency: 123,
@@ -385,5 +421,11 @@ export class ServerListComponent implements OnInit, OnDestroy {
     }
 
     return 'vpn.server-list.bronze-rating-info';
+  }
+
+  private closeCheckVpnSubscription() {
+    if (this.checkVpnSubscription) {
+      this.checkVpnSubscription.unsubscribe();
+    }
   }
 }

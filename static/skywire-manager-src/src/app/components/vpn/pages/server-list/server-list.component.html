@@ -157,7 +157,7 @@
         </tr>
 
         <!-- Values. -->
-        <tr *ngFor="let server of dataSource" class="selectable">
+        <tr *ngFor="let server of dataSource" class="selectable" (click)="selectServer(server)">
           <td class="flag-column icon-fixer">
             <div class="flag">
               <div
