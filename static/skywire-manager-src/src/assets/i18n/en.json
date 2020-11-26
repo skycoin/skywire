@@ -641,6 +641,7 @@
       "empty-with-filter": "No VPN server matches the selected filtering criteria.",
       "add-manually-info": "Add server manually.",
       "current-filters": "Current filters (press to remove)",
+      "change-server-while-connected-confirmation": "The VPN protection will be interrupted while changing the server and some data may be transmitted unprotected during the process. Do you want to continue?",
 
       "filter-dialog": {
         "country": "The country must be",
