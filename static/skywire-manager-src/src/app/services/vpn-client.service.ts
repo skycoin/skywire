@@ -3,6 +3,7 @@ import { Observable, Subscription, of, BehaviorSubject, concat, throwError } fro
 import { mergeMap, delay, retryWhen, take, catchError } from 'rxjs/operators';
 
 import { ApiService } from './api.service';
+import { AppsService } from './apps.service';
 
 export class BackendState {
   lastError: any;
@@ -24,11 +25,22 @@ export enum VpnStates {
   Disconnecting = 200,
 }
 
+export enum CheckPkResults {
+  Busy = 1,
+  Ok = 2,
+  MustStop = 3,
+  SamePkRunning = 4,
+  SamePkStopped = 5,
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class VpnClientService {
   readonly vpnClientAppName = 'vpn-client';
+
+  private requestedPk: string = null;
+  private requestedPassword: string = null;
 
   private nodeKey: string;
   private stateSubject = new BehaviorSubject<BackendState>(null);
@@ -41,6 +53,7 @@ export class VpnClientService {
 
   constructor(
     private apiService: ApiService,
+    private appsService: AppsService,
   ) {
     this.currentEventData = new BackendState();
     this.currentEventData.vpnClient = null;
@@ -67,25 +80,110 @@ export class VpnClientService {
     this.continuallyUpdateData(0);
   }
 
-  start() {
+  start(): boolean {
     if (!this.working && this.lastState < 20) {
       this.currentEventData.lastError = null;
 
       this.changeAppState(true);
+
+      return true;
     }
+
+    return false;
   }
 
-  stop() {
+  stop(): boolean {
     if (!this.working && this.lastState >= 20 && this.lastState < 200) {
       this.changeAppState(false);
+
+      return true;
     }
+
+    return false;
+  }
+
+  changeServer(pk: string, password: string): boolean {
+    if (!this.working) {
+      this.requestedPk = pk;
+      this.requestedPassword = password;
+
+      if (!this.stop()) {
+        this.processServerChange();
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  checkNewPk(newPk): CheckPkResults {
+    if (this.working) {
+      return CheckPkResults.Busy;
+    } else if (this.lastState !== VpnStates.Off) {
+      if (newPk === this.currentEventData.vpnClient.serverPk) {
+        return CheckPkResults.SamePkRunning;
+      } else {
+        return CheckPkResults.MustStop;
+      }
+    } else if (newPk === this.currentEventData.vpnClient.serverPk) {
+      return CheckPkResults.SamePkStopped;
+    }
+
+    return CheckPkResults.Ok;
+  }
+
+  private processServerChange() {
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+    }
+
+    const data = { pk: this.requestedPk };
+    if (this.requestedPassword) {
+      data['passcode'] = this.requestedPassword;
+    } else {
+      data['passcode'] = '';
+    }
+
+    this.stopContinuallyUpdateData();
+    this.sendUpdate();
+
+    // TODO: react in case of errors.
+    this.dataSubscription = this.appsService.changeAppSettings(
+      this.nodeKey,
+      this.vpnClientAppName,
+      data,
+    ).subscribe(
+      () => {
+        this.requestedPk = null;
+        this.requestedPassword = null;
+        this.working = false;
+
+        if (this.currentEventData && this.currentEventData.vpnClient) {
+          this.currentEventData.vpnClient.serverPk = data.pk;
+        }
+
+        this.start();
+      }, () => {
+        // More processing needed.
+        this.requestedPk = null;
+        this.requestedPassword = null;
+      }
+    );
   }
 
   private changeAppState(startApp: boolean) {
+    if (this.working) {
+      return;
+    }
+
+    const data = { status: 1 };
+
     if (startApp) {
       this.lastState = VpnStates.Starting;
     } else {
       this.lastState = VpnStates.Disconnecting;
+      data.status = 0;
     }
 
     if (this.dataSubscription) {
@@ -95,9 +193,10 @@ export class VpnClientService {
     this.stopContinuallyUpdateData();
     this.sendUpdate();
 
-    this.dataSubscription = this.apiService.put(
-      `visors/${this.nodeKey}/apps/${encodeURIComponent(this.vpnClientAppName)}`,
-      { status: startApp ? 1 : 0 }
+    this.dataSubscription = this.appsService.changeAppSettings(
+      this.nodeKey,
+      this.vpnClientAppName,
+      data,
     ).pipe(
       catchError(err => {
         // If the response was an error, check the state of the backend, to know if the change
@@ -119,7 +218,24 @@ export class VpnClientService {
       retryWhen(errors => concat(errors.pipe(delay(2000), take(10)), throwError('')))
     ).subscribe(response => {
       this.working = false;
+
+      if (startApp) {
+        if (this.currentEventData && this.currentEventData.vpnClient) {
+          this.currentEventData.vpnClient.running = true;
+        }
+        this.lastState = VpnStates.Running;
+      } else {
+        if (this.currentEventData && this.currentEventData.vpnClient) {
+          this.currentEventData.vpnClient.running = false;
+        }
+        this.lastState = VpnStates.Off;
+      }
+      this.sendUpdate();
       this.updateData();
+
+      if (!startApp && this.requestedPk) {
+        this.processServerChange();
+      }
     }, err => {
       if (this.lastState === VpnStates.Starting) {
         // TODO: process "Could not start".
