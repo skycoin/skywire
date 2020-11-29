@@ -590,13 +590,17 @@
     "servers": "Servers",
     "countries": "Countries",
     "settings": "Settings",
-    "unavailable-error": "The VPN client app is not available.",
 
     "server-change": {
       "busy-error": "The system is busy. Please wait.",
       "already-selected-warning": "The selected server is already being used.",
       "change-server-while-connected-confirmation": "The VPN protection will be interrupted while changing the server and some data may be transmitted unprotected during the process. Do you want to continue?",
       "start-same-server-confirmation": "You had already selected that server. Do you want to connect to it?"
+    },
+
+    "error-page": {
+      "text": "The VPN client app is not available.",
+      "more-info": "It was not possible to connect to the VPN client app. This may be due to a configuration error, a unexpected problem with the visor or because you used an invalid public key in the URL."
     },
 
     "connection-info" : {
@@ -649,6 +653,15 @@
       "empty-with-filter": "No VPN server matches the selected filtering criteria.",
       "add-manually-info": "Add server manually.",
       "current-filters": "Current filters (press to remove)",
+
+      "add-server-dialog": {
+        "title": "Enter manually",
+        "pk-label": "Server public key",
+        "password-label": "Server password (if any)",
+        "pk-length-error": "The public key must be 66 characters long.",
+        "pk-chars-error": "The public key must only contain hexadecimal characters.",
+        "use-server-button": "Use server"
+      },
 
       "filter-dialog": {
         "country": "The country must be",

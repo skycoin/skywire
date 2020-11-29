@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -10,11 +10,9 @@ import { FilterProperties, FilterFieldTypes, PrintableLabel } from 'src/app/util
 import { countriesList } from 'src/app/utils/countries-list';
 import { VpnClientDiscoveryService, VpnServer, Ratings } from 'src/app/services/vpn-client-discovery.service';
 import { VpnHelpers } from '../../vpn-helpers';
-import { VpnStatusComponent } from '../vpn-status/vpn-status.component';
-import { VpnClientService, CheckPkResults } from 'src/app/services/vpn-client.service';
-import GeneralUtils from 'src/app/utils/generalUtils';
-import { ConfirmationComponent } from 'src/app/components/layout/confirmation/confirmation.component';
+import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component';
 
 /**
  * Page for showing the vpn server list.
@@ -190,51 +188,21 @@ export class ServerListComponent implements OnInit, OnDestroy {
     this.dataSorter.dispose();
   }
 
+  enterManually() {
+    AddVpnServerComponent.openDialog(this.dialog, this.currentLocalPk);
+  }
+
   selectServer(server: VpnServer) {
-    const result = this.vpnClientService.checkNewPk(server.pk);
-
-    if (result === CheckPkResults.Busy) {
-      this.snackbarService.showError('vpn.server-change.busy-error');
-
-      return;
-    }
-
-    if (result === CheckPkResults.SamePkRunning) {
-      this.snackbarService.showWarning('vpn.server-change.already-selected-warning');
-
-      return;
-    }
-
-    if (result === CheckPkResults.MustStop) {
-      const confirmationDialog =
-        GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-change.change-server-while-connected-confirmation');
-
-        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-          confirmationDialog.componentInstance.closeModal();
-
-          this.vpnClientService.changeServer(server.pk, null);
-          this.router.navigate(['vpn', this.currentLocalPk, 'status']);
-        });
-
-        return;
-    }
-
-    if (result === CheckPkResults.SamePkStopped) {
-      const confirmationDialog =
-        GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-change.start-same-server-confirmation');
-
-        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-          confirmationDialog.componentInstance.closeModal();
-
-          this.vpnClientService.start();
-          this.router.navigate(['vpn', this.currentLocalPk, 'status']);
-        });
-
-        return;
-    }
-
-    this.vpnClientService.changeServer(server.pk, null);
-    this.router.navigate(['vpn', this.currentLocalPk, 'status']);
+    VpnHelpers.processServerChange(
+      this.router,
+      this.vpnClientService,
+      this.snackbarService,
+      this.dialog,
+      null,
+      this.currentLocalPk,
+      server.pk,
+      null
+    );
   }
 
   private loadData() {

@@ -29,11 +29,12 @@
       <div class="column-container">
         <div class="title">{{ 'vpn.status-page.start-title' | translate }}</div>
         <div>
-          <div class="start-button" (click)="start()" [ngClass]="{'disabled-button': waitingResponse}">
+          <div class="start-button" (click)="start()" [ngClass]="{'disabled-button': showBusy}">
             <div class="start-button-img-container">
               <div class="start-button-img"></div>
             </div>
-            <mat-icon [inline]="true">power_settings_new</mat-icon>
+            <mat-spinner [diameter]="40" *ngIf="showBusy"></mat-spinner>
+            <mat-icon [inline]="true" *ngIf="!showBusy">power_settings_new</mat-icon>
           </div>
         </div>
         <div class="current-server">
@@ -89,10 +90,13 @@
           </div>
         </div>
         <!-- Disconnect button. -->
-        <div class="disconnect-button" (click)="stop()" [ngClass]="{'disabled-button': waitingResponse}">
+        <div class="disconnect-button" (click)="stop()" [ngClass]="{'disabled-button': showBusy}">
           <div class="disconnect-button-container">
             <div class="d-inline-flex">
-              <mat-icon [inline]="true">power_settings_new</mat-icon>
+              <div *ngIf="showBusy">
+                <mat-spinner [diameter]="24"></mat-spinner>
+              </div>
+              <mat-icon [inline]="true" *ngIf="!showBusy">power_settings_new</mat-icon>
               <span>{{ 'vpn.status-page.disconnect' | translate }}</span>
             </div>
           </div>
