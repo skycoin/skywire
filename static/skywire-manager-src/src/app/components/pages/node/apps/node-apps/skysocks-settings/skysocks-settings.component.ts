@@ -62,12 +62,9 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     // Get the current values saved on the visor, if returned by the API.
     if (this.data.args && this.data.args.length > 0) {
       for (let i = 0; i < this.data.args.length; i++) {
-        // TODO: check the value and use it.
-        /*
         if (this.data.args[i] === '-secure' && i + 1 < this.data.args.length) {
           this.secureMode = (this.data.args[i + 1] as string).toLowerCase() === 'true';
         }
-        */
       }
     }
   }
@@ -126,7 +123,7 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
       // The node pk is obtained from the currently openned node page.
       NodeComponent.getCurrentNodeKey(),
       this.data.name,
-      { passcode: this.form.get('password').value },
+      { passcode: this.form.get('password').value, secure: this.secureMode },
     ).subscribe({
       next: this.onSuccess.bind(this),
       error: this.onError.bind(this)
