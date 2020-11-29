@@ -180,8 +180,11 @@ func (l *Launcher) AppStates() []*AppState {
 	var states []*AppState
 	for _, app := range l.apps {
 		state := &AppState{AppConfig: app, Status: AppStatusStopped}
-		if _, ok := l.procM.ProcByName(app.Name); ok {
-			state.Status = AppStatusRunning
+		if proc, ok := l.procM.ProcByName(app.Name); ok {
+			summary := proc.ConnectionsSummary()
+			if summary != nil {
+				state.Status = AppStatusRunning
+			}
 		}
 		states = append(states, state)
 	}
