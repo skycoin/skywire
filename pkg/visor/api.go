@@ -37,6 +37,8 @@ type API interface {
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
 	SetAppPK(appName string, pk cipher.PubKey) error
+	SetAppSecure(appName string, isSecure bool) error
+	SetAppKillswitch(appName string, killswitch bool) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
@@ -49,7 +51,7 @@ type API interface {
 	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
 	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
 
-	RoutingRules() ([]routing.Rule, error) // TODO(nkryuchkov): improve API
+	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
@@ -299,6 +301,72 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 	}
 
 	v.log.Infof("Updated %v password", appName)
+
+	return nil
+}
+
+// SetAppKillswitch implements API.
+func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
+	if appName != skyenv.VPNClientName {
+		return fmt.Errorf("app %s is not allowed to set killswitch", appName)
+	}
+
+	v.log.Infof("Setting %s killswitch to %q", appName, killswitch)
+
+	const (
+		killSwitchArg = "-killswitch"
+	)
+
+	var value string
+	if killswitch {
+		value = "true"
+	} else {
+		value = "false"
+	}
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, value); err != nil {
+		return err
+	}
+
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v killswitch state, restarting it", appName)
+		return v.appL.RestartApp(appName)
+	}
+
+	v.log.Infof("Updated %v killswitch state", appName)
+
+	return nil
+}
+
+// SetAppSecure implements API.
+func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
+	if appName != skyenv.VPNServerName {
+		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
+	}
+
+	v.log.Infof("Setting %s secure to %q", appName, isSecure)
+
+	const (
+		secureArgName = "-secure"
+	)
+
+	var value string
+	if isSecure {
+		value = "true"
+	} else {
+		value = "false"
+	}
+
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, value); err != nil {
+		return err
+	}
+
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v secure state, restarting it", appName)
+		return v.appL.RestartApp(appName)
+	}
+
+	v.log.Infof("Updated %v secure state", appName)
 
 	return nil
 }
