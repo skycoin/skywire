@@ -79,9 +79,11 @@
     "not-found": "Visor not found.",
     "statuses": {
       "online": "Online",
-      "online-tooltip": "Visor is online",
+      "online-tooltip": "Visor is online.",
+      "partially-online": "Online with problems",
+      "partially-online-tooltip": "Visor is online but not all services are working. For more information, open the details page and check the \"Health info\" section.",
       "offline": "Offline",
-      "offline-tooltip": "Visor is offline"
+      "offline-tooltip": "Visor is offline."
     },
     "details": {
       "node-info": {
@@ -113,7 +115,7 @@
         "setup-node": "Setup node:",
         "uptime-tracker": "Uptime tracker:",
         "address-resolver": "Address resolver:",
-        "element-offline": "offline"
+        "element-offline": "Offline"
       },
       "node-traffic-data": "Traffic data"
     },

@@ -79,9 +79,11 @@
     "not-found": "Visor no encontrado.",
     "statuses": {
       "online": "Online",
-      "online-tooltip": "El visor está online",
+      "online-tooltip": "El visor se encuentra online.",
+      "partially-online": "Online con problemas",
+      "partially-online-tooltip": "El visor se encuentra online pero no todos los servicios están funcionando. Para más información, abra la página de detalles y consulte la sección \"Información de salud\".",
       "offline": "Offline",
-      "offline-tooltip": "El visor está offline"
+      "offline-tooltip": "El visor se encuentra offline."
     },
     "details": {
       "node-info": {
@@ -113,7 +115,7 @@
         "setup-node": "Setup node:",
         "uptime-tracker": "Uptime tracker:",
         "address-resolver": "Address resolver:",
-        "element-offline": "offline"
+        "element-offline": "Offline"
       },
       "node-traffic-data": "Datos de tráfico"
     },
