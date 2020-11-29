@@ -172,6 +172,10 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
         if (this.data.args[i] === '-srv' && i + 1 < this.data.args.length) {
           currentVal = this.data.args[i + 1];
         }
+        if (this.data.args[i] === '-killswitch' && i + 1 < this.data.args.length) {
+          this.killswitch = (this.data.args[i + 1] as string).toLowerCase() === 'true';
+          this.initialKillswitchSetting = this.killswitch;
+        }
       }
     }
 
@@ -495,8 +499,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Temporal data
-    const data = { passcode: '' };
+    const data = { killswitch: this.killswitch };
 
     this.settingsButton.showLoading(false);
     this.button.showLoading(false);
@@ -516,6 +519,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
         this.working = false;
         this.settingsButton.reset(false);
         this.button.reset(false);
+
+        NodeComponent.refreshCurrentDisplayedData();
       },
       err => {
         // Allow to continue using the component.
