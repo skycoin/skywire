@@ -50,7 +50,7 @@
       <div class="option-bar-container option-bar-margin">
         <div class="rounded-elevated-box mt-3"><div class="box-internal-container allow-overflow">
           <div class="option-bar">
-            <div class="icon-option" [matTooltip]="'vpn.server-list.add-manually-info' | translate">
+            <div class="icon-option" (click)="enterManually()" [matTooltip]="'vpn.server-list.add-manually-info' | translate">
               <mat-icon [inline]="true">add</mat-icon>
             </div>
           </div>

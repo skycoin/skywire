@@ -4,7 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 
 import { VpnHelpers } from '../../vpn-helpers';
-import { VpnClientService } from 'src/app/services/vpn-client.service';
+import { VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 
 @Component({
@@ -20,7 +20,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
   loading = true;
   showStarted = false;
-  waitingResponse = false;
+  showBusy = false;
   waitingSteps = 0;
 
   currentLocalPk: string;
@@ -47,11 +47,11 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       setTimeout(() => this.navigationsSubscription.unsubscribe());
 
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
-        if (data && data.vpnClient) {
+        if (data && data.vpnClient && data.serviceState !== VpnStates.PerformingInitialCheck) {
           this.showStarted = data.vpnClient.running;
           this.currentRemotePk = data.vpnClient.serverPk;
 
-          this.waitingResponse = false;
+          this.showBusy = data.busy;
 
           this.loading = false;
         }
@@ -66,7 +66,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   }
 
   start() {
-    this.waitingResponse = true;
+    this.showBusy = true;
 
     this.vpnClientService.start();
   }
@@ -77,7 +77,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.closeModal();
 
-      this.waitingResponse = true;
+      this.showBusy = true;
 
       this.vpnClientService.stop();
     });
