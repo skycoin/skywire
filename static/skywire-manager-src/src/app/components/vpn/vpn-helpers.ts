@@ -1,4 +1,10 @@
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { Router } from '@angular/router';
+
 import { TabButtonData } from '../layout/top-bar/top-bar.component';
+import { VpnClientService, CheckPkResults } from 'src/app/services/vpn-client.service';
+import { SnackbarService } from 'src/app/services/snackbar.service';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 export class VpnHelpers {
   private static currentPk = '';
@@ -58,5 +64,73 @@ export class VpnHelpers {
     }
 
     return (latency / 1000).toFixed(1);
+  }
+
+  static processServerChange(
+    router: Router,
+    vpnClientService: VpnClientService,
+    snackbarService: SnackbarService,
+    dialog: MatDialog,
+    dialogRef: MatDialogRef<any>,
+    localPk: string,
+    pk: string,
+    password: string
+  ) {
+    const result = vpnClientService.checkNewPk(pk);
+
+    if (result === CheckPkResults.Busy) {
+      snackbarService.showError('vpn.server-change.busy-error');
+
+      return;
+    }
+
+    if (result === CheckPkResults.SamePkRunning) {
+      snackbarService.showWarning('vpn.server-change.already-selected-warning');
+
+      return;
+    }
+
+    if (result === CheckPkResults.MustStop) {
+      const confirmationDialog =
+        GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-change.change-server-while-connected-confirmation');
+
+        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+          confirmationDialog.componentInstance.closeModal();
+
+          vpnClientService.changeServer(pk, password);
+          VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
+        });
+
+        return;
+    }
+
+    if (result === CheckPkResults.SamePkStopped) {
+      const confirmationDialog =
+        GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-change.start-same-server-confirmation');
+
+        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+          confirmationDialog.componentInstance.closeModal();
+
+          vpnClientService.start();
+          VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
+        });
+
+        return;
+    }
+
+    vpnClientService.changeServer(pk, password);
+    VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
+  }
+
+  private static redirectAfterServerChange(
+    router: Router,
+    dialogRef: MatDialogRef<any>,
+    localPk: string,
+  ) {
+    if (dialogRef) {
+      dialogRef.close();
+    }
+
+    router.navigate(['vpn', localPk, 'status']);
   }
 }

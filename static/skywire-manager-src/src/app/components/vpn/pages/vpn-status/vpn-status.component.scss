@@ -139,13 +139,26 @@
       padding: 12px;
 
       mat-icon {
-        display: inline;
         margin-right: 10px;
+        align-self: center;
+      }
+
+      .mat-spinner {
+        display: inline-block;
+        position: relative;
+        top: 4px;
+        margin-right: 10px;
+        align-self: center;
+  
+        ::ng-deep circle {
+          stroke: $white;
+        }
       }
 
       span {
         position: relative;
         top: -2px;
+        line-height: 1.7;
       }
     }
   }
@@ -192,6 +205,16 @@
     mat-icon {
       line-height: $button-size;
       font-size: 50px;
+    }
+
+    .mat-spinner {
+      display: inline-block;
+      margin-top: 50px;
+      opacity: 0.5;
+
+      ::ng-deep circle {
+        stroke: $white;
+      }
     }
   }
 
