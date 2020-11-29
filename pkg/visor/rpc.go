@@ -252,11 +252,31 @@ type SetAppPKIn struct {
 	PK      cipher.PubKey
 }
 
+// SetAppBoolIn is input for SetApp boolean flags
+type SetAppBoolIn struct {
+	AppName string
+	Val     bool
+}
+
 // SetAppPK sets PK for the app.
 func (r *RPC) SetAppPK(in *SetAppPKIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppPK", in)(nil, &err)
 
 	return r.visor.SetAppPK(in.AppName, in.PK)
+}
+
+// SetAppKillswitch sets killswitch flag for the app
+func (r *RPC) SetAppKillswitch(in *SetAppBoolIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppKillswitch", in)(nil, &err)
+
+	return r.visor.SetAppKillswitch(in.AppName, in.Val)
+}
+
+// SetAppSecure sets secure flag for the app
+func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppSecure", in)(nil, &err)
+
+	return r.visor.SetAppSecure(in.AppName, in.Val)
 }
 
 // GetAppConnectionsSummary returns connections stats for the app.

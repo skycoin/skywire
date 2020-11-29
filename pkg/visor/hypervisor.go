@@ -69,6 +69,7 @@ type Hypervisor struct {
 	mu           *sync.RWMutex
 	visorMu      sync.Mutex
 	visorChanMux map[cipher.PubKey]*chanMux
+	selfConn     Conn
 }
 
 // New creates a new Hypervisor.
@@ -82,6 +83,12 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 
 	singleUserDB := usermanager.NewSingleUserStore("admin", boltUserDB)
 
+	selfConn := Conn{
+		Addr:  dmsg.Addr{PK: config.PK, Port: config.DmsgPort},
+		API:   visor,
+		PtyUI: nil,
+	}
+
 	hv := &Hypervisor{
 		c:            config,
 		visor:        visor,
@@ -92,6 +99,7 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 		users:        usermanager.NewUserManager(singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
+		selfConn:     selfConn,
 	}
 
 	return hv, nil
@@ -110,6 +118,9 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 		}
 	}
+
+	// setup
+	hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
 
 	for {
 		conn, err := lis.AcceptStream()
@@ -503,10 +514,12 @@ func (hv *Hypervisor) getApp() http.HandlerFunc {
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody struct {
-			AutoStart *bool          `json:"autostart,omitempty"`
-			Status    *int           `json:"status,omitempty"`
-			Passcode  *string        `json:"passcode,omitempty"`
-			PK        *cipher.PubKey `json:"pk,omitempty"`
+			AutoStart  *bool          `json:"autostart,omitempty"`
+			Killswitch *bool          `json:"killswitch,omitempty"`
+			Secure     *bool          `json:"secure,omitempty"`
+			Status     *int           `json:"status,omitempty"`
+			Passcode   *string        `json:"passcode,omitempty"`
+			PK         *cipher.PubKey `json:"pk,omitempty"`
 		}
 
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
@@ -537,6 +550,23 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.PK != nil {
 			if err := ctx.API.SetAppPK(ctx.App.Name, *reqBody.PK); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		// todo: this was just a quick copypasting to mimic the style already present here
+		// possible issue: each cal to ctx.API.Set* triggers app restart, so if we change multiple
+		// values in a single request the app will be restarted multple times
+		if reqBody.Killswitch != nil {
+			if err := ctx.API.SetAppKillswitch(ctx.App.Name, *reqBody.Killswitch); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Secure != nil {
+			if err := ctx.API.SetAppSecure(ctx.App.Name, *reqBody.Secure); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -1221,11 +1251,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	}
 
 	return &httpCtx{
-		Conn: Conn{
-			Addr:  dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort},
-			API:   hv.visor,
-			PtyUI: nil,
-		},
+		Conn: hv.selfConn,
 	}, true
 }
 
