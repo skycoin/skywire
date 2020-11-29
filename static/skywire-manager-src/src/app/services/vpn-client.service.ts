@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable, Subscription, of, BehaviorSubject, concat, throwError } from 'rxjs';
 import { mergeMap, delay, retryWhen, take, catchError } from 'rxjs/operators';
 
@@ -6,10 +7,11 @@ import { ApiService } from './api.service';
 import { AppsService } from './apps.service';
 
 export class BackendState {
+  updateDate: number = Date.now();
   lastError: any;
-  available: boolean;
   vpnClient: VpnClient;
   serviceState: VpnStates;
+  busy: boolean;
 }
 
 export class VpnClient {
@@ -39,6 +41,8 @@ export enum CheckPkResults {
 export class VpnClientService {
   readonly vpnClientAppName = 'vpn-client';
 
+  private readonly standardWaitTime = 2000;
+
   private requestedPk: string = null;
   private requestedPassword: string = null;
 
@@ -54,10 +58,11 @@ export class VpnClientService {
   constructor(
     private apiService: ApiService,
     private appsService: AppsService,
+    private router: Router,
   ) {
     this.currentEventData = new BackendState();
     this.currentEventData.vpnClient = null;
-    this.currentEventData.available = true;
+    this.currentEventData.busy = true;
 
     this.lastState = VpnStates.PerformingInitialCheck;
   }
@@ -215,7 +220,7 @@ export class VpnClientService {
           return throwError(err);
         }));
       }),
-      retryWhen(errors => concat(errors.pipe(delay(2000), take(10)), throwError('')))
+      retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(10)), throwError('')))
     ).subscribe(response => {
       this.working = false;
 
@@ -253,7 +258,7 @@ export class VpnClientService {
     }
 
     this.dataSubscription = this.getBackendData().pipe(
-      retryWhen(errors => concat(errors.pipe(delay(2000), take(10)), throwError('')))
+      retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(10)), throwError('')))
     ).subscribe(nodeInfo => {
       const appData = this.extractVpnAppData(nodeInfo);
       if (appData) {
@@ -270,16 +275,14 @@ export class VpnClientService {
         this.currentEventData.vpnClient = vpnClientData;
         this.sendUpdate();
 
-        this.continuallyUpdateData(2000);
+        this.continuallyUpdateData(this.standardWaitTime);
       } else {
-        this.currentEventData.available = false;
-        this.currentEventData.lastError = 'vpn.unavailable-error';
-        this.sendUpdate();
+        this.router.navigate(['vpn', 'unavailable']);
+        this.nodeKey = null;
       }
     }, err => {
-      this.currentEventData.available = false;
-      this.currentEventData.lastError = err;
-      this.sendUpdate();
+      this.router.navigate(['vpn', 'unavailable']);
+      this.nodeKey = null;
     });
   }
 
@@ -324,7 +327,7 @@ export class VpnClientService {
     this.continuousUpdateSubscription = of(0).pipe(
       delay(delayMs),
       mergeMap(() => this.getBackendData()),
-      retryWhen(errors => errors.pipe(delay(2000)))
+      retryWhen(errors => errors.pipe(delay(1000)))
     ).subscribe(nodeInfo => {
       const appData = this.extractVpnAppData(nodeInfo);
       if (appData) {
@@ -340,7 +343,7 @@ export class VpnClientService {
         this.sendUpdate();
       }
 
-      this.continuallyUpdateData(2000);
+      this.continuallyUpdateData(this.standardWaitTime);
     });
   }
 
@@ -358,6 +361,8 @@ export class VpnClientService {
 
   private sendUpdate() {
     this.currentEventData.serviceState = this.lastState;
+    this.currentEventData.updateDate = Date.now();
+    this.currentEventData.busy = this.working;
     this.stateSubject.next(this.currentEventData);
   }
 }

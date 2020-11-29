@@ -15,6 +15,7 @@ import { NodeInfoComponent } from './components/pages/node/node-info/node-info.c
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
+import { VpnUnavailableComponent } from './components/vpn/pages/vpn-unavailable/vpn-unavailable.component';
 
 const routes: Routes = [
   {
@@ -124,6 +125,10 @@ const routes: Routes = [
   {
     path: 'vpn',
     children: [
+      {
+        path: 'unavailable',
+        component: VpnUnavailableComponent
+      },
       {
         path: ':key',
         children: [
