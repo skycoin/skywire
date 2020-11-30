@@ -137,6 +137,14 @@ func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
 }
 
+// SetAppDetailedStatus sets app's detailed state.
+func (rc *rpcClient) SetAppDetailedStatus(appName, status string) error {
+	return rc.Call("SetAppDetailedStatus", &SetAppDetailedStatusIn{
+		AppName: appName,
+		Status:  status,
+	}, &struct{}{})
+}
+
 // SetAutoStart calls SetAutoStart.
 func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 	return rc.Call("SetAutoStart", &SetAutoStartIn{
@@ -613,6 +621,20 @@ func (*mockRPCClient) StartApp(string) error {
 // StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
 	return nil
+}
+
+// SetAppDetailedStatus sets app's detailed state.
+func (mc *mockRPCClient) SetAppDetailedStatus(appName, status string) error {
+	return mc.do(true, func() error {
+		for _, a := range mc.s.Apps {
+			if a.Name == appName {
+				a.DetailedStatus = status
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
 }
 
 // SetAutoStart implements API.
