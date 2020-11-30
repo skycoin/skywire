@@ -32,8 +32,8 @@ func init() {
 	updateConfigCmd.Flags().StringVarP(&addOutput, "output", "o", "skywire-config.json", "path of output config file.")
 	updateConfigCmd.Flags().StringVarP(&addInput, "input", "i", "skywire-config.json", "path of input config file.")
 	updateConfigCmd.Flags().StringVarP(&environment, "environment", "e", "production", "desired environment (values production or testing)")
-	updateConfigCmd.Flags().StringVar(&addHypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
-	updateConfigCmd.Flags().BoolVar(&resetHypervisor, "reset", false, "resets hypervisor`s configuration")
+	updateConfigCmd.Flags().StringVar(&addHypervisorPKs, "add-hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
+	updateConfigCmd.Flags().BoolVar(&resetHypervisor, "reset-hypervisor-pks", false, "resets hypervisor`s configuration")
 }
 
 var updateConfigCmd = &cobra.Command{
