@@ -48,6 +48,9 @@ type Proc struct {
 
 	m       ProcManager
 	appName string
+
+	statusMx sync.RWMutex
+	status   string
 }
 
 // NewProc constructs `Proc`.
@@ -258,6 +261,22 @@ func (p *Proc) Wait() error {
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
+}
+
+// SetDetailedStatus sets proc's detailed status.
+func (p *Proc) SetDetailedStatus(status string) {
+	p.statusMx.Lock()
+	defer p.statusMx.Unlock()
+
+	p.status = status
+}
+
+// DetailedStatus gets proc's detailed status.
+func (p *Proc) DetailedStatus() string {
+	p.statusMx.RLock()
+	defer p.statusMx.RUnlock()
+
+	return p.status
 }
 
 // ConnectionSummary sums up the connection stats.
