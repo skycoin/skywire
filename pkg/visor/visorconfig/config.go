@@ -180,6 +180,7 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	return conf, nil
 }
 
+// SetDefaultTestingValues mutates configuration to use testing values
 func SetDefaultTestingValues(conf *V1) {
 	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	conf.Transport.Discovery = skyenv.TestTpDiscAddr
@@ -189,6 +190,7 @@ func SetDefaultTestingValues(conf *V1) {
 	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
 }
 
+// SetDefaultProductionValues mutates configuration to use production values
 func SetDefaultProductionValues(conf *V1) {
 	conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
 	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
