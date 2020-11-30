@@ -13,8 +13,6 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
-
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -35,7 +33,7 @@ func init() {
 	updateConfigCmd.Flags().StringVarP(&addInput, "input", "i", "skywire-config.json", "path of input config file.")
 	updateConfigCmd.Flags().StringVarP(&environment, "environment", "e", "production", "desired environment (values production or testing)")
 	updateConfigCmd.Flags().StringVar(&addHypervisorPKs, "hypervisor-pks", "", "public keys of hypervisors that should be added to this visor")
-	updateConfigCmd.Flags().BoolVarP(&resetHypervisor, "reset", "r", false, "resets hypervisor`s configuration")
+	updateConfigCmd.Flags().BoolVar(&resetHypervisor, "reset", false, "resets hypervisor`s configuration")
 }
 
 var updateConfigCmd = &cobra.Command{
@@ -61,10 +59,10 @@ var updateConfigCmd = &cobra.Command{
 		if err != nil {
 			mLog.WithError(err).Fatal("Failed to read config.")
 		}
+
 		conf, ok := visorconfig.Parse(mLog, addInput, raw)
 		if ok != nil {
 			mLog.WithError(err).Fatal("Failed to parse config.")
-
 		}
 
 		if addHypervisorPKs != "" {
@@ -76,30 +74,20 @@ var updateConfigCmd = &cobra.Command{
 				}
 				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
 			}
-
 		}
+
 		if environment == "production" {
-			conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
-			conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
-			conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
-			conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
-			conf.UptimeTracker = &visorconfig.V1UptimeTracker{
-				Addr: skyenv.DefaultUptimeTrackerAddr,
-			}
+			visorconfig.SetDefaultProductionValues(conf)
 		}
 
 		if environment == "testing" {
-			conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
-			conf.Transport.Discovery = skyenv.TestTpDiscAddr
-			conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
-			conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-			conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-			conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
-
+			visorconfig.SetDefaultTestingValues(conf)
 		}
+
 		if resetHypervisor {
 			conf.Hypervisors = []cipher.PubKey{}
 		}
+
 		// Save config to file.
 		if err := conf.Flush(); err != nil {
 			logger.WithError(err).Fatal("Failed to flush config to file.")
