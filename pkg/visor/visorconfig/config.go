@@ -141,14 +141,7 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	if err != nil {
 		return nil, err
 	}
-
-	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
-	conf.Transport.Discovery = skyenv.TestTpDiscAddr
-	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
-	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
-	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+	SetDefaultTestingValues(conf)
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
 	}
@@ -185,4 +178,27 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
 	}
 	return conf, nil
+}
+
+func SetDefaultTestingValues(conf *V1) {
+	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
+	conf.Transport.Discovery = skyenv.TestTpDiscAddr
+	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
+	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
+	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+}
+
+func SetDefaultProductionValues(conf *V1) {
+	conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
+	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	conf.UptimeTracker = &V1UptimeTracker{
+		Addr: skyenv.DefaultUptimeTrackerAddr,
+	}
+	conf.Launcher.Discovery = &V1AppDisc{
+		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
+	}
 }
