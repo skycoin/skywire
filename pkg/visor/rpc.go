@@ -196,6 +196,19 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 	<<< APP MANAGEMENT >>>
 */
 
+// SetAppDetailedStatusIn is input for SetAppDetailedStatus.
+type SetAppDetailedStatusIn struct {
+	AppName string
+	Status  string
+}
+
+// SetAppDetailedStatus sets app's detailed status.
+func (r *RPC) SetAppDetailedStatus(in *SetAppDetailedStatusIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppDetailedStatus", in)(nil, &err)
+
+	return r.visor.SetAppDetailedStatus(in.AppName, in.Status)
+}
+
 // Apps returns list of Apps registered on the Visor.
 func (r *RPC) Apps(_ *struct{}, reply *[]*launcher.AppState) (err error) {
 	defer rpcutil.LogCall(r.log, "Apps", nil)(reply, &err)
