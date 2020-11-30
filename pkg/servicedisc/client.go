@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/pkg/util/buildinfo"
 )
 
 var (
@@ -52,9 +53,10 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 		log:  log,
 		conf: conf,
 		entry: Service{
-			Addr:  NewSWAddr(conf.PK, conf.Port),
-			Stats: stats,
-			Type:  conf.Type,
+			Addr:    NewSWAddr(conf.PK, conf.Port),
+			Stats:   stats,
+			Type:    conf.Type,
+			Version: buildinfo.Version(),
 		},
 		client: http.Client{},
 	}
