@@ -104,10 +104,11 @@ type Stats struct {
 
 // Service represents a service entry in service-discovery.
 type Service struct {
-	Addr  SWAddr       `json:"address"`
-	Type  string       `json:"type"`
-	Stats *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
-	Geo   *GeoLocation `json:"geo,omitempty"`
+	Addr    SWAddr       `json:"address"`
+	Type    string       `json:"type"`
+	Stats   *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
+	Geo     *GeoLocation `json:"geo,omitempty"`
+	Version string       `json:"version,omitempty"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaller
