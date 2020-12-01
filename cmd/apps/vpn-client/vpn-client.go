@@ -129,7 +129,7 @@ func main() {
 	vpnClientCfg := vpn.ClientConfig{
 		Passcode: *passcode,
 	}
-	vpnClient, err := vpn.NewClient(vpnClientCfg, log, appConn)
+	vpnClient, err := vpn.NewClient(vpnClientCfg, appClient, appConn)
 	if err != nil {
 		fmt.Printf("Error creating VPN client: %v\n", err)
 	}
