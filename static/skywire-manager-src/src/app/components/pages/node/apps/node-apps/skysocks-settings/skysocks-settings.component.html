@@ -27,6 +27,16 @@
         {{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}
       </mat-error>
     </mat-form-field>
+    <div class="main-theme settings-option">
+      <mat-checkbox
+        color="primary"
+        [checked]="secureMode"
+        (change)="setSecureMode($event)"
+      >
+        {{ 'apps.vpn-socks-server-settings.secure-mode-check' | translate }}
+        <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-server-settings.secure-mode-info' | translate">help</mat-icon>
+      </mat-checkbox>
+    </div>
 
     <app-button
       #button
