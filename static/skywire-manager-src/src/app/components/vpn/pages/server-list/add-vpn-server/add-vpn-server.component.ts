@@ -8,6 +8,11 @@ import { VpnHelpers } from '../../../vpn-helpers';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 
+export interface ManualVpnServerData {
+  pk: string;
+  password: string;
+}
+
 @Component({
   selector: 'app-add-vpn-server',
   templateUrl: './add-vpn-server.component.html',
@@ -55,6 +60,11 @@ export class AddVpnServerComponent implements OnInit {
       return;
     }
 
+    const serverData: ManualVpnServerData = {
+      pk: this.form.get('pk').value,
+      password: this.form.get('password').value
+    };
+
     VpnHelpers.processServerChange(
       this.router,
       this.vpnClientService,
@@ -62,8 +72,9 @@ export class AddVpnServerComponent implements OnInit {
       this.dialog,
       this.dialogRef,
       this.data,
-      this.form.get('pk').value,
-      this.form.get('password').value,
+      null,
+      null,
+      serverData
     );
   }
 }
