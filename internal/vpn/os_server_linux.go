@@ -7,19 +7,48 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strings"
 )
 
 const (
-	defaultNetworkInterfaceCMD  = "ip addr | awk '/state UP/ {print $2}' | sed 's/.$//'"
-	getIPv4ForwardingCMD        = "sysctl net.ipv4.ip_forward"
-	getIPv6ForwardingCMD        = "sysctl net.ipv6.conf.all.forwarding"
-	setIPv4ForwardingCMDFmt     = "sysctl -w net.ipv4.ip_forward=%s"
-	setIPv6ForwardingCMDFmt     = "sysctl -w net.ipv6.conf.all.forwarding=%s"
-	enableIPMasqueradingCMDFmt  = "iptables -t nat -A POSTROUTING -o %s -j MASQUERADE"
-	disableIPMasqueradingCMDFmt = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
-	blockIPToLocalNetCMDFmt     = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
-	allowIPToLocalNetCMDFmt     = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
+	defaultNetworkInterfaceCMD     = "ip addr | awk '/state UP/ {print $2}' | sed 's/.$//'"
+	getIPv4ForwardingCMD           = "sysctl net.ipv4.ip_forward"
+	getIPv6ForwardingCMD           = "sysctl net.ipv6.conf.all.forwarding"
+	setIPv4ForwardingCMDFmt        = "sysctl -w net.ipv4.ip_forward=%s"
+	setIPv6ForwardingCMDFmt        = "sysctl -w net.ipv6.conf.all.forwarding=%s"
+	getIPTablesForwardPolicyCMD    = "iptables -L | grep \"Chain FORWARD\" | tr -d '()' | awk '{print $4}'"
+	setIPTablesForwardPolicyCMDFmt = "iptables --policy FORWARD %s"
+	enableIPMasqueradingCMDFmt     = "iptables -t nat -A POSTROUTING -o %s -j MASQUERADE"
+	disableIPMasqueradingCMDFmt    = "iptables -t nat -D POSTROUTING -o %s -j MASQUERADE"
+	blockIPToLocalNetCMDFmt        = "iptables -I FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -I INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
+	allowIPToLocalNetCMDFmt        = "iptables -D FORWARD -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP && iptables -D INPUT -d 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8 -s %s -j DROP"
 )
+
+// GetIPTablesForwardPolicy gets current policy for iptables `forward` chain.
+func GetIPTablesForwardPolicy() (string, error) {
+	outputBytes, err := exec.Command("sh", "-c", getIPTablesForwardPolicyCMD).Output()
+	if err != nil {
+		return "", fmt.Errorf("error running command %s: %w", getIPTablesForwardPolicyCMD, err)
+	}
+
+	return strings.TrimRight(string(outputBytes), "\n"), nil
+}
+
+// SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
+func SetIPTablesForwardPolicy(policy string) error {
+	cmd := fmt.Sprintf(setIPTablesForwardPolicyCMDFmt, policy)
+	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
+		return fmt.Errorf("error running command %s: %w", cmd, err)
+	}
+
+	return nil
+}
+
+// SetIPTablesForwardAcceptPolicy sets ACCEPT policy for iptables `forward` chain.
+func SetIPTablesForwardAcceptPolicy() error {
+	const policy = "ACCEPT"
+	return SetIPTablesForwardPolicy(policy)
+}
 
 // AllowIPToLocalNetwork allows all the packets coming from `source`
 // to private IP ranges.
