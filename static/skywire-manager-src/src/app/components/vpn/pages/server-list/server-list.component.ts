@@ -200,7 +200,8 @@ export class ServerListComponent implements OnInit, OnDestroy {
       this.dialog,
       null,
       this.currentLocalPk,
-      server.pk,
+      null,
+      server,
       null
     );
   }
