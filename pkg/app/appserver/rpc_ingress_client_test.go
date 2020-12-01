@@ -21,7 +21,28 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-func TestRPCClient_Dial(t *testing.T) {
+func TestRPCIngressClient_SetDetailedStatus(t *testing.T) {
+	proc := &Proc{}
+
+	rpcL, closeL := prepListener(t)
+	defer closeL()
+
+	rpcS := prepRPCServer(t, NewRPCGateway(nil, proc))
+	go rpcS.Accept(rpcL)
+
+	rpcC := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+	wantStatus := "status"
+	err := rpcC.SetDetailedStatus(wantStatus)
+	require.NoError(t, err)
+
+	proc.statusMx.RLock()
+	gotStatus := wantStatus
+	proc.statusMx.RUnlock()
+	require.Equal(t, wantStatus, gotStatus)
+}
+
+func TestRPCIngressClient_Dial(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		rpcL, closeL := prepListener(t)
 		defer closeL()
@@ -80,7 +101,7 @@ func TestRPCClient_Dial(t *testing.T) {
 	})
 }
 
-func TestRPCClient_Listen(t *testing.T) {
+func TestRPCIngressClient_Listen(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		s := prepRPCServer(t, NewRPCGateway(nil, nil))
 		rpcL, lisCleanup := prepListener(t)
@@ -135,7 +156,7 @@ func TestRPCClient_Listen(t *testing.T) {
 	})
 }
 
-func TestRPCClient_Accept(t *testing.T) {
+func TestRPCIngressClient_Accept(t *testing.T) {
 	dmsgLocal, dmsgRemote, local, _ := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
@@ -203,7 +224,7 @@ func TestRPCClient_Accept(t *testing.T) {
 	})
 }
 
-func TestRPCClient_Write(t *testing.T) {
+func TestRPCIngressClient_Write(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
@@ -268,7 +289,7 @@ func TestRPCClient_Write(t *testing.T) {
 	})
 }
 
-func TestRPCClient_Read(t *testing.T) {
+func TestRPCIngressClient_Read(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
@@ -335,7 +356,7 @@ func TestRPCClient_Read(t *testing.T) {
 	})
 }
 
-func TestRPCClient_CloseConn(t *testing.T) {
+func TestRPCIngressClient_CloseConn(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
@@ -394,7 +415,7 @@ func TestRPCClient_CloseConn(t *testing.T) {
 	})
 }
 
-func TestRPCClient_CloseListener(t *testing.T) {
+func TestRPCIngressClient_CloseListener(t *testing.T) {
 	_, _, local, _ := prepAddrs()
 
 	t.Run("ok", func(t *testing.T) {
@@ -449,7 +470,7 @@ func TestRPCClient_CloseListener(t *testing.T) {
 	})
 }
 
-func TestRPCClient_SetDeadline(t *testing.T) {
+func TestRPCIngressClient_SetDeadline(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	deadline := time.Now().Add(1 * time.Hour)
@@ -518,7 +539,7 @@ func TestRPCClient_SetDeadline(t *testing.T) {
 	})
 }
 
-func TestRPCClient_SetReadDeadline(t *testing.T) {
+func TestRPCIngressClient_SetReadDeadline(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	deadline := time.Now().Add(1 * time.Hour)
@@ -587,7 +608,7 @@ func TestRPCClient_SetReadDeadline(t *testing.T) {
 	})
 }
 
-func TestRPCClient_SetWriteDeadline(t *testing.T) {
+func TestRPCIngressClient_SetWriteDeadline(t *testing.T) {
 	dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
 	deadline := time.Now().Add(1 * time.Hour)
