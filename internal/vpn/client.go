@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/app"
 )
 
 const (
@@ -23,6 +23,7 @@ const (
 // Client is a VPN client.
 type Client struct {
 	cfg            ClientConfig
+	appCl          *app.Client
 	conn           net.Conn
 	directIPSMu    sync.Mutex
 	directIPs      []net.IP
@@ -32,7 +33,7 @@ type Client struct {
 }
 
 // NewClient creates VPN client instance.
-func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, error) {
+func NewClient(cfg ClientConfig, appCl *app.Client, conn net.Conn) (*Client, error) {
 	dmsgDiscIP, err := dmsgDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)
@@ -88,6 +89,7 @@ func NewClient(cfg ClientConfig, l logrus.FieldLogger, conn net.Conn) (*Client, 
 
 	return &Client{
 		cfg:            cfg,
+		appCl:          appCl,
 		conn:           conn,
 		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
@@ -222,6 +224,13 @@ func (c *Client) Serve() error {
 			fmt.Printf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err)
 		}
 	}()
+
+	time.Sleep(10 * time.Second)
+	if err := c.appCl.SetDetailedStatus("SOME STATUS"); err != nil {
+		fmt.Printf("Failed to set app detailed status: %v\n", err)
+	} else {
+		fmt.Println("Set app detailed status")
+	}
 
 	// only one side may fail here, so we wait till at least one fails
 	select {
