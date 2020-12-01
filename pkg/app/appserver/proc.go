@@ -101,7 +101,7 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 		ok = true
 		p.conn = conn
 		p.rpcGWMu.Lock()
-		p.rpcGW = NewRPCGateway(p.log)
+		p.rpcGW = NewRPCGateway(p.log, p)
 		p.rpcGWMu.Unlock()
 
 		// Send ready signal.
