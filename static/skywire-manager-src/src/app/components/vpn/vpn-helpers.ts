@@ -2,9 +2,11 @@ import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
 import { TabButtonData } from '../layout/top-bar/top-bar.component';
-import { VpnClientService, CheckPkResults } from 'src/app/services/vpn-client.service';
+import { VpnClientService, CheckPkResults, HistoryEntry } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { VpnServer } from 'src/app/services/vpn-client-discovery.service';
+import { ManualVpnServerData } from './pages/server-list/add-vpn-server/add-vpn-server.component';
 
 export class VpnHelpers {
   private static currentPk = '';
@@ -73,10 +75,29 @@ export class VpnHelpers {
     dialog: MatDialog,
     dialogRef: MatDialogRef<any>,
     localPk: string,
-    pk: string,
-    password: string
+    newServerFromHistory: HistoryEntry,
+    newServerFromDiscovery: VpnServer,
+    newServerManually: ManualVpnServerData,
   ) {
-    const result = vpnClientService.checkNewPk(pk);
+    let requestedPk: string;
+    if ((newServerFromHistory && (newServerFromDiscovery || newServerManually)) ||
+      (newServerFromDiscovery && (newServerFromHistory || newServerManually)) ||
+      (newServerManually && (newServerFromHistory || newServerFromDiscovery))
+    ) {
+      throw new Error('Invalid call');
+    }
+
+    if (newServerFromHistory) {
+      requestedPk = newServerFromHistory.pk;
+    } else if (newServerFromDiscovery) {
+      requestedPk = newServerFromDiscovery.pk;
+    } else if (newServerManually) {
+      requestedPk = newServerManually.pk;
+    } else {
+      throw new Error('Invalid call');
+    }
+
+    const result = vpnClientService.checkNewPk(requestedPk);
 
     if (result === CheckPkResults.Busy) {
       snackbarService.showError('vpn.server-change.busy-error');
@@ -97,7 +118,14 @@ export class VpnHelpers {
         confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
           confirmationDialog.componentInstance.closeModal();
 
-          vpnClientService.changeServer(pk, password);
+          if (newServerFromHistory) {
+            vpnClientService.changeServerUsingHistory(newServerFromHistory);
+          } else if (newServerFromDiscovery) {
+            vpnClientService.changeServerUsingDiscovery(newServerFromDiscovery);
+          } else if (newServerManually) {
+            vpnClientService.changeServerManually(newServerManually);
+          }
+
           VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
         });
 
@@ -118,7 +146,14 @@ export class VpnHelpers {
         return;
     }
 
-    vpnClientService.changeServer(pk, password);
+    if (newServerFromHistory) {
+      vpnClientService.changeServerUsingHistory(newServerFromHistory);
+    } else if (newServerFromDiscovery) {
+      vpnClientService.changeServerUsingDiscovery(newServerFromDiscovery);
+    } else if (newServerManually) {
+      vpnClientService.changeServerManually(newServerManually);
+    }
+
     VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
   }
 
