@@ -3,8 +3,10 @@
 package vpn
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
@@ -25,7 +27,18 @@ func ChangeRoute(ipCIDR, gateway string) error {
 
 // AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
 func AddRoute(ipCIDR, gateway string) error {
-	return modifyRoutingTable("add", ipCIDR, gateway)
+	if err := modifyRoutingTable("add", ipCIDR, gateway); err != nil {
+		var e *ErrorWithStderr
+		if errors.As(err, &e) {
+			if strings.Contains(string(e.Stderr), "File exists") {
+				return nil
+			}
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 // DeleteRoute removes route to `ipCIDR` through the `gateway` from the OS routing table.
