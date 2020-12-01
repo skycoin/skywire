@@ -41,6 +41,7 @@ type ProcManager interface {
 	Stop(appName string) error
 	Wait(appName string) error
 	Range(next func(appName string, proc *Proc) bool)
+	SetDetailedStatus(appName, status string) error
 	DetailedStatus(appName string) (string, error)
 	ConnectionsSummary(appName string) ([]ConnectionSummary, error)
 	Addr() net.Addr
@@ -266,6 +267,18 @@ func (m *procManager) Range(next func(name string, proc *Proc) bool) {
 			break
 		}
 	}
+}
+
+// SetDetailedStatus sets detailed `status` for app `appName`.
+func (m *procManager) SetDetailedStatus(appName, status string) error {
+	p, err := m.get(appName)
+	if err != nil {
+		return err
+	}
+
+	p.SetDetailedStatus(status)
+
+	return nil
 }
 
 // DetailedStatus gets detailed status of the app `appName`.
