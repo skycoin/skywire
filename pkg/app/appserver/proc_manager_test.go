@@ -123,6 +123,6 @@ func TestProcManager_DetailedStatus(t *testing.T) {
 	require.Equal(t, wantStatus, gotStatus)
 
 	nonExistingAppName := "none"
-	gotStatus, err = m.DetailedStatus(nonExistingAppName)
+	_, err = m.DetailedStatus(nonExistingAppName)
 	require.Equal(t, errNoSuchApp, err)
 }
