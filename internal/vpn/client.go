@@ -146,6 +146,10 @@ func (c *Client) RemoveDirectRoute(ip net.IP) error {
 
 // Serve performs handshake with the server, sets up routing and starts handling traffic.
 func (c *Client) Serve() error {
+	if err := c.appCl.SetDetailedStatus(ClientStatusConnecting); err != nil {
+		fmt.Printf("Failed to set status %s: %v\n", ClientStatusConnecting, err)
+	}
+
 	tunIP, tunGateway, err := c.shakeHands()
 	if err != nil {
 		return fmt.Errorf("error during client/server handshake: %w", err)
@@ -207,6 +211,10 @@ func (c *Client) Serve() error {
 		fmt.Printf("Failed to setup system privileges to clear up: %v\n", err)
 	}
 
+	if err := c.appCl.SetDetailedStatus(ClientStatusRunning); err != nil {
+		fmt.Printf("Failed to set status %s: %v\n", ClientStatusRunning, err)
+	}
+
 	connToTunDoneCh := make(chan struct{})
 	tunToConnCh := make(chan struct{})
 	// read all system traffic and pass it to the remote VPN server
@@ -224,13 +232,6 @@ func (c *Client) Serve() error {
 			fmt.Printf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err)
 		}
 	}()
-
-	time.Sleep(10 * time.Second)
-	if err := c.appCl.SetDetailedStatus("SOME STATUS"); err != nil {
-		fmt.Printf("Failed to set app detailed status: %v\n", err)
-	} else {
-		fmt.Println("Set app detailed status")
-	}
 
 	// only one side may fail here, so we wait till at least one fails
 	select {
