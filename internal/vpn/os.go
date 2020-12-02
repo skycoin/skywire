@@ -1,10 +1,13 @@
 package vpn
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // LocalNetworkInterfaceIPs gets IPs of all local interfaces.
@@ -83,14 +86,19 @@ func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
 
 //nolint:unparam
 func run(bin string, args ...string) error {
+	fullCmd := bin + " " + strings.Join(args, " ")
+
 	cmd := exec.Command(bin, args...) //nolint:gosec
 
-	cmd.Stderr = os.Stderr
+	stderrBuf := bytes.NewBuffer(nil)
+
+	cmd.Stderr = io.MultiWriter(os.Stderr, stderrBuf)
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error running command %s: %w", bin, err)
+		return NewErrorWithStderr(fmt.Errorf("error running command \"%s\": %w", fullCmd, err),
+			stderrBuf.Bytes())
 	}
 
 	return nil

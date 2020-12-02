@@ -6,6 +6,7 @@ import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-la
 import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
+import { NodeService, HealthStatus } from 'src/app/services/node.service';
 
 /**
  * Shows the basic info of a node.
@@ -18,15 +19,18 @@ import { LabeledElementTypes, StorageService } from 'src/app/services/storage.se
 export class NodeInfoContentComponent {
   @Input() set nodeInfo(val: Node) {
     this.node = val;
+    this.nodeHealthInfo = this.nodeService.getHealthStatus(val);
     this.timeOnline = TimeUtils.getElapsedTime(val.seconds_online);
   }
 
   node: Node;
+  nodeHealthInfo: HealthStatus;
   timeOnline: ElapsedTime;
 
   constructor(
     private dialog: MatDialog,
     public storageService: StorageService,
+    private nodeService: NodeService,
   ) { }
 
   showEditLabelDialog() {

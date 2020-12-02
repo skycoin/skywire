@@ -120,3 +120,15 @@ form {
     margin-left: 5px;
   }
 }
+
+.settings-option {
+  margin: 15px 12px 10px 12px;
+}
+
+.settings-changed-warning {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  position: relative;
+  top: -5px;
+  padding: 0px 12px;
+}
