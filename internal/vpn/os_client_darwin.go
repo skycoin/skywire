@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
-	"sync"
 	"syscall"
 )
 
@@ -39,11 +38,7 @@ func DefaultNetworkGateway() (net.IP, error) {
 	return nil, errCouldFindDefaultNetworkGateway
 }
 
-var clientSysPrivilegesMx sync.Mutex
-
 func setupClientSysPrivileges() (suid int, err error) {
-	clientSysPrivilegesMx.Lock()
-
 	suid = syscall.Getuid()
 
 	if err := syscall.Setuid(0); err != nil {
@@ -54,7 +49,5 @@ func setupClientSysPrivileges() (suid int, err error) {
 }
 
 func releaseClientSysPrivileges(suid int) error {
-	err := syscall.Setuid(suid)
-	clientSysPrivilegesMx.Unlock()
-	return err
+	return syscall.Setuid(suid)
 }
