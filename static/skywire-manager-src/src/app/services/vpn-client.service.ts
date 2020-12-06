@@ -1,12 +1,13 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { Observable, Subscription, of, BehaviorSubject, concat, throwError, ReplaySubject } from 'rxjs';
+import { Observable, Subscription, of, BehaviorSubject, concat, throwError } from 'rxjs';
 import { mergeMap, delay, retryWhen, take, catchError } from 'rxjs/operators';
 
 import { ApiService } from './api.service';
 import { AppsService } from './apps.service';
 import { VpnServer } from './vpn-client-discovery.service';
 import { ManualVpnServerData } from '../components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
+import { VpnSavedDataService, LocalServerData } from './vpn-saved-data.service';
 
 export class BackendState {
   updateDate: number = Date.now();
@@ -37,16 +38,6 @@ export enum CheckPkResults {
   SamePkStopped = 5,
 }
 
-export interface HistoryEntry {
-  name: string;
-  pk: string;
-  enteredManually: boolean;
-  location?: string;
-  personalNote?: string;
-  note?: string;
-  hasPassword?: boolean;
-}
-
 @Injectable({
   providedIn: 'root'
 })
@@ -54,12 +45,6 @@ export class VpnClientService {
   readonly vpnClientAppName = 'vpn-client';
 
   private readonly standardWaitTime = 2000;
-  private readonly maxHistoryElements = 30;
-
-  private readonly historyStorageKey = 'VpnHistory';
-  private readonly favoritesStorageKey = 'VpnFavorites';
-  private readonly blockedStorageKey = 'VpnBlocked';
-  private readonly currentServerStorageKey = 'VpnServer';
 
   private nodeKey: string;
   private stateSubject = new BehaviorSubject<BackendState>(null);
@@ -70,66 +55,28 @@ export class VpnClientService {
   private lastState: VpnStates;
   private working = true;
 
-  private requestedServer: HistoryEntry = null;
+  private requestedServer: LocalServerData = null;
   private requestedPassword: string = null;
-
-  private currentServer: HistoryEntry;
-
-  private history: HistoryEntry[] = [];
-  private historyMap: Map<string, HistoryEntry>;
-  private favorites: HistoryEntry[] = [];
-  private favoritesMap: Map<string, HistoryEntry>;
-  private blocked: HistoryEntry[] = [];
-  private blockedMap: Map<string, HistoryEntry>;
-
-  private historySubject = new ReplaySubject<HistoryEntry[]>(1);
 
   constructor(
     private apiService: ApiService,
     private appsService: AppsService,
     private router: Router,
+    private vpnSavedDataService: VpnSavedDataService,
   ) {
     this.currentEventData = new BackendState();
     this.currentEventData.vpnClient = null;
     this.currentEventData.busy = true;
 
     this.lastState = VpnStates.PerformingInitialCheck;
-
-    const retrievedHistory = localStorage.getItem(this.historyStorageKey);
-    if (retrievedHistory) {
-      this.history = JSON.parse(retrievedHistory);
-      this.history.forEach(server => {
-        this.historyMap.set(server.pk, server);
-      });
-    }
-    this.historySubject.next(this.history);
-
-    const retrievedFavorites = localStorage.getItem(this.favoritesStorageKey);
-    if (retrievedFavorites) {
-      this.favorites = JSON.parse(retrievedFavorites);
-      this.favorites.forEach(server => {
-        this.favoritesMap.set(server.pk, server);
-      });
-    }
-
-    const retrievedBlocked = localStorage.getItem(this.blockedStorageKey);
-    if (retrievedBlocked) {
-      this.blocked = JSON.parse(retrievedBlocked);
-      this.blocked.forEach(server => {
-        this.blockedMap.set(server.pk, server);
-      });
-    }
-
-    const retrievedServer = localStorage.getItem(this.currentServerStorageKey);
-    if (retrievedServer) {
-      this.currentServer = JSON.parse(retrievedHistory);
-    }
   }
 
   initialize(nodeKey: string) {
     if (nodeKey) {
       if (!this.nodeKey) {
         this.nodeKey = nodeKey;
+
+        this.vpnSavedDataService.initialize();
 
         this.performInitialCheck();
       }
@@ -138,10 +85,6 @@ export class VpnClientService {
 
   get backendState(): Observable<BackendState> {
     return this.stateSubject.asObservable();
-  }
-
-  get serversHistory(): Observable<HistoryEntry[]> {
-    return this.historySubject.asObservable();
   }
 
   updateData() {
@@ -170,128 +113,22 @@ export class VpnClientService {
     return false;
   }
 
-  changeServerUsingHistory(newServer: HistoryEntry): boolean {
+  changeServerUsingHistory(newServer: LocalServerData): boolean {
     this.requestedServer = newServer;
 
     return this.changeServer();
   }
 
   changeServerUsingDiscovery(newServer: VpnServer): boolean {
-    const previousData = this.getPreviouslySavedServerData(newServer.pk);
-
-    this.requestedServer = {
-      name: newServer.name,
-      pk: newServer.pk,
-      enteredManually: false,
-      location: newServer.location,
-      personalNote: previousData ? previousData.personalNote : null,
-      note: newServer.note,
-      hasPassword: false,
-    };
+    this.requestedServer = this.vpnSavedDataService.processFromDiscovery(newServer);
 
     return this.changeServer();
   }
 
   changeServerManually(newServer: ManualVpnServerData): boolean {
-    const previousData = this.getPreviouslySavedServerData(newServer.pk);
-
-    this.requestedServer = {
-      name: '',
-      pk: newServer.pk,
-      enteredManually: true,
-      personalNote: previousData ? previousData.personalNote : null,
-      hasPassword: !!newServer.password,
-    };
+    this.requestedServer = this.vpnSavedDataService.processFromManual(newServer);
 
     return this.changeServer();
-  }
-
-  markServerFromDiscovery(server: VpnServer, makeFavorite: boolean) {
-    const previousData = this.getPreviouslySavedServerData(server.pk);
-
-    // The data must be updated everywere.
-
-    const serverData = {
-      name: server.name,
-      pk: server.pk,
-      enteredManually: false,
-      location: server.location,
-      personalNote: previousData ? previousData.personalNote : null,
-      note: server.note,
-      hasPassword: false,
-    };
-
-    this.finishMarkingkServer(serverData, makeFavorite);
-  }
-
-  // Allow to make favorites from history.
-  markServerFromHistory(server: HistoryEntry, makeFavorite: boolean) {
-    this.finishMarkingkServer(server, makeFavorite);
-  }
-
-  private finishMarkingkServer(server: HistoryEntry, makeFavorite: boolean) {
-    // The data must be updated before cancelling the operation.
-    if (makeFavorite && this.favoritesMap.get(server.pk)) {
-      return;
-    } else if (!makeFavorite && this.blockedMap.get(server.pk)) {
-      return;
-    }
-
-    if (makeFavorite) {
-      if (this.favoritesMap.get(server.pk)) {
-        return;
-      }
-
-      this.removeMarkedServer(server.pk, false);
-    } else {
-      if (this.blockedMap.get(server.pk)) {
-        return;
-      }
-
-      this.removeMarkedServer(server.pk, true);
-    }
-
-    // The data must be updated everywere.
-
-    if (makeFavorite) {
-      this.favorites.push(server);
-      this.favoritesMap.set(server.pk, server);
-    } else if (!makeFavorite) {
-      this.blocked.push(server);
-      this.blockedMap.set(server.pk, server);
-    }
-  }
-
-  removeMarkedServer(pk: string, removeFromFavorites: boolean) {
-    if (removeFromFavorites) {
-      if (this.favoritesMap.get(pk)) {
-        this.favorites = this.favorites.filter(value => value.pk !== pk);
-        this.favoritesMap.delete(pk);
-      }
-    } else {
-      if (this.blockedMap.get(pk)) {
-        this.blocked = this.blocked.filter(value => value.pk !== pk);
-        this.blockedMap.delete(pk);
-      }
-    }
-  }
-
-  private getPreviouslySavedServerData(pk: string): HistoryEntry {
-    if (this.currentServer.pk === pk) {
-      return this.currentServer;
-    }
-
-    let result: HistoryEntry;
-
-    if (this.historyMap.has(pk)) {
-      result = this.historyMap.get(pk);
-    } else if (this.favoritesMap.has(pk)) {
-      result = this.favoritesMap.get(pk);
-    } else if (this.blockedMap.has(pk)) {
-      result = this.blockedMap.get(pk);
-    }
-
-    return result;
   }
 
   private changeServer(): boolean {
@@ -310,12 +147,12 @@ export class VpnClientService {
     if (this.working) {
       return CheckPkResults.Busy;
     } else if (this.lastState !== VpnStates.Off) {
-      if (newPk === this.currentServer.pk) {
+      if (newPk === this.vpnSavedDataService.currentServer.pk) {
         return CheckPkResults.SamePkRunning;
       } else {
         return CheckPkResults.MustStop;
       }
-    } else if (this.currentServer && newPk === this.currentServer.pk) {
+    } else if (this.vpnSavedDataService.currentServer && newPk === this.vpnSavedDataService.currentServer.pk) {
       return CheckPkResults.SamePkStopped;
     }
 
@@ -344,8 +181,7 @@ export class VpnClientService {
       data,
     ).subscribe(
       () => {
-        this.currentServer = this.requestedServer;
-        this.saveCurrentServer();
+        this.vpnSavedDataService.modifyCurrentServer(this.requestedServer);
 
         this.requestedServer = null;
         this.requestedPassword = null;
@@ -417,7 +253,7 @@ export class VpnClientService {
         }
         this.lastState = VpnStates.Running;
 
-        this.updateHistory();
+        this.vpnSavedDataService.updateHistory();
       } else {
         if (this.currentEventData && this.currentEventData.vpnClient) {
           this.currentEventData.vpnClient.running = false;
@@ -454,7 +290,7 @@ export class VpnClientService {
         this.working = false;
 
         const vpnClientData = this.getVpnClientData(appData);
-        this.conpareCurrentServer(vpnClientData.serverPk);
+        this.vpnSavedDataService.compareCurrentServer(vpnClientData.serverPk);
 
         if (vpnClientData.running) {
           this.lastState = VpnStates.Running;
@@ -522,7 +358,7 @@ export class VpnClientService {
       const appData = this.extractVpnAppData(nodeInfo);
       if (appData) {
         const vpnClientData = this.getVpnClientData(appData);
-        this.conpareCurrentServer(vpnClientData.serverPk);
+        this.vpnSavedDataService.compareCurrentServer(vpnClientData.serverPk);
 
         if (vpnClientData.running) {
           this.lastState = VpnStates.Running;
@@ -555,40 +391,5 @@ export class VpnClientService {
     this.currentEventData.updateDate = Date.now();
     this.currentEventData.busy = this.working;
     this.stateSubject.next(this.currentEventData);
-  }
-
-  private updateHistory() {
-    this.history = this.history.filter(value => value.pk !== this.currentServer.pk);
-    this.history = [this.currentServer].concat(this.history);
-
-    if (this.history.length > this.maxHistoryElements) {
-      const itemsToRemove = this.history.length - this.maxHistoryElements;
-      this.history.splice(this.history.length - itemsToRemove, itemsToRemove);
-    }
-
-    const dataToSave = JSON.stringify(this.history);
-    localStorage.setItem(this.historyStorageKey, dataToSave);
-
-    this.historySubject.next(this.history);
-  }
-
-  private saveCurrentServer() {
-    const dataToSave = JSON.stringify(this.currentServer);
-    localStorage.setItem(this.currentServerStorageKey, dataToSave);
-  }
-
-  private conpareCurrentServer(pk: string) {
-    if (pk) {
-      if (!this.currentServer || this.currentServer.pk !== pk) {
-        this.currentServer = {
-          name: '',
-          pk: pk,
-          enteredManually: true,
-          hasPassword: false,
-        };
-
-        this.saveCurrentServer();
-      }
-    }
   }
 }
