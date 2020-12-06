@@ -2,11 +2,12 @@ import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
 import { TabButtonData } from '../layout/top-bar/top-bar.component';
-import { VpnClientService, CheckPkResults, HistoryEntry } from 'src/app/services/vpn-client.service';
+import { VpnClientService, CheckPkResults } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { VpnServer } from 'src/app/services/vpn-client-discovery.service';
 import { ManualVpnServerData } from './pages/server-list/add-vpn-server/add-vpn-server.component';
+import { LocalServerData } from 'src/app/services/vpn-saved-data.service';
 
 export class VpnHelpers {
   private static currentPk = '';
@@ -75,7 +76,7 @@ export class VpnHelpers {
     dialog: MatDialog,
     dialogRef: MatDialogRef<any>,
     localPk: string,
-    newServerFromHistory: HistoryEntry,
+    newServerFromHistory: LocalServerData,
     newServerFromDiscovery: VpnServer,
     newServerManually: ManualVpnServerData,
   ) {
