@@ -617,6 +617,7 @@
       "no-server": "No server selected!",
       "disconnect": "Disconnect",
       "disconnect-confirmation": "Are you sure you want to stop the VPN protection?",
+      "entered-manually": "Entered manually",
 
       "data": {
         "ip": "Current IP address:",
@@ -649,10 +650,35 @@
       "silver-rating-info": "Silver.",
       "bronze-rating-info": "Bronze.",
       "options-info": "Options.",
-      "empty": "Currently there are no VPN servers to show. Please try again later.",
+      "empty-discovery": "Currently there are no VPN servers to show. Please try again later.",
+      "empty-history": "There is no history to show.",
+      "empty-favorites": "There are no favorite servers to show.",
+      "empty-blocked": "There are no blocked servers to show.",
       "empty-with-filter": "No VPN server matches the selected filtering criteria.",
       "add-manually-info": "Add server manually.",
       "current-filters": "Current filters (press to remove)",
+      "none": "None",
+      "unknown": "Unknown",
+      "none-entered-manually": "None (entered manually)",
+      "unknown-entered-manually": "Unknown (entered manually)",
+
+      "options": {
+        "make-favorite": "Make favorite",
+        "make-favorite-confirmation": "Are you sure you want to mark this server as favorite? It will be removed from the blocked list.",
+        "remove-from-favorites": "Remove from favorites",
+        "block": "Block server",
+        "block-confirmation": "Are you sure you want to block this server? It will be removed from the favorites list.",
+        "unblock": "Unblock server",
+        "remove-from-history": "Remove from history",
+        "done": "Done."
+      },
+
+      "tabs": {
+        "public": "Public",
+        "history": "History",
+        "favorites": "Favorites",
+        "blocked": "Blocked"
+      },
 
       "add-server-dialog": {
         "title": "Enter manually",

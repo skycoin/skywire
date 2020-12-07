@@ -11,6 +11,7 @@ export enum ServerFlags {
 }
 
 export interface LocalServerData {
+  countryCode: string;
   name: string;
   pk: string;
   lastUsed: number;
@@ -21,6 +22,11 @@ export interface LocalServerData {
   location: string;
   personalNote: string;
   note: string;
+}
+
+export interface SavedServersData {
+  version: number;
+  serverList: LocalServerData[];
 }
 
 @Injectable({
@@ -36,9 +42,9 @@ export class VpnSavedDataService {
   private currentServerPk: string;
 
   private serversMap = new Map<string, LocalServerData>();
+  private savedDataVersion = 0;
 
-  private initialized = false;
-
+  private currentServerSubject = new ReplaySubject<LocalServerData>(1);
   private historySubject = new ReplaySubject<LocalServerData[]>(1);
   private favoritesSubject = new ReplaySubject<LocalServerData[]>(1);
   private blockedSubject = new ReplaySubject<LocalServerData[]>(1);
@@ -46,25 +52,31 @@ export class VpnSavedDataService {
   constructor() {}
 
   initialize() {
-    if (!this.initialized) {
-      const retrievedServers = localStorage.getItem(this.savedServersStorageKey);
-      if (retrievedServers) {
-        const servers: LocalServerData[] = JSON.parse(retrievedServers);
-        servers.forEach(server => {
-          this.serversMap.set(server.pk, server);
-        });
-      }
+    this.serversMap = new Map<string, LocalServerData>();
 
-      this.currentServerPk = localStorage.getItem(this.currentServerStorageKey);
+    const retrievedServers = localStorage.getItem(this.savedServersStorageKey);
+    if (retrievedServers) {
+      const servers: SavedServersData = JSON.parse(retrievedServers);
+      servers.serverList.forEach(server => {
+        this.serversMap.set(server.pk, server);
+      });
 
-      this.initialized = true;
-
-      this.launchEvents();
+      this.savedDataVersion = servers.version;
     }
+
+    const currentServerPk = localStorage.getItem(this.currentServerStorageKey);
+    if (currentServerPk) {
+      this.updateCurrentServerPk(currentServerPk);
+    }
+
+    this.launchEvents();
   }
 
   get currentServer(): LocalServerData {
     return this.serversMap.get(this.currentServerPk);
+  }
+  get currentServerObservable(): Observable<LocalServerData> {
+    return this.currentServerSubject.asObservable();
   }
 
   get history(): Observable<LocalServerData[]> {
@@ -75,6 +87,10 @@ export class VpnSavedDataService {
   }
   get blocked(): Observable<LocalServerData[]> {
     return this.blockedSubject.asObservable();
+  }
+
+  getSavedVersion(pk: string) {
+    return this.serversMap.get(pk);
   }
 
   processFromDiscovery(newServer: VpnServer): LocalServerData {
@@ -91,6 +107,7 @@ export class VpnSavedDataService {
     }
 
     return {
+      countryCode: newServer.countryCode,
       name: newServer.name,
       pk: newServer.pk,
       lastUsed: 0,
@@ -113,6 +130,7 @@ export class VpnSavedDataService {
     }
 
     return {
+      countryCode: 'zz',
       name: '',
       pk: newServer.pk,
       lastUsed: 0,
@@ -139,7 +157,17 @@ export class VpnSavedDataService {
     server.flag = flag;
     this.serversMap.set(server.pk, server);
     this.cleanServers();
+    this.saveData();
+  }
 
+  removeFromHistory(pk: string) {
+    const retrievedServer = this.serversMap.get(pk);
+    if (!retrievedServer || !retrievedServer.inHistory) {
+      return;
+    }
+
+    retrievedServer.inHistory = false;
+    this.cleanServers();
     this.saveData();
   }
 
@@ -148,9 +176,8 @@ export class VpnSavedDataService {
       return;
     }
 
-    this.currentServerPk = newServer.pk;
-
     this.serversMap.set(newServer.pk, newServer);
+    this.updateCurrentServerPk(newServer.pk);
     this.cleanServers();
     this.saveData();
   }
@@ -158,7 +185,7 @@ export class VpnSavedDataService {
   compareCurrentServer(pk: string) {
     if (pk) {
       if (!this.currentServerPk || this.currentServerPk !== pk) {
-        this.currentServerPk = pk;
+        this.updateCurrentServerPk(pk);
 
         const retrievedServer = this.serversMap.get(pk);
         if (!retrievedServer) {
@@ -194,7 +221,6 @@ export class VpnSavedDataService {
     });
 
     this.cleanServers();
-
     this.saveData();
   }
 
@@ -212,7 +238,27 @@ export class VpnSavedDataService {
   }
 
   private saveData() {
-    const dataToSave = JSON.stringify(Array.from(this.serversMap.values()));
+    let lastSavedVersion = 0;
+
+    const retrievedServers = localStorage.getItem(this.savedServersStorageKey);
+    if (retrievedServers) {
+      const servers: SavedServersData = JSON.parse(retrievedServers);
+      lastSavedVersion = servers.version;
+    }
+
+    if (lastSavedVersion !== this.savedDataVersion) {
+      this.initialize();
+
+      return;
+    }
+
+    this.savedDataVersion += 1;
+    const data: SavedServersData = {
+      version: this.savedDataVersion,
+      serverList: Array.from(this.serversMap.values())
+    };
+
+    const dataToSave = JSON.stringify(data);
     localStorage.setItem(this.savedServersStorageKey, dataToSave);
 
     localStorage.setItem(this.currentServerStorageKey, this.currentServerPk);
@@ -240,5 +286,13 @@ export class VpnSavedDataService {
     this.historySubject.next(history);
     this.favoritesSubject.next(favorites);
     this.blockedSubject.next(blocked);
+  }
+
+  /**
+   * Call only after the server is in the servers map.
+   */
+  private updateCurrentServerPk(pk: string) {
+    this.currentServerPk = pk;
+    this.currentServerSubject.next(this.currentServer);
   }
 }

@@ -12,12 +12,12 @@ import { VpnSavedDataService, LocalServerData } from './vpn-saved-data.service';
 export class BackendState {
   updateDate: number = Date.now();
   lastError: any;
-  vpnClient: VpnClient;
+  running: boolean;
   serviceState: VpnStates;
   busy: boolean;
 }
 
-export class VpnClient {
+export class VpnClientAppData {
   running: boolean;
   serverPk: string;
 }
@@ -65,7 +65,6 @@ export class VpnClientService {
     private vpnSavedDataService: VpnSavedDataService,
   ) {
     this.currentEventData = new BackendState();
-    this.currentEventData.vpnClient = null;
     this.currentEventData.busy = true;
 
     this.lastState = VpnStates.PerformingInitialCheck;
@@ -187,10 +186,6 @@ export class VpnClientService {
         this.requestedPassword = null;
         this.working = false;
 
-        if (this.currentEventData && this.currentEventData.vpnClient) {
-          this.currentEventData.vpnClient.serverPk = data.pk;
-        }
-
         this.start();
       }, () => {
         // More processing needed.
@@ -248,15 +243,15 @@ export class VpnClientService {
       this.working = false;
 
       if (startApp) {
-        if (this.currentEventData && this.currentEventData.vpnClient) {
-          this.currentEventData.vpnClient.running = true;
+        if (this.currentEventData) {
+          this.currentEventData.running = true;
         }
         this.lastState = VpnStates.Running;
 
         this.vpnSavedDataService.updateHistory();
       } else {
-        if (this.currentEventData && this.currentEventData.vpnClient) {
-          this.currentEventData.vpnClient.running = false;
+        if (this.currentEventData) {
+          this.currentEventData.running = false;
         }
         this.lastState = VpnStates.Off;
       }
@@ -298,7 +293,7 @@ export class VpnClientService {
           this.lastState = VpnStates.Off;
         }
 
-        this.currentEventData.vpnClient = vpnClientData;
+        this.currentEventData.running = vpnClientData.running;
         this.sendUpdate();
 
         this.continuallyUpdateData(this.standardWaitTime);
@@ -312,8 +307,8 @@ export class VpnClientService {
     });
   }
 
-  private getVpnClientData(appData: any): VpnClient {
-    const vpnClientData = new VpnClient();
+  private getVpnClientData(appData: any): VpnClientAppData {
+    const vpnClientData = new VpnClientAppData();
     vpnClientData.running = appData.status !== 0;
 
     if (appData.args && appData.args.length > 0) {
@@ -366,7 +361,7 @@ export class VpnClientService {
           this.lastState = VpnStates.Off;
         }
 
-        this.currentEventData.vpnClient = vpnClientData;
+        this.currentEventData.running = vpnClientData.running;
         this.sendUpdate();
       }
 
