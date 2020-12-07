@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"os/exec"
+	"runtime/pprof"
 	"strings"
 	"syscall"
 	"time"
@@ -136,6 +138,17 @@ var rootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
+	f, err := os.Create("./visor-cpu.pprof")
+	if err != nil {
+		log.Fatalf("Error creating CPU profile: %v\n", err)
+	}
+
+	if err := pprof.StartCPUProfile(f); err != nil {
+		log.Fatalf("Error starting CPU profiling: %v\n", err)
+	}
+
+	defer pprof.StopCPUProfile()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}

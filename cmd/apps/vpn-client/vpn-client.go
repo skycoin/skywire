@@ -143,7 +143,7 @@ func main() {
 		vpnClient.Close()
 	}()
 
-	f, err := os.Create("./cpu.pprof")
+	f, err := os.Create("./vpn-cpu.pprof")
 	if err != nil {
 		log.Fatalf("Error creating CPU profile: %v\n", err)
 	}
