@@ -246,5 +246,6 @@ export const countriesList = {
     'EH': 'Western Sahara',
     'YE': 'Yemen',
     'ZM': 'Zambia',
-    'ZW': 'Zimbabwe'
+    'ZW': 'Zimbabwe',
+    'ZZ': 'Unknown',
 };

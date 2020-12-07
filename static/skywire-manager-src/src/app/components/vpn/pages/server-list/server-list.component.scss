@@ -21,10 +21,12 @@
     display: flex;
     margin: -($containers-padding + 2px);
 
-    > div {
+    > div, a {
       height: 55px;
       line-height: 55px;
       cursor: pointer;
+      color: white;
+      text-decoration: none;
 
       &:hover {
         background: theme-color(translucid-hover);
@@ -43,6 +45,7 @@
 
     .selected {
       background: scale-color(theme-color(translucid-hover), $alpha: 20%);
+      cursor: unset !important;
 
       &:hover {
         background: scale-color(theme-color(translucid-hover), $alpha: 50%);
