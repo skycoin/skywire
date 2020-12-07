@@ -38,16 +38,22 @@
           </div>
         </div>
         <div class="current-server">
-          <ng-container *ngIf="currentRemotePk">
-            <div class="flag"></div>
+          <ng-container *ngIf="currentRemoteServer">
+            <div class="flag">
+              <div
+                [style]="'background-image: url(\'assets/img/big-flags/' + currentRemoteServer.countryCode.toLocaleLowerCase() + '.png\');'"
+                [matTooltip]="getCountryName(currentRemoteServer.countryCode)"
+              ></div>
+            </div>
             <div class="text-container">
-              <div class="top-line">United States - NY</div>
+              <div class="top-line" *ngIf="currentRemoteServer.name">{{ currentRemoteServer.name }}</div>
+              <div class="top-line" *ngIf="!currentRemoteServer.name">{{ 'vpn.status-page.entered-manually' | translate }}</div>
               <div class="bottom-line">
-                <app-copy-to-clipboard-text [shortSimple]="true" [text]="currentRemotePk"></app-copy-to-clipboard-text>
+                <app-copy-to-clipboard-text [shortSimple]="true" [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
               </div>
             </div>
           </ng-container>
-          <ng-container *ngIf="!currentRemotePk">
+          <ng-container *ngIf="!currentRemoteServer">
             <div class="none">{{ 'vpn.status-page.no-server' | translate }}</div>
           </ng-container>
         </div>
@@ -125,10 +131,10 @@
             </div>
           </div>
           <div class="margin" *ngIf="showStarted"></div>
-          <div *ngIf="showStarted">
+          <div *ngIf="showStarted && currentRemoteServer">
             <div class="title">{{ 'vpn.status-page.data.remote-pk' | translate }}</div>
             <div class="small-text">
-              <app-copy-to-clipboard-text [text]="currentRemotePk"></app-copy-to-clipboard-text>
+              <app-copy-to-clipboard-text [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
             </div>
           </div>
         </div>

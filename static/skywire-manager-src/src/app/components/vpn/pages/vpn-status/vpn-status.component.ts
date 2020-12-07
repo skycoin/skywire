@@ -6,6 +6,8 @@ import { MatDialog } from '@angular/material/dialog';
 import { VpnHelpers } from '../../vpn-helpers';
 import { VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { LocalServerData, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
+import { countriesList } from 'src/app/utils/countries-list';
 
 @Component({
   selector: 'app-vpn-status',
@@ -24,14 +26,16 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   waitingSteps = 0;
 
   currentLocalPk: string;
-  currentRemotePk: string;
+  currentRemoteServer: LocalServerData;
 
   private dataSubscription: Subscription;
+  private currentRemoteServerSubscription: Subscription;
   private operationSubscription: Subscription;
   private navigationsSubscription: Subscription;
 
   constructor(
     private vpnClientService: VpnClientService,
+    private vpnSavedDataService: VpnSavedDataService,
     private route: ActivatedRoute,
     private dialog: MatDialog,
   ) { }
@@ -47,14 +51,17 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       setTimeout(() => this.navigationsSubscription.unsubscribe());
 
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
-        if (data && data.vpnClient && data.serviceState !== VpnStates.PerformingInitialCheck) {
-          this.showStarted = data.vpnClient.running;
-          this.currentRemotePk = data.vpnClient.serverPk;
+        if (data && data.serviceState !== VpnStates.PerformingInitialCheck) {
+          this.showStarted = data.running;
 
           this.showBusy = data.busy;
 
           this.loading = false;
         }
+      });
+
+      this.currentRemoteServerSubscription = this.vpnSavedDataService.currentServerObservable.subscribe(server => {
+        this.currentRemoteServer = server;
       });
     });
   }
@@ -62,6 +69,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
+    this.currentRemoteServerSubscription.unsubscribe();
     this.closeOperationSubscription();
   }
 
@@ -81,6 +89,10 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
       this.vpnClientService.stop();
     });
+  }
+
+  getCountryName(countryCode: string): string {
+    return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
   }
 
   private closeOperationSubscription() {

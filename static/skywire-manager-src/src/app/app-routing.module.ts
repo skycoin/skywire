@@ -138,11 +138,11 @@ const routes: Routes = [
           },
           {
             path: 'servers',
-            redirectTo: 'servers/1',
+            redirectTo: 'servers/public/1',
             pathMatch: 'full'
           },
           {
-            path: 'servers/:page',
+            path: 'servers/:type/:page',
             component: ServerListComponent
           },
           {

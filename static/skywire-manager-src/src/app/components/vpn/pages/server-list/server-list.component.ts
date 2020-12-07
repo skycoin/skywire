@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Subscription, Observable } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
@@ -13,6 +13,16 @@ import { VpnHelpers } from '../../vpn-helpers';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component';
+import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/services/vpn-saved-data.service';
+import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
+import GeneralUtils from 'src/app/utils/generalUtils';
+
+enum Lists {
+  Public = 'public',
+  History = 'history',
+  Favorites = 'favorites',
+  Blocked = 'blocked',
+}
 
 /**
  * Page for showing the vpn server list.
@@ -22,9 +32,9 @@ import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component
   templateUrl: './server-list.component.html',
   styleUrls: ['./server-list.component.scss'],
 })
-export class ServerListComponent implements OnInit, OnDestroy {
+export class ServerListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
-  private readonly listId = 'vs';
+  private listId: string;
 
   // How many elements can be shown per page.
   private readonly maxFullListElements = 50;
@@ -66,74 +76,14 @@ export class ServerListComponent implements OnInit, OnDestroy {
   currentPageInUrl = 1;
 
   currentLocalPk: string;
+  showFullList = false;
+  currentList = Lists.Public;
+  lists = Lists;
 
   // Array with the properties of the columns that can be used for filtering the data.
-  filterProperties: FilterProperties[] = [
-    {
-      filterName: 'vpn.server-list.filter-dialog.name',
-      keyNameInElementsArray: 'name',
-      type: FilterFieldTypes.TextInput,
-      maxlength: 100,
-    },
-    {
-      filterName: 'vpn.server-list.filter-dialog.location',
-      keyNameInElementsArray: 'location',
-      type: FilterFieldTypes.TextInput,
-      maxlength: 100,
-    },
-    {
-      filterName: 'vpn.server-list.filter-dialog.public-key',
-      keyNameInElementsArray: 'pk',
-      type: FilterFieldTypes.TextInput,
-      maxlength: 100,
-    },
-    {
-      filterName: 'vpn.server-list.filter-dialog.congestion-rating',
-      keyNameInElementsArray: 'congestionRating',
-      type: FilterFieldTypes.Select,
-      printableLabelsForValues: [
-        {
-          value: '',
-          label: 'vpn.server-list.filter-dialog.rating-options.any',
-        },
-        {
-          value: Ratings.Gold + '',
-          label: 'vpn.server-list.filter-dialog.rating-options.gold',
-        },
-        {
-          value: Ratings.Silver + '',
-          label: 'vpn.server-list.filter-dialog.rating-options.silver',
-        },
-        {
-          value: Ratings.Bronze + '',
-          label: 'vpn.server-list.filter-dialog.rating-options.bronze',
-        }
-      ],
-    },
-    {
-      filterName: 'vpn.server-list.filter-dialog.latency-rating',
-      keyNameInElementsArray: 'latencyRating',
-      type: FilterFieldTypes.Select,
-      printableLabelsForValues: [
-        {
-          value: '',
-          label: 'vpn.server-list.filter-dialog.rating-options.any',
-        },
-        {
-          value: Ratings.Gold + '',
-          label: 'vpn.server-list.filter-dialog.rating-options.gold',
-        },
-        {
-          value: Ratings.Silver + '',
-          label: 'vpn.server-list.filter-dialog.rating-options.silver',
-        },
-        {
-          value: Ratings.Bronze + '',
-          label: 'vpn.server-list.filter-dialog.rating-options.bronze',
-        }
-      ],
-    },
-  ];
+  filterProperties: FilterProperties[];
+
+  private initialLoadStarted = false;
 
   private navigationsSubscription: Subscription;
   private dataSubscription: Subscription;
@@ -145,10 +95,32 @@ export class ServerListComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private vpnClientDiscoveryService: VpnClientDiscoveryService,
     private vpnClientService: VpnClientService,
+    private vpnSavedDataService: VpnSavedDataService,
     private snackbarService: SnackbarService,
   ) {
     // Get the page requested in the URL.
     this.navigationsSubscription = route.paramMap.subscribe(params => {
+      if (params.has('type')) {
+        if (params.get('type') === Lists.Favorites) {
+          this.currentList = Lists.Favorites;
+          this.listId = 'vfs';
+        } else if (params.get('type') === Lists.Blocked) {
+          this.currentList = Lists.Blocked;
+          this.listId = 'vbs';
+        } else if (params.get('type') === Lists.History) {
+          this.currentList = Lists.History;
+          this.listId = 'vhs';
+        } else {
+          this.currentList = Lists.Public;
+          this.listId = 'vps';
+        }
+      } else {
+        this.currentList = Lists.Public;
+        this.listId = 'vps';
+      }
+
+      this.showFullList = this.currentList === Lists.Public;
+
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
@@ -165,19 +137,28 @@ export class ServerListComponent implements OnInit, OnDestroy {
 
         this.recalculateElementsToShow();
       }
+
+      if (!this.initialLoadStarted) {
+        this.initialLoadStarted = true;
+
+        if (this.currentList === Lists.Public) {
+          this.loadTestData();
+        } else {
+          this.loadData();
+        }
+      }
     });
   }
 
-  ngOnInit() {
-    // Load the data.
-    this.loadTestData();
-  }
-
   ngOnDestroy() {
-    this.dataSortedSubscription.unsubscribe();
-    this.dataFiltererSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
 
+    if (this.dataSortedSubscription) {
+      this.dataSortedSubscription.unsubscribe();
+    }
+    if (this.dataFiltererSubscription) {
+      this.dataFiltererSubscription.unsubscribe();
+    }
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
@@ -206,15 +187,144 @@ export class ServerListComponent implements OnInit, OnDestroy {
     );
   }
 
-  private loadData() {
-    // Get the vpn servers from the discovery service.
-    this.dataSubscription = this.vpnClientDiscoveryService.getServers().subscribe(response => {
-      this.allServers = response;
+  openOptions(server: VpnServer) {
+    const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk);
 
-      this.loading = false;
+    const options: SelectableOption[] = [];
+    const optionCodes: number[] = [];
 
-      this.processAllServers();
+    if (!savedVersion || savedVersion.flag !== ServerFlags.Favorite) {
+      options.push({
+        icon: 'star',
+        label: 'vpn.server-list.options.make-favorite',
+      });
+      optionCodes.push(1);
+    }
+
+    if (savedVersion && savedVersion.flag === ServerFlags.Favorite) {
+      options.push({
+        icon: 'star_outline',
+        label: 'vpn.server-list.options.remove-from-favorites',
+      });
+      optionCodes.push(-1);
+    }
+
+    if (!savedVersion || savedVersion.flag !== ServerFlags.Blocked) {
+      options.push({
+        icon: 'pan_tool',
+        label: 'vpn.server-list.options.block',
+      });
+      optionCodes.push(2);
+    }
+
+    if (savedVersion && savedVersion.flag === ServerFlags.Blocked) {
+      options.push({
+        icon: 'thumb_up',
+        label: 'vpn.server-list.options.unblock',
+      });
+      optionCodes.push(-2);
+    }
+
+    if (savedVersion && savedVersion.inHistory) {
+      options.push({
+        icon: 'delete',
+        label: 'vpn.server-list.options.remove-from-history',
+      });
+      optionCodes.push(-3);
+    }
+
+    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
+      if (selectedOption) {
+        let savedVersion_ = this.vpnSavedDataService.getSavedVersion(server.pk);
+        if (!savedVersion_) {
+          savedVersion_ = this.vpnSavedDataService.processFromDiscovery(server);
+        }
+
+        selectedOption -= 1;
+
+        if (optionCodes[selectedOption] === 1) {
+          if (savedVersion_.flag !== ServerFlags.Blocked) {
+            this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Favorite);
+            this.snackbarService.showDone('vpn.server-list.options.done');
+          } else {
+            const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.make-favorite-confirmation');
+            confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+              confirmationDialog.componentInstance.closeModal();
+              this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Favorite);
+              this.snackbarService.showDone('vpn.server-list.options.done');
+            });
+          }
+        } else if (optionCodes[selectedOption] === -1) {
+          this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.None);
+          this.snackbarService.showDone('vpn.server-list.options.done');
+        } else if (optionCodes[selectedOption] === 2) {
+          if (savedVersion_.flag !== ServerFlags.Favorite) {
+            this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
+            this.snackbarService.showDone('vpn.server-list.options.done');
+          } else {
+            const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.block-confirmation');
+            confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+              confirmationDialog.componentInstance.closeModal();
+              this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
+              this.snackbarService.showDone('vpn.server-list.options.done');
+            });
+          }
+        } else if (optionCodes[selectedOption] === -2) {
+          this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.None);
+          this.snackbarService.showDone('vpn.server-list.options.done');
+        } else if (optionCodes[selectedOption] === -3) {
+          this.vpnSavedDataService.removeFromHistory(savedVersion_.pk);
+          this.snackbarService.showDone('vpn.server-list.options.done');
+        }
+      }
     });
+  }
+
+  private loadData() {
+    if (this.currentList === Lists.Public) {
+      // Get the vpn servers from the discovery service.
+      this.dataSubscription = this.vpnClientDiscoveryService.getServers().subscribe(response => {
+        this.allServers = response;
+
+        this.loading = false;
+
+        this.processAllServers();
+      });
+    } else {
+      let dataObservable: Observable<LocalServerData[]>;
+
+      if (this.currentList === Lists.History) {
+        dataObservable = this.vpnSavedDataService.history;
+      } else if (this.currentList === Lists.Favorites) {
+        dataObservable = this.vpnSavedDataService.favorites;
+      } else {
+        dataObservable = this.vpnSavedDataService.blocked;
+      }
+
+      this.dataSubscription = dataObservable.subscribe(response => {
+        const processedList: VpnServer[] = [];
+        response.forEach(server => {
+          processedList.push({
+            countryCode: server.countryCode,
+            name: server.name,
+            location: server.location,
+            pk: server.pk,
+            congestion: 0,
+            congestionRating: null,
+            latency: 0,
+            latencyRating: null,
+            hops: 0,
+            note: server.note,
+          });
+        });
+
+        this.allServers = processedList;
+
+        this.loading = false;
+
+        this.processAllServers();
+      });
+    }
   }
 
   private loadTestData() {
@@ -259,6 +369,8 @@ export class ServerListComponent implements OnInit, OnDestroy {
   }
 
   private processAllServers() {
+    this.fillFilterPropertiesArray();
+
     // Get the countries in the server list.
     const countriesSet = new Set<string>();
     this.allServers.forEach(server => {
@@ -297,19 +409,31 @@ export class ServerListComponent implements OnInit, OnDestroy {
     this.filterProperties = [countryFilter].concat(this.filterProperties);
 
     // Initialize the data sorter.
-    const sortableColumns: SortingColumn[] = [
-      this.countrySortData,
-      this.nameSortData,
-      this.locationSortData,
-      this.pkSortData,
-      this.congestionSortData,
-      this.congestionRatingSortData,
-      this.latencySortData,
-      this.latencyRatingSortData,
-      this.hopsSortData,
-      this.noteSortData,
-    ];
-    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, this.listId);
+    const sortableColumns: SortingColumn[] = [];
+    let defaultColumn: number;
+    if (this.showFullList) {
+      sortableColumns.push(this.countrySortData);
+      sortableColumns.push(this.nameSortData);
+      sortableColumns.push(this.locationSortData);
+      sortableColumns.push(this.pkSortData);
+      sortableColumns.push(this.congestionSortData);
+      sortableColumns.push(this.congestionRatingSortData);
+      sortableColumns.push(this.latencySortData);
+      sortableColumns.push(this.latencyRatingSortData);
+      sortableColumns.push(this.hopsSortData);
+      sortableColumns.push(this.noteSortData);
+
+      defaultColumn = 0;
+    } else {
+      sortableColumns.push(this.countrySortData);
+      sortableColumns.push(this.nameSortData);
+      sortableColumns.push(this.locationSortData);
+      sortableColumns.push(this.pkSortData);
+      sortableColumns.push(this.noteSortData);
+
+      defaultColumn = 1;
+    }
+    this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, defaultColumn, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allServers has already been sorted.
       this.recalculateElementsToShow();
@@ -322,6 +446,79 @@ export class ServerListComponent implements OnInit, OnDestroy {
     });
 
     this.dataFilterer.setData(this.allServers);
+  }
+
+  private fillFilterPropertiesArray() {
+    this.filterProperties = [
+      {
+        filterName: 'vpn.server-list.filter-dialog.name',
+        keyNameInElementsArray: 'name',
+        type: FilterFieldTypes.TextInput,
+        maxlength: 100,
+      },
+      {
+        filterName: 'vpn.server-list.filter-dialog.location',
+        keyNameInElementsArray: 'location',
+        type: FilterFieldTypes.TextInput,
+        maxlength: 100,
+      },
+      {
+        filterName: 'vpn.server-list.filter-dialog.public-key',
+        keyNameInElementsArray: 'pk',
+        type: FilterFieldTypes.TextInput,
+        maxlength: 100,
+      }
+    ];
+
+    if (this.showFullList) {
+      this.filterProperties.push({
+        filterName: 'vpn.server-list.filter-dialog.congestion-rating',
+        keyNameInElementsArray: 'congestionRating',
+        type: FilterFieldTypes.Select,
+        printableLabelsForValues: [
+          {
+            value: '',
+            label: 'vpn.server-list.filter-dialog.rating-options.any',
+          },
+          {
+            value: Ratings.Gold + '',
+            label: 'vpn.server-list.filter-dialog.rating-options.gold',
+          },
+          {
+            value: Ratings.Silver + '',
+            label: 'vpn.server-list.filter-dialog.rating-options.silver',
+          },
+          {
+            value: Ratings.Bronze + '',
+            label: 'vpn.server-list.filter-dialog.rating-options.bronze',
+          }
+        ],
+      });
+
+      this.filterProperties.push({
+        filterName: 'vpn.server-list.filter-dialog.latency-rating',
+        keyNameInElementsArray: 'latencyRating',
+        type: FilterFieldTypes.Select,
+        printableLabelsForValues: [
+          {
+            value: '',
+            label: 'vpn.server-list.filter-dialog.rating-options.any',
+          },
+          {
+            value: Ratings.Gold + '',
+            label: 'vpn.server-list.filter-dialog.rating-options.gold',
+          },
+          {
+            value: Ratings.Silver + '',
+            label: 'vpn.server-list.filter-dialog.rating-options.silver',
+          },
+          {
+            value: Ratings.Bronze + '',
+            label: 'vpn.server-list.filter-dialog.rating-options.bronze',
+          }
+        ],
+      });
+    }
   }
 
   /**
