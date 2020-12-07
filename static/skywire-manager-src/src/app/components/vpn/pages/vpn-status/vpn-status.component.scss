@@ -232,13 +232,19 @@
     }
 
     .flag {
-      background-image: url('/assets/img/big-flags/us.png');
+      background-image: url('/assets/img/big-flags/unknown.png');
       width: 20px;
       height: 15px;
       background-size: contain;
       align-self: center;
       flex-shrink: 0;
       margin-right: 12px;
+
+      div {
+        width: 20px;
+        height: 15px;
+        background-size: contain;
+      }
     }
 
     .text-container {

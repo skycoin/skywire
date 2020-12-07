@@ -185,9 +185,9 @@ export class TopBarComponent implements OnInit, OnDestroy {
     this.vpnClientService.initialize(this.localVpnKeyInternal);
 
     this.vpnDataSubscription = this.vpnClientService.backendState.subscribe(data => {
-      if (data && data.vpnClient) {
+      if (data) {
         this.vpnData = {
-          showStarted: data.vpnClient.running,
+          showStarted: data.running,
           latency: 123,
           downloadSpeed: 900000,
           uploadSpeed: 12000
