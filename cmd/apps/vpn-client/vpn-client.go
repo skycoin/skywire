@@ -3,9 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -140,6 +142,17 @@ func main() {
 		<-osSigs
 		vpnClient.Close()
 	}()
+
+	f, err := os.Create("./cpu.pprof")
+	if err != nil {
+		log.Fatalf("Error creating CPU profile: %v\n", err)
+	}
+
+	if err := pprof.StartCPUProfile(f); err != nil {
+		log.Fatalf("Error starting CPU profiling: %v\n", err)
+	}
+
+	defer pprof.StopCPUProfile()
 
 	if err := vpnClient.Serve(); err != nil {
 		fmt.Printf("Failed to serve VPN: %v\n", err)
