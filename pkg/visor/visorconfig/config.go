@@ -186,6 +186,7 @@ func SetDefaultTestingValues(conf *V1) {
 	conf.Transport.Discovery = skyenv.TestTpDiscAddr
 	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
 	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
 }
@@ -196,6 +197,7 @@ func SetDefaultProductionValues(conf *V1) {
 	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
 	conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
 	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)}
 	conf.UptimeTracker = &V1UptimeTracker{
 		Addr: skyenv.DefaultUptimeTrackerAddr,
 	}
