@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.com/skycoin/skywire.svg?branch=master)](https://travis-ci.com/skycoin/skywire)
 
-# Skywire 
+# Skywire
 
 
 - [Skywire](#skywire)
@@ -26,8 +26,10 @@
 
 ### Requirements
 
-Skywire requires a version of [golang](https://golang.org/) 
+Skywire requires a version of [golang](https://golang.org/)
 with [go modules](https://github.com/golang/go/wiki/Modules) support.
+
+Skywire is statically compiled against musl-gcc.
 
 ### Build
 
@@ -43,29 +45,78 @@ $ make build # installs all dependencies, build binaries and skywire apps
 $ make install
 ```
 
-### Configure Skywire Visor
+### Configure Skywire
 
 The configuration file provides the configuration for `skywire-visor`. It is a text file in JSON format.
 
-You can generate a default configuration file by running:
+There are two modes in which the visor may be run.
+Previously, these two modes comprised separate binaries, the `hypervisor` and `skywire-visor`.
+Their functions have been merged into the `skywire-visor`.
+
+### Run with UI / as hypervisor
+
+In order to run the hypervisor UI, generate a config file with `--is-hypervisor` flag
 
 ```bash
-$ skywire-cli visor gen-config
+$ skywire-cli visor gen-config --is-hypervisor
 ```
 
-Additional options are displayed when `skywire-cli visor gen-config -h` is run.
+The UI will start with the visor:
 
-If you are trying to test features from the develop branch, 
-you should use the `-t ` flag when generating config files for `skywire-visor`. 
+```bash
+$ skywire-visor
+```
+
+You can open up the hypervisor UI on `localhost:8000`.
+
+### Run with remote hypervisor
+
+Every node can be controlled by one or more hypervisors. To allow a hypervisor to access a visor, the Public Key of the hypervisor needs to be specified in the configuration file. Here is an example:
+
+```json
+"hypervisors":["024a2dd77de324d543561a6d9e62791723be26ddf6b9587060a10b9ba498e096f1"],
+```
+
+Generate a configuration file, and provide the public key of another visor __which is running as a hypervisor__ as an argument:
+
+Visor
+```bash
+$ skywire-cli visor gen-config --hypervisor-pks <public-key>
+```
+
+The visor's public key will appear in the hypervisor UI when the visor is started:
+
+```bash
+$ skywire-visor
+```
+
+
+Additional configuration options are displayed with `skywire-cli visor gen-config -h`
+
+To test features from the develop branch, use the `-t ` flag when generating the configuration file.
 
 We will cover certain fields of the configuration file below.
+
+
+### Run `skywire-visor`
+
+`skywire-visor` hosts apps, proxies app requests to remote visors, and exposes communication API
+that apps can use to implement communication protocols. **App binaries** are spawned by the visor,
+communication between visor and app is performed via unix pipes, provided on app startup.
+
+Note that `skywire-visor` requires a valid configuration file in order to execute. To run the VPN client application distributed with Skywire, run the following command with root permissions or using `sudo`
+
+```bash
+# Run skywire-visor. It takes one argument; the path of a configuration file (`skywire-config.json` if unspecified).
+$ skywire-visor skywire-config.json
+```
 
 #### `stcp` setup
 
 With `stcp`, you can establish *skywire transports* to other skywire visors with the `tcp` protocol.
 
-As visors are identified with public keys and not IP addresses, 
-we need to directly define the associations between IP address and public keys. 
+As visors are identified with public keys and not IP addresses,
+we need to directly define the associations between IP address and public keys.
 This is done via the configuration file for `skywire-visor`.
 
 ```json
@@ -82,32 +133,8 @@ This is done via the configuration file for `skywire-visor`.
 
 In the above example, we have two other visors running on localhost (that we wish to connect to via `stcp`).
 - The field `stcp.pk_table` holds the associations of `<public_key>` to `<ip_address>:<port>`.
-- The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming 
+- The field `stcp.local_address` should only be specified if you want the visor in question to listen for incoming
 `stcp` connection.
-
-#### `hypervisor` setup
-
-Every node can be controlled by one or more hypervisors. The hypervisor allows controlling and configuring multiple visors. 
-In order to allow a hypervisor to access a visor, 
-the address and PubKey of the hypervisor needs to be configured first on the visor. Here is an example configuration: 
-
-```json
-  "hypervisors":["024a2dd77de324d543561a6d9e62791723be26ddf6b9587060a10b9ba498e096f1"],
-```
-
-### Run `skywire-visor`
-
-`skywire-visor` hosts apps, proxies app's requests to remote visors and exposes communication API 
-that apps can use to implement communication protocols. 
-App binaries are spawned by the visor, 
-communication between visor and app is performed via unix pipes provided on app startup.
-
-Note that `skywire-visor` requires a valid configuration file in order to execute. If you want to run the VPN client application distributed with Skywire you need to run the following command with `sudo`
-
-```bash
-# Run skywire-visor. It takes one argument; the path of a configuration file (`skywire-config.json` if unspecified).
-$ skywire-visor skywire-config.json
-```
 
 ### Run `skywire-cli`
 
@@ -116,22 +143,6 @@ The `skywire-cli` tool is used to control the `skywire-visor`. Refer to the help
 ```bash
 $ skywire-cli -h
 ```
-
-### Run `hypervisor`
-
-In order to run the visor UI, generate a visor config file with `--hypervisor` flag 
-
-```bash
-$ skywire-cli visor gen-config --hypervisor
-```
-
-Then visor will start visor UI when it is run:
-
-```bash
-$ skywire-visor 
-```
-
-You can open up the visor UI on `localhost:8000`. 
 
 ### Windows
 
@@ -172,8 +183,8 @@ And then simply run skywire from the opened terminal.
 
 ### Apps
 
-After `skywire-visor` is up and running with default environment, 
-default apps are run with the configuration specified in `skywire-config.json`. 
+After `skywire-visor` is up and running with default environment,
+default apps are run with the configuration specified in `skywire-config.json`.
 Refer to the following for usage of the apps:
 
 - [Skychat](/cmd/apps/skychat)
@@ -244,7 +255,7 @@ Full info on each call input and output may be found in the [corresponding file]
 
 ### Transports
 
-In order for a local Skywire App to communicate with an App running on a remote Skywire visor, 
+In order for a local Skywire App to communicate with an App running on a remote Skywire visor,
 a transport to that remote Skywire visor needs to be established.
 
 Transports can be established via the `skywire-cli`.
@@ -257,7 +268,7 @@ $ skywire-cli visor add-tp 0276ad1c5e77d7945ad6343a3c36a8014f463653b3375b6e02ebe
 $ skywire-cli visor ls-tp
 ```
 
-Currently there are 4 available transport types. 
+Currently there are 4 available transport types.
 
 - [stcpr](https://github.com/skycoin/skywire/wiki/Transports#stcpr)
 - [sudph](https://github.com/skycoin/skywire/wiki/Transports#sudph)
@@ -267,7 +278,7 @@ Currently there are 4 available transport types.
 
 ## Creating a GitHub release
 
-To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor` binaries. 
+To maintain actual `skywire-visor` state on users' Skywire nodes we have a mechanism for updating `skywire-visor` binaries.
 Binaries for each version are uploaded to [GitHub releases](https://github.com/skycoin/skywire/releases/).
 We use [goreleaser](https://goreleaser.com) for creating them.
 
@@ -276,9 +287,9 @@ We use [goreleaser](https://goreleaser.com) for creating them.
 1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
 2. Checkout to a commit you would like to create a release against.
 3. Make sure that `git status` is in clean state.
-4. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`, 
+4. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`,
 where `0.1.0` is release version and `First release` is release name.
 5. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
 6. [Issue a personal GitHub access token.](https://github.com/settings/tokens)
-7. Run `GITHUB_TOKEN=your_token make github-release` 
+7. Run `GITHUB_TOKEN=your_token make github-release`
 8. [Check the created GitHub release.](https://github.com/skycoin/skywire/releases/)

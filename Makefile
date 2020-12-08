@@ -17,7 +17,7 @@ COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
-OPTS?=GO111MODULE=on
+OPTS?=GO111MODULE=on CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
 DOCKER_NETWORK?=SKYNET
@@ -35,17 +35,6 @@ endif
 
 TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
 TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
-
-BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
-
-BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
-BUILDINFO_DATE := -X $(BUILDINFO_PATH).date=$(DATE)
-BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
-
-BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
-
-BUILD_OPTS?="-ldflags=$(BUILDINFO)"
-BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
@@ -77,7 +66,7 @@ clean: ## Clean project: remove created binaries and apps
 	-rm -f ./skywire-visor ./skywire-cli ./setup-node
 
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
+	${OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -135,48 +124,34 @@ dep: ## Sorts dependencies
 
 # Apps
 host-apps: ## Build app
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skychat ./cmd/apps/skychat
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 # Bin
 bin: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
 
 release: ## Build `skywire-visor`, `skywire-cli` and apps without -race flag
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skychat ./cmd/apps/skychat
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 build-deploy: ## Build for deployment Docker images
-	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/skywire-cli ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
-
-package-amd64: ## Build the debian package.
-	scripts/dPKGBUILD.sh amd64
-
-package-arm64: ## Build the debian package.
-	scripts/dPKGBUILD.sh arm64
-
-package-armhf: ## Build the debian package.
-	scripts/dPKGBUILD.sh armhf
-
-all-packages: ## Build the debian package.
-	scripts/dPKGBUILD.sh amd64
-	scripts/dPKGBUILD.sh arm64
-	scripts/dPKGBUILD.sh armhf
+	${OPTS} go build -tags netgo -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/skywire-visor ./cmd/skywire-visor
+	${OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/skywire-cli ./cmd/skywire-cli
+	${OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skychat ./cmd/apps/skychat
+	${OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
