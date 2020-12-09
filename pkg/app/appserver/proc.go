@@ -194,16 +194,11 @@ func (p *Proc) Start() error {
 		// here, the connection is established, so we're not blocked by awaiting it anymore,
 		// execution may be continued as usual.
 
-		p.log.Infoln("AWAITING CONN")
-
 		if ok := p.awaitConn(); !ok {
-			p.log.Infoln("ERROR AWAITING CONN")
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
 		}
-
-		p.log.Infoln("AWAITED CONN")
 
 		// App discovery start/stop.
 		p.disc.Start()
@@ -211,8 +206,6 @@ func (p *Proc) Start() error {
 
 		// Wait for proc to exit.
 		p.waitErr = <-waitErrCh
-
-		p.log.Infof("GOT ERR: %v", p.waitErr)
 
 		// Close proc conn and associated listeners and connections.
 		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
