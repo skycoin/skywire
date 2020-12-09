@@ -162,6 +162,13 @@ func (p *Proc) Start() error {
 			close(waitErrCh)
 		}()
 
+		defer func() {
+			// here will definitely be an error notifying that the process
+			// is already stopped. We do this to remove proc from the manager,
+			// therefore giving the correct app status to hypervisor.
+			_ = p.m.Stop(p.appName) //nolint:errcheck
+		}()
+
 		select {
 		case _, ok := <-p.connCh:
 			if !ok {
@@ -181,22 +188,22 @@ func (p *Proc) Start() error {
 			// channel won't get closed outside, close it now.
 			p.connOnce.Do(func() { close(p.connCh) })
 
-			// here will definitely be an error notifying that the process
-			// is already stopped. We do this to remove proc from the manager,
-			// therefore giving the correct app status to hypervisor.
-			_ = p.m.Stop(p.appName) //nolint:errcheck
-
 			return
 		}
 
 		// here, the connection is established, so we're not blocked by awaiting it anymore,
 		// execution may be continued as usual.
 
+		p.log.Infoln("AWAITING CONN")
+
 		if ok := p.awaitConn(); !ok {
+			p.log.Infoln("ERROR AWAITING CONN")
 			_ = p.cmd.Process.Kill() //nolint:errcheck
 			p.waitMx.Unlock()
 			return
 		}
+
+		p.log.Infoln("AWAITED CONN")
 
 		// App discovery start/stop.
 		p.disc.Start()
@@ -204,6 +211,8 @@ func (p *Proc) Start() error {
 
 		// Wait for proc to exit.
 		p.waitErr = <-waitErrCh
+
+		p.log.Infof("GOT ERR: %v", p.waitErr)
 
 		// Close proc conn and associated listeners and connections.
 		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
