@@ -208,7 +208,7 @@ func (l *Launcher) startApp(cmd string, args, envs []string) error {
 	if !ok {
 		return ErrAppNotFound
 	}
-	fmt.Printf("INITIAL APP ARGS: %v\n", ac.Args)
+
 	if args != nil {
 		ac.Args = args
 	}
