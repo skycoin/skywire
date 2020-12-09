@@ -249,6 +249,8 @@ func (v *Visor) StartApp(appName string) error {
 		}
 	}
 
+	v.log.Infoln("INSIDE START APP")
+
 	return v.appL.StartApp(appName, nil, envs)
 }
 
