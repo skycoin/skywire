@@ -181,8 +181,6 @@ func (c *Client) Serve() error {
 			fmt.Printf("dialServeConn: %v\n", err)
 		}
 
-		return errors.New("fail")
-
 		if c.isClosed() {
 			return nil
 		}
