@@ -58,6 +58,8 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	}
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
+	fmt.Printf("CONF PROC ARGS: %v\n", conf.ProcArgs)
+
 	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
 	cmd.Dir = conf.ProcWorkDir
 	cmd.Env = append(os.Environ(), conf.Envs()...)

@@ -549,6 +549,7 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 		}
 
 		if reqBody.PK != nil {
+			log.Infof("SETTING REMOTE PK: %s", (*reqBody.PK).Hex())
 			if err := ctx.API.SetAppPK(ctx.App.Name, *reqBody.PK); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
