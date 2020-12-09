@@ -1,7 +1,6 @@
 package visorconfig
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -135,8 +134,6 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value st
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
-	fmt.Println("INSIDE UPDATE APP ARG")
-
 	conf := v1.Launcher
 
 	configChanged := updateArg(conf, appName, argName, value)
@@ -144,8 +141,6 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value st
 	if !configChanged {
 		return nil
 	}
-
-	fmt.Printf("ARGS AFTER CHANGING CONFIG: %v\n", conf.Apps)
 
 	launch.ResetConfig(launcher.Config{
 		VisorPK:    v1.PK,

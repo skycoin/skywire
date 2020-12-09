@@ -169,8 +169,6 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
-	m.log.Infof("APP ARGS INSIDE PROC MANAGER START: %v", conf.ProcArgs)
-
 	log := m.mLog.PackageLogger("proc:" + conf.AppName + ":" + conf.ProcKey.String())
 
 	// isDone should be called within the protection of a mutex.
