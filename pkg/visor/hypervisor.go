@@ -513,7 +513,7 @@ func (hv *Hypervisor) getApp() http.HandlerFunc {
 // nolint: funlen,gocognit,godox
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
+		type req struct {
 			AutoStart  *bool          `json:"autostart,omitempty"`
 			Killswitch *bool          `json:"killswitch,omitempty"`
 			Secure     *bool          `json:"secure,omitempty"`
@@ -522,6 +522,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			PK         *cipher.PubKey `json:"pk,omitempty"`
 		}
 
+		shouldRestartApp := func(r req) bool {
+			// we restart the app if one of these fields was changed
+			return r.Killswitch != nil || r.Secure != nil || r.Passcode != nil ||
+				r.PK != nil
+		}
+
+		var reqBody req
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
 				hv.log(r).Warnf("putApp request: %v", err)
@@ -555,9 +562,6 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
-		// todo: this was just a quick copypasting to mimic the style already present here
-		// possible issue: each cal to ctx.API.Set* triggers app restart, so if we change multiple
-		// values in a single request the app will be restarted multple times
 		if reqBody.Killswitch != nil {
 			if err := ctx.API.SetAppKillswitch(ctx.App.Name, *reqBody.Killswitch); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
@@ -567,6 +571,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.Secure != nil {
 			if err := ctx.API.SetAppSecure(ctx.App.Name, *reqBody.Secure); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if shouldRestartApp(reqBody) {
+			if err := ctx.API.RestartApp(ctx.App.Name); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
