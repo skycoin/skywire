@@ -9,10 +9,16 @@ import (
 	"syscall"
 )
 
+// ErrReleaseNoncaptured is returned on attempt to release a capturer that hasn't started capturing
 var ErrReleaseNoncaptured = errors.New("releasing non-captured output")
 
+// OutputCapturer allows to capture output to stdout/stderr and hold it temporarily
+// while giving ability to write to stdout through a separate writer
 type OutputCapturer interface {
+	// CaptureStdout starts capturing all output that is written to stdout/stderr
+	// return a separate writer for writing to stdout
 	CaptureStdout() (io.Writer, error)
+	// Release captured output to the screen, as well as stop capturing any further stout/stderr output
 	Release() error
 }
 
@@ -42,7 +48,7 @@ func (oc *outputCapturer) CaptureStdout() (io.Writer, error) {
 		return nil, err
 	}
 
-	if err := syscall.Dup2(int(stdoutWriter.Fd()), syscall.Stdout); err != nil {
+	if err := DupTo(int(stdoutWriter.Fd()), syscall.Stdout); err != nil {
 		return nil, err
 	}
 
@@ -56,7 +62,7 @@ func (oc *outputCapturer) CaptureStdout() (io.Writer, error) {
 		return nil, err
 	}
 
-	if err := syscall.Dup2(int(stderrWriter.Fd()), syscall.Stderr); err != nil {
+	if err := DupTo(int(stderrWriter.Fd()), syscall.Stderr); err != nil {
 		return nil, err
 	}
 
@@ -91,11 +97,11 @@ func (oc *outputCapturer) Release() error {
 		return err
 	}
 
-	if err := syscall.Dup2(oc.origStdoutFD, syscall.Stdout); err != nil {
+	if err := DupTo(oc.origStdoutFD, syscall.Stdout); err != nil {
 		return err
 	}
 
-	if err := syscall.Dup2(oc.origStderrFD, syscall.Stderr); err != nil {
+	if err := DupTo(oc.origStderrFD, syscall.Stderr); err != nil {
 		return err
 	}
 
