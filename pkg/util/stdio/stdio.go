@@ -22,6 +22,7 @@ type OutputCapturer interface {
 	Release() error
 }
 
+// NewCapturer creates a new output capturer
 func NewCapturer() OutputCapturer {
 	return &outputCapturer{}
 }
