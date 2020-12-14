@@ -628,6 +628,8 @@
     },
 
     "server-list" : {
+      "date-small-table-label": "Date",
+      "date-info": "Last time you used this server.",
       "country-small-table-label": "Country",
       "country-info": "Country where the server is located.",
       "name-small-table-label": "Name",
@@ -650,6 +652,9 @@
       "silver-rating-info": "Silver.",
       "bronze-rating-info": "Bronze.",
       "options-info": "Options.",
+      "selected-info": "This is the currently selected server.",
+      "favorite-info": "This server is in the favorites list.",
+      "history-info": "This server is in the server history.",
       "empty-discovery": "Currently there are no VPN servers to show. Please try again later.",
       "empty-history": "There is no history to show.",
       "empty-favorites": "There are no favorite servers to show.",
@@ -665,12 +670,16 @@
       "options": {
         "make-favorite": "Make favorite",
         "make-favorite-confirmation": "Are you sure you want to mark this server as favorite? It will be removed from the blocked list.",
+        "make-favorite-done": "Added to the favorites list.",
         "remove-from-favorites": "Remove from favorites",
+        "remove-from-favorites-done": "Removed from the favorites list.",
         "block": "Block server",
+        "block-done": "Added to the blocked list.",
         "block-confirmation": "Are you sure you want to block this server? It will be removed from the favorites list.",
         "unblock": "Unblock server",
+        "unblock-done": "Removed from the blocked list.",
         "remove-from-history": "Remove from history",
-        "done": "Done."
+        "remove-from-history-done": "Removed from history."
       },
 
       "tabs": {
