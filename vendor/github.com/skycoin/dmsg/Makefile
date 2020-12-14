@@ -56,10 +56,7 @@ install-linters: ## Install linters
 	${OPTS} go get -u github.com/incu6us/goimports-reviser
 
 format: ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
-	# TODO: Formats vendor folder which is not desired behavior.
-	# We need to consider removing it after testing goimports-reviser.
-	#${OPTS} goimports -w -local ${DMSG_REPO} .
-	find . -type f -name '*.go' -not -path "./vendor/*" -exec goimports-reviser -project-name ${DMSG_REPO} -file-path {} \;
+	${OPTS} goimports -w -local ${DMSG_REPO} .
 
 dep: ## Sorts dependencies
 	${OPTS} go mod download

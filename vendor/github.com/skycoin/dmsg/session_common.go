@@ -36,6 +36,20 @@ func (sc *SessionCommon) GetConn() net.Conn {
 	return sc.netConn
 }
 
+// GetDecNonce returns value of DecNonce of underlying `*noise.Noise`.
+func (sc *SessionCommon) GetDecNonce() uint64 {
+	sc.rMx.Lock()
+	defer sc.rMx.Unlock()
+	return sc.ns.GetDecNonce()
+}
+
+// GetEncNonce returns value of EncNonce of underlying `*noise.Noise`.
+func (sc *SessionCommon) GetEncNonce() uint64 {
+	sc.wMx.Lock()
+	defer sc.wMx.Unlock()
+	return sc.ns.GetEncNonce()
+}
+
 func (sc *SessionCommon) initClient(entity *EntityCommon, conn net.Conn, rPK cipher.PubKey) error {
 	ns, err := noise.New(noise.HandshakeXK, noise.Config{
 		LocalPK:   entity.pk,
