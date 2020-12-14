@@ -93,6 +93,21 @@ export class VpnSavedDataService {
     return this.serversMap.get(pk);
   }
 
+  updateFromDiscovery(serverList: VpnServer[]) {
+    serverList.forEach(server => {
+      if (this.serversMap.has(server.pk)) {
+        const savedServer = this.serversMap.get(server.pk);
+
+        savedServer.countryCode = server.countryCode;
+        savedServer.name = server.name;
+        savedServer.location = server.location;
+        savedServer.note = server.note;
+      }
+    });
+
+    this.saveData();
+  }
+
   processFromDiscovery(newServer: VpnServer): LocalServerData {
     const retrievedServer = this.serversMap.get(newServer.pk);
     if (retrievedServer) {
@@ -209,7 +224,7 @@ export class VpnSavedDataService {
         historyList.push(server);
       }
     });
-    historyList = historyList.sort((a, b) => a.lastUsed - b.lastUsed);
+    historyList = historyList.sort((a, b) => b.lastUsed - a.lastUsed);
 
     let historyElementsFound = 0;
     historyList.forEach(server => {
