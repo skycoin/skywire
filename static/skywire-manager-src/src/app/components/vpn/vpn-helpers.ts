@@ -8,18 +8,27 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 import { VpnServer } from 'src/app/services/vpn-client-discovery.service';
 import { ManualVpnServerData } from './pages/server-list/add-vpn-server/add-vpn-server.component';
 import { LocalServerData } from 'src/app/services/vpn-saved-data.service';
+import { Lists } from './pages/server-list/server-list.component';
 
 export class VpnHelpers {
+  private static readonly serverListTabStorageKey = 'ServerListTab';
+
   private static currentPk = '';
 
   static changeCurrentPk(pk: string): void {
     this.currentPk = pk;
   }
 
+  static setDefaultTabForServerList(tab: Lists) {
+    sessionStorage.setItem(VpnHelpers.serverListTabStorageKey, tab);
+  }
+
   /**
    * Data for configuring the tab-bar shown in the header of the vpn client pages.
    */
   static get vpnTabsData(): TabButtonData[] {
+    const lastServerListTab = sessionStorage.getItem(VpnHelpers.serverListTabStorageKey);
+
     return [
       {
         icon: 'power_settings_new',
@@ -29,7 +38,7 @@ export class VpnHelpers {
       {
         icon: 'list',
         label: 'vpn.servers',
-        linkParts: ['/vpn', this.currentPk, 'servers'],
+        linkParts: lastServerListTab ? ['/vpn', this.currentPk, 'servers', lastServerListTab, '1'] : ['/vpn', this.currentPk, 'servers'],
       },
       {
         icon: 'flag',
