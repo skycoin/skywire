@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
+	github.com/VictoriaMetrics/metrics v1.12.3
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.11 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible
@@ -42,4 +43,4 @@ require (
 )
 
 // Uncomment for tests with alternate branches of 'dmsg'
-//replace github.com/skycoin/dmsg => ../dmsg
+replace github.com/skycoin/dmsg => ../dmsg
