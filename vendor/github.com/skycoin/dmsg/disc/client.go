@@ -4,19 +4,21 @@ package disc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/dmsg/cipher"
 )
 
 var log = logging.MustGetLogger("disc")
+
+var json = jsoniter.ConfigFastest
 
 // APIClient implements dmsg discovery API client.
 type APIClient interface {
