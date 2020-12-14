@@ -17,11 +17,30 @@ import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/servi
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
 
-enum Lists {
+export enum Lists {
   Public = 'public',
   History = 'history',
   Favorites = 'favorites',
   Blocked = 'blocked',
+}
+
+interface VpnServerForList {
+  countryCode: string;
+  name: string;
+  location: string;
+  pk: string;
+  congestion?: number;
+  congestionRating?: Ratings;
+  latency?: number;
+  latencyRating?: Ratings;
+  hops?: number;
+  note: string;
+  lastUsed?: number;
+  inHistory?: boolean;
+  flag?: ServerFlags;
+
+  originalDiscoveryData?: VpnServer;
+  originalLocalData?: LocalServerData;
 }
 
 /**
@@ -40,6 +59,7 @@ export class ServerListComponent implements OnDestroy {
   private readonly maxFullListElements = 50;
 
   // Vars with the data of the columns used for sorting the data.
+  dateSortData = new SortingColumn(['lastUsed'], 'vpn.server-list.date-small-table-label', SortingModes.NumberReversed);
   countrySortData = new SortingColumn(['countryCode'], 'vpn.server-list.country-small-table-label', SortingModes.Text);
   nameSortData = new SortingColumn(['name'], 'vpn.server-list.name-small-table-label', SortingModes.Text);
   locationSortData = new SortingColumn(['location'], 'vpn.server-list.location-small-table-label', SortingModes.Text);
@@ -63,22 +83,23 @@ export class ServerListComponent implements OnDestroy {
   dataFilterer: DataFilterer;
 
   loading = true;
-  dataSource: VpnServer[];
+  dataSource: VpnServerForList[];
   tabsData = VpnHelpers.vpnTabsData;
 
   // Vars for the pagination functionality.
-  allServers: VpnServer[];
-  filteredServers: VpnServer[];
-  serversToShow: VpnServer[];
+  allServers: VpnServerForList[];
+  filteredServers: VpnServerForList[];
+  serversToShow: VpnServerForList[];
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
 
   currentLocalPk: string;
-  showFullList = false;
   currentList = Lists.Public;
   lists = Lists;
+  currentServer: LocalServerData;
+  serverFlags = ServerFlags;
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[];
@@ -87,6 +108,7 @@ export class ServerListComponent implements OnDestroy {
 
   private navigationsSubscription: Subscription;
   private dataSubscription: Subscription;
+  private currentServerSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
@@ -119,7 +141,7 @@ export class ServerListComponent implements OnDestroy {
         this.listId = 'vps';
       }
 
-      this.showFullList = this.currentList === Lists.Public;
+      VpnHelpers.setDefaultTabForServerList(this.currentList);
 
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
@@ -148,10 +170,13 @@ export class ServerListComponent implements OnDestroy {
         }
       }
     });
+
+    this.currentServerSubscription = this.vpnSavedDataService.currentServerObservable.subscribe(server => this.currentServer = server);
   }
 
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
+    this.currentServerSubscription.unsubscribe();
 
     if (this.dataSortedSubscription) {
       this.dataSortedSubscription.unsubscribe();
@@ -245,36 +270,43 @@ export class ServerListComponent implements OnDestroy {
         if (optionCodes[selectedOption] === 1) {
           if (savedVersion_.flag !== ServerFlags.Blocked) {
             this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Favorite);
-            this.snackbarService.showDone('vpn.server-list.options.done');
+            this.snackbarService.showDone('vpn.server-list.options.make-favorite-done');
+            this.processAllServers();
           } else {
             const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.make-favorite-confirmation');
             confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
               confirmationDialog.componentInstance.closeModal();
               this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Favorite);
-              this.snackbarService.showDone('vpn.server-list.options.done');
+              this.snackbarService.showDone('vpn.server-list.options.make-favorite-done');
+              this.processAllServers();
             });
           }
         } else if (optionCodes[selectedOption] === -1) {
           this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.None);
-          this.snackbarService.showDone('vpn.server-list.options.done');
+          this.snackbarService.showDone('vpn.server-list.options.remove-from-favorites-done');
+          this.processAllServers();
         } else if (optionCodes[selectedOption] === 2) {
           if (savedVersion_.flag !== ServerFlags.Favorite) {
             this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
-            this.snackbarService.showDone('vpn.server-list.options.done');
+            this.snackbarService.showDone('vpn.server-list.options.block-done');
+            this.processAllServers();
           } else {
             const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.block-confirmation');
             confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
               confirmationDialog.componentInstance.closeModal();
               this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
-              this.snackbarService.showDone('vpn.server-list.options.done');
+              this.snackbarService.showDone('vpn.server-list.options.block-done');
+              this.processAllServers();
             });
           }
         } else if (optionCodes[selectedOption] === -2) {
           this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.None);
-          this.snackbarService.showDone('vpn.server-list.options.done');
+          this.snackbarService.showDone('vpn.server-list.options.unblock-done');
+          this.processAllServers();
         } else if (optionCodes[selectedOption] === -3) {
           this.vpnSavedDataService.removeFromHistory(savedVersion_.pk);
-          this.snackbarService.showDone('vpn.server-list.options.done');
+          this.snackbarService.showDone('vpn.server-list.options.remove-from-history-done');
+          this.processAllServers();
         }
       }
     });
@@ -284,7 +316,24 @@ export class ServerListComponent implements OnDestroy {
     if (this.currentList === Lists.Public) {
       // Get the vpn servers from the discovery service.
       this.dataSubscription = this.vpnClientDiscoveryService.getServers().subscribe(response => {
-        this.allServers = response;
+        this.allServers = response.map(server => {
+          return {
+            countryCode: server.countryCode,
+            name: server.name,
+            location: server.location,
+            pk: server.pk,
+            congestion: server.congestion,
+            congestionRating: server.congestionRating,
+            latency: server.latency,
+            latencyRating: server.latencyRating,
+            hops: server.hops,
+            note: server.note,
+
+            originalDiscoveryData: server,
+          };
+        });
+
+        this.vpnSavedDataService.updateFromDiscovery(response);
 
         this.loading = false;
 
@@ -302,19 +351,19 @@ export class ServerListComponent implements OnDestroy {
       }
 
       this.dataSubscription = dataObservable.subscribe(response => {
-        const processedList: VpnServer[] = [];
+        const processedList: VpnServerForList[] = [];
         response.forEach(server => {
           processedList.push({
             countryCode: server.countryCode,
             name: server.name,
             location: server.location,
             pk: server.pk,
-            congestion: 0,
-            congestionRating: null,
-            latency: 0,
-            latencyRating: null,
-            hops: 0,
             note: server.note,
+            lastUsed: server.lastUsed,
+            inHistory: server.inHistory,
+            flag: server.flag,
+
+            originalLocalData: server,
           });
         });
 
@@ -328,53 +377,77 @@ export class ServerListComponent implements OnDestroy {
   }
 
   private loadTestData() {
-    this.allServers = [{
-      countryCode: 'au',
-      name: 'Server name',
-      location: 'Melbourne - Australia',
-      pk: '024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
-      congestion: 20,
-      congestionRating: Ratings.Gold,
-      latency: 123,
-      latencyRating: Ratings.Gold,
-      hops: 3,
-      note: 'Note'
-    }, {
-      countryCode: 'br',
-      name: 'Test server 14',
-      location: 'Rio de Janeiro - Brazil',
-      pk: '034ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
-      congestion: 20,
-      congestionRating: Ratings.Silver,
-      latency: 12345,
-      latencyRating: Ratings.Gold,
-      hops: 3,
-      note: 'Note'
-    }, {
-      countryCode: 'de',
-      name: 'Test server 20',
-      location: 'Berlin - Germany',
-      pk: '044ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
-      congestion: 20,
-      congestionRating: Ratings.Gold,
-      latency: 123,
-      latencyRating: Ratings.Bronze,
-      hops: 7,
-      note: 'Note'
-    }];
+    setTimeout(() => {
+      this.allServers = [];
 
-    this.loading = false;
+      const server1 = {
+        countryCode: 'au',
+        name: 'Server name',
+        location: 'Melbourne - Australia',
+        pk: '024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
+        congestion: 20,
+        congestionRating: Ratings.Gold,
+        latency: 123,
+        latencyRating: Ratings.Gold,
+        hops: 3,
+        note: 'Note',
+      };
+      this.allServers.push({...server1,
+        originalDiscoveryData: server1
+      });
 
-    this.processAllServers();
+      const server2 = {
+        countryCode: 'br',
+        name: 'Test server 14',
+        location: 'Rio de Janeiro - Brazil',
+        pk: '034ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
+        congestion: 20,
+        congestionRating: Ratings.Silver,
+        latency: 12345,
+        latencyRating: Ratings.Gold,
+        hops: 3,
+        note: 'Note'
+      };
+      this.allServers.push({...server2,
+        originalDiscoveryData: server2
+      });
+
+      const server3 = {
+        countryCode: 'de',
+        name: 'Test server 20',
+        location: 'Berlin - Germany',
+        pk: '044ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7',
+        congestion: 20,
+        congestionRating: Ratings.Gold,
+        latency: 123,
+        latencyRating: Ratings.Bronze,
+        hops: 7,
+        note: 'Note'
+      };
+      this.allServers.push({...server3,
+        originalDiscoveryData: server3,
+      });
+
+      this.vpnSavedDataService.updateFromDiscovery([server1, server2, server3]);
+
+      this.loading = false;
+
+      this.processAllServers();
+    }, 100);
   }
 
   private processAllServers() {
     this.fillFilterPropertiesArray();
 
-    // Get the countries in the server list.
     const countriesSet = new Set<string>();
     this.allServers.forEach(server => {
+      // Add the country to the countries list.
       countriesSet.add(server.countryCode);
+
+      // Add the saved data, if any.
+      const saveddata = this.vpnSavedDataService.getSavedVersion(server.pk);
+      server.inHistory = saveddata ? saveddata.inHistory : false;
+      server.flag = saveddata ? saveddata.flag : ServerFlags.None;
     });
 
     // Create a filter option for each country.
@@ -411,7 +484,7 @@ export class ServerListComponent implements OnDestroy {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [];
     let defaultColumn: number;
-    if (this.showFullList) {
+    if (this.currentList === Lists.Public) {
       sortableColumns.push(this.countrySortData);
       sortableColumns.push(this.nameSortData);
       sortableColumns.push(this.locationSortData);
@@ -425,13 +498,17 @@ export class ServerListComponent implements OnDestroy {
 
       defaultColumn = 0;
     } else {
+      if (this.currentList === Lists.History) {
+        sortableColumns.push(this.dateSortData);
+      }
+
       sortableColumns.push(this.countrySortData);
       sortableColumns.push(this.nameSortData);
       sortableColumns.push(this.locationSortData);
       sortableColumns.push(this.pkSortData);
       sortableColumns.push(this.noteSortData);
 
-      defaultColumn = 1;
+      defaultColumn = this.currentList === Lists.History ? 0 : 1;
     }
     this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, defaultColumn, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
@@ -445,7 +522,14 @@ export class ServerListComponent implements OnDestroy {
       this.dataSorter.setData(this.filteredServers);
     });
 
-    this.dataFilterer.setData(this.allServers);
+    let serversToUse: VpnServerForList[];
+    if (this.currentList === Lists.Public) {
+      serversToUse = this.allServers.filter(server => server.flag !== ServerFlags.Blocked);
+    } else {
+      serversToUse = this.allServers;
+    }
+
+    this.dataFilterer.setData(serversToUse);
   }
 
   private fillFilterPropertiesArray() {
@@ -470,7 +554,7 @@ export class ServerListComponent implements OnDestroy {
       }
     ];
 
-    if (this.showFullList) {
+    if (this.currentList === Lists.Public) {
       this.filterProperties.push({
         filterName: 'vpn.server-list.filter-dialog.congestion-rating',
         keyNameInElementsArray: 'congestionRating',
