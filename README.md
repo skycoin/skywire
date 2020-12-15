@@ -29,8 +29,6 @@
 Skywire requires a version of [golang](https://golang.org/)
 with [go modules](https://github.com/golang/go/wiki/Modules) support.
 
-Skywire is statically compiled against musl-gcc.
-
 ### Build
 
 ```bash
@@ -44,6 +42,19 @@ $ make build # installs all dependencies, build binaries and skywire apps
 # Install skywire-visor, skywire-cli and app CLI execs.
 $ make install
 ```
+
+### Static Build
+
+Statically compile skywire against musl-gcc (requires musl-tools):
+
+```bash
+# Static Build.
+$ make build-static # installs all dependencies, build binaries and skywire apps
+
+# Install statically compiled skywire-visor, skywire-cli and app CLI execs.
+$ make install-static
+```
+
 
 ### Configure Skywire
 
