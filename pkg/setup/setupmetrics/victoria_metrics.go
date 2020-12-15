@@ -17,7 +17,7 @@ type Metrics interface {
 
 // VictoriaMetrics implements `Metrics` using Victoria Metrics.
 type VictoriaMetrics struct {
-	activeRequests        *metricsutil.VictoriaMetricsGaugeWrapper
+	activeRequests        *metricsutil.VictoriaMetricsIntGaugeWrapper
 	reqDurationsFailed    *metrics.Histogram
 	reqDurationsSuccesses *metrics.Histogram
 }
@@ -25,7 +25,7 @@ type VictoriaMetrics struct {
 // NewVictoriaMetrics returns the Victoria Metrics implementation of Metrics.
 func NewVictoriaMetrics() *VictoriaMetrics {
 	return &VictoriaMetrics{
-		activeRequests:        metricsutil.NewVictoriaMetricsGauge("active_request_count"),
+		activeRequests:        metricsutil.NewVictoriaMetricsIntGauge("active_request_count"),
 		reqDurationsFailed:    metrics.GetOrCreateHistogram("request_durations{success=\"true\"}"),
 		reqDurationsSuccesses: metrics.GetOrCreateHistogram("request_durations{success=\"false\"}"),
 	}
