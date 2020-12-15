@@ -55,7 +55,7 @@ Different locations are required due to the fact that we want to spread out the 
 ## Rewards
 <br>
 
-* During the migration period, the pool sizes of the ending Skywire testnet and the recently launched Skywire mainnet are one and the same. With that said, the generated uptime in either the Skywire test- or mainnet are being added together with respect to the 75% uptime requirement.
+* Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards. Note that the required minimal Skywire version is subject to change and will be updated from time to time.
 * Eligible for rewards are only the whitelisted nodes, that **comply with the Skywire mainnet rules** and **meet the 75% uptime requirement** during the month.
 * The whitelist is being **updated retroactively on a monthly basis** so it is **not important** in which week you are being approved for the whitelist.
 * **Official Skyminers are whitelisted by default after purchase.**
