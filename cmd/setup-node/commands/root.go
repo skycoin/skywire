@@ -8,12 +8,11 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/skycoin/dmsg/metricsutil"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/dmsg/discord"
+	"github.com/skycoin/dmsg/metricsutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
