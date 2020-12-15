@@ -6,13 +6,13 @@ import (
 
 // RequestsInFlightCountMiddleware is a middleware to track current requests-in-flight count.
 type RequestsInFlightCountMiddleware struct {
-	reqsInFlightGauge *VictoriaMetricsGaugeWrapper
+	reqsInFlightGauge *VictoriaMetricsIntGaugeWrapper
 }
 
 // NewRequestsInFlightCountMiddleware constructs `RequestsInFlightCountMiddleware`.
 func NewRequestsInFlightCountMiddleware() *RequestsInFlightCountMiddleware {
 	return &RequestsInFlightCountMiddleware{
-		reqsInFlightGauge: NewVictoriaMetricsGauge("request_ongoing_count"),
+		reqsInFlightGauge: NewVictoriaMetricsIntGauge("request_ongoing_count"),
 	}
 }
 
