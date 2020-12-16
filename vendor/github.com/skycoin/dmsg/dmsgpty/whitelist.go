@@ -1,14 +1,17 @@
 package dmsgpty
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
+	jsoniter "github.com/json-iterator/go"
+
 	"github.com/skycoin/dmsg/cipher"
 )
+
+var json = jsoniter.ConfigFastest
 
 // Whitelist represents a whitelist of public keys.
 type Whitelist interface {
