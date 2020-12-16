@@ -88,6 +88,7 @@ import { UpdaterConfigComponent } from './components/pages/settings/updater-conf
 import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
 import { AddVpnServerComponent } from './components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
+import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 import { VpnUnavailableComponent } from './components/vpn/pages/vpn-unavailable/vpn-unavailable.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
@@ -154,6 +155,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     VpnStatusComponent,
     VpnUnavailableComponent,
     AddVpnServerComponent,
+    VpnSettingsComponent,
   ],
   imports: [
     BrowserModule,

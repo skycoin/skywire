@@ -1,0 +1,34 @@
+@import "variables";
+@import "text";
+
+table {
+  width: 100%;
+}
+
+.data-column {
+  max-width: 0;
+  width: 50%;
+  @extend .single-line;
+}
+
+.header-container {
+  max-width: 100%;
+  display: inline-flex;
+
+  .header-text {
+    @extend .single-line;
+    flex-grow: 1;
+  }
+}
+
+mat-spinner {
+  display: inline-block;
+  opacity: 0.5;
+  margin-left: 2px;
+  position: relative;
+  top: 2px;
+  
+  ::ng-deep circle {
+    stroke: $white;
+  }
+}

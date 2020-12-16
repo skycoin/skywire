@@ -717,6 +717,15 @@
           "any": "Any"
         }
       }
+    },
+
+    "settings-page": {
+      "setting-small-table-label": "Setting",
+      "value-small-table-label": "Value",
+      "killswitch": "Killswitch",
+      "setting-on": "On",
+      "setting-off": "Off",
+      "working-warning": "The system is busy. Please wait for the previous operation to finish."
     }
   }
 }
