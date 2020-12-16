@@ -69,6 +69,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   readonly maxElementsPerPage = 10;
 
   @ViewChild('button') button: ButtonComponent;
+  @ViewChild('settingsButton') settingsButton: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
   form: FormGroup;
   // Entries to show on the history.
@@ -102,8 +103,14 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // True if configuring Vpn-Client, false if configuring Skysocks-Client.
   configuringVpn = false;
 
+  // Indicates if the killswitch option is selected in the UI or not.
+  killswitch = false;
+  // Indicates if the killswitch is active in the backend or not.
+  initialKillswitchSetting = false;
+
   // If the operation in currently being made.
-  private working = false;
+  working = false;
+
   private operationSubscription: Subscription;
   private discoverySubscription: Subscription;
 
@@ -165,6 +172,10 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
         if (this.data.args[i] === '-srv' && i + 1 < this.data.args.length) {
           currentVal = this.data.args[i + 1];
         }
+        if (this.data.args[i] === '-killswitch' && i + 1 < this.data.args.length) {
+          this.killswitch = (this.data.args[i + 1] as string).toLowerCase() === 'true';
+          this.initialKillswitchSetting = this.killswitch;
+        }
       }
     }
 
@@ -185,6 +196,13 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     this.discoverySubscription.unsubscribe();
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
+    }
+  }
+
+  // Used by the checkbox for the killswitch setting.
+  setKillswitch(event) {
+    if (!this.working) {
+      this.killswitch = event.checked ? true : false;
     }
   }
 
@@ -473,6 +491,50 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Updates the app with the changes made in the settings tab.
+   */
+  saveSettings() {
+    // The operation can not continue if the component is already working.
+    if (this.working) {
+      return;
+    }
+
+    const data = { killswitch: this.killswitch };
+
+    this.settingsButton.showLoading(false);
+    this.button.showLoading(false);
+    this.working = true;
+
+    this.operationSubscription = this.appsService.changeAppSettings(
+      NodeComponent.getCurrentNodeKey(),
+      this.data.name,
+      data,
+    ).subscribe(
+      () => {
+        this.initialKillswitchSetting = this.killswitch;
+
+        this.snackbarService.showDone('apps.vpn-socks-client-settings.changes-made');
+
+        // Allow to continue using the component.
+        this.working = false;
+        this.settingsButton.reset(false);
+        this.button.reset(false);
+
+        NodeComponent.refreshCurrentDisplayedData();
+      },
+      err => {
+        // Allow to continue using the component.
+        this.working = false;
+        this.settingsButton.showError(false);
+        this.button.reset(false);
+        err = processServiceError(err);
+
+        this.snackbarService.showError(err);
+      },
+    );
+  }
+
+  /**
    * Copies a public key.
    * @param publicKey Key to copy.
    */
@@ -487,7 +549,13 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
 
   // Makes the call to the hypervisor API for changing the configuration.
   private continueSavingChanges(publicKey: string, password: string, enteredManually: boolean, location: string, note: string) {
-    this.button.showLoading();
+    // The operation can not continue if the component is already working.
+    if (this.working) {
+      return;
+    }
+
+    this.button.showLoading(false);
+    this.settingsButton.showLoading(false);
     this.working = true;
 
     const data = { pk: publicKey };
@@ -505,12 +573,12 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       this.data.name,
       data,
     ).subscribe(
-      () => this.onSuccess(publicKey, !!password, enteredManually, location, note),
-      err => this.onError(err),
+      () => this.onServerDataChangeSuccess(publicKey, !!password, enteredManually, location, note),
+      err => this.onServerDataChangeError(err),
     );
   }
 
-  private onSuccess(publicKey: string, hasPassword: boolean, enteredManually: boolean, location: string, note: string) {
+  private onServerDataChangeSuccess(publicKey: string, hasPassword: boolean, enteredManually: boolean, location: string, note: string) {
     // Remove any repeated entry from the history.
     this.history = this.history.filter(value => value.key !== publicKey);
 
@@ -547,12 +615,14 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
 
     // Allow to continue using the component.
     this.working = false;
-    this.button.reset();
+    this.button.reset(false);
+    this.settingsButton.reset(false);
   }
 
-  private onError(err: OperationError) {
+  private onServerDataChangeError(err: OperationError) {
     this.working = false;
-    this.button.showError();
+    this.button.showError(false);
+    this.settingsButton.reset(false);
     err = processServiceError(err);
 
     this.snackbarService.showError(err);

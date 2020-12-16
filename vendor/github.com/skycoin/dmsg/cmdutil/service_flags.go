@@ -1,26 +1,22 @@
 package cmdutil
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log/syslog"
-	"net/http"
 	"os"
 	"strings"
 	"unicode"
 
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/dmsg/discord"
-	"github.com/skycoin/dmsg/promutil"
 )
 
 // Associated errors.
@@ -31,6 +27,8 @@ var (
 	ErrInvalidLogString           = errors.New("failed to convert string to log level")
 	ErrInvalidSyslogNet           = errors.New("network type is unsupported for syslog")
 )
+
+var json = jsoniter.ConfigFastest
 
 const (
 	stdinConfig = "stdin"
@@ -47,12 +45,10 @@ type ServiceFlags struct {
 	Stdin       bool
 
 	// state
-	checkDone   bool
-	loggerDone  bool
-	metricsDone bool
+	checkDone  bool
+	loggerDone bool
 
-	logger  *logging.Logger
-	metrics promutil.HTTPMetrics
+	logger *logging.Logger
 }
 
 // Init initiates the service flags.
@@ -179,7 +175,7 @@ func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}
 		return fmt.Errorf("failed to decode config file: %w", err)
 	}
 
-	j, err := json.MarshalIndent(v, "", "\t")
+	j, err := json.MarshalIndent(v, "", "    ")
 	if err != nil {
 		panic(err) // should not happen
 	}
@@ -218,38 +214,6 @@ func (sf *ServiceFlags) obtainConfigReader(args []string, checkArgs bool) (io.Re
 	}
 
 	return nil, errors.New("no config location specified")
-}
-
-// HTTPMetrics returns a HTTPMetrics implementation based on service flags.
-func (sf *ServiceFlags) HTTPMetrics() promutil.HTTPMetrics {
-	if alreadyDone(&sf.metricsDone) {
-		return sf.metrics
-	}
-
-	if sf.MetricsAddr == "" {
-		m := promutil.NewEmptyHTTPMetrics()
-		sf.metrics = m
-
-		return m
-	}
-
-	m := promutil.NewHTTPMetrics(sf.Tag)
-	sf.metrics = m
-
-	r := chi.NewRouter()
-
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-
-	promutil.AddMetricsHandle(r, m.Collectors()...)
-
-	addr := sf.MetricsAddr
-	sf.logger.WithField("addr", addr).Info("Serving metrics.")
-	go func() { sf.logger.Fatal(http.ListenAndServe(addr, r)) }()
-
-	return m
 }
 
 // ValidTag returns an error if the tag is invalid.

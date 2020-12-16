@@ -12,7 +12,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 )
 
-var noiseLogger = logging.MustGetLogger("noise") // TODO: initialize properly or remove
+var noiseLogger = logging.MustGetLogger("noise")
 
 // ErrInvalidCipherText occurs when a ciphertext is received which is too short in size.
 var ErrInvalidCipherText = errors.New("noise decrypt unsafe: ciphertext cannot be less than 8 bytes")
@@ -87,6 +87,16 @@ func KKAndSecp256k1(config Config) (*Noise, error) {
 //	- Secp256 for the curve.
 func XKAndSecp256k1(config Config) (*Noise, error) {
 	return New(noise.HandshakeXK, config)
+}
+
+// GetEncNonce returns underlying encNonce.
+func (ns *Noise) GetEncNonce() uint64 {
+	return ns.encNonce
+}
+
+// GetDecNonce returns underlying decNonce.
+func (ns *Noise) GetDecNonce() uint64 {
+	return ns.decNonce
 }
 
 // MakeHandshakeMessage generates handshake message for a current handshake state.

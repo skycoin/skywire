@@ -4,14 +4,12 @@ package vpn
 
 import (
 	"fmt"
-	"os"
 )
 
 const (
 	tunSetupCMDFmt    = "netsh interface ip set address name=\"%s\" source=static addr=%s mask=%s gateway=%s"
 	tunMTUSetupCMDFmt = "netsh interface ipv4 set subinterface \"%s\" mtu=%d"
-	addRouteCMDFmt    = "route add %s mask %s %s"
-	deleteRouteCMDFmt = "route delete %s mask %s %s"
+	modifyRouteCMDFmt = "route %s %s mask %s %s"
 )
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
@@ -34,25 +32,28 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	return nil
 }
 
+// ChangeRoute changes current route to `ipCIDR` to go through the `gateway`
+// in the OS routing table.
+func ChangeRoute(ipCIDR, gateway string) error {
+	return modifyRoutingTable("change", ipCIDR, gateway)
+}
+
 // AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
 func AddRoute(ipCIDR, gateway string) error {
-	ip, netmask, err := parseCIDR(ipCIDR)
-	if err != nil {
-		return fmt.Errorf("error parsing IP CIDR: %w", err)
-	}
-
-	cmd := fmt.Sprintf(addRouteCMDFmt, ip, netmask, gateway)
-	fmt.Fprintf(os.Stdout, "Running command: \"%s\"\n", cmd)
-	return run("cmd", "/C", cmd)
+	return modifyRoutingTable("add", ipCIDR, gateway)
 }
 
 // DeleteRoute removes route to `ipCIDR` through the `gateway` from the OS routing table.
 func DeleteRoute(ipCIDR, gateway string) error {
+	return modifyRoutingTable("delete", ipCIDR, gateway)
+}
+
+func modifyRoutingTable(action, ipCIDR, gateway string) error {
 	ip, netmask, err := parseCIDR(ipCIDR)
 	if err != nil {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	cmd := fmt.Sprintf(deleteRouteCMDFmt, ip, netmask, gateway)
+	cmd := fmt.Sprintf(modifyRouteCMDFmt, action, ip, netmask, gateway)
 	return run("cmd", "/C", cmd)
 }

@@ -53,6 +53,8 @@ export interface HealthInfo {
   transport_discovery?: number;
   route_finder?: number;
   setup_node?: number;
+  uptime_tracker?: number;
+  address_resolver?: number;
 }
 
 export class ProxyDiscoveryEntry {
