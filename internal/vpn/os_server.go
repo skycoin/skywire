@@ -4,11 +4,39 @@ package vpn
 
 import (
 	"errors"
+	"net"
 )
 
 var (
 	errServerMethodsNotSupported = errors.New("server related methods are not supported for this OS")
 )
+
+// GetIPTablesForwardPolicy gets current policy for iptables `forward` chain.
+func GetIPTablesForwardPolicy() (string, error) {
+	return "", errServerMethodsNotSupported
+}
+
+// SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
+func SetIPTablesForwardPolicy(policy string) error {
+	return errServerMethodsNotSupported
+}
+
+// SetIPTablesForwardAcceptPolicy sets ACCEPT policy for iptables `forward` chain.
+func SetIPTablesForwardAcceptPolicy() error {
+	return errServerMethodsNotSupported
+}
+
+// AllowIPToLocalNetwork allows all the packets coming from `source`
+// to private IP ranges.
+func AllowIPToLocalNetwork(_, _ net.IP) error {
+	return errServerMethodsNotSupported
+}
+
+// BlockIPToLocalNetwork blocks all the packets coming from `source`
+// to private IP ranges.
+func BlockIPToLocalNetwork(_, _ net.IP) error {
+	return errServerMethodsNotSupported
+}
 
 // DefaultNetworkInterface fetches default network interface name.
 func DefaultNetworkInterface() (string, error) {

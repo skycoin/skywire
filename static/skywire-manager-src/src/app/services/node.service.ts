@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
+import { Observable, Subscription, BehaviorSubject, of, forkJoin } from 'rxjs';
 import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
@@ -59,6 +59,38 @@ export class TrafficData {
    * but the service will try it best to provided good data.
    */
   receivedHistory: number[] = [];
+}
+
+/**
+ * Data for knowing if the services of a node are working.
+ */
+export class HealthStatus {
+  /**
+   * If all services are working.
+   */
+  allServicesOk: boolean;
+  /**
+   * Details about the individual services.
+   */
+  services: HealthService[];
+}
+
+/**
+ * Data for knowing if a service of a node is working.
+ */
+export class HealthService {
+  /**
+   * Name of the service, as a translatable var.
+   */
+  name: string;
+  /**
+   * If the service is working.
+   */
+  isOk: boolean;
+  /**
+   * Status text returned by the node.
+   */
+  originalValue: string;
 }
 
 /**
@@ -470,6 +502,13 @@ export class NodeService {
     }), mergeMap((result: any[]) => {
       dmsgInfo = result;
 
+      // Get the health info of each node.
+      return forkJoin(nodes.map(node => this.apiService.get(`visors/${node.local_pk}/health`)));
+    }), mergeMap((result: any[]) => {
+      nodes.forEach((node, i) => {
+        node.health = result[i];
+      });
+
       // Get the basic info about the hypervisor.
       return this.apiService.get('about');
     }), map((aboutInfo: any) => {
@@ -680,5 +719,74 @@ export class NodeService {
     }
 
     return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
+  }
+
+  /**
+   * Checks the data of a node and returns an object indicating the state of its services.
+   */
+  getHealthStatus(node: Node): HealthStatus {
+    const response = new HealthStatus();
+    response.allServicesOk = false;
+    response.services = [];
+
+    if (node.health) {
+      // General status.
+      let service: HealthService = {
+        name: 'node.details.node-health.status',
+        isOk: node.health.status && node.health.status === 200,
+        originalValue: node.health.status + ''
+      };
+      response.services.push(service);
+
+      // Transport discovery.
+      service = {
+        name: 'node.details.node-health.transport-discovery',
+        isOk: node.health.transport_discovery && node.health.transport_discovery === 200,
+        originalValue: node.health.transport_discovery + ''
+      };
+      response.services.push(service);
+
+      // Route finder.
+      service = {
+        name: 'node.details.node-health.route-finder',
+        isOk: node.health.route_finder && node.health.route_finder === 200,
+        originalValue: node.health.route_finder + ''
+      };
+      response.services.push(service);
+
+      // Setup node.
+      service = {
+        name: 'node.details.node-health.setup-node',
+        isOk: node.health.setup_node && node.health.setup_node === 200,
+        originalValue: node.health.setup_node + ''
+      };
+      response.services.push(service);
+
+      // Uptime tracker.
+      service = {
+        name: 'node.details.node-health.uptime-tracker',
+        isOk: node.health.uptime_tracker && node.health.uptime_tracker === 200,
+        originalValue: node.health.uptime_tracker + ''
+      };
+      response.services.push(service);
+
+      // Address resolver.
+      service = {
+        name: 'node.details.node-health.address-resolver',
+        isOk: node.health.address_resolver && node.health.address_resolver === 200,
+        originalValue: node.health.address_resolver + ''
+      };
+      response.services.push(service);
+
+      // Check if any service is not working.
+      response.allServicesOk = true;
+      response.services.forEach(v => {
+        if (!v.isOk) {
+          response.allServicesOk = false;
+        }
+      });
+    }
+
+    return response;
   }
 }
