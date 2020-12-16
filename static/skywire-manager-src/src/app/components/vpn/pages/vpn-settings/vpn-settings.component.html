@@ -1,0 +1,60 @@
+<!-- Content when loading. -->
+<div *ngIf="loading" class="d-flex flex-column h-100 w-100">
+  <div>
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="3"
+      [showUpdateButton]="false"
+      [localVpnKey]="currentLocalPk"
+    ></app-top-bar>
+  </div>
+  <app-loading-indicator class="h-100"></app-loading-indicator>
+</div>
+
+<!-- Content when loaded. -->
+<div *ngIf="!loading" class="row">
+  <div class="col-12">
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="3"
+      [showUpdateButton]="false"
+      [localVpnKey]="currentLocalPk"
+    ></app-top-bar>
+  </div>
+  <div class="col-12 mt-4.5">
+    <div class="rounded-elevated-box"><div class="box-internal-container">
+      <!-- Table. -->
+      <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
+        <!-- Column names. -->
+        <tr>
+          <th class="data-column">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.settings-page.setting-small-table-label' | translate }}
+              </div>
+            </div>
+          </th>
+          <th class="data-column">
+            {{ 'vpn.settings-page.value-small-table-label' | translate }}
+          </th>
+        </tr>
+
+        <!-- Values. -->
+        <tr class="selectable" (click)="changeKillswitchOption()">
+          <td class="data-column">
+            <div>
+              {{ 'vpn.settings-page.killswitch' | translate }}
+            </div>
+          </td>
+          <td class="data-column">
+            <span [class]="getStatusClass(backendData.killswitch)"></span>
+            {{ (getStatusText(backendData.killswitch)) | translate }}
+            <mat-spinner *ngIf="this.working === workingOptions.Killswitch" [diameter]="12"></mat-spinner>
+          </td>
+        </tr>
+      </table>
+    </div></div>
+  </div>
+</div>
