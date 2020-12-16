@@ -3,6 +3,7 @@ package router
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -445,7 +446,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 			r.logger.Errorf("Error closing already existing noise route group: %v", err)
 		}
 
-		r.logger.Infoln("Successfully closed old noise route group")
+		r.logger.Debugf("Successfully closed old noise route group")
 	}
 
 	if rg.encrypt {
@@ -512,7 +513,7 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
 
-	r.logger.Infof("Handling packet with descriptor %s", &desc)
+	r.logger.Debugf("Handling packet with descriptor %s", &desc)
 
 	if ok {
 		if nrg == nil {
@@ -520,7 +521,7 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 		}
 
 		// in this case we have already initialized nrg and may use it straightforward
-		r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
 			len(packet.Payload()), packet.RouteID(), rule)
 
 		return nrg.handlePacket(packet)
@@ -541,7 +542,7 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 	}
 
 	// handshake packet, handling with the raw rg
-	r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+	r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
 		len(packet.Payload()), packet.RouteID(), rule)
 
 	return rg.handlePacket(packet)
@@ -550,7 +551,7 @@ func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.P
 func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) error {
 	routeID := packet.RouteID()
 
-	r.logger.Infof("Received close packet for route ID %v", routeID)
+	r.logger.Debugf("Received close packet for route ID %v", routeID)
 
 	rule, err := r.GetRule(routeID)
 	if err != nil {
@@ -570,14 +571,14 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}()
 
 	if t := rule.Type(); t == routing.RuleIntermediary {
-		r.logger.Infoln("Handling intermediary close packet")
+		r.logger.Debugln("Handling intermediary close packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
 
-	r.logger.Infof("Handling close packet with descriptor %s", &desc)
+	r.logger.Debugf("Handling close packet with descriptor %s", &desc)
 
 	if !ok {
 		r.logger.Infof("Descriptor not found for rule with type %s, descriptor: %s", rule.Type(), &desc)
@@ -590,7 +591,7 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return errors.New("noiseRouteGroup is nil")
 	}
 
-	r.logger.Infof("Got new remote close packet with size %d and route ID %d. Using rule: %s",
+	r.logger.Debugf("Got new remote close packet with size %d and route ID %d. Using rule: %s",
 		len(packet.Payload()), packet.RouteID(), rule)
 
 	closeCode := routing.CloseCode(packet.Payload()[0])
@@ -624,7 +625,7 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
 
-	r.logger.Infof("Handling packet with descriptor %s", &desc)
+	r.logger.Debugf("Handling packet with descriptor %s", &desc)
 
 	if ok {
 		if nrg == nil {
@@ -632,7 +633,7 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 		}
 
 		// in this case we have already initialized nrg and may use it straightforward
-		r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+		r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
 			len(packet.Payload()), packet.RouteID(), rule)
 
 		return nrg.handlePacket(packet)
@@ -653,7 +654,7 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 	}
 
 	// handshake packet, handling with the raw rg
-	r.logger.Infof("Got new remote packet with size %d and route ID %d. Using rule: %s",
+	r.logger.Debugf("Got new remote packet with size %d and route ID %d. Using rule: %s",
 		len(packet.Payload()), packet.RouteID(), rule)
 
 	return rg.handlePacket(packet)
@@ -662,7 +663,7 @@ func (r *router) handleNetworkProbePacket(ctx context.Context, packet routing.Pa
 func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packet) error {
 	routeID := packet.RouteID()
 
-	r.logger.Infof("Received keepalive packet for route ID %v", routeID)
+	r.logger.Debugf("Received keepalive packet for route ID %v", routeID)
 
 	rule, err := r.GetRule(routeID)
 	if err != nil {
@@ -679,11 +680,11 @@ func (r *router) handleKeepAlivePacket(ctx context.Context, packet routing.Packe
 	// propagate packet only for intermediary rule. forward rule workflow doesn't get here,
 	// consume rules should be omitted, activity is already updated
 	if t := rule.Type(); t == routing.RuleIntermediary {
-		r.logger.Infoln("Handling intermediary keep-alive packet")
+		r.logger.Debugln("Handling intermediary keep-alive packet")
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
-	r.logger.Infof("Route ID %v found, updated activity", routeID)
+	r.logger.Debugf("Route ID %v found, updated activity", routeID)
 
 	return nil
 }
@@ -759,6 +760,17 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		if err != nil {
 			return err
 		}
+	case routing.HandshakePacket:
+		b := int(packet[routing.PacketPayloadOffset])
+		supportEncryptionVal := true
+		if b == 0 {
+			supportEncryptionVal = false
+		}
+		p = routing.MakeHandshakePacket(rule.NextRouteID(), supportEncryptionVal)
+	case routing.NetworkProbePacket:
+		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))
+		throughput := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset+8:]))
+		p = routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:
@@ -776,7 +788,7 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		r.logger.Errorf("Failed to update activity for rule with route ID %d: %v", rule.KeyRouteID(), err)
 	}
 
-	r.logger.Infof("Forwarded packet via Transport %s using rule %d", rule.NextTransportID(), rule.KeyRouteID())
+	r.logger.Debugf("Forwarded packet via Transport %s using rule %d", rule.NextTransportID(), rule.KeyRouteID())
 
 	return nil
 }
@@ -798,7 +810,7 @@ func (r *router) RemoveRouteDescriptor(desc routing.RouteDescriptor) {
 }
 
 func (r *router) fetchBestRoutes(src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
-	// TODO(nkryuchkov): use opts
+	// TODO: use opts
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
 	}

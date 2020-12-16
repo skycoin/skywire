@@ -28,7 +28,7 @@ type Entry struct {
 
 	// Public determines whether the transport is to be exposed to other nodes or not.
 	// Public transports are to be registered in the Transport Discovery.
-	Public bool `json:"public"` // TODO: remove this.
+	Public bool `json:"public"` // TODO(evanlinjin): remove this.
 }
 
 // NewEntry constructs *Entry

@@ -76,6 +76,13 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 	return s
 }
 
+// GetSessions returns underlying sessions map.
+func (s *Server) GetSessions() map[cipher.PubKey]*SessionCommon {
+	s.sessionsMx.Lock()
+	defer s.sessionsMx.Unlock()
+	return s.sessions
+}
+
 // Close implements io.Closer
 func (s *Server) Close() error {
 	if s == nil {
@@ -136,6 +143,12 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 
 		s.wg.Add(1)
 		go func(conn net.Conn) {
+			func() {
+				err := recover()
+				if err != nil {
+					log.Warnf("panic in handleSession: %+v", err)
+				}
+			}()
 			s.handleSession(conn)
 			s.wg.Done()
 		}(conn)
