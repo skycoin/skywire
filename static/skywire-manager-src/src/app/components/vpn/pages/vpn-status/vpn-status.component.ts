@@ -4,7 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 
 import { VpnHelpers } from '../../vpn-helpers';
-import { VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
+import { AppState, BackendState, VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { LocalServerData, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { countriesList } from 'src/app/utils/countries-list';
@@ -22,16 +22,22 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
   loading = true;
   showStarted = false;
+  lastAppState: AppState = null;
   showBusy = false;
   waitingSteps = 0;
+  currentIp: string;
+  loadingCurrentIp = true;
+  problemGettingIp = false;
 
   currentLocalPk: string;
   currentRemoteServer: LocalServerData;
+  backendState: BackendState;
 
   private dataSubscription: Subscription;
   private currentRemoteServerSubscription: Subscription;
   private operationSubscription: Subscription;
   private navigationsSubscription: Subscription;
+  private ipSubscription: Subscription;
 
   constructor(
     private vpnClientService: VpnClientService,
@@ -52,8 +58,17 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
         if (data && data.serviceState !== VpnStates.PerformingInitialCheck) {
-          this.showStarted = data.running;
+          this.backendState = data;
 
+          if (this.lastAppState !== data.appState) {
+            if (data.appState === AppState.Running || data.appState === AppState.Stopped) {
+              this.getIp();
+            }
+          }
+
+          this.lastAppState = data.appState;
+
+          this.showStarted = data.running;
           this.showBusy = data.busy;
 
           this.loading = false;
@@ -64,12 +79,15 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
         this.currentRemoteServer = server;
       });
     });
+
+    this.getIp();
   }
 
   ngOnDestroy() {
     this.dataSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.currentRemoteServerSubscription.unsubscribe();
+    this.ipSubscription.unsubscribe();
     this.closeOperationSubscription();
   }
 
@@ -95,9 +113,42 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
   }
 
+  get currentStateText(): string {
+    if (this.backendState.appState === AppState.Stopped) {
+      return 'vpn.connection-info.state-disconnected';
+    } else if (this.backendState.appState === AppState.Connecting) {
+      return 'vpn.connection-info.state-connecting';
+    } else if (this.backendState.appState === AppState.Running) {
+      return 'vpn.connection-info.state-connected';
+    } else if (this.backendState.appState === AppState.ShuttingDown) {
+      return 'vpn.connection-info.state-disconnecting';
+    } else if (this.backendState.appState === AppState.Reconnecting) {
+      return 'vpn.connection-info.state-reconnecting';
+    }
+  }
+
   private closeOperationSubscription() {
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
+  }
+
+  private getIp() {
+    if (this.ipSubscription) {
+      this.ipSubscription.unsubscribe();
+    }
+
+    this.loadingCurrentIp = true;
+
+    this.ipSubscription = this.vpnClientService.getIp().subscribe(response => {
+      this.loadingCurrentIp = false;
+      this.problemGettingIp = false;
+
+      if (response) {
+        this.currentIp = response;
+      } else {
+        this.problemGettingIp = true;
+      }
+    });
   }
 }

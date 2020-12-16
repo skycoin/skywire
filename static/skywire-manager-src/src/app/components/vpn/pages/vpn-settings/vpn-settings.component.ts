@@ -1,12 +1,11 @@
 import { Component, OnDestroy } from '@angular/core';
-import { of, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 
 import { VpnHelpers } from '../../vpn-helpers';
 import { BackendState, VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AppsService } from 'src/app/services/apps.service';
-import { delay, mergeMap } from 'rxjs/operators';
 import { processServiceError } from 'src/app/utils/errors';
 
 enum WorkingOptions {
@@ -22,6 +21,7 @@ enum WorkingOptions {
 export class VpnSettingsComponent implements OnDestroy {
   loading = true;
   backendData: BackendState;
+  tabsData = VpnHelpers.vpnTabsData;
 
   currentLocalPk: string;
 
@@ -43,6 +43,7 @@ export class VpnSettingsComponent implements OnDestroy {
       if (params.has('key')) {
         this.currentLocalPk = params.get('key');
         VpnHelpers.changeCurrentPk(this.currentLocalPk);
+        this.tabsData = VpnHelpers.vpnTabsData;
       }
     });
 
