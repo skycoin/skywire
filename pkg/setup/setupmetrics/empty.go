@@ -1,21 +1,18 @@
 package setupmetrics
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // NewEmpty creates a new metrics implementation that does nothing.
-func NewEmpty() Metrics {
-	return empty{}
+func NewEmpty() Empty {
+	return Empty{}
 }
 
-type empty struct{}
+// Empty is a `Metrics` implementation which does nothing.
+type Empty struct{}
 
-func (empty) Collectors() []prometheus.Collector {
-	return nil
-}
-func (empty) RecordRequest(routing.BidirectionalRoute) func(*routing.EdgeRules, *error) {
+// RecordRequest implements `Metrics`.
+func (Empty) RecordRequest() func(*routing.EdgeRules, *error) {
 	return func(*routing.EdgeRules, *error) {}
 }
