@@ -70,8 +70,8 @@
           </div>
         </div>
         <div class="state-title">Your connection is currently:</div>
-        <div class="state-text">Protected</div>
-        <div class="state-explanation">Connection established</div>
+        <div class="state-text">{{ currentStateText | translate }}</div>
+        <div class="state-explanation">{{ (currentStateText + '-info') | translate }}</div>
         <!-- Data stats. -->
         <div class="data-container">
           <div class="rounded-elevated-box data-box">
@@ -116,7 +116,12 @@
         <div class="content-area">
           <div>
             <div class="title">{{ 'vpn.status-page.data.ip' | translate }}</div>
-            <div class="big-text">201.102.5.20</div>
+            <div class="big-text">
+              <ng-container *ngIf="currentIp">{{ currentIp }}</ng-container>
+              <ng-container *ngIf="!currentIp && !loadingCurrentIp">{{ 'common.unknown' | translate }}</ng-container>
+              <mat-spinner *ngIf="loadingCurrentIp" [diameter]="20"></mat-spinner>
+              <mat-icon *ngIf="problemGettingIp" [inline]="true" [matTooltip]="'vpn.status-page.data.ip-problem-info' | translate">warning</mat-icon>
+            </div>
           </div>
           <div class="margin"></div>
           <div>

@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable, Subscription, of, BehaviorSubject, concat, throwError } from 'rxjs';
-import { mergeMap, delay, retryWhen, take, catchError } from 'rxjs/operators';
+import { mergeMap, delay, retryWhen, take, catchError, map } from 'rxjs/operators';
+import { HttpClient } from '@angular/common/http';
 
 import { ApiService } from './api.service';
 import { AppsService } from './apps.service';
@@ -9,8 +10,17 @@ import { VpnServer } from './vpn-client-discovery.service';
 import { ManualVpnServerData } from '../components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
 import { VpnSavedDataService, LocalServerData } from './vpn-saved-data.service';
 
+export enum AppState {
+  Stopped = 'stopped',
+  Connecting = 'Connecting',
+  Running = 'Running',
+  ShuttingDown = 'Shutting down',
+  Reconnecting = 'Connection failed, reconnecting',
+}
+
 export class BackendState {
   updateDate: number = Date.now();
+  appState: AppState;
   lastError: any;
   running: boolean;
   serviceState: VpnStates;
@@ -22,6 +32,7 @@ export class VpnClientAppData {
   running: boolean;
   serverPk: string;
   killswitch: boolean;
+  appState: AppState;
 }
 
 export enum VpnStates {
@@ -65,6 +76,7 @@ export class VpnClientService {
     private appsService: AppsService,
     private router: Router,
     private vpnSavedDataService: VpnSavedDataService,
+    private http: HttpClient,
   ) {
     this.currentEventData = new BackendState();
     this.currentEventData.busy = true;
@@ -112,6 +124,13 @@ export class VpnClientService {
     }
 
     return false;
+  }
+
+  getIp(): Observable<string> {
+    return this.http.request('GET', 'https://api.ipify.org?format=json').pipe(
+      retryWhen(errors => errors.pipe(delay(4000))),
+      map(data => data['ip'] ? data['ip'] : null)
+    );
   }
 
   changeServerUsingHistory(newServer: LocalServerData): boolean {
@@ -297,6 +316,7 @@ export class VpnClientService {
 
         this.currentEventData.running = vpnClientData.running;
         this.currentEventData.killswitch = vpnClientData.killswitch;
+        this.currentEventData.appState = vpnClientData.appState;
         this.sendUpdate();
 
         this.continuallyUpdateData(this.standardWaitTime);
@@ -313,6 +333,17 @@ export class VpnClientService {
   private getVpnClientData(appData: any): VpnClientAppData {
     const vpnClientData = new VpnClientAppData();
     vpnClientData.running = appData.status !== 0;
+
+    vpnClientData.appState = AppState.Stopped;
+    if (appData.detailed_status === AppState.Connecting) {
+      vpnClientData.appState = AppState.Connecting;
+    } else if (appData.detailed_status === AppState.Running) {
+      vpnClientData.appState = AppState.Running;
+    } else if (appData.detailed_status === AppState.ShuttingDown) {
+      vpnClientData.appState = AppState.ShuttingDown;
+    } else if (appData.detailed_status === AppState.Reconnecting) {
+      vpnClientData.appState = AppState.Reconnecting;
+    }
 
     vpnClientData.killswitch = false;
 
@@ -372,6 +403,7 @@ export class VpnClientService {
 
         this.currentEventData.running = vpnClientData.running;
         this.currentEventData.killswitch = vpnClientData.killswitch;
+        this.currentEventData.appState = vpnClientData.appState;
         this.sendUpdate();
       }
 
