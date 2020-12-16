@@ -54,6 +54,11 @@ func (c *Common) MasterLogger() *logging.MasterLogger {
 	return c.log
 }
 
+// SetLogger sets logger.
+func (c *Common) SetLogger(log *logging.MasterLogger) {
+	c.log = log
+}
+
 func (c *Common) ensureKeys() error {
 	if !c.PK.Null() {
 		return nil

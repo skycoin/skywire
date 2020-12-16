@@ -79,9 +79,11 @@
     "not-found": "Visor no encontrado.",
     "statuses": {
       "online": "Online",
-      "online-tooltip": "El visor está online",
+      "online-tooltip": "El visor se encuentra online.",
+      "partially-online": "Online con problemas",
+      "partially-online-tooltip": "El visor se encuentra online pero no todos los servicios están funcionando. Para más información, abra la página de detalles y consulte la sección \"Información de salud\".",
       "offline": "Offline",
-      "offline-tooltip": "El visor está offline"
+      "offline-tooltip": "El visor se encuentra offline."
     },
     "details": {
       "node-info": {
@@ -113,7 +115,7 @@
         "setup-node": "Setup node:",
         "uptime-tracker": "Uptime tracker:",
         "address-resolver": "Address resolver:",
-        "element-offline": "offline"
+        "element-offline": "Offline"
       },
       "node-traffic-data": "Datos de tráfico"
     },
@@ -330,6 +332,8 @@
       "new-password": "Nueva contraseña (dejar en blanco para eliminar la contraseña)",
       "repeat-password": "Repita la contraseña",
       "passwords-not-match": "Las contraseñas no coinciden.",
+      "secure-mode-check": "Usar modo seguro",
+      "secure-mode-info": "Cuando está activo, el servidor no permite SSH con los clientes y no permite ningún tráfico de clientes VPN a la red local del servidor.",
       "save": "Guardar",
       "remove-passowrd-confirmation": "Ha dejado el campo de contraseña vacío. ¿Seguro que desea eliminar la contraseña?",
       "change-passowrd-confirmation": "¿Seguro que desea cambiar la contraseña?",
@@ -340,6 +344,7 @@
       "vpn-title": "Configuración de VPN-Client",
       "discovery-tab": "Buscar",
       "remote-visor-tab": "Introducir manualmente",
+      "settings-tab": "Configuracion",
       "history-tab": "Historial",
       "use": "Usar estos datos",
       "change-note": "Cambiar nota",
@@ -371,6 +376,10 @@
       "no-history": "Esta pestaña mostrará las últimas {{ number }} llaves públicas usadas.",
       "default-note-warning": "La nota por defecto ha sido utilizada.",
       "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
+      "killswitch-check": "Activar killswitch",
+      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN está interrumpida (por errores temporales o cualquier otro problema).",
+      "settings-changed-alert": "Los cambios aún no se han guardado.",
+      "save-settings": "Guardar configuracion",
 
       "change-note-dialog": {
         "title": "Cambiar Nota",
