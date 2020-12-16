@@ -15,11 +15,13 @@ export class BackendState {
   running: boolean;
   serviceState: VpnStates;
   busy: boolean;
+  killswitch: boolean;
 }
 
 export class VpnClientAppData {
   running: boolean;
   serverPk: string;
+  killswitch: boolean;
 }
 
 export enum VpnStates {
@@ -294,6 +296,7 @@ export class VpnClientService {
         }
 
         this.currentEventData.running = vpnClientData.running;
+        this.currentEventData.killswitch = vpnClientData.killswitch;
         this.sendUpdate();
 
         this.continuallyUpdateData(this.standardWaitTime);
@@ -311,10 +314,16 @@ export class VpnClientService {
     const vpnClientData = new VpnClientAppData();
     vpnClientData.running = appData.status !== 0;
 
+    vpnClientData.killswitch = false;
+
     if (appData.args && appData.args.length > 0) {
       for (let i = 0; i < appData.args.length; i++) {
         if (appData.args[i] === '-srv' && i + 1 < appData.args.length) {
           vpnClientData.serverPk = appData.args[i + 1];
+        }
+
+        if (appData.args[i] === '-killswitch' && i + 1 < appData.args.length) {
+          vpnClientData.killswitch = (appData.args[i + 1] as string).toLowerCase() === 'true';
         }
       }
     }
@@ -362,6 +371,7 @@ export class VpnClientService {
         }
 
         this.currentEventData.running = vpnClientData.running;
+        this.currentEventData.killswitch = vpnClientData.killswitch;
         this.sendUpdate();
       }
 

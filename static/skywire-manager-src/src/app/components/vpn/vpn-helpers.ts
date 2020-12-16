@@ -48,7 +48,7 @@ export class VpnHelpers {
       {
         icon: 'settings',
         label: 'vpn.settings',
-        linkParts: ['/vpn', this.currentPk, 'status'],
+        linkParts: ['/vpn', this.currentPk, 'settings'],
       },
     ];
   }
