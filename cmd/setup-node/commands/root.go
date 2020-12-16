@@ -6,17 +6,13 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/dmsg/discord"
+	"github.com/skycoin/dmsg/metricsutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
@@ -122,25 +118,13 @@ func prepareMetrics(log logrus.FieldLogger) setupmetrics.Metrics {
 		return setupmetrics.NewEmpty()
 	}
 
-	m := setupmetrics.New(tag)
-	r := chi.NewRouter()
+	m := setupmetrics.NewVictoriaMetrics()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	metricsutil.ServeHTTPMetrics(log, metricsAddr)
 
-	// TODO(evanlinjin): The following should be replaced by promutil.AddMetricsHandle
-	reg := prometheus.NewPedanticRegistry()
-	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	reg.MustRegister(prometheus.NewGoCollector())
-	reg.MustRegister(m.Collectors()...)
-	h := promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-
-	r.Handle("/metrics", h)
-
-	log.WithField("addr", metricsAddr).Info("Serving metrics...")
-	go func() { log.Fatal(http.ListenAndServe(metricsAddr, r)) }()
+	// TODO (darkrengarius): implement these with Victoria Metrics somehow
+	//reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	//reg.MustRegister(prometheus.NewGoCollector())
 
 	return m
 }
