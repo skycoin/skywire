@@ -604,8 +604,16 @@
     },
 
     "connection-info" : {
+      "state-connecting": "Connecting",
+      "state-connecting-info": "The VPN protection is being activated.",
       "state-connected": "Connected",
+      "state-connected-info": "The VPN protection is on.",
+      "state-disconnecting": "Disconnecting",
+      "state-disconnecting-info": "The VPN protection is being deactivated.",
+      "state-reconnecting": "Reconnecting",
+      "state-reconnecting-info": "The VPN protection is being restored.",
       "state-disconnected": "Disconnected",
+      "state-disconnected-info": "The VPN protection is off.",
       "state-info": "Current connection status.",
       "latency-info": "Current latency.",
       "upload-info": "Upload speed.",
@@ -621,6 +629,7 @@
 
       "data": {
         "ip": "Current IP address:",
+        "ip-problem-info": "There was a problem trying to get the IP. Please verify it using an external service.",
         "country": "IP country:",
         "local-pk": "Local visor public key:",
         "remote-pk": "Remote visor public key:"

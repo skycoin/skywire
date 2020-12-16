@@ -279,6 +279,25 @@
     .big-text {
       font-size: $font-size-lg;
       font-weight: normal;
+
+      mat-spinner {
+        display: inline-block;
+        opacity: 0.5;
+        margin-left: 5px;
+        position: relative;
+        top: 2px;
+        
+        ::ng-deep circle {
+          stroke: $white;
+        }
+      }
+
+      mat-icon {
+        opacity: 0.7;
+        font-size: $font-size-lg * 0.7;
+        cursor: default;
+        margin-left: 5px;
+      }
     }
 
     .small-text {
