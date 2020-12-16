@@ -12,7 +12,7 @@ type RequestsInFlightCountMiddleware struct {
 // NewRequestsInFlightCountMiddleware constructs `RequestsInFlightCountMiddleware`.
 func NewRequestsInFlightCountMiddleware() *RequestsInFlightCountMiddleware {
 	return &RequestsInFlightCountMiddleware{
-		reqsInFlightGauge: NewVictoriaMetricsIntGauge("request_ongoing_count"),
+		reqsInFlightGauge: NewVictoriaMetricsIntGauge("vm_request_ongoing_count"),
 	}
 }
 
