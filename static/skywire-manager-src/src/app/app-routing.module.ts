@@ -16,6 +16,7 @@ import { AllLabelsComponent } from './components/pages/settings/all-labels/all-l
 import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
 import { VpnUnavailableComponent } from './components/vpn/pages/vpn-unavailable/vpn-unavailable.component';
+import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 
 const routes: Routes = [
   {
@@ -144,6 +145,10 @@ const routes: Routes = [
           {
             path: 'servers/:type/:page',
             component: ServerListComponent
+          },
+          {
+            path: 'settings',
+            component: VpnSettingsComponent
           },
           {
             path: '**',
