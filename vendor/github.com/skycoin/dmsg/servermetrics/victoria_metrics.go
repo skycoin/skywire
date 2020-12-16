@@ -27,12 +27,12 @@ type VictoriaMetrics struct {
 // NewVictoriaMetrics returns the Victoria Metrics implementation of Metrics.
 func NewVictoriaMetrics() *VictoriaMetrics {
 	return &VictoriaMetrics{
-		activeSessions:     metricsutil.NewVictoriaMetricsIntGauge("active_sessions_count"),
-		successfulSessions: metrics.GetOrCreateCounter("session_success_total"),
-		failedSessions:     metrics.GetOrCreateCounter("session_fail_total"),
-		activeStreams:      metricsutil.NewVictoriaMetricsIntGauge("active_streams_count"),
-		successfulStreams:  metrics.GetOrCreateCounter("stream_success_total"),
-		failedStreams:      metrics.GetOrCreateCounter("stream_fail_total"),
+		activeSessions:     metricsutil.NewVictoriaMetricsIntGauge("vm_active_sessions_count"),
+		successfulSessions: metrics.GetOrCreateCounter("vm_session_success_total"),
+		failedSessions:     metrics.GetOrCreateCounter("vm_session_fail_total"),
+		activeStreams:      metricsutil.NewVictoriaMetricsIntGauge("vm_active_streams_count"),
+		successfulStreams:  metrics.GetOrCreateCounter("vm_stream_success_total"),
+		failedStreams:      metrics.GetOrCreateCounter("vm_stream_fail_total"),
 	}
 }
 

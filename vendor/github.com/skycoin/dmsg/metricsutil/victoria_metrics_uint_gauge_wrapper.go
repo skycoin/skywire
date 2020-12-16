@@ -31,7 +31,7 @@ func (w *VictoriaMetricsUintGaugeWrapper) Inc() {
 
 // Dec decrements gauge value.
 func (w *VictoriaMetricsUintGaugeWrapper) Dec() {
-	atomic.AddUint64(&w.val, -1)
+	atomic.AddUint64(&w.val, ^uint64(0))
 }
 
 // Val gets gauge value.
