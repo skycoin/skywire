@@ -17,7 +17,7 @@ func RequestDurationMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(srw, r)
 		reqDuration := time.Since(reqStart)
 
-		hName := fmt.Sprintf("request_duration{code=\"%d\", method=\"%s\"}", srw.StatusCode(), r.Method)
+		hName := fmt.Sprintf("vm_request_duration{code=\"%d\", method=\"%s\"}", srw.StatusCode(), r.Method)
 		metrics.GetOrCreateHistogram(hName).Update(reqDuration.Seconds())
 	}
 
