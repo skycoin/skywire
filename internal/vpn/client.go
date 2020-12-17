@@ -667,10 +667,23 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 			PubKey: pk,
 			Port:   vpnPort,
 		})
+
+		if c.isClosed() {
+			// in this case client got closed, we return no error,
+			// so that retrier could stop gracefully
+			return nil
+		}
+
 		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if c.isClosed() {
+		// we need to signal outer code that connection object is inalid
+		// in this case
+		return nil, errors.New("client got closed")
 	}
 
 	return conn, nil
