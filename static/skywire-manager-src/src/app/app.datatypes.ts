@@ -1,20 +1,16 @@
-// Most classes are based on the responses returned by the API, but
-// sometimes with some extra fields which are calculated internally in the app.
-
 export class Node {
-  tcp_addr: string;
+  label: string;
+  localPk: string;
+  tcpAddr: string;
   ip: string;
   port: string;
-  local_pk: string;
-  node_version: string;
-  app_protocol_version: string;
+  version: string;
   apps: Application[];
   transports: Transport[];
-  routes_count: number;
+  routesCount: number;
   routes?: Route[];
-  label?: string;
   online?: boolean;
-  seconds_online?: number;
+  secondsOnline?: number;
   health?: HealthInfo;
   dmsgServerPk?: string;
   roundTripPing?: string;
@@ -26,19 +22,15 @@ export interface Application {
   autostart: boolean;
   port: number;
   status: number;
-  args?: any[];
+  args: any[];
 }
 
 export interface Transport {
+  isUp: boolean;
   id: string;
-  local_pk: string;
-  remote_pk: string;
+  localPk: string;
+  remotePk: string;
   type: string;
-  log?: TransportLog;
-  is_up: boolean;
-}
-
-export interface TransportLog {
   recv: number|null;
   sent: number|null;
 }
@@ -46,15 +38,42 @@ export interface TransportLog {
 export interface Route {
   key: number;
   rule: string;
+  ruleSummary?: RouteRuleSummary;
+  appFields?: RouteAppRuleSumary;
+  forwardFields?: RouteForwardRuleSumary;
+  intermediaryForwardFields?: RouteForwardRuleSumary;
+}
+
+export interface RouteRuleSummary {
+  keepAlive: number;
+  ruleType: number;
+  keyRouteId: number;
+}
+
+interface RouteAppRuleSumary {
+  routeDescriptor: RouteDescriptor;
+}
+
+interface RouteForwardRuleSumary {
+  nextRid: number;
+  nextTid: string;
+  routeDescriptor?: RouteDescriptor;
+}
+
+interface RouteDescriptor {
+  dstPk: string;
+  srcPk: string;
+  dstPort: number;
+  srcPort: number;
 }
 
 export interface HealthInfo {
-  status?: number;
-  transport_discovery?: number;
-  route_finder?: number;
-  setup_node?: number;
-  uptime_tracker?: number;
-  address_resolver?: number;
+  status: number;
+  transportDiscovery: number;
+  routeFinder: number;
+  setupNode: number;
+  uptimeTracker: number;
+  addressResolver: number;
 }
 
 export class ProxyDiscoveryEntry {
