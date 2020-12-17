@@ -218,7 +218,7 @@ export class RouteListComponent implements OnDestroy {
 
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
-        this.details(route.key.toString());
+        this.details(route);
       } else if (selectedOption === 2) {
         this.delete(route.key);
       }
@@ -228,7 +228,7 @@ export class RouteListComponent implements OnDestroy {
   /**
    * Shows a modal window with the details of a route.
    */
-  details(route: string) {
+  details(route: Route) {
     RouteDetailsComponent.openDialog(this.dialog, route);
   }
 
