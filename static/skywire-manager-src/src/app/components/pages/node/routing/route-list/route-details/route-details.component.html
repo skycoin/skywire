@@ -1,6 +1,5 @@
 <app-dialog class="info-dialog" [headline]="'routes.details.title' | translate">
-  <app-loading-indicator [showWhite]="false" *ngIf="!routeRule"></app-loading-indicator>
-  <div *ngIf="routeRule">
+  <div>
     <!-- Basic info. -->
     <div class="title mt-0">
       <mat-icon [inline]="true">list</mat-icon>{{ 'routes.details.basic.title' | translate }}
@@ -13,89 +12,86 @@
     </div>
 
     <!-- Rule summary. -->
-    <div *ngIf="routeRule.rule_summary">
+    <div *ngIf="routeRule.ruleSummary">
       <div class="title">
         <mat-icon [inline]="true">list</mat-icon>{{ 'routes.details.summary.title' | translate }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.summary.keep-alive' | translate }}</span> {{ routeRule.rule_summary.keep_alive }}
+        <span>{{ 'routes.details.summary.keep-alive' | translate }}</span> {{ routeRule.ruleSummary.keepAlive }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.summary.type' | translate }}</span> {{ getRuleTypeName(routeRule.rule_summary.rule_type) }}
+        <span>{{ 'routes.details.summary.type' | translate }}</span> {{ getRuleTypeName(routeRule.ruleSummary.ruleType) }}
       </div>
       <div class="item">
-        <span>{{ 'routes.details.summary.key-route-id' | translate }}</span> {{ routeRule.rule_summary.key_route_id }}
+        <span>{{ 'routes.details.summary.key-route-id' | translate }}</span> {{ routeRule.ruleSummary.keyRouteId }}
       </div>
 
       <!-- Title for the specific rule type. -->
-      <div *ngIf="routeRule.rule_summary.app_fields" class="title">
+      <div *ngIf="routeRule.appFields" class="title">
         <mat-icon [inline]="true">settings</mat-icon>{{ 'routes.details.specific-fields-titles.app' | translate }}
       </div>
-      <div *ngIf="routeRule.rule_summary.forward_fields" class="title">
+      <div *ngIf="routeRule.forwardFields" class="title">
         <mat-icon [inline]="true">swap_horiz</mat-icon>{{ 'routes.details.specific-fields-titles.forward' | translate }}
       </div>
-      <div *ngIf="routeRule.rule_summary.intermediary_forward_fields" class="title">
+      <div *ngIf="routeRule.intermediaryForwardFields" class="title">
         <mat-icon [inline]="true">arrow_forward</mat-icon>{{ 'routes.details.specific-fields-titles.intermediary-forward' | translate }}
       </div>
 
       <!-- Fields for the forward and intermediary forward rules. -->
-      <div *ngIf="
-        (routeRule.rule_summary.forward_fields ||
-        routeRule.rule_summary.intermediary_forward_fields)"
-      >
+      <div *ngIf="(routeRule.forwardFields || routeRule.intermediaryForwardFields)">
         <div class="item">
           <span>{{ 'routes.details.specific-fields.route-id' | translate }}</span>
           {{
-            routeRule.rule_summary.forward_fields ?
-              routeRule.rule_summary.forward_fields.next_rid :
-              routeRule.rule_summary.intermediary_forward_fields.next_rid
+            routeRule.forwardFields ?
+              routeRule.forwardFields.nextRid :
+              routeRule.intermediaryForwardFields.nextRid
           }}
         </div>
         <div class="item">
           <span>{{ 'routes.details.specific-fields.transport-id' | translate }}</span>
           {{
-            routeRule.rule_summary.forward_fields ?
-              routeRule.rule_summary.forward_fields.next_tid :
-              routeRule.rule_summary.intermediary_forward_fields.next_tid
+            routeRule.forwardFields ?
+              routeRule.forwardFields.nextTid :
+              routeRule.intermediaryForwardFields.nextTid
           }}
         </div>
       </div>
 
       <!-- Fields for the app and forward rules. -->
       <div *ngIf="
-        ((routeRule.rule_summary.app_fields && routeRule.rule_summary.app_fields.route_descriptor) ||
-        (routeRule.rule_summary.forward_fields && routeRule.rule_summary.forward_fields.route_descriptor))"
+        ((routeRule.appFields && routeRule.appFields.routeDescriptor) ||
+        (routeRule.forwardFields && routeRule.forwardFields.routeDescriptor))"
       >
         <div class="item">
           <span>{{ 'routes.details.specific-fields.destination-pk' | translate }}</span>
           {{
-            routeRule.rule_summary.app_fields ?
-              routeRule.rule_summary.app_fields.route_descriptor.dst_pk :
-              routeRule.rule_summary.forward_fields.route_descriptor.dst_pk
+            routeRule.appFields ?
+              routeRule.appFields.routeDescriptor.dstPk :
+              routeRule.forwardFields.routeDescriptor.dstPk
           }}
         </div>
         <div class="item">
           <span>{{ 'routes.details.specific-fields.source-pk' | translate }}</span>
           {{
-            routeRule.rule_summary.app_fields ?
-              routeRule.rule_summary.app_fields.route_descriptor.src_pk :
-              routeRule.rule_summary.forward_fields.route_descriptor.src_pk
+            routeRule.appFields ?
+              routeRule.appFields.routeDescriptor.srcPk :
+              routeRule.forwardFields.routeDescriptor.srcPk
           }}
         </div>
         <div class="item">
           <span>{{ 'routes.details.specific-fields.destination-port' | translate }}</span>
           {{
-            routeRule.rule_summary.app_fields ?
-              routeRule.rule_summary.app_fields.route_descriptor.dst_port :
-              routeRule.rule_summary.forward_fields.route_descriptor.dst_port
+            routeRule.appFields ?
+              routeRule.appFields.routeDescriptor.dstPort :
+              routeRule.forwardFields.routeDescriptor.dstPort
           }}
         </div>
         <div class="item">
           <span>{{ 'routes.details.specific-fields.source-port' | translate }}</span>
           {{
-            routeRule.rule_summary.app_fields ?
-              routeRule.rule_summary.app_fields.route_descriptor.src_port :
-              routeRule.rule_summary.forward_fields.route_descriptor.src_port
+            routeRule.appFields ?
+              routeRule.appFields.routeDescriptor.srcPort :
+              routeRule.forwardFields.routeDescriptor.srcPort
           }}
         </div>
       </div>

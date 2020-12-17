@@ -5,18 +5,18 @@
     </div>
     <div class="item">
       <span>{{ 'transports.details.basic.state' | translate }}</span>
-      <div [class]="'d-inline ' + (data.is_up ? 'green-text' : 'red-text')">
-        {{ ('transports.statuses.' + (data.is_up ? 'online' : 'offline')) | translate }}
+      <div [class]="'d-inline ' + (data.isUp ? 'green-text' : 'red-text')">
+        {{ ('transports.statuses.' + (data.isUp ? 'online' : 'offline')) | translate }}
       </div>
     </div>
     <div class="item">
       <span>{{ 'transports.details.basic.id' | translate }}</span> {{ data.id }}
     </div>
     <div class="item">
-      <span>{{ 'transports.details.basic.local-pk' | translate }}</span> {{ data.local_pk }}
+      <span>{{ 'transports.details.basic.local-pk' | translate }}</span> {{ data.localPk }}
     </div>
     <div class="item">
-      <span>{{ 'transports.details.basic.remote-pk' | translate }}</span> {{ data.remote_pk }}
+      <span>{{ 'transports.details.basic.remote-pk' | translate }}</span> {{ data.remotePk }}
     </div>
     <div class="item">
       <span>{{ 'transports.details.basic.type' | translate }}</span> {{ data.type }}
@@ -26,10 +26,10 @@
       <mat-icon [inline]="true">import_export</mat-icon>{{ 'transports.details.data.title' | translate }}
     </div>
     <div class="item">
-      <span>{{ 'transports.details.data.uploaded' | translate }}</span> {{ data.log.sent | autoScale }}
+      <span>{{ 'transports.details.data.uploaded' | translate }}</span> {{ data.sent | autoScale }}
     </div>
     <div class="item">
-      <span>{{ 'transports.details.data.downloaded' | translate }}</span> {{ data.log.recv | autoScale }}
+      <span>{{ 'transports.details.data.downloaded' | translate }}</span> {{ data.recv | autoScale }}
     </div>
   </div>
 </app-dialog>
