@@ -38,12 +38,12 @@ export class TransportListComponent implements OnDestroy {
   @Input() nodePK: string;
 
   // Vars with the data of the columns used for sorting the data.
-  stateSortData = new SortingColumn(['is_up'], 'transports.state', SortingModes.Boolean);
+  stateSortData = new SortingColumn(['isUp'], 'transports.state', SortingModes.Boolean);
   idSortData = new SortingColumn(['id'], 'transports.id', SortingModes.Text, ['id_label']);
-  remotePkSortData = new SortingColumn(['remote_pk'], 'transports.remote-node', SortingModes.Text, ['remote_pk_label']);
+  remotePkSortData = new SortingColumn(['remotePk'], 'transports.remote-node', SortingModes.Text, ['remote_pk_label']);
   typeSortData = new SortingColumn(['type'], 'transports.type', SortingModes.Text);
-  uploadedSortData = new SortingColumn(['log', 'sent'], 'common.uploaded', SortingModes.NumberReversed);
-  downloadedSortData = new SortingColumn(['log', 'recv'], 'common.downloaded', SortingModes.NumberReversed);
+  uploadedSortData = new SortingColumn(['sent'], 'common.uploaded', SortingModes.NumberReversed);
+  downloadedSortData = new SortingColumn(['recv'], 'common.downloaded', SortingModes.NumberReversed);
 
   private dataSortedSubscription: Subscription;
   private dataFiltererSubscription: Subscription;
@@ -86,7 +86,7 @@ export class TransportListComponent implements OnDestroy {
         LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.id);
 
       transport['remote_pk_label'] =
-        LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.remote_pk);
+        LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.remotePk);
     });
 
     this.dataFilterer.setData(this.allTransports);
@@ -96,7 +96,7 @@ export class TransportListComponent implements OnDestroy {
   filterProperties: FilterProperties[] = [
     {
       filterName: 'transports.filter-dialog.online',
-      keyNameInElementsArray: 'is_up',
+      keyNameInElementsArray: 'isUp',
       type: FilterFieldTypes.Select,
       printableLabelsForValues: [
         {
@@ -122,7 +122,7 @@ export class TransportListComponent implements OnDestroy {
     },
     {
       filterName: 'transports.filter-dialog.remote-node',
-      keyNameInElementsArray: 'remote_pk',
+      keyNameInElementsArray: 'remotePk',
       secondaryKeyNameInElementsArray: 'remote_pk_label',
       type: FilterFieldTypes.TextInput,
       maxlength: 66,
@@ -166,7 +166,7 @@ export class TransportListComponent implements OnDestroy {
       // Check if there are offline transports.
       this.hasOfflineTransports = false;
       this.filteredTransports.forEach(transport => {
-        if (!transport.is_up) {
+        if (!transport.isUp) {
           this.hasOfflineTransports = true;
         }
       });
@@ -213,7 +213,7 @@ export class TransportListComponent implements OnDestroy {
    * returns a class for a colored text.
    */
   transportStatusClass(transport: Transport, forDot: boolean): string {
-    switch (transport.is_up) {
+    switch (transport.isUp) {
       case true:
         return forDot ? 'dot-green' : 'green-text';
       default:
@@ -227,7 +227,7 @@ export class TransportListComponent implements OnDestroy {
    * text for the transport list shown on small screens.
    */
   transportStatusText(transport: Transport, forTooltip: boolean): string {
-    switch (transport.is_up) {
+    switch (transport.isUp) {
       case true:
         return 'transports.statuses.online' + (forTooltip ? '-tooltip' : '');
       default:
@@ -309,7 +309,7 @@ export class TransportListComponent implements OnDestroy {
       // Prepare all offline transports to be removed.
       const transportsToRemove: string[] = [];
       this.filteredTransports.forEach(transport => {
-        if (!transport.is_up) {
+        if (!transport.isUp) {
           transportsToRemove.push(transport.id);
         }
       });
