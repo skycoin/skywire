@@ -34,6 +34,7 @@ type API interface {
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
 	SetAppPK(appName string, pk cipher.PubKey) error
@@ -258,6 +259,16 @@ func (v *Visor) StopApp(appName string) error {
 	return err
 }
 
+// RestartApp implements API.
+func (v *Visor) RestartApp(appName string) error {
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v password, restarting it", appName)
+		return v.appL.RestartApp(appName)
+	}
+
+	return nil
+}
+
 // SetAutoStart implements API.
 func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	if _, ok := v.appL.AppState(appName); !ok {
@@ -295,11 +306,6 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v password, restarting it", appName)
-		return v.appL.RestartApp(appName)
-	}
-
 	v.log.Infof("Updated %v password", appName)
 
 	return nil
@@ -328,11 +334,6 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v killswitch state, restarting it", appName)
-		return v.appL.RestartApp(appName)
-	}
-
 	v.log.Infof("Updated %v killswitch state", appName)
 
 	return nil
@@ -359,11 +360,6 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 
 	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, value); err != nil {
 		return err
-	}
-
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v secure state, restarting it", appName)
-		return v.appL.RestartApp(appName)
 	}
 
 	v.log.Infof("Updated %v secure state", appName)
@@ -395,11 +391,6 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 
 	if err := v.conf.UpdateAppArg(v.appL, appName, pkArgName, pk.String()); err != nil {
 		return err
-	}
-
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v PK, restarting it", appName)
-		return v.appL.RestartApp(appName)
 	}
 
 	v.log.Infof("Updated %v PK", appName)
