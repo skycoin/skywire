@@ -220,6 +220,13 @@ func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	return r.visor.StopApp(*name)
 }
 
+// RestartApp restarts App with provided name.
+func (r *RPC) RestartApp(name *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RestartApp", name)(nil, &err)
+
+	return r.visor.RestartApp(*name)
+}
+
 // SetAutoStartIn is input for SetAutoStart.
 type SetAutoStartIn struct {
 	AppName   string

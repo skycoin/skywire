@@ -137,6 +137,11 @@ func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
 }
 
+// RestartApp calls `RestartApp`.
+func (rc *rpcClient) RestartApp(appName string) error {
+	return rc.Call("RestartApp", &appName, &struct{}{})
+}
+
 // SetAutoStart calls SetAutoStart.
 func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 	return rc.Call("SetAutoStart", &SetAutoStartIn{
@@ -612,6 +617,11 @@ func (*mockRPCClient) StartApp(string) error {
 
 // StopApp implements API.
 func (*mockRPCClient) StopApp(string) error {
+	return nil
+}
+
+// RestartApp implements API.
+func (*mockRPCClient) RestartApp(string) error {
 	return nil
 }
 
