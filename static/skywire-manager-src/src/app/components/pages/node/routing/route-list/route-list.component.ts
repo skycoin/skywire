@@ -18,6 +18,8 @@ import { TranslateService } from '@ngx-translate/core';
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
+import { LabeledElementTextComponent } from 'src/app/components/layout/labeled-element-text/labeled-element-text.component';
+import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 
 /**
  * Shows the list of routes of a node. I can be used to show a short preview, with just some
@@ -36,7 +38,11 @@ export class RouteListComponent implements OnDestroy {
 
   // Vars with the data of the columns used for sorting the data.
   keySortData = new SortingColumn(['key'], 'routes.key', SortingModes.Number);
-  ruleSortData = new SortingColumn(['rule'], 'routes.rule', SortingModes.Text);
+  typeSortData = new SortingColumn(['type'], 'routes.type', SortingModes.Number);
+  sourceSortData = new SortingColumn(['src'], 'routes.source', SortingModes.Text, ['src_label']);
+  destinationSortData = new SortingColumn(['dst'], 'routes.destination', SortingModes.Text, ['dst_label']);
+
+  labeledElementTypes = LabeledElementTypes;
 
   private dataSortedSubscription: Subscription;
   private dataFiltererSubscription: Subscription;
@@ -72,6 +78,42 @@ export class RouteListComponent implements OnDestroy {
   @Input() set routes(val: Route[]) {
     this.allRoutes = val;
 
+    // Include additional properties with helpful data. Mostly for displating the data and for
+    // using the filterer and sorter objects.
+    this.allRoutes.forEach(route => {
+      // Save the type in the root of the object to be able to use it with the filterer.
+      if (route.ruleSummary.ruleType || route.ruleSummary.ruleType === 0) {
+        route['type'] = route.ruleSummary.ruleType;
+      } else {
+        route['type'] = '';
+      }
+
+      if (route.appFields || route.forwardFields) {
+        const routeDescriptor = route.appFields ? route.appFields.routeDescriptor : route.forwardFields.routeDescriptor;
+
+        // Save the source and destination visor keys and the associated labels.
+        route['src'] = routeDescriptor.srcPk;
+        route['src_label'] =
+          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, route['src']);
+        route['dst'] = routeDescriptor.dstPk;
+        route['dst_label'] =
+          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, route['dst']);
+      } else if (route.intermediaryForwardFields) {
+        // Save the destination transport id and the associated label. There is no source transport.
+        route['src'] = '';
+        route['src_label'] = '';
+        route['dst'] = route.intermediaryForwardFields.nextTid;
+        route['dst_label'] =
+          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, route['dst']);
+      } else {
+        // Special case.
+        route['src'] = '';
+        route['src_label'] = '';
+        route['dst'] = '';
+        route['dst_label'] = '';
+      }
+    });
+
     this.dataFilterer.setData(this.allRoutes);
   }
 
@@ -84,12 +126,29 @@ export class RouteListComponent implements OnDestroy {
       maxlength: 8,
     },
     {
-      filterName: 'routes.filter-dialog.rule',
-      keyNameInElementsArray: 'rule',
+      filterName: 'routes.filter-dialog.source',
+      keyNameInElementsArray: 'src',
+      secondaryKeyNameInElementsArray: 'src_label',
       type: FilterFieldTypes.TextInput,
-      maxlength: 150,
-    }
+      maxlength: 66,
+    },
+    {
+      filterName: 'routes.filter-dialog.destination',
+      keyNameInElementsArray: 'dst',
+      secondaryKeyNameInElementsArray: 'dst_label',
+      type: FilterFieldTypes.TextInput,
+      maxlength: 66,
+    },
   ];
+
+  /**
+   * Map with the types of route rules that the hypervisor can return and are known by this app.
+   */
+  private ruleTypes = new Map<number, string>([
+    [0, 'App'],
+    [1, 'Forward'],
+    [2, 'Int. forward']
+  ]);
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -101,11 +160,14 @@ export class RouteListComponent implements OnDestroy {
     private router: Router,
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
+    private storageService: StorageService,
   ) {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
       this.keySortData,
-      this.ruleSortData,
+      this.typeSortData,
+      this.sourceSortData,
+      this.destinationSortData,
     ];
     this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, 0, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
@@ -113,6 +175,27 @@ export class RouteListComponent implements OnDestroy {
       this.recalculateElementsToShow();
     });
 
+    // Include the known route types in the filterer config array.
+    const typeFilterConfig: FilterProperties = {
+      filterName: 'routes.filter-dialog.type',
+      keyNameInElementsArray: 'type',
+      type: FilterFieldTypes.Select,
+      printableLabelsForValues: [
+        {
+          value: '',
+          label: 'routes.filter-dialog.any-type-option',
+        }
+      ],
+    };
+    this.ruleTypes.forEach((v, k) => {
+      typeFilterConfig.printableLabelsForValues.push({
+        value: k + '',
+        label: v,
+      });
+    });
+    this.filterProperties = [typeFilterConfig].concat(this.filterProperties);
+
+    // Initialize the data filterer.
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredRoutes = data;
@@ -143,6 +226,24 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
+   * Asks the node data to be refreshed.
+   */
+  refreshData() {
+    NodeComponent.refreshCurrentDisplayedData();
+  }
+
+  /**
+   * Gets the name of a route type.
+   */
+  getTypeName(type: number): string {
+    if (this.ruleTypes.has(type)) {
+      return this.ruleTypes.get(type);
+    }
+
+    return 'Unknown';
+  }
+
+  /**
    * Changes the selection state of an entry (modifies the state of its checkbox).
    */
   changeSelection(route: Route) {
@@ -154,7 +255,7 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
-   * Check if at lest one entry has been selected via its checkbox.
+   * Checks if at lest one entry has been selected via its checkbox.
    */
   hasSelectedElements(): boolean {
     if (!this.selections) {

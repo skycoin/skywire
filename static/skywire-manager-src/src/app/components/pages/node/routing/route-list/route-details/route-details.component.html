@@ -54,6 +54,11 @@
               routeRule.forwardFields.nextTid :
               routeRule.intermediaryForwardFields.nextTid
           }}
+          {{
+            getLabel(routeRule.forwardFields ?
+            routeRule.forwardFields.nextTid :
+            routeRule.intermediaryForwardFields.nextTid)
+          }}
         </div>
       </div>
 
@@ -69,6 +74,11 @@
               routeRule.appFields.routeDescriptor.dstPk :
               routeRule.forwardFields.routeDescriptor.dstPk
           }}
+          {{
+            getLabel(routeRule.appFields ?
+            routeRule.appFields.routeDescriptor.dstPk :
+            routeRule.forwardFields.routeDescriptor.dstPk)
+          }}
         </div>
         <div class="item">
           <span>{{ 'routes.details.specific-fields.source-pk' | translate }}</span>
@@ -76,6 +86,11 @@
             routeRule.appFields ?
               routeRule.appFields.routeDescriptor.srcPk :
               routeRule.forwardFields.routeDescriptor.srcPk
+          }}
+          {{
+            getLabel(routeRule.appFields ?
+            routeRule.appFields.routeDescriptor.srcPk :
+            routeRule.forwardFields.routeDescriptor.srcPk)
           }}
         </div>
         <div class="item">

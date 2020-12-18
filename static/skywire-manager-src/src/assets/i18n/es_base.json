@@ -490,7 +490,9 @@
     "title": "Routes",
     "list-title": "Route list",
     "key": "Key",
-    "rule": "Rule",
+    "type": "Type",
+    "source": "Source",
+    "destination": "Destination",
     "delete-confirmation": "Are you sure you want to delete the route?",
     "delete-selected-confirmation": "Are you sure you want to delete the selected routes?",
     "delete": "Delete route",
@@ -526,7 +528,10 @@
     },
     "filter-dialog": {
       "key": "The key must contain",
-      "rule": "The rule must contain"
+      "type": "The type must be",
+      "source": "The source must contain",
+      "destination": "The destination must contain",
+      "any-type-option": "Any"
     }
   },
 
