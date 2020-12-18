@@ -3,6 +3,7 @@ import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angu
 
 import { AppConfig } from 'src/app/app.config';
 import { Route } from 'src/app/app.datatypes';
+import { StorageService } from 'src/app/services/storage.service';
 
 /**
  * Modal window for showing the details of a route.
@@ -39,6 +40,7 @@ export class RouteDetailsComponent {
   constructor(
     @Inject(MAT_DIALOG_DATA) data: Route,
     private dialogRef: MatDialogRef<RouteDetailsComponent>,
+    private storageService: StorageService,
   ) {
     this.routeRule = data;
   }
@@ -53,5 +55,18 @@ export class RouteDetailsComponent {
 
   closePopup() {
     this.dialogRef.close();
+  }
+
+  /**
+   * Gets the label the user has set for an ID or pk.
+   */
+  getLabel(id: string) {
+    const label = this.storageService.getLabelInfo(id);
+
+    if (label) {
+      return ' (' + label.label + ')';
+    }
+
+    return '';
   }
 }
