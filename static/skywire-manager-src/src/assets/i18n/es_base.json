@@ -307,6 +307,8 @@
       "enable-autostart": "Enable autostart",
       "autostart-disabled": "Autostart disabled",
       "autostart-enabled": "Autostart enabled",
+      "unavailable-logs-error": "Unable to show the logs while the app is not running.",
+
       "filter-dialog": {
         "state": "The state must be",
         "name": "The name must contain",
