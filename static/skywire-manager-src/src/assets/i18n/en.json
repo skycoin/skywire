@@ -17,7 +17,8 @@
     "time-in-segs": "{{ time }}s.",
     "ok": "Ok",
     "unknown": "Unknown",
-    "close": "Close"
+    "close": "Close",
+    "window-size-error": "The window is too narrow for the content."
   },
 
   "labeled-element": {
@@ -381,7 +382,7 @@
       "default-note-warning": "The default note has been used.",
       "pagination-info": "{{ currentElementsRange }} of {{ totalElements }}",
       "killswitch-check": "Activate killswitch",
-      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem).",
+      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
       "settings-changed-alert": " The changes have not been saved yet.",
       "save-settings": "Save settings",
 
@@ -609,7 +610,9 @@
 
     "error-page": {
       "text": "The VPN client app is not available.",
-      "more-info": "It was not possible to connect to the VPN client app. This may be due to a configuration error, a unexpected problem with the visor or because you used an invalid public key in the URL."
+      "more-info": "It was not possible to connect to the VPN client app. This may be due to a configuration error, a unexpected problem with the visor or because you used an invalid public key in the URL.",
+      "text-pk": "Invalid configuration.",
+      "more-info-pk": "The application cannot be started because you have not specified the visor public key."
     },
 
     "connection-info" : {
@@ -639,6 +642,8 @@
       "data": {
         "ip": "Current IP address:",
         "ip-problem-info": "There was a problem trying to get the IP. Please verify it using an external service.",
+        "ip-country-problem-info": "There was a problem trying to get the country. Please verify it using an external service.",
+        "ip-refresh-info": "Refresh.",
         "country": "IP country:",
         "local-pk": "Local visor public key:",
         "remote-pk": "Remote visor public key:"
@@ -741,6 +746,7 @@
       "setting-small-table-label": "Setting",
       "value-small-table-label": "Value",
       "killswitch": "Killswitch",
+      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
       "setting-on": "On",
       "setting-off": "Off",
       "working-warning": "The system is busy. Please wait for the previous operation to finish."
