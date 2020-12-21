@@ -152,13 +152,13 @@ const routes: Routes = [
           },
           {
             path: '**',
-            redirectTo: '/login'
+            redirectTo: 'status'
           }
         ]
       },
       {
         path: '**',
-        redirectTo: '/login'
+        redirectTo: '/vpn/unavailable?problem=pk'
       }
     ],
   },

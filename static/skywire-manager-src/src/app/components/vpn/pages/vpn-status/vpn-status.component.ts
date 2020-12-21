@@ -26,8 +26,10 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   showBusy = false;
   waitingSteps = 0;
   currentIp: string;
+  ipCountry: string;
   loadingCurrentIp = true;
   problemGettingIp = false;
+  problemGettingIpCountry = false;
 
   currentLocalPk: string;
   currentRemoteServer: LocalServerData;
@@ -143,9 +145,31 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     this.ipSubscription = this.vpnClientService.getIp().subscribe(response => {
       this.loadingCurrentIp = false;
       this.problemGettingIp = false;
+      this.problemGettingIpCountry = false;
 
       if (response) {
-        this.currentIp = response;
+        if (response.ip) {
+          this.currentIp = response.ip;
+        } else {
+          this.problemGettingIp = true;
+        }
+
+        if (response.country) {
+          this.ipCountry = response.country;
+        } else {
+          this.problemGettingIpCountry = true;
+        }
+      } else {
+        this.problemGettingIp = true;
+        this.problemGettingIpCountry = true;
+      }
+    }, ip => {
+      this.loadingCurrentIp = false;
+      this.problemGettingIpCountry = true;
+
+      if (ip) {
+        this.problemGettingIp = false;
+        this.currentIp = ip;
       } else {
         this.problemGettingIp = true;
       }

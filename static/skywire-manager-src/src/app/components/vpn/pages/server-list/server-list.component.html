@@ -1,5 +1,5 @@
 <!-- Content when loading. -->
-<div *ngIf="loading" class="d-flex flex-column h-100 w-100">
+<div *ngIf="loading || loadingBackendData" class="d-flex flex-column h-100 w-100">
   <div>
     <app-top-bar
       [titleParts]="['vpn.title']"
@@ -13,7 +13,7 @@
 </div>
 
 <!-- Content when loaded. -->
-<div *ngIf="!loading" class="row">
+<div *ngIf="!loading && !loadingBackendData" class="row">
   <div class="col-12">
     <app-top-bar
       [titleParts]="['vpn.title']"

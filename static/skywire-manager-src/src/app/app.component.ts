@@ -16,6 +16,9 @@ import { LanguageService } from './services/language.service';
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent {
+  // If the app is showing the VPN client.
+  inVpnClient = false;
+
   constructor(
     // Imported to call its constructor right after opening the app.
     storage: StorageService,
@@ -44,5 +47,9 @@ export class AppComponent {
 
     // Initialize the language configuration.
     languageService.loadLanguageSettings();
+
+    router.events.subscribe(() => {
+      this.inVpnClient = router.url.includes('/vpn/');
+    });
   }
 }
