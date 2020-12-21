@@ -101,3 +101,13 @@ button:focus {
   position: relative;
   top: 1px;
 }
+
+.blinking {
+  animation: alert-blinking 1s linear infinite;
+}
+
+@keyframes alert-blinking {
+  50% {
+    opacity: 0.5;
+  }
+}

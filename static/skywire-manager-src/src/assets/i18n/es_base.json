@@ -377,7 +377,7 @@
       "default-note-warning": "The default note has been used.",
       "pagination-info": "{{ currentElementsRange }} of {{ totalElements }}",
       "killswitch-check": "Activate killswitch",
-      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem).",
+      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
       "settings-changed-alert": " The changes have not been saved yet.",
       "save-settings": "Save settings",
 

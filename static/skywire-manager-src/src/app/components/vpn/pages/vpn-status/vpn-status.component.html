@@ -120,13 +120,19 @@
               <ng-container *ngIf="currentIp">{{ currentIp }}</ng-container>
               <ng-container *ngIf="!currentIp && !loadingCurrentIp">{{ 'common.unknown' | translate }}</ng-container>
               <mat-spinner *ngIf="loadingCurrentIp" [diameter]="20"></mat-spinner>
-              <mat-icon *ngIf="problemGettingIp" [inline]="true" [matTooltip]="'vpn.status-page.data.ip-problem-info' | translate">warning</mat-icon>
+              <mat-icon *ngIf="problemGettingIp" class="small-icon blinking" [inline]="true" [matTooltip]="'vpn.status-page.data.ip-problem-info' | translate">warning</mat-icon>
+              <mat-icon *ngIf="!loadingCurrentIp" (click)="getIp()" class="big-icon transparent-button" [inline]="true" [matTooltip]="'vpn.status-page.data.ip-refresh-info' | translate">refresh</mat-icon>
             </div>
           </div>
           <div class="margin"></div>
           <div>
             <div class="title">{{ 'vpn.status-page.data.country' | translate }}</div>
-            <div class="big-text">United States</div>
+            <div class="big-text">
+              <ng-container *ngIf="ipCountry">{{ ipCountry }}</ng-container>
+              <ng-container *ngIf="!ipCountry && !loadingCurrentIp">{{ 'common.unknown' | translate }}</ng-container>
+              <mat-spinner *ngIf="loadingCurrentIp" [diameter]="20"></mat-spinner>
+              <mat-icon *ngIf="problemGettingIpCountry" class="small-icon blinking" [inline]="true" [matTooltip]="'vpn.status-page.data.ip-country-problem-info' | translate">warning</mat-icon>
+            </div>
           </div>
           <div class="margin"></div>
           <div>

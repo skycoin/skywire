@@ -2,8 +2,8 @@
   <div class="text-container">
     <div class="inner-container">
       <div class="error-icon"><mat-icon [inline]="true">error_outline</mat-icon></div>
-      <div>{{ 'vpn.error-page.text' | translate }}</div>
-      <div class="more-info">{{ 'vpn.error-page.more-info' | translate }}</div>
+      <div>{{ (!problem ? 'vpn.error-page.text' : 'vpn.error-page.text-pk') | translate }}</div>
+      <div class="more-info">{{ (!problem ? 'vpn.error-page.more-info' : 'vpn.error-page.more-info-pk') | translate }}</div>
     </div>
   </div>
 </div>
