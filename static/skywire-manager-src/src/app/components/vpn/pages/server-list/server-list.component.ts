@@ -83,6 +83,7 @@ export class ServerListComponent implements OnDestroy {
   dataFilterer: DataFilterer;
 
   loading = true;
+  loadingBackendData = true;
   dataSource: VpnServerForList[];
   tabsData = VpnHelpers.vpnTabsData;
 
@@ -109,6 +110,7 @@ export class ServerListComponent implements OnDestroy {
   private navigationsSubscription: Subscription;
   private dataSubscription: Subscription;
   private currentServerSubscription: Subscription;
+  private backendDataSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
@@ -172,6 +174,12 @@ export class ServerListComponent implements OnDestroy {
     });
 
     this.currentServerSubscription = this.vpnSavedDataService.currentServerObservable.subscribe(server => this.currentServer = server);
+
+    this.backendDataSubscription = this.vpnClientService.backendState.subscribe(data => {
+      if (data) {
+        this.loadingBackendData = false;
+      }
+    });
   }
 
   ngOnDestroy() {

@@ -292,11 +292,20 @@
         }
       }
 
-      mat-icon {
+      .small-icon {
+        color: $yellow;
         opacity: 0.7;
         font-size: $font-size-lg * 0.7;
         cursor: default;
         margin-left: 5px;
+      }
+
+      .big-icon {
+        font-size: $font-size-lg * 0.9;
+        margin-left: 5px;
+        position: relative;
+        top: 2px;
+        cursor: pointer;
       }
     }
 

@@ -377,7 +377,7 @@
       "default-note-warning": "La nota por defecto ha sido utilizada.",
       "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
       "killswitch-check": "Activar killswitch",
-      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN está interrumpida (por errores temporales o cualquier otro problema).",
+      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN está interrumpida (por errores temporales o cualquier otro problema). Esto evita fugas de datos.",
       "settings-changed-alert": "Los cambios aún no se han guardado.",
       "save-settings": "Guardar configuracion",
 

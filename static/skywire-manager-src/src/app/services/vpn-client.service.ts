@@ -35,6 +35,11 @@ export class VpnClientAppData {
   appState: AppState;
 }
 
+export interface IpInfo {
+  ip: string;
+  country: string;
+}
+
 export enum VpnStates {
   PerformingInitialCheck = 1,
   Off = 10,
@@ -126,11 +131,47 @@ export class VpnClientService {
     return false;
   }
 
-  getIp(): Observable<string> {
-    return this.http.request('GET', 'https://api.ipify.org?format=json').pipe(
-      retryWhen(errors => errors.pipe(delay(4000))),
-      map(data => data['ip'] ? data['ip'] : null)
-    );
+  getIp(): Observable<IpInfo> {
+    let ip: string;
+
+    return of(1).pipe(mergeMap(tmp => {
+      if (!ip) {
+        return this.http.request('GET', 'https://api.ipify.org?format=json');
+      } else {
+        return of(undefined);
+      }
+    }), mergeMap(data => {
+      if (data && data['ip']) {
+        ip = data['ip'];
+      }
+
+      if (ip) {
+        return this.http.request('GET', 'https://ip2c.org/' + ip, { responseType: 'text' });
+      } else {
+        return of('-1');
+      }
+    }), retryWhen(errors => concat(errors.pipe(delay(2000), take(4)), throwError(ip))),
+    map (response => {
+      if (response === '-1') {
+        return null;
+      }
+
+      let country: string;
+      if (response) {
+        const reply: string[] = response.split(';');
+
+        if (reply.length === 4) {
+          country = reply[3];
+        }
+      }
+
+      const result: IpInfo = {
+        ip: ip,
+        country: country,
+      };
+
+      return result;
+    }));
   }
 
   changeServerUsingHistory(newServer: LocalServerData): boolean {
