@@ -236,6 +236,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/apps/{app}", hv.getApp())
 				r.Put("/visors/{pk}/apps/{app}", hv.putApp())
 				r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
+				r.Get("/visors/{pk}/apps/{app}/stats", hv.getAppStats())
 				r.Get("/visors/{pk}/apps/{app}/connections", hv.appConnections())
 				r.Get("/visors/{pk}/transport-types", hv.getTransportTypes())
 				r.Get("/visors/{pk}/transports", hv.getTransports())
@@ -506,6 +507,18 @@ func (hv *Hypervisor) getApps() http.HandlerFunc {
 func (hv *Hypervisor) getApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
+	})
+}
+
+func (hv *Hypervisor) getAppStats() http.HandlerFunc {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		stats, err := ctx.API.GetAppStats(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, &stats)
 	})
 }
 
