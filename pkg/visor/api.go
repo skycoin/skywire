@@ -414,6 +414,7 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 	return res, nil
 }
 
+// GetAppStats implements API.
 func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
 	stats, err := v.procM.Stats(appName)
 	if err != nil {

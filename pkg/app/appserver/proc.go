@@ -91,6 +91,7 @@ func (p *Proc) Cmd() *exec.Cmd {
 	return p.cmd
 }
 
+// StartTime returns app start time.
 func (p *Proc) StartTime() (time.Time, bool) {
 	if !p.IsRunning() {
 		return time.Time{}, false
@@ -284,7 +285,8 @@ func (p *Proc) IsRunning() bool {
 type ConnectionSummary struct {
 	IsAlive           bool          `json:"is_alive"`
 	Latency           time.Duration `json:"latency"`
-	Throughput        uint32        `json:"throughput"`
+	UploadSpeed       uint32        `json:"upload_speed"`
+	DownloadSpeed     uint32        `json:"download_speed"`
 	BandwidthSent     uint64        `json:"bandwidth_sent"`
 	BandwidthReceived uint64        `json:"bandwidth_received"`
 	Error             string        `json:"error"`
@@ -325,7 +327,8 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 		summaries = append(summaries, ConnectionSummary{
 			IsAlive:           skywireConn.IsAlive(),
 			Latency:           skywireConn.Latency(),
-			Throughput:        skywireConn.Throughput(),
+			UploadSpeed:       skywireConn.UploadSpeed(),
+			DownloadSpeed:     skywireConn.DownloadSpeed(),
 			BandwidthSent:     skywireConn.BandwidthSent(),
 			BandwidthReceived: skywireConn.BandwidthReceived(),
 		})
