@@ -7,10 +7,11 @@ import (
 )
 
 type networkStats struct {
-	bandwidthSent     uint64
-	bandwidthReceived uint64
-	latency           uint32
-	throughput        uint32
+	totalBandwidthSent     uint64
+	totalBandwidthReceived uint64
+	bandwidthReceived      uint64
+	latency                uint32
+	throughput             uint32
 
 	bandwidthReceivedRecStartMu sync.Mutex
 	bandwidthReceivedRecStart   time.Time
@@ -41,14 +42,19 @@ func (s *networkStats) LocalThroughput() uint32 {
 }
 
 func (s *networkStats) BandwidthSent() uint64 {
-	return atomic.LoadUint64(&s.bandwidthSent)
+	return atomic.LoadUint64(&s.totalBandwidthSent)
 }
 
 func (s *networkStats) AddBandwidthSent(amount uint64) {
-	atomic.AddUint64(&s.bandwidthSent, amount)
+	atomic.AddUint64(&s.totalBandwidthSent, amount)
+}
+
+func (s *networkStats) BandwidthReceived() uint64 {
+	return atomic.LoadUint64(&s.totalBandwidthReceived)
 }
 
 func (s *networkStats) AddBandwidthReceived(amount uint64) {
+	atomic.AddUint64(&s.bandwidthReceived, amount)
 	atomic.AddUint64(&s.bandwidthReceived, amount)
 }
 
