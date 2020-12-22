@@ -492,7 +492,9 @@
     "title": "Rutas",
     "list-title": "Lista de rutas",
     "key": "Llave",
-    "rule": "Regla",
+    "type": "Tipo",
+    "source": "Inicio",
+    "destination": "Destino",
     "delete-confirmation": "¿Seguro que desea borrar la ruta?",
     "delete-selected-confirmation": "¿Seguro que desea borrar las rutas seleccionadas?",
     "delete": "Borrar ruta",
@@ -528,7 +530,10 @@
     },
     "filter-dialog": {
       "key": "La llave debe contener",
-      "rule": "La regla debe contener"
+      "type": "El tipo debe ser",
+      "source": "El inicio debe contener",
+      "destination": "El destino debe contener",
+      "any-type-option": "Cualquiera"
     }
   },
 
