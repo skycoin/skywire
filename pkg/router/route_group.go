@@ -266,6 +266,10 @@ func (rg *RouteGroup) BandwidthSent() uint64 {
 	return rg.networkStats.BandwidthSent()
 }
 
+func (rg *RouteGroup) BandwidthReceived() uint64 {
+	return rg.networkStats.BandwidthReceived()
+}
+
 // read reads incoming data. It tries to fetch the data from the internal buffer.
 // If buffer is empty it blocks on receiving from the data channel
 func (rg *RouteGroup) read(p []byte) (int, error) {

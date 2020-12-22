@@ -282,11 +282,12 @@ func (p *Proc) IsRunning() bool {
 
 // ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
-	IsAlive       bool          `json:"is_alive"`
-	Latency       time.Duration `json:"latency"`
-	Throughput    uint32        `json:"throughput"`
-	BandwidthSent uint64        `json:"bandwidth_sent"`
-	Error         string        `json:"error"`
+	IsAlive           bool          `json:"is_alive"`
+	Latency           time.Duration `json:"latency"`
+	Throughput        uint32        `json:"throughput"`
+	BandwidthSent     uint64        `json:"bandwidth_sent"`
+	BandwidthReceived uint64        `json:"bandwidth_received"`
+	Error             string        `json:"error"`
 }
 
 // ConnectionsSummary returns all of the proc's connections stats.
@@ -322,10 +323,11 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 		}
 
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive:       skywireConn.IsAlive(),
-			Latency:       skywireConn.Latency(),
-			Throughput:    skywireConn.Throughput(),
-			BandwidthSent: skywireConn.BandwidthSent(),
+			IsAlive:           skywireConn.IsAlive(),
+			Latency:           skywireConn.Latency(),
+			Throughput:        skywireConn.Throughput(),
+			BandwidthSent:     skywireConn.BandwidthSent(),
+			BandwidthReceived: skywireConn.BandwidthReceived(),
 		})
 
 		return true
