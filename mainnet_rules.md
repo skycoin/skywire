@@ -1,8 +1,7 @@
 ![skywire logo](https://user-images.githubusercontent.com/26845312/32426764-3495e3d8-c282-11e7-8fe8-8e60e90cb906.png)
 
 # Skywire Mainnet Rules
-<div align="center"><em> Disclaimer: All information about the rules in this post can be found on various posts on our <a href="https://www.skycoin.com/blog/">blog</a> or on our <a href="https://medium.com/@Skycoinproject">medium</a>.<br>
-The rewards in this post are subject to change. Updates in this post will be followed by a notification via the <a href="https://t.me/SkywirePSA">official Skywire PSA channel</a> on Telegram.</em>
+<div align="center"><em> Disclaimer: The rewards in this post are subject to change. Updates in this post will be followed by a notification via the <a href="https://t.me/SkywirePSA">official Skywire PSA channel</a> on Telegram.</em>
 </div>
 
 #### Table of Contents
@@ -162,6 +161,7 @@ The following hardware is accepted in the Skywire mainnet:
      - Win
      - Win-Plus
      - Zero
+     - Zero LTS
      - Zero-Plus
      - Zero-Plus2
 
