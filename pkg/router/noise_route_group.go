@@ -34,9 +34,14 @@ func (nrg *NoiseRouteGroup) Latency() time.Duration {
 	return nrg.rg.Latency()
 }
 
-// Throughput returns throughput till remote (bytes/s).
-func (nrg *NoiseRouteGroup) Throughput() uint32 {
-	return nrg.rg.Throughput()
+// UploadSpeed returns upload speed (bytes/s).
+func (nrg *NoiseRouteGroup) UploadSpeed() uint32 {
+	return nrg.rg.UploadSpeed()
+}
+
+// DownloadSpeed returns upload speed (bytes/s).
+func (nrg *NoiseRouteGroup) DownloadSpeed() uint32 {
+	return nrg.rg.DownloadSpeed()
 }
 
 // BandwidthSent returns amount of bandwidth sent (bytes).
@@ -44,6 +49,7 @@ func (nrg *NoiseRouteGroup) BandwidthSent() uint64 {
 	return nrg.rg.BandwidthSent()
 }
 
+// BandwidthReceived returns amount of bandwidth received (bytes).
 func (nrg *NoiseRouteGroup) BandwidthReceived() uint64 {
 	return nrg.rg.BandwidthReceived()
 }

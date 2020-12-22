@@ -286,6 +286,7 @@ func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
 	return r.visor.SetAppSecure(in.AppName, in.Val)
 }
 
+// GetAppStats gets app runtime statistics.
 func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) {
 	defer rpcutil.LogCall(r.log, "GetAppStats", appName)(out, &err)
 
