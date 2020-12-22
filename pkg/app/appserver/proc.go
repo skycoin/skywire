@@ -48,6 +48,9 @@ type Proc struct {
 
 	m       ProcManager
 	appName string
+
+	startTimeMx sync.RWMutex
+	startTime   time.Time
 }
 
 // NewProc constructs `Proc`.
@@ -86,6 +89,17 @@ func (p *Proc) Logs() appcommon.LogStore {
 // Cmd returns the internal cmd name.
 func (p *Proc) Cmd() *exec.Cmd {
 	return p.cmd
+}
+
+func (p *Proc) StartTime() (time.Time, bool) {
+	if !p.IsRunning() {
+		return time.Time{}, false
+	}
+
+	p.startTimeMx.RLock()
+	defer p.startTimeMx.RUnlock()
+
+	return p.startTime, true
 }
 
 // InjectConn introduces the connection to the Proc after it is started.
@@ -154,6 +168,10 @@ func (p *Proc) Start() error {
 		p.waitMx.Unlock()
 		return err
 	}
+
+	p.startTimeMx.Lock()
+	p.startTime = time.Now().UTC()
+	p.startTimeMx.Unlock()
 
 	go func() {
 		waitErrCh := make(chan error)
