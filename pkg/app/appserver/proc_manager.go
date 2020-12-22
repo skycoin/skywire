@@ -41,6 +41,7 @@ type ProcManager interface {
 	Stop(appName string) error
 	Wait(appName string) error
 	Range(next func(appName string, proc *Proc) bool)
+	Stats(appName string) (AppStats, error)
 	ConnectionsSummary(appName string) ([]ConnectionSummary, error)
 	Addr() net.Addr
 }
@@ -265,6 +266,24 @@ func (m *procManager) Range(next func(name string, proc *Proc) bool) {
 			break
 		}
 	}
+}
+
+func (m *procManager) Stats(appName string) (AppStats, error) {
+	p, err := m.get(appName)
+	if err != nil {
+		return AppStats{}, err
+	}
+
+	stats := AppStats{
+		Connections: p.ConnectionsSummary(),
+	}
+
+	startTime, ok := p.StartTime()
+	if ok {
+		stats.StartTime = &startTime
+	}
+
+	return stats, nil
 }
 
 func (m *procManager) ConnectionsSummary(appName string) ([]ConnectionSummary, error) {
