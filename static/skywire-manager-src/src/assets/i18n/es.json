@@ -307,6 +307,8 @@
       "enable-autostart": "Habilitar autoinicio",
       "autostart-disabled": "Autoinicio deshabilitado",
       "autostart-enabled": "Autoinicio habilitado",
+      "unavailable-logs-error": "No es posible mostrar los logs mientras la aplicación no se está ejecutando.",
+
       "filter-dialog": {
         "state": "El estado debe ser",
         "name": "El nombre debe contener",
