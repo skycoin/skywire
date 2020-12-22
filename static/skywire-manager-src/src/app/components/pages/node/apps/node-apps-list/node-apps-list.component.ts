@@ -406,7 +406,11 @@ export class NodeAppsListComponent implements OnDestroy {
    * Shows a modal window with the logs of an app.
    */
   viewLogs(app: Application): void {
-    LogComponent.openDialog(this.dialog, app);
+    if (app.status === 1) {
+      LogComponent.openDialog(this.dialog, app);
+    } else {
+      this.snackbarService.showError('apps.apps-list.unavailable-logs-error');
+    }
   }
 
   /**
