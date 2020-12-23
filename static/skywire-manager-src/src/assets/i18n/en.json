@@ -644,6 +644,8 @@
         "ip-problem-info": "There was a problem trying to get the IP. Please verify it using an external service.",
         "ip-country-problem-info": "There was a problem trying to get the country. Please verify it using an external service.",
         "ip-refresh-info": "Refresh.",
+        "ip-refresh-time-warning": "Please wait {{ seconds }} second(s) before refreshing the data.",
+        "ip-refresh-loading-warning": "Please wait for the previous operation to finish.",
         "country": "IP country:",
         "local-pk": "Local visor public key:",
         "remote-pk": "Remote visor public key:"
