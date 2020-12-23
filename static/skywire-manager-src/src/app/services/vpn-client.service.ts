@@ -9,6 +9,8 @@ import { AppsService } from './apps.service';
 import { VpnServer } from './vpn-client-discovery.service';
 import { ManualVpnServerData } from '../components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
 import { VpnSavedDataService, LocalServerData } from './vpn-saved-data.service';
+import { AppConfig } from '../app.config';
+import { environment } from 'src/environments/environment';
 
 export enum AppState {
   Stopped = 'stopped',
@@ -33,11 +35,6 @@ export class VpnClientAppData {
   serverPk: string;
   killswitch: boolean;
   appState: AppState;
-}
-
-export interface IpInfo {
-  ip: string;
-  country: string;
 }
 
 export enum VpnStates {
@@ -131,47 +128,43 @@ export class VpnClientService {
     return false;
   }
 
-  getIp(): Observable<IpInfo> {
-    let ip: string;
+  getIp(): Observable<string> {
+    if (!environment.production && AppConfig.vpn.hardcodedIpWhileDeveloping) {
+      return of('8.8.8.8 ***');
+    }
 
-    return of(1).pipe(mergeMap(tmp => {
-      if (!ip) {
-        return this.http.request('GET', 'https://api.ipify.org?format=json');
-      } else {
-        return of(undefined);
-      }
-    }), mergeMap(data => {
-      if (data && data['ip']) {
-        ip = data['ip'];
-      }
-
-      if (ip) {
-        return this.http.request('GET', 'https://ip2c.org/' + ip, { responseType: 'text' });
-      } else {
-        return of('-1');
-      }
-    }), retryWhen(errors => concat(errors.pipe(delay(2000), take(4)), throwError(ip))),
-    map (response => {
-      if (response === '-1') {
-        return null;
-      }
-
-      let country: string;
-      if (response) {
-        const reply: string[] = response.split(';');
-
-        if (reply.length === 4) {
-          country = reply[3];
+    return this.http.request('GET', 'https://api.ipify.org?format=json').pipe(
+      retryWhen(errors => concat(errors.pipe(delay(2000), take(4)), throwError(''))),
+      map(data => {
+        if (data && data['ip']) {
+          return  data['ip'];
         }
-      }
 
-      const result: IpInfo = {
-        ip: ip,
-        country: country,
-      };
+        return null;
+      })
+    );
+  }
 
-      return result;
-    }));
+  getIpCountry(ip: string): Observable<string> {
+    if (!environment.production && AppConfig.vpn.hardcodedIpWhileDeveloping) {
+      return of('United States ***');
+    }
+
+    return this.http.request('GET', 'https://ip2c.org/' + ip, { responseType: 'text' }).pipe(
+      retryWhen(errors => concat(errors.pipe(delay(2000), take(4)), throwError(''))),
+      map(data => {
+        let country: string;
+        if (data) {
+          const dataParts: string[] = data.split(';');
+
+          if (dataParts.length === 4) {
+            country = dataParts[3];
+          }
+        }
+
+        return country;
+      })
+    );
   }
 
   changeServerUsingHistory(newServer: LocalServerData): boolean {

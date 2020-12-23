@@ -2,12 +2,14 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 
 import { VpnHelpers } from '../../vpn-helpers';
 import { AppState, BackendState, VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { LocalServerData, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { countriesList } from 'src/app/utils/countries-list';
+import { SnackbarService } from 'src/app/services/snackbar.service';
 
 @Component({
   selector: 'app-vpn-status',
@@ -26,10 +28,13 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   showBusy = false;
   waitingSteps = 0;
   currentIp: string;
+  previousIp: string;
   ipCountry: string;
   loadingCurrentIp = true;
+  loadingIpCountry = true;
   problemGettingIp = false;
   problemGettingIpCountry = false;
+  lastIpRefresDate = 0;
 
   currentLocalPk: string;
   currentRemoteServer: LocalServerData;
@@ -44,6 +49,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   constructor(
     private vpnClientService: VpnClientService,
     private vpnSavedDataService: VpnSavedDataService,
+    private snackbarService: SnackbarService,
+    private translateService: TranslateService,
     private route: ActivatedRoute,
     private dialog: MatDialog,
   ) { }
@@ -64,7 +71,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
           if (this.lastAppState !== data.appState) {
             if (data.appState === AppState.Running || data.appState === AppState.Stopped) {
-              this.getIp();
+              this.getIp(true);
             }
           }
 
@@ -82,7 +89,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       });
     });
 
-    this.getIp();
+    this.getIp(true);
   }
 
   ngOnDestroy() {
@@ -135,44 +142,84 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     }
   }
 
-  private getIp() {
+  private getIp(ignoreTimeCheck = false) {
+    if (!ignoreTimeCheck) {
+      if (this.loadingCurrentIp || this.loadingIpCountry) {
+        this.snackbarService.showWarning('vpn.status-page.data.ip-refresh-loading-warning');
+
+        return;
+      }
+
+      const msToWait = 10000;
+      if (Date.now() - this.lastIpRefresDate < msToWait) {
+        const remainingSeconds = Math.ceil((msToWait - (Date.now() - this.lastIpRefresDate)) / 1000);
+
+        this.snackbarService.showWarning(
+          this.translateService.instant('vpn.status-page.data.ip-refresh-time-warning', {seconds: remainingSeconds})
+        );
+
+        return;
+      }
+    }
+
     if (this.ipSubscription) {
       this.ipSubscription.unsubscribe();
     }
 
     this.loadingCurrentIp = true;
+    this.loadingIpCountry = true;
+
+    this.previousIp = this.currentIp;
 
     this.ipSubscription = this.vpnClientService.getIp().subscribe(response => {
       this.loadingCurrentIp = false;
-      this.problemGettingIp = false;
-      this.problemGettingIpCountry = false;
+      this.lastIpRefresDate = Date.now();
 
       if (response) {
-        if (response.ip) {
-          this.currentIp = response.ip;
-        } else {
-          this.problemGettingIp = true;
-        }
+        this.problemGettingIp = false;
+        this.currentIp = response;
 
-        if (response.country) {
-          this.ipCountry = response.country;
+        if (this.previousIp !== this.currentIp || this.problemGettingIpCountry) {
+          this.getIpCountry();
         } else {
-          this.problemGettingIpCountry = true;
+          this.loadingIpCountry = false;
         }
       } else {
         this.problemGettingIp = true;
         this.problemGettingIpCountry = true;
+        this.loadingIpCountry = false;
       }
-    }, ip => {
+    }, () => {
+      this.lastIpRefresDate = Date.now();
       this.loadingCurrentIp = false;
+      this.loadingIpCountry = false;
+      this.problemGettingIp = false;
       this.problemGettingIpCountry = true;
+    });
+  }
 
-      if (ip) {
-        this.problemGettingIp = false;
-        this.currentIp = ip;
+  private getIpCountry() {
+    if (this.ipSubscription) {
+      this.ipSubscription.unsubscribe();
+    }
+
+    this.loadingIpCountry = true;
+
+    this.ipSubscription = this.vpnClientService.getIpCountry(this.currentIp).subscribe(response => {
+      this.loadingIpCountry = false;
+
+      this.lastIpRefresDate = Date.now();
+
+      if (response) {
+        this.problemGettingIpCountry = false;
+        this.ipCountry = response;
       } else {
-        this.problemGettingIp = true;
+        this.problemGettingIpCountry = true;
       }
+    }, () => {
+      this.lastIpRefresDate = Date.now();
+      this.loadingIpCountry = false;
+      this.problemGettingIpCountry = true;
     });
   }
 }
