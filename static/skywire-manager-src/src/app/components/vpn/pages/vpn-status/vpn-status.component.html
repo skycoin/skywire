@@ -129,8 +129,8 @@
             <div class="title">{{ 'vpn.status-page.data.country' | translate }}</div>
             <div class="big-text">
               <ng-container *ngIf="ipCountry">{{ ipCountry }}</ng-container>
-              <ng-container *ngIf="!ipCountry && !loadingCurrentIp">{{ 'common.unknown' | translate }}</ng-container>
-              <mat-spinner *ngIf="loadingCurrentIp" [diameter]="20"></mat-spinner>
+              <ng-container *ngIf="!ipCountry && !loadingIpCountry">{{ 'common.unknown' | translate }}</ng-container>
+              <mat-spinner *ngIf="loadingIpCountry" [diameter]="20"></mat-spinner>
               <mat-icon *ngIf="problemGettingIpCountry" class="small-icon blinking" [inline]="true" [matTooltip]="'vpn.status-page.data.ip-country-problem-info' | translate">warning</mat-icon>
             </div>
           </div>
