@@ -187,10 +187,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
     this.vpnDataSubscription = this.vpnClientService.backendState.subscribe(data => {
       if (data) {
         this.vpnData = {
-          showStarted: data.running,
-          latency: 123,
-          downloadSpeed: 900000,
-          uploadSpeed: 12000
+          showStarted: data.vpnClientAppData.running,
+          latency: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.latency : 0,
+          downloadSpeed: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.downloadSpeed : 0,
+          uploadSpeed: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.uploadSpeed : 0,
         };
       }
     });

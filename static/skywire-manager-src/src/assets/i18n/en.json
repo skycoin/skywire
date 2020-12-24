@@ -638,6 +638,9 @@
       "disconnect": "Disconnect",
       "disconnect-confirmation": "Are you sure you want to stop the VPN protection?",
       "entered-manually": "Entered manually",
+      "upload-info": "Uploaded data stats.",
+      "download-info": "Downloaded data stats.",
+      "total-data-label": "total",
 
       "data": {
         "ip": "Current IP address:",

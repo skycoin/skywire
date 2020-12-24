@@ -3,7 +3,7 @@ import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 
 import { VpnHelpers } from '../../vpn-helpers';
-import { BackendState, VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
+import { BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AppsService } from 'src/app/services/apps.service';
 import { processServiceError } from 'src/app/utils/errors';
@@ -48,7 +48,7 @@ export class VpnSettingsComponent implements OnDestroy {
     });
 
     this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
-      if (data && data.serviceState !== VpnStates.PerformingInitialCheck) {
+      if (data && data.serviceState !== VpnServiceStates.PerformingInitialCheck) {
         this.backendData = data;
 
         this.loading = false;
@@ -95,7 +95,7 @@ export class VpnSettingsComponent implements OnDestroy {
     this.operationSubscription = this.appsService.changeAppSettings(
       this.currentLocalPk,
       this.vpnClientService.vpnClientAppName,
-      { killswitch: !this.backendData.killswitch },
+      { killswitch: !this.backendData.vpnClientAppData.killswitch },
     ).subscribe(
       () => {
         this.working = WorkingOptions.None;

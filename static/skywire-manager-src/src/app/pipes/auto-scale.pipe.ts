@@ -4,6 +4,7 @@ import { BigNumber } from 'bignumber.js';
 export class AutoScalePipeParams {
   showValue: boolean;
   showUnit: boolean;
+  showPerSecond: boolean;
 }
 
 @Pipe({
@@ -12,7 +13,10 @@ export class AutoScalePipeParams {
 export class AutoScalePipe implements PipeTransform {
 
   transform(value: any, params: AutoScalePipeParams): any {
-    const measurements = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const accumulatedMeasurements = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const measurementsPerSec = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s', 'PB/s', 'EB/s', 'ZB/s', 'YB/s'];
+
+    const measurements = !params || !params.showPerSecond ? accumulatedMeasurements : measurementsPerSec;
 
     let val = new BigNumber(value);
     let measurement = measurements[0];
