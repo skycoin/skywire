@@ -50,8 +50,8 @@
             </div>
           </td>
           <td class="data-column">
-            <span [class]="getStatusClass(backendData.killswitch)"></span>
-            {{ (getStatusText(backendData.killswitch)) | translate }}
+            <span [class]="getStatusClass(backendData.vpnClientAppData.killswitch)"></span>
+            {{ (getStatusText(backendData.vpnClientAppData.killswitch)) | translate }}
             <mat-spinner *ngIf="this.working === workingOptions.Killswitch" [diameter]="12"></mat-spinner>
           </td>
         </tr>
