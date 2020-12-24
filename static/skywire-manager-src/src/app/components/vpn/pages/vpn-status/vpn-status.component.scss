@@ -65,6 +65,7 @@
     .data-box {
       $data-box-width: 170px;
       $data-box-height: 140px;
+      cursor: default;
 
       display: inline-block;
       width: $data-box-width;
@@ -103,7 +104,7 @@
         }
 
         .upload {
-          transform: rotate(-90deg);
+          transform: rotate(90deg);
         }
 
         .speed {
