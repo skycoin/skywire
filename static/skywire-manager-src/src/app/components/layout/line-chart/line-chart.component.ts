@@ -14,6 +14,7 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
   @Input() data: number[];
   @Input() height = 100;
   @Input() color = 'rgba(10, 15, 22, 0.4)';
+  @Input() animated = false;
   chart: any;
 
   private differ: IterableDiffer<unknown>;
@@ -63,7 +64,11 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
 
     // Update the chart only when the values of the "data" var change.
     if (changes && this.chart) {
-      this.chart.update();
+      if (this.animated) {
+        this.chart.update();
+      } else {
+        this.chart.update(0);
+      }
     }
   }
 }

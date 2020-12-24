@@ -74,24 +74,30 @@
         <div class="state-explanation">{{ (currentStateText + '-info') | translate }}</div>
         <!-- Data stats. -->
         <div class="data-container">
-          <div class="rounded-elevated-box data-box">
+          <div class="rounded-elevated-box data-box" [matTooltip]="'vpn.status-page.upload-info' | translate">
             <div class="chart-container">
-              <app-line-chart [data]="receivedHistory" height="140" color="#00000080"></app-line-chart>
-            </div>
-            <div class="content">
-              <mat-icon [inline]="true" class="download">keyboard_backspace</mat-icon>
-              <div class="speed">1.2 mb/s</div>
-              <div class="total">345 MB total</div>
-            </div>
-          </div>
-          <div class="rounded-elevated-box data-box">
-            <div class="chart-container">
-              <app-line-chart [data]="sentHistory" height="140" color="#00000080"></app-line-chart>
+              <app-line-chart [animated]="false" [data]="sentHistory" height="140" color="#00000080"></app-line-chart>
             </div>
             <div class="content">
               <mat-icon [inline]="true" class="upload">keyboard_backspace</mat-icon>
-              <div class="speed">1.2 mb/s</div>
-              <div class="total">345 MB total</div>
+              <div class="speed">{{ uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}</div>
+              <div class="total">
+                {{ totalUploaded | autoScale }}
+                {{ 'vpn.status-page.total-data-label' | translate }}
+              </div>
+            </div>
+          </div>
+          <div class="rounded-elevated-box data-box" [matTooltip]="'vpn.status-page.download-info' | translate">
+            <div class="chart-container">
+              <app-line-chart [animated]="false" [data]="receivedHistory" height="140" color="#00000080"></app-line-chart>
+            </div>
+            <div class="content">
+              <mat-icon [inline]="true" class="download">keyboard_backspace</mat-icon>
+              <div class="speed">{{ downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}</div>
+              <div class="total">
+                {{ totalDownloaded | autoScale }}
+                {{ 'vpn.status-page.total-data-label' | translate }}
+              </div>
             </div>
           </div>
         </div>

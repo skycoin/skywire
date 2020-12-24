@@ -5,7 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 
 import { VpnHelpers } from '../../vpn-helpers';
-import { AppState, BackendState, VpnClientService, VpnStates } from 'src/app/services/vpn-client.service';
+import { AppState, BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { LocalServerData, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { countriesList } from 'src/app/utils/countries-list';
@@ -19,10 +19,15 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
 export class VpnStatusComponent implements OnInit, OnDestroy {
   tabsData = VpnHelpers.vpnTabsData;
 
-  receivedHistory: number[] = [20, 25, 40, 100, 35, 45, 45, 10, 20, 20];
-  sentHistory: number[] = [30, 20, 40, 10, 35, 45, 45, 10, 20, 20];
+  sentHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  receivedHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  uploadSpeed = 0;
+  downloadSpeed = 0;
+  totalUploaded = 0;
+  totalDownloaded = 0;
 
   loading = true;
+  showStartedLastValue = false;
   showStarted = false;
   lastAppState: AppState = null;
   showBusy = false;
@@ -66,19 +71,45 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
       setTimeout(() => this.navigationsSubscription.unsubscribe());
 
       this.dataSubscription = this.vpnClientService.backendState.subscribe(data => {
-        if (data && data.serviceState !== VpnStates.PerformingInitialCheck) {
+        if (data && data.serviceState !== VpnServiceStates.PerformingInitialCheck) {
           this.backendState = data;
 
-          if (this.lastAppState !== data.appState) {
-            if (data.appState === AppState.Running || data.appState === AppState.Stopped) {
+          if (this.lastAppState !== data.vpnClientAppData.appState) {
+            if (data.vpnClientAppData.appState === AppState.Running || data.vpnClientAppData.appState === AppState.Stopped) {
               this.getIp(true);
             }
           }
 
-          this.lastAppState = data.appState;
+          this.showStarted = data.vpnClientAppData.running;
+          if (this.showStartedLastValue !== this.showStarted) {
+            // Avoid replacing the whole var to prevent problems with the graph.
+            for (let i = 0; i < 10; i++) {
+              this.receivedHistory[i] = 0;
+              this.sentHistory[i] = 0;
+            }
 
-          this.showStarted = data.running;
+            this.uploadSpeed = 0;
+            this.downloadSpeed = 0;
+            this.totalUploaded = 0;
+            this.totalDownloaded = 0;
+          }
+
+          this.lastAppState = data.vpnClientAppData.appState;
+          this.showStartedLastValue = this.showStarted;
           this.showBusy = data.busy;
+
+          if (data.vpnClientAppData.connectionData) {
+            // Avoid replacing the whole var to prevent problems with the graph.
+            for (let i = 0; i < 10; i++) {
+              this.receivedHistory[i] = data.vpnClientAppData.connectionData.downloadSpeedHistory[i];
+              this.sentHistory[i] = data.vpnClientAppData.connectionData.uploadSpeedHistory[i];
+            }
+
+            this.uploadSpeed = data.vpnClientAppData.connectionData.uploadSpeed;
+            this.downloadSpeed = data.vpnClientAppData.connectionData.downloadSpeed;
+            this.totalUploaded = data.vpnClientAppData.connectionData.totalUploaded;
+            this.totalDownloaded = data.vpnClientAppData.connectionData.totalDownloaded;
+          }
 
           this.loading = false;
         }
@@ -123,15 +154,15 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   }
 
   get currentStateText(): string {
-    if (this.backendState.appState === AppState.Stopped) {
+    if (this.backendState.vpnClientAppData.appState === AppState.Stopped) {
       return 'vpn.connection-info.state-disconnected';
-    } else if (this.backendState.appState === AppState.Connecting) {
+    } else if (this.backendState.vpnClientAppData.appState === AppState.Connecting) {
       return 'vpn.connection-info.state-connecting';
-    } else if (this.backendState.appState === AppState.Running) {
+    } else if (this.backendState.vpnClientAppData.appState === AppState.Running) {
       return 'vpn.connection-info.state-connected';
-    } else if (this.backendState.appState === AppState.ShuttingDown) {
+    } else if (this.backendState.vpnClientAppData.appState === AppState.ShuttingDown) {
       return 'vpn.connection-info.state-disconnecting';
-    } else if (this.backendState.appState === AppState.Reconnecting) {
+    } else if (this.backendState.vpnClientAppData.appState === AppState.Reconnecting) {
       return 'vpn.connection-info.state-reconnecting';
     }
   }

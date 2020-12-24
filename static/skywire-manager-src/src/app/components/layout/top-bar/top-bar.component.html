@@ -146,11 +146,11 @@
         <tr>
           <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
             <mat-icon [inline]="true">arrow_upward</mat-icon>
-            {{ vpnData.uploadSpeed | autoScale }}
+            {{ vpnData.uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}
           </td>
           <td [matTooltip]="'vpn.connection-info.download-info' | translate">
             <mat-icon [inline]="true">arrow_downward</mat-icon>
-            {{ vpnData.downloadSpeed | autoScale }}
+            {{ vpnData.downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}
           </td>
         </tr>
       </table>

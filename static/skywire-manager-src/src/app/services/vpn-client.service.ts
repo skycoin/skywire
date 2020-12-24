@@ -22,12 +22,10 @@ export enum AppState {
 
 export class BackendState {
   updateDate: number = Date.now();
-  appState: AppState;
   lastError: any;
-  running: boolean;
-  serviceState: VpnStates;
+  serviceState: VpnServiceStates;
   busy: boolean;
-  killswitch: boolean;
+  vpnClientAppData: VpnClientAppData;
 }
 
 export class VpnClientAppData {
@@ -35,9 +33,20 @@ export class VpnClientAppData {
   serverPk: string;
   killswitch: boolean;
   appState: AppState;
+  connectionData: VpnClientConnectionsData;
 }
 
-export enum VpnStates {
+export class VpnClientConnectionsData {
+  latency = 0;
+  uploadSpeed = 0;
+  downloadSpeed = 0;
+  totalUploaded = 0;
+  totalDownloaded = 0;
+  downloadSpeedHistory: number[];
+  uploadSpeedHistory: number[];
+}
+
+export enum VpnServiceStates {
   PerformingInitialCheck = 1,
   Off = 10,
   Starting = 20,
@@ -67,11 +76,15 @@ export class VpnClientService {
   private continuousUpdateSubscription: Subscription;
 
   private currentEventData: BackendState;
-  private lastState: VpnStates;
+  private lastState: VpnServiceStates;
   private working = true;
 
   private requestedServer: LocalServerData = null;
   private requestedPassword: string = null;
+
+  private connectionHistoryPk: string;
+  private downloadSpeedHistory: number[];
+  private uploadSpeedHistory: number[];
 
   constructor(
     private apiService: ApiService,
@@ -83,7 +96,7 @@ export class VpnClientService {
     this.currentEventData = new BackendState();
     this.currentEventData.busy = true;
 
-    this.lastState = VpnStates.PerformingInitialCheck;
+    this.lastState = VpnServiceStates.PerformingInitialCheck;
   }
 
   initialize(nodeKey: string) {
@@ -93,7 +106,7 @@ export class VpnClientService {
 
         this.vpnSavedDataService.initialize();
 
-        this.performInitialCheck();
+        this.continuallyUpdateData(0);
       }
     }
   }
@@ -200,7 +213,7 @@ export class VpnClientService {
   checkNewPk(newPk): CheckPkResults {
     if (this.working) {
       return CheckPkResults.Busy;
-    } else if (this.lastState !== VpnStates.Off) {
+    } else if (this.lastState !== VpnServiceStates.Off) {
       if (newPk === this.vpnSavedDataService.currentServer.pk) {
         return CheckPkResults.SamePkRunning;
       } else {
@@ -246,6 +259,8 @@ export class VpnClientService {
         // More processing needed.
         this.requestedServer = null;
         this.requestedPassword = null;
+
+        // TODO: the service could stay in working state.
       }
     );
   }
@@ -258,9 +273,10 @@ export class VpnClientService {
     const data = { status: 1 };
 
     if (startApp) {
-      this.lastState = VpnStates.Starting;
+      this.lastState = VpnServiceStates.Starting;
+      this.connectionHistoryPk = null;
     } else {
-      this.lastState = VpnStates.Disconnecting;
+      this.lastState = VpnServiceStates.Disconnecting;
       data.status = 0;
     }
 
@@ -279,13 +295,11 @@ export class VpnClientService {
       catchError(err => {
         // If the response was an error, check the state of the backend, to know if the change
         // was made.
-        return this.getBackendData().pipe(mergeMap(nodeInfo => {
-          const appData = this.extractVpnAppData(nodeInfo);
+        return this.getVpnClientState().pipe(mergeMap(appData => {
           if (appData) {
-            const vpnClientData = this.getVpnClientData(appData);
-            if (startApp && vpnClientData.running) {
+            if (startApp && appData.running) {
               return of(true);
-            } else if (!startApp && !vpnClientData.running) {
+            } else if (!startApp && !appData.running) {
               return of(true);
             }
           }
@@ -299,16 +313,16 @@ export class VpnClientService {
 
       if (startApp) {
         if (this.currentEventData) {
-          this.currentEventData.running = true;
+          this.currentEventData.vpnClientAppData.running = true;
         }
-        this.lastState = VpnStates.Running;
+        this.lastState = VpnServiceStates.Running;
 
         this.vpnSavedDataService.updateHistory();
       } else {
         if (this.currentEventData) {
-          this.currentEventData.running = false;
+          this.currentEventData.vpnClientAppData.running = false;
         }
-        this.lastState = VpnStates.Off;
+        this.lastState = VpnServiceStates.Off;
       }
       this.sendUpdate();
       this.updateData();
@@ -317,9 +331,11 @@ export class VpnClientService {
         this.processServerChange();
       }
     }, err => {
-      if (this.lastState === VpnStates.Starting) {
+      // TODO: the service could stay in working state.
+
+      if (this.lastState === VpnServiceStates.Starting) {
         // TODO: process "Could not start".
-      } else if (this.lastState === VpnStates.Disconnecting) {
+      } else if (this.lastState === VpnServiceStates.Disconnecting) {
         // TODO: process Could not stop.
       } else {
         // TODO: process Should not happen.
@@ -327,91 +343,8 @@ export class VpnClientService {
     });
   }
 
-  private performInitialCheck() {
-    if (this.dataSubscription) {
-      this.dataSubscription.unsubscribe();
-    }
-
-    this.dataSubscription = this.getBackendData().pipe(
-      retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(10)), throwError('')))
-    ).subscribe(nodeInfo => {
-      const appData = this.extractVpnAppData(nodeInfo);
-      if (appData) {
-        this.working = false;
-
-        const vpnClientData = this.getVpnClientData(appData);
-        this.vpnSavedDataService.compareCurrentServer(vpnClientData.serverPk);
-
-        if (vpnClientData.running) {
-          this.lastState = VpnStates.Running;
-        } else {
-          this.lastState = VpnStates.Off;
-        }
-
-        this.currentEventData.running = vpnClientData.running;
-        this.currentEventData.killswitch = vpnClientData.killswitch;
-        this.currentEventData.appState = vpnClientData.appState;
-        this.sendUpdate();
-
-        this.continuallyUpdateData(this.standardWaitTime);
-      } else {
-        this.router.navigate(['vpn', 'unavailable']);
-        this.nodeKey = null;
-      }
-    }, err => {
-      this.router.navigate(['vpn', 'unavailable']);
-      this.nodeKey = null;
-    });
-  }
-
-  private getVpnClientData(appData: any): VpnClientAppData {
-    const vpnClientData = new VpnClientAppData();
-    vpnClientData.running = appData.status !== 0;
-
-    vpnClientData.appState = AppState.Stopped;
-    if (appData.detailed_status === AppState.Connecting) {
-      vpnClientData.appState = AppState.Connecting;
-    } else if (appData.detailed_status === AppState.Running) {
-      vpnClientData.appState = AppState.Running;
-    } else if (appData.detailed_status === AppState.ShuttingDown) {
-      vpnClientData.appState = AppState.ShuttingDown;
-    } else if (appData.detailed_status === AppState.Reconnecting) {
-      vpnClientData.appState = AppState.Reconnecting;
-    }
-
-    vpnClientData.killswitch = false;
-
-    if (appData.args && appData.args.length > 0) {
-      for (let i = 0; i < appData.args.length; i++) {
-        if (appData.args[i] === '-srv' && i + 1 < appData.args.length) {
-          vpnClientData.serverPk = appData.args[i + 1];
-        }
-
-        if (appData.args[i] === '-killswitch' && i + 1 < appData.args.length) {
-          vpnClientData.killswitch = (appData.args[i + 1] as string).toLowerCase() === 'true';
-        }
-      }
-    }
-
-    return vpnClientData;
-  }
-
-  private extractVpnAppData(nodeInfo: any): any {
-    let appData: any;
-
-    if (nodeInfo && nodeInfo.apps && (nodeInfo.apps as any[]).length > 0) {
-      (nodeInfo.apps as any[]).forEach(value => {
-        if (value.name === this.vpnClientAppName) {
-          appData = value;
-        }
-      });
-    }
-
-    return appData;
-  }
-
   private continuallyUpdateData(delayMs: number) {
-    if (this.working) {
+    if (this.working && this.lastState !== VpnServiceStates.PerformingInitialCheck) {
       return;
     }
 
@@ -421,27 +354,36 @@ export class VpnClientService {
 
     this.continuousUpdateSubscription = of(0).pipe(
       delay(delayMs),
-      mergeMap(() => this.getBackendData()),
-      retryWhen(errors => errors.pipe(delay(1000)))
-    ).subscribe(nodeInfo => {
-      const appData = this.extractVpnAppData(nodeInfo);
+      mergeMap(() => this.getVpnClientState()),
+      retryWhen(errors => concat(
+        errors.pipe(delay(this.standardWaitTime), take(this.lastState === VpnServiceStates.PerformingInitialCheck ? 5 : 1000000000)),
+        throwError('')
+      )),
+    ).subscribe(appData => {
       if (appData) {
-        const vpnClientData = this.getVpnClientData(appData);
-        this.vpnSavedDataService.compareCurrentServer(vpnClientData.serverPk);
-
-        if (vpnClientData.running) {
-          this.lastState = VpnStates.Running;
-        } else {
-          this.lastState = VpnStates.Off;
+        if (this.lastState === VpnServiceStates.PerformingInitialCheck) {
+          this.working = false;
         }
 
-        this.currentEventData.running = vpnClientData.running;
-        this.currentEventData.killswitch = vpnClientData.killswitch;
-        this.currentEventData.appState = vpnClientData.appState;
+        this.vpnSavedDataService.compareCurrentServer(appData.serverPk);
+
+        if (appData.running) {
+          this.lastState = VpnServiceStates.Running;
+        } else {
+          this.lastState = VpnServiceStates.Off;
+        }
+
+        this.currentEventData.vpnClientAppData = appData;
         this.sendUpdate();
+      } else if (this.lastState === VpnServiceStates.PerformingInitialCheck) {
+        this.router.navigate(['vpn', 'unavailable']);
+        this.nodeKey = null;
       }
 
       this.continuallyUpdateData(this.standardWaitTime);
+    }, () => {
+      this.router.navigate(['vpn', 'unavailable']);
+      this.nodeKey = null;
     });
   }
 
@@ -453,8 +395,92 @@ export class VpnClientService {
     }
   }
 
-  private getBackendData(): Observable<any> {
-    return this.apiService.get(`visors/${this.nodeKey}`);
+  private getVpnClientState(): Observable<VpnClientAppData> {
+    let vpnClientData: VpnClientAppData;
+
+    return this.apiService.get(`visors/${this.nodeKey}`).pipe(mergeMap(nodeInfo => {
+      let appData: any;
+
+      if (nodeInfo && nodeInfo.apps && (nodeInfo.apps as any[]).length > 0) {
+        (nodeInfo.apps as any[]).forEach(value => {
+          if (value.name === this.vpnClientAppName) {
+            appData = value;
+          }
+        });
+      }
+
+      if (appData) {
+        vpnClientData = new VpnClientAppData();
+        vpnClientData.running = appData.status !== 0;
+
+        vpnClientData.appState = AppState.Stopped;
+        if (appData.detailed_status === AppState.Connecting) {
+          vpnClientData.appState = AppState.Connecting;
+        } else if (appData.detailed_status === AppState.Running) {
+          vpnClientData.appState = AppState.Running;
+        } else if (appData.detailed_status === AppState.ShuttingDown) {
+          vpnClientData.appState = AppState.ShuttingDown;
+        } else if (appData.detailed_status === AppState.Reconnecting) {
+          vpnClientData.appState = AppState.Reconnecting;
+        }
+
+        vpnClientData.killswitch = false;
+
+        if (appData.args && appData.args.length > 0) {
+          for (let i = 0; i < appData.args.length; i++) {
+            if (appData.args[i] === '-srv' && i + 1 < appData.args.length) {
+              vpnClientData.serverPk = appData.args[i + 1];
+            }
+
+            if (appData.args[i] === '-killswitch' && i + 1 < appData.args.length) {
+              vpnClientData.killswitch = (appData.args[i + 1] as string).toLowerCase() === 'true';
+            }
+          }
+        }
+      }
+
+      if (vpnClientData && vpnClientData.running) {
+        return this.apiService.get(`visors/${this.nodeKey}/apps/${this.vpnClientAppName}/connections`);
+      }
+
+      return of(null);
+    }), map((connectionsInfo: any[]) => {
+      if (connectionsInfo && connectionsInfo.length > 0) {
+        const vpnClientConnectionsData = new VpnClientConnectionsData();
+        connectionsInfo.forEach(connection => {
+          vpnClientConnectionsData.latency += connection.latency / connectionsInfo.length;
+          vpnClientConnectionsData.uploadSpeed += connection.upload_speed / connectionsInfo.length;
+          vpnClientConnectionsData.downloadSpeed += connection.download_speed / connectionsInfo.length;
+          vpnClientConnectionsData.totalUploaded += connection.bandwidth_sent;
+          vpnClientConnectionsData.totalDownloaded += connection.bandwidth_received;
+        });
+
+        if (!this.connectionHistoryPk || this.connectionHistoryPk !== vpnClientData.serverPk) {
+          this.connectionHistoryPk = vpnClientData.serverPk;
+
+          this.uploadSpeedHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+          this.downloadSpeedHistory = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        }
+
+        vpnClientConnectionsData.latency = Math.round(vpnClientConnectionsData.latency);
+        vpnClientConnectionsData.uploadSpeed = Math.round(vpnClientConnectionsData.uploadSpeed);
+        vpnClientConnectionsData.downloadSpeed = Math.round(vpnClientConnectionsData.downloadSpeed);
+        vpnClientConnectionsData.totalUploaded = Math.round(vpnClientConnectionsData.totalUploaded);
+        vpnClientConnectionsData.totalDownloaded = Math.round(vpnClientConnectionsData.totalDownloaded);
+
+        this.uploadSpeedHistory.splice(0, 1);
+        this.uploadSpeedHistory.push(vpnClientConnectionsData.uploadSpeed);
+        vpnClientConnectionsData.uploadSpeedHistory = this.uploadSpeedHistory;
+
+        this.downloadSpeedHistory.splice(0, 1);
+        this.downloadSpeedHistory.push(vpnClientConnectionsData.downloadSpeed);
+        vpnClientConnectionsData.downloadSpeedHistory = this.downloadSpeedHistory;
+
+        vpnClientData.connectionData = vpnClientConnectionsData;
+      }
+
+      return vpnClientData;
+    }));
   }
 
   private sendUpdate() {
