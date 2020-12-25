@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { ReplaySubject, Observable } from 'rxjs';
+import { Router } from '@angular/router';
 
 import { VpnServer } from './vpn-client-discovery.service';
 import { ManualVpnServerData } from '../components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
@@ -27,6 +28,7 @@ export interface LocalServerData {
 export interface SavedServersData {
   version: number;
   serverList: LocalServerData[];
+  selectedServerPk: string;
 }
 
 @Injectable({
@@ -36,8 +38,7 @@ export class VpnSavedDataService {
   private readonly maxHistoryElements = 30;
 
   private readonly savedServersStorageKey = 'VpnServers';
-
-  private readonly currentServerStorageKey = 'VpnServer';
+  private readonly checkIpSettingStorageKey = 'VpnGetIp';
 
   private currentServerPk: string;
 
@@ -49,7 +50,7 @@ export class VpnSavedDataService {
   private favoritesSubject = new ReplaySubject<LocalServerData[]>(1);
   private blockedSubject = new ReplaySubject<LocalServerData[]>(1);
 
-  constructor() {}
+  constructor(private router: Router) {}
 
   initialize() {
     this.serversMap = new Map<string, LocalServerData>();
@@ -62,11 +63,10 @@ export class VpnSavedDataService {
       });
 
       this.savedDataVersion = servers.version;
-    }
 
-    const currentServerPk = localStorage.getItem(this.currentServerStorageKey);
-    if (currentServerPk) {
-      this.updateCurrentServerPk(currentServerPk);
+      if (servers.selectedServerPk) {
+        this.updateCurrentServerPk(servers.selectedServerPk);
+      }
     }
 
     this.launchEvents();
@@ -93,7 +93,21 @@ export class VpnSavedDataService {
     return this.serversMap.get(pk);
   }
 
+  getCheckIpSetting(): boolean {
+    const val = localStorage.getItem(this.checkIpSettingStorageKey);
+    if (val === null || val === undefined) {
+      return true;
+    }
+
+    return val !== 'false';
+  }
+
+  setCheckIpSetting(value: boolean) {
+    localStorage.setItem(this.checkIpSettingStorageKey, value ? 'true' : 'false');
+  }
+
   updateFromDiscovery(serverList: VpnServer[]) {
+    this.checkIfDataWasChanged();
     serverList.forEach(server => {
       if (this.serversMap.has(server.pk)) {
         const savedServer = this.serversMap.get(server.pk);
@@ -109,6 +123,8 @@ export class VpnSavedDataService {
   }
 
   processFromDiscovery(newServer: VpnServer): LocalServerData {
+    this.checkIfDataWasChanged();
+
     const retrievedServer = this.serversMap.get(newServer.pk);
     if (retrievedServer) {
       retrievedServer.name = newServer.name;
@@ -137,6 +153,8 @@ export class VpnSavedDataService {
   }
 
   processFromManual(newServer: ManualVpnServerData): LocalServerData {
+    this.checkIfDataWasChanged();
+
     const retrievedServer = this.serversMap.get(newServer.pk);
     if (retrievedServer) {
       // IMPORTANT: if more data is added manually, the saved data may have to be updated, like
@@ -160,6 +178,8 @@ export class VpnSavedDataService {
   }
 
   changeFlag(server: LocalServerData, flag: ServerFlags) {
+    this.checkIfDataWasChanged();
+
     const retrievedServer = this.serversMap.get(server.pk);
     if (retrievedServer) {
       server = retrievedServer;
@@ -176,6 +196,8 @@ export class VpnSavedDataService {
   }
 
   removeFromHistory(pk: string) {
+    this.checkIfDataWasChanged();
+
     const retrievedServer = this.serversMap.get(pk);
     if (!retrievedServer || !retrievedServer.inHistory) {
       return;
@@ -187,6 +209,8 @@ export class VpnSavedDataService {
   }
 
   modifyCurrentServer(newServer: LocalServerData) {
+    this.checkIfDataWasChanged();
+
     if (newServer.pk === this.currentServerPk) {
       return;
     }
@@ -198,9 +222,11 @@ export class VpnSavedDataService {
   }
 
   compareCurrentServer(pk: string) {
+    this.checkIfDataWasChanged();
+
     if (pk) {
       if (!this.currentServerPk || this.currentServerPk !== pk) {
-        this.updateCurrentServerPk(pk);
+        this.currentServerPk = pk;
 
         const retrievedServer = this.serversMap.get(pk);
         if (!retrievedServer) {
@@ -210,11 +236,15 @@ export class VpnSavedDataService {
         }
 
         this.saveData();
+
+        this.currentServerSubject.next(this.currentServer);
       }
     }
   }
 
   updateHistory() {
+    this.checkIfDataWasChanged();
+
     this.currentServer.lastUsed = Date.now();
     this.currentServer.inHistory = true;
 
@@ -261,8 +291,9 @@ export class VpnSavedDataService {
       lastSavedVersion = servers.version;
     }
 
+    // Previous calls to checkIfDataWasChanged should prevent this from happening.
     if (lastSavedVersion !== this.savedDataVersion) {
-      this.initialize();
+      this.router.navigate(['vpn', 'unavailable'], { queryParams: {problem: 'storage'}});
 
       return;
     }
@@ -270,15 +301,28 @@ export class VpnSavedDataService {
     this.savedDataVersion += 1;
     const data: SavedServersData = {
       version: this.savedDataVersion,
-      serverList: Array.from(this.serversMap.values())
+      serverList: Array.from(this.serversMap.values()),
+      selectedServerPk: this.currentServerPk,
     };
 
     const dataToSave = JSON.stringify(data);
     localStorage.setItem(this.savedServersStorageKey, dataToSave);
 
-    localStorage.setItem(this.currentServerStorageKey, this.currentServerPk);
-
     this.launchEvents();
+  }
+
+  private checkIfDataWasChanged() {
+    let lastSavedVersion = 0;
+
+    const retrievedServers = localStorage.getItem(this.savedServersStorageKey);
+    if (retrievedServers) {
+      const servers: SavedServersData = JSON.parse(retrievedServers);
+      lastSavedVersion = servers.version;
+    }
+
+    if (lastSavedVersion !== this.savedDataVersion) {
+      this.initialize();
+    }
   }
 
   private launchEvents() {

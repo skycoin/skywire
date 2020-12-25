@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { retryWhen, delay, map } from 'rxjs/operators';
 
@@ -36,6 +36,8 @@ export class VpnClientDiscoveryService {
    */
   private readonly discoveryServiceUrl = 'https://service.discovery.skycoin.com/api/services?type=vpn';
 
+  private servers: VpnServer[];
+
   constructor(
     private http: HttpClient,
   ) {}
@@ -44,6 +46,10 @@ export class VpnClientDiscoveryService {
    * Gets the vpn servers registered in the discovery service.
    */
   getServers(): Observable<VpnServer[]> {
+    if (this.servers) {
+      return of(this.servers);
+    }
+
     const response: VpnServer[] = [];
 
     return this.http.get(this.discoveryServiceUrl).pipe(
@@ -82,6 +88,8 @@ export class VpnClientDiscoveryService {
             response.push(currentEntry);
           }
         });
+
+        this.servers = response;
 
         return response;
       })
