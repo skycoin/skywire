@@ -41,11 +41,6 @@ export class VpnHelpers {
         linkParts: lastServerListTab ? ['/vpn', this.currentPk, 'servers', lastServerListTab, '1'] : ['/vpn', this.currentPk, 'servers'],
       },
       {
-        icon: 'flag',
-        label: 'vpn.countries',
-        linkParts: ['/vpn', this.currentPk, 'status'],
-      },
-      {
         icon: 'settings',
         label: 'vpn.settings',
         linkParts: ['/vpn', this.currentPk, 'settings'],

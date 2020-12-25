@@ -7,7 +7,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { VpnHelpers } from '../../vpn-helpers';
 import { AppState, BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
-import { LocalServerData, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
+import { LocalServerData, ServerFlags, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { countriesList } from 'src/app/utils/countries-list';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 
@@ -21,10 +21,12 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
   sentHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   receivedHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  latencyHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   uploadSpeed = 0;
   downloadSpeed = 0;
   totalUploaded = 0;
   totalDownloaded = 0;
+  latency = 0;
 
   loading = true;
   showStartedLastValue = false;
@@ -32,6 +34,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   lastAppState: AppState = null;
   showBusy = false;
   waitingSteps = 0;
+  ipInfoAllowed: boolean;
   currentIp: string;
   previousIp: string;
   ipCountry: string;
@@ -58,7 +61,9 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     private translateService: TranslateService,
     private route: ActivatedRoute,
     private dialog: MatDialog,
-  ) { }
+  ) {
+    this.ipInfoAllowed = this.vpnSavedDataService.getCheckIpSetting();
+  }
 
   ngOnInit() {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
@@ -82,16 +87,18 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
           this.showStarted = data.vpnClientAppData.running;
           if (this.showStartedLastValue !== this.showStarted) {
-            // Avoid replacing the whole var to prevent problems with the graph.
+            // Avoid replacing the whole vars to prevent problems with the graph.
             for (let i = 0; i < 10; i++) {
               this.receivedHistory[i] = 0;
               this.sentHistory[i] = 0;
+              this.latencyHistory[i] = 0;
             }
 
             this.uploadSpeed = 0;
             this.downloadSpeed = 0;
             this.totalUploaded = 0;
             this.totalDownloaded = 0;
+            this.latency = 0;
           }
 
           this.lastAppState = data.vpnClientAppData.appState;
@@ -99,16 +106,18 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
           this.showBusy = data.busy;
 
           if (data.vpnClientAppData.connectionData) {
-            // Avoid replacing the whole var to prevent problems with the graph.
+            // Avoid replacing the whole vars to prevent problems with the graph.
             for (let i = 0; i < 10; i++) {
               this.receivedHistory[i] = data.vpnClientAppData.connectionData.downloadSpeedHistory[i];
               this.sentHistory[i] = data.vpnClientAppData.connectionData.uploadSpeedHistory[i];
+              this.latencyHistory[i] = data.vpnClientAppData.connectionData.latencyHistory[i];
             }
 
             this.uploadSpeed = data.vpnClientAppData.connectionData.uploadSpeed;
             this.downloadSpeed = data.vpnClientAppData.connectionData.downloadSpeed;
             this.totalUploaded = data.vpnClientAppData.connectionData.totalUploaded;
             this.totalDownloaded = data.vpnClientAppData.connectionData.totalDownloaded;
+            this.latency = data.vpnClientAppData.connectionData.latency;
           }
 
           this.loading = false;
@@ -127,11 +136,20 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     this.dataSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.currentRemoteServerSubscription.unsubscribe();
-    this.ipSubscription.unsubscribe();
     this.closeOperationSubscription();
+
+    if (this.ipSubscription) {
+      this.ipSubscription.unsubscribe();
+    }
   }
 
   start() {
+    if (this.currentRemoteServer.flag === ServerFlags.Blocked) {
+      this.snackbarService.showError('vpn.starting-blocked-server-error');
+
+      return;
+    }
+
     this.showBusy = true;
 
     this.vpnClientService.start();
@@ -151,6 +169,19 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
 
   getCountryName(countryCode: string): string {
     return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
+  }
+
+  // Gets the name of the translatable var that must be used for showing a latency value. This
+  // allows to add the correct measure suffix.
+  getLatencyValueString(latency: number): string {
+    return VpnHelpers.getLatencyValueString(latency);
+  }
+
+  // Gets the string value to show in the UI a latency value with an adecuate number of decimals.
+  // This function converts the value from ms to segs, if appropriate, so the value must be shown
+  // using the var returned by getLatencyValueString.
+  getPrintableLatency(latency: number): string {
+    return VpnHelpers.getPrintableLatency(latency);
   }
 
   get currentStateText(): string {
@@ -174,6 +205,10 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   }
 
   private getIp(ignoreTimeCheck = false) {
+    if (!this.ipInfoAllowed) {
+      return;
+    }
+
     if (!ignoreTimeCheck) {
       if (this.loadingCurrentIp || this.loadingIpCountry) {
         this.snackbarService.showWarning('vpn.status-page.data.ip-refresh-loading-warning');
@@ -230,6 +265,10 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   }
 
   private getIpCountry() {
+    if (!this.ipInfoAllowed) {
+      return;
+    }
+
     if (this.ipSubscription) {
       this.ipSubscription.unsubscribe();
     }

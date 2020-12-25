@@ -60,7 +60,6 @@
 
   .data-container {
     margin-top: 20px;
-    margin-bottom: 20px;
 
     .data-box {
       $data-box-width: 170px;
@@ -114,6 +113,42 @@
         .total {
           font-size: $font-size-smaller;
           color: $grey;
+        }
+      }
+    }
+  }
+
+  .latency-container {
+    margin-bottom: 20px;
+
+    .latency-box {
+      $latency-box-width: 352px;
+      $latency-box-height: 50px;
+      cursor: default;
+
+      display: inline-block;
+      width: $latency-box-width;
+      height: $latency-box-height;
+
+      .chart-container {
+        width: $latency-box-width;
+        height: 0px;
+        position: relative;
+        top: -$internal-blue-box-margin;
+        left: -$internal-blue-box-margin;
+      }
+  
+      .content {
+        display: inline-flex;
+        align-items: center;
+        height: 100%;
+        font-size: $font-size-sm;
+        position: relative;
+
+        mat-icon {
+          font-size: 18px;
+          height: 25px;
+          margin-right: 5px;
         }
       }
     }

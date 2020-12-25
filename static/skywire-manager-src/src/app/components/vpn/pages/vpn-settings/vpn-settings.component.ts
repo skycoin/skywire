@@ -7,6 +7,7 @@ import { BackendState, VpnClientService, VpnServiceStates } from 'src/app/servic
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AppsService } from 'src/app/services/apps.service';
 import { processServiceError } from 'src/app/utils/errors';
+import { VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 
 enum WorkingOptions {
   None = 0,
@@ -21,6 +22,7 @@ enum WorkingOptions {
 export class VpnSettingsComponent implements OnDestroy {
   loading = true;
   backendData: BackendState;
+  getIpOption: boolean;
   tabsData = VpnHelpers.vpnTabsData;
 
   currentLocalPk: string;
@@ -36,9 +38,9 @@ export class VpnSettingsComponent implements OnDestroy {
     private vpnClientService: VpnClientService,
     private snackbarService: SnackbarService,
     private appsService: AppsService,
+    private vpnSavedDataService: VpnSavedDataService,
     route: ActivatedRoute,
   ) {
-    // Get the page requested in the URL.
     this.navigationsSubscription = route.paramMap.subscribe(params => {
       if (params.has('key')) {
         this.currentLocalPk = params.get('key');
@@ -54,6 +56,8 @@ export class VpnSettingsComponent implements OnDestroy {
         this.loading = false;
       }
     });
+
+    this.getIpOption = this.vpnSavedDataService.getCheckIpSetting();
   }
 
   ngOnDestroy() {
@@ -108,5 +112,11 @@ export class VpnSettingsComponent implements OnDestroy {
         this.snackbarService.showError(err);
       },
     );
+  }
+
+  changeGetIpOption() {
+    this.getIpOption = !this.getIpOption;
+
+    this.vpnSavedDataService.setCheckIpSetting(this.getIpOption);
   }
 }
