@@ -197,6 +197,12 @@
               [matTooltip]="'vpn.server-list.selected-info' | translate"
             >done</mat-icon>
             <mat-icon
+              *ngIf="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
+              class="known-icon red-clear-text"
+              [inline]="true"
+              [matTooltip]="'vpn.server-list.blocked-info' | translate"
+            >clear</mat-icon>
+            <mat-icon
               *ngIf="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
               class="known-icon yellow-clear-text"
               [inline]="true"

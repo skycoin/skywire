@@ -55,6 +55,14 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
           xAxes: [{ display: false }],
         },
         elements: { point: { radius: 0 } },
+        layout: {
+          padding: {
+              left: 0,
+              right: 0,
+              top: 5,
+              bottom: 0
+          }
+        },
       },
     });
   }
