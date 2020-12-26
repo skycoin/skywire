@@ -14,6 +14,7 @@ export enum ServerFlags {
 export interface LocalServerData {
   countryCode: string;
   name: string;
+  customName: string;
   pk: string;
   lastUsed: number;
   notInDiscovery: boolean;
@@ -89,7 +90,11 @@ export class VpnSavedDataService {
     return this.blockedSubject.asObservable();
   }
 
-  getSavedVersion(pk: string) {
+  getSavedVersion(pk: string, updateFromPersistentStorage: boolean) {
+    if (updateFromPersistentStorage) {
+      this.checkIfDataWasChanged();
+    }
+
     return this.serversMap.get(pk);
   }
 
@@ -122,6 +127,12 @@ export class VpnSavedDataService {
     this.saveData();
   }
 
+  updateServer(server: LocalServerData) {
+    this.serversMap.set(server.pk, server);
+    this.cleanServers();
+    this.saveData();
+  }
+
   processFromDiscovery(newServer: VpnServer): LocalServerData {
     this.checkIfDataWasChanged();
 
@@ -140,6 +151,7 @@ export class VpnSavedDataService {
     return {
       countryCode: newServer.countryCode,
       name: newServer.name,
+      customName: null,
       pk: newServer.pk,
       lastUsed: 0,
       notInDiscovery: false,
@@ -157,14 +169,18 @@ export class VpnSavedDataService {
 
     const retrievedServer = this.serversMap.get(newServer.pk);
     if (retrievedServer) {
-      // IMPORTANT: if more data is added manually, the saved data may have to be updated, like
-      // it is done in processFromDiscovery().
+      retrievedServer.customName = newServer.name;
+      retrievedServer.personalNote = newServer.note;
+
+      this.saveData();
+
       return retrievedServer;
     }
 
     return {
       countryCode: 'zz',
       name: '',
+      customName: newServer.name,
       pk: newServer.pk,
       lastUsed: 0,
       notInDiscovery: true,
@@ -172,7 +188,7 @@ export class VpnSavedDataService {
       flag: ServerFlags.None,
       lastTimeUsedWithPassword: false,
       location: '',
-      personalNote: null,
+      personalNote: newServer.note,
       note: '',
     };
   }
@@ -272,7 +288,13 @@ export class VpnSavedDataService {
   private cleanServers() {
     const unneeded: string[] = [];
     this.serversMap.forEach(server => {
-      if (!server.inHistory && server.flag === ServerFlags.None && server.pk !== this.currentServerPk) {
+      if (
+        !server.inHistory &&
+        server.flag === ServerFlags.None &&
+        server.pk !== this.currentServerPk &&
+        !server.customName &&
+        !server.personalNote
+      ) {
         unneeded.push(server.pk);
       }
     });

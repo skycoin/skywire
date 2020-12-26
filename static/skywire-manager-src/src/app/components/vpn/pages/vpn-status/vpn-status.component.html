@@ -46,8 +46,14 @@
               ></div>
             </div>
             <div class="text-container">
-              <div class="top-line" *ngIf="currentRemoteServer.name">{{ currentRemoteServer.name }}</div>
-              <div class="top-line" *ngIf="!currentRemoteServer.name">{{ 'vpn.status-page.entered-manually' | translate }}</div>
+              <div class="top-line" *ngIf="currentRemoteServer.name && currentRemoteServer.customName">
+                {{ currentRemoteServer.customName }}
+                <mat-icon [inline]="true" class="name-separator">fiber_manual_record</mat-icon>
+                {{ currentRemoteServer.name }}
+              </div>
+              <div class="top-line" *ngIf="!currentRemoteServer.name && currentRemoteServer.customName">{{ currentRemoteServer.customName }}</div>
+              <div class="top-line" *ngIf="currentRemoteServer.name && !currentRemoteServer.customName">{{ currentRemoteServer.name }}</div>
+              <div class="top-line" *ngIf="!currentRemoteServer.name && !currentRemoteServer.customName">{{ 'vpn.status-page.entered-manually' | translate }}</div>
               <div class="bottom-line">
                 <app-copy-to-clipboard-text [shortSimple]="true" [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
               </div>
@@ -131,6 +137,7 @@
     <div class="col-5 column right-area">
       <div class="column-container">
         <div class="content-area">
+          <!-- Ip. -->
           <div>
             <div class="title">{{ 'vpn.status-page.data.ip' | translate }}</div>
             <div class="big-text" *ngIf="ipInfoAllowed">
@@ -144,6 +151,7 @@
               {{ 'vpn.status-page.data.unavailable' | translate }}
             </div>
           </div>
+          <!-- Ip country. -->
           <div class="margin"></div>
           <div>
             <div class="title">{{ 'vpn.status-page.data.country' | translate }}</div>
@@ -157,18 +165,51 @@
               {{ 'vpn.status-page.data.unavailable' | translate }}
             </div>
           </div>
+          <!-- Server name. -->
+          <div class="margin" *ngIf="showStarted && currentRemoteServer"></div>
+          <div *ngIf="showStarted && currentRemoteServer">
+            <div class="title">{{ 'vpn.status-page.data.server' | translate }}</div>
+            <div class="big-text">
+              <div *ngIf="currentRemoteServer.name && currentRemoteServer.customName">
+                {{ currentRemoteServer.customName }}
+                <mat-icon [inline]="true" class="name-separator">fiber_manual_record</mat-icon>
+                {{ currentRemoteServer.name }}
+              </div>
+              <div *ngIf="!currentRemoteServer.name && currentRemoteServer.customName">{{ currentRemoteServer.customName }}</div>
+              <div *ngIf="currentRemoteServer.name && !currentRemoteServer.customName">{{ currentRemoteServer.name }}</div>
+              <div *ngIf="!currentRemoteServer.name && !currentRemoteServer.customName">{{ 'vpn.status-page.entered-manually' | translate }}</div>
+            </div>
+          </div>
+          <!-- Server custom note. -->
+          <div class="margin" *ngIf="showStarted && currentRemoteServer && currentRemoteServer.personalNote"></div>
+          <div *ngIf="showStarted && currentRemoteServer && currentRemoteServer.personalNote">
+            <div class="title">{{ 'vpn.status-page.data.server-note' | translate }}</div>
+            <div class="small-text">
+              {{ currentRemoteServer.personalNote }}
+            </div>
+          </div>
+          <!-- Server original note. -->
+          <div class="margin" *ngIf="showStarted && currentRemoteServer && currentRemoteServer.note"></div>
+          <div *ngIf="showStarted && currentRemoteServer && currentRemoteServer.note">
+            <div class="title">{{ ('vpn.status-page.data.' + (currentRemoteServer.personalNote ? 'original-' : '') + 'server-note') | translate }}</div>
+            <div class="small-text">
+              {{ currentRemoteServer.note }}
+            </div>
+          </div>
+          <!-- Server pk. -->
+          <div class="margin" *ngIf="showStarted && currentRemoteServer"></div>
+          <div *ngIf="showStarted && currentRemoteServer">
+            <div class="title">{{ 'vpn.status-page.data.remote-pk' | translate }}</div>
+            <div class="small-text">
+              <app-copy-to-clipboard-text [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
+            </div>
+          </div>
+          <!-- Local pk. -->
           <div class="margin"></div>
           <div>
             <div class="title">{{ 'vpn.status-page.data.local-pk' | translate }}</div>
             <div class="small-text">
               <app-copy-to-clipboard-text [text]="currentLocalPk"></app-copy-to-clipboard-text>
-            </div>
-          </div>
-          <div class="margin" *ngIf="showStarted"></div>
-          <div *ngIf="showStarted && currentRemoteServer">
-            <div class="title">{{ 'vpn.status-page.data.remote-pk' | translate }}</div>
-            <div class="small-text">
-              <app-copy-to-clipboard-text [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
             </div>
           </div>
         </div>
