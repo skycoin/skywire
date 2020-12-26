@@ -661,6 +661,9 @@
         "ip-refresh-time-warning": "Please wait {{ seconds }} second(s) before refreshing the data.",
         "ip-refresh-loading-warning": "Please wait for the previous operation to finish.",
         "country": "IP country:",
+        "server": "Server:",
+        "server-note": "Server note:",
+        "original-server-note": "Original server note:",
         "local-pk": "Local visor public key:",
         "remote-pk": "Remote visor public key:",
         "unavailable": "Unavailable"
@@ -691,6 +694,7 @@
       "gold-rating-info": "Gold.",
       "silver-rating-info": "Silver.",
       "bronze-rating-info": "Bronze.",
+      "notes-info": "Custom note: {{ custom }} - Original note: {{ original }}",
       "options-info": "Options.",
       "selected-info": "This is the currently selected server.",
       "blocked-info": "This server is in the blocked list.",
@@ -722,7 +726,16 @@
         "unblock": "Unblock server",
         "unblock-done": "Removed from the blocked list.",
         "remove-from-history": "Remove from history",
-        "remove-from-history-done": "Removed from history."
+        "remove-from-history-done": "Removed from history.",
+
+        "edit-value": {
+          "name-title": "Custom Name",
+          "note-title": "Custom Note",
+          "name-label": "Custom name",
+          "note-label": "Custom note",
+          "apply-button": "Apply",
+          "changes-made-confirmation": "The change has been made."
+        }
       },
 
       "tabs": {
@@ -736,6 +749,8 @@
         "title": "Enter manually",
         "pk-label": "Server public key",
         "password-label": "Server password (if any)",
+        "name-label": "Server name (optional)",
+        "note-label": "Personal note (optional)",
         "pk-length-error": "The public key must be 66 characters long.",
         "pk-chars-error": "The public key must only contain hexadecimal characters.",
         "use-server-button": "Use server"
