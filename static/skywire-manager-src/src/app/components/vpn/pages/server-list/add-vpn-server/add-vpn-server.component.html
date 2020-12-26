@@ -27,6 +27,24 @@
       >
     </mat-form-field>
 
+    <mat-form-field>
+      <input
+        formControlName="name"
+        maxlength="100"
+        [placeholder]="'vpn.server-list.add-server-dialog.name-label' | translate"
+        matInput
+      >
+    </mat-form-field>
+
+    <mat-form-field>
+      <input
+        formControlName="note"
+        maxlength="100"
+        [placeholder]="'vpn.server-list.add-server-dialog.note-label' | translate"
+        matInput
+      >
+    </mat-form-field>
+
     <app-button
       (action)="process()"
       [disabled]="!form.valid"

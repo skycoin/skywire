@@ -11,6 +11,8 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
 export interface ManualVpnServerData {
   pk: string;
   password: string;
+  name?: string;
+  note?: string;
 }
 
 @Component({
@@ -50,6 +52,8 @@ export class AddVpnServerComponent implements OnInit {
         Validators.pattern('^[0-9a-fA-F]+$')])
       ],
       'password': [''],
+      'name': [''],
+      'note': [''],
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
@@ -62,7 +66,9 @@ export class AddVpnServerComponent implements OnInit {
 
     const serverData: ManualVpnServerData = {
       pk: this.form.get('pk').value,
-      password: this.form.get('password').value
+      password: this.form.get('password').value,
+      name: this.form.get('name').value,
+      note: this.form.get('note').value,
     };
 
     VpnHelpers.processServerChange(

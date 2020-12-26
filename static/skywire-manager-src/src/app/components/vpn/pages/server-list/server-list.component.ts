@@ -16,6 +16,7 @@ import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component
 import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/services/vpn-saved-data.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { EditVpnServerParams, EditVpnServerValueComponent } from './edit-vpn-server-value/edit-vpn-server-value.component';
 
 export enum Lists {
   Public = 'public',
@@ -27,6 +28,7 @@ export enum Lists {
 interface VpnServerForList {
   countryCode: string;
   name: string;
+  customName: string;
   location: string;
   pk: string;
   congestion?: number;
@@ -35,6 +37,7 @@ interface VpnServerForList {
   latencyRating?: Ratings;
   hops?: number;
   note: string;
+  personalNote: string;
   lastUsed?: number;
   inHistory?: boolean;
   flag?: ServerFlags;
@@ -206,8 +209,18 @@ export class ServerListComponent implements OnDestroy {
     AddVpnServerComponent.openDialog(this.dialog, this.currentLocalPk);
   }
 
-  selectServer(server: VpnServer) {
-    const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk);
+  getNoteVar(server: VpnServerForList) {
+    if (server.note && server.personalNote) {
+      return 'vpn.server-list.notes-info';
+    } else if (!server.note && server.personalNote) {
+      return server.personalNote;
+    }
+
+    return server.note;
+  }
+
+  selectServer(server: VpnServerForList) {
+    const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
 
     if (!savedVersion || savedVersion.flag !== ServerFlags.Blocked) {
       VpnHelpers.processServerChange(
@@ -217,8 +230,8 @@ export class ServerListComponent implements OnDestroy {
         this.dialog,
         null,
         this.currentLocalPk,
-        null,
-        server,
+        server.originalLocalData,
+        server.originalDiscoveryData,
         null
       );
     } else {
@@ -226,11 +239,23 @@ export class ServerListComponent implements OnDestroy {
     }
   }
 
-  openOptions(server: VpnServer) {
-    const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk);
+  openOptions(server: VpnServerForList) {
+    const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
 
     const options: SelectableOption[] = [];
     const optionCodes: number[] = [];
+
+    options.push({
+      icon: 'edit',
+      label: 'vpn.server-list.options.edit-value.name-title',
+    });
+    optionCodes.push(101);
+
+    options.push({
+      icon: 'subject',
+      label: 'vpn.server-list.options.edit-value.note-title',
+    });
+    optionCodes.push(102);
 
     if (!savedVersion || savedVersion.flag !== ServerFlags.Favorite) {
       options.push({
@@ -274,14 +299,25 @@ export class ServerListComponent implements OnDestroy {
 
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption) {
-        let savedVersion_ = this.vpnSavedDataService.getSavedVersion(server.pk);
+        let savedVersion_ = this.vpnSavedDataService.getSavedVersion(server.pk, true);
         if (!savedVersion_) {
-          savedVersion_ = this.vpnSavedDataService.processFromDiscovery(server);
+          savedVersion_ = this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData);
+        }
+        if (!savedVersion_) {
+          // This should not happen.
+          throw new Error('Invalid server.');
         }
 
         selectedOption -= 1;
 
-        if (optionCodes[selectedOption] === 1) {
+        if (optionCodes[selectedOption] > 100) {
+          const params: EditVpnServerParams = {
+            editName: optionCodes[selectedOption] === 101,
+            server: savedVersion_
+          };
+
+          EditVpnServerValueComponent.openDialog(this.dialog, params).afterClosed().subscribe(() => this.processAllServers());
+        } else if (optionCodes[selectedOption] === 1) {
           if (savedVersion_.flag !== ServerFlags.Blocked) {
             this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Favorite);
             this.snackbarService.showDone('vpn.server-list.options.make-favorite-done');
@@ -364,6 +400,7 @@ export class ServerListComponent implements OnDestroy {
           return {
             countryCode: server.countryCode,
             name: server.name,
+            customName: null,
             location: server.location,
             pk: server.pk,
             congestion: server.congestion,
@@ -372,6 +409,7 @@ export class ServerListComponent implements OnDestroy {
             latencyRating: server.latencyRating,
             hops: server.hops,
             note: server.note,
+            personalNote: null,
 
             originalDiscoveryData: server,
           };
@@ -400,9 +438,11 @@ export class ServerListComponent implements OnDestroy {
           processedList.push({
             countryCode: server.countryCode,
             name: server.name,
+            customName: null,
             location: server.location,
             pk: server.pk,
             note: server.note,
+            personalNote: null,
             lastUsed: server.lastUsed,
             inHistory: server.inHistory,
             flag: server.flag,
@@ -424,7 +464,7 @@ export class ServerListComponent implements OnDestroy {
     setTimeout(() => {
       this.allServers = [];
 
-      const server1 = {
+      const server1: VpnServer = {
         countryCode: 'au',
         name: 'Server name',
         location: 'Melbourne - Australia',
@@ -437,10 +477,12 @@ export class ServerListComponent implements OnDestroy {
         note: 'Note',
       };
       this.allServers.push({...server1,
-        originalDiscoveryData: server1
+        customName: null,
+        personalNote: null,
+        originalDiscoveryData: server1,
       });
 
-      const server2 = {
+      const server2: VpnServer = {
         countryCode: 'br',
         name: 'Test server 14',
         location: 'Rio de Janeiro - Brazil',
@@ -453,10 +495,12 @@ export class ServerListComponent implements OnDestroy {
         note: 'Note'
       };
       this.allServers.push({...server2,
+        customName: null,
+        personalNote: null,
         originalDiscoveryData: server2
       });
 
-      const server3 = {
+      const server3: VpnServer = {
         countryCode: 'de',
         name: 'Test server 20',
         location: 'Berlin - Germany',
@@ -469,6 +513,8 @@ export class ServerListComponent implements OnDestroy {
         note: 'Note'
       };
       this.allServers.push({...server3,
+        customName: null,
+        personalNote: null,
         originalDiscoveryData: server3,
       });
 
@@ -484,12 +530,14 @@ export class ServerListComponent implements OnDestroy {
     this.fillFilterPropertiesArray();
 
     const countriesSet = new Set<string>();
-    this.allServers.forEach(server => {
+    this.allServers.forEach((server, i) => {
       // Add the country to the countries list.
       countriesSet.add(server.countryCode);
 
       // Add the saved data, if any.
-      const saveddata = this.vpnSavedDataService.getSavedVersion(server.pk);
+      const saveddata = this.vpnSavedDataService.getSavedVersion(server.pk, i === 0);
+      server.customName = saveddata ? saveddata.customName : null;
+      server.personalNote = saveddata ? saveddata.personalNote : null;
       server.inHistory = saveddata ? saveddata.inHistory : false;
       server.flag = saveddata ? saveddata.flag : ServerFlags.None;
     });

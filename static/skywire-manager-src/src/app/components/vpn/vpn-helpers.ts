@@ -144,6 +144,11 @@ export class VpnHelpers {
         confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
           confirmationDialog.componentInstance.closeModal();
 
+          // For updating the data in persistent storage.
+          if (newServerManually) {
+            vpnClientService.changeServerManually(newServerManually);
+          }
+
           vpnClientService.start();
           VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
         });
