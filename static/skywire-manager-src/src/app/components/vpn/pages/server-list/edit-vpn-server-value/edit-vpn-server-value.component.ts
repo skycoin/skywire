@@ -66,7 +66,7 @@ export class EditVpnServerValueComponent implements OnInit {
     }
 
     this.vpnSavedDataService.updateServer(updatedSavedServer);
-    this.snackbarService.showDone('vpn.server-list.options.edit-value.changes-made-confirmation');
-    this.dialogRef.close();
+    this.snackbarService.showDone('vpn.server-options.edit-value.changes-made-confirmation');
+    this.dialogRef.close(true);
   }
 }

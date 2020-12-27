@@ -1,5 +1,7 @@
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router } from '@angular/router';
+import { map, mergeMap } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
 
 import { TabButtonData } from '../layout/top-bar/top-bar.component';
 import { VpnClientService, CheckPkResults } from 'src/app/services/vpn-client.service';
@@ -7,8 +9,13 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { VpnServer } from 'src/app/services/vpn-client-discovery.service';
 import { ManualVpnServerData } from './pages/server-list/add-vpn-server/add-vpn-server.component';
-import { LocalServerData } from 'src/app/services/vpn-saved-data.service';
-import { Lists } from './pages/server-list/server-list.component';
+import { LocalServerData, ServerFlags, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
+import { Lists, VpnServerForList } from './pages/server-list/server-list.component';
+import { SelectableOption, SelectOptionComponent } from '../layout/select-option/select-option.component';
+import {
+  EditVpnServerParams,
+  EditVpnServerValueComponent
+} from './pages/server-list/edit-vpn-server-value/edit-vpn-server-value.component';
 
 export class VpnHelpers {
   private static readonly serverListTabStorageKey = 'ServerListTab';
@@ -177,5 +184,173 @@ export class VpnHelpers {
     }
 
     router.navigate(['vpn', localPk, 'status']);
+  }
+
+  static openServerOptions(
+    server: LocalServerData,
+    vpnSavedDataService: VpnSavedDataService,
+    vpnClientService: VpnClientService,
+    snackbarService: SnackbarService,
+    dialog: MatDialog
+  ) {
+    const options: SelectableOption[] = [];
+    const optionCodes: number[] = [];
+
+    options.push({ icon: 'edit', label: 'vpn.server-options.edit-value.name-title' });
+    optionCodes.push(101);
+    options.push({ icon: 'subject', label: 'vpn.server-options.edit-value.note-title' });
+    optionCodes.push(102);
+
+    if (!server || server.flag !== ServerFlags.Favorite) {
+      options.push({ icon: 'star', label: 'vpn.server-options.make-favorite' });
+      optionCodes.push(1);
+    }
+
+    if (server && server.flag === ServerFlags.Favorite) {
+      options.push({ icon: 'star_outline', label: 'vpn.server-options.remove-from-favorites' });
+      optionCodes.push(-1);
+    }
+
+    if (!server || server.flag !== ServerFlags.Blocked) {
+      options.push({ icon: 'pan_tool', label: 'vpn.server-options.block' });
+      optionCodes.push(2);
+    }
+
+    if (server && server.flag === ServerFlags.Blocked) {
+      options.push({ icon: 'thumb_up', label: 'vpn.server-options.unblock' });
+      optionCodes.push(-2);
+    }
+
+    if (server && server.inHistory) {
+      options.push({ icon: 'delete', label: 'vpn.server-options.remove-from-history'});
+      optionCodes.push(-3);
+    }
+
+    return SelectOptionComponent.openDialog(dialog, options, 'common.options').afterClosed().pipe(mergeMap((selectedOption: number) => {
+      if (selectedOption) {
+        const updatedSavedVersion = vpnSavedDataService.getSavedVersion(server.pk, true);
+        server = updatedSavedVersion ? updatedSavedVersion : server;
+
+        selectedOption -= 1;
+
+        if (optionCodes[selectedOption] > 100) {
+          const params: EditVpnServerParams = {
+            editName: optionCodes[selectedOption] === 101,
+            server: server
+          };
+
+          return EditVpnServerValueComponent.openDialog(dialog, params).afterClosed();
+        } else if (optionCodes[selectedOption] === 1) {
+          return VpnHelpers.makeFavorite(server, vpnSavedDataService, snackbarService, dialog);
+        } else if (optionCodes[selectedOption] === -1) {
+          vpnSavedDataService.changeFlag(server, ServerFlags.None);
+          snackbarService.showDone('vpn.server-options.remove-from-favorites-done');
+
+          return of(true);
+        } else if (optionCodes[selectedOption] === 2) {
+          return VpnHelpers.blockServer(server, vpnSavedDataService, vpnClientService, snackbarService, dialog);
+        } else if (optionCodes[selectedOption] === -2) {
+          vpnSavedDataService.changeFlag(server, ServerFlags.None);
+          snackbarService.showDone('vpn.server-options.unblock-done');
+
+          return of(true);
+        } else if (optionCodes[selectedOption] === -3) {
+          return VpnHelpers.removeFromHistory(server, vpnSavedDataService, snackbarService, dialog);
+        }
+      }
+
+      return of(false);
+    }));
+  }
+
+  private static removeFromHistory(
+    server: LocalServerData,
+    vpnSavedDataService: VpnSavedDataService,
+    snackbarService: SnackbarService,
+    dialog: MatDialog
+  ): Observable<boolean> {
+    let confirmed = false;
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-options.remove-from-history-confirmation');
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmed = true;
+      vpnSavedDataService.removeFromHistory(server.pk);
+      snackbarService.showDone('vpn.server-options.remove-from-history-done');
+
+      confirmationDialog.componentInstance.closeModal();
+    });
+
+    return confirmationDialog.afterClosed().pipe(map(() => confirmed));
+  }
+
+  private static makeFavorite(
+    server: LocalServerData,
+    vpnSavedDataService: VpnSavedDataService,
+    snackbarService: SnackbarService,
+    dialog: MatDialog
+  ): Observable<boolean> {
+    if (server.flag !== ServerFlags.Blocked) {
+      vpnSavedDataService.changeFlag(server, ServerFlags.Favorite);
+      snackbarService.showDone('vpn.server-options.make-favorite-done');
+
+      return of(true);
+    }
+
+    let confirmed = false;
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-options.make-favorite-confirmation');
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmed = true;
+      vpnSavedDataService.changeFlag(server, ServerFlags.Favorite);
+      snackbarService.showDone('vpn.server-options.make-favorite-done');
+
+      confirmationDialog.componentInstance.closeModal();
+    });
+
+    return confirmationDialog.afterClosed().pipe(map(() => confirmed));
+  }
+
+  private static blockServer(
+    server: LocalServerData,
+    vpnSavedDataService: VpnSavedDataService,
+    vpnClientService: VpnClientService,
+    snackbarService: SnackbarService,
+    dialog: MatDialog
+  ): Observable<boolean> {
+    if (server.flag !== ServerFlags.Favorite) {
+      if (!vpnSavedDataService.currentServer || vpnSavedDataService.currentServer.pk !== server.pk) {
+        vpnSavedDataService.changeFlag(server, ServerFlags.Blocked);
+        snackbarService.showDone('vpn.server-options.block-done');
+
+        return of(true);
+      }
+    }
+
+    let confirmed = false;
+    const mustStopVpn = vpnSavedDataService.currentServer && vpnSavedDataService.currentServer.pk === server.pk;
+
+    let confirmationMsg: string;
+    if (server.flag !== ServerFlags.Favorite) {
+      confirmationMsg = 'vpn.server-options.block-selected-confirmation';
+    } else if (mustStopVpn) {
+      confirmationMsg = 'vpn.server-options.block-selected-favorite-confirmation';
+    } else {
+      confirmationMsg = 'vpn.server-options.block-confirmation';
+    }
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(dialog, confirmationMsg);
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmed = true;
+      vpnSavedDataService.changeFlag(server, ServerFlags.Blocked);
+      snackbarService.showDone('vpn.server-options.block-done');
+
+      if (mustStopVpn) {
+        vpnClientService.stop();
+      }
+
+      confirmationDialog.componentInstance.closeModal();
+    });
+
+    return confirmationDialog.afterClosed().pipe(map(() => confirmed));
   }
 }

@@ -254,12 +254,14 @@
     }
   }
 
+  $max-server-box-size: 280px;
+
   .current-server {
     display: inline-flex;
     background: $dark-background;
     border-radius: 10px;
     padding: 10px 15px;
-    max-width: 250px;
+    max-width: $max-server-box-size;
     text-align: left;
 
     .none {
@@ -296,6 +298,45 @@
         color: $grey;
         @extend .single-line;
       }
+    }
+
+    .icon-button-separator {
+      display: flex;
+      align-items: center;
+
+      div {
+        width: 1px;
+        height: 30px;
+        background: $separator;
+        margin-left: 12px;
+      }
+    }
+
+    .icon-button {
+      font-size: 22px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      padding-left: 12px;
+
+      mat-icon {
+        cursor: pointer;
+      }
+    }
+  }
+
+  .current-server-note {
+    display: inline-block;
+    max-width: $max-server-box-size;
+    margin-top: 15px;
+    font-size: $font-size-mini;
+    color: $grey;
+
+    mat-icon {
+      position: relative;
+      top: 1px;
+      display: inline;
+      user-select: none;
     }
   }
 }
@@ -361,8 +402,12 @@
   pointer-events: none;
 }
 
-.name-separator {
-  display: inline;
-  font-size: 8px !important;
-  opacity: 0.5;
+.server-condition-icon {
+  font-size: 14px !important;
+  line-height: 14px !important;
+  margin-right: 3px;
+  position: relative;
+  top: 2px;
+  width: unset !important;
+  user-select: none;
 }
