@@ -194,31 +194,31 @@
               *ngIf="server.pk === currentServer.pk"
               class="known-icon"
               [inline]="true"
-              [matTooltip]="'vpn.server-list.selected-info' | translate"
+              [matTooltip]="'vpn.server-conditions.selected-info' | translate"
             >done</mat-icon>
             <mat-icon
               *ngIf="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
               class="known-icon red-clear-text"
               [inline]="true"
-              [matTooltip]="'vpn.server-list.blocked-info' | translate"
+              [matTooltip]="'vpn.server-conditions.blocked-info' | translate"
             >clear</mat-icon>
             <mat-icon
               *ngIf="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
               class="known-icon yellow-clear-text"
               [inline]="true"
-              [matTooltip]="'vpn.server-list.favorite-info' | translate"
+              [matTooltip]="'vpn.server-conditions.favorite-info' | translate"
             >star</mat-icon>
             <mat-icon
               *ngIf="server.inHistory && currentList !== lists.History"
               class="known-icon"
               [inline]="true"
-              [matTooltip]="'vpn.server-list.history-info' | translate"
+              [matTooltip]="'vpn.server-conditions.history-info' | translate"
             >history</mat-icon>
             <ng-container *ngIf="server.customName">
               {{ server.customName }}
             </ng-container>
             <ng-container *ngIf="server.customName && server.name">
-              <mat-icon [inline]="true" class="name-separator">fiber_manual_record</mat-icon>
+              <mat-icon [inline]="true" class="vpn-server-name-separator">fiber_manual_record</mat-icon>
             </ng-container>
             <ng-container *ngIf="server.name">
               {{ server.name }}
@@ -280,7 +280,7 @@
             <button
               mat-icon-button
               class="big-action-button transparent-button"
-              [matTooltip]="'vpn.server-list.options-info' | translate"
+              [matTooltip]="'vpn.server-options.tooltip' | translate"
               (click)="$event.stopPropagation(); openOptions(server);"
             >
               <mat-icon [inline]="true">settings</mat-icon>

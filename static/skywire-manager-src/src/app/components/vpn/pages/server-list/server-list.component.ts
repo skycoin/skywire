@@ -25,7 +25,7 @@ export enum Lists {
   Blocked = 'blocked',
 }
 
-interface VpnServerForList {
+export interface VpnServerForList {
   countryCode: string;
   name: string;
   customName: string;
@@ -188,6 +188,7 @@ export class ServerListComponent implements OnDestroy {
   ngOnDestroy() {
     this.navigationsSubscription.unsubscribe();
     this.currentServerSubscription.unsubscribe();
+    this.backendDataSubscription.unsubscribe();
 
     if (this.dataSortedSubscription) {
       this.dataSortedSubscription.unsubscribe();
@@ -240,154 +241,26 @@ export class ServerListComponent implements OnDestroy {
   }
 
   openOptions(server: VpnServerForList) {
-    const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
+    let savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
+    if (!savedVersion) {
+      savedVersion = this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData);
+    }
+    if (!savedVersion) {
+      // This should not happen.
+      this.snackbarService.showError('vpn.unexpedted-error');
 
-    const options: SelectableOption[] = [];
-    const optionCodes: number[] = [];
-
-    options.push({
-      icon: 'edit',
-      label: 'vpn.server-list.options.edit-value.name-title',
-    });
-    optionCodes.push(101);
-
-    options.push({
-      icon: 'subject',
-      label: 'vpn.server-list.options.edit-value.note-title',
-    });
-    optionCodes.push(102);
-
-    if (!savedVersion || savedVersion.flag !== ServerFlags.Favorite) {
-      options.push({
-        icon: 'star',
-        label: 'vpn.server-list.options.make-favorite',
-      });
-      optionCodes.push(1);
+      return;
     }
 
-    if (savedVersion && savedVersion.flag === ServerFlags.Favorite) {
-      options.push({
-        icon: 'star_outline',
-        label: 'vpn.server-list.options.remove-from-favorites',
-      });
-      optionCodes.push(-1);
-    }
-
-    if (!savedVersion || savedVersion.flag !== ServerFlags.Blocked) {
-      options.push({
-        icon: 'pan_tool',
-        label: 'vpn.server-list.options.block',
-      });
-      optionCodes.push(2);
-    }
-
-    if (savedVersion && savedVersion.flag === ServerFlags.Blocked) {
-      options.push({
-        icon: 'thumb_up',
-        label: 'vpn.server-list.options.unblock',
-      });
-      optionCodes.push(-2);
-    }
-
-    if (savedVersion && savedVersion.inHistory) {
-      options.push({
-        icon: 'delete',
-        label: 'vpn.server-list.options.remove-from-history',
-      });
-      optionCodes.push(-3);
-    }
-
-    SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
-      if (selectedOption) {
-        let savedVersion_ = this.vpnSavedDataService.getSavedVersion(server.pk, true);
-        if (!savedVersion_) {
-          savedVersion_ = this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData);
-        }
-        if (!savedVersion_) {
-          // This should not happen.
-          throw new Error('Invalid server.');
-        }
-
-        selectedOption -= 1;
-
-        if (optionCodes[selectedOption] > 100) {
-          const params: EditVpnServerParams = {
-            editName: optionCodes[selectedOption] === 101,
-            server: savedVersion_
-          };
-
-          EditVpnServerValueComponent.openDialog(this.dialog, params).afterClosed().subscribe(() => this.processAllServers());
-        } else if (optionCodes[selectedOption] === 1) {
-          if (savedVersion_.flag !== ServerFlags.Blocked) {
-            this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Favorite);
-            this.snackbarService.showDone('vpn.server-list.options.make-favorite-done');
-            this.processAllServers();
-          } else {
-            const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.make-favorite-confirmation');
-            confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-              confirmationDialog.componentInstance.closeModal();
-              this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Favorite);
-              this.snackbarService.showDone('vpn.server-list.options.make-favorite-done');
-              this.processAllServers();
-            });
-          }
-        } else if (optionCodes[selectedOption] === -1) {
-          this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.None);
-          this.snackbarService.showDone('vpn.server-list.options.remove-from-favorites-done');
-          this.processAllServers();
-        } else if (optionCodes[selectedOption] === 2) {
-          if (savedVersion_.flag !== ServerFlags.Favorite) {
-            if (this.currentServer.pk !== savedVersion_.pk) {
-              this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
-              this.snackbarService.showDone('vpn.server-list.options.block-done');
-              this.processAllServers();
-            } else {
-              const confirmationDialog =
-                GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.block-selected-confirmation');
-
-              confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-                confirmationDialog.componentInstance.closeModal();
-                this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
-                this.snackbarService.showDone('vpn.server-list.options.block-done');
-                this.processAllServers();
-
-                this.vpnClientService.stop();
-              });
-            }
-          } else {
-            if (this.currentServer.pk !== savedVersion_.pk) {
-              const confirmationDialog =
-                GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.block-confirmation');
-
-              confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-                confirmationDialog.componentInstance.closeModal();
-                this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
-                this.snackbarService.showDone('vpn.server-list.options.block-done');
-                this.processAllServers();
-              });
-            } else {
-              const confirmationDialog =
-                GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-list.options.block-selected-favorite-confirmation');
-
-              confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-                confirmationDialog.componentInstance.closeModal();
-                this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.Blocked);
-                this.snackbarService.showDone('vpn.server-list.options.block-done');
-                this.processAllServers();
-
-                this.vpnClientService.stop();
-              });
-            }
-          }
-        } else if (optionCodes[selectedOption] === -2) {
-          this.vpnSavedDataService.changeFlag(savedVersion_, ServerFlags.None);
-          this.snackbarService.showDone('vpn.server-list.options.unblock-done');
-          this.processAllServers();
-        } else if (optionCodes[selectedOption] === -3) {
-          this.vpnSavedDataService.removeFromHistory(savedVersion_.pk);
-          this.snackbarService.showDone('vpn.server-list.options.remove-from-history-done');
-          this.processAllServers();
-        }
+    VpnHelpers.openServerOptions(
+      savedVersion,
+      this.vpnSavedDataService,
+      this.vpnClientService,
+      this.snackbarService,
+      this.dialog
+    ).subscribe(changesMade => {
+      if (changesMade) {
+        this.processAllServers();
       }
     });
   }

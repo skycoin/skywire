@@ -48,6 +48,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   currentRemoteServer: LocalServerData;
   backendState: BackendState;
 
+  serverFlags = ServerFlags;
+
   private dataSubscription: Subscription;
   private currentRemoteServerSubscription: Subscription;
   private operationSubscription: Subscription;
@@ -167,8 +169,28 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     });
   }
 
+  openServerOptions() {
+    VpnHelpers.openServerOptions(
+      this.currentRemoteServer,
+      this.vpnSavedDataService,
+      this.vpnClientService,
+      this.snackbarService,
+      this.dialog
+    ).subscribe();
+  }
+
   getCountryName(countryCode: string): string {
     return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
+  }
+
+  getNoteVar() {
+    if (this.currentRemoteServer.note && this.currentRemoteServer.personalNote) {
+      return 'vpn.server-list.notes-info';
+    } else if (!this.currentRemoteServer.note && this.currentRemoteServer.personalNote) {
+      return this.currentRemoteServer.personalNote;
+    }
+
+    return this.currentRemoteServer.note;
   }
 
   // Gets the name of the translatable var that must be used for showing a latency value. This
