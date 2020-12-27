@@ -46,22 +46,53 @@
               ></div>
             </div>
             <div class="text-container">
-              <div class="top-line" *ngIf="currentRemoteServer.name && currentRemoteServer.customName">
-                {{ currentRemoteServer.customName }}
-                <mat-icon [inline]="true" class="name-separator">fiber_manual_record</mat-icon>
-                {{ currentRemoteServer.name }}
+              <div class="top-line">
+                <mat-icon
+                  *ngIf="currentRemoteServer.flag === serverFlags.Blocked"
+                  class="server-condition-icon red-clear-text"
+                  [inline]="true"
+                  [matTooltip]="'vpn.server-conditions.blocked-info' | translate"
+                >clear</mat-icon>
+                <mat-icon
+                  *ngIf="currentRemoteServer.flag === serverFlags.Favorite"
+                  class="server-condition-icon yellow-clear-text"
+                  [inline]="true"
+                  [matTooltip]="'vpn.server-conditions.favorite-info' | translate"
+                >star</mat-icon>
+                <ng-container *ngIf="currentRemoteServer.name && currentRemoteServer.customName">
+                  {{ currentRemoteServer.customName }}
+                  <mat-icon [inline]="true" class="vpn-server-name-separator">fiber_manual_record</mat-icon>
+                  {{ currentRemoteServer.name }}
+                </ng-container>
+                <ng-container *ngIf="!currentRemoteServer.name && currentRemoteServer.customName">{{ currentRemoteServer.customName }}</ng-container>
+                <ng-container *ngIf="currentRemoteServer.name && !currentRemoteServer.customName">{{ currentRemoteServer.name }}</ng-container>
+                <ng-container *ngIf="!currentRemoteServer.name && !currentRemoteServer.customName">{{ 'vpn.status-page.entered-manually' | translate }}</ng-container>
               </div>
-              <div class="top-line" *ngIf="!currentRemoteServer.name && currentRemoteServer.customName">{{ currentRemoteServer.customName }}</div>
-              <div class="top-line" *ngIf="currentRemoteServer.name && !currentRemoteServer.customName">{{ currentRemoteServer.name }}</div>
-              <div class="top-line" *ngIf="!currentRemoteServer.name && !currentRemoteServer.customName">{{ 'vpn.status-page.entered-manually' | translate }}</div>
               <div class="bottom-line">
                 <app-copy-to-clipboard-text [shortSimple]="true" [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
               </div>
+            </div>
+            <div class="icon-button-separator">
+              <div></div>
+            </div>
+            <div class="icon-button">
+              <mat-icon
+                [inline]="true"
+                class="transparent-button"
+                (click)="openServerOptions()"
+                [matTooltip]="'vpn.server-options.tooltip' | translate"
+              >settings</mat-icon>
             </div>
           </ng-container>
           <ng-container *ngIf="!currentRemoteServer">
             <div class="none">{{ 'vpn.status-page.no-server' | translate }}</div>
           </ng-container>
+        </div>
+        <div>
+          <div class="current-server-note" *ngIf="currentRemoteServer.note || currentRemoteServer.personalNote">
+            <mat-icon [inline]="true">info_outline</mat-icon>
+            {{ getNoteVar() | translate:{custom: currentRemoteServer.personalNote, original: currentRemoteServer.note} }}
+          </div>
         </div>
       </div>
     </div>
@@ -170,14 +201,32 @@
           <div *ngIf="showStarted && currentRemoteServer">
             <div class="title">{{ 'vpn.status-page.data.server' | translate }}</div>
             <div class="big-text">
-              <div *ngIf="currentRemoteServer.name && currentRemoteServer.customName">
+              <mat-icon
+                *ngIf="currentRemoteServer.flag === serverFlags.Blocked"
+                class="server-condition-icon red-clear-text"
+                [inline]="true"
+                [matTooltip]="'vpn.server-conditions.blocked-info' | translate"
+              >clear</mat-icon>
+              <mat-icon
+                *ngIf="currentRemoteServer.flag === serverFlags.Favorite"
+                class="server-condition-icon yellow-clear-text"
+                [inline]="true"
+                [matTooltip]="'vpn.server-conditions.favorite-info' | translate"
+              >star</mat-icon>
+              <ng-container *ngIf="currentRemoteServer.name && currentRemoteServer.customName">
                 {{ currentRemoteServer.customName }}
-                <mat-icon [inline]="true" class="name-separator">fiber_manual_record</mat-icon>
+                <mat-icon [inline]="true" class="vpn-server-name-separator">fiber_manual_record</mat-icon>
                 {{ currentRemoteServer.name }}
-              </div>
-              <div *ngIf="!currentRemoteServer.name && currentRemoteServer.customName">{{ currentRemoteServer.customName }}</div>
-              <div *ngIf="currentRemoteServer.name && !currentRemoteServer.customName">{{ currentRemoteServer.name }}</div>
-              <div *ngIf="!currentRemoteServer.name && !currentRemoteServer.customName">{{ 'vpn.status-page.entered-manually' | translate }}</div>
+              </ng-container>
+              <ng-container *ngIf="!currentRemoteServer.name && currentRemoteServer.customName">{{ currentRemoteServer.customName }}</ng-container>
+              <ng-container *ngIf="currentRemoteServer.name && !currentRemoteServer.customName">{{ currentRemoteServer.name }}</ng-container>
+              <ng-container *ngIf="!currentRemoteServer.name && !currentRemoteServer.customName">{{ 'vpn.status-page.entered-manually' | translate }}</ng-container>
+              <mat-icon
+                (click)="openServerOptions()"
+                class="big-icon transparent-button"
+                [inline]="true"
+                [matTooltip]="'vpn.server-options.tooltip' | translate"
+              >settings</mat-icon>
             </div>
           </div>
           <!-- Server custom note. -->

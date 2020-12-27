@@ -1,10 +1,10 @@
-<app-dialog [headline]="('vpn.server-list.options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-title') | translate">
+<app-dialog [headline]="('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-title') | translate">
   <form [formGroup]="form">
     <mat-form-field>
       <input
         formControlName="value"
         maxlength="100"
-        [placeholder]="('vpn.server-list.options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-label') | translate"
+        [placeholder]="('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-label') | translate"
         #firstInput
         matInput
       >
@@ -15,7 +15,7 @@
       color="primary"
       class="float-right"
     >
-      {{ 'vpn.server-list.options.edit-value.apply-button' | translate }}
+      {{ 'vpn.server-options.edit-value.apply-button' | translate }}
     </app-button>
   </form>
 </app-dialog>
