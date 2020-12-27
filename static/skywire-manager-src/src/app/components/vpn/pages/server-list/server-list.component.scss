@@ -94,12 +94,6 @@ tr {
   max-width: 0;
   width: 20%;
   @extend .single-line;
-
-  .name-separator {
-    display: inline;
-    font-size: 8px;
-    opacity: 0.5;
-  }
 }
 
 .location-column {
