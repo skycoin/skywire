@@ -202,8 +202,12 @@ export class ServerListComponent implements OnDestroy {
 
     this.closeCheckVpnSubscription();
 
-    this.dataFilterer.dispose();
-    this.dataSorter.dispose();
+    if (this.dataFilterer) {
+      this.dataFilterer.dispose();
+    }
+    if (this.dataSorter) {
+      this.dataSorter.dispose();
+    }
   }
 
   enterManually() {

@@ -1,4 +1,4 @@
-import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit, IterableDiffer } from '@angular/core';
+import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit, IterableDiffer, OnDestroy } from '@angular/core';
 import { Chart } from 'chart.js';
 
 /**
@@ -9,12 +9,16 @@ import { Chart } from 'chart.js';
   templateUrl: './line-chart.component.html',
   styleUrls: ['./line-chart.component.scss']
 })
-export class LineChartComponent implements AfterViewInit, DoCheck {
+export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
+  public static topInternalMargin = 5;
+
   @ViewChild('chart') chartElement: ElementRef;
   @Input() data: number[];
   @Input() height = 100;
   @Input() color = 'rgba(10, 15, 22, 0.4)';
   @Input() animated = false;
+  @Input() min: number = undefined;
+  @Input() max: number = undefined;
   chart: any;
 
   private differ: IterableDiffer<unknown>;
@@ -59,12 +63,18 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
           padding: {
               left: 0,
               right: 0,
-              top: 5,
+              top: LineChartComponent.topInternalMargin,
               bottom: 0
           }
         },
       },
     });
+
+    // Update the max and min values, if set.
+    if (this.min !== undefined && this.max !== undefined) {
+      this.updateMinAndMax();
+      this.chart.update(0);
+    }
   }
 
   ngDoCheck() {
@@ -72,11 +82,37 @@ export class LineChartComponent implements AfterViewInit, DoCheck {
 
     // Update the chart only when the values of the "data" var change.
     if (changes && this.chart) {
+      if (this.min !== undefined && this.max !== undefined) {
+        this.updateMinAndMax();
+      }
+
       if (this.animated) {
         this.chart.update();
       } else {
         this.chart.update(0);
       }
     }
+  }
+
+  ngOnDestroy() {
+    if (this.chart) {
+      this.chart.destroy();
+    }
+  }
+
+  /**
+   * Updates the max and min values the chart shows.
+   */
+  private updateMinAndMax() {
+    this.chart.options.scales = {
+      yAxes: [{
+          display: false,
+          ticks: {
+            min: this.min,
+            max: this.max,
+          },
+      }],
+      xAxes: [{ display: false }],
+    };
   }
 }

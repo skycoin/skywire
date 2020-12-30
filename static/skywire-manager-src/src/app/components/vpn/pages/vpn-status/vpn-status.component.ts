@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
+import BigNumber from 'bignumber.js';
 
 import { VpnHelpers } from '../../vpn-helpers';
 import { AppState, BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';
@@ -10,6 +11,7 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 import { LocalServerData, ServerFlags, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { countriesList } from 'src/app/utils/countries-list';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { LineChartComponent } from 'src/app/components/layout/line-chart/line-chart.component';
 
 @Component({
   selector: 'app-vpn-status',
@@ -22,6 +24,18 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   sentHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   receivedHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   latencyHistory: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  minUploadInGraph = 0;
+  midUploadInGraph = 0;
+  maxUploadInGraph = 0;
+  minDownloadInGraph = 0;
+  midDownloadInGraph = 0;
+  maxDownloadInGraph = 0;
+  minLatencyInGraph = 0;
+  midLatencyInGraph = 0;
+  maxLatencyInGraph = 0;
+
+  graphsTopInternalMargin = LineChartComponent.topInternalMargin;
+
   uploadSpeed = 0;
   downloadSpeed = 0;
   totalUploaded = 0;
@@ -96,6 +110,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
               this.latencyHistory[i] = 0;
             }
 
+            this.updateHistoryVals();
+
             this.uploadSpeed = 0;
             this.downloadSpeed = 0;
             this.totalUploaded = 0;
@@ -114,6 +130,8 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
               this.sentHistory[i] = data.vpnClientAppData.connectionData.uploadSpeedHistory[i];
               this.latencyHistory[i] = data.vpnClientAppData.connectionData.latencyHistory[i];
             }
+
+            this.updateHistoryVals();
 
             this.uploadSpeed = data.vpnClientAppData.connectionData.uploadSpeed;
             this.downloadSpeed = data.vpnClientAppData.connectionData.downloadSpeed;
@@ -224,6 +242,48 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
+  }
+
+  private updateHistoryVals() {
+    const uploaded = this.calculateHistoryVals(this.sentHistory);
+    this.minUploadInGraph = uploaded[0];
+    this.midUploadInGraph = uploaded[1];
+    this.maxUploadInGraph = uploaded[2];
+
+    const downloaded = this.calculateHistoryVals(this.receivedHistory);
+    this.minDownloadInGraph = downloaded[0];
+    this.midDownloadInGraph = downloaded[1];
+    this.maxDownloadInGraph = downloaded[2];
+
+    const latency = this.calculateHistoryVals(this.latencyHistory);
+    this.minLatencyInGraph = latency[0];
+    this.midLatencyInGraph = latency[1];
+    this.maxLatencyInGraph = latency[2];
+  }
+
+  private calculateHistoryVals(arrayToCheck: number[]) {
+    let min = Number.MAX_SAFE_INTEGER;
+    let max = 0;
+    let mid = 0;
+
+    arrayToCheck.forEach(val => {
+      if (val < min) {
+        min = val;
+      }
+
+      if (val > max) {
+        max = val;
+      }
+    });
+
+    if (min === max) {
+      max += 1;
+      min = min >= 1 ? min - 1 : 0;
+    }
+
+    mid = (new BigNumber(max)).minus(min).dividedBy(2).plus(min).decimalPlaces(1).toNumber();
+
+    return [min, mid, max];
   }
 
   private getIp(ignoreTimeCheck = false) {
