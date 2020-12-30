@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { of, Subscription } from 'rxjs';
+import { delay } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
@@ -147,9 +148,21 @@ export class TopBarComponent implements OnInit, OnDestroy {
   vpnData: VpnData;
   // If the vpn data must be shown.
   showVpnInfo = false;
+  // If the state of the vpn client app has already been obtained for the first time.
+  initialVpnStateObtained = false;
+  // If the vpn client app was running or not the first time the state was obtained.
+  firstVpnRunningCValue = false;
+  // If the css class for animating the vpn state changes must be added. Must be true only after
+  // the first state change was detected. From that moment, showing a new state will run
+  // the animation.
+  showVpnStateAnimation = false;
+  // If the control with the animation for the vpn state that runs one time must me shown. For
+  // running the animation again, this var is set to false and the to true again, after a moment.
+  showVpnStateAnimatedDot = true;
 
   private langSubscriptionsGroup: Subscription[] = [];
   private vpnDataSubscription: Subscription;
+  private showVpnStateAnimatedDotSubscription: Subscription;
 
   constructor(
     private languageService: LanguageService,
@@ -192,6 +205,23 @@ export class TopBarComponent implements OnInit, OnDestroy {
           downloadSpeed: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.downloadSpeed : 0,
           uploadSpeed: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.uploadSpeed : 0,
         };
+
+        // Include the VPN state change animation only after the first state change is detected.
+        if (!this.initialVpnStateObtained) {
+          this.initialVpnStateObtained = true;
+          this.firstVpnRunningCValue = data.vpnClientAppData.running;
+        } else {
+          if (this.firstVpnRunningCValue !== data.vpnClientAppData.running) {
+            this.showVpnStateAnimation = true;
+          }
+        }
+
+        // Make the state dot blink after receiving an update.
+        this.showVpnStateAnimatedDot = false;
+        if (this.showVpnStateAnimatedDotSubscription) {
+          this.showVpnStateAnimatedDotSubscription.unsubscribe();
+        }
+        this.showVpnStateAnimatedDotSubscription = of(0).pipe(delay(1)).subscribe(() => this.showVpnStateAnimatedDot = true);
       }
     });
   }
