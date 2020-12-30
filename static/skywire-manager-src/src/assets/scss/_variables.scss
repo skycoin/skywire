@@ -31,12 +31,13 @@ $separator: rgba(255, 255, 255, 0.15);
 $grey-separator: rgba(0, 0, 0, 0.12);
 
 $theme-colors: (
-  green:              $green,
-  red:                $red,
-  yellow:             $yellow,
-  translucid-hover:   rgba(0, 0, 0, 0.2),
-  white:              $white,
-  light-gray:         $light-gray
+  green:                   $green,
+  red:                     $red,
+  yellow:                  $yellow,
+  translucid-hover:        rgba(0, 0, 0, 0.2),
+  translucid-hover-hard:   rgba(0, 0, 0, 0.4),
+  white:                   $white,
+  light-gray:              $light-gray
 );
 
 //

@@ -5,6 +5,6 @@
   </div>
 </div>
 <div class="flex-1 content container-fluid">
-  <div class="background"></div>
+  <div [ngClass]="{'background': inVpnClient}"></div>
   <router-outlet></router-outlet>
 </div>

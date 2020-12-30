@@ -3,3 +3,12 @@
   font-size: 8px !important;
   opacity: 0.5 !important;
 }
+
+.vpn-small-button {
+  cursor: pointer;
+  user-select: none;
+
+  &:active {
+    transform: scale(0.9);
+  }
+}
