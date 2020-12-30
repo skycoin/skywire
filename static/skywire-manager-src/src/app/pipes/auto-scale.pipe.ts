@@ -5,6 +5,7 @@ export class AutoScalePipeParams {
   showValue: boolean;
   showUnit: boolean;
   showPerSecond: boolean;
+  limitDecimals: boolean;
 }
 
 @Pipe({
@@ -29,7 +30,11 @@ export class AutoScalePipe implements PipeTransform {
 
     let result = '';
     if (!params || !!params.showValue) {
-      result = val.toFixed(2);
+      if (params && params.limitDecimals) {
+        result = (new BigNumber(val)).decimalPlaces(1).toString();
+      } else {
+        result = val.toFixed(2);
+      }
     }
     if (!params || (!!params.showValue && !!params.showUnit)) {
       result = result + ' ';

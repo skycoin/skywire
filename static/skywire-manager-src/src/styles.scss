@@ -112,3 +112,14 @@ button:focus {
     opacity: 0.5;
   }
 }
+
+.snackbar-container {
+  padding: 0;
+  background: transparent !important;
+}
+
+.mat-tooltip {
+  font-size: 11px !important;
+  line-height: 1.8;
+  padding: 7px 14px !important;
+}

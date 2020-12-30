@@ -131,10 +131,32 @@
       <table cellspacing="0" cellpadding="0" *ngIf="vpnData">
         <tr>
           <td *ngIf="vpnData.showStarted" class="green-clear-text" [matTooltip]="'vpn.connection-info.state-info' | translate">
+            <div [ngClass]="{'animation-container': showVpnStateAnimation, 'd-none': !showVpnStateAnimation}">
+              <div class="internal-animation-container">
+                <div class="animation-area">
+                  <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+                  {{ 'vpn.connection-info.state-connected' | translate }}
+                </div>
+              </div>
+            </div>
+            <div class="aminated-state-icon-container" *ngIf="showVpnStateAnimatedDot">
+              <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+            </div>
             <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
             {{ 'vpn.connection-info.state-connected' | translate }}
           </td>
           <td *ngIf="!vpnData.showStarted" class="red-clear-text" [matTooltip]="'vpn.connection-info.state-info' | translate">
+            <div [ngClass]="{'animation-container': showVpnStateAnimation, 'd-none': !showVpnStateAnimation}">
+              <div class="internal-animation-container">
+                <div class="animation-area">
+                  <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+                  {{ 'vpn.connection-info.state-disconnected' | translate }}
+                </div>
+              </div>
+            </div>
+            <div class="aminated-state-icon-container" *ngIf="showVpnStateAnimatedDot">
+              <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+            </div>
             <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
             {{ 'vpn.connection-info.state-disconnected' | translate }}
           </td>
