@@ -190,7 +190,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 			select {
 			case <-t.C:
 				log.Infoln("GOT TIME SIGNAL")
-				l.Println("DEBUG LOG")
+				l.Infoln("DEBUG LOG")
 			case <-osSigs:
 				if err := f.Close(); err != nil {
 					log.Errorf("FAILED TO CLOSE LOG: %v", err)
