@@ -90,7 +90,7 @@ import { AddVpnServerComponent } from './components/vpn/pages/server-list/add-vp
 import { EditVpnServerValueComponent } from './components/vpn/pages/server-list/edit-vpn-server-value/edit-vpn-server-value.component';
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
-import { VpnUnavailableComponent } from './components/vpn/pages/vpn-unavailable/vpn-unavailable.component';
+import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -154,7 +154,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     SkysocksClientPasswordComponent,
     ServerListComponent,
     VpnStatusComponent,
-    VpnUnavailableComponent,
+    VpnErrorComponent,
     AddVpnServerComponent,
     VpnSettingsComponent,
     EditVpnServerValueComponent,

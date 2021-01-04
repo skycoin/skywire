@@ -8,6 +8,9 @@ import { VpnHelpers } from '../../../vpn-helpers';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 
+/**
+ * Data AddVpnServerComponent collets.
+ */
 export interface ManualVpnServerData {
   pk: string;
   password: string;
@@ -15,6 +18,10 @@ export interface ManualVpnServerData {
   note?: string;
 }
 
+/**
+ * Modal window for entering the data of a VPN server manually. If the user confirms the
+ * operation, the window saves the new server and start connecting with it.
+ */
 @Component({
   selector: 'app-add-vpn-server',
   templateUrl: './add-vpn-server.component.html',
@@ -24,6 +31,9 @@ export class AddVpnServerComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;
   form: FormGroup;
 
+  /**
+   * Opens the modal window. Please use this function instead of opening the window "by hand".
+   */
   public static openDialog(dialog: MatDialog, currentLocalPk: string): MatDialogRef<AddVpnServerComponent, any> {
     const config = new MatDialogConfig();
     config.data = currentLocalPk;
@@ -44,6 +54,7 @@ export class AddVpnServerComponent implements OnInit {
   ) { }
 
   ngOnInit() {
+    // Init the form.
     this.form = this.formBuilder.group({
       'pk': ['', Validators.compose([
         Validators.required,
@@ -59,6 +70,9 @@ export class AddVpnServerComponent implements OnInit {
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 
+  /**
+   * Saves the server and starts connecting with it.
+   */
   process() {
     if (!this.form.valid) {
       return;

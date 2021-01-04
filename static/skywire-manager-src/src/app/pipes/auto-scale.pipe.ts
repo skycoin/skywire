@@ -1,13 +1,31 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import { BigNumber } from 'bignumber.js';
 
-export class AutoScalePipeParams {
+/**
+ * Params AutoScalePipe can receive.
+ */
+class AutoScalePipeParams {
+  /**
+   * If true, the numeric value will be shown.
+   */
   showValue: boolean;
+  /**
+   * If true, the unit will be shown.
+   */
   showUnit: boolean;
+  /**
+   * If true, the unit will be in data per second (like KB/s instead of KB).
+   */
   showPerSecond: boolean;
+  /**
+   * If true, the numeric value will have at most 1 decimal.
+   */
   limitDecimals: boolean;
 }
 
+/**
+ * Allows to convert a bytes value to KB, MB, GB, etc. It considers 1024, and not 1000, a K.
+ */
 @Pipe({
   name: 'autoScale'
 })
@@ -16,9 +34,12 @@ export class AutoScalePipe implements PipeTransform {
   transform(value: any, params: AutoScalePipeParams): any {
     const accumulatedMeasurements = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     const measurementsPerSec = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s', 'PB/s', 'EB/s', 'ZB/s', 'YB/s'];
-
+    /**
+     * Units to use, as per requested.
+     */
     const measurements = !params || !params.showPerSecond ? accumulatedMeasurements : measurementsPerSec;
 
+    // Calculate the number and the unit.
     let val = new BigNumber(value);
     let measurement = measurements[0];
     let currentIndex = 0;
@@ -28,6 +49,7 @@ export class AutoScalePipe implements PipeTransform {
       measurement = measurements[currentIndex];
     }
 
+    // Add the requested parts.
     let result = '';
     if (!params || !!params.showValue) {
       if (params && params.limitDecimals) {
@@ -45,5 +67,4 @@ export class AutoScalePipe implements PipeTransform {
 
     return result;
   }
-
 }
