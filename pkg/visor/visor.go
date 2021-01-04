@@ -162,7 +162,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		return v, ok
 	}
 
-	log.Info("Startup complete!")
+	log.Info("Startup complete! CHANGED")
 	return v, ok
 }
 
