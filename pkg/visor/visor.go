@@ -170,7 +170,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		l := logrus.New()
 		f, err := os.Open("/opt/skywire/log.log")
 		if err != nil {
-			panic(err)
+			log.Errorf("FAILED TO INITIALLY OPEN LOG: %v", err)
 		}
 
 		l.SetOutput(f)
@@ -187,12 +187,12 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 				l.Println("DEBUG LOG")
 			case <-osSigs:
 				if err := f.Close(); err != nil {
-					panic(err)
+					log.Errorf("FAILED TO CLOSE LOG: %v", err)
 				}
 
 				f, err = os.Open("/opt/skywire/log.log")
 				if err != nil {
-					panic(err)
+					log.Errorf("FAILED TO OPEN LOG: %v", err)
 				}
 			}
 		}
