@@ -167,11 +167,14 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	log.Info("Startup complete!")
 
 	go func() {
+		log.Infoln("INSIDE GOROUTINE")
 		l := logrus.New()
 		f, err := os.Open("/opt/skywire/log.log")
 		if err != nil {
 			log.Errorf("FAILED TO INITIALLY OPEN LOG: %v", err)
 		}
+
+		log.Infoln("OPENED FILE")
 
 		l.SetOutput(f)
 		osSigs := make(chan os.Signal)
@@ -181,9 +184,12 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		t := time.NewTicker(2 * time.Second)
 		defer t.Stop()
 
+		log.Infoln("SUBSCRIBED TO OS SIGNAL")
+
 		for {
 			select {
 			case <-t.C:
+				log.Infoln("GOT TIME SIGNAL")
 				l.Println("DEBUG LOG")
 			case <-osSigs:
 				if err := f.Close(); err != nil {
