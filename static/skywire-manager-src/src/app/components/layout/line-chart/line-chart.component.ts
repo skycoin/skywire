@@ -10,15 +10,19 @@ import { Chart } from 'chart.js';
   styleUrls: ['./line-chart.component.scss']
 })
 export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
+  // Margin at the top of the chart. The max value will be this many pixels from the top.
   public static topInternalMargin = 5;
 
   @ViewChild('chart') chartElement: ElementRef;
   @Input() data: number[];
   @Input() height = 100;
-  @Input() color = 'rgba(10, 15, 22, 0.4)';
   @Input() animated = false;
+
+  // Max and min values that the chart sill show. If not set, the chart will calculate the
+  // values automatically.
   @Input() min: number = undefined;
   @Input() max: number = undefined;
+
   chart: any;
 
   private differ: IterableDiffer<unknown>;
@@ -39,8 +43,8 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
         labels: Array.from(Array(this.data.length).keys()),
         datasets: [{
           data: this.data,
-          backgroundColor: [this.color],
-          borderColor: [this.color],
+          backgroundColor: ['rgba(10, 15, 22, 0.4)'],
+          borderColor: ['rgba(10, 15, 22, 0.4)'],
           borderWidth: 1,
         }],
       },

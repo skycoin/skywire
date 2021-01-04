@@ -48,6 +48,7 @@ export class AppComponent {
     // Initialize the language configuration.
     languageService.loadLanguageSettings();
 
+    // Check if the app is showing the VPN client.
     router.events.subscribe(() => {
       this.inVpnClient = router.url.includes('/vpn/');
     });

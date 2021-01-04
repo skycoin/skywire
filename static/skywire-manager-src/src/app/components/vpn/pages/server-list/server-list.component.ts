@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { Subscription, Observable } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -14,40 +14,109 @@ import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component';
 import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/services/vpn-saved-data.service';
-import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
-import GeneralUtils from 'src/app/utils/generalUtils';
-import { EditVpnServerParams, EditVpnServerValueComponent } from './edit-vpn-server-value/edit-vpn-server-value.component';
 
+/**
+ * Server lists ServerListComponent can show.
+ */
 export enum Lists {
+  /**
+   * List of public servers obtained from the discovery service.
+   */
   Public = 'public',
+  /**
+   * List of the last servers to which the app has been connected.
+   */
   History = 'history',
+  /**
+   * List with the favorite servers.
+   */
   Favorites = 'favorites',
+  /**
+   * List with the blocked servers.
+   */
   Blocked = 'blocked',
 }
 
-export interface VpnServerForList {
+/**
+ * Data of a server for being shown in the list. Combines the data provided by the discovery
+ * service and the data saved locally.
+ */
+interface VpnServerForList {
+  /**
+   * 2 letter code of the country the server is in.
+   */
   countryCode: string;
+  /**
+   * Sever name, obtained from the discovery service.
+   */
   name: string;
+  /**
+   * Custom name set by the user.
+   */
   customName: string;
+  /**
+   * Location of the server, obtained from the discovery service.
+   */
   location: string;
+  /**
+   * Public key.
+   */
   pk: string;
+  /**
+   * Current congestion of the server, obtained from the discovery service.
+   */
   congestion?: number;
+  /**
+   * Rating of the congestion the server normally has, obtained from the discovery service.
+   */
   congestionRating?: Ratings;
+  /**
+   * Latency of the server, obtained from the discovery service.
+   */
   latency?: number;
+  /**
+   * Rating of the latency the server normally has, obtained from the discovery service.
+   */
   latencyRating?: Ratings;
+  /**
+   * Hops needed for reaching the server.
+   */
   hops?: number;
+  /**
+   * Note with information about the server, obtained from the discovery service.
+   */
   note: string;
+  /**
+   * Personal note added by the user.
+   */
   personalNote: string;
+  /**
+   * Last moment in which the VPN was connected to the server.
+   */
   lastUsed?: number;
+  /**
+   * If the server is in the history of recently used servers.
+   */
   inHistory?: boolean;
+  /**
+   * Special condition the server may have.
+   */
   flag?: ServerFlags;
 
+  /**
+   * Original VpnServer instance used for creating this object. Is not set if the objet was not
+   * created using a VpnServer instance.
+   */
   originalDiscoveryData?: VpnServer;
+  /**
+   * Original LocalServerData instance used for creating this object. Is not set if the objet
+   * was not created using a LocalServerData instance.
+   */
   originalLocalData?: LocalServerData;
 }
 
 /**
- * Page for showing the vpn server list.
+ * Page for showing the vpn server lists.
  */
 @Component({
   selector: 'app-server-list',
@@ -80,14 +149,17 @@ export class ServerListComponent implements OnDestroy {
 
   private dataSortedSubscription: Subscription;
   private dataFiltererSubscription: Subscription;
-  private checkVpnSubscription: Subscription;
   // Objects in charge of sorting and filtering the data.
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
+  // If the server list is being loaded.
   loading = true;
+  // If the app is still loading the data about the local visor. Must be true for showing the list.
   loadingBackendData = true;
+  // Data for populating the list.
   dataSource: VpnServerForList[];
+  // Data for populating the tabs of the top bar.
   tabsData = VpnHelpers.vpnTabsData;
 
   // Vars for the pagination functionality.
@@ -99,11 +171,15 @@ export class ServerListComponent implements OnDestroy {
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
 
+  // Pk of the local visor.
   currentLocalPk: string;
+  // List currently being shown. It also means which tab is currently selected in the lower tab bar.
   currentList = Lists.Public;
-  lists = Lists;
+  // Currently selected server.
   currentServer: LocalServerData;
+
   serverFlags = ServerFlags;
+  lists = Lists;
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[];
@@ -114,6 +190,7 @@ export class ServerListComponent implements OnDestroy {
   private dataSubscription: Subscription;
   private currentServerSubscription: Subscription;
   private backendDataSubscription: Subscription;
+  private checkVpnSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
@@ -125,8 +202,8 @@ export class ServerListComponent implements OnDestroy {
     private vpnSavedDataService: VpnSavedDataService,
     private snackbarService: SnackbarService,
   ) {
-    // Get the page requested in the URL.
     this.navigationsSubscription = route.paramMap.subscribe(params => {
+      // Get which list must be shown.
       if (params.has('type')) {
         if (params.get('type') === Lists.Favorites) {
           this.currentList = Lists.Favorites;
@@ -146,25 +223,29 @@ export class ServerListComponent implements OnDestroy {
         this.listId = 'vps';
       }
 
+      // Ensure the currently selected tab is the one that will be openen when returning to
+      // the server list.
       VpnHelpers.setDefaultTabForServerList(this.currentList);
 
+      // Get the PK of the current local visor.
+      if (params.has('key')) {
+        this.currentLocalPk = params.get('key');
+        VpnHelpers.changeCurrentPk(this.currentLocalPk);
+        this.tabsData = VpnHelpers.vpnTabsData;
+      }
+
+      // Get the requested page.
       if (params.has('page')) {
         let selectedPage = Number.parseInt(params.get('page'), 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
           selectedPage = 1;
         }
 
-        if (params.has('key')) {
-          this.currentLocalPk = params.get('key');
-          VpnHelpers.changeCurrentPk(this.currentLocalPk);
-          this.tabsData = VpnHelpers.vpnTabsData;
-        }
-
         this.currentPageInUrl = selectedPage;
-
         this.recalculateElementsToShow();
       }
 
+      // Load the data, if needed.
       if (!this.initialLoadStarted) {
         this.initialLoadStarted = true;
 
@@ -210,11 +291,18 @@ export class ServerListComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Opens the modal window for entering the server data manually.
+   */
   enterManually() {
     AddVpnServerComponent.openDialog(this.dialog, this.currentLocalPk);
   }
 
-  getNoteVar(server: VpnServerForList) {
+  /**
+   * Returns the translatable var that must be used for showing the notes of a server.
+   * If there is only one note, the note itself is returned.
+   */
+  getNoteVar(server: VpnServerForList): string {
     if (server.note && server.personalNote) {
       return 'vpn.server-list.notes-info';
     } else if (!server.note && server.personalNote) {
@@ -224,6 +312,9 @@ export class ServerListComponent implements OnDestroy {
     return server.note;
   }
 
+  /**
+   * Selects a server and starts the process for connecting to it.
+   */
   selectServer(server: VpnServerForList) {
     const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
 
@@ -244,6 +335,9 @@ export class ServerListComponent implements OnDestroy {
     }
   }
 
+  /**
+   * Opens the options modal window for a specific server.
+   */
   openOptions(server: VpnServerForList) {
     let savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
     if (!savedVersion) {
@@ -264,15 +358,20 @@ export class ServerListComponent implements OnDestroy {
       this.dialog
     ).subscribe(changesMade => {
       if (changesMade) {
+        // Update the data shown in the UI.
         this.processAllServers();
       }
     });
   }
 
+  /**
+   * Loads the server list.
+   */
   private loadData() {
     if (this.currentList === Lists.Public) {
       // Get the vpn servers from the discovery service.
       this.dataSubscription = this.vpnClientDiscoveryService.getServers().subscribe(response => {
+        // Process the result.
         this.allServers = response.map(server => {
           return {
             countryCode: server.countryCode,
@@ -292,15 +391,16 @@ export class ServerListComponent implements OnDestroy {
           };
         });
 
+        // Update the data in the saved versions of the servers.
         this.vpnSavedDataService.updateFromDiscovery(response);
 
         this.loading = false;
-
         this.processAllServers();
       });
     } else {
       let dataObservable: Observable<LocalServerData[]>;
 
+      // Get the requested data.
       if (this.currentList === Lists.History) {
         dataObservable = this.vpnSavedDataService.history;
       } else if (this.currentList === Lists.Favorites) {
@@ -310,6 +410,7 @@ export class ServerListComponent implements OnDestroy {
       }
 
       this.dataSubscription = dataObservable.subscribe(response => {
+        // Process the result.
         const processedList: VpnServerForList[] = [];
         response.forEach(server => {
           processedList.push({
@@ -331,12 +432,14 @@ export class ServerListComponent implements OnDestroy {
         this.allServers = processedList;
 
         this.loading = false;
-
         this.processAllServers();
       });
     }
   }
 
+  /**
+   * TODO: should be removed in the final version.
+   */
   private loadTestData() {
     setTimeout(() => {
       this.allServers = [];
@@ -403,12 +506,16 @@ export class ServerListComponent implements OnDestroy {
     }, 100);
   }
 
+  /**
+   * Makes preparations for the page to work well with the obtained server list.
+   */
   private processAllServers() {
     this.fillFilterPropertiesArray();
 
+    // Create a list with the countries on the server list. Also, add all saved data to each
+    // server.
     const countriesSet = new Set<string>();
     this.allServers.forEach((server, i) => {
-      // Add the country to the countries list.
       countriesSet.add(server.countryCode);
 
       // Add the saved data, if any.
@@ -429,7 +536,7 @@ export class ServerListComponent implements OnDestroy {
       });
     });
 
-    // Sort the data and add an empty option at the top.
+    // Sort the countries list and add an empty option at the top.
     countriesFilteringLabels.sort((a, b) => a.label.localeCompare(b.label));
     countriesFilteringLabels = [{
       label: 'vpn.server-list.filter-dialog.country-options.any',
@@ -485,12 +592,14 @@ export class ServerListComponent implements OnDestroy {
       this.recalculateElementsToShow();
     });
 
+    // Initialize the data filterer.
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredServers = data;
       this.dataSorter.setData(this.filteredServers);
     });
 
+    // Remove the blocked servers, if needed.
     let serversToUse: VpnServerForList[];
     if (this.currentList === Lists.Public) {
       serversToUse = this.allServers.filter(server => server.flag !== ServerFlags.Blocked);
@@ -501,11 +610,16 @@ export class ServerListComponent implements OnDestroy {
     this.dataFilterer.setData(serversToUse);
   }
 
+  /**
+   * Fills the array with the properties that the data filterer must use, depending on the
+   * list that will be shown.
+   */
   private fillFilterPropertiesArray() {
     this.filterProperties = [
       {
         filterName: 'vpn.server-list.filter-dialog.name',
         keyNameInElementsArray: 'name',
+        secondaryKeyNameInElementsArray: 'customName',
         type: FilterFieldTypes.TextInput,
         maxlength: 100,
       },
@@ -575,7 +689,7 @@ export class ServerListComponent implements OnDestroy {
   }
 
   /**
-   * Recalculates which elements should be shown on the UI.
+   * Recalculates which elements should be shown on the list, mainly related to the pagination.
    */
   private recalculateElementsToShow() {
     // Needed to prevent race conditions.
@@ -601,18 +715,34 @@ export class ServerListComponent implements OnDestroy {
     this.dataSource = this.serversToShow;
   }
 
+  /**
+   * Gets the full name of a country.
+   * @param countryCode 2 letter code of the country.
+   */
   getCountryName(countryCode: string): string {
     return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
   }
 
+  /**
+   * Gets the name of the translatable var that must be used for showing a latency value. This
+   * allows to add the correct measure suffix.
+   */
   getLatencyValueString(latency: number): string {
     return VpnHelpers.getLatencyValueString(latency);
   }
 
+  /**
+   * Gets the string value to show in the UI a latency value with an adecuate number of decimals.
+   * This function converts the value from ms to segs, if appropriate, so the value must be shown
+   * using the var returned by getLatencyValueString.
+   */
   getPrintableLatency(latency: number): string {
     return VpnHelpers.getPrintableLatency(latency);
   }
 
+  /**
+   * Gets the class that must be used for showing the color of a congestion value.
+   */
   getCongestionTextColorClass(congestion: number): string {
     if (congestion < 60) {
       return 'green-value';
@@ -623,6 +753,9 @@ export class ServerListComponent implements OnDestroy {
     return 'red-value';
   }
 
+  /**
+   * Gets the class that must be used for showing the color of a latency value.
+   */
   getLatencyTextColorClass(latency: number): string {
     if (latency < 200) {
       return 'green-value';
@@ -633,6 +766,9 @@ export class ServerListComponent implements OnDestroy {
     return 'red-value';
   }
 
+  /**
+   * Gets the class that must be used for showing the color of a hops value.
+   */
   getHopsTextColorClass(hops: number): string {
     if (hops < 5) {
       return 'green-value';
@@ -643,6 +779,9 @@ export class ServerListComponent implements OnDestroy {
     return 'red-value';
   }
 
+  /**
+   * Returns the name of the image that must be shown for a rating value.
+   */
   getRatingIcon(rating: Ratings): string {
     if (rating === Ratings.Gold) {
       return 'gold-rating';
@@ -653,6 +792,9 @@ export class ServerListComponent implements OnDestroy {
     return 'bronze-rating';
   }
 
+  /**
+   * Returns the translatable var for describing a rating value.
+   */
   getRatingText(rating: Ratings): string {
     if (rating === Ratings.Gold) {
       return 'vpn.server-list.gold-rating-info';

@@ -613,7 +613,7 @@
 
     "error-page": {
       "text": "The VPN client app is not available.",
-      "more-info": "It was not possible to connect to the VPN client app. This may be due to a configuration error, a unexpected problem with the visor or because you used an invalid public key in the URL.",
+      "more-info": "It was not possible to connect to the VPN client app. This may be due to a configuration error, an unexpected problem with the visor or because you used an invalid public key in the URL.",
       "text-pk": "Invalid configuration.",
       "more-info-pk": "The application cannot be started because you have not specified the visor public key.",
       "text-storage": "Error saving data.",
@@ -722,7 +722,7 @@
       "latency-rating-small-table-label": "Latency rating",
       "latency-rating-info": "Rating of the server related to how much latency it tends to have.",
       "latency-small-table-label": "Latency",
-      "latency-info": "Current server latency",
+      "latency-info": "Current server latency.",
       "hops-small-table-label": "Hops",
       "hops-info": "How many hops are needed for connecting with the server.",
       "note-small-table-label": "Note",

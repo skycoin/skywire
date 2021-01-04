@@ -1,3 +1,4 @@
+<!-- Content when loading. -->
 <div *ngIf="loading" class="d-flex flex-column h-100 w-100">
   <div>
     <app-top-bar
@@ -11,6 +12,7 @@
   <app-loading-indicator></app-loading-indicator>
 </div>
 
+<!-- Content when loaded. -->
 <div class="general-container" *ngIf="!loading">
   <div class="row">
     <div class="col-12">
@@ -28,6 +30,7 @@
     <div *ngIf="!showStarted" class="col-7 column left-area">
       <div class="column-container">
         <div class="title">{{ 'vpn.status-page.start-title' | translate }}</div>
+        <!-- Staert button. -->
         <div>
           <div class="start-button" (click)="start()" [ngClass]="{'disabled-button': showBusy}">
             <div class="start-button-img-container">
@@ -41,6 +44,7 @@
           </div>
         </div>
         <div class="current-server">
+          <!-- Current server box. -->
           <ng-container *ngIf="currentRemoteServer">
             <div class="flag">
               <div
@@ -87,10 +91,12 @@
               >settings</mat-icon>
             </div>
           </ng-container>
+          <!-- No server selected msg box. -->
           <ng-container *ngIf="!currentRemoteServer">
             <div class="none">{{ 'vpn.status-page.no-server' | translate }}</div>
           </ng-container>
         </div>
+        <!-- Current server note. -->
         <div>
           <div class="current-server-note" *ngIf="currentRemoteServer.note || currentRemoteServer.personalNote">
             <mat-icon [inline]="true">info_outline</mat-icon>
@@ -112,8 +118,9 @@
         <div class="state-title">Your connection is currently:</div>
         <div class="state-text">{{ currentStateText | translate }}</div>
         <div class="state-explanation">{{ (currentStateText + '-info') | translate }}</div>
-        <!-- Data stats. -->
+        <!-- Square graphs. -->
         <div class="data-container">
+          <!-- Uploaded data. -->
           <div class="rounded-elevated-box data-box big-box" [matTooltip]="'vpn.status-page.upload-info' | translate">
             <div class="chart-container">
               <app-line-chart [animated]="false" [data]="sentHistory" [min]="minUploadInGraph" [max]="maxUploadInGraph" height="140" color="#00000080"></app-line-chart>
@@ -150,6 +157,7 @@
               </div>
             </div>
           </div>
+          <!-- Downloaded data. -->
           <div class="rounded-elevated-box data-box big-box" [matTooltip]="'vpn.status-page.download-info' | translate">
             <div class="chart-container">
               <app-line-chart [animated]="false" [data]="receivedHistory" [min]="minDownloadInGraph" [max]="maxDownloadInGraph" height="140" color="#00000080"></app-line-chart>
@@ -187,6 +195,7 @@
             </div>
           </div>
         </div>
+        <!-- Latency graph. -->
         <div class="latency-container">
           <div class="rounded-elevated-box data-box small-box" [matTooltip]="'vpn.status-page.latency-info' | translate">
             <div class="chart-container">

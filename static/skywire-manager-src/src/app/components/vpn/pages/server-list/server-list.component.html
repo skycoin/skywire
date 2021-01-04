@@ -1,6 +1,7 @@
 <!-- Content when loading. -->
 <div *ngIf="loading || loadingBackendData" class="d-flex flex-column h-100 w-100">
   <div class="loading-top-container">
+    <!-- Top bar. -->
     <app-top-bar
       [titleParts]="['vpn.title']"
       [tabsData]="tabsData"
@@ -9,6 +10,7 @@
       [localVpnKey]="currentLocalPk"
     ></app-top-bar>
 
+    <!-- Lower tab bar. -->
     <div class="main-container">
       <div class="width-limiter">
         <div class="center-container mt-4.5">
@@ -17,9 +19,11 @@
       </div>
     </div>
   </div>
+  <!-- Loading animation. -->
   <app-loading-indicator class="h-100 loading-indicator"></app-loading-indicator>
 </div>
 
+<!-- General declaration for the lower tab bar, used when loading and when not. -->
 <ng-template #topPart>
   <!-- Tabs. -->
   <div class="option-bar-container">
@@ -65,7 +69,7 @@
     </div></div>
   </div>
   <!-- Current filters info. -->
-  <ng-template *ngIf="dataFilterer">
+  <ng-container *ngIf="dataFilterer">
     <br *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0" />
     <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
       <div class="transparent-50"><mat-icon [inline]="true">search</mat-icon> {{ 'vpn.server-list.current-filters' | translate }}</div>
@@ -75,12 +79,13 @@
         <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
       </div>
     </div>
-  </ng-template>
+  </ng-container>
 </ng-template>
 
 <!-- Content when loaded. -->
 <div *ngIf="!loading && !loadingBackendData" class="row">
   <div class="col-12">
+    <!-- Top bar. -->
     <app-top-bar
       [titleParts]="['vpn.title']"
       [tabsData]="tabsData"
@@ -90,6 +95,7 @@
     ></app-top-bar>
   </div>
   <div class="col-12 main-container"><div class="width-limiter">
+    <!-- Lower tab bar. -->
     <div class="center-container mt-4.5" [ngClass]="{'mb-3': !dataFilterer.currentFiltersTexts || dataFilterer.currentFiltersTexts.length < 1}">
       <ng-container *ngTemplateOutlet="topPart"></ng-container>
     </div>
@@ -202,6 +208,7 @@
             </div>
           </td>
           <td class="name-column">
+            <!-- Icons shown if the server is blocked, in the favorites list, etc. -->
             <mat-icon
               *ngIf="server.pk === currentServer.pk"
               class="known-icon"
@@ -226,6 +233,7 @@
               [inline]="true"
               [matTooltip]="'vpn.server-conditions.history-info' | translate"
             >history</mat-icon>
+            <!-- Sever name, depending on whether there is a custom name or not. -->
             <ng-container *ngIf="server.customName">
               {{ server.customName }}
             </ng-container>
@@ -269,7 +277,7 @@
           <td *ngIf="currentList === lists.Public" [class]="getLatencyTextColorClass(server.latency) + ' center short-column'">
             {{ ('common.' + getLatencyValueString(server.latency)) | translate:{ time: getPrintableLatency(server.latency) } }}
           </td>
-          <td  *ngIf="currentList === lists.Public" class="center mini-column icon-fixer">
+          <td *ngIf="currentList === lists.Public" class="center mini-column icon-fixer">
             <div
               [style]="'background-image: url(\'assets/img/' + getRatingIcon(server.latencyRating) + '.png\');'"
               class="rating"

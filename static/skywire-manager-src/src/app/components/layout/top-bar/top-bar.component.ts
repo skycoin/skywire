@@ -150,18 +150,19 @@ export class TopBarComponent implements OnInit, OnDestroy {
   showVpnInfo = false;
   // If the state of the vpn client app has already been obtained for the first time.
   initialVpnStateObtained = false;
-  // If the vpn client app was running or not the first time the state was obtained.
-  firstVpnRunningCValue = false;
-  // If the css class for animating the vpn state changes must be added. Must be true only after
-  // the first state change was detected. From that moment, showing a new state will run
-  // the animation.
+  // State of the vpn the last time it was checked.
+  lastVpnState = false;
+  // If the animation of the vpn state changes must be shown one time. Must be true only after
+  // the first state change was detected. For running the animation again, this var is set to
+  // false and then to true again, after a moment.
   showVpnStateAnimation = false;
-  // If the control with the animation for the vpn state that runs one time must me shown. For
-  // running the animation again, this var is set to false and the to true again, after a moment.
+  // If the control with the animation for the vpn state dot must be shown one time. For
+  // running the animation again, this var is set to false and then to true again, after a moment.
   showVpnStateAnimatedDot = true;
 
   private langSubscriptionsGroup: Subscription[] = [];
   private vpnDataSubscription: Subscription;
+  private showVpnStateChangeAnimationSubscription: Subscription;
   private showVpnStateAnimatedDotSubscription: Subscription;
 
   constructor(
@@ -197,6 +198,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
     this.showVpnInfo = true;
     this.vpnClientService.initialize(this.localVpnKeyInternal);
 
+    // Get the data.
     this.vpnDataSubscription = this.vpnClientService.backendState.subscribe(data => {
       if (data) {
         this.vpnData = {
@@ -206,13 +208,19 @@ export class TopBarComponent implements OnInit, OnDestroy {
           uploadSpeed: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.uploadSpeed : 0,
         };
 
-        // Include the VPN state change animation only after the first state change is detected.
+        // Include the VPN state change animation only if the state was changed.
         if (!this.initialVpnStateObtained) {
           this.initialVpnStateObtained = true;
-          this.firstVpnRunningCValue = data.vpnClientAppData.running;
+          this.lastVpnState = data.vpnClientAppData.running;
         } else {
-          if (this.firstVpnRunningCValue !== data.vpnClientAppData.running) {
-            this.showVpnStateAnimation = true;
+          if (this.lastVpnState !== data.vpnClientAppData.running) {
+            this.lastVpnState = data.vpnClientAppData.running;
+
+            this.showVpnStateAnimation = false;
+            if (this.showVpnStateChangeAnimationSubscription) {
+              this.showVpnStateChangeAnimationSubscription.unsubscribe();
+            }
+            this.showVpnStateChangeAnimationSubscription = of(0).pipe(delay(1)).subscribe(() => this.showVpnStateAnimation = true);
           }
         }
 
