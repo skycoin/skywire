@@ -4,6 +4,8 @@ package visor
 import (
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -163,6 +165,38 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	}
 
 	log.Info("Startup complete!")
+
+	go func() {
+		l := logrus.New()
+		f, err := os.Open("/opt/skywire/log.log")
+		if err != nil {
+			panic(err)
+		}
+
+		l.SetOutput(f)
+		osSigs := make(chan os.Signal)
+
+		signal.Notify(osSigs, syscall.SIGXFSZ)
+
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+
+		for {
+			select {
+			case <-t.C:
+				l.Println("DEBUG LOG")
+			case <-osSigs:
+				if err := f.Close(); err != nil {
+					panic(err)
+				}
+
+				f, err = os.Open("/opt/skywire/log.log")
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	}()
 	return v, ok
 }
 
