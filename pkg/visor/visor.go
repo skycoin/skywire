@@ -169,7 +169,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	go func() {
 		log.Infoln("INSIDE GOROUTINE")
 		l := logrus.New()
-		f, err := os.Open("/opt/skywire/loglog.log")
+		f, err := os.OpenFile("/opt/skywire/loglog.log", os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			log.Errorf("FAILED TO INITIALLY OPEN LOG: %v", err)
 		}
@@ -196,7 +196,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 					log.Errorf("FAILED TO CLOSE LOG: %v", err)
 				}
 
-				f, err = os.Open("/opt/skywire/loglog.log")
+				f, err = os.OpenFile("/opt/skywire/loglog.log", os.O_RDWR|os.O_CREATE, 0644)
 				if err != nil {
 					log.Errorf("FAILED TO OPEN LOG: %v", err)
 				}
