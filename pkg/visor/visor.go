@@ -200,6 +200,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 				if err != nil {
 					log.Errorf("FAILED TO OPEN LOG: %v", err)
 				}
+
+				l.SetOutput(f)
 			}
 		}
 	}()
