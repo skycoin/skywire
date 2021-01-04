@@ -10,22 +10,39 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 import { VpnServer } from 'src/app/services/vpn-client-discovery.service';
 import { ManualVpnServerData } from './pages/server-list/add-vpn-server/add-vpn-server.component';
 import { LocalServerData, ServerFlags, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
-import { Lists, VpnServerForList } from './pages/server-list/server-list.component';
+import { Lists } from './pages/server-list/server-list.component';
 import { SelectableOption, SelectOptionComponent } from '../layout/select-option/select-option.component';
 import {
   EditVpnServerParams,
   EditVpnServerValueComponent
 } from './pages/server-list/edit-vpn-server-value/edit-vpn-server-value.component';
 
+/**
+ * Helper functions for the VPN client.
+ */
 export class VpnHelpers {
+  /**
+   * Key for saving in sessionStorage the default tab that should be openned when entering to
+   * the server list.
+   */
   private static readonly serverListTabStorageKey = 'ServerListTab';
 
+  /**
+   * Pk of the local Skywire visor.
+   */
   private static currentPk = '';
-
+  /**
+   * Sets the Pk of the local Skywire visor. Must be called for the vpnTabsData property to
+   * work correctly.
+   */
   static changeCurrentPk(pk: string): void {
     this.currentPk = pk;
   }
 
+  /**
+   * Allows to set the default tab that should be openned when entering to the server list.
+   * It is saved while the tab is openned.
+   */
   static setDefaultTabForServerList(tab: Lists) {
     sessionStorage.setItem(VpnHelpers.serverListTabStorageKey, tab);
   }
@@ -68,7 +85,7 @@ export class VpnHelpers {
   }
 
   /**
-   * Gets the string value to show in the UI a latency value with an adecuate number of decimals.
+   * Gets the string value to show in the UI a latency value, with an adecuate number of decimals.
    * This function converts the value from ms to segs, if appropriate, so the value must be shown
    * using the var returned by getLatencyValueString.
    */
@@ -80,6 +97,10 @@ export class VpnHelpers {
     return (latency / 1000).toFixed(1);
   }
 
+  /**
+   * Changes the server and connects to it. One, and only one, of the newServer params must
+   * be provided, with the data about the new server.
+   */
   static processServerChange(
     router: Router,
     vpnClientService: VpnClientService,
@@ -91,6 +112,7 @@ export class VpnHelpers {
     newServerFromDiscovery: VpnServer,
     newServerManually: ManualVpnServerData,
   ) {
+    // Check if the new server param was provided as it should.
     let requestedPk: string;
     if ((newServerFromHistory && (newServerFromDiscovery || newServerManually)) ||
       (newServerFromDiscovery && (newServerFromHistory || newServerManually)) ||
@@ -109,20 +131,25 @@ export class VpnHelpers {
       throw new Error('Invalid call');
     }
 
+    // Check if the selected server can be used.
     const result = vpnClientService.checkNewPk(requestedPk);
 
+    // If the VPN service is busy, cancel the operation.
     if (result === CheckPkResults.Busy) {
       snackbarService.showError('vpn.server-change.busy-error');
 
       return;
     }
 
+    // If the app is already connected to the selected server, cancel the operation.
     if (result === CheckPkResults.SamePkRunning) {
       snackbarService.showWarning('vpn.server-change.already-selected-warning');
 
       return;
     }
 
+    // If the app is connected to another server, ask for confirmation for stopping the
+    // current connection before connecting with the new server.
     if (result === CheckPkResults.MustStop) {
       const confirmationDialog =
         GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-change.change-server-while-connected-confirmation');
@@ -144,6 +171,7 @@ export class VpnHelpers {
         return;
     }
 
+    // If the server has already been selected, inform the user and continue after confirmation.
     if (result === CheckPkResults.SamePkStopped) {
       const confirmationDialog =
         GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-change.start-same-server-confirmation');
@@ -151,7 +179,7 @@ export class VpnHelpers {
         confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
           confirmationDialog.componentInstance.closeModal();
 
-          // For updating the data in persistent storage.
+          // For updating the data in persistent storage, if it was entered manually.
           if (newServerManually) {
             vpnClientService.changeServerManually(newServerManually);
           }
@@ -163,6 +191,7 @@ export class VpnHelpers {
         return;
     }
 
+    // If none of the other conditions were met, change the server immediately.
     if (newServerFromHistory) {
       vpnClientService.changeServerUsingHistory(newServerFromHistory);
     } else if (newServerFromDiscovery) {
@@ -171,9 +200,13 @@ export class VpnHelpers {
       vpnClientService.changeServerManually(newServerManually);
     }
 
+    // Go to the status page.
     VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
   }
 
+  /**
+   * Opens the status page. If a modal window ref is provided, it is closed.
+   */
   private static redirectAfterServerChange(
     router: Router,
     dialogRef: MatDialogRef<any>,
@@ -186,53 +219,71 @@ export class VpnHelpers {
     router.navigate(['vpn', localPk, 'status']);
   }
 
+  /**
+   * Opens the server options modal window and manages the interations the users may have with it.
+   * @param server Sever for which the options will be openned.
+   * @returns An observable for knowing if the user made a change.
+   */
   static openServerOptions(
     server: LocalServerData,
     vpnSavedDataService: VpnSavedDataService,
     vpnClientService: VpnClientService,
     snackbarService: SnackbarService,
     dialog: MatDialog
-  ) {
+  ): Observable<boolean> {
+    // List with the options that will be shown in the modal window.
     const options: SelectableOption[] = [];
+    // List that, for each option added to the options array, will contain a code identifying
+    // which operation the option is related to.
     const optionCodes: number[] = [];
 
+    // Options for changing the custom name and personal note.
     options.push({ icon: 'edit', label: 'vpn.server-options.edit-value.name-title' });
     optionCodes.push(101);
     options.push({ icon: 'subject', label: 'vpn.server-options.edit-value.note-title' });
     optionCodes.push(102);
 
+    // Option for adding the server to the favorites list.
     if (!server || server.flag !== ServerFlags.Favorite) {
       options.push({ icon: 'star', label: 'vpn.server-options.make-favorite' });
       optionCodes.push(1);
     }
 
+    // Option for removing the server from the favorites list.
     if (server && server.flag === ServerFlags.Favorite) {
       options.push({ icon: 'star_outline', label: 'vpn.server-options.remove-from-favorites' });
       optionCodes.push(-1);
     }
 
+    // Option for blocking the server.
     if (!server || server.flag !== ServerFlags.Blocked) {
       options.push({ icon: 'pan_tool', label: 'vpn.server-options.block' });
       optionCodes.push(2);
     }
 
+    // Option for unblocking the server.
     if (server && server.flag === ServerFlags.Blocked) {
       options.push({ icon: 'thumb_up', label: 'vpn.server-options.unblock' });
       optionCodes.push(-2);
     }
 
+    // Option for removing the server from the history.
     if (server && server.inHistory) {
       options.push({ icon: 'delete', label: 'vpn.server-options.remove-from-history'});
       optionCodes.push(-3);
     }
 
+    // Show the options window.
     return SelectOptionComponent.openDialog(dialog, options, 'common.options').afterClosed().pipe(mergeMap((selectedOption: number) => {
       if (selectedOption) {
+        // Get the saved version of the server, just in case it was modified in another tab.
         const updatedSavedVersion = vpnSavedDataService.getSavedVersion(server.pk, true);
+        // Use the initially provided version, if there is no saved version.
         server = updatedSavedVersion ? updatedSavedVersion : server;
 
         selectedOption -= 1;
 
+        // Chage name or note.
         if (optionCodes[selectedOption] > 100) {
           const params: EditVpnServerParams = {
             editName: optionCodes[selectedOption] === 101,
@@ -240,20 +291,30 @@ export class VpnHelpers {
           };
 
           return EditVpnServerValueComponent.openDialog(dialog, params).afterClosed();
+
+          // Make favorite.
         } else if (optionCodes[selectedOption] === 1) {
           return VpnHelpers.makeFavorite(server, vpnSavedDataService, snackbarService, dialog);
+
+          // Remove from favorites.
         } else if (optionCodes[selectedOption] === -1) {
           vpnSavedDataService.changeFlag(server, ServerFlags.None);
           snackbarService.showDone('vpn.server-options.remove-from-favorites-done');
 
           return of(true);
+
+          // Block.
         } else if (optionCodes[selectedOption] === 2) {
           return VpnHelpers.blockServer(server, vpnSavedDataService, vpnClientService, snackbarService, dialog);
+
+          // Unblock.
         } else if (optionCodes[selectedOption] === -2) {
           vpnSavedDataService.changeFlag(server, ServerFlags.None);
           snackbarService.showDone('vpn.server-options.unblock-done');
 
           return of(true);
+
+          // Remove from history.
         } else if (optionCodes[selectedOption] === -3) {
           return VpnHelpers.removeFromHistory(server, vpnSavedDataService, snackbarService, dialog);
         }
@@ -263,6 +324,10 @@ export class VpnHelpers {
     }));
   }
 
+  /**
+   * Removes a server from history.
+   * @returns An observable for knowing if the change was made.
+   */
   private static removeFromHistory(
     server: LocalServerData,
     vpnSavedDataService: VpnSavedDataService,
@@ -271,6 +336,7 @@ export class VpnHelpers {
   ): Observable<boolean> {
     let confirmed = false;
 
+    // Ask for confirmation.
     const confirmationDialog = GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-options.remove-from-history-confirmation');
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmed = true;
@@ -280,15 +346,21 @@ export class VpnHelpers {
       confirmationDialog.componentInstance.closeModal();
     });
 
+    // Return if the change was made.
     return confirmationDialog.afterClosed().pipe(map(() => confirmed));
   }
 
+  /**
+   * Adds a server to the favorites list.
+   * @returns An observable for knowing if the change was made.
+   */
   private static makeFavorite(
     server: LocalServerData,
     vpnSavedDataService: VpnSavedDataService,
     snackbarService: SnackbarService,
     dialog: MatDialog
   ): Observable<boolean> {
+    // If the server is not blocked, make the change immediately.
     if (server.flag !== ServerFlags.Blocked) {
       vpnSavedDataService.changeFlag(server, ServerFlags.Favorite);
       snackbarService.showDone('vpn.server-options.make-favorite-done');
@@ -298,6 +370,7 @@ export class VpnHelpers {
 
     let confirmed = false;
 
+    // If the server is blocked, ask for confirmation.
     const confirmationDialog = GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-options.make-favorite-confirmation');
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmed = true;
@@ -310,6 +383,10 @@ export class VpnHelpers {
     return confirmationDialog.afterClosed().pipe(map(() => confirmed));
   }
 
+  /**
+   * Blocks a server.
+   * @returns An observable for knowing if the change was made.
+   */
   private static blockServer(
     server: LocalServerData,
     vpnSavedDataService: VpnSavedDataService,
@@ -317,6 +394,8 @@ export class VpnHelpers {
     snackbarService: SnackbarService,
     dialog: MatDialog
   ): Observable<boolean> {
+    // If the server is not in the favorites list and is not the currently selected server, make
+    // the change immediately.
     if (server.flag !== ServerFlags.Favorite) {
       if (!vpnSavedDataService.currentServer || vpnSavedDataService.currentServer.pk !== server.pk) {
         vpnSavedDataService.changeFlag(server, ServerFlags.Blocked);
@@ -326,15 +405,20 @@ export class VpnHelpers {
       }
     }
 
+    // Ask for confirmation.
+
     let confirmed = false;
     const mustStopVpn = vpnSavedDataService.currentServer && vpnSavedDataService.currentServer.pk === server.pk;
 
     let confirmationMsg: string;
     if (server.flag !== ServerFlags.Favorite) {
+      // Msg for blocking the currently selected server.
       confirmationMsg = 'vpn.server-options.block-selected-confirmation';
     } else if (mustStopVpn) {
+      // Msg for blocking the currently selected server if it is also in the favorites list.
       confirmationMsg = 'vpn.server-options.block-selected-favorite-confirmation';
     } else {
+      // Msg for blocking a server from the favorites list.
       confirmationMsg = 'vpn.server-options.block-confirmation';
     }
 
@@ -344,6 +428,7 @@ export class VpnHelpers {
       vpnSavedDataService.changeFlag(server, ServerFlags.Blocked);
       snackbarService.showDone('vpn.server-options.block-done');
 
+      // Stop the VPN if we are connected to the recently blocked server.
       if (mustStopVpn) {
         vpnClientService.stop();
       }
