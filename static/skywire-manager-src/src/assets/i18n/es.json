@@ -268,6 +268,7 @@
     "update-instructions": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
     "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
     "version-change": "De {{ currentVersion }} a {{ newVersion }}",
+    "selected-channel": "Canal seleccionado:",
     "downloaded-file-name-prefix": "Descargando: ",
     "speed-prefix": "Velocidad: ",
     "time-downloading-prefix": "Tiempo descargando: ",
