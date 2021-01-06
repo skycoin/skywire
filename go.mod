@@ -8,6 +8,10 @@ require (
 	github.com/VictoriaMetrics/metrics v1.12.3
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.11 // indirect
+	github.com/getlantern/golog v0.0.0-20201105130739-9586b8bde3a9 // indirect
+	github.com/getlantern/hidden v0.0.0-20201229170000-e66e7f878730 // indirect
+	github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6 // indirect
+	github.com/getlantern/systray v1.1.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/google/go-github v17.0.0+incompatible
@@ -27,6 +31,7 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/sirupsen/logrus v1.7.0
+	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
@@ -42,7 +47,7 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9 // indirect
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
-	golang.org/x/sys v0.0.0-20201214210602-f9fddec55a1e
+	golang.org/x/sys v0.0.0-20210104204734-6f8348627aad
 	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf // indirect
 	golang.zx2c4.com/wireguard v0.0.20200320
 	nhooyr.io/websocket v1.8.2
