@@ -12,9 +12,9 @@
    * [Official Skyminers - New Batches](#official-skyminers---new-batches)
    * [DIY Skyminers](#diy-skyminers)   
 * [Requirements](#Requirements)
-* [Hardware ](#hardware)
 * [Whitelist](#whitelist)
    * [Facts](#facts)
+* [Hardware ](#hardware)
 
 ## Introduction
 This article represents the central source of information for the Skywire mainnet. All information about rewards and potential changes will be published here, so check in regularely.
@@ -52,14 +52,12 @@ Different locations are required due to the fact that we want to spread out the 
 ***
 
 ## Rewards
+**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time to time.
 <br>
-
-* Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards. Note that the required minimal Skywire version is subject to change and will be updated from time to time.
-* Eligible for rewards are only the whitelisted nodes, that **comply with the Skywire mainnet rules** and **meet the 75% uptime requirement** during the month.
-* The whitelist is being **updated retroactively on a monthly basis** so it is **not important** in which week you are being approved for the whitelist.
-* **Official Skyminers are whitelisted by default after purchase.**
-* The rewards are **paid every subsequent month around the 5th** or with a short delay, depending if other things delay the process.
+* The rewards are **paid every subsequent month around the 5th** (short delays are possible)
+* Adjustments of previous months are included in these reward distributions on the 5th.
 * The deadline to submit complaints is being published in the monthly Skywire status update emails and in the [Skywire PSA channel on Telegram](https://t.me/SkywirePSA).
+* Eligible for rewards are only the whitelisted nodes, that **comply with the Skywire mainnet rules** and **meet the uptime requirement** of the respective month (usually 75%).
 
 <div align="center">
 <em>During Skywire’s testnet phase, owners of official Skyminers were required to have all eight nodes online in order to qualify for full uptime rewards. With the launch of Mainnet, official Skyminers now only require seven nodes to be online at least 75% of the time in order to earn full rewards.
@@ -133,6 +131,67 @@ As of now, you are provided with two tools to check whether or not you're online
 
 You are advised to use [this guide](https://github.com/skycoin/skywire/wiki/Troubleshooting#online-status-verification) to **verify that your nodes are online & connected to the discovery server**.
 <div align="center"><em><b>Make sure to verify the online status of your nodes on a regular basis!</em></b></div>
+
+***
+## Whitelist
+
+<div align="center">Whitelist applications must be submitted using the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a>.<br> 
+All necessary steps to get up and running are described in  <a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System">this guide</a></div>
+
+
+<div align="center">
+     <p>
+          <em>
+               The previously submitted data using skycoin.net/whitelist was imported into the new system & accounts were created for you. Check your emails for an invite link to assign your own password and follow the instructions in the email & the guide referenced above. <br> Make sure to double check your data and adjust it if necessary.
+          </em>
+     </p>
+</div>
+- The whitelist is being **updated retroactively on a monthly basis** so it is **not important** in which week you are being approved for the whitelist.
+- **Official Skyminers are whitelisted by default after purchase.**
+- There is no waiting period at the moment
+- Whitelist applications are being updated every couple days (potentially up to a week).
+    
+#### View & change your data
+    - Login to the [Skywire Whitelisting System](https://whitelist.skycoin.com) to:
+          - review your current application state
+          - view your whitelisted miners 
+          - adjust public keys if necessary
+          - adjust your Skycoin wallet reward address as you like
+    - Contact support@skycoin.net in case your account is disabled or other issues occur
+    - You can double check with our team members (see above) if we received your application.
+
+
+### Facts
+
+<div align="center"><b>You must use the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a> to keep your submitted data up to date</b>
+<br><em> Read<a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System"> this guide</a> to familiarize yourself with the new system.</em></div>
+<br>
+
+* Keep your account data up to date using the [Skywire Whitelisting System](https://whitelist.skycoin.com)
+     - Update Skycoin Wallet Address
+     - Update public keys if it's necessary
+     - Add more boards and include new pictures to receive the verification of an admin
+     - Transfer your whitelisted miner to another email address
+* The whitelist is a queue based on a first come first serve basis, the benchmark for applications is the hardware list above + the official miner specifications.
+* For email address changes of official miners please use the [transfer miner function](https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System#transfer-miner) of the Skywire Whitelisting System.
+
+#### Official Miner - Required Data for the Whitelisting System
+     - MUST NOT USE THE APPLICATION FORM SINCE THEY ARE BEING AUTOMATICALLY WHITELISTED!
+     - Skycoin wallet reward address.
+     - Your 7 public keys. Simply submit less public keys if you have DOA components (reward will be paid regardless until you receive your replacement(s)).
+
+<div align="center"><b>Please note that your account was pre-made for you after purchasing.<br> You received an email with all necessary links & instructions, please check your inbox and follow the steps in the <a href="https://github.com/skycoin/skywire/wiki/Skyminer-Official-Guide">Official Skyminer Guide</a>!</b></div>
+
+#### DIY Miner - Required Data for the Whitelisting System
+     - Location; doesn't have to be 100% precise.
+     - Skycoin wallet reward address.
+     - Miner photos: At least three photos, each from a different perspective and max. 3 MB in size.
+     - Description: Go into detail of the used hardware components (the router, boards etc. which are presented in the pictures
+          - Telegram account. Join us, there is an awesome community waiting for you!
+          - Node quantity: The number of pis you're running in your miner.
+          - Node Hardware: Specify the hardware you're using. Add a note if you have merged more than 1 type of board in your miner. Elaborate on boards that may be in the pictures but were not (yet) submitted.
+          - Node OS: The OS you're running on the boards.
+     - Your public keys.
 
 ***
 
@@ -287,65 +346,3 @@ The following hardware is accepted in the Skywire mainnet:
      - ROCK Pi S
 
 **If you like to use other boards please contact the team first to be approved before you buy them, only the boards on the list are guaranteed to be whitelisted.**
-
-***
-
-## Whitelist
-
-<div align="center">Whitelist applications must be submitted using the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a>.<br> 
-All necessary steps to get up and running are described in  <a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System">this guide</a></div>
-
-
-<div align="center">
-     <p>
-          <em>
-               The previously submitted data using skycoin.net/whitelist was imported into the new system & accounts were created for you. Check your emails for an invite link to assign your own password and follow the instructions in the email & the guide referenced above. <br> Make sure to double check your data and adjust it if necessary.
-          </em>
-     </p>
-</div>
-
-- There is no waiting period at the moment
-- Whitelist applications are being updated every couple days (potentially up to a week).
-    
-#### View & change your data
-    - Login to the [Skywire Whitelisting System](https://whitelist.skycoin.com) to:
-          - review your current application state
-          - view your whitelisted miners 
-          - adjust public keys if necessary
-          - adjust your Skycoin wallet reward address as you like
-    - Contact support@skycoin.net in case your account is disabled or other issues occur
-    - You can double check with our team members (see above) if we received your application.
-
-
-### Facts
-
-<div align="center"><b>You must use the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a> to keep your submitted data up to date</b>
-<br><em> Read<a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System"> this guide</a> to familiarize yourself with the new system.</em></div>
-<br>
-
-* Keep your account data up to date using the [Skywire Whitelisting System](https://whitelist.skycoin.com)
-     - Update Skycoin Wallet Address
-     - Update public keys if it's necessary
-     - Add more boards and include new pictures to receive the verification of an admin
-     - Transfer your whitelisted miner to another email address
-* The whitelist is a queue based on a first come first serve basis, the benchmark for applications is the hardware list above + the official miner specifications.
-* For email address changes of official miners please use the [transfer miner function](https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System#transfer-miner) of the Skywire Whitelisting System.
-
-#### Official Miner - Required Data for the Whitelisting System
-     - MUST NOT USE THE APPLICATION FORM SINCE THEY ARE BEING AUTOMATICALLY WHITELISTED!
-     - Skycoin wallet reward address.
-     - Your 7 public keys. Simply submit less public keys if you have DOA components (reward will be paid regardless until you receive your replacement(s)).
-
-<div align="center"><b>Please note that your account was pre-made for you after purchasing.<br> You received an email with all necessary links & instructions, please check your inbox and follow the steps in the <a href="https://github.com/skycoin/skywire/wiki/Skyminer-Official-Guide">Official Skyminer Guide</a>!</b></div>
-
-#### DIY Miner - Required Data for the Whitelisting System
-     - Location; doesn't have to be 100% precise.
-     - Skycoin wallet reward address.
-     - Miner photos: At least three photos, each from a different perspective and max. 3 MB in size.
-     - Description: Go into detail of the used hardware components (the router, boards etc. which are presented in the pictures
-          - Telegram account. Join us, there is an awesome community waiting for you!
-          - Node quantity: The number of pis you're running in your miner.
-          - Node Hardware: Specify the hardware you're using. Add a note if you have merged more than 1 type of board in your miner. Elaborate on boards that may be in the pictures but were not (yet) submitted.
-          - Node OS: The OS you're running on the boards.
-     - Your public keys.
-
