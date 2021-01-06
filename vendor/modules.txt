@@ -24,6 +24,24 @@ github.com/dsnet/compress/bzip2/internal/sais
 github.com/dsnet/compress/internal
 github.com/dsnet/compress/internal/errors
 github.com/dsnet/compress/internal/prefix
+# github.com/getlantern/context v0.0.0-20190109183933-c447772a6520
+github.com/getlantern/context
+# github.com/getlantern/errors v1.0.1
+github.com/getlantern/errors
+# github.com/getlantern/golog v0.0.0-20201105130739-9586b8bde3a9
+## explicit
+github.com/getlantern/golog
+# github.com/getlantern/hex v0.0.0-20190417191902-c6586a6fe0b7
+github.com/getlantern/hex
+# github.com/getlantern/hidden v0.0.0-20201229170000-e66e7f878730
+## explicit
+github.com/getlantern/hidden
+# github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6
+## explicit
+github.com/getlantern/ops
+# github.com/getlantern/systray v1.1.0
+## explicit
+github.com/getlantern/systray
 # github.com/go-chi/chi v4.1.2+incompatible
 ## explicit
 github.com/go-chi/chi
@@ -32,6 +50,8 @@ github.com/go-chi/chi/middleware
 ## explicit
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
+# github.com/go-stack/stack v1.8.0
+github.com/go-stack/stack
 # github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
 github.com/golang/gddo/httputil
 github.com/golang/gddo/httputil/header
@@ -107,6 +127,8 @@ github.com/modern-go/concurrent
 github.com/modern-go/reflect2
 # github.com/nwaples/rardecode v1.0.0
 github.com/nwaples/rardecode
+# github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
+github.com/oxtoacart/bpool
 # github.com/pierrec/lz4 v2.0.5+incompatible
 github.com/pierrec/lz4
 github.com/pierrec/lz4/internal/xxh32
@@ -136,6 +158,9 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
+# github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
+## explicit
+github.com/skratchdot/open-golang/open
 # github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
 ## explicit
 github.com/skycoin/dmsg
@@ -241,7 +266,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20201214210602-f9fddec55a1e
+# golang.org/x/sys v0.0.0-20210104204734-6f8348627aad
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
