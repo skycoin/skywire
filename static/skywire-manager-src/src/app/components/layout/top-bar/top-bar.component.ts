@@ -7,7 +7,7 @@ import { Router } from '@angular/router';
 import { LanguageService, LanguageData } from 'src/app/services/language.service';
 import { SelectableOption, SelectOptionComponent } from '../select-option/select-option.component';
 import { SelectLanguageComponent } from '../select-language/select-language.component';
-import { VpnClientService } from 'src/app/services/vpn-client.service';
+import { AppState, VpnClientService } from 'src/app/services/vpn-client.service';
 import { VpnHelpers } from '../../vpn/vpn-helpers';
 
 /**
@@ -50,9 +50,25 @@ export interface MenuOptionData {
  * Data about the current vpn protection.
  */
 interface VpnData {
-  showStarted: boolean;
+  /**
+   * Translatable var with the current state of the VPN.
+   */
+  state: string;
+  /**
+   * CSS class that must be used for showing the current state of the VPN.
+   */
+  stateClass: string;
+  /**
+   * Current latency.
+   */
   latency: number;
+  /**
+   * Current upload speed.
+   */
   uploadSpeed: number;
+  /**
+   * Current download speed.
+   */
   downloadSpeed: Number;
 }
 
@@ -151,7 +167,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   // If the state of the vpn client app has already been obtained for the first time.
   initialVpnStateObtained = false;
   // State of the vpn the last time it was checked.
-  lastVpnState = false;
+  lastVpnState = '';
   // If the animation of the vpn state changes must be shown one time. Must be true only after
   // the first state change was detected. For running the animation again, this var is set to
   // false and then to true again, after a moment.
@@ -159,6 +175,8 @@ export class TopBarComponent implements OnInit, OnDestroy {
   // If the control with the animation for the vpn state dot must be shown one time. For
   // running the animation again, this var is set to false and then to true again, after a moment.
   showVpnStateAnimatedDot = true;
+  // Allows to know if the app is being accessed from a remote localtion.
+  remoteAccess = false;
 
   private langSubscriptionsGroup: Subscription[] = [];
   private vpnDataSubscription: Subscription;
@@ -184,6 +202,12 @@ export class TopBarComponent implements OnInit, OnDestroy {
         this.hideLanguageButton = true;
       }
     }));
+
+    // Check if the app is being accessed from a remote localtion.
+    const currentHost = window.location.hostname;
+    if (!currentHost.toLowerCase().includes('localhost') && !currentHost.toLowerCase().includes('127.0.0.1')) {
+      this.remoteAccess = true;
+    }
   }
 
   ngOnDestroy() {
@@ -202,19 +226,38 @@ export class TopBarComponent implements OnInit, OnDestroy {
     this.vpnDataSubscription = this.vpnClientService.backendState.subscribe(data => {
       if (data) {
         this.vpnData = {
-          showStarted: data.vpnClientAppData.running,
+          state: '',
+          stateClass: '',
           latency: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.latency : 0,
           downloadSpeed: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.downloadSpeed : 0,
           uploadSpeed: data.vpnClientAppData.connectionData ? data.vpnClientAppData.connectionData.uploadSpeed : 0,
         };
 
+        // Use the correct state vars.
+        if (data.vpnClientAppData.appState === AppState.Stopped) {
+          this.vpnData.state = 'vpn.connection-info.state-disconnected';
+          this.vpnData.stateClass = 'red-clear-text';
+        } else if (data.vpnClientAppData.appState === AppState.Connecting) {
+          this.vpnData.state = 'vpn.connection-info.state-connecting';
+          this.vpnData.stateClass = 'yellow-clear-text';
+        } else if (data.vpnClientAppData.appState === AppState.Running) {
+          this.vpnData.state = 'vpn.connection-info.state-connected';
+          this.vpnData.stateClass = 'green-clear-text';
+        } else if (data.vpnClientAppData.appState === AppState.ShuttingDown) {
+          this.vpnData.state = 'vpn.connection-info.state-disconnecting';
+          this.vpnData.stateClass = 'yellow-clear-text';
+        } else if (data.vpnClientAppData.appState === AppState.Reconnecting) {
+          this.vpnData.state = 'vpn.connection-info.state-reconnecting';
+          this.vpnData.stateClass = 'yellow-clear-text';
+        }
+
         // Include the VPN state change animation only if the state was changed.
         if (!this.initialVpnStateObtained) {
           this.initialVpnStateObtained = true;
-          this.lastVpnState = data.vpnClientAppData.running;
+          this.lastVpnState = this.vpnData.state;
         } else {
-          if (this.lastVpnState !== data.vpnClientAppData.running) {
-            this.lastVpnState = data.vpnClientAppData.running;
+          if (this.lastVpnState !== this.vpnData.state) {
+            this.lastVpnState = this.vpnData.state;
 
             this.showVpnStateAnimation = false;
             if (this.showVpnStateChangeAnimationSubscription) {

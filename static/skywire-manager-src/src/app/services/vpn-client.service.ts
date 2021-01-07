@@ -311,8 +311,10 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerUsingHistory(newServer: LocalServerData): boolean {
+  changeServerUsingHistory(newServer: LocalServerData, password: string): boolean {
     this.requestedServer = newServer;
+    this.requestedPassword = password;
+    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
   }
@@ -321,8 +323,10 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerUsingDiscovery(newServer: VpnServer): boolean {
+  changeServerUsingDiscovery(newServer: VpnServer, password: string): boolean {
     this.requestedServer = this.vpnSavedDataService.processFromDiscovery(newServer);
+    this.requestedPassword = password;
+    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
   }
@@ -331,10 +335,26 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerManually(newServer: ManualVpnServerData): boolean {
+  changeServerManually(newServer: ManualVpnServerData, password: string): boolean {
     this.requestedServer = this.vpnSavedDataService.processFromManual(newServer);
+    this.requestedPassword = password;
+    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
+  }
+
+  /**
+   * Updates the "usedWithPassword" property of the server in the requestedServer var, locally
+   * and in in persistent storage.
+   */
+  private updateRequestedServerPasswordSetting() {
+    this.requestedServer.usedWithPassword = !!this.requestedPassword && this.requestedPassword !== '';
+
+    const alreadySavedVersion = this.vpnSavedDataService.getSavedVersion(this.requestedServer.pk, true);
+    if (alreadySavedVersion) {
+      alreadySavedVersion.usedWithPassword = this.requestedServer.usedWithPassword;
+      this.vpnSavedDataService.updateServer(alreadySavedVersion);
+    }
   }
 
   /**
@@ -643,7 +663,7 @@ export class VpnClientService {
   /**
    * Makes the service stop continually updating the VPN state.
    */
-  private stopContinuallyUpdatingData() {
+  stopContinuallyUpdatingData() {
     if (this.continuousUpdateSubscription) {
       this.continuousUpdateSubscription.unsubscribe();
     }

@@ -14,6 +14,8 @@ import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component';
 import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/services/vpn-saved-data.service';
+import GeneralUtils from 'src/app/utils/generalUtils';
+import { EnterVpnServerPasswordComponent } from './enter-vpn-server-password/enter-vpn-server-password.component';
 
 /**
  * Server lists ServerListComponent can show.
@@ -102,6 +104,14 @@ interface VpnServerForList {
    * Special condition the server may have.
    */
   flag?: ServerFlags;
+  /**
+   * If the last time the server was used it was used with a password.
+   */
+  usedWithPassword?: boolean;
+  /**
+   * If the server was entered manually, at least one time.
+   */
+  enteredManually?: boolean;
 
   /**
    * Original VpnServer instance used for creating this object. Is not set if the objet was not
@@ -177,6 +187,8 @@ export class ServerListComponent implements OnDestroy {
   currentList = Lists.Public;
   // Currently selected server.
   currentServer: LocalServerData;
+  // If the VPN is currently running.
+  vpnRunning = false;
 
   serverFlags = ServerFlags;
   lists = Lists;
@@ -262,6 +274,7 @@ export class ServerListComponent implements OnDestroy {
     this.backendDataSubscription = this.vpnClientService.backendState.subscribe(data => {
       if (data) {
         this.loadingBackendData = false;
+        this.vpnRunning = data.vpnClientAppData.running;
       }
     });
   }
@@ -319,20 +332,61 @@ export class ServerListComponent implements OnDestroy {
     const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
 
     if (!savedVersion || savedVersion.flag !== ServerFlags.Blocked) {
-      VpnHelpers.processServerChange(
-        this.router,
-        this.vpnClientService,
-        this.snackbarService,
-        this.dialog,
-        null,
-        this.currentLocalPk,
-        server.originalLocalData,
-        server.originalDiscoveryData,
-        null
-      );
+      // To prevent overriding any password, if the currently selected server is selected again,
+      // the case is managed here.
+      if (this.currentServer.pk === server.pk) {
+        if (this.vpnRunning) {
+          // Inform that the VPN is already connected to the server.
+          this.snackbarService.showWarning('vpn.server-change.already-selected-warning');
+        } else {
+          // Ask for confirmation for starting the VPN.
+          const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-change.start-same-server-confirmation');
+          confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+            confirmationDialog.componentInstance.closeModal();
+
+            this.vpnClientService.start();
+            VpnHelpers.redirectAfterServerChange(this.router, null, this.currentLocalPk);
+          });
+        }
+
+        return;
+      }
+
+      // If the server was previously used with a password, ask for it.
+      if (savedVersion && savedVersion.usedWithPassword) {
+        EnterVpnServerPasswordComponent.openDialog(this.dialog, true).afterClosed().subscribe((password: string) => {
+          // Continue only if the user did not cancel the operation.
+          if (password) {
+            this.makeServerChange(server, password === '-' ? null : password.substr(1));
+          }
+        });
+
+        return;
+      }
+
+      this.makeServerChange(server, null);
     } else {
       this.snackbarService.showError('vpn.starting-blocked-server-error');
     }
+  }
+
+  /**
+   * Changes the currently selected server and connects to the new one after that.
+   */
+  private makeServerChange(server: VpnServerForList, password: string) {
+    VpnHelpers.processServerChange(
+      this.router,
+      this.vpnClientService,
+      this.vpnSavedDataService,
+      this.snackbarService,
+      this.dialog,
+      null,
+      this.currentLocalPk,
+      server.originalLocalData,
+      server.originalDiscoveryData,
+      null,
+      password,
+    );
   }
 
   /**
@@ -352,6 +406,7 @@ export class ServerListComponent implements OnDestroy {
 
     VpnHelpers.openServerOptions(
       savedVersion,
+      this.router,
       this.vpnSavedDataService,
       this.vpnClientService,
       this.snackbarService,
@@ -524,6 +579,8 @@ export class ServerListComponent implements OnDestroy {
       server.personalNote = saveddata ? saveddata.personalNote : null;
       server.inHistory = saveddata ? saveddata.inHistory : false;
       server.flag = saveddata ? saveddata.flag : ServerFlags.None;
+      server.enteredManually = saveddata ? saveddata.enteredManually : false;
+      server.usedWithPassword = saveddata ? saveddata.usedWithPassword : false;
     });
 
     // Create a filter option for each country.

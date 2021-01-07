@@ -603,6 +603,9 @@
     "starting-blocked-server-error": "Unable to connect to the selected server because it has been added to the blocked servers list.",
     "unexpedted-error": "An unexpected error occurred and the operation could not be completed.",
 
+    "remote-access-title": "It appears that you are accessing the system remotely",
+    "remote-access-text": "This application only allows you to manage the VPN protection of the device on which it was installed. Changes made with it will not affect remote devices like the one you seem to be using. Also, the displayed IP data may be incorrect.",
+
     "server-change": {
       "busy-error": "The system is busy. Please wait.",
       "backend-error": "It was not possible to change the server. Please make sure the public key is correct and the VPN app is running.",
@@ -655,13 +658,13 @@
       "generic-problem-error": "It was not possible to perform the operation. Please make sure the base VPN client app is running.",
 
       "data": {
-        "ip": "Current IP address:",
+        "ip": "Browser IP address:",
         "ip-problem-info": "There was a problem trying to get the IP. Please verify it using an external service.",
         "ip-country-problem-info": "There was a problem trying to get the country. Please verify it using an external service.",
         "ip-refresh-info": "Refresh.",
         "ip-refresh-time-warning": "Please wait {{ seconds }} second(s) before refreshing the data.",
         "ip-refresh-loading-warning": "Please wait for the previous operation to finish.",
-        "country": "IP country:",
+        "country": "Browser IP country:",
         "server": "Server:",
         "server-note": "Server note:",
         "original-server-note": "Original server note:",
@@ -673,6 +676,9 @@
 
     "server-options": {
       "tooltip": "Options.",
+      "connect-without-password": "Connect without password",
+      "connect-without-password-confirmation": "The connection will be made without the password. Are you sure you want to continue?",
+      "connect-using-password": "Connect using a password",
       "make-favorite": "Make favorite",
       "make-favorite-confirmation": "Are you sure you want to mark this server as favorite? It will be removed from the blocked list.",
       "make-favorite-done": "Added to the favorites list.",
@@ -703,7 +709,8 @@
       "selected-info": "This is the currently selected server.",
       "blocked-info": "This server is in the blocked list.",
       "favorite-info": "This server is in the favorites list.",
-      "history-info": "This server is in the server history."
+      "history-info": "This server is in the server history.",
+      "has-password-info": "A password was set for connecting with this server."
     },
 
     "server-list" : {
@@ -759,6 +766,12 @@
         "pk-length-error": "The public key must be 66 characters long.",
         "pk-chars-error": "The public key must only contain hexadecimal characters.",
         "use-server-button": "Use server"
+      },
+
+      "password-dialog": {
+        "title": "Enter Password",
+        "password-label": "Server password (if any)",
+        "continue-button": "Continue"
       },
 
       "filter-dialog": {
