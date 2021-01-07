@@ -2,6 +2,9 @@ import { Component } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs/internal/Subscription';
 
+import { VpnAuthGuardService } from 'src/app/services/vpn-auth-guard.service';
+import { VpnClientService } from 'src/app/services/vpn-client.service';
+
 /**
  * Errors VpnErrorComponent can show.
  */
@@ -30,10 +33,21 @@ export class VpnErrorComponent {
 
   constructor(
     private route: ActivatedRoute,
+    private vpnAuthGuardService: VpnAuthGuardService,
+    private vpnClientService: VpnClientService,
   ) {
     // Get the query string.
     this.navigationsSubscription = this.route.queryParamMap.subscribe(queryParams => {
       this.problem = queryParams.get('problem');
+      if (!this.problem) {
+        this.problem = KnownProblems.UnableToConnectWithTheVpnClientApp;
+      }
+
+      // Make all navigations redirect to this page.
+      this.vpnAuthGuardService.lastError = this.problem;
+      // Stop requesting data.
+      this.vpnClientService.stopContinuallyUpdatingData();
+
       setTimeout(() => this.navigationsSubscription.unsubscribe());
     });
   }

@@ -115,6 +115,7 @@ tr {
   td {
     padding: 2px 5px !important;
     font-size: 12px !important;
+    font-weight: normal !important;
   }
 
   th {
@@ -256,12 +257,4 @@ tr {
 .alert-icon {
   vertical-align: middle;
   margin-right: 10px;
-}
-
-.known-icon {
-  font-size: 14px !important;
-  line-height: 14px !important;
-  position: relative;
-  top: 2px;
-  width: unset !important;
 }
