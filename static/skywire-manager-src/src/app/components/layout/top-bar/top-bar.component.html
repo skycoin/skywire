@@ -132,15 +132,12 @@
       <table cellspacing="0" cellpadding="0" *ngIf="vpnData">
         <tr>
           <!-- Current state. -->
-          <td
-            [ngClass]="{'green-clear-text': vpnData.showStarted, 'red-clear-text': !vpnData.showStarted}"
-            [matTooltip]="'vpn.connection-info.state-info' | translate"
-          >
+          <td [class]="vpnData.stateClass + ' state-td'" [matTooltip]="(vpnData.state + '-info') | translate">
             <div [ngClass]="{'animation-container': showVpnStateAnimation, 'd-none': !showVpnStateAnimation}">
               <div class="internal-animation-container">
                 <div class="animation-area">
                   <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
-                  {{ 'vpn.connection-info.state-connected' | translate }}
+                  {{ vpnData.state | translate }}
                 </div>
               </div>
             </div>
@@ -148,7 +145,7 @@
               <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
             </div>
             <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
-            {{ (vpnData.showStarted ? 'vpn.connection-info.state-connected' : 'vpn.connection-info.state-disconnected') | translate }}
+            {{ vpnData.state | translate }}
           </td>
           <!-- Latency. -->
           <td [matTooltip]="'vpn.connection-info.latency-info' | translate">
@@ -172,5 +169,16 @@
       <!-- Loading animation. -->
       <mat-spinner [diameter]="20" *ngIf="!vpnData"></mat-spinner>
     </div>
+  </div>
+</div>
+
+<!-- Remote access warning for the VPN client. -->
+<div class="remote-vpn-alert-container" *ngIf="showVpnInfo && remoteAccess">
+  <div class="top-line">
+    <mat-icon [inline]="true">error_outline</mat-icon>
+    {{ 'vpn.remote-access-title' | translate }}
+  </div>
+  <div class="bottom-line">
+    {{ 'vpn.remote-access-text' | translate }}
   </div>
 </div>

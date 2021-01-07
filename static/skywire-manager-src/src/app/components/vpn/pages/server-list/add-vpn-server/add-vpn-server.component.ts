@@ -7,13 +7,13 @@ import { AppConfig } from 'src/app/app.config';
 import { VpnHelpers } from '../../../vpn-helpers';
 import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 
 /**
  * Data AddVpnServerComponent collets.
  */
 export interface ManualVpnServerData {
   pk: string;
-  password: string;
   name?: string;
   note?: string;
 }
@@ -50,6 +50,7 @@ export class AddVpnServerComponent implements OnInit {
     private dialog: MatDialog,
     private router: Router,
     private vpnClientService: VpnClientService,
+    private vpnSavedDataService: VpnSavedDataService,
     private snackbarService: SnackbarService,
   ) { }
 
@@ -80,7 +81,6 @@ export class AddVpnServerComponent implements OnInit {
 
     const serverData: ManualVpnServerData = {
       pk: this.form.get('pk').value,
-      password: this.form.get('password').value,
       name: this.form.get('name').value,
       note: this.form.get('note').value,
     };
@@ -88,13 +88,15 @@ export class AddVpnServerComponent implements OnInit {
     VpnHelpers.processServerChange(
       this.router,
       this.vpnClientService,
+      this.vpnSavedDataService,
       this.snackbarService,
       this.dialog,
       this.dialogRef,
       this.data,
       null,
       null,
-      serverData
+      serverData,
+      this.form.get('password').value
     );
   }
 }

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import BigNumber from 'bignumber.js';
@@ -99,6 +99,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     private translateService: TranslateService,
     private route: ActivatedRoute,
     private dialog: MatDialog,
+    private router: Router,
   ) {
     this.ipInfoAllowed = this.vpnSavedDataService.getCheckIpSetting();
   }
@@ -230,6 +231,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   openServerOptions() {
     VpnHelpers.openServerOptions(
       this.currentRemoteServer,
+      this.router,
       this.vpnSavedDataService,
       this.vpnClientService,
       this.snackbarService,

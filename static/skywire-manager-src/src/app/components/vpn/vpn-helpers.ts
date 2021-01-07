@@ -16,6 +16,7 @@ import {
   EditVpnServerParams,
   EditVpnServerValueComponent
 } from './pages/server-list/edit-vpn-server-value/edit-vpn-server-value.component';
+import { EnterVpnServerPasswordComponent } from './pages/server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 
 /**
  * Helper functions for the VPN client.
@@ -104,6 +105,7 @@ export class VpnHelpers {
   static processServerChange(
     router: Router,
     vpnClientService: VpnClientService,
+    vpnSavedDataService: VpnSavedDataService,
     snackbarService: SnackbarService,
     dialog: MatDialog,
     dialogRef: MatDialogRef<any>,
@@ -111,6 +113,7 @@ export class VpnHelpers {
     newServerFromHistory: LocalServerData,
     newServerFromDiscovery: VpnServer,
     newServerManually: ManualVpnServerData,
+    password: string,
   ) {
     // Check if the new server param was provided as it should.
     let requestedPk: string;
@@ -131,6 +134,10 @@ export class VpnHelpers {
       throw new Error('Invalid call');
     }
 
+    // Check if the server was already saved and if the user could be changing the password.
+    const savedServer = vpnSavedDataService.getSavedVersion(requestedPk, true);
+    const passwordCouldHaveBeenChanged = savedServer && (password || savedServer.usedWithPassword);
+
     // Check if the selected server can be used.
     const result = vpnClientService.checkNewPk(requestedPk);
 
@@ -141,16 +148,18 @@ export class VpnHelpers {
       return;
     }
 
-    // If the app is already connected to the selected server, cancel the operation.
-    if (result === CheckPkResults.SamePkRunning) {
+    // If the app is already connected to the selected server, cancel the operation, but not
+    // if the password may have been changed.
+    if (result === CheckPkResults.SamePkRunning && !passwordCouldHaveBeenChanged) {
       snackbarService.showWarning('vpn.server-change.already-selected-warning');
 
       return;
     }
 
     // If the app is connected to another server, ask for confirmation for stopping the
-    // current connection before connecting with the new server.
-    if (result === CheckPkResults.MustStop) {
+    // current connection before connecting with the new server. Also if the server was not
+    // changed but the user could be changing the password.
+    if (result === CheckPkResults.MustStop || (result === CheckPkResults.SamePkRunning && passwordCouldHaveBeenChanged)) {
       const confirmationDialog =
         GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-change.change-server-while-connected-confirmation');
 
@@ -158,11 +167,11 @@ export class VpnHelpers {
           confirmationDialog.componentInstance.closeModal();
 
           if (newServerFromHistory) {
-            vpnClientService.changeServerUsingHistory(newServerFromHistory);
+            vpnClientService.changeServerUsingHistory(newServerFromHistory, password);
           } else if (newServerFromDiscovery) {
-            vpnClientService.changeServerUsingDiscovery(newServerFromDiscovery);
+            vpnClientService.changeServerUsingDiscovery(newServerFromDiscovery, password);
           } else if (newServerManually) {
-            vpnClientService.changeServerManually(newServerManually);
+            vpnClientService.changeServerManually(newServerManually, password);
           }
 
           VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
@@ -172,32 +181,31 @@ export class VpnHelpers {
     }
 
     // If the server has already been selected, inform the user and continue after confirmation.
-    if (result === CheckPkResults.SamePkStopped) {
-      const confirmationDialog =
-        GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-change.start-same-server-confirmation');
+    // Not if the user could be changing the password, to allow to make the change.
+    if (result === CheckPkResults.SamePkStopped && !passwordCouldHaveBeenChanged) {
+      const confirmationDialog = GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-change.start-same-server-confirmation');
+      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+        confirmationDialog.componentInstance.closeModal();
 
-        confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-          confirmationDialog.componentInstance.closeModal();
+        // Update the data in persistent storage, if it was entered manually.
+        if (newServerManually && savedServer) {
+          vpnSavedDataService.processFromManual(newServerManually);
+        }
 
-          // For updating the data in persistent storage, if it was entered manually.
-          if (newServerManually) {
-            vpnClientService.changeServerManually(newServerManually);
-          }
+        vpnClientService.start();
+        VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
+      });
 
-          vpnClientService.start();
-          VpnHelpers.redirectAfterServerChange(router, dialogRef, localPk);
-        });
-
-        return;
+      return;
     }
 
     // If none of the other conditions were met, change the server immediately.
     if (newServerFromHistory) {
-      vpnClientService.changeServerUsingHistory(newServerFromHistory);
+      vpnClientService.changeServerUsingHistory(newServerFromHistory, password);
     } else if (newServerFromDiscovery) {
-      vpnClientService.changeServerUsingDiscovery(newServerFromDiscovery);
+      vpnClientService.changeServerUsingDiscovery(newServerFromDiscovery, password);
     } else if (newServerManually) {
-      vpnClientService.changeServerManually(newServerManually);
+      vpnClientService.changeServerManually(newServerManually, password);
     }
 
     // Go to the status page.
@@ -207,7 +215,7 @@ export class VpnHelpers {
   /**
    * Opens the status page. If a modal window ref is provided, it is closed.
    */
-  private static redirectAfterServerChange(
+  static redirectAfterServerChange(
     router: Router,
     dialogRef: MatDialogRef<any>,
     localPk: string,
@@ -226,6 +234,7 @@ export class VpnHelpers {
    */
   static openServerOptions(
     server: LocalServerData,
+    router: Router,
     vpnSavedDataService: VpnSavedDataService,
     vpnClientService: VpnClientService,
     snackbarService: SnackbarService,
@@ -236,6 +245,18 @@ export class VpnHelpers {
     // List that, for each option added to the options array, will contain a code identifying
     // which operation the option is related to.
     const optionCodes: number[] = [];
+
+    // Options for connecting with or without password.
+    if (server.usedWithPassword) {
+      options.push({ icon: 'lock_open', label: 'vpn.server-options.connect-without-password' });
+      optionCodes.push(201);
+    } else {
+      // Allow to use a password only if the server was added manually.
+      if (server.enteredManually) {
+        options.push({ icon: 'lock_outlined', label: 'vpn.server-options.connect-using-password' });
+        optionCodes.push(202);
+      }
+    }
 
     // Options for changing the custom name and personal note.
     options.push({ icon: 'edit', label: 'vpn.server-options.edit-value.name-title' });
@@ -283,8 +304,61 @@ export class VpnHelpers {
 
         selectedOption -= 1;
 
-        // Chage name or note.
-        if (optionCodes[selectedOption] > 100) {
+        if (optionCodes[selectedOption] > 200) {
+          if (optionCodes[selectedOption] === 201) {
+            let confirmed = false;
+
+            // Ask for confirmation.
+            const confirmationDialog = GeneralUtils.createConfirmationDialog(dialog, 'vpn.server-options.connect-without-password-confirmation');
+            confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+              confirmed = true;
+
+              VpnHelpers.processServerChange(
+                router,
+                vpnClientService,
+                vpnSavedDataService,
+                snackbarService,
+                dialog,
+                null,
+                VpnHelpers.currentPk,
+                server,
+                null,
+                null,
+                null,
+              );
+
+              confirmationDialog.componentInstance.closeModal();
+            });
+
+            // Return if the change was made.
+            return confirmationDialog.afterClosed().pipe(map(() => confirmed));
+          } else {
+            return EnterVpnServerPasswordComponent.openDialog(dialog, false).afterClosed().pipe(map((password: string) => {
+              // Continue only if the user did not cancel the operation.
+              if (password && password !== '-') {
+                VpnHelpers.processServerChange(
+                  router,
+                  vpnClientService,
+                  vpnSavedDataService,
+                  snackbarService,
+                  dialog,
+                  null,
+                  VpnHelpers.currentPk,
+                  server,
+                  null,
+                  null,
+                  password.substr(1),
+                );
+
+                return true;
+              }
+
+              return false;
+            }));
+          }
+
+          // Chage name or note.
+        } else if (optionCodes[selectedOption] > 100) {
           const params: EditVpnServerParams = {
             editName: optionCodes[selectedOption] === 101,
             server: server
