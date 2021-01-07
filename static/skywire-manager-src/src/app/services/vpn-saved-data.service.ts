@@ -64,6 +64,14 @@ export interface LocalServerData {
    * Personal note added by the user.
    */
   personalNote: string;
+  /**
+   * If the last time the server was used it was used with a password.
+   */
+  usedWithPassword: boolean;
+  /**
+   * If the server was entered manually, at least one time.
+   */
+  enteredManually: boolean;
 }
 
 /**
@@ -279,6 +287,8 @@ export class VpnSavedDataService {
       location: newServer.location,
       personalNote: null,
       note: newServer.note,
+      enteredManually: false,
+      usedWithPassword: false,
     };
   }
 
@@ -294,6 +304,7 @@ export class VpnSavedDataService {
     if (retrievedServer) {
       retrievedServer.customName = newServer.name;
       retrievedServer.personalNote = newServer.note;
+      retrievedServer.enteredManually = true;
 
       this.saveData();
 
@@ -311,6 +322,8 @@ export class VpnSavedDataService {
       location: '',
       personalNote: newServer.note,
       note: '',
+      enteredManually: true,
+      usedWithPassword: false,
     };
   }
 
@@ -395,7 +408,7 @@ export class VpnSavedDataService {
 
         const retrievedServer = this.serversMap.get(pk);
         if (!retrievedServer) {
-          const server = this.processFromManual({pk: pk, password: ''});
+          const server = this.processFromManual({pk: pk});
           this.serversMap.set(server.pk, server);
           this.cleanServers();
         }

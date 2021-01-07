@@ -17,6 +17,7 @@ import { ServerListComponent } from './components/vpn/pages/server-list/server-l
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
 import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
+import { VpnAuthGuardService } from './services/vpn-auth-guard.service';
 
 const routes: Routes = [
   {
@@ -125,6 +126,8 @@ const routes: Routes = [
   },
   {
     path: 'vpn',
+    canActivate: [VpnAuthGuardService],
+    canActivateChild: [VpnAuthGuardService],
     children: [
       {
         path: 'unavailable',

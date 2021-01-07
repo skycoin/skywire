@@ -195,7 +195,11 @@
         </tr>
 
         <!-- Values. -->
-        <tr *ngFor="let server of dataSource" class="selectable click-effect" (click)="selectServer(server)">
+        <tr
+          *ngFor="let server of dataSource"
+          [ngClass]="{'selectable click-effect': currentList !== lists.Blocked}"
+          (click)="currentList !== lists.Blocked ? selectServer(server) : null"
+        >
           <td  *ngIf="currentList === lists.History" class="date-column">
             {{ server.lastUsed | date:'yyyy/MM/dd, H:mm a' }}
           </td>
@@ -208,47 +212,16 @@
             </div>
           </td>
           <td class="name-column">
-            <!-- Icons shown if the server is blocked, in the favorites list, etc. -->
-            <mat-icon
-              *ngIf="server.pk === currentServer.pk"
-              class="known-icon"
-              [inline]="true"
-              [matTooltip]="'vpn.server-conditions.selected-info' | translate"
-            >done</mat-icon>
-            <mat-icon
-              *ngIf="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
-              class="known-icon red-clear-text"
-              [inline]="true"
-              [matTooltip]="'vpn.server-conditions.blocked-info' | translate"
-            >clear</mat-icon>
-            <mat-icon
-              *ngIf="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
-              class="known-icon yellow-clear-text"
-              [inline]="true"
-              [matTooltip]="'vpn.server-conditions.favorite-info' | translate"
-            >star</mat-icon>
-            <mat-icon
-              *ngIf="server.inHistory && currentList !== lists.History"
-              class="known-icon"
-              [inline]="true"
-              [matTooltip]="'vpn.server-conditions.history-info' | translate"
-            >history</mat-icon>
-            <!-- Sever name, depending on whether there is a custom name or not. -->
-            <ng-container *ngIf="server.customName">
-              {{ server.customName }}
-            </ng-container>
-            <ng-container *ngIf="server.customName && server.name">
-              <mat-icon [inline]="true" class="vpn-server-name-separator">fiber_manual_record</mat-icon>
-            </ng-container>
-            <ng-container *ngIf="server.name">
-              {{ server.name }}
-            </ng-container>
-            <ng-container *ngIf="currentList === lists.Public && !server.name && !server.customName">
-              {{ 'vpn.server-list.none' | translate }}
-            </ng-container>
-            <ng-container *ngIf="currentList !== lists.Public && !server.name && !server.customName">
-              {{ 'vpn.server-list.none-entered-manually' | translate }}
-            </ng-container>
+            <app-vpn-server-name
+              [isCurrentServer]="server.pk === currentServer.pk"
+              [isFavorite]="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
+              [isBlocked]="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
+              [isInHistory]="server.inHistory && currentList !== lists.History"
+              [hasPassword]="server.usedWithPassword"
+              [name]="server.name"
+              [customName]="server.customName"
+              [defaultName]="currentList === lists.Public ? 'vpn.server-list.none' : 'vpn.server-list.none-entered-manually'">
+            </app-vpn-server-name>
           </td>
           <td class="location-column">
             <ng-container *ngIf="server.location">

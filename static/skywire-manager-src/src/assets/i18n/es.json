@@ -603,6 +603,9 @@
     "starting-blocked-server-error": "No se puede conectar con el servidor seleccionado porque se ha agregado a la lista de servidores bloqueados.",
     "unexpedted-error": "Se produjo un error inesperado y no se pudo completar la operación.",
 
+    "remote-access-title": "Parece que está accediendo al sistema de manera remota",
+    "remote-access-text": "Esta aplicación sólo permite administrar la protección VPN del dispositivo en el que fue instalada. Los cambios hechos con ella no afectarán a dispositivos remotos como el que parece estar usando. También es posible que los datos de IP que se muestren sean incorrectos.",
+
     "server-change": {
       "busy-error": "El sistema está ocupado. Por favor, espere.",
       "backend-error": "No fue posible cambiar el servidor. Por favor, asegúrese de que la clave pública sea correcta y de que la aplicación VPN se esté ejecutando.",
@@ -655,13 +658,13 @@
       "generic-problem-error": "No fue posible realizar la operación. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
 
       "data": {
-        "ip": "Dirección IP actual:",
+        "ip": "Dirección IP del navegador:",
         "ip-problem-info": "Hubo un problema al intentar obtener la IP. Por favor, verifíquela utilizando un servicio externo.",
         "ip-country-problem-info": "Hubo un problema al intentar obtener el país. Por favor, verifíquelo utilizando un servicio externo.",
         "ip-refresh-info": "Refrescar.",
         "ip-refresh-time-warning": "Por favor, espere {{ seconds }} segundo(s) antes de refrescar los datos.",
         "ip-refresh-loading-warning": "Por favor, espere a que finalice la operación anterior.",
-        "country": "País de la IP:",
+        "country": "País de la IP del navegador:",
         "server": "Servidor:",
         "server-note": "Nota del servidor:",
         "original-server-note": "Nota original del servidor:",
@@ -673,6 +676,9 @@
 
     "server-options": {
       "tooltip": "Opciones.",
+      "connect-without-password": "Conectarse sin contraseña",
+      "connect-without-password-confirmation": "La conexión se realizará sin la contraseña. ¿Seguro que desea continuar?",
+      "connect-using-password": "Conectarse usando una contraseña",
       "make-favorite": "Hacer favorito",
       "make-favorite-confirmation": "¿Realmente desea marcar este servidor como favorito? Se eliminará de la lista de bloqueados.",
       "make-favorite-done": "Agregado a la lista de favoritos.",
@@ -703,7 +709,8 @@
       "selected-info": "Este es el servidor actualmente seleccionado.",
       "blocked-info": "Este servidor está en la lista de bloqueados.",
       "favorite-info": "Este servidor está en la lista de favoritos.",
-      "history-info": "Este servidor está en el historial de servidores."
+      "history-info": "Este servidor está en el historial de servidores.",
+      "has-password-info": "Se estableció una contraseña para conectarse con este servidor."
     },
 
     "server-list" : {
@@ -759,6 +766,12 @@
         "pk-length-error": "La llave pública debe tener 66 caracteres.",
         "pk-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
         "use-server-button": "Usar servidor"
+      },
+
+      "password-dialog": {
+        "title": "Introducir Contraseña",
+        "password-label": "Contraseña del servidor (si tiene)",
+        "continue-button": "Continuar"
       },
 
       "filter-dialog": {

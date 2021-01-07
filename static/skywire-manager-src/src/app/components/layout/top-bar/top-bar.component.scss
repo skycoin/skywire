@@ -188,6 +188,10 @@ $top-bar-height: 56px;
 
   table {
     tr {
+      .state-td {
+        font-weight: bold;
+      }
+
       td {
         padding: 2px 0;
         min-width: 90px;
@@ -283,5 +287,24 @@ $top-bar-height: 56px;
       height: 11px;
       margin-right: 2px;
     }
+  }
+}
+
+.remote-vpn-alert-container {
+  background-color: $red;
+  margin: 0 -21px;
+  padding: 10px 20px 15px;
+  text-align: center;
+
+  mat-icon {
+    font-size: 14px;
+  }
+
+  .top-line {
+    font-size: $font-size-lg;
+  }
+
+  .bottom-line {
+    font-size: $font-size-smaller;
   }
 }
