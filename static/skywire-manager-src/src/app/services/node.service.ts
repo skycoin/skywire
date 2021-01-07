@@ -781,7 +781,13 @@ export class NodeService {
    * Checks if there are updates available for a node.
    */
   checkUpdate(nodeKey: string): Observable<any> {
-    return this.apiService.get(`visors/${nodeKey}/update/available`);
+    let channel = 'stable';
+
+    // Use the custom channel saved by the user, if any.
+    const savedChannel = localStorage.getItem(UpdaterStorageKeys.Channel);
+    channel = savedChannel ? savedChannel : channel;
+
+    return this.apiService.get(`visors/${nodeKey}/update/available/${channel}`);
   }
 
   /**
