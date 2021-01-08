@@ -18,7 +18,7 @@ import GeneralUtils from 'src/app/utils/generalUtils';
 import { EnterVpnServerPasswordComponent } from './enter-vpn-server-password/enter-vpn-server-password.component';
 
 /**
- * Server lists ServerListComponent can show.
+ * Server lists VpnServerListComponent can show.
  */
 export enum Lists {
   /**
@@ -129,11 +129,11 @@ interface VpnServerForList {
  * Page for showing the vpn server lists.
  */
 @Component({
-  selector: 'app-server-list',
-  templateUrl: './server-list.component.html',
-  styleUrls: ['./server-list.component.scss'],
+  selector: 'app-vpn-server-list',
+  templateUrl: './vpn-server-list.component.html',
+  styleUrls: ['./vpn-server-list.component.scss'],
 })
-export class ServerListComponent implements OnDestroy {
+export class VpnServerListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
   private listId: string;
 
@@ -331,6 +331,9 @@ export class ServerListComponent implements OnDestroy {
   selectServer(server: VpnServerForList) {
     const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
 
+    // Close any previous temporary loading error msg.
+    this.snackbarService.closeCurrentIfTemporaryError();
+
     if (!savedVersion || savedVersion.flag !== ServerFlags.Blocked) {
       // To prevent overriding any password, if the currently selected server is selected again,
       // the case is managed here.
@@ -366,7 +369,7 @@ export class ServerListComponent implements OnDestroy {
 
       this.makeServerChange(server, null);
     } else {
-      this.snackbarService.showError('vpn.starting-blocked-server-error');
+      this.snackbarService.showError('vpn.starting-blocked-server-error', {}, true);
     }
   }
 

@@ -8,15 +8,15 @@ import { VpnClientService, CheckPkResults } from 'src/app/services/vpn-client.se
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { VpnServer } from 'src/app/services/vpn-client-discovery.service';
-import { ManualVpnServerData } from './pages/server-list/add-vpn-server/add-vpn-server.component';
+import { ManualVpnServerData } from './pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
 import { LocalServerData, ServerFlags, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
-import { Lists } from './pages/server-list/server-list.component';
+import { Lists } from './pages/vpn-server-list/vpn-server-list.component';
 import { SelectableOption, SelectOptionComponent } from '../layout/select-option/select-option.component';
 import {
   EditVpnServerParams,
   EditVpnServerValueComponent
-} from './pages/server-list/edit-vpn-server-value/edit-vpn-server-value.component';
-import { EnterVpnServerPasswordComponent } from './pages/server-list/enter-vpn-server-password/enter-vpn-server-password.component';
+} from './pages/vpn-server-list/edit-vpn-server-value/edit-vpn-server-value.component';
+import { EnterVpnServerPasswordComponent } from './pages/vpn-server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 
 /**
  * Helper functions for the VPN client.
