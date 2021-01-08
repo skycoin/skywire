@@ -94,7 +94,7 @@
       [localVpnKey]="currentLocalPk"
     ></app-top-bar>
   </div>
-  <div class="col-12 main-container"><div class="width-limiter">
+  <div class="col-12 vpn-table-container"><div class="width-limiter">
     <!-- Lower tab bar. -->
     <div class="center-container mt-4.5" [ngClass]="{'mb-3': !dataFilterer.currentFiltersTexts || dataFilterer.currentFiltersTexts.length < 1}">
       <ng-container *ngTemplateOutlet="topPart"></ng-container>
@@ -213,7 +213,7 @@
           </td>
           <td class="name-column">
             <app-vpn-server-name
-              [isCurrentServer]="server.pk === currentServer.pk"
+              [isCurrentServer]="currentServer && server.pk === currentServer.pk"
               [isFavorite]="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
               [isBlocked]="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
               [isInHistory]="server.inHistory && currentList !== lists.History"

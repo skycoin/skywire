@@ -3,7 +3,7 @@ import { ReplaySubject, Observable } from 'rxjs';
 import { Router } from '@angular/router';
 
 import { VpnServer } from './vpn-client-discovery.service';
-import { ManualVpnServerData } from '../components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
+import { ManualVpnServerData } from '../components/vpn/pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
 
 /**
  * Special conditions a server may have.

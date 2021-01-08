@@ -197,6 +197,14 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
    * Starts the VPN protection.
    */
   start() {
+    // If no server has been selected, open the server list.
+    if (!this.currentRemoteServer) {
+      this.router.navigate(['vpn', this.currentLocalPk, 'servers']);
+      setTimeout(() => this.snackbarService.showWarning('vpn.status-page.select-server-warning'), 100);
+
+      return;
+    }
+
     // Cancel the operation if the server has been blocked.
     if (this.currentRemoteServer.flag === ServerFlags.Blocked) {
       this.snackbarService.showError('vpn.starting-blocked-server-error');

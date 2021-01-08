@@ -9,6 +9,7 @@
       [localVpnKey]="currentLocalPk"
     ></app-top-bar>
   </div>
+  <!-- Loading animation. -->
   <app-loading-indicator class="h-100"></app-loading-indicator>
 </div>
 
@@ -23,7 +24,7 @@
       [localVpnKey]="currentLocalPk"
     ></app-top-bar>
   </div>
-  <div class="col-12 mt-4.5">
+  <div class="col-12 mt-4.5 vpn-table-container"><div class="width-limiter">
     <div class="rounded-elevated-box"><div class="box-internal-container">
       <!-- Table. -->
       <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
@@ -70,5 +71,5 @@
         </tr>
       </table>
     </div></div>
-  </div>
+  </div></div>
 </div>
