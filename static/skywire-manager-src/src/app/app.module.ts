@@ -85,14 +85,14 @@ import { AllLabelsComponent } from './components/pages/settings/all-labels/all-l
 import { LabelListComponent } from './components/pages/settings/all-labels/label-list/label-list.component';
 import { UpdateComponent } from './components/layout/update/update.component';
 import { UpdaterConfigComponent } from './components/pages/settings/updater-config/updater-config.component';
-import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
-import { AddVpnServerComponent } from './components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
-import { EditVpnServerValueComponent } from './components/vpn/pages/server-list/edit-vpn-server-value/edit-vpn-server-value.component';
+import { VpnServerListComponent } from './components/vpn/pages/vpn-server-list/vpn-server-list.component';
+import { AddVpnServerComponent } from './components/vpn/pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
+import { EditVpnServerValueComponent } from './components/vpn/pages/vpn-server-list/edit-vpn-server-value/edit-vpn-server-value.component';
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 import { VpnServerNameComponent } from './components/vpn/layout/vpn-server-name/vpn-server-name.component';
-import { EnterVpnServerPasswordComponent } from './components/vpn/pages/server-list/enter-vpn-server-password/enter-vpn-server-password.component';
+import { EnterVpnServerPasswordComponent } from './components/vpn/pages/vpn-server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -154,7 +154,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     EditSkysocksClientNoteComponent,
     SkysocksClientFilterComponent,
     SkysocksClientPasswordComponent,
-    ServerListComponent,
+    VpnServerListComponent,
     VpnStatusComponent,
     VpnErrorComponent,
     AddVpnServerComponent,

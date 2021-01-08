@@ -656,6 +656,7 @@
       "problem-starting-error": "It was not possible to start the VPN. Please make sure the base VPN client app is running.",
       "problem-stopping-error": "It was not possible to stop the VPN. Please make sure the base VPN client app is running.",
       "generic-problem-error": "It was not possible to perform the operation. Please make sure the base VPN client app is running.",
+      "select-server-warning": "Please select a server first.",
 
       "data": {
         "ip": "Browser IP address:",

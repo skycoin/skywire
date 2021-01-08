@@ -10,3 +10,14 @@
 .vpn-dark-box-radius {
   border-radius: 10px;
 }
+
+.vpn-table-container {
+  text-align: center;
+
+  .width-limiter {
+    width: inherit;
+    max-width: 1250px;
+    display: inline-block;
+    text-align: initial;
+  }
+}
