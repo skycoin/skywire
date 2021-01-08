@@ -13,7 +13,7 @@ import { AllRoutesComponent } from './components/pages/node/routing/all-routes/a
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
-import { ServerListComponent } from './components/vpn/pages/server-list/server-list.component';
+import { VpnServerListComponent } from './components/vpn/pages/vpn-server-list/vpn-server-list.component';
 import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
 import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
@@ -147,7 +147,7 @@ const routes: Routes = [
           },
           {
             path: 'servers/:type/:page',
-            component: ServerListComponent
+            component: VpnServerListComponent
           },
           {
             path: 'settings',

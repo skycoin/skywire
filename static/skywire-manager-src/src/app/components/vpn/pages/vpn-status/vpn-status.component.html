@@ -86,7 +86,7 @@
         </div>
         <!-- Current server note. -->
         <div>
-          <div class="current-server-note" *ngIf="currentRemoteServer.note || currentRemoteServer.personalNote">
+          <div class="current-server-note" *ngIf="currentRemoteServer && (currentRemoteServer.note || currentRemoteServer.personalNote)">
             <mat-icon [inline]="true">info_outline</mat-icon>
             {{ getNoteVar() | translate:{custom: currentRemoteServer.personalNote, original: currentRemoteServer.note} }}
           </div>

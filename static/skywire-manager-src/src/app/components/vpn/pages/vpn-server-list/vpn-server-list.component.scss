@@ -10,17 +10,6 @@
   }
 }
 
-.main-container {
-  text-align: center;
-
-  .width-limiter {
-    width: inherit;
-    max-width: 1250px;
-    display: inline-block;
-    text-align: initial;
-  }
-}
-
 .loading-top-container {
   z-index: 1;
 }
@@ -114,7 +103,7 @@ table {
 tr {
   td {
     padding: 2px 5px !important;
-    font-size: 12px !important;
+    font-size: $font-size-vpn-list !important;
     font-weight: normal !important;
   }
 

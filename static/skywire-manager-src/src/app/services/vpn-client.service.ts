@@ -7,7 +7,7 @@ import { HttpClient } from '@angular/common/http';
 import { ApiService } from './api.service';
 import { AppsService } from './apps.service';
 import { VpnServer } from './vpn-client-discovery.service';
-import { ManualVpnServerData } from '../components/vpn/pages/server-list/add-vpn-server/add-vpn-server.component';
+import { ManualVpnServerData } from '../components/vpn/pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
 import { VpnSavedDataService, LocalServerData } from './vpn-saved-data.service';
 import { AppConfig } from '../app.config';
 import { environment } from 'src/environments/environment';
