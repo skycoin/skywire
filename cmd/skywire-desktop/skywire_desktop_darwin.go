@@ -41,7 +41,6 @@ func isVisorRunning() (bool, error) {
 
 func startVisorDaemon() error {
 	cmd := "launchctl start " + osxServiceIdentifier
-
 	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
 		return fmt.Errorf("failed to run command %s: %w", cmd, err)
 	}
@@ -51,9 +50,36 @@ func startVisorDaemon() error {
 
 func stopVisorDaemon() error {
 	cmd := "launchctl stop " + osxServiceIdentifier
-
 	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
 		return fmt.Errorf("failed to run command %s: %w", cmd, err)
+	}
+
+	return nil
+}
+
+func uninstall() error {
+	const logCleanerServiceIdentifier = "com.skycoin.skywire.logcleaner"
+
+	const uninstallScript = `
+launchctl remove ` + logCleanerServiceIdentifier + `
+launchctl remove ` + osxServiceIdentifier + `
+sleep 2
+
+rm -rf $HOME/Library/LaunchAgents/` + logCleanerServiceIdentifier + `.plist
+rm -rf $HOME/Library/LaunchAgents/` + osxServiceIdentifier + `.plist
+sudo rm -rf /opt/skywire
+
+#sudo sed -i '' '/.*skywire.*/d' /etc/newsyslog.conf
+
+pkgutil --forget ` + osxServiceIdentifier + `
+pkgutil --forget com.skycoin.skywire.updater
+pkgutil --forget com.skycoin.skywire.remover
+
+exit 0
+`
+
+	if err := osutil.Run("/bin/bash", "-c", uninstallScript); err != nil {
+		return fmt.Errorf("failed to run uninstall script: %w", err)
 	}
 
 	return nil
