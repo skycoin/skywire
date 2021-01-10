@@ -14,7 +14,6 @@ const (
 
 func isVisorRunning() (bool, error) {
 	cmd := "systemctl is-active --quiet " + linuxServiceName
-
 	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
 		// if cmd doesn't return 0 status code, daemon is considered not running
 		return false, nil
@@ -25,7 +24,6 @@ func isVisorRunning() (bool, error) {
 
 func startVisorDaemon() error {
 	cmd := "systemctl start " + linuxServiceName
-
 	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
 		return fmt.Errorf("failed to run command %s: %w", cmd, err)
 	}
@@ -35,7 +33,6 @@ func startVisorDaemon() error {
 
 func stopVisorDaemon() error {
 	cmd := "systemctl stop " + linuxServiceName
-
 	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
 		return fmt.Errorf("failed to run command %s: %w", cmd, err)
 	}
