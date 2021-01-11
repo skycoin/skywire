@@ -47,10 +47,6 @@ rm -rf $HOME/Library/LaunchAgents/` + osxServiceIdentifier + `.plist
 
 #sudo sed -i '' '/.*skywire.*/d' /etc/newsyslog.conf
 
-pkgutil --forget ` + osxServiceIdentifier + `
-pkgutil --forget com.skycoin.skywire.updater
-pkgutil --forget com.skycoin.skywire.remover
-
 exit 0
 `
 
@@ -58,13 +54,22 @@ exit 0
 		return fmt.Errorf("failed to run uninstall script: %w", err)
 	}
 
+	privilegedScript := `
+sudo pkgutil --forget ` + osxServiceIdentifier + `
+sudo pkgutil --forget com.skycoin.skywire.updater
+sudo pkgutil --forget com.skycoin.skywire.remover
+
+sudo rm -rf /opt/skywire
+`
+
 	uid := syscall.Getuid()
 
 	if err := syscall.Setuid(0); err != nil {
 		return fmt.Errorf("failed to setuid 0: %w", err)
 	}
 
-	if err := osutil.Run("/bin/bash", "-c", "sudo rm -rf /opt/skywire"); err != nil {
+	if err := osutil.Run("/bin/bash", "-c", privilegedScript); err != nil {
+		// TODO: change error text
 		return fmt.Errorf("failed to remove skywire installation directory: %w", err)
 	}
 
