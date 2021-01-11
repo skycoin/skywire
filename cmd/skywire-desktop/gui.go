@@ -1,7 +1,6 @@
 package main
 
 import (
-	"syscall"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
@@ -137,41 +136,18 @@ func handleUninstall() {
 	mUninstall.Disable()
 	mQuit.Disable()
 
-	/*if err := uninstall(); err != nil {
+	if err := osutil.Run("/bin/bash", "-c", "/opt/skywire/deinstaller"); err != nil {
 		mUninstall.Enable()
-		log.WithError(err).Errorln("failed to uninstall skywire apps")
+		log.WithError(err).Errorln("Failed to run deinstaller")
+		return
+	}
+
+	/*cmd = "rm -rf /Applications/Skywire.app"
+	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
+		mUninstall.Enable()
+		log.WithError(err).Errorln("failed to remove systray app")
 		return
 	}*/
-
-	suid := syscall.Getuid()
-
-	if err := syscall.Setuid(0); err != nil {
-		mUninstall.Enable()
-		log.WithError(err).Errorln("failed to setuid 0")
-	}
-
-	cmd := "installer -pkg /Users/darkrengarius/go/src/github.com/SkycoinPro/skywire-services/scripts/mac_installer/remover.pkg -target /"
-	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
-		mUninstall.Enable()
-		log.WithError(err).Errorln("failed to remove systray app")
-		if err := syscall.Setuid(suid); err != nil {
-			log.WithError(err).Errorln("Failed to revert uid")
-		}
-		return
-	}
-
-	if err := syscall.Setuid(suid); err != nil {
-		log.WithError(err).Errorln("Failed to revert uid")
-	}
-
-	return
-
-	cmd = "rm -rf /Applications/Skywire.app"
-	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
-		mUninstall.Enable()
-		log.WithError(err).Errorln("failed to remove systray app")
-		return
-	}
 
 	systray.Quit()
 }
