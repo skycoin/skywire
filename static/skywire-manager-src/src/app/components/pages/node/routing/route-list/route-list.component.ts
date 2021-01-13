@@ -223,6 +223,7 @@ export class RouteListComponent implements OnDestroy {
     this.dataSortedSubscription.unsubscribe();
     this.dataFiltererSubscription.unsubscribe();
     this.dataSorter.dispose();
+    this.dataFilterer.dispose();
   }
 
   /**
