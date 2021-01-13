@@ -10,9 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/internal/gui"
+
+	"github.com/getlantern/systray"
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
@@ -33,12 +37,17 @@ const (
 )
 
 var (
-	tag        string
-	syslogAddr string
-	pprofMode  string
-	pprofAddr  string
-	confPath   string
-	delay      string
+	stopVisorWg sync.WaitGroup
+)
+
+var (
+	tag           string
+	syslogAddr    string
+	pprofMode     string
+	pprofAddr     string
+	confPath      string
+	delay         string
+	runSysTrayApp bool
 )
 
 func init() {
@@ -48,88 +57,29 @@ func init() {
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
+	rootCmd.Flags().BoolVar(&runSysTrayApp, "systray", false, "Run system tray app")
 }
 
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor",
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
-		log := initLogger(tag, syslogAddr)
+		if runSysTrayApp {
+			l := logging.MustGetLogger("sys_tray_setup")
 
-		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-			// Workaround for Discord logger hook. Actually, it's Info.
-			log.Error(discord.StartLogMessage)
-			defer log.Error(discord.StopLogMessage)
-		} else {
-			log.Info(discord.StartLogMessage)
-			defer log.Info(discord.StopLogMessage)
-		}
-
-		delayDuration, err := time.ParseDuration(delay)
-		if err != nil {
-			log.WithError(err).Error("Failed to parse delay duration.")
-			delayDuration = time.Duration(0)
-		}
-
-		log.WithField("delay", delayDuration).
-			WithField("systemd", restartCtx.Systemd()).
-			WithField("parent_systemd", restartCtx.ParentSystemd()).
-			Debugf("Process info")
-
-		// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
-		// and therefore do not support restart via systemd.
-		// If --delay flag is passed, version is v0.2.3 or below.
-		// Systemd has PID 1. If PPID is not 1 and PPID of parent process is 1, then
-		// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
-		if delayDuration != 0 && !restartCtx.Systemd() && restartCtx.ParentSystemd() {
-			// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
-			// new process should be alive after `restart.DefaultCheckDelay`.
-			time.Sleep(restart.DefaultCheckDelay)
-
-			// When a parent process exits, systemd kills child processes as well,
-			// so a child process can ask systemd to restart service between after restart.DefaultCheckDelay
-			// but before (restart.DefaultCheckDelay + restart.extraWaitingTime),
-			// because after that time a parent process would exit and then systemd would kill its children.
-			// In this case, systemd would kill both parent and child processes,
-			// then restart service using an updated binary.
-			cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
-			if err := cmd.Run(); err != nil {
-				log.WithError(err).Errorf("Failed to restart skywire-visor service")
-			} else {
-				log.WithError(err).Infof("Restarted skywire-visor service")
+			sysTrayIcon, err := gui.ReadSysTrayIcon()
+			if err != nil {
+				l.WithError(err).Fatalln("Failed to read system tray icon")
 			}
 
-			// Detach child from parent.
-			if _, err := syscall.Setsid(); err != nil {
-				log.WithError(err).Errorf("Failed to call setsid()")
-			}
+			go runVisor(args)
+
+			systray.Run(gui.GetOnGUIReady(sysTrayIcon), gui.OnGUIQuit)
+
+			return
 		}
 
-		time.Sleep(delayDuration)
-
-		if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
-			log.WithError(err).Error("Failed to output build info.")
-		}
-
-		stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
-		defer stopPProf()
-
-		conf := initConfig(log, args, confPath)
-
-		v, ok := visor.NewVisor(conf, restartCtx)
-		if !ok {
-			log.Fatal("Failed to start visor.")
-		}
-
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-		defer cancel()
-
-		// Wait.
-		<-ctx.Done()
-
-		if err := v.Close(); err != nil {
-			log.WithError(err).Error("Visor closed with error.")
-		}
+		runVisor(args)
 	},
 	Version: buildinfo.Version(),
 }
@@ -138,6 +88,94 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
+	}
+}
+
+func runVisor(args []string) {
+	log := initLogger(tag, syslogAddr)
+
+	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
+		// Workaround for Discord logger hook. Actually, it's Info.
+		log.Error(discord.StartLogMessage)
+		defer log.Error(discord.StopLogMessage)
+	} else {
+		log.Info(discord.StartLogMessage)
+		defer log.Info(discord.StopLogMessage)
+	}
+
+	delayDuration, err := time.ParseDuration(delay)
+	if err != nil {
+		log.WithError(err).Error("Failed to parse delay duration.")
+		delayDuration = time.Duration(0)
+	}
+
+	log.WithField("delay", delayDuration).
+		WithField("systemd", restartCtx.Systemd()).
+		WithField("parent_systemd", restartCtx.ParentSystemd()).
+		Debugf("Process info")
+
+	// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
+	// and therefore do not support restart via systemd.
+	// If --delay flag is passed, version is v0.2.3 or below.
+	// Systemd has PID 1. If PPID is not 1 and PPID of parent process is 1, then
+	// this process is a child process that is run after updating by a skywire-visor that is run by systemd.
+	if delayDuration != 0 && !restartCtx.Systemd() && restartCtx.ParentSystemd() {
+		// As skywire-visor checks if new process is run successfully in `restart.DefaultCheckDelay` after update,
+		// new process should be alive after `restart.DefaultCheckDelay`.
+		time.Sleep(restart.DefaultCheckDelay)
+
+		// When a parent process exits, systemd kills child processes as well,
+		// so a child process can ask systemd to restart service between after restart.DefaultCheckDelay
+		// but before (restart.DefaultCheckDelay + restart.extraWaitingTime),
+		// because after that time a parent process would exit and then systemd would kill its children.
+		// In this case, systemd would kill both parent and child processes,
+		// then restart service using an updated binary.
+		cmd := exec.Command("systemctl", "restart", "skywire-visor") // nolint:gosec
+		if err := cmd.Run(); err != nil {
+			log.WithError(err).Errorf("Failed to restart skywire-visor service")
+		} else {
+			log.WithError(err).Infof("Restarted skywire-visor service")
+		}
+
+		// Detach child from parent.
+		if _, err := syscall.Setsid(); err != nil {
+			log.WithError(err).Errorf("Failed to call setsid()")
+		}
+	}
+
+	time.Sleep(delayDuration)
+
+	if _, err := buildinfo.Get().WriteTo(log.Out); err != nil {
+		log.WithError(err).Error("Failed to output build info.")
+	}
+
+	stopPProf := initPProf(log, tag, pprofMode, pprofAddr)
+	defer stopPProf()
+
+	conf := initConfig(log, args, confPath)
+
+	v, ok := visor.NewVisor(conf, restartCtx)
+	if !ok {
+		log.Errorln("Failed to start visor.")
+		systray.Quit()
+		return
+	}
+
+	stopVisorWg.Add(1)
+	defer stopVisorWg.Done()
+
+	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	gui.SetStopVisorFn(func() {
+		cancel()
+		stopVisorWg.Wait()
+	})
+	defer cancel()
+
+	// Wait.
+	<-ctx.Done()
+
+	if err := v.Close(); err != nil {
+		log.WithError(err).Error("Visor closed with error.")
 	}
 }
 
