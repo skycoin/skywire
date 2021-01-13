@@ -275,7 +275,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.languageSubscription.unsubscribe();
-    this.dataFiltererSubscription.unsubscribe();
 
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
@@ -283,6 +282,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     this.dataSortedSubscription.unsubscribe();
     this.dataSorter.dispose();
+
+    this.dataFiltererSubscription.unsubscribe();
+    this.dataFilterer.dispose();
   }
 
   /**
