@@ -68,6 +68,7 @@ type V1Routing struct {
 	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
+	MinHops            uint16          `json:"min_hops"`
 }
 
 // V1UptimeTracker configures uptime tracker.
