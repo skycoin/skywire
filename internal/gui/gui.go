@@ -92,18 +92,21 @@ func initOpenHypervisorBtn() {
 	// visor is running, but hypervisor is not yet, so disable the button
 	mOpenHypervisor.Disable()
 
-	t := time.NewTicker(1 * time.Second)
-	defer t.Stop()
+	// wait for the hypervisor to start in the background
+	go func() {
+		t := time.NewTicker(1 * time.Second)
+		defer t.Stop()
 
-	// we simply wait till the hypervisor is up
-	for {
-		<-t.C
+		// we simply wait till the hypervisor is up
+		for {
+			<-t.C
 
-		if isHypervisorRunning(hvAddr) {
-			mOpenHypervisor.Enable()
-			break
+			if isHypervisorRunning(hvAddr) {
+				mOpenHypervisor.Enable()
+				break
+			}
 		}
-	}
+	}()
 }
 
 func initUninstallBtn() {
