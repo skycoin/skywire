@@ -20,10 +20,14 @@ func initDmsgpty(v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
 
+	v.log.Infoln("INSIDE INIT DMSGPTY")
+
 	if conf == nil {
 		v.log.Info("'dmsgpty' is not configured, skipping.")
 		return report(nil)
 	}
+
+	v.log.Infoln("CONF IS NOT NIL")
 
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
@@ -31,6 +35,8 @@ func initDmsgpty(v *Visor) bool {
 			return report(err)
 		}
 	}
+
+	v.log.Infoln("UNLINKINED SOCKET FILES")
 
 	v.log.Infoln("BEFORE WHITELIST")
 	var wl dmsgpty.Whitelist
