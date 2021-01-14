@@ -144,7 +144,7 @@ func handleUninstall() {
 
 	stopVisor()
 
-	if err := osutil.Run("/bin/bash", "-c", "/Applications/Contents/deinstaller"); err != nil {
+	if err := osutil.Run("/bin/bash", "-c", "/Applications/Skywire.app/Contents/deinstaller"); err != nil {
 		mUninstall.Enable()
 		log.WithError(err).Errorln("Failed to run deinstaller")
 		return
