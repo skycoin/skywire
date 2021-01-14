@@ -602,7 +602,12 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hypervisorconfig.Config) {
 	go func() {
 		if err := hv.ServeRPC(ctx, conf.DmsgPort); err != nil {
-			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+			l := log.WithError(err)
+			if errors.Is(err, dmsg.ErrEntityClosed) {
+				l.Errorln("Failed to serve RPC client over dmsg.")
+			} else {
+				l.Fatalln("Failed to serve RPC client over dmsg.")
+			}
 		}
 	}()
 	log.WithField("addr", dmsg.Addr{PK: conf.PK, Port: conf.DmsgPort}).
