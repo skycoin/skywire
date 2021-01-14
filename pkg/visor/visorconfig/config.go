@@ -1,6 +1,8 @@
 package visorconfig
 
 import (
+	"runtime"
+
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -187,6 +189,10 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
 		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
+		if runtime.GOOS == "darwin" {
+			// disable TLS by default for OSX
+			conf.Hypervisor.EnableTLS = false
+		}
 		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
 		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
 	}
