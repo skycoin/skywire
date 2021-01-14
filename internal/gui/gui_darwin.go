@@ -2,4 +2,4 @@
 
 package gui
 
-const iconPath = "/Applications/Skywire.app/icon.png"
+const iconPath = "/Applications/Skywire.app/Contents/Resources/tray_icon.png"
