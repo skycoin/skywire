@@ -32,6 +32,7 @@ func initDmsgpty(v *Visor) bool {
 		}
 	}
 
+	v.log.Infoln("BEFORE WHITELIST")
 	var wl dmsgpty.Whitelist
 	if conf.AuthFile == "" {
 		wl = dmsgpty.NewMemoryWhitelist()
@@ -41,15 +42,18 @@ func initDmsgpty(v *Visor) bool {
 			return report(err)
 		}
 	}
+	v.log.Infoln("GOT WHITELIST")
 
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
 		return report(err)
 	}
+	v.log.Infoln("ADDED HYPERVISORS")
 	// add itself to the whitelist to allow local pty
 	if err := wl.Add(v.conf.PK); err != nil {
 		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
 	}
+	v.log.Infoln("ADDED ITSELF")
 
 	dmsgC := v.net.Dmsg()
 	if dmsgC == nil {
