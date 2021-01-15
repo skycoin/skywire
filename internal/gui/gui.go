@@ -66,6 +66,11 @@ func SetStopVisorFn(fn func()) {
 	stopVisorFnMx.Unlock()
 }
 
+func Stop() {
+	stopVisor()
+	systray.Quit()
+}
+
 func initOpenHypervisorBtn() {
 	vConf, err := readVisorConfig()
 	if err != nil {
@@ -125,8 +130,7 @@ func handleUserInteraction() {
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
-			stopVisor()
-			systray.Quit()
+			Stop()
 		}
 	}
 }

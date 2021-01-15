@@ -177,6 +177,10 @@ func runVisor(args []string) {
 	if err := v.Close(); err != nil {
 		log.WithError(err).Error("Visor closed with error.")
 	}
+
+	if runSysTrayApp {
+		gui.Stop()
+	}
 }
 
 func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
