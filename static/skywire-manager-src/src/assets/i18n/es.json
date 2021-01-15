@@ -659,13 +659,13 @@
       "select-server-warning": "Por favor, seleccione un servidor primero.",
 
       "data": {
-        "ip": "Dirección IP del navegador:",
+        "ip": "Dirección IP:",
         "ip-problem-info": "Hubo un problema al intentar obtener la IP. Por favor, verifíquela utilizando un servicio externo.",
         "ip-country-problem-info": "Hubo un problema al intentar obtener el país. Por favor, verifíquelo utilizando un servicio externo.",
-        "ip-refresh-info": "Refrescar.",
+        "ip-refresh-info": "Refrescar",
         "ip-refresh-time-warning": "Por favor, espere {{ seconds }} segundo(s) antes de refrescar los datos.",
         "ip-refresh-loading-warning": "Por favor, espere a que finalice la operación anterior.",
-        "country": "País de la IP del navegador:",
+        "country": "País:",
         "server": "Servidor:",
         "server-note": "Nota del servidor:",
         "original-server-note": "Nota original del servidor:",
@@ -676,7 +676,7 @@
     },
 
     "server-options": {
-      "tooltip": "Opciones.",
+      "tooltip": "Opciones",
       "connect-without-password": "Conectarse sin contraseña",
       "connect-without-password-confirmation": "La conexión se realizará sin la contraseña. ¿Seguro que desea continuar?",
       "connect-using-password": "Conectarse usando una contraseña",
@@ -735,9 +735,9 @@
       "hops-info": "Cuántos saltos se necesitan para conectarse con el servidor.",
       "note-small-table-label": "Nota",
       "note-info": "Nota acerca del servidor.",
-      "gold-rating-info": "Oro.",
-      "silver-rating-info": "Plata.",
-      "bronze-rating-info": "Bronce.",
+      "gold-rating-info": "Oro",
+      "silver-rating-info": "Plata",
+      "bronze-rating-info": "Bronce",
       "notes-info": "Nota personalizada: {{ custom }} - Nota original: {{ original }}",
       "empty-discovery": "Actualmente no hay servidores VPN para mostrar. Por favor, inténtelo de nuevo más tarde.",
       "empty-history": "No hay historial que mostrar.",
@@ -748,8 +748,6 @@
       "current-filters": "Filtros actuales (presione para eliminar)",
       "none": "Ninguno",
       "unknown": "Desconocido",
-      "none-entered-manually": "Ninguno (ingresado manualmente)",
-      "unknown-entered-manually": "Desconocido (ingresado manualmente)",
 
       "tabs": {
         "public": "Públicos",
@@ -771,7 +769,8 @@
 
       "password-dialog": {
         "title": "Introducir Contraseña",
-        "password-label": "Contraseña del servidor (si tiene)",
+        "password-if-any-label": "Contraseña del servidor (si tiene)",
+        "password-label": "Contraseña del servidor",
         "continue-button": "Continuar"
       },
 
@@ -805,7 +804,8 @@
       "get-ip-info": "Cuando está activa, la aplicación utilizará servicios externos para obtener información sobre la IP actual.",
       "setting-on": "Encendido",
       "setting-off": "Apagado",
-      "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior."
+      "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
+      "change-while-connected-confirmation": "La protección VPN se interrumpirá mientras se realiza el cambio. ¿Desea continuar?"
     }
   }
 }

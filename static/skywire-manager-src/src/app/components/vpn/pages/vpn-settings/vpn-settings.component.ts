@@ -1,6 +1,7 @@
 import { Component, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 
 import { VpnHelpers } from '../../vpn-helpers';
 import { BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';
@@ -8,6 +9,7 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AppsService } from 'src/app/services/apps.service';
 import { processServiceError } from 'src/app/utils/errors';
 import { VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
+import GeneralUtils from 'src/app/utils/generalUtils';
 
 /**
  * Options that VpnSettingsComponent might be changing asynchronously.
@@ -51,6 +53,7 @@ export class VpnSettingsComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private appsService: AppsService,
     private vpnSavedDataService: VpnSavedDataService,
+    private dialog: MatDialog,
     route: ActivatedRoute,
   ) {
     this.navigationsSubscription = route.paramMap.subscribe(params => {
@@ -110,7 +113,7 @@ export class VpnSettingsComponent implements OnDestroy {
   }
 
   /**
-   * Changes the killswitch option.
+   * Starts changing the killswitch option.
    */
   changeKillswitchOption() {
     // Do not continue if another option is being changed.
@@ -120,6 +123,25 @@ export class VpnSettingsComponent implements OnDestroy {
       return;
     }
 
+    // If the VPN is running, ask for confirmation.
+    if (this.backendData.vpnClientAppData.running) {
+      const confirmationDialog =
+        GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.settings-page.change-while-connected-confirmation');
+
+      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+        confirmationDialog.componentInstance.closeModal();
+
+        this.finishChangingKillswitchOption();
+      });
+    } else {
+      this.finishChangingKillswitchOption();
+    }
+  }
+
+  /**
+   * Finishes the procedure for changing the killswitch option.
+   */
+  private finishChangingKillswitchOption() {
     this.working = WorkingOptions.Killswitch;
 
     this.operationSubscription = this.appsService.changeAppSettings(
