@@ -67,7 +67,9 @@ func SetStopVisorFn(fn func()) {
 }
 
 func Stop() {
+	log.Infoln("STOPPING VISOR")
 	stopVisor()
+	log.Infoln("QUITTING SYSTRAY")
 	systray.Quit()
 }
 
