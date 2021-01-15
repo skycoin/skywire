@@ -218,19 +218,30 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Stops the VPN protection.
+   * Start the process for stopping the VPN protection.
    */
   stop() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.status-page.disconnect-confirmation');
+    // If the killswitch option is not active, skip asking for confirmation.
+    if (!this.backendState.vpnClientAppData.killswitch) {
+      this.finishStoppingVpn();
+
+      return;
+    }
 
     // Ask for confirmation.
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.status-page.disconnect-confirmation');
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.closeModal();
-
-      this.showBusy = true;
-
-      this.vpnClientService.stop();
+      this.finishStoppingVpn();
     });
+  }
+
+  /**
+   * Makes the actual request for stopping the VPN.
+   */
+  private finishStoppingVpn() {
+    this.showBusy = true;
+    this.vpnClientService.stop();
   }
 
   /**
