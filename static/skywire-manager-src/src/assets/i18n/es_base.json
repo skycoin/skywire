@@ -659,13 +659,13 @@
       "select-server-warning": "Please select a server first.",
 
       "data": {
-        "ip": "Browser IP address:",
+        "ip": "IP address:",
         "ip-problem-info": "There was a problem trying to get the IP. Please verify it using an external service.",
         "ip-country-problem-info": "There was a problem trying to get the country. Please verify it using an external service.",
-        "ip-refresh-info": "Refresh.",
+        "ip-refresh-info": "Refresh",
         "ip-refresh-time-warning": "Please wait {{ seconds }} second(s) before refreshing the data.",
         "ip-refresh-loading-warning": "Please wait for the previous operation to finish.",
-        "country": "Browser IP country:",
+        "country": "Country:",
         "server": "Server:",
         "server-note": "Server note:",
         "original-server-note": "Original server note:",
@@ -676,7 +676,7 @@
     },
 
     "server-options": {
-      "tooltip": "Options.",
+      "tooltip": "Options",
       "connect-without-password": "Connect without password",
       "connect-without-password-confirmation": "The connection will be made without the password. Are you sure you want to continue?",
       "connect-using-password": "Connect using a password",
@@ -735,9 +735,9 @@
       "hops-info": "How many hops are needed for connecting with the server.",
       "note-small-table-label": "Note",
       "note-info": "Note about the server.",
-      "gold-rating-info": "Gold.",
-      "silver-rating-info": "Silver.",
-      "bronze-rating-info": "Bronze.",
+      "gold-rating-info": "Gold",
+      "silver-rating-info": "Silver",
+      "bronze-rating-info": "Bronze",
       "notes-info": "Custom note: {{ custom }} - Original note: {{ original }}",
       "empty-discovery": "Currently there are no VPN servers to show. Please try again later.",
       "empty-history": "There is no history to show.",
@@ -748,8 +748,6 @@
       "current-filters": "Current filters (press to remove)",
       "none": "None",
       "unknown": "Unknown",
-      "none-entered-manually": "None (entered manually)",
-      "unknown-entered-manually": "Unknown (entered manually)",
 
       "tabs": {
         "public": "Public",
@@ -771,7 +769,8 @@
 
       "password-dialog": {
         "title": "Enter Password",
-        "password-label": "Server password (if any)",
+        "password-if-any-label": "Server password (if any)",
+        "password-label": "Server password",
         "continue-button": "Continue"
       },
 
@@ -805,7 +804,8 @@
       "get-ip-info": "When active, the application will use external services to obtain information about the current IP.",
       "setting-on": "On",
       "setting-off": "Off",
-      "working-warning": "The system is busy. Please wait for the previous operation to finish."
+      "working-warning": "The system is busy. Please wait for the previous operation to finish.",
+      "change-while-connected-confirmation": "The VPN protection will be interrupted while changing the setting. Do you want to continue?"
     }
   }
 }
