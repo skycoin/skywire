@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skratchdot/open-golang/open"
@@ -25,6 +26,10 @@ var log = logging.NewMasterLogger()
 var (
 	stopVisorFnMx sync.Mutex
 	stopVisorFn   func()
+)
+
+var (
+	guiStopped int32
 )
 
 var (
@@ -67,6 +72,10 @@ func SetStopVisorFn(fn func()) {
 }
 
 func Stop() {
+	if !atomic.CompareAndSwapInt32(&guiStopped, 0, 1) {
+		return
+	}
+
 	log.Infoln("STOPPING VISOR")
 	stopVisor()
 	log.Infoln("QUITTING SYSTRAY")
