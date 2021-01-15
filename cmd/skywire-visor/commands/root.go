@@ -98,7 +98,7 @@ func Execute() {
 func runVisor(args []string) {
 	log := initLogger(tag, syslogAddr)
 
-	log.Infoln("UPDATED VERSION")
+	log.Infoln("UPDATED VERSION 2")
 
 	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
 		// Workaround for Discord logger hook. Actually, it's Info.
