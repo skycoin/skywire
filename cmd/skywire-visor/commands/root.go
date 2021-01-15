@@ -72,7 +72,11 @@ var rootCmd = &cobra.Command{
 				l.WithError(err).Fatalln("Failed to read system tray icon")
 			}
 
-			go runVisor(args)
+			go func() {
+				runVisor(args)
+				fmt.Println("STOPPING GUI")
+				gui.Stop()
+			}()
 
 			systray.Run(gui.GetOnGUIReady(sysTrayIcon), gui.OnGUIQuit)
 
@@ -176,11 +180,6 @@ func runVisor(args []string) {
 
 	if err := v.Close(); err != nil {
 		log.WithError(err).Error("Visor closed with error.")
-	}
-
-	if runSysTrayApp {
-		log.Infoln("STOPPING GUI")
-		gui.Stop()
 	}
 }
 
