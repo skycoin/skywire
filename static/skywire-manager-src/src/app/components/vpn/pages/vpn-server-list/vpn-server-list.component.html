@@ -220,18 +220,15 @@
               [hasPassword]="server.usedWithPassword"
               [name]="server.name"
               [customName]="server.customName"
-              [defaultName]="currentList === lists.Public ? 'vpn.server-list.none' : 'vpn.server-list.none-entered-manually'">
+              [defaultName]="'vpn.server-list.none'">
             </app-vpn-server-name>
           </td>
           <td class="location-column">
             <ng-container *ngIf="server.location">
               {{ server.location }}
             </ng-container>
-            <ng-container *ngIf="currentList === lists.Public && !server.location">
+            <ng-container *ngIf="!server.location">
               {{ 'vpn.server-list.unknown' | translate }}
-            </ng-container>
-            <ng-container *ngIf="currentList !== lists.Public && !server.location">
-              {{ 'vpn.server-list.unknown-entered-manually' | translate }}
             </ng-container>
           </td>
           <td class="pk-column" [ngClass]="{'public-pk-column': currentList === lists.Public, 'history-pk-column': currentList === lists.History}">

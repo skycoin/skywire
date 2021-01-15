@@ -61,9 +61,10 @@
         <mat-icon [inline]="true">chevron_left</mat-icon>
       </a>
     </div>
-    <span class="title-text">
+    <span class="title-text" *ngIf="!showVpnInfo">
       {{ titleParts[titleParts.length - 1] | translate }}
     </span>
+    <img class="title-image" *ngIf="showVpnInfo" src="./assets/img/logo-vpn.png" />
   </div>
 
   <div class="lower-container">
