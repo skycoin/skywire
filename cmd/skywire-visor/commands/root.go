@@ -179,6 +179,7 @@ func runVisor(args []string) {
 	}
 
 	if runSysTrayApp {
+		log.Infoln("STOPPING GUI")
 		gui.Stop()
 	}
 }
