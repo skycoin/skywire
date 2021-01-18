@@ -12,13 +12,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/skratchdot/open-golang/open"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-
-	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/skyenv"
 
 	"github.com/getlantern/systray"
+	"github.com/skratchdot/open-golang/open"
+	"github.com/skycoin/skycoin/src/util/logging"
+
+	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var log = logging.NewMasterLogger()
@@ -76,9 +77,7 @@ func Stop() {
 		return
 	}
 
-	log.Infoln("STOPPING VISOR")
 	stopVisor()
-	log.Infoln("QUITTING SYSTRAY")
 	systray.Quit()
 }
 
@@ -159,18 +158,12 @@ func handleUninstall() {
 
 	stopVisor()
 
-	if err := osutil.Run("/bin/bash", "-c", "/Applications/Skywire.app/Contents/deinstaller"); err != nil {
+	const deinstallerPath = "/Applications/Skywire.app/Contents/deinstaller"
+	if err := osutil.Run("/bin/bash", "-c", deinstallerPath); err != nil {
 		mUninstall.Enable()
 		log.WithError(err).Errorln("Failed to run deinstaller")
 		return
 	}
-
-	/*cmd = "rm -rf /Applications/Skywire.app"
-	if err := osutil.Run("/bin/bash", "-c", cmd); err != nil {
-		mUninstall.Enable()
-		log.WithError(err).Errorln("failed to remove systray app")
-		return
-	}*/
 
 	systray.Quit()
 }
@@ -241,9 +234,9 @@ func getHVAddr(conf *visorconfig.V1) string {
 }
 
 func readVisorConfig() (*visorconfig.V1, error) {
-	confPath := "/opt/skywire/skywire-config.json"
+	confPath := skyenv.PackageSkywirePath + "/skywire-config.json"
 	if runtime.GOOS == "windows" {
-		// TODO: set path for windows config
+		// TODO (darkrengarius): set path for windows config
 	}
 
 	f, err := os.Open(confPath) //nolint:gosec
