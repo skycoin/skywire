@@ -5,7 +5,7 @@ package skyenv
 import "os"
 
 const (
-	packageSkywirePath = "/skywire"
+	packageSkywirePath = "/Skywire"
 )
 
 func PackageSkywirePath() string {
