@@ -7,14 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 

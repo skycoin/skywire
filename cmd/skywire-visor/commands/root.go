@@ -14,8 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/internal/gui"
-
 	"github.com/getlantern/systray"
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
@@ -24,6 +22,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/internal/gui"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -74,7 +73,6 @@ var rootCmd = &cobra.Command{
 
 			go func() {
 				runVisor(args)
-				fmt.Println("STOPPING GUI")
 				gui.Stop()
 			}()
 
@@ -97,8 +95,6 @@ func Execute() {
 
 func runVisor(args []string) {
 	log := initLogger(tag, syslogAddr)
-
-	log.Infoln("UPDATED VERSION 2")
 
 	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
 		// Workaround for Discord logger hook. Actually, it's Info.
