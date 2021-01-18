@@ -9,10 +9,12 @@ import (
 	"strings"
 )
 
+// Run runs binary `bin` with `args`.
 func Run(bin string, args ...string) error {
 	return run(bin, os.Stdout, args...)
 }
 
+// RunWithResult runs binary `bin` with `args` returning stdout contents.
 func RunWithResult(bin string, args ...string) (io.Reader, error) {
 	stdout := bytes.NewBuffer(nil)
 

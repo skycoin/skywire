@@ -4,8 +4,6 @@ package visor
 import (
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -166,45 +164,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 
 	log.Info("Startup complete!")
 
-	go func() {
-		log.Infoln("INSIDE GOROUTINE")
-		l := logrus.New()
-		f, err := os.OpenFile("/opt/skywire/loglog.log", os.O_RDWR|os.O_CREATE, 0644)
-		if err != nil {
-			log.Errorf("FAILED TO INITIALLY OPEN LOG: %v", err)
-		}
-
-		log.Infoln("OPENED FILE")
-
-		l.SetOutput(f)
-		osSigs := make(chan os.Signal)
-
-		signal.Notify(osSigs, syscall.SIGXFSZ)
-
-		t := time.NewTicker(2 * time.Second)
-		defer t.Stop()
-
-		log.Infoln("SUBSCRIBED TO OS SIGNAL")
-
-		for {
-			select {
-			case <-t.C:
-				log.Infoln("GOT TIME SIGNAL")
-				l.Infoln("DEBUG LOG")
-			case <-osSigs:
-				if err := f.Close(); err != nil {
-					log.Errorf("FAILED TO CLOSE LOG: %v", err)
-				}
-
-				f, err = os.OpenFile("/opt/skywire/loglog.log", os.O_RDWR|os.O_CREATE, 0644)
-				if err != nil {
-					log.Errorf("FAILED TO OPEN LOG: %v", err)
-				}
-
-				l.SetOutput(f)
-			}
-		}
-	}()
 	return v, ok
 }
 
