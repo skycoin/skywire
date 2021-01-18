@@ -234,7 +234,7 @@ func getHVAddr(conf *visorconfig.V1) string {
 }
 
 func readVisorConfig() (*visorconfig.V1, error) {
-	confPath := skyenv.PackageSkywirePath + "/skywire-config.json"
+	confPath := skyenv.PackageSkywirePath() + "/skywire-config.json"
 	if runtime.GOOS == "windows" {
 		// TODO (darkrengarius): set path for windows config
 	}
