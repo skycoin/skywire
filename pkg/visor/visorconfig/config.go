@@ -173,18 +173,18 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 
 	conf.Dmsgpty = &V1Dmsgpty{
 		Port:     skyenv.DmsgPtyPort,
-		AuthFile: skyenv.PackageDmsgPtyWhiteList,
+		AuthFile: skyenv.PackageDmsgPtyWhiteList(),
 		CLINet:   skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
 	}
 
 	conf.Transport.LogStore = &V1LogStore{
 		Type:     "file",
-		Location: skyenv.PackageTpLogStore,
+		Location: skyenv.PackageTpLogStore(),
 	}
 
-	conf.Launcher.BinPath = skyenv.PackageAppBinPath
-	conf.Launcher.LocalPath = skyenv.PackageAppLocalPath
+	conf.Launcher.BinPath = skyenv.PackageAppBinPath()
+	conf.Launcher.LocalPath = skyenv.PackageAppLocalPath()
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
@@ -193,8 +193,8 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 			// disable TLS by default for OSX
 			conf.Hypervisor.EnableTLS = false
 		}
-		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
-		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey()
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert()
 	}
 	return conf, nil
 }

@@ -9,6 +9,7 @@ import (
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -257,7 +258,11 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = "/opt/skywire/" + defaultConfigName
+			if runtime.GOOS == "darwin" {
+				confPath = os.Getenv("HOME") + "/Skywire/" + defaultConfigName
+			} else {
+				confPath = "/opt/skywire/" + defaultConfigName
+			}
 		}
 
 		fallthrough

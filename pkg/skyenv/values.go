@@ -9,7 +9,6 @@ import (
 // Constants for skywire root directories.
 const (
 	DefaultSkywirePath = "."
-	PackageSkywirePath = "/opt/skywire"
 )
 
 // Constants for default services.
@@ -51,7 +50,6 @@ const (
 	DefaultDmsgPtyCLINet    = "unix"
 	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
 	DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
-	PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
 )
 
 // Default STCP constants.
@@ -95,14 +93,11 @@ const (
 	DefaultAppLocalPath   = DefaultSkywirePath + "/local"
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
-	PackageAppLocalPath   = PackageSkywirePath + "/local"
-	PackageAppBinPath     = PackageSkywirePath + "/apps"
 )
 
 // Default routing constants
 const (
 	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
-	PackageTpLogStore = PackageSkywirePath + "/transport_logs"
 )
 
 // Default hypervisor constants
@@ -113,9 +108,31 @@ const (
 	DefaultTLSKey       = DefaultSkywirePath + "/ssl/key.pem"
 	DefaultTLSCert      = DefaultSkywirePath + "/ssl/cert.pem"
 	PackageEnableTLS    = true
-	PackageTLSKey       = PackageSkywirePath + "/ssl/key.pem"
-	PackageTLSCert      = PackageSkywirePath + "/ssl/cert.pem"
 )
+
+func PackageDmsgPtyWhiteList() string {
+	return PackageSkywirePath() + "/dmsgpty/whitelist.json"
+}
+
+func PackageAppLocalPath() string {
+	return PackageSkywirePath() + "/local"
+}
+
+func PackageAppBinPath() string {
+	return PackageSkywirePath() + "/apps"
+}
+
+func PackageTpLogStore() string {
+	return PackageSkywirePath() + "/transport_logs"
+}
+
+func PackageTLSKey() string {
+	return PackageSkywirePath() + "/ssl/key.pem"
+}
+
+func PackageTLSCert() string {
+	return PackageSkywirePath() + "/ssl/cert.pem"
+}
 
 // MustPK unmarshals string PK to cipher.PubKey. It panics if unmarshaling fails.
 func MustPK(pk string) cipher.PubKey {
