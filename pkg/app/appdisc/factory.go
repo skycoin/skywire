@@ -65,7 +65,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	log := f.Log.WithField("appName", conf.AppName)
 
 	// Do not update in proxy discovery if passcode-protected.
-	if containsFlag(conf.ProcArgs, "passcode") {
+	if containsFlag(conf.ProcArgs, "passcode") && argVal(conf.ProcArgs, "passcode") != "" {
 		return &emptyUpdater{}, false
 	}
 
@@ -123,4 +123,14 @@ func argEqualsFlag(arg, flag string) bool {
 	arg = strings.Split(arg, "=")[0]
 
 	return arg == flag
+}
+
+func argVal(args []string, flag string) string {
+	for idx, arg := range args {
+		if argEqualsFlag(arg, flag) {
+			return args[idx+1]
+		}
+	}
+
+	return ""
 }
