@@ -492,8 +492,8 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 
 type extraSummaryWithDmsgResp struct {
 	extraSummaryResp
-	IsHypervisor bool                          `json:"is_hypervisor"`
-	DmsgStats    dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
+	IsHypervisor bool                           `json:"is_hypervisor"`
+	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 }
 
 func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
@@ -507,26 +507,12 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 			i++
 		}
 
-		// todo: request dmsg stats in background (maybe new function?)
-		dmsgStats := make(map[cipher.PubKey]dmsgtracker.DmsgClientSummary, 0)
+		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary, 0)
 		wg.Add(1)
 		go func() {
-			hv.mu.RLock()
-			defer hv.mu.RUnlock()
-
-			pks := make([]cipher.PubKey, 0, len(hv.visors)+1)
-			if hv.visor != nil {
-				// Add hypervisor node.
-				pks = append(pks, hv.visor.conf.PK)
-			}
-
-			for pk := range hv.visors {
-				pks = append(pks, pk)
-			}
-
-			summary := hv.trackers.GetBulk(pks)
+			summary := hv.getDmsgSummary()
 			for _, stat := range summary {
-				dmsgStats[stat.PK] = stat
+				dmsgStats[stat.PK.String()] = stat
 			}
 			wg.Done()
 		}()
@@ -585,10 +571,9 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		}
 
 		wg.Wait()
-
-		for _, summary := range summaries {
-			if stat, ok := dmsgStats[summary.Summary.PubKey]; ok {
-				summary.DmsgStats = stat
+		for i := 0; i < len(summaries); i++ {
+			if stat, ok := dmsgStats[summaries[i].Summary.PubKey.String()]; ok {
+				summaries[i].DmsgStats = &stat
 			}
 		}
 
