@@ -127,7 +127,7 @@ func argEqualsFlag(arg, flag string) bool {
 
 func argVal(args []string, flag string) string {
 	for idx, arg := range args {
-		if argEqualsFlag(arg, flag) {
+		if argEqualsFlag(arg, flag) && idx+1 < len(args) {
 			return args[idx+1]
 		}
 	}
