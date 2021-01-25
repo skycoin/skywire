@@ -228,6 +228,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/dmsg", hv.getDmsg())
 
 				r.Get("/visors", hv.getVisors())
+				r.Get("/visors-summary", hv.getVisorsExtraSummary())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -487,6 +488,114 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 			ExtraSummary: extraSummary,
 		})
 	})
+}
+
+type extraSummaryWithDmsgResp struct {
+	extraSummaryResp
+	IsHypervisor bool                          `json:"is_hypervisor"`
+	DmsgStats    dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
+}
+
+func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hv.mu.RLock()
+		wg := new(sync.WaitGroup)
+		wg.Add(len(hv.visors))
+
+		i := 0
+		if hv.visor != nil {
+			i++
+		}
+
+		// todo: request dmsg stats in background (maybe new function?)
+		dmsgStats := make(map[cipher.PubKey]dmsgtracker.DmsgClientSummary, 0)
+		wg.Add(1)
+		go func() {
+			hv.mu.RLock()
+			defer hv.mu.RUnlock()
+
+			pks := make([]cipher.PubKey, 0, len(hv.visors)+1)
+			if hv.visor != nil {
+				// Add hypervisor node.
+				pks = append(pks, hv.visor.conf.PK)
+			}
+
+			for pk := range hv.visors {
+				pks = append(pks, pk)
+			}
+
+			summary := hv.trackers.GetBulk(pks)
+			for _, stat := range summary {
+				dmsgStats[stat.PK] = stat
+			}
+			wg.Done()
+		}()
+
+		summaries := make([]extraSummaryWithDmsgResp, len(hv.visors)+i)
+
+		if hv.visor != nil {
+			summary, err := hv.visor.ExtraSummary()
+			if err != nil {
+				log.WithError(err).Warn("Failed to obtain summary of this visor.")
+				summary = &ExtraSummary{}
+				summary.Summary.PubKey = hv.visor.conf.PK
+			}
+
+			addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
+			summaries[0] = extraSummaryWithDmsgResp{
+				extraSummaryResp: extraSummaryResp{
+					TCPAddr:      addr.String(),
+					Online:       err == nil,
+					ExtraSummary: summary,
+				},
+				IsHypervisor: true,
+			}
+		}
+
+		for pk, c := range hv.visors {
+			go func(pk cipher.PubKey, c Conn, i int) {
+				log := hv.log(r).
+					WithField("visor_addr", c.Addr).
+					WithField("func", "getVisors")
+
+				log.Debug("Requesting summary via RPC.")
+
+				summary, err := c.API.ExtraSummary()
+				if err != nil {
+					log.WithError(err).
+						Warn("Failed to obtain summary via RPC.")
+					summary = &ExtraSummary{}
+					summary.Summary.PubKey = hv.visor.conf.PK
+				} else {
+					log.Debug("Obtained summary via RPC.")
+				}
+				resp := extraSummaryWithDmsgResp{
+					extraSummaryResp: extraSummaryResp{
+						TCPAddr:      c.Addr.String(),
+						Online:       err == nil,
+						ExtraSummary: summary,
+					},
+					IsHypervisor: false,
+				}
+				resp.ExtraSummary = summary
+				summaries[i] = resp
+				wg.Done()
+			}(pk, c, i)
+			i++
+		}
+
+		wg.Wait()
+
+		for _, summary := range summaries {
+			if stat, ok := dmsgStats[summary.Summary.PubKey]; ok {
+				summary.DmsgStats = stat
+			}
+		}
+
+		hv.mu.RUnlock()
+
+		httputil.WriteJSON(w, r, http.StatusOK, summaries)
+	}
 }
 
 // returns app summaries of a given node of pk
