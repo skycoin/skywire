@@ -107,6 +107,7 @@ func (c *ProcConfig) Envs() []string {
 	return append(c.ProcEnvs, fmt.Sprintf(format, EnvProcConfig, string(c.encodeJSON())))
 }
 
+// ContainsFlag checks if a given flag has been passed to the ProcConfig.
 func (c *ProcConfig) ContainsFlag(flag string) bool {
 	for _, arg := range c.ProcArgs {
 		if argEqualsFlag(arg, flag) {
@@ -116,6 +117,7 @@ func (c *ProcConfig) ContainsFlag(flag string) bool {
 	return false
 }
 
+// ArgVal returns the value associated in ProcConfig with a given flag.
 func (c *ProcConfig) ArgVal(flag string) string {
 	for idx, arg := range c.ProcArgs {
 		if argEqualsFlag(arg, flag) && idx+1 < len(c.ProcArgs) {
