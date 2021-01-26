@@ -507,7 +507,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 			i++
 		}
 
-		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary, 0)
+		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
 		wg.Add(1)
 		go func() {
 			summary := hv.getDmsgSummary()
@@ -551,7 +551,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 					log.WithError(err).
 						Warn("Failed to obtain summary via RPC.")
 					summary = &ExtraSummary{}
-					summary.Summary.PubKey = hv.visor.conf.PK
+					summary.Summary.PubKey = pk
 				} else {
 					log.Debug("Obtained summary via RPC.")
 				}
