@@ -20,6 +20,15 @@
     </mat-form-field>
 
     <mat-form-field>
+      <input
+        formControlName="label"
+        maxlength="66"
+        [placeholder]="'transports.dialog.label' | translate"
+        matInput
+      >
+    </mat-form-field>
+
+    <mat-form-field>
       <mat-select
         formControlName="type"
         [placeholder]="'transports.dialog.transport-type' | translate"

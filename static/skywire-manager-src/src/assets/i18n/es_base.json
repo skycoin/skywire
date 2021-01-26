@@ -468,8 +468,10 @@
     },
     "dialog": {
       "remote-key": "Remote public key",
+      "label": "Identification name (optional)",
       "transport-type": "Transport type",
       "success": "Transport created.",
+      "success-without-label": "The transport was created, but it was not possible to save the label.",
       "errors": {
         "remote-key-length-error": "The remote public key must be 66 characters long.",
         "remote-key-chars-error": "The remote public key must only contain hexadecimal characters.",
