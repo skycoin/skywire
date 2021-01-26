@@ -1,7 +1,6 @@
 package appdisc
 
 import (
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -65,7 +64,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	log := f.Log.WithField("appName", conf.AppName)
 
 	// Do not update in proxy discovery if passcode-protected.
-	if containsFlag(conf.ProcArgs, "passcode") && argVal(conf.ProcArgs, "passcode") != "" {
+	if conf.ContainsFlag("passcode") && conf.ArgVal("passcode") != "" {
 		return &emptyUpdater{}, false
 	}
 
@@ -93,44 +92,4 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 	default:
 		return &emptyUpdater{}, false
 	}
-}
-
-func containsFlag(args []string, flag string) bool {
-	for _, arg := range args {
-		if argEqualsFlag(arg, flag) {
-			return true
-		}
-	}
-	return false
-}
-
-func argEqualsFlag(arg, flag string) bool {
-	arg = strings.TrimSpace(arg)
-
-	// strip prefixed '-'s.
-	for {
-		if len(arg) < 1 {
-			return false
-		}
-		if arg[0] == '-' {
-			arg = arg[1:]
-			continue
-		}
-		break
-	}
-
-	// strip anything after (inclusive) of '='.
-	arg = strings.Split(arg, "=")[0]
-
-	return arg == flag
-}
-
-func argVal(args []string, flag string) string {
-	for idx, arg := range args {
-		if argEqualsFlag(arg, flag) && idx+1 < len(args) {
-			return args[idx+1]
-		}
-	}
-
-	return ""
 }
