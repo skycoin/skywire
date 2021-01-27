@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
+	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
@@ -33,12 +34,13 @@ const (
 )
 
 var (
-	tag        string
-	syslogAddr string
-	pprofMode  string
-	pprofAddr  string
-	confPath   string
-	delay      string
+	tag           string
+	syslogAddr    string
+	pprofMode     string
+	pprofAddr     string
+	confPath      string
+	delay         string
+	launchBrowser bool
 )
 
 func init() {
@@ -48,6 +50,7 @@ func init() {
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
+	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "start delay (deprecated)")
 }
 
 var rootCmd = &cobra.Command{
@@ -119,6 +122,10 @@ var rootCmd = &cobra.Command{
 		v, ok := visor.NewVisor(conf, restartCtx)
 		if !ok {
 			log.Fatal("Failed to start visor.")
+		}
+
+		if launchBrowser {
+			runBrowser(conf, log)
 		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
@@ -248,4 +255,26 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	}
 
 	return conf
+}
+
+func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
+	if conf.Hypervisor == nil {
+		log.Errorln("Cannot start browser with a regular visor")
+		return
+	}
+	addr := conf.Hypervisor.HTTPAddr
+	if addr[0] == ':' {
+		addr = "localhost" + addr
+	}
+	if conf.Hypervisor.EnableTLS {
+		addr = "https://" + addr
+	} else {
+		addr = "http://" + addr
+	}
+	go func() {
+		time.Sleep(1 * time.Second)
+		if err := webbrowser.Open(addr); err != nil {
+			log.WithError(err).Error("webbrowser.Open failed")
+		}
+	}()
 }
