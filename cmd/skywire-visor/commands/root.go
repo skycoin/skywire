@@ -266,10 +266,12 @@ func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
 	if addr[0] == ':' {
 		addr = "localhost" + addr
 	}
-	if conf.Hypervisor.EnableTLS {
-		addr = "https://" + addr
-	} else {
-		addr = "http://" + addr
+	if addr[:4] != "http" {
+		if conf.Hypervisor.EnableTLS {
+			addr = "https://" + addr
+		} else {
+			addr = "http://" + addr
+		}
 	}
 	go func() {
 		time.Sleep(1 * time.Second)
