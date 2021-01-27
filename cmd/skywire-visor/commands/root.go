@@ -50,7 +50,7 @@ func init() {
 	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
-	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "start delay (deprecated)")
+	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
 }
 
 var rootCmd = &cobra.Command{
