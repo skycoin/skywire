@@ -160,7 +160,6 @@ github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
 # github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 ## explicit
-github.com/skratchdot/open-golang/open
 # github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
 ## explicit
 github.com/skycoin/dmsg
@@ -218,6 +217,9 @@ github.com/templexxx/xor
 # github.com/tjfoc/gmsm v1.3.2
 ## explicit
 github.com/tjfoc/gmsm/sm4
+# github.com/toqueteos/webbrowser v1.2.0
+## explicit
+github.com/toqueteos/webbrowser
 # github.com/ulikunitz/xz v0.5.6
 github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash

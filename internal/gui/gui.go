@@ -12,10 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/toqueteos/webbrowser"
+
 	"github.com/skycoin/skywire/pkg/skyenv"
 
 	"github.com/getlantern/systray"
-	"github.com/skratchdot/open-golang/open"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
@@ -211,7 +212,7 @@ func openHypervisor() error {
 
 	log.Infoln("Opening hypervisor at %s", hvAddr)
 
-	if err := open.Run(hvAddr); err != nil {
+	if err := webbrowser.Open("http://golang.org"); err != nil {
 		return fmt.Errorf("failed to open link: %w", err)
 	}
 
