@@ -173,11 +173,12 @@ func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[stri
 	responses := make(chan healthResponse, len(services))
 	wg.Add(len(services))
 	for name, service := range services {
-		if service == nil {
-			responses <- healthResponse{name, http.StatusNotFound}
-			continue
-		}
 		go func(name string, service HealthCheckable) {
+			if service == nil {
+				responses <- healthResponse{name, http.StatusNotFound}
+				wg.Done()
+				return
+			}
 			status, err := service.Health(ctx)
 			if err != nil {
 				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
