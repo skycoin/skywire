@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,6 +39,7 @@ var (
 	mQuit           *systray.MenuItem
 )
 
+// GetOnGUIReady creates func to run on GUI startup.
 func GetOnGUIReady(icon []byte) func() {
 	return func() {
 		systray.SetTooltip("Skywire")
@@ -54,10 +54,12 @@ func GetOnGUIReady(icon []byte) func() {
 	}
 }
 
+// OnGUIQuit is executed on GUI exit.
 func OnGUIQuit() {
 
 }
 
+// ReadSysTrayIcon reads system tray icon.
 func ReadSysTrayIcon() ([]byte, error) {
 	contents, err := ioutil.ReadFile(iconPath)
 	if err != nil {
@@ -67,12 +69,14 @@ func ReadSysTrayIcon() ([]byte, error) {
 	return contents, nil
 }
 
+// SetStopVisorFn sets function to stop running visor.
 func SetStopVisorFn(fn func()) {
 	stopVisorFnMx.Lock()
 	stopVisorFn = fn
 	stopVisorFnMx.Unlock()
 }
 
+// Stop stops visor and quits GUI app.
 func Stop() {
 	if !atomic.CompareAndSwapInt32(&guiStopped, 0, 1) {
 		return
@@ -210,7 +214,7 @@ func openHypervisor() error {
 		return nil
 	}
 
-	log.Infoln("Opening hypervisor at %s", hvAddr)
+	log.Infof("Opening hypervisor at %s", hvAddr)
 
 	if err := webbrowser.Open("http://golang.org"); err != nil {
 		return fmt.Errorf("failed to open link: %w", err)
@@ -236,9 +240,6 @@ func getHVAddr(conf *visorconfig.V1) string {
 
 func readVisorConfig() (*visorconfig.V1, error) {
 	confPath := skyenv.PackageSkywirePath() + "/skywire-config.json"
-	if runtime.GOOS == "windows" {
-		// TODO (darkrengarius): set path for windows config
-	}
 
 	f, err := os.Open(confPath) //nolint:gosec
 	if err != nil {

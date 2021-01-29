@@ -110,26 +110,32 @@ const (
 	PackageEnableTLS    = true
 )
 
+// PackageDmsgPtyWhiteList gets dmsgpty whitelist path for installed Skywire.
 func PackageDmsgPtyWhiteList() string {
 	return PackageSkywirePath() + "/dmsgpty/whitelist.json"
 }
 
+// PackageAppLocalPath gets `.local` path for installed Skywire.
 func PackageAppLocalPath() string {
 	return PackageSkywirePath() + "/local"
 }
 
+// PackageAppBinPath gets apps path for installed Skywire.
 func PackageAppBinPath() string {
 	return PackageSkywirePath() + "/apps"
 }
 
+// PackageTpLogStore gets transport logs path for installed Skywire.
 func PackageTpLogStore() string {
 	return PackageSkywirePath() + "/transport_logs"
 }
 
+// PackageTLSKey gets TLS key path for installed Skywire.
 func PackageTLSKey() string {
 	return PackageSkywirePath() + "/ssl/key.pem"
 }
 
+// PackageTLSCert gets TLS cert path for installed Skywire.
 func PackageTLSCert() string {
 	return PackageSkywirePath() + "/ssl/cert.pem"
 }
