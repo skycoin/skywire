@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/rename"
+	"github.com/skycoin/skywire/pkg/util/stdio"
 )
 
 const (
@@ -420,7 +421,19 @@ func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
 	}
 
-	r := io.TeeReader(resp.Body, u.progressBar(resp.ContentLength, checksumsFilename))
+	capturer := stdio.NewCapturer()
+	stdoutWriter, err := capturer.CaptureStdout()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := capturer.Release(); err != nil {
+			u.log.Errorf("Failed to release output: %w", err)
+		}
+	}()
+
+	r := io.TeeReader(resp.Body, u.progressBar(stdoutWriter, resp.ContentLength, checksumsFilename))
 
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -430,12 +443,12 @@ func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 	return string(data), nil
 }
 
-func (u *Updater) progressBar(contentLength int64, filename string) io.Writer {
+func (u *Updater) progressBar(w io.Writer, contentLength int64, filename string) io.Writer {
 	width := progressbar.OptionSetWidth(0)
 	desc := progressbar.OptionSetDescription("Downloading " + filename)
 	speed := progressbar.OptionSetBytes64(contentLength)
 	theme := progressbar.OptionSetTheme(progressbar.Theme{})
-	writer := progressbar.OptionSetWriter(io.MultiWriter(os.Stdout, u.status))
+	writer := progressbar.OptionSetWriter(io.MultiWriter(w, u.status))
 	completion := progressbar.OptionOnCompletion(func() { fmt.Printf("\n") })
 
 	return progressbar.NewOptions64(contentLength, speed, completion, width, theme, desc, writer)
@@ -472,8 +485,19 @@ func (u *Updater) downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
-	// TODO(nkryuchkov): use syscall.Dup to block stdout for all messages except updater logs (https://play.golang.org/p/Xg2iajdiuNN)
-	out := io.MultiWriter(f, u.progressBar(resp.ContentLength, filename))
+	capturer := stdio.NewCapturer()
+	stdoutWriter, err := capturer.CaptureStdout()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := capturer.Release(); err != nil {
+			u.log.Errorf("Failed to release output: %w", err)
+		}
+	}()
+
+	out := io.MultiWriter(f, u.progressBar(stdoutWriter, resp.ContentLength, filename))
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return "", err

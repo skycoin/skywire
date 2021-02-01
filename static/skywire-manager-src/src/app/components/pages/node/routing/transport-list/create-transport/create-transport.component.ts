@@ -11,6 +11,7 @@ import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
+import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 
 /**
  * Modal window used for creating trnasports. It creates the transport and shows a
@@ -47,6 +48,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     private formBuilder: FormBuilder,
     private dialogRef: MatDialogRef<CreateTransportComponent>,
     private snackbarService: SnackbarService,
+    private storageService: StorageService,
   ) { }
 
   ngOnInit() {
@@ -57,6 +59,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
         Validators.maxLength(66),
         Validators.pattern('^[0-9a-fA-F]+$')])
       ],
+      'label': [''],
       'type': ['', Validators.required],
     });
 
@@ -92,10 +95,26 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     });
   }
 
-  private onSuccess() {
+  private onSuccess(response: any) {
+    // Save the label.
+    const label = this.form.get('label').value;
+    let errorSavingLabel = false;
+    if (label) {
+      if (response && response.id) {
+        this.storageService.saveLabel(response.id, label, LabeledElementTypes.Transport);
+      } else {
+        errorSavingLabel = true;
+      }
+    }
+
     NodeComponent.refreshCurrentDisplayedData();
-    this.snackbarService.showDone('transports.dialog.success');
     this.dialogRef.close();
+
+    if (!errorSavingLabel) {
+      this.snackbarService.showDone('transports.dialog.success');
+    } else {
+      this.snackbarService.showWarning('transports.dialog.success-without-label');
+    }
   }
 
   private onError(err: OperationError) {
