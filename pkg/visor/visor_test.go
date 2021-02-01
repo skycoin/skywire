@@ -1,11 +1,24 @@
 package visor
 
 import (
+	"encoding/json"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/restart"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var masterLogger *logging.MasterLogger
@@ -26,38 +39,56 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// TODO(nkryuchkov): fix and uncomment
-//func TestNewVisor(t *testing.T) {
-//	pk, sk := cipher.GenerateKeyPair()
-//	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-//		require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: pk, NextNonce: 1}))
-//	}))
-//	defer srv.Close()
-//
-//	conf := Config{AppLocalPath: "local", AppBinPath: "apps"}
-//	conf.Visor.PubKey = pk
-//	conf.Visor.SecKey = sk
-//	conf.Dmsg.Discovery = "http://skywire.skycoin.com:8002"
-//	conf.Dmsg.ServerCount = 10
-//	conf.Transport.Discovery = srv.URL
-//	conf.Apps = []AppConfig{
-//		{App: "foo", Port: 1},
-//		{App: "bar", AutoStart: true, Port: 2},
-//	}
-//
-//	defer func() {
-//		require.NoError(t, os.RemoveAll("local"))
-//	}()
-//
-//	visor, err := NewVisor(&conf, masterLogger)
-//	require.NoError(t, err)
-//
-//	assert.NotNil(t, visor.router)
-//	assert.NotNil(t, visor.appsConf)
-//	assert.NotNil(t, visor.appsPath)
-//	assert.NotNil(t, visor.localPath)
-//	assert.NotNil(t, visor.startedApps)
-//}
+func TestNewVisor(t *testing.T) {
+	pk, sk := cipher.GenerateKeyPair()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: pk, NextNonce: 1}))
+	}))
+	defer srv.Close()
+
+	conf := visorconfig.V1{
+		Common: &visorconfig.Common{
+			PK: pk,
+			SK: sk,
+		},
+		Dmsg: &snet.DmsgConfig{
+			Discovery:     skyenv.DefaultDmsgDiscAddr,
+			SessionsCount: 10,
+		},
+		Transport: &visorconfig.V1Transport{
+			Discovery:       srv.URL,
+			AddressResolver: skyenv.DefaultAddressResolverAddr,
+			LogStore: &visorconfig.V1LogStore{
+				Type: visorconfig.MemoryLogStore,
+			},
+			TrustedVisors: nil,
+		},
+		Routing: &visorconfig.V1Routing{
+			SetupNodes:         nil,
+			RouteFinder:        skyenv.DefaultRouteFinderAddr,
+			RouteFinderTimeout: 0,
+		},
+		Launcher: &visorconfig.V1Launcher{
+			LocalPath: "local",
+			BinPath:   "apps",
+			Apps: []launcher.AppConfig{
+				{Name: "foo", Port: 1},
+				{Name: "bar", AutoStart: true, Port: 2},
+			},
+		},
+	}
+
+	conf.SetLogger(logging.NewMasterLogger())
+
+	defer func() {
+		require.NoError(t, os.RemoveAll("local"))
+	}()
+
+	visor, ok := NewVisor(&conf, restart.CaptureContext())
+	require.True(t, ok)
+
+	assert.NotNil(t, visor.router)
+}
 
 // TODO(evanlinjin): Move to /pkg/app/launcher
 //func TestVisorStartClose(t *testing.T) {

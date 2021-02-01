@@ -44,7 +44,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
 	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = restart.DefaultCheckDelay.String() // TODO: Use Duration type.
+	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	return conf
 }
 
@@ -141,14 +141,7 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	if err != nil {
 		return nil, err
 	}
-
-	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
-	conf.Transport.Discovery = skyenv.TestTpDiscAddr
-	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
-	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
-	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
-	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
-	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+	SetDefaultTestingValues(conf)
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
 	}
@@ -185,4 +178,31 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
 	}
 	return conf, nil
+}
+
+// SetDefaultTestingValues mutates configuration to use testing values
+func SetDefaultTestingValues(conf *V1) {
+	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
+	conf.Transport.Discovery = skyenv.TestTpDiscAddr
+	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
+	conf.Routing.RouteFinder = skyenv.TestRouteFinderAddr
+	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
+	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
+	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+}
+
+// SetDefaultProductionValues mutates configuration to use production values
+func SetDefaultProductionValues(conf *V1) {
+	conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
+	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)}
+	conf.UptimeTracker = &V1UptimeTracker{
+		Addr: skyenv.DefaultUptimeTrackerAddr,
+	}
+	conf.Launcher.Discovery = &V1AppDisc{
+		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
+	}
 }

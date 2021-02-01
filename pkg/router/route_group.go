@@ -97,9 +97,8 @@ type RouteGroup struct {
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
 	//      and push to the appropriate '(RouteGroup).readCh'.
-	readCh   chan []byte // push reads from Router
-	readChMu sync.Mutex
-	readBuf  bytes.Buffer // for read overflow
+	readCh  chan []byte  // push reads from Router
+	readBuf bytes.Buffer // for read overflow
 
 	readDeadline  deadline.PipeDeadline
 	writeDeadline deadline.PipeDeadline
@@ -558,12 +557,8 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		if closeInitiator {
 			close(rg.closed)
 		}
-
 		rg.setRemoteClosed()
-
-		rg.readChMu.Lock()
 		close(rg.readCh)
-		rg.readChMu.Unlock()
 	})
 
 	return nil
@@ -621,6 +616,11 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	select {
 	case <-rg.closed:
 		return io.ErrClosedPipe
+	case <-rg.remoteClosed:
+		// in this case remote is already closed, and `readCh` is closed too,
+		// but some packets may still reach the rg causing panic on writing
+		// to `readCh`, so we simple omit such packets
+		return nil
 	case rg.readCh <- packet.Payload():
 	}
 

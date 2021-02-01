@@ -59,7 +59,7 @@ func TestContext_Start(t *testing.T) {
 		cmd := "bad_command"
 		cc.cmd = exec.Command(cmd) // nolint:gosec
 
-		// TODO(nkryuchkov): Add error text for Windows
+		// TODO: Add error text for Windows
 		possibleErrors := []string{
 			`exec: "bad_command": executable file not found in $PATH`,
 		}

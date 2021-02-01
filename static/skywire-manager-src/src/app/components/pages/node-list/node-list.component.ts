@@ -5,7 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService, BackendData } from '../../../services/node.service';
+import { NodeService, BackendData, HealthStatus } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -39,7 +39,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
   hypervisorSortData = new SortingColumn(['isHypervisor'], 'nodes.hypervisor', SortingModes.Boolean);
   stateSortData = new SortingColumn(['online'], 'nodes.state', SortingModes.Boolean);
   labelSortData = new SortingColumn(['label'], 'nodes.label', SortingModes.Text);
-  keySortData = new SortingColumn(['local_pk'], 'nodes.key', SortingModes.Text);
+  keySortData = new SortingColumn(['localPk'], 'nodes.key', SortingModes.Text);
   dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
   pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
 
@@ -51,6 +51,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
   loading = true;
   dataSource: Node[];
+  nodesHealthInfo: Map<string, HealthStatus>;
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
@@ -94,7 +95,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     },
     {
       filterName: 'nodes.filter-dialog.key',
-      keyNameInElementsArray: 'local_pk',
+      keyNameInElementsArray: 'localPk',
       type: FilterFieldTypes.TextInput,
       maxlength: 66,
     },
@@ -274,7 +275,6 @@ export class NodeListComponent implements OnInit, OnDestroy {
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.languageSubscription.unsubscribe();
-    this.dataFiltererSubscription.unsubscribe();
 
     if (this.updateSubscription) {
       this.updateSubscription.unsubscribe();
@@ -282,6 +282,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     this.dataSortedSubscription.unsubscribe();
     this.dataSorter.dispose();
+
+    this.dataFiltererSubscription.unsubscribe();
+    this.dataFilterer.dispose();
   }
 
   /**
@@ -304,7 +307,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
   nodeStatusClass(node: Node, forDot: boolean): string {
     switch (node.online) {
       case true:
-        return forDot ? 'dot-green' : 'green-text';
+        return this.nodesHealthInfo.get(node.localPk).allServicesOk ?
+          (forDot ? 'dot-green' : 'green-text') :
+          (forDot ? 'dot-yellow online-warning' : 'yellow-text');
       default:
         return forDot ? 'dot-red' : 'red-text';
     }
@@ -318,7 +323,9 @@ export class NodeListComponent implements OnInit, OnDestroy {
   nodeStatusText(node: Node, forTooltip: boolean): string {
     switch (node.online) {
       case true:
-        return 'node.statuses.online' + (forTooltip ? '-tooltip' : '');
+        return this.nodesHealthInfo.get(node.localPk).allServicesOk ?
+          ('node.statuses.online' + (forTooltip ? '-tooltip' : '')) :
+          ('node.statuses.partially-online' + (forTooltip ? '-tooltip' : ''));
       default:
         return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
     }
@@ -419,7 +426,15 @@ export class NodeListComponent implements OnInit, OnDestroy {
       this.nodesToShow = null;
     }
 
-    this.dataSource = this.nodesToShow;
+    if (this.nodesToShow) {
+      // Get the health status of each node.
+      this.nodesHealthInfo = new Map<string, HealthStatus>();
+      this.nodesToShow.forEach(node => {
+        this.nodesHealthInfo.set(node.localPk, this.nodeService.getHealthStatus(node));
+      });
+
+      this.dataSource = this.nodesToShow;
+    }
   }
 
   logout() {
@@ -446,7 +461,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
     const nodesData: NodeData[] = [];
     this.dataSource.forEach(node => {
       nodesData.push({
-        key: node.local_pk,
+        key: node.localPk,
         label: node.label,
       });
     });
@@ -519,7 +534,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
       if (selectedOption === 1) {
-        this.copySpecificTextToClipboard(node.local_pk);
+        this.copySpecificTextToClipboard(node.localPk);
       } else if (this.showDmsgInfo) {
         if (selectedOption === 2) {
           this.copySpecificTextToClipboard(node.dmsgServerPk);
@@ -544,7 +559,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
    */
   copyToClipboard(node: Node) {
     if (!this.showDmsgInfo) {
-      this.copySpecificTextToClipboard(node.local_pk);
+      this.copySpecificTextToClipboard(node.localPk);
     } else {
       const options: SelectableOption[] = [
         {
@@ -559,7 +574,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
       SelectOptionComponent.openDialog(this.dialog, options, 'common.options').afterClosed().subscribe((selectedOption: number) => {
         if (selectedOption === 1) {
-          this.copySpecificTextToClipboard(node.local_pk);
+          this.copySpecificTextToClipboard(node.localPk);
         } else if (selectedOption === 2) {
           this.copySpecificTextToClipboard(node.dmsgServerPk);
         }
@@ -581,10 +596,10 @@ export class NodeListComponent implements OnInit, OnDestroy {
    * Opens the modal window for changing the label of a node.
    */
   showEditLabelDialog(node: Node) {
-    let labelInfo =  this.storageService.getLabelInfo(node.local_pk);
+    let labelInfo =  this.storageService.getLabelInfo(node.localPk);
     if (!labelInfo) {
       labelInfo = {
-        id: node.local_pk,
+        id: node.localPk,
         label: '',
         identifiedElementType: LabeledElementTypes.Node,
       };
@@ -605,7 +620,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
-      this.storageService.setLocalNodesAsHidden([node.local_pk]);
+      this.storageService.setLocalNodesAsHidden([node.localPk]);
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
     });
@@ -629,7 +644,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       const nodesToRemove: string[] = [];
       this.filteredNodes.forEach(node => {
         if (!node.online) {
-          nodesToRemove.push(node.local_pk);
+          nodesToRemove.push(node.localPk);
         }
       });
 
@@ -653,7 +668,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
    */
   open(node: Node) {
     if (node.online) {
-      this.router.navigate(['nodes', node.local_pk]);
+      this.router.navigate(['nodes', node.localPk]);
     }
   }
 }

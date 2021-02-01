@@ -598,7 +598,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log.WithField("type", packet.Type().String()).
 		WithField("rt_id", packet.RouteID()).
 		WithField("size", packet.Size()).
-		Info("Received packet.")
+		Debug("Received packet.")
 	return packet, nil
 }
 

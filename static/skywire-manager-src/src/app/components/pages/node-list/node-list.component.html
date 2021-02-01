@@ -122,8 +122,7 @@
             {{ node.label }}
           </td>
           <td>
-            {{ node.local_pk }}
-            <!--<app-copy-to-clipboard-text [short]="true" text="{{ node.local_pk }}" shortTextLength="5"></app-copy-to-clipboard-text>-->
+            {{ node.localPk }}
           </td>
           <td *ngIf="showDmsgInfo">
             <app-labeled-element-text
@@ -215,7 +214,7 @@
               </div>
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:
-                {{ node.local_pk }}
+                {{ node.localPk }}
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
