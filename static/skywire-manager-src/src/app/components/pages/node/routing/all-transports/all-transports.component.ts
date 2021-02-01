@@ -21,7 +21,7 @@ export class AllTransportsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
-      this.nodePK = node.local_pk;
+      this.nodePK = node.localPk;
       this.transports = node.transports;
     });
   }

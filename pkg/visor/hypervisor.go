@@ -69,6 +69,7 @@ type Hypervisor struct {
 	mu           *sync.RWMutex
 	visorMu      sync.Mutex
 	visorChanMux map[cipher.PubKey]*chanMux
+	selfConn     Conn
 }
 
 // New creates a new Hypervisor.
@@ -82,6 +83,12 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 
 	singleUserDB := usermanager.NewSingleUserStore("admin", boltUserDB)
 
+	selfConn := Conn{
+		Addr:  dmsg.Addr{PK: config.PK, Port: config.DmsgPort},
+		API:   visor,
+		PtyUI: nil,
+	}
+
 	hv := &Hypervisor{
 		c:            config,
 		visor:        visor,
@@ -92,6 +99,7 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 		users:        usermanager.NewUserManager(singleUserDB, config.Cookies),
 		mu:           new(sync.RWMutex),
 		visorChanMux: make(map[cipher.PubKey]*chanMux),
+		selfConn:     selfConn,
 	}
 
 	return hv, nil
@@ -110,6 +118,9 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).Warn("Failed to dial tracker stream.")
 		}
 	}
+
+	// setup
+	hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
 
 	for {
 		conn, err := lis.AcceptStream()
@@ -145,6 +156,11 @@ type MockConfig struct {
 	MaxTpsPerVisor    int
 	MaxRoutesPerVisor int
 	EnableAuth        bool
+}
+
+type elementResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
 }
 
 // AddMockData adds mock data to Hypervisor.
@@ -226,11 +242,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/transports", hv.postTransport())
 				r.Get("/visors/{pk}/transports/{tid}", hv.getTransport())
 				r.Delete("/visors/{pk}/transports/{tid}", hv.deleteTransport())
+				r.Delete("/visors/{pk}/transports/", hv.deleteTransports())
 				r.Get("/visors/{pk}/routes", hv.getRoutes())
 				r.Post("/visors/{pk}/routes", hv.postRoute())
 				r.Get("/visors/{pk}/routes/{rid}", hv.getRoute())
 				r.Put("/visors/{pk}/routes/{rid}", hv.putRoute())
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
+				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Post("/visors/{pk}/exec", hv.exec())
@@ -495,13 +513,22 @@ func (hv *Hypervisor) getApp() http.HandlerFunc {
 // nolint: funlen,gocognit,godox
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var reqBody struct {
-			AutoStart *bool          `json:"autostart,omitempty"`
-			Status    *int           `json:"status,omitempty"`
-			Passcode  *string        `json:"passcode,omitempty"`
-			PK        *cipher.PubKey `json:"pk,omitempty"`
+		type req struct {
+			AutoStart  *bool          `json:"autostart,omitempty"`
+			Killswitch *bool          `json:"killswitch,omitempty"`
+			Secure     *bool          `json:"secure,omitempty"`
+			Status     *int           `json:"status,omitempty"`
+			Passcode   *string        `json:"passcode,omitempty"`
+			PK         *cipher.PubKey `json:"pk,omitempty"`
 		}
 
+		shouldRestartApp := func(r req) bool {
+			// we restart the app if one of these fields was changed
+			return r.Killswitch != nil || r.Secure != nil || r.Passcode != nil ||
+				r.PK != nil
+		}
+
+		var reqBody req
 		if err := httputil.ReadJSON(r, &reqBody); err != nil {
 			if err != io.EOF {
 				hv.log(r).Warnf("putApp request: %v", err)
@@ -530,6 +557,27 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.PK != nil {
 			if err := ctx.API.SetAppPK(ctx.App.Name, *reqBody.PK); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Killswitch != nil {
+			if err := ctx.API.SetAppKillswitch(ctx.App.Name, *reqBody.Killswitch); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Secure != nil {
+			if err := ctx.API.SetAppSecure(ctx.App.Name, *reqBody.Secure); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if shouldRestartApp(reqBody) {
+			if err := ctx.API.RestartApp(ctx.App.Name); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}
@@ -688,6 +736,51 @@ func (hv *Hypervisor) deleteTransport() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) deleteTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var transports []string
+		response := make(map[string]elementResponse)
+		err := json.NewDecoder(r.Body).Decode(&transports)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		for _, transport := range transports {
+			transportBoxed, err := uuid.Parse(transport)
+			if err != nil {
+				response[transport] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			_, err = ctx.API.Transport(transportBoxed)
+			if err != nil {
+				if err.Error() == ErrNotFound.Error() {
+					errMsg := fmt.Errorf("transport of ID %s is not found", transportBoxed)
+					response[transport] = elementResponse{
+						Success: false,
+						Error:   errMsg.Error(),
+					}
+					continue
+				}
+			}
+
+			if err := ctx.API.RemoveTransport(transportBoxed); err != nil {
+				response[transport] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			response[transport] = elementResponse{
+				Success: true,
+			}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, response)
+	})
+}
+
 type routingRuleResp struct {
 	Key     routing.RouteID      `json:"key"`
 	Rule    string               `json:"rule"`
@@ -812,6 +905,60 @@ func (hv *Hypervisor) deleteRoute() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, true)
+	})
+}
+
+func (hv *Hypervisor) deleteRoutes() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rids []string
+		response := make(map[string]elementResponse)
+		err := json.NewDecoder(r.Body).Decode(&rids)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, err)
+			return
+		}
+		rules, err := ctx.API.RoutingRules()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, err)
+			return
+		}
+		for _, rid := range rids {
+			ridUint64, err := strconv.ParseUint(rid, 10, 32)
+			if err != nil {
+				response[rid] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			routeID := routing.RouteID(ridUint64)
+			contains := false
+			for _, rule := range rules {
+				if rule.KeyRouteID() == routeID {
+					contains = true
+				}
+			}
+			if !contains {
+				errMsg := fmt.Errorf("route of ID %s is not found", rid)
+				response[rid] = elementResponse{
+					Success: false,
+					Error:   errMsg.Error(),
+				}
+				continue
+			}
+
+			if err := ctx.API.RemoveRoutingRule(routeID); err != nil {
+				response[rid] = elementResponse{
+					Success: false,
+					Error:   err.Error(),
+				}
+				continue
+			}
+			response[rid] = elementResponse{
+				Success: true,
+			}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, response)
 	})
 }
 
@@ -1115,11 +1262,7 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 	}
 
 	return &httpCtx{
-		Conn: Conn{
-			Addr:  dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort},
-			API:   hv.visor,
-			PtyUI: nil,
-		},
+		Conn: hv.selfConn,
 	}, true
 }
 

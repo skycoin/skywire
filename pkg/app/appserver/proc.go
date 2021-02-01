@@ -162,6 +162,13 @@ func (p *Proc) Start() error {
 			close(waitErrCh)
 		}()
 
+		defer func() {
+			// here will definitely be an error notifying that the process
+			// is already stopped. We do this to remove proc from the manager,
+			// therefore giving the correct app status to hypervisor.
+			_ = p.m.Stop(p.appName) //nolint:errcheck
+		}()
+
 		select {
 		case _, ok := <-p.connCh:
 			if !ok {
@@ -180,11 +187,6 @@ func (p *Proc) Start() error {
 
 			// channel won't get closed outside, close it now.
 			p.connOnce.Do(func() { close(p.connCh) })
-
-			// here will definitely be an error notifying that the process
-			// is already stopped. We do this to remove proc from the manager,
-			// therefore giving the correct app status to hypervisor.
-			_ = p.m.Stop(p.appName) //nolint:errcheck
 
 			return
 		}

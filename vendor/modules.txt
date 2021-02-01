@@ -4,16 +4,16 @@ github.com/AudriusButkevicius/pfilter
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 ## explicit
 github.com/StackExchange/wmi
+# github.com/VictoriaMetrics/metrics v1.12.3
+## explicit
+github.com/VictoriaMetrics/metrics
 # github.com/andybalholm/brotli v0.0.0-20190621154722-5f990b63d2d6
 github.com/andybalholm/brotli
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 ## explicit
 github.com/armon/go-socks5
-# github.com/beorn7/perks v1.0.1
-github.com/beorn7/perks/quantile
-# github.com/cespare/xxhash/v2 v2.1.1
-github.com/cespare/xxhash/v2
-# github.com/creack/pty v1.1.9
+# github.com/creack/pty v1.1.11
+## explicit
 github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -35,12 +35,6 @@ github.com/go-ole/go-ole/oleutil
 # github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
 github.com/golang/gddo/httputil
 github.com/golang/gddo/httputil/header
-# github.com/golang/protobuf v1.4.2
-github.com/golang/protobuf/proto
-github.com/golang/protobuf/ptypes
-github.com/golang/protobuf/ptypes/any
-github.com/golang/protobuf/ptypes/duration
-github.com/golang/protobuf/ptypes/timestamp
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/google/go-github v17.0.0+incompatible
@@ -52,11 +46,15 @@ github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 ## explicit
 github.com/google/uuid
+# github.com/gorilla/handlers v1.4.2
+## explicit
 # github.com/gorilla/securecookie v1.1.1
 ## explicit
 github.com/gorilla/securecookie
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
+# github.com/json-iterator/go v1.1.10
+github.com/json-iterator/go
 # github.com/klauspost/compress v1.10.0
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/fse
@@ -72,16 +70,16 @@ github.com/klauspost/pgzip
 ## explicit
 github.com/klauspost/reedsolomon
 # github.com/konsorten/go-windows-terminal-sequences v1.0.3
-github.com/konsorten/go-windows-terminal-sequences
+## explicit
 # github.com/kz/discordrus v1.2.0
 github.com/kz/discordrus
-# github.com/mattn/go-colorable v0.1.6
+# github.com/mattn/go-colorable v0.1.8
+## explicit
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
 github.com/mattn/go-isatty
-# github.com/matttproud/golang_protobuf_extensions v1.0.1
-github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b
+# github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
+## explicit
 github.com/mgutz/ansi
 # github.com/mholt/archiver/v3 v3.3.0
 ## explicit
@@ -103,6 +101,10 @@ github.com/mmcloughlin/avo/printer
 github.com/mmcloughlin/avo/reg
 github.com/mmcloughlin/avo/src
 github.com/mmcloughlin/avo/x86
+# github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
+github.com/modern-go/concurrent
+# github.com/modern-go/reflect2 v1.0.1
+github.com/modern-go/reflect2
 # github.com/nwaples/rardecode v1.0.0
 github.com/nwaples/rardecode
 # github.com/pierrec/lz4 v2.0.5+incompatible
@@ -117,19 +119,6 @@ github.com/pkg/profile
 github.com/pmezard/go-difflib/difflib
 # github.com/prometheus/client_golang v1.7.1
 ## explicit
-github.com/prometheus/client_golang/prometheus
-github.com/prometheus/client_golang/prometheus/internal
-github.com/prometheus/client_golang/prometheus/promhttp
-# github.com/prometheus/client_model v0.2.0
-github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.10.0
-github.com/prometheus/common/expfmt
-github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
-github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.1.3
-github.com/prometheus/procfs
-github.com/prometheus/procfs/internal/fs
-github.com/prometheus/procfs/internal/util
 # github.com/rakyll/statik v0.1.7
 ## explicit
 github.com/rakyll/statik/fs
@@ -143,11 +132,11 @@ github.com/shirou/gopsutil/internal/common
 github.com/shirou/gopsutil/mem
 github.com/shirou/gopsutil/net
 github.com/shirou/gopsutil/process
-# github.com/sirupsen/logrus v1.6.0
+# github.com/sirupsen/logrus v1.7.0
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20201018132543-a08c07be4640
+# github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
@@ -160,13 +149,13 @@ github.com/skycoin/dmsg/dmsgpty
 github.com/skycoin/dmsg/dmsgtest
 github.com/skycoin/dmsg/httputil
 github.com/skycoin/dmsg/ioutil
+github.com/skycoin/dmsg/metricsutil
 github.com/skycoin/dmsg/netutil
 github.com/skycoin/dmsg/noise
-github.com/skycoin/dmsg/promutil
 github.com/skycoin/dmsg/servermetrics
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.26.0
+# github.com/skycoin/skycoin v0.27.1
 ## explicit
 github.com/skycoin/skycoin/src/cipher
 github.com/skycoin/skycoin/src/cipher/base58
@@ -209,6 +198,10 @@ github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
 github.com/ulikunitz/xz/internal/xlog
 github.com/ulikunitz/xz/lzma
+# github.com/valyala/fastrand v1.0.0
+github.com/valyala/fastrand
+# github.com/valyala/histogram v1.1.2
+github.com/valyala/histogram
 # github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8
 github.com/xi2/xz
 # github.com/xtaci/kcp-go v5.4.20+incompatible
@@ -219,7 +212,8 @@ github.com/xtaci/kcp-go
 # go.etcd.io/bbolt v1.3.5
 ## explicit
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+# golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9
+## explicit
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/blowfish
@@ -247,13 +241,17 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20200929083018-4d22bbb62b3c
+# golang.org/x/sys v0.0.0-20201214210602-f9fddec55a1e
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
+golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
+# golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf
+## explicit
+golang.org/x/term
 # golang.org/x/text v0.3.2
 golang.org/x/text/transform
 golang.org/x/text/unicode/norm
@@ -281,37 +279,6 @@ golang.zx2c4.com/wireguard/tun/wintun/namespaceapi
 golang.zx2c4.com/wireguard/tun/wintun/nci
 golang.zx2c4.com/wireguard/tun/wintun/registry
 golang.zx2c4.com/wireguard/tun/wintun/setupapi
-# google.golang.org/protobuf v1.23.0
-google.golang.org/protobuf/encoding/prototext
-google.golang.org/protobuf/encoding/protowire
-google.golang.org/protobuf/internal/descfmt
-google.golang.org/protobuf/internal/descopts
-google.golang.org/protobuf/internal/detrand
-google.golang.org/protobuf/internal/encoding/defval
-google.golang.org/protobuf/internal/encoding/messageset
-google.golang.org/protobuf/internal/encoding/tag
-google.golang.org/protobuf/internal/encoding/text
-google.golang.org/protobuf/internal/errors
-google.golang.org/protobuf/internal/fieldnum
-google.golang.org/protobuf/internal/fieldsort
-google.golang.org/protobuf/internal/filedesc
-google.golang.org/protobuf/internal/filetype
-google.golang.org/protobuf/internal/flags
-google.golang.org/protobuf/internal/genname
-google.golang.org/protobuf/internal/impl
-google.golang.org/protobuf/internal/mapsort
-google.golang.org/protobuf/internal/pragma
-google.golang.org/protobuf/internal/set
-google.golang.org/protobuf/internal/strs
-google.golang.org/protobuf/internal/version
-google.golang.org/protobuf/proto
-google.golang.org/protobuf/reflect/protoreflect
-google.golang.org/protobuf/reflect/protoregistry
-google.golang.org/protobuf/runtime/protoiface
-google.golang.org/protobuf/runtime/protoimpl
-google.golang.org/protobuf/types/known/anypb
-google.golang.org/protobuf/types/known/durationpb
-google.golang.org/protobuf/types/known/timestamppb
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
 # nhooyr.io/websocket v1.8.2
