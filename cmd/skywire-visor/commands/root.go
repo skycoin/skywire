@@ -274,9 +274,31 @@ func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
 		}
 	}
 	go func() {
-		time.Sleep(1 * time.Second)
+		if !checkHvIsRunning(addr, 5) {
+			log.Error("Cannot open hypervisor in browser: status check failed")
+			return
+		}
 		if err := webbrowser.Open(addr); err != nil {
 			log.WithError(err).Error("webbrowser.Open failed")
 		}
 	}()
+}
+
+func checkHvIsRunning(addr string, retries int) bool {
+	url := addr + "/api/ping"
+	for i := 0; i < retries; i++ {
+		time.Sleep(500 * time.Millisecond)
+		resp, err := http.Get(url) // nolint: gosec
+		if err != nil {
+			continue
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode < 400 {
+			return true
+		}
+	}
+	return false
 }
