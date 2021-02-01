@@ -125,7 +125,7 @@
       <td>
         <app-labeled-element-text
           [short]="true"
-          id="{{ transport.remote_pk }}"
+          id="{{ transport.remotePk }}"
           shortTextLength="4"
           (labelEdited)="refreshData()">
         </app-labeled-element-text>
@@ -134,10 +134,10 @@
         {{ transport.type }}
       </td>
       <td>
-        {{ transport.log.sent | autoScale }}
+        {{ transport.sent | autoScale }}
       </td>
       <td>
-        {{ transport.log.recv | autoScale }}
+        {{ transport.recv | autoScale }}
       </td>
       <td class="actions">
         <button
@@ -206,7 +206,7 @@
           <div class="list-row long-content">
             <span class="title">{{ 'transports.remote-node' | translate }}</span>:
             <app-labeled-element-text
-              id="{{ transport.remote_pk }}"
+              id="{{ transport.remotePk }}"
               (labelEdited)="refreshData()">
             </app-labeled-element-text>
           </div>
@@ -216,11 +216,11 @@
           </div>
           <div class="list-row">
             <span class="title">{{ 'common.uploaded' | translate }}</span>:
-            {{ transport.log.sent | autoScale }}
+            {{ transport.sent | autoScale }}
           </div>
           <div class="list-row">
             <span class="title">{{ 'common.downloaded' | translate }}</span>:
-            {{ transport.log.recv | autoScale }}
+            {{ transport.recv | autoScale }}
           </div>
         </div>
         <div class="margin-part"></div>

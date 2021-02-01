@@ -137,6 +137,11 @@ func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
 }
 
+// RestartApp calls `RestartApp`.
+func (rc *rpcClient) RestartApp(appName string) error {
+	return rc.Call("RestartApp", &appName, &struct{}{})
+}
+
 // SetAutoStart calls SetAutoStart.
 func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 	return rc.Call("SetAutoStart", &SetAutoStartIn{
@@ -158,6 +163,22 @@ func (rc *rpcClient) SetAppPK(appName string, pk cipher.PubKey) error {
 	return rc.Call("SetAppPK", &SetAppPKIn{
 		AppName: appName,
 		PK:      pk,
+	}, &struct{}{})
+}
+
+// SetAppKillswitch implements API.
+func (rc *rpcClient) SetAppKillswitch(appName string, killswitch bool) error {
+	return rc.Call("SetAppKillswitch", &SetAppBoolIn{
+		AppName: appName,
+		Val:     killswitch,
+	}, &struct{}{})
+}
+
+// SetAppSecure implements API.
+func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
+	return rc.Call("SetAppSecure", &SetAppBoolIn{
+		AppName: appName,
+		Val:     isSecure,
 	}, &struct{}{})
 }
 
@@ -599,6 +620,11 @@ func (*mockRPCClient) StopApp(string) error {
 	return nil
 }
 
+// RestartApp implements API.
+func (*mockRPCClient) RestartApp(string) error {
+	return nil
+}
+
 // SetAutoStart implements API.
 func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	return mc.do(true, func() error {
@@ -631,6 +657,36 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 func (mc *mockRPCClient) SetAppPK(string, cipher.PubKey) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks-client"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppKillswitch implements API.
+func (mc *mockRPCClient) SetAppKillswitch(appName string, killswitch bool) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks"
+
+		for i := range mc.s.Apps {
+			if mc.s.Apps[i].Name == socksName {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", socksName)
+	})
+}
+
+// SetAppSecure implements API.
+func (mc *mockRPCClient) SetAppSecure(appName string, isSecure bool) error {
+	return mc.do(true, func() error {
+		const socksName = "skysocks"
 
 		for i := range mc.s.Apps {
 			if mc.s.Apps[i].Name == socksName {

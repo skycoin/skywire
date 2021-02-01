@@ -30,6 +30,10 @@ $skywire-theme: mat-light-theme($skywire-primary, $skywire-accent);
 
 @include angular-material-theme($skywire-theme);
 
+.main-theme {
+  @include angular-material-theme($skywire-theme);
+}
+
 $mat-white-primary: (
   100: white,
   500: white,

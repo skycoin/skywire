@@ -367,16 +367,16 @@ func testKeepAlivePacket(t *testing.T, r0, r1 *router, pk1, pk2 cipher.PubKey) {
 	require.NoError(t, err)
 	require.Len(t, r0.rt.AllRules(), 1)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	packet := routing.MakeKeepAlivePacket(rtIDs[0])
 	require.NoError(t, r0.handleTransportPacket(context.TODO(), packet))
 
 	require.Len(t, r0.rt.AllRules(), 1)
-	time.Sleep(40 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	require.Len(t, r0.rt.AllRules(), 1)
 
-	time.Sleep(110 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	require.Len(t, r0.rt.AllRules(), 0)
 }
 
