@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	// TrustedVisorsDelay defines a delay before adding transports to trusted visors.
-	TrustedVisorsDelay = 5 * time.Second
+	// PublicVisorsDelay defines a delay before adding transports to public visors.
+	PublicVisorsDelay = 5 * time.Second
 )
 
 // TPCloseCallback triggers after a session is closed.
@@ -33,7 +33,6 @@ type TPCloseCallback func(network, addr string)
 type ManagerConfig struct {
 	PubKey          cipher.PubKey
 	SecKey          cipher.SecKey
-	DefaultVisors   []cipher.PubKey // Visors to automatically connect to
 	DiscoveryClient DiscoveryClient
 	LogStore        LogStore
 }
