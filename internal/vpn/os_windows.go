@@ -12,11 +12,6 @@ const (
 	modifyRouteCMDFmt = "route %s %s mask %s %s"
 )
 
-// DefaultNetworkInterface fetches default network interface name.
-func DefaultNetworkInterface() (string, error) {
-	return "", errServerMethodsNotSupported
-}
-
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
 func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	ip, netmask, err := parseCIDR(ipCIDR)

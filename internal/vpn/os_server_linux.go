@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	defaultNetworkInterfaceCMD     = "ip r | awk '$1 == \"default\" {print $5}'"
 	getIPv4ForwardingCMD           = "sysctl net.ipv4.ip_forward"
 	getIPv6ForwardingCMD           = "sysctl net.ipv6.conf.all.forwarding"
 	setIPv4ForwardingCMDFmt        = "sysctl -w net.ipv4.ip_forward=%s"
@@ -70,19 +69,6 @@ func BlockIPToLocalNetwork(src, dst net.IP) error {
 	}
 
 	return nil
-}
-
-// DefaultNetworkInterface fetches default network interface name.
-func DefaultNetworkInterface() (string, error) {
-	outputBytes, err := exec.Command("sh", "-c", defaultNetworkInterfaceCMD).Output()
-	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", defaultNetworkInterfaceCMD, err)
-	}
-
-	// just in case
-	outputBytes = bytes.TrimRight(outputBytes, "\n")
-
-	return string(outputBytes), nil
 }
 
 // GetIPv4ForwardingValue gets current value of IPv4 forwarding.
