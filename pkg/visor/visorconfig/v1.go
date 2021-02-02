@@ -35,8 +35,6 @@ type V1 struct {
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 
-	PublicTrustedVisor bool `json:"public_trusted_visor,omitempty"`
-
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
 

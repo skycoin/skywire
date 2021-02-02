@@ -60,9 +60,8 @@ func (c *DmsgConfig) Type() string {
 
 // STCPConfig defines config for STCP network.
 type STCPConfig struct {
-	PKTable      map[cipher.PubKey]string `json:"pk_table"`
-	LocalAddr    string                   `json:"local_address"`
-	AddrIsPublic bool                     `json:"address_is_public"`
+	PKTable   map[cipher.PubKey]string `json:"pk_table"`
+	LocalAddr string                   `json:"local_address"`
 }
 
 // Type returns STCP type.
@@ -77,7 +76,6 @@ type Config struct {
 	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
 	ServiceDisc    appdisc.Factory
-	PublicTrusted  bool
 }
 
 // NetworkConfigs represents all network configs.
@@ -228,9 +226,7 @@ func (n *Network) Init() error {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
 
-			if n.conf.PublicTrusted {
-				go n.registerPublicTrusted(client)
-			}
+			go n.registerPublicTrusted(client)
 		} else {
 			log.Infof("No config found for stcpr")
 		}
