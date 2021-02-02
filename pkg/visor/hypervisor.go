@@ -502,10 +502,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.visors))
 
-		i := 0
-		if hv.visor != nil {
-			i++
-		}
+		i := 1
 
 		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
 		wg.Add(1)
@@ -519,23 +516,21 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 
 		summaries := make([]extraSummaryWithDmsgResp, len(hv.visors)+i)
 
-		if hv.visor != nil {
-			summary, err := hv.visor.ExtraSummary()
-			if err != nil {
-				log.WithError(err).Warn("Failed to obtain summary of this visor.")
-				summary = &ExtraSummary{}
-				summary.Summary.PubKey = hv.visor.conf.PK
-			}
+		summary, err := hv.visor.ExtraSummary()
+		if err != nil {
+			log.WithError(err).Warn("Failed to obtain summary of this visor.")
+			summary = &ExtraSummary{}
+			summary.Summary.PubKey = hv.visor.conf.PK
+		}
 
-			addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-			summaries[0] = extraSummaryWithDmsgResp{
-				extraSummaryResp: extraSummaryResp{
-					TCPAddr:      addr.String(),
-					Online:       err == nil,
-					ExtraSummary: summary,
-				},
-				IsHypervisor: true,
-			}
+		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
+		summaries[0] = extraSummaryWithDmsgResp{
+			extraSummaryResp: extraSummaryResp{
+				TCPAddr:      addr.String(),
+				Online:       err == nil,
+				ExtraSummary: summary,
+			},
+			IsHypervisor: true,
 		}
 
 		for pk, c := range hv.visors {
