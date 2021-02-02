@@ -56,9 +56,8 @@ func initStack() []initFunc {
 		initCLI,
 		initHypervisors,
 		initUptimeTracker,
-		initTrustedVisors,
-		initHypervisor,
 		initPublicVisors,
+		initHypervisor,
 	}
 }
 
@@ -182,7 +181,6 @@ func initTransport(v *Visor) bool {
 	tpMConf := transport.ManagerConfig{
 		PubKey:          v.conf.PK,
 		SecKey:          v.conf.SK,
-		DefaultVisors:   conf.TrustedVisors,
 		DiscoveryClient: tpdC,
 		LogStore:        logS,
 	}
@@ -491,7 +489,7 @@ func initUptimeTracker(v *Visor) bool {
 	return true
 }
 
-func initTrustedVisors(v *Visor) bool {
+/*func initTrustedVisors(v *Visor) bool {
 	const trustedVisorsTransportType = tptypes.STCPR
 
 	go func() {
@@ -515,34 +513,40 @@ func initTrustedVisors(v *Visor) bool {
 	}()
 
 	return true
-}
+}*/
+// TODO (darkrengarius): adv REMOVE
 
 func initPublicVisors(v *Visor) bool {
-	const trustedVisorsTransportType = tptypes.STCPR
+	const tpType = tptypes.STCPR
+
 	proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
 	if proxyDisc == "" {
 		proxyDisc = skyenv.DefaultServiceDiscAddr
 	}
-	log = logging.MustGetLogger("appdisc")
+
 	_, portStr, err := net.SplitHostPort(v.conf.STCP.LocalAddr)
 	if err != nil {
-		log.WithError(err).Warn("can't parse address string")
+		v.log.WithError(err).Errorln("Failed to parse address string")
 		return false
 	}
+
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		log.WithError(err).Warn("can't convert port to integer")
+		v.log.WithError(err).Errorln("Failed to parse port")
 		return false
 	}
+
 	conf := servicedisc.Config{
-		Type:     servicedisc.ServiceTypePublicVisor,
+		Type:     servicedisc.ServiceTypeVisor,
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
 		Port:     uint16(port),
 		DiscAddr: proxyDisc,
 	}
-	client := servicedisc.NewClient(log, conf)
-	if v.conf.STCP.AddrIsPublic {
+	discCl := servicedisc.NewClient(log, conf)
+
+	// TODO (darkrengarius): adv this one should be done in the updater manner, like it's already done for trusted visors
+	/*if v.conf.STCP.AddrIsPublic {
 		go func() {
 			time.Sleep(transport.TrustedVisorsDelay)
 			_, err := client.UpdateEntry(context.Background()) // try to register as public visor
@@ -550,32 +554,37 @@ func initPublicVisors(v *Visor) bool {
 				log.WithError(err).Warn("can't register as public visor")
 			}
 		}()
-	}
+	}*/
+
 	if v.conf.Launcher.Discovery.PublicVisorsEnabled {
 		go func() {
-			time.Sleep(transport.TrustedVisorsDelay * 2)
-			services, err := client.Services(context.Background(), 5)
+			time.Sleep(transport.PublicVisorsDelay * 2)
+
+			visors, err := discCl.Services(context.Background(), 5)
 			if err != nil {
-				log.WithError(err).Error("Can't fetch public visors")
+				log.WithError(err).Errorln("Failed to fetch public visors")
+				return
 			}
-			for _, service := range services {
-				pk := service.Addr.PubKey()
-				v.log.WithField("pk", pk).Infof("Adding public visor")
-				if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType); err != nil {
+
+			for _, visor := range visors {
+				pk := visor.Addr.PubKey()
+				v.log.WithField("pk", pk).Infoln("Adding transport to public visor")
+				if _, err := v.tpM.SaveTransport(context.Background(), pk, tpType); err != nil {
 					v.log.
 						WithError(err).
 						WithField("pk", pk).
-						WithField("type", trustedVisorsTransportType).
-						Warnf("Failed to add transport to public visor via")
+						WithField("type", tpType).
+						Warnln("Failed to add transport to public visor via")
 				} else {
 					v.log.
 						WithField("pk", pk).
-						WithField("type", trustedVisorsTransportType).
-						Infof("Added transport to public visor")
+						WithField("type", tpType).
+						Infoln("Added transport to public visor")
 				}
 			}
 		}()
 	}
+
 	return true
 }
 

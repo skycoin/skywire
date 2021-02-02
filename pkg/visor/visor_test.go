@@ -61,7 +61,6 @@ func TestNewVisor(t *testing.T) {
 			LogStore: &visorconfig.V1LogStore{
 				Type: visorconfig.MemoryLogStore,
 			},
-			TrustedVisors: nil,
 		},
 		Routing: &visorconfig.V1Routing{
 			SetupNodes:         nil,

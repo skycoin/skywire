@@ -50,10 +50,9 @@ type V1Dmsgpty struct {
 
 // V1Transport defines a transport config.
 type V1Transport struct {
-	Discovery       string          `json:"discovery"`
-	AddressResolver string          `json:"address_resolver"`
-	LogStore        *V1LogStore     `json:"log_store"`
-	TrustedVisors   []cipher.PubKey `json:"trusted_visors"`
+	Discovery       string      `json:"discovery"`
+	AddressResolver string      `json:"address_resolver"`
+	LogStore        *V1LogStore `json:"log_store"`
 }
 
 // V1LogStore configures a LogStore.

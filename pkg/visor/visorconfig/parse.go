@@ -103,7 +103,6 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 		conf.Transport.LogStore = old.Transport.LogStore
 	}
 
-	conf.Transport.TrustedVisors = old.TrustedVisors
 	if old.Routing != nil {
 		conf.Routing = old.Routing
 	}
