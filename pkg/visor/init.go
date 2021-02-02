@@ -99,7 +99,6 @@ func initSNet(v *Visor) bool {
 		ARClient:       v.arClient,
 		NetworkConfigs: nc,
 		ServiceDisc:    v.serviceDisc,
-		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -489,33 +488,6 @@ func initUptimeTracker(v *Visor) bool {
 	return true
 }
 
-/*func initTrustedVisors(v *Visor) bool {
-	const trustedVisorsTransportType = tptypes.STCPR
-
-	go func() {
-		time.Sleep(transport.TrustedVisorsDelay)
-		for _, pk := range v.tpM.Conf.DefaultVisors {
-			v.log.WithField("pk", pk).Infof("Adding trusted visor")
-
-			if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType); err != nil {
-				v.log.
-					WithError(err).
-					WithField("pk", pk).
-					WithField("type", trustedVisorsTransportType).
-					Warnf("Failed to add transport to trusted visor via")
-			} else {
-				v.log.
-					WithField("pk", pk).
-					WithField("type", trustedVisorsTransportType).
-					Infof("Added transport to trusted visor")
-			}
-		}
-	}()
-
-	return true
-}*/
-// TODO (darkrengarius): adv REMOVE
-
 func initPublicVisors(v *Visor) bool {
 	const tpType = tptypes.STCPR
 
@@ -544,17 +516,6 @@ func initPublicVisors(v *Visor) bool {
 		DiscAddr: proxyDisc,
 	}
 	discCl := servicedisc.NewClient(log, conf)
-
-	// TODO (darkrengarius): adv this one should be done in the updater manner, like it's already done for trusted visors
-	/*if v.conf.STCP.AddrIsPublic {
-		go func() {
-			time.Sleep(transport.TrustedVisorsDelay)
-			_, err := client.UpdateEntry(context.Background()) // try to register as public visor
-			if err != nil {
-				log.WithError(err).Warn("can't register as public visor")
-			}
-		}()
-	}*/
 
 	if v.conf.Launcher.Discovery.PublicVisorsEnabled {
 		go func() {
