@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/internal/vpn"
+
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 
@@ -135,6 +137,25 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 
 // UpdateEntry calls 'POST /api/services'.
 func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
+	if c.conf.Type == ServiceTypeVisor {
+		if len(c.entry.LocalIPs) == 0 {
+			networkIfc, err := vpn.DefaultNetworkInterface()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get default network interface: %w", err)
+			}
+
+			localIPs, err := vpn.NetworkInterfaceIPs(networkIfc)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get IPs of %s: %w", networkIfc, err)
+			}
+
+			c.entry.LocalIPs = make([]string, 0, len(localIPs))
+			for _, ip := range localIPs {
+				c.entry.LocalIPs = append(c.entry.LocalIPs, ip.String())
+			}
+		}
+	}
+
 	auth, err := c.Auth(ctx)
 	if err != nil {
 		return nil, err
