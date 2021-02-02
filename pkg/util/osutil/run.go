@@ -1,26 +1,27 @@
-package vpn
+package osutil
 
 import (
 	"bytes"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"strings"
 )
 
-func parseCIDR(ipCIDR string) (ipStr, netmask string, err error) {
-	ip, net, err := net.ParseCIDR(ipCIDR)
-	if err != nil {
-		return "", "", err
-	}
-
-	return ip.String(), fmt.Sprintf("%d.%d.%d.%d", net.Mask[0], net.Mask[1], net.Mask[2], net.Mask[3]), nil
+// Run runs binary `bin` with `args`.
+func Run(bin string, args ...string) error {
+	return run(bin, os.Stdout, args...)
 }
 
-//nolint:unparam
-func run(bin string, args ...string) error {
+// RunWithResult runs binary `bin` with `args` returning stdout contents.
+func RunWithResult(bin string, args ...string) (io.Reader, error) {
+	stdout := bytes.NewBuffer(nil)
+
+	return stdout, run(bin, stdout, args...)
+}
+
+func run(bin string, stdout io.Writer, args ...string) error {
 	fullCmd := bin + " " + strings.Join(args, " ")
 
 	cmd := exec.Command(bin, args...) //nolint:gosec
@@ -28,7 +29,7 @@ func run(bin string, args ...string) error {
 	stderrBuf := bytes.NewBuffer(nil)
 
 	cmd.Stderr = io.MultiWriter(os.Stderr, stderrBuf)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = stdout
 	cmd.Stdin = os.Stdin
 
 	if err := cmd.Run(); err != nil {
