@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	nutil "github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (
@@ -613,7 +614,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 }
 
 func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
-	unavailableIPs, err := LocalNetworkInterfaceIPs()
+	unavailableIPs, err := nutil.LocalNetworkInterfaceIPs()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
