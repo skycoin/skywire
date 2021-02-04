@@ -80,7 +80,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 	utIP, err := uptimeTrackerIPFromEnv()
 	if err != nil {
-		return nil, fmt.Errorf("error getting UT IP: %w")
+		return nil, fmt.Errorf("error getting UT IP: %w", err)
 	}
 
 	stcpEntities, err := stcpEntitiesFromEnv()
