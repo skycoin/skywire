@@ -394,18 +394,24 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 		wg := new(sync.WaitGroup)
 		wg.Add(len(hv.visors))
 
+		log.Infof("ADDING TO WG %d", len(hv.visors))
+
 		i := 0
 		if hv.visor != nil {
 			i++
 		}
 
+		log.Infof("CREATING %d SUMMARIES", len(hv.visors)+i)
 		summaries := make([]summaryResp, len(hv.visors)+i)
 
 		if hv.visor != nil {
+			log.Infoln("GETTING SUMMARY FOR LOCAL VISOR")
 			summary, err := hv.visor.Summary()
 			if err != nil {
 				log.WithError(err).Warn("Failed to obtain summary of this visor.")
 				summary = &Summary{PubKey: hv.visor.conf.PK}
+			} else {
+				log.Infoln("GOT LOCAL VISOR SUMMARY")
 			}
 
 			addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
@@ -442,7 +448,9 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 			i++
 		}
 
+		log.Infoln("WAITING FOR ROUTINES")
 		wg.Wait()
+		log.Infoln("ROUTINES DONE")
 		hv.mu.RUnlock()
 
 		httputil.WriteJSON(w, r, http.StatusOK, summaries)
