@@ -78,6 +78,11 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		return nil, fmt.Errorf("error getting RF IP: %w", err)
 	}
 
+	utIP, err := uptimeTrackerIPFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("error getting UT IP: %w", err)
+	}
+
 	stcpEntities, err := stcpEntitiesFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
@@ -97,6 +102,10 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 	if arIP != nil {
 		directIPs = append(directIPs, arIP)
+	}
+
+	if utIP != nil {
+		directIPs = append(directIPs, utIP)
 	}
 
 	const (
@@ -550,6 +559,10 @@ func addressResolverIPFromEnv() (net.IP, error) {
 
 func rfIPFromEnv() (net.IP, error) {
 	return ipFromEnv(RFAddrEnvKey)
+}
+
+func uptimeTrackerIPFromEnv() (net.IP, error) {
+	return ipFromEnv(UptimeTrackerAddrEnvKey)
 }
 
 func tpRemoteIPsFromEnv() ([]net.IP, error) {
