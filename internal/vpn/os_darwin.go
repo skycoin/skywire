@@ -54,12 +54,3 @@ func modifyRoutingTable(action, ipCIDR, gateway string) error {
 
 	return run("route", action, "-net", ip, gateway, netmask)
 }
-
-func modifyRoutingTableHost(action, ipCIDR, gateway string) error {
-	ip, netmask, err := parseCIDR(ipCIDR)
-	if err != nil {
-		return fmt.Errorf("error parsing IP CIDR: %w", err)
-	}
-
-	return run("route", action, "-host", ip, gateway, netmask)
-}
