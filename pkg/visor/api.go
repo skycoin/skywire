@@ -168,32 +168,41 @@ func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[stri
 		name   string
 		status int
 	}
-	var wg sync.WaitGroup
-	ctx := context.Background()
+
+	ctx, cancel := context.WithTimeout(context.Background(), InnerHealthTimeout)
+	defer cancel()
+
 	responses := make(chan healthResponse, len(services))
+
+	var wg sync.WaitGroup
 	wg.Add(len(services))
 	for name, service := range services {
 		go func(name string, service HealthCheckable) {
+			defer wg.Done()
+
 			if service == nil {
 				responses <- healthResponse{name, http.StatusNotFound}
-				wg.Done()
 				return
 			}
+
 			status, err := service.Health(ctx)
 			if err != nil {
 				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
 				status = http.StatusInternalServerError
 			}
+
 			responses <- healthResponse{name, status}
-			wg.Done()
 		}(name, service)
 	}
 	wg.Wait()
+
 	close(responses)
+
 	results := make(map[string]int)
 	for response := range responses {
 		results[response.name] = response.status
 	}
+
 	return results
 }
 
