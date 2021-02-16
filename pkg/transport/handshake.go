@@ -15,7 +15,7 @@ import (
 )
 
 func makeEntryFromTpConn(conn *snet.Conn) Entry {
-	return MakeEntry(conn.LocalPK(), conn.RemotePK(), conn.Network(), true)
+	return MakeEntry(conn.LocalPK(), conn.RemotePK(), conn.Network(), true, LabelUser)
 }
 
 func compareEntries(expected, received *Entry) error {
