@@ -42,12 +42,13 @@ type Entry struct {
 }
 
 // MakeEntry creates a new transport entry
-func MakeEntry(pk1, pk2 cipher.PubKey, tpType string, public bool) Entry {
+func MakeEntry(pk1, pk2 cipher.PubKey, tpType string, public bool, label Label) Entry {
 	return Entry{
 		ID:     MakeTransportID(pk1, pk2, tpType),
 		Edges:  SortEdges(pk1, pk2),
 		Type:   tpType,
 		Public: public,
+		Label:  label,
 	}
 }
 
