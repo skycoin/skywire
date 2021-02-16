@@ -14,17 +14,8 @@ import (
 	"github.com/skycoin/skywire/pkg/snet"
 )
 
-func makeEntry(pk1, pk2 cipher.PubKey, tpType string) Entry {
-	return Entry{
-		ID:     MakeTransportID(pk1, pk2, tpType),
-		Edges:  SortEdges(pk1, pk2),
-		Type:   tpType,
-		Public: true,
-	}
-}
-
 func makeEntryFromTpConn(conn *snet.Conn) Entry {
-	return makeEntry(conn.LocalPK(), conn.RemotePK(), conn.Network())
+	return MakeEntry(conn.LocalPK(), conn.RemotePK(), conn.Network(), true)
 }
 
 func compareEntries(expected, received *Entry) error {
