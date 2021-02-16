@@ -14,8 +14,8 @@ func TestNewEntry(t *testing.T) {
 	pkA, _ := cipher.GenerateKeyPair()
 	pkB, _ := cipher.GenerateKeyPair()
 
-	entryAB := transport.MakeEntry(pkA, pkB, "", true)
-	entryBA := transport.MakeEntry(pkA, pkB, "", true)
+	entryAB := transport.MakeEntry(pkA, pkB, "", true, transport.LabelUser)
+	entryBA := transport.MakeEntry(pkA, pkB, "", true, transport.LabelUser)
 
 	assert.True(t, entryAB.Edges == entryBA.Edges)
 	assert.True(t, entryAB.ID == entryBA.ID)
@@ -42,7 +42,7 @@ func ExampleSignedEntry_Sign() {
 	pkA, skA := cipher.GenerateKeyPair()
 	pkB, skB := cipher.GenerateKeyPair()
 
-	entry := transport.MakeEntry(pkA, pkB, "mock", true)
+	entry := transport.MakeEntry(pkA, pkB, "mock", true, transport.LabelUser)
 	sEntry := &transport.SignedEntry{Entry: &entry}
 
 	if sEntry.Signatures[0].Null() && sEntry.Signatures[1].Null() {
@@ -77,7 +77,7 @@ func ExampleSignedEntry_Signature() {
 	pkA, skA := cipher.GenerateKeyPair()
 	pkB, skB := cipher.GenerateKeyPair()
 
-	entry := transport.MakeEntry(pkA, pkB, "mock", true)
+	entry := transport.MakeEntry(pkA, pkB, "mock", true, transport.LabelUser)
 	sEntry := &transport.SignedEntry{Entry: &entry}
 
 	if err := sEntry.Sign(pkA, skA); err != nil {
