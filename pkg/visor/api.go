@@ -489,7 +489,7 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, t
 
 	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, tpType)
+	tp, err := v.tpM.SaveTransport(ctx, remote, tpType, transport.LabelUser)
 	if err != nil {
 		return nil, err
 	}
