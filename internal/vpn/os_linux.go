@@ -40,12 +40,12 @@ func SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 // ChangeRoute changes current route to `ip` to go through the `gateway`
 // in the OS routing table.
 func ChangeRoute(ip, gateway string) error {
-	return run("ip", "r", "change", ip, "via", gateway)
+	return osutil.Run("ip", "r", "change", ip, "via", gateway)
 }
 
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func AddRoute(ip, gateway string) error {
-	err := run("ip", "r", "add", ip, "via", gateway)
+	err := osutil.Run("ip", "r", "add", ip, "via", gateway)
 
 	var e *osutil.ErrorWithStderr
 	if errors.As(err, &e) {
