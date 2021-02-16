@@ -496,7 +496,7 @@ func initTrustedVisors(v *Visor) bool {
 		for _, pk := range v.tpM.Conf.DefaultVisors {
 			v.log.WithField("pk", pk).Infof("Adding trusted visor")
 
-			if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType); err != nil {
+			if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType, transport.LabelAutomatic); err != nil {
 				v.log.
 					WithError(err).
 					WithField("pk", pk).
