@@ -5,9 +5,12 @@ package vpn
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os/exec"
 	"regexp"
+
+	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
 const (
@@ -18,10 +21,14 @@ var redundantWhitespacesCleanupRegex = regexp.MustCompile(`[\s\p{Zs}]{2,}`)
 
 // DefaultNetworkGateway fetches system's default network gateway.
 func DefaultNetworkGateway() (net.IP, error) {
-	cmd := exec.Command("cmd", "/C", defaultNetworkGatewayCMD)
-	outBytes, err := cmd.Output() //nolint:gosec
+	out, err := osutil.RunWithResult("cmd", "/C", defaultNetworkGatewayCMD)
 	if err != nil {
 		return nil, fmt.Errorf("error running command %s: %w", defaultNetworkGatewayCMD, err)
+	}
+
+	outBytes, err := ioutil.ReadAll(out)
+	if err != nil {
+		cmd := exec.Command("cmd", "/C", defaultNetworkGatewayCMD)
 	}
 
 	outBytes = bytes.TrimRight(outBytes, "\n\r")
