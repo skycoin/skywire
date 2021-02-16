@@ -73,7 +73,7 @@ func TestNewManager(t *testing.T) {
 	defer func() { require.NoError(t, m2.Close()) }()
 
 	// Create data transport between manager 1 & manager 2.
-	tp2, err := m2.SaveTransport(context.TODO(), pk0, "dmsg")
+	tp2, err := m2.SaveTransport(context.TODO(), pk0, "dmsg", transport.LabelUser)
 	require.NoError(t, err)
 	tp1 := m0.Transport(transport.MakeTransportID(pk0, pk1, "dmsg"))
 	require.NotNil(t, tp1)
