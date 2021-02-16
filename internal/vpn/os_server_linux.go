@@ -35,7 +35,7 @@ func GetIPTablesForwardPolicy() (string, error) {
 
 	outputBytes, err := ioutil.ReadAll(output)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read stdout: %w", err)
+		return "", fmt.Errorf("failed to read stdout: %w", err)
 	}
 
 	return strings.TrimRight(string(outputBytes), "\n"), nil
@@ -88,7 +88,7 @@ func DefaultNetworkInterface() (string, error) {
 
 	outputBytes, err := ioutil.ReadAll(output)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read stdout: %w", err)
+		return "", fmt.Errorf("failed to read stdout: %w", err)
 	}
 
 	// just in case
@@ -163,9 +163,9 @@ func getIPForwardingValue(cmd string) (string, error) {
 		return "", fmt.Errorf("error running command %s: %w", cmd, err)
 	}
 
-	outBytes, err := ioutil.ReadAll()
+	outBytes, err := ioutil.ReadAll(out)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read stdout: %w", err)
+		return "", fmt.Errorf("failed to read stdout: %w", err)
 	}
 
 	val, err := parseIPForwardingOutput(outBytes)
