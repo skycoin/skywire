@@ -100,7 +100,7 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		n:           conf.Net,
 		dc:          conf.DC,
 		ls:          conf.LS,
-		Entry:       makeEntry(conf.Net.LocalPK(), conf.RemotePK, conf.NetName),
+		Entry:       MakeEntry(conf.Net.LocalPK(), conf.RemotePK, conf.NetName, true),
 		LogEntry:    new(LogEntry),
 		connCh:      make(chan struct{}, 1),
 		done:        make(chan struct{}),

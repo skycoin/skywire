@@ -41,11 +41,11 @@ type Entry struct {
 	Label Label `json:"label"`
 }
 
-// NewEntry constructs *Entry
-func NewEntry(localPK, remotePK cipher.PubKey, tpType string, public bool) *Entry {
-	return &Entry{
-		ID:     MakeTransportID(localPK, remotePK, tpType),
-		Edges:  SortEdges(localPK, remotePK),
+// MakeEntry creates a new transport entry
+func MakeEntry(pk1, pk2 cipher.PubKey, tpType string, public bool) Entry {
+	return Entry{
+		ID:     MakeTransportID(pk1, pk2, tpType),
+		Edges:  SortEdges(pk1, pk2),
 		Type:   tpType,
 		Public: public,
 	}
