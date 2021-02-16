@@ -45,12 +45,13 @@ const (
 
 // ManagedTransportConfig is a configuration for managed transport.
 type ManagedTransportConfig struct {
-	Net         *snet.Network
-	DC          DiscoveryClient
-	LS          LogStore
-	RemotePK    cipher.PubKey
-	NetName     string
-	AfterClosed TPCloseCallback
+	Net            *snet.Network
+	DC             DiscoveryClient
+	LS             LogStore
+	RemotePK       cipher.PubKey
+	NetName        string
+	AfterClosed    TPCloseCallback
+	TransportLabel Label
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -100,7 +101,7 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		n:           conf.Net,
 		dc:          conf.DC,
 		ls:          conf.LS,
-		Entry:       MakeEntry(conf.Net.LocalPK(), conf.RemotePK, conf.NetName, true, LabelUser),
+		Entry:       MakeEntry(conf.Net.LocalPK(), conf.RemotePK, conf.NetName, true, conf.TransportLabel),
 		LogEntry:    new(LogEntry),
 		connCh:      make(chan struct{}, 1),
 		done:        make(chan struct{}),
