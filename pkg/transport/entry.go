@@ -14,6 +14,14 @@ var (
 	ErrEdgeIndexNotFound = errors.New("edge index not found")
 )
 
+type Label string
+
+const (
+	LabelUser      Label = "user"
+	LabelAutomatic       = "automatic"
+	LabelSkywire         = "skywire"
+)
+
 // Entry is the unsigned representation of a Transport.
 type Entry struct {
 
@@ -29,6 +37,8 @@ type Entry struct {
 	// Public determines whether the transport is to be exposed to other nodes or not.
 	// Public transports are to be registered in the Transport Discovery.
 	Public bool `json:"public"` // TODO(evanlinjin): remove this.
+
+	Label Label `json:"label"`
 }
 
 // NewEntry constructs *Entry
