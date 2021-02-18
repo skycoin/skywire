@@ -4,9 +4,7 @@ package vpn
 
 import (
 	"bytes"
-	"fmt"
 	"net"
-	"syscall"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
@@ -39,16 +37,10 @@ func DefaultNetworkGateway() (net.IP, error) {
 	return nil, errCouldFindDefaultNetworkGateway
 }
 
-func setupClientSysPrivileges() (suid int, err error) {
-	suid = syscall.Getuid()
-
-	if err := syscall.Setuid(0); err != nil {
-		return 0, fmt.Errorf("failed to setuid 0: %w", err)
-	}
-
-	return suid, nil
+func setupClientSysPrivileges() (int, error) {
+	return osutil.GainRoot()
 }
 
-func releaseClientSysPrivileges(suid int) error {
-	return syscall.Setuid(suid)
+func releaseClientSysPrivileges(oldUID int) error {
+	return osutil.ReleaseRoot(oldUID)
 }
