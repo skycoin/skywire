@@ -5,7 +5,6 @@ package vpn
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"sync"
 
@@ -21,14 +20,9 @@ const (
 
 // DefaultNetworkGateway fetches system's default network gateway.
 func DefaultNetworkGateway() (net.IP, error) {
-	out, err := osutil.RunWithResult("sh", "-c", defaultNetworkGatewayCMD)
+	outBytes, err := osutil.RunWithResult("sh", "-c", defaultNetworkGatewayCMD)
 	if err != nil {
-		return nil, fmt.Errorf("error running command %s: %w", defaultNetworkGatewayCMD, err)
-	}
-
-	outBytes, err := ioutil.ReadAll(out)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read stdout: %w", err)
+		return nil, err
 	}
 
 	outBytes = bytes.TrimRight(outBytes, "\n")

@@ -5,7 +5,6 @@ package vpn
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"strings"
 
@@ -28,14 +27,9 @@ const (
 
 // GetIPTablesForwardPolicy gets current policy for iptables `forward` chain.
 func GetIPTablesForwardPolicy() (string, error) {
-	output, err := osutil.RunWithResult("sh", "-c", getIPTablesForwardPolicyCMD)
+	outputBytes, err := osutil.RunWithResult("sh", "-c", getIPTablesForwardPolicyCMD)
 	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", getIPTablesForwardPolicyCMD, err)
-	}
-
-	outputBytes, err := ioutil.ReadAll(output)
-	if err != nil {
-		return "", fmt.Errorf("failed to read stdout: %w", err)
+		return "", err
 	}
 
 	return strings.TrimRight(string(outputBytes), "\n"), nil
@@ -44,11 +38,7 @@ func GetIPTablesForwardPolicy() (string, error) {
 // SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
 func SetIPTablesForwardPolicy(policy string) error {
 	cmd := fmt.Sprintf(setIPTablesForwardPolicyCMDFmt, policy)
-	if err := osutil.Run("sh", "-c", cmd); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // SetIPTablesForwardAcceptPolicy sets ACCEPT policy for iptables `forward` chain.
@@ -61,34 +51,21 @@ func SetIPTablesForwardAcceptPolicy() error {
 // to private IP ranges.
 func AllowIPToLocalNetwork(src, dst net.IP) error {
 	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, src)
-	if err := osutil.Run("sh", "-c", cmd); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // BlockIPToLocalNetwork blocks all the packets coming from `source`
 // to private IP ranges.
 func BlockIPToLocalNetwork(src, dst net.IP) error {
 	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, src)
-	if err := osutil.Run("sh", "-c", cmd); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // DefaultNetworkInterface fetches default network interface name.
 func DefaultNetworkInterface() (string, error) {
-	output, err := osutil.RunWithResult("sh", "-c", defaultNetworkInterfaceCMD)
+	outputBytes, err := osutil.RunWithResult("sh", "-c", defaultNetworkInterfaceCMD)
 	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", defaultNetworkInterfaceCMD, err)
-	}
-
-	outputBytes, err := ioutil.ReadAll(output)
-	if err != nil {
-		return "", fmt.Errorf("failed to read stdout: %w", err)
+		return "", err
 	}
 
 	// just in case
@@ -110,21 +87,13 @@ func GetIPv6ForwardingValue() (string, error) {
 // SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
 func SetIPv4ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
-	if err := osutil.Run("sh", "-c", cmd); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // SetIPv6ForwardingValue sets `val` value of IPv6 forwarding.
 func SetIPv6ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
-	if err := osutil.Run("sh", "-c", cmd); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // EnableIPv4Forwarding enables IPv4 forwarding.
@@ -140,32 +109,19 @@ func EnableIPv6Forwarding() error {
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
 func EnableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
-	if err := osutil.Run("sh", "-c", cmd); err != nil {
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
 func DisableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(disableIPMasqueradingCMDFmt, ifcName)
-	if err := osutil.Run("sh", "-c", cmd); err != nil {
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 func getIPForwardingValue(cmd string) (string, error) {
-	out, err := osutil.RunWithResult("sh", "-c", cmd)
+	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
 	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	outBytes, err := ioutil.ReadAll(out)
-	if err != nil {
-		return "", fmt.Errorf("failed to read stdout: %w", err)
+		return "", err
 	}
 
 	val, err := parseIPForwardingOutput(outBytes)
