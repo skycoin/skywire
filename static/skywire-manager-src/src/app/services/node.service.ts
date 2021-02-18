@@ -218,16 +218,11 @@ export class NodeService {
 
     // Get for how many ms the saved data is still valid.
     const momentOfLastCorrectUpdate = this.nodeListSubject.value ? this.nodeListSubject.value.momentOfLastCorrectUpdate : 0;
-    const remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
+    let remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
+    remainingTime = remainingTime > 0 ? remainingTime : 0;
 
-    if (remainingTime === 0) {
-      // Get the data from the backend.
-      this.nodeListSubject.next(null);
-      this.startDataSubscription(0, true);
-    } else {
-      // Use the data obtained the last time and schedule an update after the appropriate time.
-      this.startDataSubscription(remainingTime, true);
-    }
+    // Use the data obtained the last time and schedule an update after the appropriate time.
+    this.startDataSubscription(remainingTime, true);
   }
 
   /**
@@ -781,7 +776,13 @@ export class NodeService {
    * Checks if there are updates available for a node.
    */
   checkUpdate(nodeKey: string): Observable<any> {
-    return this.apiService.get(`visors/${nodeKey}/update/available`);
+    let channel = 'stable';
+
+    // Use the custom channel saved by the user, if any.
+    const savedChannel = localStorage.getItem(UpdaterStorageKeys.Channel);
+    channel = savedChannel ? savedChannel : channel;
+
+    return this.apiService.get(`visors/${nodeKey}/update/available/${channel}`);
   }
 
   /**
