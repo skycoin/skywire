@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -14,11 +15,26 @@ func Run(bin string, args ...string) error {
 	return run(bin, os.Stdout, args...)
 }
 
-// RunWithResult runs binary `bin` with `args` returning stdout contents.
-func RunWithResult(bin string, args ...string) (io.Reader, error) {
+// RunWithResultReader runs binary `bin` with `args` returning stdout contents as `io.Reader`.
+func RunWithResultReader(bin string, args ...string) (io.Reader, error) {
 	stdout := bytes.NewBuffer(nil)
 
 	return stdout, run(bin, stdout, args...)
+}
+
+// RunWithResult runs binary `bin` with `args` returning stdout contents as bytes.
+func RunWithResult(bin string, args ...string) ([]byte, error) {
+	stdout, err := RunWithResultReader(bin, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	stdoutBytes, err := ioutil.ReadAll(stdout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read stdout: %w", err)
+	}
+
+	return stdoutBytes, nil
 }
 
 func run(bin string, stdout io.Writer, args ...string) error {
