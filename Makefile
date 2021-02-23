@@ -51,9 +51,9 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: host-apps bin ## Build apps and binaries. `go build` with ${OPTS}
 
-build-static: dep host-apps-static bin-static ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
