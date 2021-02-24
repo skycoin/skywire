@@ -192,7 +192,7 @@ func Test_updateBoolArg(t *testing.T) {
 				Apps: []launcher.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "--killswitch=true"},
+						Args: []string{"-passcode", "1234", "-killswitch=true"},
 					},
 				},
 			},
@@ -217,7 +217,7 @@ func Test_updateBoolArg(t *testing.T) {
 				Apps: []launcher.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "--killswitch=false"},
+						Args: []string{"-passcode", "1234", "-killswitch=false"},
 					},
 				},
 			},
@@ -242,7 +242,7 @@ func Test_updateBoolArg(t *testing.T) {
 				Apps: []launcher.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "--killswitch=false"},
+						Args: []string{"-passcode", "1234", "-killswitch=false"},
 					},
 				},
 			},
@@ -267,7 +267,7 @@ func Test_updateBoolArg(t *testing.T) {
 				Apps: []launcher.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "--killswitch=true"},
+						Args: []string{"-passcode", "1234", "-killswitch=true"},
 					},
 				},
 			},
@@ -292,7 +292,7 @@ func Test_updateBoolArg(t *testing.T) {
 				Apps: []launcher.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
-						Args: []string{"-passcode", "1234", "--killswitch=true"},
+						Args: []string{"-passcode", "1234", "-killswitch=true"},
 					},
 				},
 			},
@@ -317,7 +317,7 @@ func Test_updateBoolArg(t *testing.T) {
 				Apps: []launcher.AppConfig{
 					{
 						Name: skyenv.VPNClientName,
-						Args: []string{"--killswitch=false"},
+						Args: []string{"-killswitch=false"},
 					},
 				},
 			},
