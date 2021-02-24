@@ -32,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	vt "github.com/skycoin/skywire/pkg/transport/setup/visor"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -49,6 +50,7 @@ func initStack() []initFunc {
 		initSNet,
 		initDmsgpty,
 		initTransport,
+		initTransportSetup,
 		initRouter,
 		initLauncher,
 		initCLI,
@@ -217,6 +219,23 @@ func initTransport(v *Visor) bool {
 
 	v.tpM = tpM
 
+	return report(nil)
+}
+
+func initTransportSetup(v *Visor) bool {
+	report := v.makeReporter("transport_setup")
+	ctx, cancel := context.WithCancel(context.Background())
+	ts, err := vt.NewTransportListener(ctx, v.conf)
+	if err != nil {
+		report(err)
+	}
+	go func() {
+		ts.Serve(ctx)
+	}()
+	v.pushCloseStack("transport_setup.rpc", func() bool {
+		cancel()
+		return true
+	})
 	return report(nil)
 }
 
