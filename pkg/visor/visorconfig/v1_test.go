@@ -368,6 +368,31 @@ func Test_updateBoolArg(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "List with a single arg and empty value",
+			args: args{
+				conf: &V1Launcher{
+					Apps: []launcher.AppConfig{
+						{
+							Name: skyenv.VPNClientName,
+							Args: []string{"-passcode", ""},
+						},
+					},
+				},
+				appName: skyenv.VPNClientName,
+				argName: "--killswitch",
+				value:   false,
+			},
+			wantResult: true,
+			wantConf: &V1Launcher{
+				Apps: []launcher.AppConfig{
+					{
+						Name: skyenv.VPNClientName,
+						Args: []string{"-passcode", "", "-killswitch=false"},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
