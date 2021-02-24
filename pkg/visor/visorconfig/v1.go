@@ -192,7 +192,7 @@ func updateStringArg(conf *V1Launcher, appName, argName, value string) bool {
 			break
 		}
 
-		if !argChanged {
+		if !argChanged && value != "" {
 			conf.Apps[i].Args = append(conf.Apps[i].Args, argName, value)
 		}
 
