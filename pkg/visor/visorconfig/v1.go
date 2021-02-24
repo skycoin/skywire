@@ -203,7 +203,7 @@ func updateStringArg(conf *V1Launcher, appName, argName, value string) bool {
 }
 
 // updateBoolArg updates the cli boolean flag of the specified app config and also within the launcher.
-// All flag names and values are formatted as "name=value" to allow arbitrary values with respect to different
+// All flag names and values are formatted as "-name=value" to allow arbitrary values with respect to different
 // possible default values.
 // The updated config gets flushed to file if there are any changes.
 func updateBoolArg(conf *V1Launcher, appName, argName string, value bool) bool {
@@ -216,10 +216,10 @@ func updateBoolArg(conf *V1Launcher, appName, argName string, value bool) bool {
 			continue
 		}
 
-		// we format it to have two dashes, just to unify representation
+		// we format it to have a single dash, just to unify representation
 		fmtedArgName := argName
-		if argName[1] != '-' {
-			fmtedArgName = "-" + argName
+		if argName[1] == '-' {
+			fmtedArgName = fmtedArgName[1:]
 		}
 
 		arg := fmt.Sprintf(argFmt, fmtedArgName, value)
@@ -228,9 +228,9 @@ func updateBoolArg(conf *V1Launcher, appName, argName string, value bool) bool {
 
 		argChanged := false
 		for j := 0; j < len(conf.Apps[i].Args); j++ {
-			equalArgName := conf.Apps[i].Args[j][1] == '-' && strings.HasPrefix(conf.Apps[i].Args[j], fmtedArgName)
-			if conf.Apps[i].Args[j][1] != '-' {
-				equalArgName = strings.HasPrefix("-"+conf.Apps[i].Args[j], fmtedArgName)
+			equalArgName := conf.Apps[i].Args[j][1] != '-' && strings.HasPrefix(conf.Apps[i].Args[j], fmtedArgName)
+			if conf.Apps[i].Args[j][1] == '-' {
+				equalArgName = strings.HasPrefix(conf.Apps[i].Args[j], "-"+fmtedArgName)
 			}
 
 			if !equalArgName {
