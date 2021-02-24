@@ -228,6 +228,12 @@ func updateBoolArg(conf *V1Launcher, appName, argName string, value bool) bool {
 
 		argChanged := false
 		for j := 0; j < len(conf.Apps[i].Args); j++ {
+			// there shouldn't be such values if config is modified automatically,
+			// but might happen if done manually, so we avoid further panic with this check
+			if len(conf.Apps[i].Args[j]) < 2 {
+				continue
+			}
+
 			equalArgName := conf.Apps[i].Args[j][1] != '-' && strings.HasPrefix(conf.Apps[i].Args[j], fmtedArgName)
 			if conf.Apps[i].Args[j][1] == '-' {
 				equalArgName = strings.HasPrefix(conf.Apps[i].Args[j], "-"+fmtedArgName)
