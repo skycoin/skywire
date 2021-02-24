@@ -3,11 +3,10 @@ package visorconfig
 import (
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
-
 	"github.com/stretchr/testify/assert"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 func Test_updateStringArg(t *testing.T) {
@@ -144,6 +143,29 @@ func Test_updateStringArg(t *testing.T) {
 					{
 						Name: "skysocks-client",
 						Args: []string{"-t", "-passcode", "1234", "-test", "abc"},
+					},
+				},
+			},
+		},
+		{
+			name: "Case 6",
+			args: args{
+				conf: &V1Launcher{
+					Apps: []launcher.AppConfig{
+						{
+							Name: "skysocks-client",
+						},
+					},
+				},
+				appName: "skysocks-client",
+				argName: "-passcode",
+				value:   "",
+			},
+			wantResult: true,
+			wantConf: &V1Launcher{
+				Apps: []launcher.AppConfig{
+					{
+						Name: "skysocks-client",
 					},
 				},
 			},
@@ -305,6 +327,30 @@ func Test_updateBoolArg(t *testing.T) {
 						{
 							Name: skyenv.VPNClientName,
 							Args: []string{"--killswitch", "true"},
+						},
+					},
+				},
+				appName: skyenv.VPNClientName,
+				argName: "--killswitch",
+				value:   false,
+			},
+			wantResult: true,
+			wantConf: &V1Launcher{
+				Apps: []launcher.AppConfig{
+					{
+						Name: skyenv.VPNClientName,
+						Args: []string{"-killswitch=false"},
+					},
+				},
+			},
+		},
+		{
+			name: "Empty args list",
+			args: args{
+				conf: &V1Launcher{
+					Apps: []launcher.AppConfig{
+						{
+							Name: skyenv.VPNClientName,
 						},
 					},
 				},
