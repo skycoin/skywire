@@ -101,6 +101,7 @@ func (rc *rpcClient) ExtraSummary() (*ExtraSummary, error) {
 
 // Summary calls Summary.
 func (rc *rpcClient) Summary() (*Summary, error) {
+	rc.log.Infoln("INSIDE SUMMARY CALL RPC CL")
 	out := new(Summary)
 	err := rc.Call("Summary", &struct{}{}, out)
 	return out, err
