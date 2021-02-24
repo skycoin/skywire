@@ -87,6 +87,7 @@ type Summary struct {
 
 // Summary implements API.
 func (v *Visor) Summary() (*Summary, error) {
+	v.log.Infoln("INSIDE SUMMARY CALL OF VISOR")
 	var summaries []*TransportSummary
 	if v == nil {
 		panic("v is nil")

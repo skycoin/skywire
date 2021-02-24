@@ -184,6 +184,8 @@ func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
 func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
 
+	r.log.Infoln("INSIDE SUMMARY CALL OF RPC SRC")
+
 	summary, err := r.visor.Summary()
 	if summary != nil {
 		*out = *summary
