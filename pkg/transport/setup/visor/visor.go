@@ -10,18 +10,19 @@ import (
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// TransportListener is a wrapper around dmsg client that provides an rpc service
-// over dmsg to perform skycoin transport setup
+// TransportListener provides an rpc service over dmsg to perform skycoin transport setup
 type TransportListener struct {
 	dmsgC *dmsg.Client
 	log   *logging.Logger
+	tm    *transport.Manager
 }
 
 // NewTransportSetup makes a TransportSetup from configuration
-func NewTransportListener(ctx context.Context, conf *visorconfig.V1) (*TransportListener, error) {
+func NewTransportListener(ctx context.Context, conf *visorconfig.V1, tm *transport.Manager) (*TransportListener, error) {
 	log := logging.MustGetLogger("transport_setup")
 	discovery := disc.NewHTTP(conf.Dmsg.Discovery)
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
@@ -31,14 +32,14 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1) (*Transport
 	select {
 	case <-dmsgC.Ready():
 		log.Info("Connected!")
-		return &TransportListener{dmsgC: dmsgC, log: log}, nil
+		return &TransportListener{dmsgC: dmsgC, log: log, tm: tm}, nil
 	case <-ctx.Done():
 		return nil, fmt.Errorf("failed to connect to dmsg network")
 	}
 }
 
 func (ts *TransportListener) Serve(ctx context.Context) {
-	const dmsgPort = skyenv.DmsgTransportSetupServicePort
+	const dmsgPort = skyenv.DmsgTransportSetupPort
 	const timeout = 30 * time.Second
 	ts.log.WithField("dmesg_port", dmsgPort).Info("starting listener")
 	lis, err := ts.dmsgC.Listen(dmsgPort)
@@ -58,7 +59,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		if err != nil {
 			ts.log.WithError(err).Error("failed to accept")
 		}
-		gw := &TestGateway{}
+		gw := &RPCGateway{ts.tm}
 		rpcS := rpc.NewServer()
 		if err := rpcS.Register(gw); err != nil {
 			ts.log.WithError(err).Error("failed to register rpc")

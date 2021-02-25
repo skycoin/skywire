@@ -225,7 +225,7 @@ func initTransport(v *Visor) bool {
 func initTransportSetup(v *Visor) bool {
 	report := v.makeReporter("transport_setup")
 	ctx, cancel := context.WithCancel(context.Background())
-	ts, err := vt.NewTransportListener(ctx, v.conf)
+	ts, err := vt.NewTransportListener(ctx, v.conf, v.tpM)
 	if err != nil {
 		report(err)
 	}
