@@ -38,7 +38,7 @@ func NewTransportSetup(ctx context.Context, conf Config, log *logging.Logger) (*
 }
 
 func (ts *TransportSetup) Serve(ctx context.Context) error {
-	const dmsgPort = skyenv.DmsgTransportSetupServicePort
+	const dmsgPort = skyenv.DmsgTransportSetupPort
 	const timeout = 30 * time.Second
 	ts.log.WithField("dmesg_port", dmsgPort).Info("starting listener")
 	lis, err := ts.dmsgC.Listen(dmsgPort)
