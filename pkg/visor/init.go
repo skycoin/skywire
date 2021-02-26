@@ -32,7 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
-	vt "github.com/skycoin/skywire/pkg/transport/setup/visor"
+	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -225,7 +225,7 @@ func initTransport(v *Visor) bool {
 func initTransportSetup(v *Visor) bool {
 	report := v.makeReporter("transport_setup")
 	ctx, cancel := context.WithCancel(context.Background())
-	ts, err := vt.NewTransportListener(ctx, v.conf, v.tpM)
+	ts, err := ts.NewTransportListener(ctx, v.conf, v.tpM)
 	if err != nil {
 		report(err)
 	}
