@@ -112,9 +112,12 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 
 // IsUp returns true if transport status is up.
 func (mt *ManagedTransport) IsUp() bool {
+	mt.log.Infoln("ACQUIRING IS UP MUX")
 	mt.isUpMux.Lock()
+	mt.log.Infoln("ACQUIRED IS UP MUX")
 	isUp := mt.isUp && mt.isUpErr == nil
 	mt.isUpMux.Unlock()
+	mt.log.Infoln("RELEASED IS UP MUX")
 	return isUp
 }
 
@@ -471,10 +474,10 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 	}()
 
 	mt.isUpMux.Lock()
+	defer mt.isUpMux.Unlock()
 
 	// If last update is the same as current, nothing needs to be done.
 	if mt.isUp == isUp {
-		mt.isUpMux.Unlock()
 		return nil
 	}
 
@@ -515,7 +518,6 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 
 	mt.isUp = isUp
 	mt.isUpErr = err
-	mt.isUpMux.Unlock()
 	return err
 }
 
