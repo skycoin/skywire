@@ -85,6 +85,7 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 	case call := <-rc.client.Go(rc.prefix+"."+method, args, reply, nil).Done:
 		return call.Error
 	case <-ctx.Done():
+		rc.log.Infoln("CLOSING HV RPC CONN")
 		if err := rc.conn.Close(); err != nil {
 			rc.log.WithError(err).Warn("Failed to close rpc client after timeout error.")
 		}
