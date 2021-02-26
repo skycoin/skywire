@@ -620,6 +620,7 @@ export class VpnServerListComponent implements OnDestroy {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [];
     let defaultColumn: number;
+    let tieBreakerColumn: number;
     if (this.currentList === Lists.Public) {
       sortableColumns.push(this.countrySortData);
       sortableColumns.push(this.nameSortData);
@@ -633,6 +634,7 @@ export class VpnServerListComponent implements OnDestroy {
       sortableColumns.push(this.noteSortData);
 
       defaultColumn = 0;
+      tieBreakerColumn = 1;
     } else {
       if (this.currentList === Lists.History) {
         sortableColumns.push(this.dateSortData);
@@ -645,8 +647,10 @@ export class VpnServerListComponent implements OnDestroy {
       sortableColumns.push(this.noteSortData);
 
       defaultColumn = this.currentList === Lists.History ? 0 : 1;
+      tieBreakerColumn = this.currentList === Lists.History ? 2 : 3;
     }
     this.dataSorter = new DataSorter(this.dialog, this.translateService, sortableColumns, defaultColumn, this.listId);
+    this.dataSorter.setTieBreakerColumnIndex(tieBreakerColumn);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allServers has already been sorted.
       this.recalculateElementsToShow();

@@ -48,15 +48,15 @@
         matInput
       >
     </mat-form-field>
-
-    <!-- Button. -->
-    <app-button
-      (action)="process()"
-      [disabled]="!form.valid"
-      color="primary"
-      class="float-right"
-    >
-      {{ 'vpn.server-list.add-server-dialog.use-server-button' | translate }}
-    </app-button>
   </form>
+
+  <!-- Button. -->
+  <app-button
+    (action)="process()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'vpn.server-list.add-server-dialog.use-server-button' | translate }}
+  </app-button>
 </app-dialog>

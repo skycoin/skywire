@@ -346,15 +346,11 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
    * @returns An array with the min(0), mid(1) and max(2) values.
    */
   private calculateGraphLimits(arrayToCheck: number[]) {
-    let min = Number.MAX_SAFE_INTEGER;
+    let min = 0;
     let max = 0;
     let mid = 0;
 
     arrayToCheck.forEach(val => {
-      if (val < min) {
-        min = val;
-      }
-
       if (val > max) {
         max = val;
       }
@@ -363,7 +359,6 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     // If the max and the min are the same, leave some spacing.
     if (min === max) {
       max += 1;
-      min = min >= 1 ? min - 1 : 0;
     }
 
     mid = (new BigNumber(max)).minus(min).dividedBy(2).plus(min).decimalPlaces(1).toNumber();

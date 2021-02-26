@@ -680,6 +680,8 @@
       "connect-without-password": "Conectarse sin contraseña",
       "connect-without-password-confirmation": "La conexión se realizará sin la contraseña. ¿Seguro que desea continuar?",
       "connect-using-password": "Conectarse usando una contraseña",
+      "edit-name": "Nombre personalizado",
+      "edit-label": "Nota personalizada",
       "make-favorite": "Hacer favorito",
       "make-favorite-confirmation": "¿Realmente desea marcar este servidor como favorito? Se eliminará de la lista de bloqueados.",
       "make-favorite-done": "Agregado a la lista de favoritos.",

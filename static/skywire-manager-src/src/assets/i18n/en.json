@@ -680,6 +680,8 @@
       "connect-without-password": "Connect without password",
       "connect-without-password-confirmation": "The connection will be made without the password. Are you sure you want to continue?",
       "connect-using-password": "Connect using a password",
+      "edit-name": "Custom name",
+      "edit-label": "Custom note",
       "make-favorite": "Make favorite",
       "make-favorite-confirmation": "Are you sure you want to mark this server as favorite? It will be removed from the blocked list.",
       "make-favorite-done": "Added to the favorites list.",
