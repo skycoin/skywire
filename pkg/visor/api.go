@@ -96,18 +96,36 @@ func (v *Visor) Summary() (*Summary, error) {
 		panic("tpM is nil")
 	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		summaries = append(summaries,
-			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
+		v.log.Infoln("INSIDE WALK TRANSPORTS")
+
+		tpRemote := tp.Remote()
+		v.log.Infoln("GOT TP REMOTE")
+
+		setupIsTrusted := v.router.SetupIsTrusted(tpRemote)
+		v.log.Infoln("GOT SETUP IS TRUSTED")
+
+		summary := newTransportSummary(v.tpM, tp, true, setupIsTrusted)
+		v.log.Infoln("GOT NEW TP SUMMARY")
+
+		summaries = append(summaries, summary)
 		return true
 	})
+
+	v.log.Infoln("AFTER WALK TRANSPORTS")
+
+	appStates := v.appL.AppStates()
+	v.log.Infoln("AFTER APP STATES")
+
+	routesCount := v.router.RoutesCount()
+	v.log.Infoln("AFTER ROUTES COUNT")
 
 	summary := &Summary{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
-		Apps:            v.appL.AppStates(),
+		Apps:            appStates,
 		Transports:      summaries,
-		RoutesCount:     v.router.RoutesCount(),
+		RoutesCount:     routesCount,
 	}
 
 	return summary, nil
