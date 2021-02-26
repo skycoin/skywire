@@ -112,12 +112,9 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 
 // IsUp returns true if transport status is up.
 func (mt *ManagedTransport) IsUp() bool {
-	mt.log.Infoln("ACQUIRING IS UP MUX")
 	mt.isUpMux.Lock()
-	mt.log.Infoln("ACQUIRED IS UP MUX")
 	isUp := mt.isUp && mt.isUpErr == nil
 	mt.isUpMux.Unlock()
-	mt.log.Infoln("RELEASED IS UP MUX")
 	return isUp
 }
 

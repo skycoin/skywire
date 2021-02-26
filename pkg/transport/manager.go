@@ -436,17 +436,13 @@ func (tm *Manager) Transport(id uuid.UUID) *ManagedTransport {
 
 // WalkTransports ranges through all transports.
 func (tm *Manager) WalkTransports(walk func(tp *ManagedTransport) bool) {
-	tm.Logger.Infoln("ACQUIRING LOCK")
 	tm.mx.RLock()
-	tm.Logger.Infoln("ACQUIRED LOCK")
-	for id, tp := range tm.tps {
-		tm.Logger.Infof("WALKING TP %s", id.String())
+	for _, tp := range tm.tps {
 		if ok := walk(tp); !ok {
 			break
 		}
 	}
 	tm.mx.RUnlock()
-	tm.Logger.Infoln("UNLOCKED")
 }
 
 // Local returns Manager.config.PubKey
