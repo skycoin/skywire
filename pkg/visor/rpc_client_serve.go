@@ -50,7 +50,6 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, n *snet.Network
 		connCtx, cancel := context.WithCancel(ctx)
 		go func() {
 			rpcS.ServeConn(conn)
-			log.Infoln("DONE SERVING HV RPC CONN")
 			cancel()
 		}()
 		<-connCtx.Done()
