@@ -342,17 +342,10 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	v.log.Infof("Setting %s killswitch to %q", appName, killswitch)
 
 	const (
-		killSwitchArg = "-killswitch"
+		killSwitchArg = "--killswitch"
 	)
 
-	var value string
-	if killswitch {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
 		return err
 	}
 
@@ -370,17 +363,10 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	v.log.Infof("Setting %s secure to %q", appName, isSecure)
 
 	const (
-		secureArgName = "-secure"
+		secureArgName = "--secure"
 	)
 
-	var value string
-	if isSecure {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
 		return err
 	}
 
