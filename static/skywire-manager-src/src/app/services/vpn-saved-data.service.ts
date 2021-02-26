@@ -267,6 +267,7 @@ export class VpnSavedDataService {
 
     const retrievedServer = this.serversMap.get(newServer.pk);
     if (retrievedServer) {
+      retrievedServer.countryCode = newServer.countryCode;
       retrievedServer.name = newServer.name;
       retrievedServer.location = newServer.location;
       retrievedServer.note = newServer.note;
