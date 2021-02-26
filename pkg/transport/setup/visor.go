@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -16,12 +17,13 @@ import (
 
 // TransportListener provides an rpc service over dmsg to perform skycoin transport setup
 type TransportListener struct {
-	dmsgC *dmsg.Client
-	log   *logging.Logger
-	tm    *transport.Manager
+	dmsgC   *dmsg.Client
+	log     *logging.Logger
+	tm      *transport.Manager
+	tsNodes []cipher.PubKey
 }
 
-// NewTransportSetup makes a TransportSetup from configuration
+// NewTransportListener makes a TransportListener from configuration
 func NewTransportListener(ctx context.Context, conf *visorconfig.V1, tm *transport.Manager) (*TransportListener, error) {
 	log := logging.MustGetLogger("transport_setup")
 	discovery := disc.NewHTTP(conf.Dmsg.Discovery)
@@ -32,12 +34,19 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1, tm *transpo
 	select {
 	case <-dmsgC.Ready():
 		log.Info("Connected!")
-		return &TransportListener{dmsgC: dmsgC, log: log, tm: tm}, nil
+		tl := &TransportListener{
+			dmsgC:   dmsgC,
+			log:     log,
+			tm:      tm,
+			tsNodes: conf.Transport.TransportSetup,
+		}
+		return tl, nil
 	case <-ctx.Done():
 		return nil, fmt.Errorf("failed to connect to dmsg network")
 	}
 }
 
+// Serve transport setup rpc to trusted nodes over dmsg
 func (ts *TransportListener) Serve(ctx context.Context) {
 	const dmsgPort = skyenv.DmsgTransportSetupPort
 	const timeout = 30 * time.Second
@@ -59,12 +68,26 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		if err != nil {
 			ts.log.WithError(err).Error("failed to accept")
 		}
+		remotePK := conn.RawRemoteAddr().PK
+		found := false
+		for _, trusted := range ts.tsNodes {
+			if trusted == remotePK {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ts.log.WithField("remote_conn", remotePK).WithField("trusted", ts.tsNodes).Info("Closing connection")
+			if err := conn.Close(); err != nil {
+				ts.log.WithError(err).Error("Failed to close stream")
+			}
+		}
 		gw := &RPCGateway{ts.tm}
 		rpcS := rpc.NewServer()
 		if err := rpcS.Register(gw); err != nil {
 			ts.log.WithError(err).Error("failed to register rpc")
 		}
-		ts.log.WithField("remote_conn", conn.RawRemoteAddr().PK).Info("Serving rpc")
+		ts.log.WithField("remote_conn", remotePK).Info("Serving rpc")
 		go rpcS.ServeConn(conn)
 	}
 }
