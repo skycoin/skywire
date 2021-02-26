@@ -259,9 +259,9 @@ export class VpnHelpers {
     }
 
     // Options for changing the custom name and personal note.
-    options.push({ icon: 'edit', label: 'vpn.server-options.edit-value.name-title' });
+    options.push({ icon: 'edit', label: 'vpn.server-options.edit-name' });
     optionCodes.push(101);
-    options.push({ icon: 'subject', label: 'vpn.server-options.edit-value.note-title' });
+    options.push({ icon: 'subject', label: 'vpn.server-options.edit-label' });
     optionCodes.push(102);
 
     // Option for adding the server to the favorites list.
