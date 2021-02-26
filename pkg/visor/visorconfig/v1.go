@@ -54,6 +54,7 @@ type V1Transport struct {
 	AddressResolver string          `json:"address_resolver"`
 	LogStore        *V1LogStore     `json:"log_store"`
 	TrustedVisors   []cipher.PubKey `json:"trusted_visors"`
+	TransportSetup  []cipher.PubKey `json:"transport_setup_nodes"`
 }
 
 // V1LogStore configures a LogStore.
