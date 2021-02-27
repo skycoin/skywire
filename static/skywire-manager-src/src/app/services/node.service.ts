@@ -547,8 +547,8 @@ export class NodeService {
           const labelInfo = this.storageService.getLabelInfo(node.publicKey);
           newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.publicKey);
           newNode.online = false;
-          newNode.dmsgServerPk = "";
-          newNode.roundTripPing = "";
+          newNode.dmsgServerPk = '';
+          newNode.roundTripPing = '';
 
           missingSavedNodes.push(newNode);
         }
