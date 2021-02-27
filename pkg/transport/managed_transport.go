@@ -471,10 +471,10 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 	}()
 
 	mt.isUpMux.Lock()
+	defer mt.isUpMux.Unlock()
 
 	// If last update is the same as current, nothing needs to be done.
 	if mt.isUp == isUp {
-		mt.isUpMux.Unlock()
 		return nil
 	}
 
@@ -515,7 +515,6 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 
 	mt.isUp = isUp
 	mt.isUpErr = err
-	mt.isUpMux.Unlock()
 	return err
 }
 
