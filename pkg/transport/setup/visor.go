@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/rpc"
-	"time"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -49,7 +49,6 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1, tm *transpo
 // Serve transport setup rpc to trusted nodes over dmsg
 func (ts *TransportListener) Serve(ctx context.Context) {
 	const dmsgPort = skyenv.DmsgTransportSetupPort
-	const timeout = 30 * time.Second
 	ts.log.WithField("dmesg_port", dmsgPort).Info("starting listener")
 	lis, err := ts.dmsgC.Listen(dmsgPort)
 	if err != nil {
