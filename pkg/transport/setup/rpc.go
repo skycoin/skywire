@@ -21,6 +21,11 @@ type TransportRequest struct {
 	Type     string
 }
 
+// UUIDRequest contains id in UUID format
+type UUIDRequest struct {
+	ID uuid.UUID
+}
+
 // TransportResponse specifies an existing transport to remote node
 type TransportResponse struct {
 	ID     uuid.UUID
@@ -54,15 +59,9 @@ func (gw *TransportGateway) AddTransport(req TransportRequest, res *TransportRes
 // ErrNotFound is returned when requested transport is not found
 var ErrNotFound = errors.New("transport not found")
 
-// RemoveTransports removes all transports that match given request
-func (gw *TransportGateway) RemoveTransports(req TransportRequest, res *BoolResponse) error {
-	trIDs := gw.tm.FindTransports(req.RemotePK, req.Type)
-	if len(trIDs) == 0 {
-		return ErrNotFound
-	}
-	for _, trID := range trIDs {
-		gw.tm.DeleteTransport(trID)
-	}
+// RemoveTransport removes all transports that match given request
+func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) error {
+	gw.tm.DeleteTransport(req.ID)
 	res.Result = true
 	return nil
 }
