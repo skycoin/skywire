@@ -81,7 +81,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 				ts.log.WithError(err).Error("Failed to close stream")
 			}
 		}
-		gw := &TransportGateway{ts.tm}
+		gw := &TransportGateway{tm: ts.tm, log: ts.log}
 		rpcS := rpc.NewServer()
 		if err := rpcS.Register(gw); err != nil {
 			ts.log.WithError(err).Error("failed to register rpc")
