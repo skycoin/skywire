@@ -76,7 +76,6 @@ func ReadJSON(conn net.Conn, data interface{}) error {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Printf("FAILED TO READ JSON: %v\n", err)
 			return fmt.Errorf("error reading data: %w", err)
 		}
 
