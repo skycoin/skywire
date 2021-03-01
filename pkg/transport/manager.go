@@ -402,6 +402,19 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	}
 }
 
+// FindTransports returns ids of all transports to dest that have given type
+func (tm *Manager) FindTransports(dest cipher.PubKey, tpType string) []uuid.UUID {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	var ids []uuid.UUID
+	for id, item := range tm.tps {
+		if item.Remote() == dest && item.Type() == tpType {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 func (tm *Manager) deleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
