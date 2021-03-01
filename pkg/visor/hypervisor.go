@@ -62,7 +62,6 @@ type Hypervisor struct {
 	c            hypervisorconfig.Config
 	visor        *Visor
 	dmsgC        *dmsg.Client
-	assets       http.FileSystem        // web UI
 	visors       map[cipher.PubKey]Conn // connected remote visors
 	trackers     *dmsgtracker.Manager   // dmsg trackers
 	users        *usermanager.UserManager
@@ -73,7 +72,7 @@ type Hypervisor struct {
 }
 
 // New creates a new Hypervisor.
-func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
+func New(config hypervisorconfig.Config, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
 	config.Cookies.TLS = config.EnableTLS
 
 	boltUserDB, err := usermanager.NewBoltUserStore(config.DBPath)
@@ -93,7 +92,6 @@ func New(config hypervisorconfig.Config, assets http.FileSystem, visor *Visor, d
 		c:            config,
 		visor:        visor,
 		dmsgC:        dmsgC,
-		assets:       assets,
 		visors:       make(map[cipher.PubKey]Conn),
 		trackers:     dmsgtracker.NewDmsgTrackerManager(nil, dmsgC, 0, 0),
 		users:        usermanager.NewUserManager(singleUserDB, config.Cookies),
@@ -271,7 +269,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			})
 		}
 
-		r.Handle("/*", http.FileServer(hv.assets))
+		r.Handle("/*", http.FileServer(http.FS(hv.c.UIAssets)))
 	})
 
 	return r
