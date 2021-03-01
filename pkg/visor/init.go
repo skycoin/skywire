@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/cmd/skywire-visor/static"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -529,7 +527,7 @@ func initHypervisor(v *Visor) bool {
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, http.FS(static.UIAssets()), v, v.net.Dmsg())
+	hv, err := New(conf, v, v.net.Dmsg())
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
