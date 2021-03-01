@@ -41,3 +41,5 @@ dist
 
 # release
 *.deb
+cmd/skywire-visor/static
+!cmd/skywire-visor/static/static.go
