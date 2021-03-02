@@ -15,7 +15,7 @@
 
 ## Build
 
-Skywire requires a Golang version of `1.13` or higher.
+Skywire requires a Golang version of `1.16` or higher.
 
 ```bash
 # Clone.
