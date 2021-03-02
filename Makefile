@@ -20,6 +20,7 @@ DMSG_BASE := github.com/skycoin/dmsg
 OPTS?=GO111MODULE=on
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
+MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
 DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
@@ -51,9 +52,14 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-build: host-apps bin ## Build apps and binaries. `go build` with ${OPTS}
+move-built-frontend:
+	rm -rf ${MANAGER_UI_BUILT_DIR}
+	mkdir ${MANAGER_UI_BUILT_DIR}
+	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
-build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
+build: dep move-built-frontend host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+
+build-static: move-build-frontend host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
