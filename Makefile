@@ -56,6 +56,7 @@ move-built-frontend:
 	rm -rf ${MANAGER_UI_BUILT_DIR}
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+	rm -rf ${MANAGER_UI_DIR}/dist/
 
 build: dep move-built-frontend host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
@@ -221,7 +222,7 @@ lint-ui:  ## Lint the UI code
 build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
-	cp -r ${MANAGER_UI_DIR}/dist/. ./cmd/skywire-visor/static/
+	make move-built-frontent
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
