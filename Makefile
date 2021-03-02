@@ -222,8 +222,7 @@ lint-ui:  ## Lint the UI code
 build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
-	cd ../../
-	make move-built-frontent
+	make move-built-frontend
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
