@@ -227,7 +227,8 @@ func initTransportSetup(v *Visor) bool {
 	ctx, cancel := context.WithCancel(context.Background())
 	ts, err := ts.NewTransportListener(ctx, v.conf, v.tpM)
 	if err != nil {
-		report(err)
+		cancel()
+		return report(err)
 	}
 	go func() {
 		ts.Serve(ctx)
