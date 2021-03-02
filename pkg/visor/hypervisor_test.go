@@ -72,7 +72,7 @@ func makeStartNode(t *testing.T, config hypervisorconfig.Config) (string, *http.
 		EnableAuth:        true,
 	}
 
-	visor, err := New(config, nil, nil, nil)
+	visor, err := New(config, nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, visor.AddMockData(defaultMockConfig))
 
