@@ -638,14 +638,16 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 		Passcode:              c.cfg.Passcode,
 	}
 
+	const handshakeTimeout = 5 * time.Second
+
 	fmt.Printf("Sending client hello: %v\n", cHello)
 
-	if err := WriteJSON(conn, &cHello); err != nil {
+	if err := WriteJSONWithTimeout(conn, &cHello, handshakeTimeout); err != nil {
 		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
 	}
 
 	var sHello ServerHello
-	if err := ReadJSON(conn, &sHello); err != nil {
+	if err := ReadJSONWithTimeout(conn, &sHello, handshakeTimeout); err != nil {
 		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
 	}
 
