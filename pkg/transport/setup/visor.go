@@ -7,7 +7,6 @@ import (
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -24,11 +23,8 @@ type TransportListener struct {
 }
 
 // NewTransportListener makes a TransportListener from configuration
-func NewTransportListener(ctx context.Context, conf *visorconfig.V1, tm *transport.Manager) (*TransportListener, error) {
+func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg.Client, tm *transport.Manager) (*TransportListener, error) {
 	log := logging.MustGetLogger("transport_setup")
-	discovery := disc.NewHTTP(conf.Dmsg.Discovery)
-	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
-	dmsgC := dmsg.NewClient(conf.PK, conf.SK, discovery, dmsgConf)
 	go dmsgC.Serve(ctx)
 	log.WithField("local_pk", conf.PK).Info("Connecting to the dmsg network.")
 	select {
@@ -48,9 +44,8 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1, tm *transpo
 
 // Serve transport setup rpc to trusted nodes over dmsg
 func (ts *TransportListener) Serve(ctx context.Context) {
-	const dmsgPort = skyenv.DmsgTransportSetupPort
-	ts.log.WithField("dmesg_port", dmsgPort).Info("starting listener")
-	lis, err := ts.dmsgC.Listen(dmsgPort)
+	ts.log.WithField("dmesg_port", skyenv.DmsgTransportSetupPort).Info("starting listener")
+	lis, err := ts.dmsgC.Listen(skyenv.DmsgTransportSetupPort)
 	if err != nil {
 		ts.log.WithError(err).Error("failed to listen")
 	}
@@ -61,7 +56,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		}
 	}()
 
-	ts.log.WithField("dmsg_port", dmsgPort).Info("Accepting dmsg streams.")
+	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Info("Accepting dmsg streams.")
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
