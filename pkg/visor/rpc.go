@@ -27,7 +27,7 @@ const (
 	// InnerHealthTimeout defines timeout for /health endpoint calls done from visor.
 	// We keep it is less than the `HealthTimeout`, so that the outer call would
 	// definitely complete.
-	InnerHealthTimeout = 4 * time.Second
+	InnerHealthTimeout = 3 * time.Second
 )
 
 var (
