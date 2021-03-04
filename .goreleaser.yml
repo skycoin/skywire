@@ -9,6 +9,8 @@ release:
     owner: skycoin
     name: skywire
 
+  draft: true
+
 before:
   hooks:
     - go mod tidy
