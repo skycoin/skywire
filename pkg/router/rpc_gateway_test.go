@@ -108,37 +108,3 @@ func TestRPCGateway_AddIntermediaryRules(t *testing.T) {
 		require.False(t, ok)
 	})
 }
-
-func TestRPCGateway_ReserveIDs(t *testing.T) {
-	n := 5
-	ids := []routing.RouteID{1, 2, 3, 4, 5}
-
-	t.Run("ok", func(t *testing.T) {
-		r := &MockRouter{}
-		r.On("ReserveKeys", n).Return(ids, testhelpers.NoErr)
-
-		gateway := NewRPCGateway(r)
-
-		var gotIds []routing.RouteID
-		err := gateway.ReserveIDs(uint8(n), &gotIds)
-		require.NoError(t, err)
-		require.Equal(t, ids, gotIds)
-	})
-
-	t.Run("fail reserving keys", func(t *testing.T) {
-		r := &MockRouter{}
-		r.On("ReserveKeys", n).Return(nil, testhelpers.Err)
-
-		gateway := NewRPCGateway(r)
-
-		wantErr := routing.Failure{
-			Code: routing.FailureReserveRtIDs,
-			Msg:  testhelpers.Err.Error(),
-		}
-
-		var gotIds []routing.RouteID
-		err := gateway.ReserveIDs(uint8(n), &gotIds)
-		require.Equal(t, wantErr, err)
-		require.Nil(t, gotIds)
-	})
-}

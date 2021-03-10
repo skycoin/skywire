@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -28,15 +27,6 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/snettest"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
-)
-
-var (
-	// ErrAlreadyServing is returned when an operation fails due to an operation
-	// that is currently running.
-	ErrAlreadyServing = errors.New("already serving")
-
-	// ErrTimeout represents a timed-out call.
-	ErrTimeout = errors.New("rpc client timeout")
 )
 
 // API provides methods to call an RPC Server.
@@ -445,6 +435,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 	rt := routing.NewTable()
 	ruleKeepAlive := router.DefaultRouteKeepAlive
 
+	nextRID := routing.RouteID(1)
 	for i := 0; i < r.Intn(maxRules+1); i++ {
 		remotePK, _ := cipher.GenerateKeyPair()
 		var lpRaw, rpRaw [2]byte
@@ -460,30 +451,26 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 		lp := routing.Port(binary.BigEndian.Uint16(lpRaw[:]))
 		rp := routing.Port(binary.BigEndian.Uint16(rpRaw[:]))
 
-		fwdRID, err := rt.ReserveKeys(1)
-		if err != nil {
-			panic(err)
-		}
+		fwdRID := nextRID
+		nextRID++
 
 		keys := snettest.GenKeyPairs(2)
 
-		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
+		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID, routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
 		if err := rt.SaveRule(fwdRule); err != nil {
 			panic(err)
 		}
 
-		appRID, err := rt.ReserveKeys(1)
-		if err != nil {
-			panic(err)
-		}
+		appRID := nextRID
+		nextRID++
 
-		consumeRule := routing.ConsumeRule(ruleKeepAlive, appRID[0], localPK, remotePK, lp, rp)
+		consumeRule := routing.ConsumeRule(ruleKeepAlive, appRID, localPK, remotePK, lp, rp)
 		if err := rt.SaveRule(consumeRule); err != nil {
 			panic(err)
 		}
 
 		log.Infof("rt[%2da]: %v %v", i, fwdRID, fwdRule.Summary().ForwardFields)
-		log.Infof("rt[%2db]: %v %v", i, appRID[0], consumeRule.Summary().ConsumeFields)
+		log.Infof("rt[%2db]: %v %v", i, appRID, consumeRule.Summary().ConsumeFields)
 	}
 
 	log.Printf("rtCount: %d", rt.Count())

@@ -119,7 +119,6 @@ type Router interface {
 	// - Return the RoutingGroup.
 	AcceptRoutes(context.Context) (net.Conn, error)
 	SaveRoutingRules(rules ...routing.Rule) error
-	ReserveKeys(n int) ([]routing.RouteID, error)
 	IntroduceRules(rules routing.EdgeRules) error
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
@@ -866,15 +865,6 @@ func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
 	}
 
 	return nil
-}
-
-func (r *router) ReserveKeys(n int) ([]routing.RouteID, error) {
-	ids, err := r.rt.ReserveKeys(n)
-	if err != nil {
-		r.logger.WithError(err).Error("Error reserving IDs")
-	}
-
-	return ids, err
 }
 
 func (r *router) popNoiseRouteGroup(desc routing.RouteDescriptor) (*NoiseRouteGroup, bool) {

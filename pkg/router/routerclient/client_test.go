@@ -72,21 +72,6 @@ func TestClient_AddIntermediaryRules(t *testing.T) {
 	require.True(t, ok)
 }
 
-func TestClient_ReserveIDs(t *testing.T) {
-	n := uint8(5)
-	ids := []routing.RouteID{1, 2, 3, 4, 5}
-
-	r := &router.MockRouter{}
-	r.On("ReserveKeys", int(n)).Return(ids, testhelpers.NoErr)
-
-	_, cl, cleanup := prepRPCServerAndClient(t, r)
-	defer cleanup()
-
-	gotIDs, err := cl.ReserveIDs(context.Background(), n)
-	require.NoError(t, err)
-	require.Equal(t, ids, gotIDs)
-}
-
 // nolint:unparam
 func prepRPCServerAndClient(t *testing.T, r router.Router) (s *rpc.Server, cl *Client, cleanup func()) {
 	l, err := nettest.NewLocalListener("tcp")

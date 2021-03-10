@@ -31,30 +31,28 @@ func TestMain(m *testing.M) {
 func RoutingTableSuite(t *testing.T, tbl Table) {
 	t.Helper()
 
-	id, err := tbl.ReserveKeys(1)
-	require.NoError(t, err)
+	id := RouteID(1)
 
-	rule := IntermediaryForwardRule(15*time.Minute, id[0], 2, uuid.New())
-	err = tbl.SaveRule(rule)
+	rule := IntermediaryForwardRule(15*time.Minute, id, 2, uuid.New())
+	err := tbl.SaveRule(rule)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, tbl.Count())
 
-	r, err := tbl.Rule(id[0])
+	r, err := tbl.Rule(id)
 	require.NoError(t, err)
 	assert.Equal(t, rule, r)
 
-	id2, err := tbl.ReserveKeys(1)
-	require.NoError(t, err)
+	id2 := RouteID(2)
 
-	rule2 := IntermediaryForwardRule(15*time.Minute, id2[0], 3, uuid.New())
+	rule2 := IntermediaryForwardRule(15*time.Minute, id2, 3, uuid.New())
 	err = tbl.SaveRule(rule2)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, tbl.Count())
 	require.NoError(t, tbl.SaveRule(rule))
 
-	r, err = tbl.Rule(id[0])
+	r, err = tbl.Rule(id)
 	require.NoError(t, err)
 	assert.Equal(t, rule, r)
 
@@ -63,9 +61,9 @@ func RoutingTableSuite(t *testing.T, tbl Table) {
 		ids = append(ids, rule.KeyRouteID())
 	}
 
-	require.ElementsMatch(t, []RouteID{id[0], id2[0]}, ids)
+	require.ElementsMatch(t, []RouteID{id, id2}, ids)
 
-	tbl.DelRules([]RouteID{id[0], id2[0]})
+	tbl.DelRules([]RouteID{id, id2})
 	assert.Equal(t, 0, tbl.Count())
 }
 

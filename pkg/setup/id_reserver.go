@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/skycoin/dmsg/cipher"
 
@@ -27,9 +29,9 @@ type IDReserver interface {
 	io.Closer
 	fmt.Stringer
 
-	// ReserveIDs reserves route IDs from the router clients.
+	// ReserveIDs gets random route IDs.
 	// It uses an internal map to know how many ids to reserve from each router.
-	ReserveIDs(ctx context.Context) error
+	ReserveIDs()
 
 	// PopID pops a reserved route ID from the ID stack of the given public key.
 	PopID(pk cipher.PubKey) (routing.RouteID, bool)
@@ -46,6 +48,7 @@ type idReserver struct {
 	rcM   routerclient.Map                    // map of router clients
 	rec   map[cipher.PubKey]uint8             // this records the number of expected rules per visor PK
 	ids   map[cipher.PubKey][]routing.RouteID // this records the obtained rules per visor PK
+	rnd   *rand.Rand
 	mx    sync.Mutex
 }
 
@@ -82,33 +85,29 @@ func NewIDReserver(ctx context.Context, dialer snet.Dialer, paths [][]routing.Ho
 		total: total,
 		rcM:   clients,
 		rec:   rec,
+		rnd:   rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
 		ids:   make(map[cipher.PubKey][]routing.RouteID, total),
 	}, nil
 }
 
-func (idr *idReserver) ReserveIDs(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	errCh := make(chan error, len(idr.rec))
-	defer close(errCh)
-
+func (idr *idReserver) ReserveIDs() {
+	ids := make(map[cipher.PubKey][]routing.RouteID)
 	for pk, n := range idr.rec {
-		go func(pk cipher.PubKey, n uint8) {
-			rtIDs, err := idr.rcM.Client(pk).ReserveIDs(ctx, n)
-			if err != nil {
-				cancel()
-				errCh <- fmt.Errorf("reserve routeID from %s failed: %w", pk, err)
-				return
-			}
-			idr.mx.Lock()
-			idr.ids[pk] = rtIDs
-			idr.mx.Unlock()
-			errCh <- nil
-		}(pk, n)
+		ids[pk] = idr.genIDs(int(n))
 	}
 
-	return firstError(len(idr.rec), errCh)
+	idr.mx.Lock()
+	idr.ids = ids
+	idr.mx.Unlock()
+}
+
+func (idr *idReserver) genIDs(count int) []routing.RouteID {
+	ids := make([]routing.RouteID, 0, count)
+	for i := 0; i < count; i++ {
+		ids = append(ids, routing.RouteID(idr.rnd.Uint32()))
+	}
+
+	return ids
 }
 
 func (idr *idReserver) PopID(pk cipher.PubKey) (routing.RouteID, bool) {

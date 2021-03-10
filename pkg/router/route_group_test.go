@@ -646,17 +646,14 @@ func setupEnv(t *testing.T) (rg1, rg2 *RouteGroup, m1, m2 *transport.Manager, te
 	rg1 = createRouteGroup(rgCfg)
 	rg2 = createRouteGroup(rgCfg)
 
-	r1RtIDs, err := rg1.rt.ReserveKeys(1)
-	require.NoError(t, err)
+	r1RtID := routing.RouteID(1)
+	r2RtID := routing.RouteID(2)
 
-	r2RtIDs, err := rg2.rt.ReserveKeys(1)
-	require.NoError(t, err)
-
-	r1FwdRule := routing.ForwardRule(ruleKeepAlive, r1RtIDs[0], r2RtIDs[0], tp1.Entry.ID, pk2, pk1, 0, 0)
+	r1FwdRule := routing.ForwardRule(ruleKeepAlive, r1RtID, r2RtID, tp1.Entry.ID, pk2, pk1, 0, 0)
 	err = rg1.rt.SaveRule(r1FwdRule)
 	require.NoError(t, err)
 
-	r2FwdRule := routing.ForwardRule(ruleKeepAlive, r2RtIDs[0], r1RtIDs[0], tp2.Entry.ID, pk1, pk2, 0, 0)
+	r2FwdRule := routing.ForwardRule(ruleKeepAlive, r2RtID, r1RtID, tp2.Entry.ID, pk1, pk2, 0, 0)
 	err = rg2.rt.SaveRule(r2FwdRule)
 	require.NoError(t, err)
 

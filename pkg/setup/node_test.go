@@ -89,10 +89,8 @@ func TestCreateRouteGroup(t *testing.T) {
 			assert.NoError(t, err)
 
 			// assert: valid route ID keys
-			for pk, r := range routers {
+			for _, r := range routers {
 				mr := r.(*mockRouterGateway)
-				t.Logf("Checking router %s: lastRtID=%d edgeRules=%d interRules=%d",
-					pk, mr.lastRtID, len(mr.edgeRules), len(mr.interRules))
 				checkRtIDKeysOfRouterRules(t, mr)
 			}
 
@@ -130,11 +128,6 @@ func checkRtIDKeysOfRouterRules(t *testing.T, r *mockRouterGateway) {
 		dupM[rtID] = struct{}{}
 	}
 	assert.Len(t, dupM, len(rtIDKeys), "rtIDKeys=%v dupM=%v", rtIDKeys, dupM)
-
-	// assert: all routes IDs are explicitly reserved by router
-	for _, rtID := range rtIDKeys {
-		assert.LessOrEqual(t, uint32(rtID), r.lastRtID)
-	}
 }
 
 func countUniquePKs(pks []cipher.PubKey) int {
@@ -188,7 +181,6 @@ func determineTpID(pk1, pk2 cipher.PubKey) (tpID uuid.UUID) {
 // mockRouterGateway acts as a well behaved router, and no error will be returned on any of it's endpoints.
 type mockRouterGateway struct {
 	pk         cipher.PubKey       // router's public key
-	lastRtID   uint32              // last route ID that was reserved (the first returned rtID would be 1 if this starts as 0).
 	edgeRules  []routing.EdgeRules // edge rules added by remote.
 	interRules [][]routing.Rule    // intermediary rules added by remote.
 	mx         sync.Mutex
@@ -213,19 +205,6 @@ func (gw *mockRouterGateway) AddIntermediaryRules(rules []routing.Rule, ok *bool
 
 	gw.interRules = append(gw.interRules, rules)
 	*ok = true
-	return nil
-}
-
-func (gw *mockRouterGateway) ReserveIDs(n uint8, routeIDs *[]routing.RouteID) error {
-	gw.mx.Lock()
-	defer gw.mx.Unlock()
-
-	out := make([]routing.RouteID, n)
-	for i := range out {
-		gw.lastRtID++
-		out[i] = routing.RouteID(gw.lastRtID)
-	}
-	*routeIDs = out
 	return nil
 }
 

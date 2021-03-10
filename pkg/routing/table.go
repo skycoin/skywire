@@ -3,7 +3,6 @@ package routing
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 )
@@ -13,15 +12,10 @@ var (
 	ErrRuleNotFound = errors.New("rule not found")
 	// ErrRuleTimedOut is being returned while trying to access the rule which timed out
 	ErrRuleTimedOut = errors.New("rule keep-alive timeout exceeded")
-	// ErrNoAvailableRoutes is returned when there're no more available routeIDs
-	ErrNoAvailableRoutes = errors.New("no available routeIDs")
 )
 
 // Table represents a routing table implementation.
 type Table interface {
-	// ReserveKeys reserves n RouteIDs.
-	ReserveKeys(n int) ([]RouteID, error)
-
 	// SaveRule sets RoutingRule for a given RouteID.
 	SaveRule(Rule) error
 
@@ -49,7 +43,6 @@ type Table interface {
 type memTable struct {
 	sync.RWMutex
 
-	nextID   RouteID
 	rules    map[RouteID]Rule
 	activity map[RouteID]time.Time
 }
@@ -62,35 +55,6 @@ func NewTable() Table {
 	}
 
 	return mt
-}
-
-func (mt *memTable) ReserveKeys(n int) ([]RouteID, error) {
-	first, last, err := mt.reserveKeysImpl(n)
-	if err != nil {
-		return nil, err
-	}
-
-	routes := make([]RouteID, 0, n)
-	for id := first; id <= last; id++ {
-		routes = append(routes, id)
-	}
-
-	return routes, nil
-}
-
-func (mt *memTable) reserveKeysImpl(n int) (first, last RouteID, err error) {
-	mt.Lock()
-	defer mt.Unlock()
-
-	if int64(mt.nextID)+int64(n) >= math.MaxUint32 {
-		return 0, 0, ErrNoAvailableRoutes
-	}
-
-	first = mt.nextID + 1
-	mt.nextID += RouteID(n)
-	last = mt.nextID
-
-	return first, last, nil
 }
 
 func (mt *memTable) SaveRule(rule Rule) error {

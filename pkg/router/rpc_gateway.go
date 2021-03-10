@@ -49,16 +49,3 @@ func (r *RPCGateway) AddIntermediaryRules(rules []routing.Rule, ok *bool) error 
 
 	return nil
 }
-
-// ReserveIDs reserves route IDs.
-func (r *RPCGateway) ReserveIDs(n uint8, routeIDs *[]routing.RouteID) error {
-	ids, err := r.router.ReserveKeys(int(n))
-	if err != nil {
-		r.logger.WithError(err).Warnf("Request completed with error.")
-		return routing.Failure{Code: routing.FailureReserveRtIDs, Msg: err.Error()}
-	}
-
-	*routeIDs = ids
-
-	return nil
-}

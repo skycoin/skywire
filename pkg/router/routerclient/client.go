@@ -65,13 +65,6 @@ func (c *Client) AddIntermediaryRules(ctx context.Context, rules []routing.Rule)
 	return ok, err
 }
 
-// ReserveIDs reserves n IDs and returns them.
-func (c *Client) ReserveIDs(ctx context.Context, n uint8) (rtIDs []routing.RouteID, err error) {
-	const method = "ReserveIDs"
-	err = c.call(ctx, method, n, &rtIDs)
-	return rtIDs, err
-}
-
 func (c *Client) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
 	call := c.rpc.Go(RPCName+"."+method, args, reply, nil)
 	select {
