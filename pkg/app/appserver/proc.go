@@ -11,11 +11,13 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 )
 
 var (
@@ -38,6 +40,7 @@ type Proc struct {
 	waitMx    sync.Mutex
 	waitErr   error
 
+	rpcGWMu  sync.Mutex
 	rpcGW    *RPCIngressGateway // gateway shared over 'conn' - introduced AFTER proc is started
 	conn     net.Conn           // connection to proc - introduced AFTER proc is started
 	connCh   chan struct{}      // push here when conn is received - protected by 'connOnce'
@@ -94,7 +97,9 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 	p.connOnce.Do(func() {
 		ok = true
 		p.conn = conn
+		p.rpcGWMu.Lock()
 		p.rpcGW = NewRPCGateway(p.log)
+		p.rpcGWMu.Unlock()
 
 		// Send ready signal.
 		p.connCh <- struct{}{}
@@ -157,6 +162,13 @@ func (p *Proc) Start() error {
 			close(waitErrCh)
 		}()
 
+		defer func() {
+			// here will definitely be an error notifying that the process
+			// is already stopped. We do this to remove proc from the manager,
+			// therefore giving the correct app status to hypervisor.
+			_ = p.m.Stop(p.appName) //nolint:errcheck
+		}()
+
 		select {
 		case _, ok := <-p.connCh:
 			if !ok {
@@ -175,11 +187,6 @@ func (p *Proc) Start() error {
 
 			// channel won't get closed outside, close it now.
 			p.connOnce.Do(func() { close(p.connCh) })
-
-			// here will definitely be an error notifying that the process
-			// is already stopped. We do this to remove proc from the manager,
-			// therefore giving the correct app status to hypervisor.
-			_ = p.m.Stop(p.appName) //nolint:errcheck
 
 			return
 		}
@@ -253,4 +260,58 @@ func (p *Proc) Wait() error {
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
+}
+
+// ConnectionSummary sums up the connection stats.
+type ConnectionSummary struct {
+	IsAlive       bool          `json:"is_alive"`
+	Latency       time.Duration `json:"latency"`
+	Throughput    uint32        `json:"throughput"`
+	BandwidthSent uint64        `json:"bandwidth_sent"`
+	Error         string        `json:"error"`
+}
+
+// ConnectionsSummary returns all of the proc's connections stats.
+func (p *Proc) ConnectionsSummary() []ConnectionSummary {
+	p.rpcGWMu.Lock()
+	rpcGW := p.rpcGW
+	p.rpcGWMu.Unlock()
+
+	if rpcGW == nil {
+		return nil
+	}
+
+	var summaries []ConnectionSummary
+	rpcGW.cm.DoRange(func(id uint16, v interface{}) bool {
+		if v == nil {
+			summaries = append(summaries, ConnectionSummary{})
+			return true
+		}
+
+		conn, ok := v.(net.Conn)
+		if !ok {
+			summaries = append(summaries, ConnectionSummary{})
+		}
+
+		wrappedConn := conn.(*appnet.WrappedConn)
+
+		skywireConn, isSkywireConn := wrappedConn.Conn.(*appnet.SkywireConn)
+		if !isSkywireConn {
+			summaries = append(summaries, ConnectionSummary{
+				Error: "Can't get such info from this conn",
+			})
+			return true
+		}
+
+		summaries = append(summaries, ConnectionSummary{
+			IsAlive:       skywireConn.IsAlive(),
+			Latency:       skywireConn.Latency(),
+			Throughput:    skywireConn.Throughput(),
+			BandwidthSent: skywireConn.BandwidthSent(),
+		})
+
+		return true
+	})
+
+	return summaries
 }

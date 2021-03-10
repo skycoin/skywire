@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/httpauth"
+	"github.com/skycoin/skywire/pkg/util/buildinfo"
 )
 
 var (
@@ -38,7 +39,6 @@ type HTTPClient struct {
 	conf    Config
 	entry   Service
 	entryMx sync.Mutex // only used if UpdateLoop && UpdateStats functions are used.
-	auth    *httpauth.Client
 	client  http.Client
 }
 
@@ -53,9 +53,10 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 		log:  log,
 		conf: conf,
 		entry: Service{
-			Addr:  NewSWAddr(conf.PK, conf.Port),
-			Stats: stats,
-			Type:  conf.Type,
+			Addr:    NewSWAddr(conf.PK, conf.Port),
+			Stats:   stats,
+			Type:    conf.Type,
+			Version: buildinfo.Version(),
 		},
 		client: http.Client{},
 	}
@@ -71,10 +72,19 @@ func (c *HTTPClient) addr(path string, sType string) string {
 	return addr
 }
 
+var (
+	authClientMu sync.Mutex
+	authClient   *httpauth.Client // Singleton: there should be only one instance per PK.
+)
+
 // Auth returns the internal httpauth.Client
 func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
-	if c.auth != nil {
-		return c.auth, nil
+	authClientMu.Lock()
+	defer authClientMu.Unlock()
+
+	auth := authClient
+	if auth != nil {
+		return auth, nil
 	}
 
 	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK)
@@ -82,7 +92,8 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 		return nil, err
 	}
 
-	c.auth = auth
+	authClient = auth
+
 	return auth, nil
 }
 

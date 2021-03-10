@@ -6,8 +6,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/process"
@@ -55,22 +57,18 @@ func CaptureContext() *Context {
 	shellArgs := []string{commandFlag, shellCmd}
 
 	cmd := exec.Command(shellCommand, shellArgs...) // nolint:gosec
+
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
 	path := os.Args[0]
+
 	ppid := os.Getppid()
+	parentPPID := ppidByPid(ppid)
 
-	parentPPID := -1
-
-	parentProcess, err := process.NewProcess(int32(ppid))
-	if err == nil {
-		if parPPID, err := parentProcess.Ppid(); err == nil {
-			parentPPID = int(parPPID)
-		}
-	}
+	attachTTY(cmd)
 
 	return &Context{
 		cmd:        cmd,
@@ -113,9 +111,15 @@ func (c *Context) Systemd() bool {
 // Restart restarts an executable using Context.
 // If the process is supervised by systemd, it lets systemd restart the process.
 func (c *Context) Restart() (err error) {
+	// SIGTTIN and SIGTTOU need to be ignored to make Foreground flag of syscall.SysProcAttr work.
+	// https://github.com/golang/go/issues/37217
+	signal.Ignore(syscall.SIGTTIN, syscall.SIGTTOU)
+
 	if err := c.start(); err != nil {
 		return err
 	}
+
+	signal.Reset()
 
 	// Let RPC calls complete and then exit.
 	go c.exitAfterDelay(exitDelay)
@@ -219,4 +223,17 @@ func (c *Context) errorLogger() func(string, ...interface{}) {
 	logger := log.New(os.Stdout, "[ERROR] ", log.LstdFlags)
 
 	return logger.Printf
+}
+
+func ppidByPid(pid int) int {
+	parentPPID := 0
+
+	parentProcess, err := process.NewProcess(int32(pid))
+	if err == nil {
+		if parPPID, err := parentProcess.Ppid(); err == nil {
+			parentPPID = int(parPPID)
+		}
+	}
+
+	return parentPPID
 }

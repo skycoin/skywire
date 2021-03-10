@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
+import { StartComponent } from './components/pages/start/start.component';
 import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
@@ -16,9 +17,12 @@ import { AllLabelsComponent } from './components/pages/settings/all-labels/all-l
 
 const routes: Routes = [
   {
+    path: '',
+    component: StartComponent
+  },
+  {
     path: 'login',
-    component: LoginComponent,
-    canActivate: [AuthGuardService]
+    component: LoginComponent
   },
   {
     path: 'nodes',
@@ -122,7 +126,7 @@ const routes: Routes = [
   },
   {
     path: '**',
-    redirectTo: 'login'
+    redirectTo: ''
   },
 ];
 

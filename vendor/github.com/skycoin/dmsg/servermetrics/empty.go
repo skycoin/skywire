@@ -2,18 +2,21 @@ package servermetrics
 
 import (
 	"net/http"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
-// NewEmpty implements Metrics, but does nothing.
-func NewEmpty() Metrics {
-	return empty{}
+// NewEmpty constructs new empty metrics.
+func NewEmpty() Empty {
+	return Empty{}
 }
 
-type empty struct{}
+// Empty implements Metrics, but does nothing.
+type Empty struct{}
 
-func (empty) Collectors() []prometheus.Collector            { return nil }
-func (empty) RecordSession(_ DeltaType)                     {}
-func (empty) RecordStream(_ DeltaType)                      {}
-func (empty) HandleDisc(next http.Handler) http.HandlerFunc { return next.ServeHTTP }
+// RecordSession implements `Metrics`.
+func (Empty) RecordSession(_ DeltaType) {}
+
+// RecordStream implements `Metrics`.
+func (Empty) RecordStream(_ DeltaType) {}
+
+// HandleDisc implements `Metrics`.
+func (Empty) HandleDisc(next http.Handler) http.HandlerFunc { return next.ServeHTTP }

@@ -26,6 +26,9 @@ const (
 	TrustedVisorsDelay = 5 * time.Second
 )
 
+// TPCloseCallback triggers after a session is closed.
+type TPCloseCallback func(network, addr string)
+
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
 	PubKey          cipher.PubKey
@@ -53,6 +56,8 @@ type Manager struct {
 	serveOnce     sync.Once // ensure we only serve once.
 	closeOnce     sync.Once // ensure we only close once.
 	done          chan struct{}
+
+	afterTPClosed TPCloseCallback
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -71,6 +76,19 @@ func NewManager(log *logging.Logger, n *snet.Network, config *ManagerConfig) (*M
 		done:        make(chan struct{}),
 	}
 	return tm, nil
+}
+
+// OnAfterTPClosed sets callback which will fire after transport gets closed.
+func (tm *Manager) OnAfterTPClosed(f TPCloseCallback) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+
+	tm.afterTPClosed = f
+
+	// set callback for all already known tps
+	for _, tp := range tm.tps {
+		tp.onAfterClosed(f)
+	}
 }
 
 // Serve runs listening loop across all registered factories.
@@ -135,7 +153,7 @@ func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
 }
 
 func (tm *Manager) serve(ctx context.Context) {
-	// TODO(nkryuchkov): to get rid of this callback, we need to have method on future network interface like: `Ready() <-chan struct{}`
+	// TODO: to get rid of this callback, we need to have method on future network interface like: `Ready() <-chan struct{}`
 	// some networks may not be ready yet, so we're setting a callback first
 	tm.n.OnNewNetworkType(func(netType string) {
 		tm.serveNetwork(ctx, netType)
@@ -166,8 +184,6 @@ func (tm *Manager) serve(ctx context.Context) {
 }
 
 func (tm *Manager) initTransports(ctx context.Context) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
 
 	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
 	if err != nil {
@@ -212,7 +228,14 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 
-		mTp = NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, conn.RemotePK(), lis.Network())
+		mTp = NewManagedTransport(ManagedTransportConfig{
+			Net:         tm.n,
+			DC:          tm.Conf.DiscoveryClient,
+			LS:          tm.Conf.LogStore,
+			RemotePK:    conn.RemotePK(),
+			NetName:     lis.Network(),
+			AfterClosed: tm.afterTPClosed,
+		})
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -238,8 +261,6 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
 
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
@@ -261,7 +282,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				delete(tm.tps, mTp.Entry.ID)
+				tm.deleteTransport(mTp.Entry.ID)
 				continue
 			}
 
@@ -272,7 +293,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
-				delete(tm.tps, mTp.Entry.ID)
+				tm.deleteTransport(mTp.Entry.ID)
 				return nil, err
 			}
 
@@ -290,6 +311,8 @@ func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
 	if !snet.IsKnownNetwork(netName) {
 		return nil, snet.ErrUnknownNetwork
 	}
@@ -303,13 +326,23 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 		return oldMTp, nil
 	}
 
-	mTp := NewManagedTransport(tm.n, tm.Conf.DiscoveryClient, tm.Conf.LogStore, remote, netName)
+	afterTPClosed := tm.afterTPClosed
+
+	mTp := NewManagedTransport(ManagedTransportConfig{
+		Net:         tm.n,
+		DC:          tm.Conf.DiscoveryClient,
+		LS:          tm.Conf.LogStore,
+		RemotePK:    remote,
+		NetName:     netName,
+		AfterClosed: afterTPClosed,
+	})
+
 	if mTp.netName == tptypes.STCPR {
 		ar := mTp.n.Conf().ARClient
 		if ar != nil {
 			visorData, err := ar.Resolve(context.Background(), mTp.netName, remote)
 			if err == nil {
-				mTp.remoteAddrs = append(mTp.remoteAddrs, visorData.RemoteAddr)
+				mTp.remoteAddr = visorData.RemoteAddr
 			} else {
 				if err != arclient.ErrNoEntry {
 					return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
@@ -319,12 +352,9 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	}
 	go func() {
 		mTp.Serve(tm.readCh)
-		tm.mx.Lock()
-		delete(tm.tps, mTp.Entry.ID)
-		tm.mx.Unlock()
+		tm.deleteTransport(mTp.Entry.ID)
 	}()
 	tm.tps[tpID] = mTp
-
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
 	return mTp, nil
 }
@@ -337,8 +367,8 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.Entry.Type == tptypes.STCPR && len(tp.remoteAddrs) > 0 {
-			addrs = append(addrs, tp.remoteAddrs...)
+		if tp.Entry.Type == tptypes.STCPR && tp.remoteAddr != "" {
+			addrs = append(addrs, tp.remoteAddr)
 		}
 	}
 
@@ -370,6 +400,12 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		tp.close()
 		delete(tm.tps, id)
 	}
+}
+
+func (tm *Manager) deleteTransport(id uuid.UUID) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	delete(tm.tps, id)
 }
 
 // ReadPacket reads data packets from routes.
