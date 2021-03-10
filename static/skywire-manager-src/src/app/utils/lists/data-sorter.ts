@@ -292,8 +292,8 @@ export class DataSorter {
         // Use the selection made by the user.
         this.changeSortingParams(
           optionParams[result - 1].sortBy,
-          optionParams[result - 1].sortReverse,
-          optionParams[result - 1].sortByLabel
+          optionParams[result - 1].sortByLabel,
+          optionParams[result - 1].sortReverse
         );
       }
     });
@@ -355,9 +355,9 @@ export class DataSorter {
     } else if (sortingMode === SortingModes.Number) {
       response = !this.sortReverse ? aVal - bVal : bVal - aVal;
     } else if (sortingMode === SortingModes.Boolean) {
-      if (aVal.is_up && !bVal.is_up) {
+      if (aVal && !bVal) {
         response = -1;
-      } else if (!aVal.is_up && bVal.is_up) {
+      } else if (!aVal && bVal) {
         response = 1;
       }
       response = response * (this.sortReverse ? -1 : 1);

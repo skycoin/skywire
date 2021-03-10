@@ -11,7 +11,7 @@
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.public-key' | translate }}&nbsp;</span>
-      <app-copy-to-clipboard-text text="{{ node.local_pk }}"></app-copy-to-clipboard-text>
+      <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.port' | translate }}&nbsp;</span>
@@ -27,7 +27,7 @@
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>
-      {{ node.build_info.version ? node.build_info.version : ('common.unknown' | translate) }}
+      {{ node.version ? node.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>
@@ -46,70 +46,15 @@
   <!-- Health info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.status' | translate }}</span>
-      <ng-container *ngIf="node.health.status && node.health.status === 200">
+    <span *ngFor="let service of nodeHealthInfo.services" class="info-line">
+      <span class="title">{{ service.name | translate }}</span>
+      <ng-container *ngIf="service.isOk">
         <i class="dot-green"></i>
         {{ 'common.ok' | translate }}
       </ng-container>
-      <ng-container *ngIf="!node.health.status || node.health.status !== 200">
+      <ng-container *ngIf="!service.isOk">
         <i class="dot-red"></i>
-        {{ node.health.status ? node.health.status : ('node.details.node-health.element-offline' | translate) }}
-      </ng-container>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.transport-discovery' | translate }}</span>
-      <ng-container *ngIf="node.health.transport_discovery && node.health.transport_discovery === 200">
-        <i class="dot-green"></i>
-        {{ 'common.ok' | translate }}
-      </ng-container>
-      <ng-container *ngIf="!node.health.transport_discovery || node.health.transport_discovery !== 200">
-        <i class="dot-red"></i>
-        {{ node.health.transport_discovery ? node.health.transport_discovery : ('node.details.node-health.element-offline' | translate) }}
-      </ng-container>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.route-finder' | translate }}</span>
-      <ng-container *ngIf="node.health.route_finder && node.health.route_finder === 200">
-        <i class="dot-green"></i>
-        {{ 'common.ok' | translate }}
-      </ng-container>
-      <ng-container *ngIf="!node.health.route_finder || node.health.route_finder !== 200">
-        <i class="dot-red"></i>
-        {{ node.health.route_finder ? node.health.route_finder : ('node.details.node-health.element-offline' | translate) }}
-      </ng-container>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.setup-node' | translate }}</span>
-      <ng-container *ngIf="node.health.setup_node && node.health.setup_node === 200">
-        <i class="dot-green"></i>
-        {{ 'common.ok' | translate }}
-      </ng-container>
-      <ng-container *ngIf="!node.health.setup_node || node.health.setup_node !== 200">
-        <i class="dot-red"></i>
-        {{ node.health.setup_node ? node.health.setup_node : ('node.details.node-health.element-offline' | translate) }}
-      </ng-container>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
-      <ng-container *ngIf="node.health.uptime_tracker && node.health.uptime_tracker === 200">
-        <i class="dot-green"></i>
-        {{ 'common.ok' | translate }}
-      </ng-container>
-      <ng-container *ngIf="!node.health.uptime_tracker || node.health.uptime_tracker !== 200">
-        <i class="dot-red"></i>
-        {{ node.health.uptime_tracker ? node.health.uptime_tracker : ('node.details.node-health.element-offline' | translate) }}
-      </ng-container>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.address-resolver' | translate }}</span>
-      <ng-container *ngIf="node.health.address_resolver && node.health.address_resolver === 200">
-        <i class="dot-green"></i>
-        {{ 'common.ok' | translate }}
-      </ng-container>
-      <ng-container *ngIf="!node.health.address_resolver || node.health.address_resolver !== 200">
-        <i class="dot-red"></i>
-        {{ node.health.address_resolver ? node.health.address_resolver : ('node.details.node-health.element-offline' | translate) }}
+        {{ service.originalValue ? service.originalValue : ('node.details.node-health.element-offline' | translate) }}
       </ng-container>
     </span>
   </div>

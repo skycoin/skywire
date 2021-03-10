@@ -12,25 +12,40 @@ import (
 
 // Server is a VPN server.
 type Server struct {
-	cfg                     ServerConfig
-	lisMx                   sync.Mutex
-	lis                     net.Listener
-	log                     logrus.FieldLogger
-	serveOnce               sync.Once
-	ipGen                   *IPGenerator
-	defaultNetworkInterface string
-	ipv4ForwardingVal       string
-	ipv6ForwardingVal       string
+	cfg                        ServerConfig
+	lisMx                      sync.Mutex
+	lis                        net.Listener
+	log                        logrus.FieldLogger
+	serveOnce                  sync.Once
+	ipGen                      *IPGenerator
+	defaultNetworkInterface    string
+	defaultNetworkInterfaceIPs []net.IP
+	ipv4ForwardingVal          string
+	ipv6ForwardingVal          string
+	iptablesForwardPolicy      string
 }
 
 // NewServer creates VPN server instance.
 func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
+	s := &Server{
+		cfg:   cfg,
+		log:   l,
+		ipGen: NewIPGenerator(),
+	}
+
 	defaultNetworkIfc, err := DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
 	}
 
 	l.Infof("Got default network interface: %s", defaultNetworkIfc)
+
+	defaultNetworkIfcIPs, err := NetworkInterfaceIPs(defaultNetworkIfc)
+	if err != nil {
+		return nil, fmt.Errorf("error getting IPs of interface %s: %w", defaultNetworkIfc, err)
+	}
+
+	l.Infof("Got IPs of interface %s: %v", defaultNetworkIfc, defaultNetworkIfcIPs)
 
 	ipv4ForwardingVal, err := GetIPv4ForwardingValue()
 	if err != nil {
@@ -44,14 +59,20 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 	l.Infoln("Old IP forwarding values:")
 	l.Infof("IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
-	return &Server{
-		cfg:                     cfg,
-		log:                     l,
-		ipGen:                   NewIPGenerator(),
-		defaultNetworkInterface: defaultNetworkIfc,
-		ipv4ForwardingVal:       ipv4ForwardingVal,
-		ipv6ForwardingVal:       ipv6ForwardingVal,
-	}, nil
+	iptablesForwarPolicy, err := GetIPTablesForwardPolicy()
+	if err != nil {
+		return nil, fmt.Errorf("error getting iptables forward policy: %w", err)
+	}
+
+	l.Infof("Old iptables forward policy: %s", iptablesForwarPolicy)
+
+	s.defaultNetworkInterface = defaultNetworkIfc
+	s.defaultNetworkInterfaceIPs = defaultNetworkIfcIPs
+	s.ipv4ForwardingVal = ipv4ForwardingVal
+	s.ipv6ForwardingVal = ipv6ForwardingVal
+	s.iptablesForwardPolicy = iptablesForwarPolicy
+
+	return s, nil
 }
 
 // Serve accepts connections from `l` and serves them.
@@ -99,6 +120,21 @@ func (s *Server) Serve(l net.Listener) error {
 			}
 		}()
 
+		if err := SetIPTablesForwardAcceptPolicy(); err != nil {
+			serveErr = fmt.Errorf("error settings iptables forward policy to ACCEPT")
+			return
+		}
+
+		s.log.Infoln("Set iptables forward policy to ACCEPT")
+
+		defer func() {
+			if err := SetIPTablesForwardPolicy(s.iptablesForwardPolicy); err != nil {
+				s.log.WithError(err).Errorf("Error setting iptables forward policy to %s", s.iptablesForwardPolicy)
+			} else {
+				s.log.Infof("Restored iptables forward policy to %s", s.iptablesForwardPolicy)
+			}
+		}()
+
 		s.lisMx.Lock()
 		s.lis = l
 		s.lisMx.Unlock()
@@ -141,11 +177,12 @@ func (s *Server) closeConn(conn net.Conn) {
 func (s *Server) serveConn(conn net.Conn) {
 	defer s.closeConn(conn)
 
-	tunIP, tunGateway, err := s.shakeHands(conn)
+	tunIP, tunGateway, allowTrafficToLocalNet, err := s.shakeHands(conn)
 	if err != nil {
 		s.log.WithError(err).Errorf("Error negotiating with client %s", conn.RemoteAddr())
 		return
 	}
+	defer allowTrafficToLocalNet()
 
 	tun, err := newTUNDevice()
 	if err != nil {
@@ -190,55 +227,40 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error) {
+func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVPN func(), err error) {
 	var cHello ClientHello
 	if err := ReadJSON(conn, &cHello); err != nil {
-		return nil, nil, fmt.Errorf("error reading client hello: %w", err)
+		return nil, nil, nil, fmt.Errorf("error reading client hello: %w", err)
 	}
+
+	// default value
+	unsecureVPN = func() {}
 
 	s.log.Debugf("Got client hello: %v", cHello)
 
-	var sHello ServerHello
-
 	if s.cfg.Passcode != "" && cHello.Passcode != s.cfg.Passcode {
-		sHello.Status = HandshakeStatusForbidden
-		if err := WriteJSON(conn, &sHello); err != nil {
-			s.log.WithError(err).Errorln("Error sending server hello")
-		}
-
-		return nil, nil, errors.New("got wrong passcode from client")
+		s.sendServerErrHello(conn, HandshakeStatusForbidden)
+		return nil, nil, nil, errors.New("got wrong passcode from client")
 	}
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {
 			// this happens only on malformed IP
-			sHello.Status = HandshakeStatusBadRequest
-			if err := WriteJSON(conn, &sHello); err != nil {
-				s.log.WithError(err).Errorln("Error sending server hello")
-			}
-
-			return nil, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
+			s.sendServerErrHello(conn, HandshakeStatusBadRequest)
+			return nil, nil, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
 		}
 	}
 
 	subnet, err := s.ipGen.Next()
 	if err != nil {
-		sHello.Status = HandshakeNoFreeIPs
-		if err := WriteJSON(conn, &sHello); err != nil {
-			s.log.WithError(err).Errorln("Error sending server hello")
-		}
-
-		return nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
+		s.sendServerErrHello(conn, HandshakeNoFreeIPs)
+		return nil, nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
 	}
 
 	subnetOctets, err := fetchIPv4Octets(subnet)
 	if err != nil {
-		sHello.Status = HandshakeStatusInternalError
-		if err := WriteJSON(conn, &sHello); err != nil {
-			s.log.WithError(err).Errorln("Error sending server hello")
-		}
-
-		return nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
+		s.sendServerErrHello(conn, HandshakeStatusInternalError)
+		return nil, nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
 	}
 
 	// basically IP address comprised of `subnetOctets` items is the IP address of the subnet,
@@ -255,12 +277,40 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, err error)
 	cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
 	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
 
-	sHello.TUNIP = cTUNIP
-	sHello.TUNGateway = cTUNGateway
+	if s.cfg.Secure {
+		if err := BlockIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
+			s.sendServerErrHello(conn, HandshakeStatusInternalError)
+			return nil, nil, nil,
+				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
+		}
 
-	if err := WriteJSON(conn, &sHello); err != nil {
-		return nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
+		unsecureVPN = func() {
+			if err := AllowIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
+				s.log.WithError(err).Errorln("Error allowing traffic to local network")
+			}
+		}
 	}
 
-	return sTUNIP, sTUNGateway, nil
+	sHello := ServerHello{
+		Status:     HandshakeStatusOK,
+		TUNIP:      cTUNIP,
+		TUNGateway: cTUNGateway,
+	}
+
+	if err := WriteJSON(conn, &sHello); err != nil {
+		unsecureVPN()
+		return nil, nil, nil, fmt.Errorf("error finishing hadnshake: error sending server hello: %w", err)
+	}
+
+	return sTUNIP, sTUNGateway, unsecureVPN, nil
+}
+
+func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
+	sHello := ServerHello{
+		Status: status,
+	}
+
+	if err := WriteJSON(conn, &sHello); err != nil {
+		s.log.WithError(err).Errorln("Error sending server hello")
+	}
 }

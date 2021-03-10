@@ -39,9 +39,16 @@ export class ButtonComponent implements OnDestroy {
     }
   }
 
-  reset() {
+  /**
+   * Puts the button in the normal state.
+   * @param changeDisabledState If true, the button is enabled.
+   */
+  reset(changeDisabledState = true) {
     this.state = ButtonStates.Normal;
-    this.disabled = false;
+
+    if (changeDisabledState) {
+      this.disabled = false;
+    }
   }
 
   focus() {
@@ -61,13 +68,27 @@ export class ButtonComponent implements OnDestroy {
     this.disabled = true;
   }
 
-  showLoading() {
+  /**
+   * Puts the button in the loading state.
+   * @param changeDisabledState If true, the button is disabled.
+   */
+  showLoading(changeDisabledState = true) {
     this.state = ButtonStates.Loading;
-    this.disabled = true;
+
+    if (changeDisabledState) {
+      this.disabled = true;
+    }
   }
 
-  showError() {
+  /**
+   * Puts the button in the error state.
+   * @param changeDisabledState If true, the button is enabled.
+   */
+  showError(changeDisabledState = true) {
     this.state = ButtonStates.Error;
-    this.disabled = false;
+
+    if (changeDisabledState) {
+      this.disabled = false;
+    }
   }
 }

@@ -518,7 +518,7 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 	require.NoError(t, rg.Close())
 }
 
-// TODO: Uncomment and fix.
+// TODO(darkrengarius): Uncomment and fix.
 /*
 func TestRouteGroup_TestConn(t *testing.T) {
 	mp := func() (c1, c2 net.Conn, stop func(), err error) {
@@ -589,13 +589,9 @@ func pushPackets(ctx context.Context, from *transport.Manager, to *RouteGroup) {
 func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (keepSending bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			// TODO: come up with idea how to get rid of panic
 			keepSending = r == "send on closed channel"
 		}
 	}()
-
-	to.readChMu.Lock()
-	defer to.readChMu.Unlock()
 
 	select {
 	case <-ctx.Done():

@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/rename"
+	"github.com/skycoin/skywire/pkg/util/stdio"
 )
 
 const (
@@ -41,7 +42,6 @@ const (
 	appsSubfolder     = "apps"
 	archiveFormat     = ".tar.gz"
 	visorBinary       = "skywire-visor"
-	hypervisorBinary  = "hypervisor"
 	cliBinary         = "skywire-cli"
 )
 
@@ -87,22 +87,11 @@ func New(log *logging.Logger, restartCtx *restart.Context, appsPath string) *Upd
 // Version overrides Channel.
 // ArchiveURL/ChecksumURL override Version and channel.
 type UpdateConfig struct {
-	Target       Target
 	Channel      Channel `json:"channel"`
 	Version      string  `json:"version"`
 	ArchiveURL   string  `json:"archive_url"`
 	ChecksumsURL string  `json:"checksums_url"`
 }
-
-// Target defines what binary target to update.
-type Target int
-
-const (
-	// TargetVisor updates visor.
-	TargetVisor Target = iota
-	// TargetHypervisor updates hypervisor.
-	TargetHypervisor
-)
 
 // Channel defines channel for updating.
 type Channel string
@@ -144,7 +133,7 @@ func (u *Updater) Update(updateConfig UpdateConfig) (updated bool, err error) {
 	u.status.Set("Downloading completed, updating binaries")
 
 	currentBasePath := filepath.Dir(u.restartCtx.CmdPath())
-	if err := u.updateBinaries(updateConfig.Target, downloadedBinariesPath, currentBasePath); err != nil {
+	if err := u.updateBinaries(downloadedBinariesPath, currentBasePath); err != nil {
 		return false, err
 	}
 
@@ -216,33 +205,22 @@ func (u *Updater) getVersion(updateConfig UpdateConfig) (string, error) {
 	return version, nil
 }
 
-func (u *Updater) updateBinaries(target Target, downloadedBinariesPath string, currentBasePath string) error {
-	switch target {
-	case TargetHypervisor:
-		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, hypervisorBinary); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", hypervisorBinary, err)
+func (u *Updater) updateBinaries(downloadedBinariesPath string, currentBasePath string) error {
+	for _, app := range apps() {
+		if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
+			return fmt.Errorf("failed to update %s binary: %w", app, err)
 		}
-
-		return nil
-	case TargetVisor:
-		for _, app := range apps() {
-			if err := u.updateBinary(downloadedBinariesPath, u.appsPath, app); err != nil {
-				return fmt.Errorf("failed to update %s binary: %w", app, err)
-			}
-		}
-
-		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
-		}
-
-		if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
-			return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
-		}
-
-		return nil
-	default:
-		return ErrUnknownTarget
 	}
+
+	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, cliBinary); err != nil {
+		return fmt.Errorf("failed to update %s binary: %w", cliBinary, err)
+	}
+
+	if err := u.updateBinary(downloadedBinariesPath, currentBasePath, visorBinary); err != nil {
+		return fmt.Errorf("failed to update %s binary: %w", visorBinary, err)
+	}
+
+	return nil
 }
 
 func (u *Updater) updateBinary(downloadedBinariesPath, basePath, binary string) error {
@@ -443,7 +421,19 @@ func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 		return "", fmt.Errorf("received bad status code: %d", resp.StatusCode)
 	}
 
-	r := io.TeeReader(resp.Body, u.progressBar(resp.ContentLength, checksumsFilename))
+	capturer := stdio.NewCapturer()
+	stdoutWriter, err := capturer.CaptureStdout()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := capturer.Release(); err != nil {
+			u.log.Errorf("Failed to release output: %w", err)
+		}
+	}()
+
+	r := io.TeeReader(resp.Body, u.progressBar(stdoutWriter, resp.ContentLength, checksumsFilename))
 
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -453,12 +443,12 @@ func (u *Updater) downloadChecksums(url string) (checksums string, err error) {
 	return string(data), nil
 }
 
-func (u *Updater) progressBar(contentLength int64, filename string) io.Writer {
+func (u *Updater) progressBar(w io.Writer, contentLength int64, filename string) io.Writer {
 	width := progressbar.OptionSetWidth(0)
 	desc := progressbar.OptionSetDescription("Downloading " + filename)
 	speed := progressbar.OptionSetBytes64(contentLength)
 	theme := progressbar.OptionSetTheme(progressbar.Theme{})
-	writer := progressbar.OptionSetWriter(io.MultiWriter(os.Stdout, u.status))
+	writer := progressbar.OptionSetWriter(io.MultiWriter(w, u.status))
 	completion := progressbar.OptionOnCompletion(func() { fmt.Printf("\n") })
 
 	return progressbar.NewOptions64(contentLength, speed, completion, width, theme, desc, writer)
@@ -495,7 +485,19 @@ func (u *Updater) downloadFile(url, filename string) (path string, err error) {
 		return "", err
 	}
 
-	out := io.MultiWriter(f, u.progressBar(resp.ContentLength, filename))
+	capturer := stdio.NewCapturer()
+	stdoutWriter, err := capturer.CaptureStdout()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if err := capturer.Release(); err != nil {
+			u.log.Errorf("Failed to release output: %w", err)
+		}
+	}()
+
+	out := io.MultiWriter(f, u.progressBar(stdoutWriter, resp.ContentLength, filename))
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return "", err

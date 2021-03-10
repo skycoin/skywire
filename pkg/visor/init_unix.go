@@ -14,6 +14,8 @@ import (
 	"github.com/skycoin/dmsg/dmsgpty"
 )
 
+const ownerRWX = 0700
+
 func initDmsgpty(v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
@@ -25,7 +27,7 @@ func initDmsgpty(v *Visor) bool {
 
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
-		if err := UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+		if err := unlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
 			return report(err)
 		}
 	}
@@ -43,6 +45,10 @@ func initDmsgpty(v *Visor) bool {
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
 		return report(err)
+	}
+	// add itself to the whitelist to allow local pty
+	if err := wl.Add(v.conf.PK); err != nil {
+		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
 	}
 
 	dmsgC := v.net.Dmsg()
