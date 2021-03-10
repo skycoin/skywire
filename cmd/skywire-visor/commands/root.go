@@ -99,7 +99,7 @@ var rootCmd = &cobra.Command{
 				log.WithError(err).Infof("Restarted skywire-visor service")
 			}
 
-			// Detach child from parent. TODO: This may be unnecessary.
+			// Detach child from parent.
 			if _, err := syscall.Setsid(); err != nil {
 				log.WithError(err).Errorf("Failed to call setsid()")
 			}
@@ -217,7 +217,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 		}
 
 		if confPath == "" {
-			confPath = defaultConfigName
+			confPath = "/opt/skywire/" + defaultConfigName
 		}
 
 		fallthrough

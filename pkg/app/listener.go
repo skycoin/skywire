@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 
@@ -26,14 +27,14 @@ type Listener struct {
 
 // Accept accepts a connection from listener.
 func (l *Listener) Accept() (net.Conn, error) {
-	l.log.Infoln("Calling app RPC Accept")
+	fmt.Print("Calling app RPC Accept")
 
 	connID, remote, err := l.rpc.Accept(l.id)
 	if err != nil {
 		return nil, err
 	}
 
-	l.log.Infoln("Accepted conn from app RPC")
+	fmt.Print("Accepted conn from app RPC")
 
 	conn := &Conn{
 		id:     connID,
@@ -42,7 +43,6 @@ func (l *Listener) Accept() (net.Conn, error) {
 		remote: remote,
 	}
 
-	// TODO: discuss
 	// lock is needed, since the conn is already added to the manager,
 	// but has no `freeConn`. It shouldn't really happen under usual
 	// circumstances, but the data race is possible. If we try to close

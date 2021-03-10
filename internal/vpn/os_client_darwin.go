@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"syscall"
 )
 
 const (
@@ -35,4 +36,18 @@ func DefaultNetworkGateway() (net.IP, error) {
 	}
 
 	return nil, errCouldFindDefaultNetworkGateway
+}
+
+func setupClientSysPrivileges() (suid int, err error) {
+	suid = syscall.Getuid()
+
+	if err := syscall.Setuid(0); err != nil {
+		return 0, fmt.Errorf("failed to setuid 0: %w", err)
+	}
+
+	return suid, nil
+}
+
+func releaseClientSysPrivileges(suid int) error {
+	return syscall.Setuid(suid)
 }

@@ -18,6 +18,7 @@ COMMIT := $(shell git rev-list -1 HEAD)
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
 OPTS?=GO111MODULE=on
+STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
 DOCKER_NETWORK?=SKYNET
@@ -36,6 +37,7 @@ endif
 TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
 TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
 
+
 BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
@@ -44,12 +46,14 @@ BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
 
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
 
-BUILD_OPTS?="-ldflags=$(BUILDINFO)"
+BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: host-apps bin ## Build apps and binaries. `go build` with ${OPTS}
+
+build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
@@ -74,10 +78,14 @@ generate: ## Generate mocks and config README's
 
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./apps
-	-rm -f ./skywire-visor ./skywire-cli ./setup-node ./hypervisor
+	-rm -f ./skywire-visor ./skywire-cli ./setup-node
 
-install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`, `hypervisor`
-	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node ./cmd/hypervisor
+install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
+	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
+
+
+install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
+	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
 rerun: stop
 	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
@@ -98,7 +106,6 @@ vendorcheck:  ## Run vendorcheck
 	GO111MODULE=off vendorcheck ./internal/...
 	GO111MODULE=off vendorcheck ./pkg/...
 	GO111MODULE=off vendorcheck ./cmd/apps/...
-	GO111MODULE=off vendorcheck ./cmd/hypervisor/...
 	GO111MODULE=off vendorcheck ./cmd/setup-node/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-cli/...
 	GO111MODULE=off vendorcheck ./cmd/skywire-visor/...
@@ -134,55 +141,66 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 dep: ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-# Apps
 host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
+
+# Static Apps
+host-apps-static: ## Build app
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skychat ./cmd/apps/skychat
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks ./cmd/apps/skysocks
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 # Bin
-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`
+bin: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 
-release: ## Build `skywire-visor`, `skywire-cli`, `hypervisor` and apps without -race flag
+# Static Bin
+bin-static: ## Build `skywire-visor`, `skywire-cli`
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
+
+release: ## Build `skywire-visor`, `skywire-cli` and apps without -race flag
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./hypervisor ./cmd/hypervisor
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
+
+release-static: ## Build `skywire-visor`, `skywire-cli` and apps without -race flag
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skychat ./cmd/apps/skychat
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks ./cmd/apps/skysocks
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 build-deploy: ## Build for deployment Docker images
 	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/skywire-cli ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/helloworld ./cmd/apps/helloworld
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-package-amd64: install-deps-ui lint-ui build-ui ## Build the debian package.
-	scripts/dPKGBUILD.sh amd64
-
-package-arm64: install-deps-ui lint-ui build-ui ## Build the debian package.
-	scripts/dPKGBUILD.sh arm64
-
-package-armhf:  install-deps-ui lint-ui build-ui ## Build the debian package.
-	scripts/dPKGBUILD.sh armhf
-
-all-packages: install-deps-ui lint-ui build-ui
-	scripts/dPKGBUILD.sh amd64
-	scripts/dPKGBUILD.sh arm64
-	scripts/dPKGBUILD.sh armhf
+build-deploy-static: ## Build for deployment Docker images
+	${STATIC_OPTS} go build -tags netgo -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/skywire-visor ./cmd/skywire-visor
+	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/skywire-cli ./cmd/skywire-cli
+	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skychat ./cmd/apps/skychat
+	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skysocks ./cmd/apps/skysocks
+	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
@@ -198,7 +216,7 @@ build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
 	${OPTS} GOBIN=${PWD}/bin go get github.com/rakyll/statik
-	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/hypervisor -f
+	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/skywire-visor -f
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
@@ -213,11 +231,10 @@ docker-network: ## Create docker network ${DOCKER_NETWORK}
 
 docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/helloworld ./cmd/apps/helloworld
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks ./cmd/apps/skysocks
 	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client  ./cmd/apps/skysocks-client
 
-docker-bin: ## Build `skywire-visor`, `skywire-cli`, `hypervisor`. `go build` with  ${DOCKER_OPTS}
+docker-bin: ## Build `skywire-visor`, `skywire-cli`. `go build` with  ${DOCKER_OPTS}
 	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
 
 docker-volume: dep docker-apps docker-bin bin  ## Prepare docker volume for dockerized skywire-visor

@@ -42,6 +42,7 @@
         <div class="right-part">
           {{ 'update.version-change' | translate:update }}
           <a [href]="update.updateLink" target="_blank" rel="noreferrer nofollow noopener">{{ update.updateLink }}</a>
+          <span class="channel" *ngIf="customChannel">{{ 'update.selected-channel' | translate }} {{ customChannel }}</span>
         </div>
       </div>
     </div>
@@ -104,7 +105,7 @@
             <div class="list-element">
               <div class="left-part">-</div>
               <div class="right-part">
-                {{ node.label }}: <span class="red-text">{{ node.updateProgressInfo.errorMsg }}</span>
+                {{ node.label }}: <span class="red-text">{{ node.updateProgressInfo.errorMsg | translate }}</span>
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { HttpClientModule } from '@angular/common/http';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
+import { StartComponent } from './components/pages/start/start.component';
 import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
@@ -84,7 +85,6 @@ import { LabeledElementTextComponent } from './components/layout/labeled-element
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { LabelListComponent } from './components/pages/settings/all-labels/label-list/label-list.component';
 import { UpdateComponent } from './components/layout/update/update.component';
-import { UpdateHypervisorComponent } from './components/layout/update-hypervisor/update-hypervisor.component';
 import { UpdaterConfigComponent } from './components/pages/settings/updater-config/updater-config.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
@@ -94,6 +94,7 @@ const globalRippleConfig: RippleGlobalOptions = {
 @NgModule({
   declarations: [
     AppComponent,
+    StartComponent,
     LoginComponent,
     NodeListComponent,
     NodeComponent,
@@ -143,7 +144,6 @@ const globalRippleConfig: RippleGlobalOptions = {
     AllLabelsComponent,
     LabelListComponent,
     UpdateComponent,
-    UpdateHypervisorComponent,
     UpdaterConfigComponent,
     EditSkysocksClientNoteComponent,
     SkysocksClientFilterComponent,
