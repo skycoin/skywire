@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
+import { Observable, Subscription, BehaviorSubject, of, forkJoin } from 'rxjs';
 import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
@@ -59,6 +59,38 @@ export class TrafficData {
    * but the service will try it best to provided good data.
    */
   receivedHistory: number[] = [];
+}
+
+/**
+ * Data for knowing if the services of a node are working.
+ */
+export class HealthStatus {
+  /**
+   * If all services are working.
+   */
+  allServicesOk: boolean;
+  /**
+   * Details about the individual services.
+   */
+  services: HealthService[];
+}
+
+/**
+ * Data for knowing if a service of a node is working.
+ */
+export class HealthService {
+  /**
+   * Name of the service, as a translatable var.
+   */
+  name: string;
+  /**
+   * If the service is working.
+   */
+  isOk: boolean;
+  /**
+   * Status text returned by the node.
+   */
+  originalValue: string;
 }
 
 /**
@@ -186,16 +218,11 @@ export class NodeService {
 
     // Get for how many ms the saved data is still valid.
     const momentOfLastCorrectUpdate = this.nodeListSubject.value ? this.nodeListSubject.value.momentOfLastCorrectUpdate : 0;
-    const remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
+    let remainingTime = this.calculateRemainingTime(momentOfLastCorrectUpdate);
+    remainingTime = remainingTime > 0 ? remainingTime : 0;
 
-    if (remainingTime === 0) {
-      // Get the data from the backend.
-      this.nodeListSubject.next(null);
-      this.startDataSubscription(0, true);
-    } else {
-      // Use the data obtained the last time and schedule an update after the appropriate time.
-      this.startDataSubscription(remainingTime, true);
-    }
+    // Use the data obtained the last time and schedule an update after the appropriate time.
+    this.startDataSubscription(remainingTime, true);
   }
 
   /**
@@ -386,8 +413,8 @@ export class NodeService {
     currentData.totalSent = 0;
     currentData.totalReceived = 0;
     if (transports && transports.length > 0) {
-      currentData.totalSent = transports.reduce((total, transport) => total + transport.log.sent, 0);
-      currentData.totalReceived = transports.reduce((total, transport) => total + transport.log.recv, 0);
+      currentData.totalSent = transports.reduce((total, transport) => total + transport.sent, 0);
+      currentData.totalReceived = transports.reduce((total, transport) => total + transport.recv, 0);
     }
 
     // Update the history.
@@ -458,15 +485,52 @@ export class NodeService {
    * Gets the list of the nodes connected to the hypervisor.
    */
   private getNodes(): Observable<Node[]> {
-    let nodes: Node[];
+    let nodes: Node[] = [];
+    let dmsgInfo: any[];
 
-    return this.apiService.get('visors').pipe(mergeMap((result: Node[]) => {
+    return this.apiService.get('visors').pipe(mergeMap((result: any[]) => {
       // Save the visor list.
-      nodes = result || [];
+      if (result) {
+        result.forEach(response => {
+          const node = new Node();
+
+          // Basic data.
+          node.online = response.online;
+          node.tcpAddr = response.tcp_addr;
+          node.ip = this.getAddressPart(node.tcpAddr, 0);
+          node.port = this.getAddressPart(node.tcpAddr, 1);
+          node.localPk = response.local_pk;
+
+          // Label.
+          const labelInfo = this.storageService.getLabelInfo(node.localPk);
+          node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+
+          nodes.push(node);
+        });
+      }
 
       // Get the dmsg info.
       return this.apiService.get('dmsg');
-    }), map((dmsgInfo: any[]) => {
+    }), mergeMap((result: any[]) => {
+      dmsgInfo = result;
+
+      // Get the health info of each node.
+      return forkJoin(nodes.map(node => this.apiService.get(`visors/${node.localPk}/health`)));
+    }), mergeMap((result: any[]) => {
+      nodes.forEach((node, i) => {
+        node.health = {
+          status: result[i].status,
+          addressResolver: result[i].address_resolver,
+          routeFinder: result[i].route_finder,
+          setupNode: result[i].setup_node,
+          transportDiscovery: result[i].transport_discovery,
+          uptimeTracker: result[i].uptime_tracker,
+        };
+      });
+
+      // Get the basic info about the hypervisor.
+      return this.apiService.get('about');
+    }), map((aboutInfo: any) => {
       // Create a map to associate the dmsg info with the visors.
       const dmsgInfoMap = new Map<string, any>();
       dmsgInfo.forEach(info => dmsgInfoMap.set(info.public_key, info));
@@ -475,23 +539,19 @@ export class NodeService {
       const obtainedNodes = new Map<string, Node>();
       const nodesToRegisterInLocalStorageAsOnline: string[] = [];
       nodes.forEach(node => {
-        if (dmsgInfoMap.has(node.local_pk)) {
-          node.dmsgServerPk = dmsgInfoMap.get(node.local_pk).server_public_key;
-          node.roundTripPing = this.nsToMs(dmsgInfoMap.get(node.local_pk).round_trip);
+        if (dmsgInfoMap.has(node.localPk)) {
+          node.dmsgServerPk = dmsgInfoMap.get(node.localPk).server_public_key;
+          node.roundTripPing = this.nsToMs(dmsgInfoMap.get(node.localPk).round_trip);
         } else {
           node.dmsgServerPk = '-';
           node.roundTripPing = '-1';
         }
 
-        node.ip = this.getAddressPart(node.tcp_addr, 0);
-        node.port = this.getAddressPart(node.tcp_addr, 1);
-        const labelInfo = this.storageService.getLabelInfo(node.local_pk);
-        node.label =
-          labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.local_pk);
+        node.isHypervisor = node.localPk === aboutInfo.public_key;
 
-        obtainedNodes.set(node.local_pk, node);
+        obtainedNodes.set(node.localPk, node);
         if (node.online) {
-          nodesToRegisterInLocalStorageAsOnline.push(node.local_pk);
+          nodesToRegisterInLocalStorageAsOnline.push(node.localPk);
         }
       });
 
@@ -502,10 +562,9 @@ export class NodeService {
         // If the backend did not return a saved node, add it to the response as an offline node.
         if (!obtainedNodes.has(node.publicKey) && !node.hidden) {
           const newNode: Node = new Node();
-          newNode.local_pk = node.publicKey;
+          newNode.localPk = node.publicKey;
           const labelInfo = this.storageService.getLabelInfo(node.publicKey);
-          newNode.label =
-            labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.publicKey);
+          newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.publicKey);
           newNode.online = false;
 
           missingSavedNodes.push(newNode);
@@ -546,68 +605,139 @@ export class NodeService {
    * Gets the details of a specific node.
    */
   private getNode(nodeKey: string): Observable<Node> {
-    let currentNode: Node;
+    // Get the node data.
+    return this.apiService.get(`visors/${nodeKey}/summary`).pipe(
+      map((response: any) => {
+        const node = new Node();
 
-    // Get the basic node data.
-    return this.apiService.get(`visors/${nodeKey}`).pipe(
-      flatMap((node: Node) => {
-        node.ip = this.getAddressPart(node.tcp_addr, 0);
-        node.port = this.getAddressPart(node.tcp_addr, 1);
-        const labelInfo = this.storageService.getLabelInfo(node.local_pk);
-        node.label =
-          labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.local_pk);
-        currentNode = node;
+        // Basic data.
+        node.online = response.online;
+        node.tcpAddr = response.tcp_addr;
+        node.ip = this.getAddressPart(node.tcpAddr, 0);
+        node.port = this.getAddressPart(node.tcpAddr, 1);
+        node.localPk = response.summary.local_pk;
+        node.version = response.summary.build_info.version;
+        node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
 
-        // Needed for a change made to the names on the backend.
-        if (node.apps) {
-          node.apps.forEach(app => {
-            app.name = (app as any).name ? (app as any).name : (app as any).app;
-            app.autostart = (app as any).auto_start;
+        // Label.
+        const labelInfo = this.storageService.getLabelInfo(node.localPk);
+        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+
+        // Health info.
+        node.health = {
+          status: 200,
+          addressResolver: response.health.address_resolver,
+          routeFinder: response.health.route_finder,
+          setupNode: response.health.setup_node,
+          transportDiscovery: response.health.transport_discovery,
+          uptimeTracker: response.health.uptime_tracker,
+        };
+
+        // Transports.
+        node.transports = [];
+        if (response.summary.transports) {
+          (response.summary.transports as any[]).forEach(transport => {
+            node.transports.push({
+              isUp: transport.is_up,
+              id: transport.id,
+              localPk: transport.local_pk,
+              remotePk: transport.remote_pk,
+              type: transport.type,
+              recv: transport.log.recv,
+              sent: transport.log.sent,
+            });
           });
         }
 
-        // Get the dmsg info.
-        return this.apiService.get('dmsg');
-      }),
-      flatMap((dmsgInfo: any[]) => {
-        for (let i = 0; i < dmsgInfo.length; i++) {
-          if (dmsgInfo[i].public_key === currentNode.local_pk) {
-            currentNode.dmsgServerPk = dmsgInfo[i].server_public_key;
-            currentNode.roundTripPing = this.nsToMs(dmsgInfo[i].round_trip);
+        // Routes.
+        node.routes = [];
+        if (response.routes) {
+          (response.routes as any[]).forEach(route => {
+            // Basic data.
+            node.routes.push({
+              key: route.key,
+              rule: route.rule,
+            });
 
-            // Get the health info.
-            return this.apiService.get(`visors/${nodeKey}/health`);
+            if (route.rule_summary) {
+              // Rule summary.
+              node.routes[node.routes.length - 1].ruleSummary = {
+                keepAlive: route.rule_summary.keep_alive,
+                ruleType: route.rule_summary.rule_type,
+                keyRouteId: route.rule_summary.key_route_id,
+              };
+
+              // App fields, if any.
+              if (route.rule_summary.app_fields && route.rule_summary.app_fields.route_descriptor) {
+                node.routes[node.routes.length - 1].appFields = {
+                  routeDescriptor: {
+                    dstPk: route.rule_summary.app_fields.route_descriptor.dst_pk,
+                    dstPort: route.rule_summary.app_fields.route_descriptor.dst_port,
+                    srcPk: route.rule_summary.app_fields.route_descriptor.src_pk,
+                    srcPort: route.rule_summary.app_fields.route_descriptor.src_port,
+                  },
+                };
+              }
+
+              // Forward fields, if any.
+              if (route.rule_summary.forward_fields) {
+                node.routes[node.routes.length - 1].forwardFields = {
+                  nextRid: route.rule_summary.forward_fields.next_rid,
+                  nextTid: route.rule_summary.forward_fields.next_tid,
+                };
+
+                if (route.rule_summary.forward_fields.route_descriptor) {
+                  node.routes[node.routes.length - 1].forwardFields.routeDescriptor = {
+                    dstPk: route.rule_summary.forward_fields.route_descriptor.dst_pk,
+                    dstPort: route.rule_summary.forward_fields.route_descriptor.dst_port,
+                    srcPk: route.rule_summary.forward_fields.route_descriptor.src_pk,
+                    srcPort: route.rule_summary.forward_fields.route_descriptor.src_port,
+                  };
+                }
+              }
+
+              // Intermediary forward fields, if any.
+              if (route.rule_summary.intermediary_forward_fields) {
+                node.routes[node.routes.length - 1].intermediaryForwardFields = {
+                  nextRid: route.rule_summary.intermediary_forward_fields.next_rid,
+                  nextTid: route.rule_summary.intermediary_forward_fields.next_tid,
+                };
+              }
+            }
+          });
+        }
+
+        // Apps.
+        node.apps = [];
+        if (response.summary.apps) {
+          (response.summary.apps as any[]).forEach(app => {
+            node.apps.push({
+              name: app.name,
+              status: app.status,
+              port: app.port,
+              autostart: app.auto_start,
+              args: app.args,
+            });
+          });
+        }
+
+        let dmsgServerFound = false;
+        for (let i = 0; i < response.dmsg.length; i++) {
+          if (response.dmsg[i].public_key === node.localPk) {
+            node.dmsgServerPk = response.dmsg[i].server_public_key;
+            node.roundTripPing = this.nsToMs(response.dmsg[i].round_trip);
+
+            dmsgServerFound = true;
+            break;
           }
         }
 
-        currentNode.dmsgServerPk = '-';
-        currentNode.roundTripPing = '-1';
+        if (!dmsgServerFound) {
+          node.dmsgServerPk = '-';
+          node.roundTripPing = '-1';
+        }
 
-        // Get the health info.
-        return this.apiService.get(`visors/${nodeKey}/health`);
-      }),
-      flatMap((health: HealthInfo) => {
-        currentNode.health = health;
-
-        // Get the node uptime.
-        return this.apiService.get(`visors/${nodeKey}/uptime`);
-      }),
-      flatMap((secondsOnline: string) => {
-        currentNode.seconds_online = Math.floor(Number.parseFloat(secondsOnline));
-
-        // Get the complete transports info.
-        return this.transportService.getTransports(nodeKey);
-      }),
-      flatMap((transports: Transport[]) => {
-        currentNode.transports = transports;
-
-        // Get the complete routes info.
-        return this.routeService.getRoutes(nodeKey);
-      }),
-      map((routes: Route[]) => {
-        currentNode.routes = routes;
-
-        return currentNode;
+        return node;
       })
     );
   }
@@ -636,31 +766,27 @@ export class NodeService {
   }
 
   /**
-   * Checks if a node is currently being updated. If no node key is provided, checks if the
-   * hypervisor is currently being updated.
+   * Checks if a node is currently being updated.
    */
   checkIfUpdating(nodeKey: string): Observable<any> {
-    if (!nodeKey) {
-      return this.apiService.get(`update/ws/running`);
-    }
-
     return this.apiService.get(`visors/${nodeKey}/update/ws/running`);
   }
 
   /**
-   * Checks if there are updates available for a node. If no node key is provided, checks if
-   * there are updates available for the hypervisor.
+   * Checks if there are updates available for a node.
    */
   checkUpdate(nodeKey: string): Observable<any> {
-    if (!nodeKey) {
-      return this.apiService.post(`update/available`);
-    }
+    let channel = 'stable';
 
-    return this.apiService.get(`visors/${nodeKey}/update/available`);
+    // Use the custom channel saved by the user, if any.
+    const savedChannel = localStorage.getItem(UpdaterStorageKeys.Channel);
+    channel = savedChannel ? savedChannel : channel;
+
+    return this.apiService.get(`visors/${nodeKey}/update/available/${channel}`);
   }
 
   /**
-   * Updates a node. If no node key is provided, updates the hypervisor.
+   * Updates a node.
    */
   update(nodeKey: string): Observable<any> {
     const body = {
@@ -681,10 +807,75 @@ export class NodeService {
       if (checksumsURL) { body['checksums_url'] = checksumsURL; }
     }
 
-    if (!nodeKey) {
-      return this.apiService.ws(`update/ws`, body);
+    return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
+  }
+
+  /**
+   * Checks the data of a node and returns an object indicating the state of its services.
+   */
+  getHealthStatus(node: Node): HealthStatus {
+    const response = new HealthStatus();
+    response.allServicesOk = false;
+    response.services = [];
+
+    if (node.health) {
+      // General status.
+      let service: HealthService = {
+        name: 'node.details.node-health.status',
+        isOk: node.health.status && node.health.status === 200,
+        originalValue: node.health.status + ''
+      };
+      response.services.push(service);
+
+      // Transport discovery.
+      service = {
+        name: 'node.details.node-health.transport-discovery',
+        isOk: node.health.transportDiscovery && node.health.transportDiscovery === 200,
+        originalValue: node.health.transportDiscovery + ''
+      };
+      response.services.push(service);
+
+      // Route finder.
+      service = {
+        name: 'node.details.node-health.route-finder',
+        isOk: node.health.routeFinder && node.health.routeFinder === 200,
+        originalValue: node.health.routeFinder + ''
+      };
+      response.services.push(service);
+
+      // Setup node.
+      service = {
+        name: 'node.details.node-health.setup-node',
+        isOk: node.health.setupNode && node.health.setupNode === 200,
+        originalValue: node.health.setupNode + ''
+      };
+      response.services.push(service);
+
+      // Uptime tracker.
+      service = {
+        name: 'node.details.node-health.uptime-tracker',
+        isOk: node.health.uptimeTracker && node.health.uptimeTracker === 200,
+        originalValue: node.health.uptimeTracker + ''
+      };
+      response.services.push(service);
+
+      // Address resolver.
+      service = {
+        name: 'node.details.node-health.address-resolver',
+        isOk: node.health.addressResolver && node.health.addressResolver === 200,
+        originalValue: node.health.addressResolver + ''
+      };
+      response.services.push(service);
+
+      // Check if any service is not working.
+      response.allServicesOk = true;
+      response.services.forEach(v => {
+        if (!v.isOk) {
+          response.allServicesOk = false;
+        }
+      });
     }
 
-    return this.apiService.ws(`visors/${nodeKey}/update/ws`, body);
+    return response;
   }
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
@@ -43,7 +44,7 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
 	conf.ShutdownTimeout = DefaultTimeout
-	conf.RestartCheckDelay = restart.DefaultCheckDelay.String() // TODO: Use Duration type.
+	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	return conf
 }
 
@@ -51,15 +52,15 @@ func MakeBaseConfig(common *Common) *V1 {
 // The config's 'sk' field will be nil if not specified.
 // Generated config will be saved to 'confPath'.
 // This function always returns the latest config version.
-func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
+func MakeDefaultConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
 	cc, err := NewCommon(log, confPath, V1Name, sk)
 	if err != nil {
 		return nil, err
 	}
-	return defaultConfigFromCommon(cc)
+	return defaultConfigFromCommon(cc, hypervisor)
 }
 
-func defaultConfigFromCommon(cc *Common) (*V1, error) {
+func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	// Enforce version and keys in 'cc'.
 	cc.Version = V1Name
 	if err := cc.ensureKeys(); err != nil {
@@ -126,16 +127,61 @@ func defaultConfigFromCommon(cc *Common) (*V1, error) {
 
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 
+	if hypervisor {
+		config := hypervisorconfig.GenerateWorkDirConfig(false)
+		conf.Hypervisor = &config
+	}
+
 	return conf, nil
 }
 
 // MakeTestConfig acts like MakeDefaultConfig, however, test deployment service addresses are used instead.
-func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey) (*V1, error) {
-	conf, err := MakeDefaultConfig(log, confPath, sk)
+func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
+	if err != nil {
+		return nil, err
+	}
+	SetDefaultTestingValues(conf)
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.DmsgDiscovery = conf.Transport.Discovery
+	}
+
+	return conf, nil
+}
+
+// MakePackageConfig acts like MakeDefaultConfig but use package config defaults
+func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKey, hypervisor bool) (*V1, error) {
+	conf, err := MakeDefaultConfig(log, confPath, sk, hypervisor)
 	if err != nil {
 		return nil, err
 	}
 
+	conf.Dmsgpty = &V1Dmsgpty{
+		Port:     skyenv.DmsgPtyPort,
+		AuthFile: skyenv.PackageDmsgPtyWhiteList,
+		CLINet:   skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+	}
+
+	conf.Transport.LogStore = &V1LogStore{
+		Type:     "file",
+		Location: skyenv.PackageTpLogStore,
+	}
+
+	conf.Launcher.BinPath = skyenv.PackageAppBinPath
+	conf.Launcher.LocalPath = skyenv.PackageAppLocalPath
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
+		conf.Hypervisor.EnableTLS = skyenv.PackageEnableTLS
+		conf.Hypervisor.TLSKeyFile = skyenv.PackageTLSKey
+		conf.Hypervisor.TLSCertFile = skyenv.PackageTLSCert
+	}
+	return conf, nil
+}
+
+// SetDefaultTestingValues mutates configuration to use testing values
+func SetDefaultTestingValues(conf *V1) {
 	conf.Dmsg.Discovery = skyenv.TestDmsgDiscAddr
 	conf.Transport.Discovery = skyenv.TestTpDiscAddr
 	conf.Transport.AddressResolver = skyenv.TestAddressResolverAddr
@@ -143,6 +189,20 @@ func MakeTestConfig(log *logging.MasterLogger, confPath string, sk *cipher.SecKe
 	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.TestSetupPK)}
 	conf.UptimeTracker.Addr = skyenv.TestUptimeTrackerAddr
 	conf.Launcher.Discovery.ServiceDisc = skyenv.TestServiceDiscAddr
+}
 
-	return conf, nil
+// SetDefaultProductionValues mutates configuration to use production values
+func SetDefaultProductionValues(conf *V1) {
+	conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
+	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	conf.Routing.SetupNodes = []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)}
+	conf.UptimeTracker = &V1UptimeTracker{
+		Addr: skyenv.DefaultUptimeTrackerAddr,
+	}
+	conf.Launcher.Discovery = &V1AppDisc{
+		UpdateInterval: Duration(skyenv.AppDiscUpdateInterval),
+		ServiceDisc:    skyenv.DefaultServiceDiscAddr,
+	}
 }

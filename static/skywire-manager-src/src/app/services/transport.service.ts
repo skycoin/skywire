@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ApiService } from './api.service';
-import { Transport } from '../app.datatypes';
 
 /**
  * Allows to work with the transports of a node.
@@ -14,13 +13,6 @@ export class TransportService {
   constructor(
     private apiService: ApiService,
   ) { }
-
-  /**
-   * Get a list with the transports of a node.
-   */
-  getTransports(nodeKey: string): Observable<Transport[]> {
-    return this.apiService.get(`visors/${nodeKey}/transports`);
-  }
 
   create(nodeKey: string, remoteKey: string, type: string): Observable<any> {
     return this.apiService.post(`visors/${nodeKey}/transports`, {

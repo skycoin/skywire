@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
 
@@ -34,7 +33,6 @@ var addr = flag.String("addr", ":8001", "address to bind")
 var r = netutil.NewRetrier(50*time.Millisecond, 5, 2)
 
 var (
-	log      = logrus.New()
 	appC     *app.Client
 	clientCh chan string
 	conns    map[cipher.PubKey]net.Conn // Chat connections
@@ -46,11 +44,11 @@ func main() {
 	defer appC.Close()
 
 	if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-		log.Printf("Failed to output build info: %v", err)
+		fmt.Printf("Failed to output build info: %v", err)
 	}
 
 	flag.Parse()
-	log.Println("Successfully started skychat.")
+	fmt.Print("Successfully started skychat.")
 
 	clientCh = make(chan string)
 	defer close(clientCh)
@@ -62,31 +60,35 @@ func main() {
 	http.HandleFunc("/message", messageHandler)
 	http.HandleFunc("/sse", sseHandler)
 
-	log.Println("Serving HTTP on", *addr)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	fmt.Print("Serving HTTP on", *addr)
+	err := http.ListenAndServe(*addr, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func listenLoop() {
 	l, err := appC.Listen(netType, port)
 	if err != nil {
-		log.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
+		fmt.Printf("Error listening network %v on port %d: %v\n", netType, port, err)
 		return
 	}
 
 	for {
-		log.Println("Accepting skychat conn...")
+		fmt.Print("Accepting skychat conn...")
 		conn, err := l.Accept()
 		if err != nil {
-			log.Println("Failed to accept conn:", err)
+			fmt.Print("Failed to accept conn:", err)
 			return
 		}
-		log.Println("Accepted skychat conn")
+		fmt.Print("Accepted skychat conn")
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
 		connsMu.Lock()
 		conns[raddr.PubKey] = conn
 		connsMu.Unlock()
-		log.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
+		fmt.Printf("Accepted skychat conn on %s from %s\n", conn.LocalAddr(), raddr.PubKey)
 
 		go handleConn(conn)
 	}
@@ -98,7 +100,7 @@ func handleConn(conn net.Conn) {
 		buf := make([]byte, 32*1024)
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Println("Failed to read packet:", err)
+			fmt.Print("Failed to read packet:", err)
 			raddr := conn.RemoteAddr().(appnet.Addr)
 			connsMu.Lock()
 			delete(conns, raddr.PubKey)
@@ -108,13 +110,13 @@ func handleConn(conn net.Conn) {
 
 		clientMsg, err := json.Marshal(map[string]string{"sender": raddr.PubKey.Hex(), "message": string(buf[:n])})
 		if err != nil {
-			log.Printf("Failed to marshal json: %v", err)
+			fmt.Printf("Failed to marshal json: %v", err)
 		}
 		select {
 		case clientCh <- string(clientMsg):
-			log.Printf("Received and sent to ui: %s\n", clientMsg)
+			fmt.Printf("Received and sent to ui: %s\n", clientMsg)
 		default:
-			log.Printf("Received and trashed: %s\n", clientMsg)
+			fmt.Printf("Received and trashed: %s\n", clientMsg)
 		}
 	}
 }
@@ -193,7 +195,7 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			f.Flush()
 
 		case <-req.Context().Done():
-			log.Println("SSE connection were closed.")
+			fmt.Print("SSE connection were closed.")
 			return
 		}
 	}
