@@ -268,6 +268,7 @@
     "update-instructions": "Haga clic en el botón 'Instalar actualizaciones' para continuar.",
     "updating": "La operación de actualización se ha iniciado, puede abrir esta ventana nuevamente para verificar el progreso:",
     "version-change": "De {{ currentVersion }} a {{ newVersion }}",
+    "selected-channel": "Canal seleccionado:",
     "downloaded-file-name-prefix": "Descargando: ",
     "speed-prefix": "Velocidad: ",
     "time-downloading-prefix": "Tiempo descargando: ",
@@ -307,6 +308,8 @@
       "enable-autostart": "Habilitar autoinicio",
       "autostart-disabled": "Autoinicio deshabilitado",
       "autostart-enabled": "Autoinicio habilitado",
+      "unavailable-logs-error": "No es posible mostrar los logs mientras la aplicación no se está ejecutando.",
+
       "filter-dialog": {
         "state": "El estado debe ser",
         "name": "El nombre debe contener",
@@ -465,8 +468,10 @@
     },
     "dialog": {
       "remote-key": "Llave pública remota",
+      "label": "Nombre del transporte (opcional)",
       "transport-type": "Tipo de transporte",
       "success": "Transporte creado.",
+      "success-without-label": "El transporte fue creado, pero no fue posible guardar la etiqueta.",
       "errors": {
         "remote-key-length-error": "La llave pública remota debe tener 66 caracteres.",
         "remote-key-chars-error": "La llave pública remota sólo debe contener caracteres hexadecimales.",
@@ -490,7 +495,9 @@
     "title": "Rutas",
     "list-title": "Lista de rutas",
     "key": "Llave",
-    "rule": "Regla",
+    "type": "Tipo",
+    "source": "Inicio",
+    "destination": "Destino",
     "delete-confirmation": "¿Seguro que desea borrar la ruta?",
     "delete-selected-confirmation": "¿Seguro que desea borrar las rutas seleccionadas?",
     "delete": "Borrar ruta",
@@ -526,7 +533,10 @@
     },
     "filter-dialog": {
       "key": "La llave debe contener",
-      "rule": "La regla debe contener"
+      "type": "El tipo debe ser",
+      "source": "El inicio debe contener",
+      "destination": "El destino debe contener",
+      "any-type-option": "Cualquiera"
     }
   },
 

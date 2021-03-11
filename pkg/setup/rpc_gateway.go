@@ -26,7 +26,7 @@ type RPCGateway struct {
 // DialRouteGroup dials RouteGroups for route and rules.
 func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *routing.EdgeRules) (err error) {
 	log := logging.MustGetLogger("request:" + g.ReqPK.String())
-	defer g.Metrics.RecordRequest(route)(rules, &err)
+	defer g.Metrics.RecordRequest()(rules, &err)
 
 	ctx, cancel := context.WithTimeout(g.Ctx, g.Timeout)
 	defer cancel()

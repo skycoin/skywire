@@ -22,8 +22,12 @@ import (
 const (
 	// RPCPrefix is the prefix used with all RPC calls.
 	RPCPrefix = "app-visor"
-	// HealthTimeout defines timeout for /health endpoint calls.
+	// HealthTimeout defines timeout for /health endpoint calls done from hypervisor.
 	HealthTimeout = 5 * time.Second
+	// InnerHealthTimeout defines timeout for /health endpoint calls done from visor.
+	// We keep it is less than the `HealthTimeout`, so that the outer call would
+	// definitely complete.
+	InnerHealthTimeout = 3 * time.Second
 )
 
 var (
@@ -231,6 +235,13 @@ func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
 
 	return r.visor.StopApp(*name)
+}
+
+// RestartApp restarts App with provided name.
+func (r *RPC) RestartApp(name *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RestartApp", name)(nil, &err)
+
+	return r.visor.RestartApp(*name)
 }
 
 // SetAutoStartIn is input for SetAutoStart.

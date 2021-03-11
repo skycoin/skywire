@@ -3,18 +3,20 @@ module github.com/skycoin/dmsg
 go 1.14
 
 require (
+	github.com/VictoriaMetrics/metrics v1.12.3
 	github.com/creack/pty v1.1.9
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-redis/redis v6.15.6+incompatible
-	github.com/gorilla/handlers v1.4.2
+	github.com/json-iterator/go v1.1.10
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/kz/discordrus v1.2.0
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
-	github.com/prometheus/client_golang v1.3.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 	github.com/skycoin/skycoin v0.26.0
