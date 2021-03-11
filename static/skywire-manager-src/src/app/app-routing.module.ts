@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
+import { StartComponent } from './components/pages/start/start.component';
 import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
@@ -15,6 +16,10 @@ import { NodeInfoComponent } from './components/pages/node/node-info/node-info.c
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 
 const routes: Routes = [
+  {
+    path: '',
+    component: StartComponent
+  },
   {
     path: 'login',
     component: LoginComponent
@@ -121,7 +126,7 @@ const routes: Routes = [
   },
   {
     path: '**',
-    redirectTo: 'login'
+    redirectTo: ''
   },
 ];
 

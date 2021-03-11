@@ -341,7 +341,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) 
 		r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 		err := r.Do(context.Background(), func() error {
 			for _, ses := range n.Dmsg().AllSessions() {
-				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.LocalTCPAddr().String())
+				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
 			}
 
 			if len(envCfg.DmsgServers) == 0 {

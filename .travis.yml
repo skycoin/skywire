@@ -2,8 +2,14 @@ language: go
 go:
   # - "1.14.x" At minimum the code should run make check on the latest two go versions in the default linux environment provided by Travis.
   - "1.14.x"
-  
+
 dist: xenial
+
+addons:
+  apt:
+    packages:
+      # For building MUSL static builds on Linux.
+      - musl-tools
 
 matrix:
   include:
@@ -31,4 +37,3 @@ script:
   - make install-deps-ui
   - make lint-ui
   - make build-ui
-

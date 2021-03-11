@@ -67,9 +67,17 @@
         {{ 'routes.key' | translate }}
         <mat-icon *ngIf="dataSorter.currentSortingColumn === keySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
-      <th class="sortable-column"  (click)="dataSorter.changeSortingOrder(ruleSortData)">
-        {{ 'routes.rule' | translate }}
-        <mat-icon *ngIf="dataSorter.currentSortingColumn === ruleSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(typeSortData)">
+        {{ 'routes.type' | translate }}
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === typeSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+      </th>
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(sourceSortData)">
+        {{ 'routes.source' | translate }}
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === sourceSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+      </th>
+      <th class="sortable-column" (click)="dataSorter.changeSortingOrder(destinationSortData)">
+        {{ 'routes.destination' | translate }}
+        <mat-icon *ngIf="dataSorter.currentSortingColumn === destinationSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
       </th>
       <th class="actions"></th>
     </tr>
@@ -85,11 +93,50 @@
         {{ route.key }}
       </td>
       <td>
-        <app-copy-to-clipboard-text [text]="route.rule"></app-copy-to-clipboard-text>
+        {{ getTypeName(route.type) }}
       </td>
+      <!-- Source and destination for app and forward routes. -->
+      <ng-container *ngIf="route.appFields || route.forwardFields">
+        <td>
+          <app-labeled-element-text
+            [short]="true"
+            id="{{ route.src }}"
+            shortTextLength="7"
+            (labelEdited)="refreshData()"
+            [elementType]="labeledElementTypes.Node">
+          </app-labeled-element-text>
+        </td>
+        <td>
+          <app-labeled-element-text
+            [short]="true"
+            id="{{ route.dst }}"
+            shortTextLength="7"
+            (labelEdited)="refreshData()"
+            [elementType]="labeledElementTypes.Node">
+          </app-labeled-element-text>
+        </td>
+      </ng-container>
+      <!-- Source and destination for intermediary forward routes. -->
+      <ng-container *ngIf="(!route.appFields && !route.forwardFields) && route.intermediaryForwardFields">
+        <td>---</td>
+        <td>
+          <app-labeled-element-text
+            [short]="true"
+            id="{{ route.dst }}"
+            shortTextLength="5"
+            (labelEdited)="refreshData()"
+            [elementType]="labeledElementTypes.Transport">
+          </app-labeled-element-text>
+        </td>
+      </ng-container>
+      <!-- Source and destination for special cases. -->
+      <ng-container *ngIf="!route.appFields && !route.forwardFields && !route.intermediaryForwardFields">
+        <td>---</td>
+        <td>---</td>
+      </ng-container>
       <td class="actions">
         <button
-          (click)="details(route.key)"
+          (click)="details(route)"
           mat-icon-button
           [matTooltip]="'routes.details.title' | translate"
           class="action-button transparent-button"
@@ -144,9 +191,54 @@
             {{ route.key }}
           </div>
           <div class="list-row long-content">
-            <span class="title">{{ 'routes.rule' | translate }}</span>:
-            <app-copy-to-clipboard-text text="{{ route.rule }}"></app-copy-to-clipboard-text>
+            <span class="title">{{ 'routes.type' | translate }}</span>:
+            {{ getTypeName(route.type) }}
           </div>
+          <!-- Source and destination for app and forward routes. -->
+          <ng-container *ngIf="route.appFields || route.forwardFields">
+            <div class="list-row long-content">
+              <span class="title">{{ 'routes.source' | translate }}</span>:
+              <app-labeled-element-text
+                id="{{ route.src }}"
+                (labelEdited)="refreshData()"
+                [elementType]="labeledElementTypes.Node">
+              </app-labeled-element-text>
+            </div>
+            <div class="list-row long-content">
+              <span class="title">{{ 'routes.destination' | translate }}</span>:
+              <app-labeled-element-text
+                id="{{ route.dst }}"
+                (labelEdited)="refreshData()"
+                [elementType]="labeledElementTypes.Node">
+              </app-labeled-element-text>
+            </div>
+          </ng-container>
+          <!-- Source and destination for intermediary forward routes. -->
+          <ng-container *ngIf="(!route.appFields && !route.forwardFields) && route.intermediaryForwardFields">
+            <div class="list-row long-content">
+              <span class="title">{{ 'routes.source' | translate }}</span>:
+              ---
+            </div>
+            <div class="list-row long-content">
+              <span class="title">{{ 'routes.destination' | translate }}</span>:
+              <app-labeled-element-text
+                id="{{ route.dst }}"
+                (labelEdited)="refreshData()"
+                [elementType]="labeledElementTypes.Transport">
+              </app-labeled-element-text>
+            </div>
+          </ng-container>
+          <!-- Source and destination for special cases. -->
+          <ng-container *ngIf="!route.appFields && !route.forwardFields && !route.intermediaryForwardFields">
+            <div class="list-row long-content">
+              <span class="title">{{ 'routes.source' | translate }}</span>:
+              ---
+            </div>
+            <div class="list-row long-content">
+              <span class="title">{{ 'routes.destination' | translate }}</span>:
+              ---
+            </div>
+          </ng-container>
         </div>
         <div class="margin-part"></div>
         <div class="right-part">
