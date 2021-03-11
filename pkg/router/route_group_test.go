@@ -593,9 +593,6 @@ func safeSend(ctx context.Context, to *RouteGroup, payload []byte) (keepSending 
 		}
 	}()
 
-	to.readChMu.Lock()
-	defer to.readChMu.Unlock()
-
 	select {
 	case <-ctx.Done():
 		return false
