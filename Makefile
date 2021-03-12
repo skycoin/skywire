@@ -60,7 +60,7 @@ move-built-frontend:
 
 build: dep move-built-frontend host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
-build-static: move-build-frontend host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
+build-static: move-built-frontend host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
