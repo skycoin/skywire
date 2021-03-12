@@ -38,9 +38,9 @@ var (
 // @evanlinjin: I see no need to make these configurable.
 const (
 	tpInitBO = time.Millisecond * 500
-	tpMaxBO  = time.Second * 10
+	tpMaxBO  = time.Minute
 	tpTries  = 0
-	tpFactor = 1.3
+	tpFactor = 2
 )
 
 // ManagedTransportConfig is a configuration for managed transport.
