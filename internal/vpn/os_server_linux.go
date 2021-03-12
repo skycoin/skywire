@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	defaultNetworkInterfaceCMD     = "ip r | awk '$1 == \"default\" {print $5}'"
 	getIPv4ForwardingCMD           = "sysctl net.ipv4.ip_forward"
 	getIPv6ForwardingCMD           = "sysctl net.ipv6.conf.all.forwarding"
 	setIPv4ForwardingCMDFmt        = "sysctl -w net.ipv4.ip_forward=%s"
@@ -59,19 +58,6 @@ func AllowIPToLocalNetwork(src, dst net.IP) error {
 func BlockIPToLocalNetwork(src, dst net.IP) error {
 	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, src)
 	return osutil.Run("sh", "-c", cmd)
-}
-
-// DefaultNetworkInterface fetches default network interface name.
-func DefaultNetworkInterface() (string, error) {
-	outputBytes, err := osutil.RunWithResult("sh", "-c", defaultNetworkInterfaceCMD)
-	if err != nil {
-		return "", err
-	}
-
-	// just in case
-	outputBytes = bytes.TrimRight(outputBytes, "\n")
-
-	return string(outputBytes), nil
 }
 
 // GetIPv4ForwardingValue gets current value of IPv4 forwarding.
