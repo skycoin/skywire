@@ -108,6 +108,8 @@ func (v *Visor) Summary() (*Summary, error) {
 		return nil, fmt.Errorf("failed to get default network interface: %w", err)
 	}
 
+	v.log.Infof("DEAFULT NETWORK IFC: %s", defaultNetworkIfc)
+
 	localIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get IPs of interface %s: %w", defaultNetworkIfc, err)
@@ -123,9 +125,12 @@ func (v *Visor) Summary() (*Summary, error) {
 	}
 
 	if len(localIPs) > 0 {
+		v.log.Infof("IP: %s", localIPs[0].String())
 		// should be okay to have the first one, in the case of
 		// active network interface, there's usually just a single IP
 		summary.LocalIP = localIPs[0].String()
+	} else {
+		v.log.Infoln("IPS ARE EMPTY")
 	}
 
 	return summary, nil
