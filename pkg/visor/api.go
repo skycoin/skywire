@@ -35,6 +35,7 @@ type API interface {
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	SetAppDetailedStatus(appName, state string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
@@ -269,6 +270,19 @@ func (v *Visor) StartApp(appName string) error {
 func (v *Visor) StopApp(appName string) error {
 	_, err := v.appL.StopApp(appName)
 	return err
+}
+
+// SetAppDetailedStatus implements API.
+func (v *Visor) SetAppDetailedStatus(appName, status string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting app detailed status %v for app %v", status, appName)
+	proc.SetDetailedStatus(status)
+
+	return nil
 }
 
 // RestartApp implements API.
