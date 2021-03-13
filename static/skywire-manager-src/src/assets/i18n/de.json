@@ -24,7 +24,7 @@
     "remove-label": "Bezeichnung löschen",
     "copy": "Kopieren",
     "remove-label-confirmation": "Bezeichnung wirklich löschen?",
-    "unnamed-element": "unbenannt",
+    "unnamed-element": "Unbenannt",
     "unnamed-local-visor": "Lokaler Visor",
     "local-element": "Lokal",
     "tooltip": "Klicken um Eintrag zu kopieren oder Bezeichnung zu ändern",
@@ -38,12 +38,12 @@
     "label": "Bezeichnung",
     "id": "Element ID",
     "type": "Typ",
-    "delete-confirmation": "Wirklich diese Bezeichnung löschen?",
-    "delete-selected-confirmation": "Wirkliche ausgewählte Bezeichnungen löschen?",
+    "delete-confirmation": "Diese Bezeichnung wirklich löschen?",
+    "delete-selected-confirmation": "Ausgewählte Bezeichnungen wirklich löschen?",
     "delete": "Bezeichnung löschen",
     "deleted": "Bezeichnung gelöscht.",
     "empty": "Keine gespeicherten Bezeichnungen vorhanden.",
-    "empty-with-filter": "Keine Bezeichnung erfüllt die gewählten Filterkriterien",
+    "empty-with-filter": "Keine Bezeichnung erfüllt die gewählten Filterkriterien.",
     "filter-dialog": {
       "label": "Die Bezeichnung muss beinhalten",
       "id": "Die ID muss beinhalten",
@@ -206,7 +206,7 @@
     },
     "updater-config" : {
       "open-link": "Aktualisierungseinstellungen anzeigen",
-      "open-confirmation": "Die Aktualisierungseinstellungen sind nur für erfahrene Benutzer. Wirklich fortfahren?",
+      "open-confirmation": "Es wird nur erfahrenen Benutzern empfohlen, die Aktualisierungseinstellungen zu modifizieren. Wirkich fortfahren?",
       "help": "Dieses Formular benutzen um Einstellungen für die Aktualisierung zu überschreiben. Alle leeren Felder werden ignoriert. Die Einstellungen werden für alle Aktualisierungen übernommen. Dies geschieht unabhängig davon, welches Element aktualisiert wird. Bitte Vorsicht wahren.",
       "channel": "Kanal",
       "version": "Version",
@@ -256,7 +256,7 @@
   },
   
   "update": {
-    "title": "Update",
+    "title": "Aktualisierung",
     "error-title": "Error",
     "processing": "Suche nach Aktualisierungen...",
     "no-update": "Keine Aktualisierung vorhanden.<br>Installierte Version:",
@@ -369,14 +369,14 @@
       "copied-pk-info": "Öffentlicher Schlüssel wurde kopiert",
       "copy-pk-error": "Beim Kopieren des öffentlichen Schlüssels ist ein Problem aufgetreten.",
       "no-elements": "Derzeit können keine Elemente angezeigt werden. Bitte später versuchen.",
-      "no-elements-for-filters": "Keine Elemente, welche die Filterkriterien erfüllen",
-      "no-filter": "Es wurde kein Filter gewählt",
+      "no-elements-for-filters": "Keine Elemente, welche die Filterkriterien erfüllen.",
+      "no-filter": "Es wurde kein Filter gewählt.",
       "click-to-change": "Zum Ändern klicken",
       "remote-key-length-error": "Der öffentliche Schlüssel muss 66 Zeichen lang sein.",
       "remote-key-chars-error": "Der öffentliche Schlüssel darf nur hexadezimale Zeichen enthalten.",
       "save": "Speichern",
       "remove-from-history-confirmation": "Eintrag wirklich aus dem Verlauf löschen?",
-      "change-key-confirmation": "Wirklich den öffentlichen Schlüssel des Remote Visors ändern?",
+      "change-key-confirmation": "Wirklich den öffentlichen Schlüssel des remote Visors ändern?",
       "changes-made": "Änderungen wurden gespeichert.",
       "no-history": "Dieser Tab zeigt die letzten {{ number }} öffentlichen Schlüssel, die benutzt wurden.",
       "default-note-warning": "Die Standardnotiz wurde nicht benutzt.",
@@ -433,7 +433,7 @@
     "remove-all-offline": "Alle offline Transporte löschen",
     "remove-all-offline-confirmation": "Wirkliche alle offline Transporte löschen?",
     "remove-all-filtered-offline-confirmation": "Alle offline Transporte, welche die Filterkriterien erfüllen werden gelöscht. Wirklich fortfahren?",
-    "info": "Verbindungen mit Remote Skywire Visor, um lokalen Skywire Anwendungen zu erlauben mit diesen remote Visor zu kommunizieren.",
+    "info": "Verbindungen mit remote Skywire Visor, um lokalen Skywire Anwendungen zu erlauben mit diesen remote Visor zu kommunizieren.",
     "list-title": "Transport-Liste",
     "state": "Status",
     "state-tooltip": "Aktueller Status",
@@ -484,7 +484,7 @@
     "filter-dialog": {
       "online": "Der Transport muss sein",
       "id": "Die ID muss enthalten",
-      "remote-node": "Der Remote Schlüssel muss enthalten",
+      "remote-node": "Der remote Schlüssel muss enthalten",
 
       "online-options": {
         "any": "Online oder offline",
@@ -496,7 +496,7 @@
 
   "routes": {
     "title": "Routen",
-    "info": "Pfade um Remote Visor, zu denen ein Transport aufgebaut wurde zu erreichen. Routen werden bei Bedarf automatisch generiert.",
+    "info": "Netzwerkpfade zum Erreichen von remote Visor. Routen werden bei Bedarf automatisch generiert.",
     "list-title": "Routen-Liste",
     "key": "Schlüssel",
     "type": "Typ",
