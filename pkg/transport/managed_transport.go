@@ -35,7 +35,6 @@ var (
 )
 
 // Constants associated with transport redial loop.
-// @evanlinjin: I see no need to make these configurable.
 const (
 	tpInitBO = time.Millisecond * 500
 	tpMaxBO  = time.Minute
