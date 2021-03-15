@@ -42,6 +42,7 @@
         <div class="right-part">
           {{ 'update.version-change' | translate:update }}
           <a [href]="update.updateLink" target="_blank" rel="noreferrer nofollow noopener">{{ update.updateLink }}</a>
+          <span class="channel" *ngIf="customChannel">{{ 'update.selected-channel' | translate }} {{ customChannel }}</span>
         </div>
       </div>
     </div>
