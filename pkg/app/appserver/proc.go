@@ -51,6 +51,9 @@ type Proc struct {
 
 	startTimeMx sync.RWMutex
 	startTime   time.Time
+
+	statusMx sync.RWMutex
+	status   string
 }
 
 // NewProc constructs `Proc`.
@@ -113,7 +116,7 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 		ok = true
 		p.conn = conn
 		p.rpcGWMu.Lock()
-		p.rpcGW = NewRPCGateway(p.log)
+		p.rpcGW = NewRPCGateway(p.log, p)
 		p.rpcGWMu.Unlock()
 
 		// Send ready signal.
@@ -279,6 +282,22 @@ func (p *Proc) Wait() error {
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
+}
+
+// SetDetailedStatus sets proc's detailed status.
+func (p *Proc) SetDetailedStatus(status string) {
+	p.statusMx.Lock()
+	defer p.statusMx.Unlock()
+
+	p.status = status
+}
+
+// DetailedStatus gets proc's detailed status.
+func (p *Proc) DetailedStatus() string {
+	p.statusMx.RLock()
+	defer p.statusMx.RUnlock()
+
+	return p.status
 }
 
 // ConnectionSummary sums up the connection stats.
