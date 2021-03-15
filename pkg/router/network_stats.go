@@ -73,8 +73,7 @@ func (s *networkStats) RemoteThroughput() int64 {
 	s.bandwidthReceivedRecStart = time.Now()
 	s.bandwidthReceivedRecStartMu.Unlock()
 
-	bandwidth := atomic.LoadUint64(&s.bandwidthReceived)
-	atomic.StoreUint64(&s.bandwidthReceived, 0)
+	bandwidth := atomic.SwapUint64(&s.bandwidthReceived, 0)
 
 	throughput := float64(bandwidth) / timePassed.Seconds()
 
