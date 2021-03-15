@@ -20,6 +20,15 @@
     </mat-form-field>
 
     <mat-form-field>
+      <input
+        formControlName="label"
+        maxlength="66"
+        [placeholder]="'transports.dialog.label' | translate"
+        matInput
+      >
+    </mat-form-field>
+
+    <mat-form-field>
       <mat-select
         formControlName="type"
         [placeholder]="'transports.dialog.transport-type' | translate"
@@ -30,15 +39,15 @@
         {{ 'transports.dialog.errors.transport-type-error' | translate }}
       </mat-error>
     </mat-form-field>
-
-    <app-button
-      #button
-      (action)="create()"
-      [disabled]="!form.valid"
-      color="primary"
-      class="float-right"
-    >
-      {{ 'transports.create' | translate }}
-    </app-button>
   </form>
+
+  <app-button
+    #button
+    (action)="create()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'transports.create' | translate }}
+  </app-button>
 </app-dialog>
