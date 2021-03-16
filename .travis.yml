@@ -32,6 +32,7 @@ before_script:
 
 script:
   - make lint # TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
+  - make build
   - make test
   - make test-no-ci
   - make install-deps-ui
