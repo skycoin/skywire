@@ -78,6 +78,11 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		return nil, fmt.Errorf("error getting RF IP: %w", err)
 	}
 
+	utIP, err := uptimeTrackerIPFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("error getting UT IP: %w", err)
+	}
+
 	stcpEntities, err := stcpEntitiesFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting STCP entities: %w", err)
@@ -97,6 +102,10 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 	if arIP != nil {
 		directIPs = append(directIPs, arIP)
+	}
+
+	if utIP != nil {
+		directIPs = append(directIPs, utIP)
 	}
 
 	const (
@@ -150,9 +159,7 @@ func (c *Client) Serve() error {
 
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
-		fmt.Println("Serve stopped, inside defer")
 		if c.cfg.Killswitch {
-			fmt.Println("Killswitch enabled")
 			err := c.setSysPrivileges()
 			if err != nil {
 				fmt.Printf("Error setting up system privileges: %v\n", err)
@@ -176,6 +183,10 @@ func (c *Client) Serve() error {
 		fmt.Println("Closed TUN")
 	}()
 
+	defer c.setAppStatus(ClientStatusShuttingDown)
+
+	c.setAppStatus(ClientStatusConnecting)
+
 	for {
 		if err := c.dialServeConn(); err != nil {
 			fmt.Printf("dialServeConn: %v\n", err)
@@ -185,6 +196,7 @@ func (c *Client) Serve() error {
 			return nil
 		}
 
+		c.setAppStatus(ClientStatusReconnecting)
 		fmt.Println("Connection broke, reconnecting...")
 	}
 }
@@ -364,6 +376,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 	if err := c.routeTrafficThroughTUN(tunGateway, isNewRoute); err != nil {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
+
+	c.setAppStatus(ClientStatusRunning)
 
 	defer func() {
 		if !c.cfg.Killswitch {
@@ -552,6 +566,10 @@ func rfIPFromEnv() (net.IP, error) {
 	return ipFromEnv(RFAddrEnvKey)
 }
 
+func uptimeTrackerIPFromEnv() (net.IP, error) {
+	return ipFromEnv(UptimeTrackerAddrEnvKey)
+}
+
 func tpRemoteIPsFromEnv() ([]net.IP, error) {
 	var ips []net.IP
 	ipsLenStr := os.Getenv(TPRemoteIPsLenEnvKey)
@@ -625,14 +643,16 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 		Passcode:              c.cfg.Passcode,
 	}
 
+	const handshakeTimeout = 5 * time.Second
+
 	fmt.Printf("Sending client hello: %v\n", cHello)
 
-	if err := WriteJSON(conn, &cHello); err != nil {
+	if err := WriteJSONWithTimeout(conn, &cHello, handshakeTimeout); err != nil {
 		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
 	}
 
 	var sHello ServerHello
-	if err := ReadJSON(conn, &sHello); err != nil {
+	if err := ReadJSONWithTimeout(conn, &sHello, handshakeTimeout); err != nil {
 		return nil, nil, fmt.Errorf("error reading server hello: %w", err)
 	}
 
@@ -687,6 +707,12 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	}
 
 	return conn, nil
+}
+
+func (c *Client) setAppStatus(status ClientStatus) {
+	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
 }
 
 func (c *Client) isClosed() bool {
