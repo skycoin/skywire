@@ -10,10 +10,10 @@ addons:
     packages:
       # For building MUSL static builds on Linux.
       - musl-tools
-      - gcc-mingw-w64-i686
-      - g++-mingw-w64-i686
-      - binutils-mingw-w64-i686
-      - libsnmp-dev
+      #- gcc-mingw-w64-i686
+      #- g++-mingw-w64-i686
+      #- binutils-mingw-w64-i686
+      #- libsnmp-dev
 
 matrix:
   include:
@@ -35,7 +35,7 @@ before_script:
   - ci_scripts/create-ip-aliases.sh
 
 script:
-  - make lint # TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
+  - make lint-ci # TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
   - make build
   - make test
   - make test-no-ci
