@@ -9,6 +9,8 @@ release:
     owner: skycoin
     name: skywire
 
+  draft: true
+
 before:
   hooks:
     - go mod tidy
@@ -28,6 +30,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-visor/
@@ -47,6 +51,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
@@ -66,6 +72,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skychat/
@@ -85,6 +93,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks/
@@ -104,6 +114,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks-client/
@@ -123,6 +135,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/vpn-server/
@@ -142,6 +156,8 @@ builds:
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm64
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/vpn-client/
