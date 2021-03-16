@@ -93,6 +93,9 @@ rerun: stop
 	perl -pi -e 's/localhost//g' ./skywire.json
 	./skywire-visor skywire.json
 
+lint-ci:
+	${OPTS} golangci-lint run --build-tags=musl -c .golangci.yml ./...
+
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
