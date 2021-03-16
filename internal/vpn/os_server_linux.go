@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultNetworkInterfaceCMD     = "route | awk '$1 == \"default\" {print $8}'"
+	defaultNetworkInterfaceCMD     = "ip r | awk '$1 == \"default\" {print $5}'"
 	getIPv4ForwardingCMD           = "sysctl net.ipv4.ip_forward"
 	getIPv6ForwardingCMD           = "sysctl net.ipv6.conf.all.forwarding"
 	setIPv4ForwardingCMDFmt        = "sysctl -w net.ipv4.ip_forward=%s"

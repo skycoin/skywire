@@ -35,12 +35,11 @@ var (
 )
 
 // Constants associated with transport redial loop.
-// @evanlinjin: I see no need to make these configurable.
 const (
 	tpInitBO = time.Millisecond * 500
-	tpMaxBO  = time.Second * 10
+	tpMaxBO  = time.Minute
 	tpTries  = 0
-	tpFactor = 1.3
+	tpFactor = 2
 )
 
 // ManagedTransportConfig is a configuration for managed transport.
@@ -471,10 +470,10 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 	}()
 
 	mt.isUpMux.Lock()
+	defer mt.isUpMux.Unlock()
 
 	// If last update is the same as current, nothing needs to be done.
 	if mt.isUp == isUp {
-		mt.isUpMux.Unlock()
 		return nil
 	}
 
@@ -515,7 +514,6 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 
 	mt.isUp = isUp
 	mt.isUpErr = err
-	mt.isUpMux.Unlock()
 	return err
 }
 
