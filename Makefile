@@ -58,9 +58,9 @@ move-built-frontend:
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 	rm -rf ${MANAGER_UI_DIR}/dist/
 
-build: dep move-built-frontend host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
-build-static: move-build-frontend host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
+build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
 run: stop build	config  ## Run skywire-visor on host
 	./skywire-visor skywire.json
