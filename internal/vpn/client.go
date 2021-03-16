@@ -159,9 +159,7 @@ func (c *Client) Serve() error {
 
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
-		fmt.Println("Serve stopped, inside defer")
 		if c.cfg.Killswitch {
-			fmt.Println("Killswitch enabled")
 			err := c.setSysPrivileges()
 			if err != nil {
 				fmt.Printf("Error setting up system privileges: %v\n", err)
@@ -185,6 +183,10 @@ func (c *Client) Serve() error {
 		fmt.Println("Closed TUN")
 	}()
 
+	defer c.setAppStatus(ClientStatusShuttingDown)
+
+	c.setAppStatus(ClientStatusConnecting)
+
 	r := netutil.NewDefaultRetrier(c.log)
 	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
@@ -192,6 +194,7 @@ func (c *Client) Serve() error {
 		}
 
 		if err := c.dialServeConn(); err != nil {
+			c.setAppStatus(ClientStatusReconnecting)
 			fmt.Println("Connection broke, reconnecting...")
 			return fmt.Errorf("dialServeConn: %w", err)
 		}
@@ -380,6 +383,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 	if err := c.routeTrafficThroughTUN(tunGateway, isNewRoute); err != nil {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
+
+	c.setAppStatus(ClientStatusRunning)
 
 	defer func() {
 		if !c.cfg.Killswitch {
@@ -709,6 +714,12 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	}
 
 	return conn, nil
+}
+
+func (c *Client) setAppStatus(status ClientStatus) {
+	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
 }
 
 func (c *Client) isClosed() bool {
