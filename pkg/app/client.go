@@ -63,6 +63,11 @@ func (c *Client) Config() appcommon.ProcConfig {
 	return c.conf
 }
 
+// SetDetailedStatus sets detailed app status within the visor.
+func (c *Client) SetDetailedStatus(status string) error {
+	return c.rpcC.SetDetailedStatus(status)
+}
+
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	connID, localPort, err := c.rpcC.Dial(remote)
