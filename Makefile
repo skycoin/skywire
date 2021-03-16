@@ -61,14 +61,14 @@ build: host-apps bin ## Install dependencies, build apps and binaries. `go build
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
-run: stop build	config  ## Run skywire-visor on host
-	./skywire-visor skywire.json
+run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
+	./skywire-visor -c ./skywire-config.json --launch-browser
 
 stop: ## Stop running skywire-visor on host
-	-bash -c "kill $$(ps aux |grep '[s]kywire-visor' |awk '{print $$2}')"
+	-bash -c "kill $$(ps aux |grep '[s]kywire-visor' | awk '{print $$2}')"
 
-config: ## Generate skywire.json
-	-./skywire-cli visor gen-config -o  ./skywire.json -r
+config: ## Generate skywire-config.json
+	-./skywire-cli visor gen-config -o ./skywire-config.json  -r --is-hypervisor
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc

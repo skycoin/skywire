@@ -10,17 +10,17 @@ require (
 	github.com/creack/pty v1.1.11 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-ole/go-ole v1.2.4 // indirect
+	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/uuid v1.1.1
-	github.com/gorilla/handlers v1.4.2 // indirect
 	github.com/gorilla/securecookie v1.1.1
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/archiver/v3 v3.3.0
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
+	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.7.1 // indirect
 	github.com/schollz/progressbar/v2 v2.15.0
@@ -36,6 +36,7 @@ require (
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tjfoc/gmsm v1.3.2 // indirect
+	github.com/toqueteos/webbrowser v1.2.0
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.5
