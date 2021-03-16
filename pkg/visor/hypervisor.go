@@ -491,9 +491,26 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 }
 
 type extraSummaryWithDmsgResp struct {
-	extraSummaryResp
+	Summary      *Summary                       `json:"summary"`
+	Health       *HealthInfo                    `json:"health"`
+	Uptime       float64                        `json:"uptime"`
+	Routes       []routingRuleResp              `json:"routes"`
+	TCPAddr      string                         `json:"tcp_addr"`
+	Online       bool                           `json:"online"`
 	IsHypervisor bool                           `json:"is_hypervisor"`
 	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
+}
+
+func makeExtraSummaryResp(online, hyper bool, addr dmsg.Addr, extra *ExtraSummary) extraSummaryWithDmsgResp {
+	var resp extraSummaryWithDmsgResp
+	resp.TCPAddr = addr.String()
+	resp.Online = online
+	resp.IsHypervisor = hyper
+	resp.Summary = extra.Summary
+	resp.Health = extra.Health
+	resp.Uptime = extra.Uptime
+	resp.Routes = extra.Routes
+	return resp
 }
 
 func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
@@ -524,14 +541,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		}
 
 		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-		summaries[0] = extraSummaryWithDmsgResp{
-			extraSummaryResp: extraSummaryResp{
-				TCPAddr:      addr.String(),
-				Online:       err == nil,
-				ExtraSummary: summary,
-			},
-			IsHypervisor: true,
-		}
+		summaries[0] = makeExtraSummaryResp(err == nil, true, addr, summary)
 
 		for pk, c := range hv.visors {
 			go func(pk cipher.PubKey, c Conn, i int) {
@@ -550,15 +560,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 				} else {
 					log.Debug("Obtained summary via RPC.")
 				}
-				resp := extraSummaryWithDmsgResp{
-					extraSummaryResp: extraSummaryResp{
-						TCPAddr:      c.Addr.String(),
-						Online:       err == nil,
-						ExtraSummary: summary,
-					},
-					IsHypervisor: false,
-				}
-				resp.ExtraSummary = summary
+				resp := makeExtraSummaryResp(err == nil, false, c.Addr, summary)
 				summaries[i] = resp
 				wg.Done()
 			}(pk, c, i)
