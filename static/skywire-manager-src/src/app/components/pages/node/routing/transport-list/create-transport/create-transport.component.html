@@ -39,15 +39,15 @@
         {{ 'transports.dialog.errors.transport-type-error' | translate }}
       </mat-error>
     </mat-form-field>
-
-    <app-button
-      #button
-      (action)="create()"
-      [disabled]="!form.valid"
-      color="primary"
-      class="float-right"
-    >
-      {{ 'transports.create' | translate }}
-    </app-button>
   </form>
+
+  <app-button
+    #button
+    (action)="create()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'transports.create' | translate }}
+  </app-button>
 </app-dialog>
