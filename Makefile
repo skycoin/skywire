@@ -46,23 +46,23 @@ BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
 
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
 
-BUILD_OPTS?="-ldflags=$(BUILDINFO)"
+BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: host-apps bin ## Build apps and binaries. `go build` with ${OPTS}
 
-build-static: dep host-apps-static bin-static ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
-run: stop build	config  ## Run skywire-visor on host
-	./skywire-visor skywire.json
+run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
+	./skywire-visor -c ./skywire-config.json --launch-browser
 
 stop: ## Stop running skywire-visor on host
-	-bash -c "kill $$(ps aux |grep '[s]kywire-visor' |awk '{print $$2}')"
+	-bash -c "kill $$(ps aux |grep '[s]kywire-visor' | awk '{print $$2}')"
 
-config: ## Generate skywire.json
-	-./skywire-cli visor gen-config -o  ./skywire.json -r
+config: ## Generate skywire-config.json
+	-./skywire-cli visor gen-config -o ./skywire-config.json  -r --is-hypervisor
 
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
