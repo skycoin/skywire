@@ -45,16 +45,16 @@
         matInput
       >
     </mat-form-field>
-
-    <!-- button. -->
-    <app-button
-      #button
-      (action)="apply()"
-      type="mat-raised-button"
-      color="primary"
-      class="float-right"
-    >
-      {{ 'apps.vpn-socks-client-settings.filter-dialog.apply' | translate }}
-    </app-button>
   </form>
+
+  <!-- button. -->
+  <app-button
+    #button
+    (action)="apply()"
+    type="mat-raised-button"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'apps.vpn-socks-client-settings.filter-dialog.apply' | translate }}
+  </app-button>
 </app-dialog>
