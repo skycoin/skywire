@@ -228,8 +228,8 @@ func TestConn_TestConn(t *testing.T) {
 		copy(procKey1[:], appKeys[0].PK[:])
 		copy(procKey2[:], appKeys[1].PK[:])
 
-		gateway1 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway1"))
-		gateway2 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway2"))
+		gateway1 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway1"), nil)
+		gateway2 := appserver.NewRPCGateway(logging.MustGetLogger("test_app_rpc_gateway2"), nil)
 
 		err = rpcS.RegisterName(procKey1.String(), gateway1)
 		if err != nil {
