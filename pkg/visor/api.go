@@ -35,6 +35,7 @@ type API interface {
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	SetAppDetailedStatus(appName, state string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
@@ -168,32 +169,41 @@ func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[stri
 		name   string
 		status int
 	}
-	var wg sync.WaitGroup
-	ctx := context.Background()
+
+	ctx, cancel := context.WithTimeout(context.Background(), InnerHealthTimeout)
+	defer cancel()
+
 	responses := make(chan healthResponse, len(services))
+
+	var wg sync.WaitGroup
 	wg.Add(len(services))
 	for name, service := range services {
 		go func(name string, service HealthCheckable) {
+			defer wg.Done()
+
 			if service == nil {
 				responses <- healthResponse{name, http.StatusNotFound}
-				wg.Done()
 				return
 			}
+
 			status, err := service.Health(ctx)
 			if err != nil {
 				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
 				status = http.StatusInternalServerError
 			}
+
 			responses <- healthResponse{name, status}
-			wg.Done()
 		}(name, service)
 	}
 	wg.Wait()
+
 	close(responses)
+
 	results := make(map[string]int)
 	for response := range responses {
 		results[response.name] = response.status
 	}
+
 	return results
 }
 
@@ -262,6 +272,19 @@ func (v *Visor) StopApp(appName string) error {
 	return err
 }
 
+// SetAppDetailedStatus implements API.
+func (v *Visor) SetAppDetailedStatus(appName, status string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting app detailed status %v for app %v", status, appName)
+	proc.SetDetailedStatus(status)
+
+	return nil
+}
+
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
 	if _, ok := v.procM.ProcByName(appName); ok {
@@ -323,17 +346,10 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	v.log.Infof("Setting %s killswitch to %q", appName, killswitch)
 
 	const (
-		killSwitchArg = "-killswitch"
+		killSwitchArg = "--killswitch"
 	)
 
-	var value string
-	if killswitch {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
 		return err
 	}
 
@@ -351,17 +367,10 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	v.log.Infof("Setting %s secure to %q", appName, isSecure)
 
 	const (
-		secureArgName = "-secure"
+		secureArgName = "--secure"
 	)
 
-	var value string
-	if isSecure {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
 		return err
 	}
 
