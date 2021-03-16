@@ -56,9 +56,8 @@ move-built-frontend:
 	rm -rf ${MANAGER_UI_BUILT_DIR}
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
-	rm -rf ${MANAGER_UI_DIR}/dist/
 
-build: dep host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
+build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
