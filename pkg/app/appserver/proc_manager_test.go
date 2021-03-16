@@ -78,3 +78,51 @@ func TestProcManager_Pop(t *testing.T) {
 	_, ok = m.procs[appName]
 	require.False(t, ok)
 }
+
+func TestProcManager_SetDetailedStatus(t *testing.T) {
+	mI, err := NewProcManager(nil, nil, nil, ":0")
+	require.NoError(t, err)
+
+	m, ok := mI.(*procManager)
+	require.True(t, ok)
+
+	appName := "app"
+
+	m.procs[appName] = &Proc{}
+
+	wantStatus := "status"
+	err = m.SetDetailedStatus(appName, wantStatus)
+	require.NoError(t, err)
+
+	m.procs[appName].statusMx.RLock()
+	gotStatus := m.procs[appName].status
+	m.procs[appName].statusMx.RUnlock()
+	require.Equal(t, wantStatus, gotStatus)
+
+	nonExistingAppName := "none"
+	err = m.SetDetailedStatus(nonExistingAppName, wantStatus)
+	require.Equal(t, errNoSuchApp, err)
+}
+
+func TestProcManager_DetailedStatus(t *testing.T) {
+	mI, err := NewProcManager(nil, nil, nil, ":0")
+	require.NoError(t, err)
+
+	m, ok := mI.(*procManager)
+	require.True(t, ok)
+
+	appName := "app"
+	wantStatus := "status"
+
+	m.procs[appName] = &Proc{
+		status: wantStatus,
+	}
+
+	gotStatus, err := m.DetailedStatus(appName)
+	require.NoError(t, err)
+	require.Equal(t, wantStatus, gotStatus)
+
+	nonExistingAppName := "none"
+	_, err = m.DetailedStatus(nonExistingAppName)
+	require.Equal(t, errNoSuchApp, err)
+}
