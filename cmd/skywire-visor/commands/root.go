@@ -2,8 +2,10 @@ package commands
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
@@ -26,6 +28,8 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+var uiAssets fs.FS
 
 var restartCtx = restart.CaptureContext()
 
@@ -142,7 +146,15 @@ var rootCmd = &cobra.Command{
 }
 
 // Execute executes root CLI command.
-func Execute() {
+func Execute(ui embed.FS) {
+	uiFS, err := fs.Sub(ui, "static")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	uiAssets = uiFS
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
@@ -252,6 +264,10 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	conf, err := visorconfig.Parse(mLog, confPath, raw)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to parse config.")
+	}
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.UIAssets = uiAssets
 	}
 
 	return conf

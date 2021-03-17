@@ -20,6 +20,7 @@ DMSG_BASE := github.com/skycoin/dmsg
 OPTS?=GO111MODULE=on
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
+MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
 DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
 DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
@@ -51,7 +52,12 @@ BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
 
-build: host-apps bin ## Build apps and binaries. `go build` with ${OPTS}
+move-built-frontend:
+	rm -rf ${MANAGER_UI_BUILT_DIR}
+	mkdir ${MANAGER_UI_BUILT_DIR}
+	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+
+build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
@@ -215,8 +221,7 @@ lint-ui:  ## Lint the UI code
 build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
-	${OPTS} GOBIN=${PWD}/bin go get github.com/rakyll/statik
-	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/skywire-visor -f
+	make move-built-frontend
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
