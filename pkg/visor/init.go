@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rakyll/statik/fs"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -17,7 +16,6 @@ import (
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	_ "github.com/skycoin/skywire/cmd/skywire-visor/statik" // embedded static files
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -523,18 +521,13 @@ func initHypervisor(v *Visor) bool {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	assets, err := fs.New()
-	if err != nil {
-		v.log.Fatalf("Failed to obtain embedded static files: %v", err)
-	}
-
 	conf := *v.conf.Hypervisor
 	conf.PK = v.conf.PK
 	conf.SK = v.conf.SK
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, assets, v, v.net.Dmsg())
+	hv, err := New(conf, v, v.net.Dmsg())
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
