@@ -62,8 +62,8 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     // Get the current values saved on the visor, if returned by the API.
     if (this.data.args && this.data.args.length > 0) {
       for (let i = 0; i < this.data.args.length; i++) {
-        if (this.data.args[i] === '-secure' && i + 1 < this.data.args.length) {
-          this.secureMode = (this.data.args[i + 1] as string).toLowerCase() === 'true';
+        if ((this.data.args[i] as string).toLowerCase().includes('-secure')) {
+          this.secureMode = (this.data.args[i] as string).toLowerCase().includes('true');
         }
       }
     }
