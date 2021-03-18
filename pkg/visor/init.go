@@ -232,6 +232,7 @@ func initRouter(v *Visor) bool {
 		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
+		MinHops:          v.conf.Routing.MinHops,
 	}
 
 	r, err := router.New(v.net, &rConf)
