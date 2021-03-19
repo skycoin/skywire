@@ -35,6 +35,8 @@ github.com/go-ole/go-ole/oleutil
 # github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
 github.com/golang/gddo/httputil
 github.com/golang/gddo/httputil/header
+# github.com/golang/protobuf v1.4.2
+## explicit
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/google/go-github v17.0.0+incompatible
@@ -46,8 +48,6 @@ github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 ## explicit
 github.com/google/uuid
-# github.com/gorilla/handlers v1.4.2
-## explicit
 # github.com/gorilla/securecookie v1.1.1
 ## explicit
 github.com/gorilla/securecookie
@@ -69,8 +69,6 @@ github.com/klauspost/pgzip
 # github.com/klauspost/reedsolomon v1.9.9
 ## explicit
 github.com/klauspost/reedsolomon
-# github.com/konsorten/go-windows-terminal-sequences v1.0.3
-## explicit
 # github.com/kz/discordrus v1.2.0
 github.com/kz/discordrus
 # github.com/mattn/go-colorable v0.1.8
@@ -111,14 +109,13 @@ github.com/nwaples/rardecode
 github.com/pierrec/lz4
 github.com/pierrec/lz4/internal/xxh32
 # github.com/pkg/errors v0.8.1
+## explicit
 github.com/pkg/errors
 # github.com/pkg/profile v1.5.0
 ## explicit
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/prometheus/client_golang v1.7.1
-## explicit
 # github.com/rakyll/statik v0.1.7
 ## explicit
 github.com/rakyll/statik/fs
