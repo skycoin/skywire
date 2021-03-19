@@ -168,7 +168,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       sortableColumns.push(this.pingSortData);
     }
     this.dataSorter = new DataSorter(
-      this.dialog, this.translateService, sortableColumns, 2, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
+      this.dialog, this.translateService, sortableColumns, 3, this.showDmsgInfo ? this.dmsgListId : this.nodesListId
     );
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allNodes has already been sorted.
@@ -620,7 +620,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
-      this.storageService.setLocalNodesAsHidden([node.localPk]);
+      this.storageService.setLocalNodesAsHidden([node.localPk], [node.ip]);
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
     });
@@ -642,15 +642,17 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
       // Prepare all offline nodes to be removed.
       const nodesToRemove: string[] = [];
+      const ipsToRemove: string[] = [];
       this.filteredNodes.forEach(node => {
         if (!node.online) {
           nodesToRemove.push(node.localPk);
+          ipsToRemove.push(node.ip);
         }
       });
 
       // Remove the nodes and show the result.
       if (nodesToRemove.length > 0) {
-        this.storageService.setLocalNodesAsHidden(nodesToRemove);
+        this.storageService.setLocalNodesAsHidden(nodesToRemove, ipsToRemove);
 
         this.forceDataRefresh();
 
