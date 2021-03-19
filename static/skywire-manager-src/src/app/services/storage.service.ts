@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { ReplaySubject, Observable } from 'rxjs';
 
+import { Node } from '../app.datatypes';
+
 // Names for saving the data in localStorage.
 const KEY_REFRESH_SECONDS = 'refreshSeconds';
 const KEY_SAVED_LABELS = 'labelsData';
@@ -44,6 +46,10 @@ export class LocalNodeInfo {
    * If true, the node should not be shown in the node list if it is offline.
    */
   hidden: boolean;
+  /**
+   * IP the node had the last time it was seen.
+   */
+  ip: string;
 }
 
 /**
@@ -147,6 +153,7 @@ export class StorageService {
         currentLocalNodes.push({
           publicKey: oldNode.publicKey,
           hidden: oldNode.deleted,
+          ip: null,
         });
         this.savedLocalNodes.set(oldNode.publicKey, currentLocalNodes[currentLocalNodes.length - 1]);
         if (!oldNode.deleted) {
@@ -198,32 +205,41 @@ export class StorageService {
   /**
    * Saves a list of online nodes in the list of local nodes this app has already seen. If a
    * node was already saved in the list and set as hidden, its hidden status will be removed.
+   * @param nodesPublicKeys Public keys of the nodes to save.
+   * @param nodesIps Ips of the nodes, if known. Must have the same size as nodesPublicKeys.
    */
-  includeVisibleLocalNodes(nodesPublicKeys: string[]) {
-    this.changeLocalNodesHiddenProperty(nodesPublicKeys, false);
+  includeVisibleLocalNodes(nodesPublicKeys: string[], nodesIps: string[]) {
+    this.changeLocalNodesHiddenProperty(nodesPublicKeys, nodesIps, false);
   }
 
   /**
    * Adds the hidden status of a list of local nodes. If a node was not saved before with a
    * call to includeVisibleLocalNodes, it will be saved.
+   * @param nodesPublicKeys Public keys of the nodes to set as hidden.
+   * @param nodesIps Ips of the nodes, if known. Must have the same size as nodesPublicKeys.
    */
-  setLocalNodesAsHidden(nodesPublicKeys: string[]) {
-    this.changeLocalNodesHiddenProperty(nodesPublicKeys, true);
+  setLocalNodesAsHidden(nodesPublicKeys: string[], nodesIps: string[]) {
+    this.changeLocalNodesHiddenProperty(nodesPublicKeys, nodesIps, true);
   }
 
   /**
    * Saves a list of nodes in the list of local nodes this app has already seen. Is a node has
    * been already saved, the hidden status will be updated.
+   * @param nodesIps Ips of the nodes, if known. Must have the same size as nodesPublicKeys.
    * @param hidden If the nodes will be set as hidden or not.
    */
-  private changeLocalNodesHiddenProperty(nodesPublicKeys: string[], hidden: boolean) {
-    // Create sets for the requested public keys and the ones that have not been saved in
-    // local storage yet.
-    const publicKeysSet = new Set<string>();
-    const newKeysToSave = new Set<string>();
-    nodesPublicKeys.forEach(key => {
-      publicKeysSet.add(key);
-      newKeysToSave.add(key);
+  private changeLocalNodesHiddenProperty(nodesPublicKeys: string[], nodesIps: string[], hidden: boolean) {
+    if (nodesPublicKeys.length !== nodesIps.length) {
+      throw new Error('Invalid params');
+    }
+
+    // Create maps for the requested public keys and the ones that have not been saved in
+    // local storage yet. The pk is used as key and the IP as value.
+    const publicKeysMap = new Map<string, string>();
+    const newKeysToSave = new Map<string, string>();
+    nodesPublicKeys.forEach((key, i) => {
+      publicKeysMap.set(key, nodesIps[i]);
+      newKeysToSave.set(key, nodesIps[i]);
     });
 
     // If any change was made and the data has to be saved.
@@ -231,13 +247,20 @@ export class StorageService {
 
     const localNodes = this.getSavedLocalNodes();
     localNodes.forEach(localNode => {
-      if (publicKeysSet.has(localNode.publicKey)) {
+      if (publicKeysMap.has(localNode.publicKey)) {
         // Any key found in the already saved data is removed from the keys to save.
         if (newKeysToSave.has(localNode.publicKey)) {
           newKeysToSave.delete(localNode.publicKey);
         }
 
-        // If the status if different, update it.
+        // If the ip if different, update it.
+        if (localNode.ip !== publicKeysMap.get(localNode.publicKey)) {
+          localNode.ip = publicKeysMap.get(localNode.publicKey);
+          modificationsMade = true;
+          this.savedLocalNodes.set(localNode.publicKey, localNode);
+        }
+
+        // If the hidden status if different, update it.
         if (localNode.hidden !== hidden) {
           localNode.hidden = hidden;
           modificationsMade = true;
@@ -253,12 +276,13 @@ export class StorageService {
     });
 
     // Add any not already saved key.
-    newKeysToSave.forEach(pk => {
+    newKeysToSave.forEach((ip, pk) => {
       modificationsMade = true;
 
       const newLocalNode = {
         publicKey: pk,
         hidden: hidden,
+        ip: ip,
       };
 
       localNodes.push(newLocalNode);
@@ -376,10 +400,18 @@ export class StorageService {
   }
 
   /**
-   * Returns the default label for a public key or any other string.
+   * Returns the default label for a node.
    */
-  getDefaultLabel(publicKey: string): string {
-    return publicKey.substr(0, 8);
+  getDefaultLabel(node: Node): string {
+    if (!node) {
+      return '';
+    }
+
+    if (node.ip) {
+      return node.ip;
+    }
+
+    return node.localPk.substr(0, 8);
   }
 
   /**
