@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of, forkJoin } from 'rxjs';
-import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
+import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
+import { flatMap, map, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
-import { HealthInfo, Node, Route, Transport } from '../app.datatypes';
+import { Node, Transport } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { TransportService } from './transport.service';
 import { RouteService } from './route.service';
@@ -496,13 +496,19 @@ export class NodeService {
           // Basic data.
           node.online = response.online;
           node.tcpAddr = response.tcp_addr;
-          node.ip = this.getAddressPart(node.tcpAddr, 0);
           node.port = this.getAddressPart(node.tcpAddr, 1);
           node.localPk = response.summary.local_pk;
 
+          // Ip.
+          if (response.summary.local_ip && (response.summary.local_ip as string).trim()) {
+            node.ip = response.summary.local_ip;
+          } else {
+            node.ip = null;
+          }
+
           // Label.
           const labelInfo = this.storageService.getLabelInfo(node.localPk);
-          node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+          node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
 
           // Health data.
           node.health = {
@@ -528,15 +534,17 @@ export class NodeService {
       // Create lists with the nodes returned by the api.
       const obtainedNodes = new Map<string, Node>();
       const nodesToRegisterInLocalStorageAsOnline: string[] = [];
+      const ipsToRegisterInLocalStorageAsOnline: string[] = [];
       nodes.forEach(node => {
         obtainedNodes.set(node.localPk, node);
         if (node.online) {
           nodesToRegisterInLocalStorageAsOnline.push(node.localPk);
+          ipsToRegisterInLocalStorageAsOnline.push(node.ip);
         }
       });
 
       // Save all online nodes.
-      this.storageService.includeVisibleLocalNodes(nodesToRegisterInLocalStorageAsOnline);
+      this.storageService.includeVisibleLocalNodes(nodesToRegisterInLocalStorageAsOnline, ipsToRegisterInLocalStorageAsOnline);
 
       const missingSavedNodes: Node[] = [];
       this.storageService.getSavedLocalNodes().forEach(node => {
@@ -545,7 +553,7 @@ export class NodeService {
           const newNode: Node = new Node();
           newNode.localPk = node.publicKey;
           const labelInfo = this.storageService.getLabelInfo(node.publicKey);
-          newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.publicKey);
+          newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(newNode);
           newNode.online = false;
           newNode.dmsgServerPk = '';
           newNode.roundTripPing = '';
@@ -596,15 +604,21 @@ export class NodeService {
         // Basic data.
         node.online = response.online;
         node.tcpAddr = response.tcp_addr;
-        node.ip = this.getAddressPart(node.tcpAddr, 0);
         node.port = this.getAddressPart(node.tcpAddr, 1);
         node.localPk = response.summary.local_pk;
         node.version = response.summary.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
 
+        // Ip.
+        if (response.summary.local_ip && (response.summary.local_ip as string).trim()) {
+          node.ip = response.summary.local_ip;
+        } else {
+          node.ip = null;
+        }
+
         // Label.
         const labelInfo = this.storageService.getLabelInfo(node.localPk);
-        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
 
         // Health info.
         node.health = {
