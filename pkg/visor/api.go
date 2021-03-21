@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/util/netutil"
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/buildinfo"
@@ -34,12 +37,15 @@ type API interface {
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	SetAppDetailedStatus(appName, state string) error
+	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
 	SetAppPK(appName string, pk cipher.PubKey) error
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
+	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
 	TransportTypes() ([]string, error)
@@ -66,6 +72,13 @@ type API interface {
 	UpdateStatus() (string, error)
 }
 
+// HealthCheckable resource returns its health status as an integer
+// that corresponds to HTTP status code returned from the resource
+// 200 codes correspond to a healthy resource
+type HealthCheckable interface {
+	Health(ctx context.Context) (int, error)
+}
+
 // Summary provides a summary of a Skywire Visor.
 type Summary struct {
 	PubKey          cipher.PubKey        `json:"local_pk"`
@@ -74,6 +87,7 @@ type Summary struct {
 	Apps            []*launcher.AppState `json:"apps"`
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
+	LocalIP         string               `json:"local_ip"`
 }
 
 // Summary implements API.
@@ -91,6 +105,16 @@ func (v *Visor) Summary() (*Summary, error) {
 		return true
 	})
 
+	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get default network interface: %w", err)
+	}
+
+	localIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IPs of interface %s: %w", defaultNetworkIfc, err)
+	}
+
 	summary := &Summary{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
@@ -98,6 +122,12 @@ func (v *Visor) Summary() (*Summary, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      summaries,
 		RoutesCount:     v.router.RoutesCount(),
+	}
+
+	if len(localIPs) > 0 {
+		// should be okay to have the first one, in the case of
+		// active network interface, there's usually just a single IP
+		summary.LocalIP = localIPs[0].String()
 	}
 
 	return summary, nil
@@ -153,6 +183,50 @@ func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
 	return extraSummary, nil
 }
 
+// collectHealthStats for given services and return health statuses
+func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[string]int {
+	type healthResponse struct {
+		name   string
+		status int
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), InnerHealthTimeout)
+	defer cancel()
+
+	responses := make(chan healthResponse, len(services))
+
+	var wg sync.WaitGroup
+	wg.Add(len(services))
+	for name, service := range services {
+		go func(name string, service HealthCheckable) {
+			defer wg.Done()
+
+			if service == nil {
+				responses <- healthResponse{name, http.StatusNotFound}
+				return
+			}
+
+			status, err := service.Health(ctx)
+			if err != nil {
+				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
+				status = http.StatusInternalServerError
+			}
+
+			responses <- healthResponse{name, status}
+		}(name, service)
+	}
+	wg.Wait()
+
+	close(responses)
+
+	results := make(map[string]int)
+	for response := range responses {
+		results[response.name] = response.status
+	}
+
+	return results
+}
+
 // HealthInfo carries information about visor's external services health represented as http status codes
 type HealthInfo struct {
 	TransportDiscovery int `json:"transport_discovery"`
@@ -164,65 +238,25 @@ type HealthInfo struct {
 
 // Health implements API.
 func (v *Visor) Health() (*HealthInfo, error) {
-	ctx := context.Background()
+	services := map[string]HealthCheckable{
+		"td": v.tpDiscClient(),
+		"rf": v.routeFinderClient(),
+		"ut": v.uptimeTrackerClient(),
+		"ar": v.addressResolverClient(),
+	}
 
+	stats := v.collectHealthStats(services)
 	healthInfo := &HealthInfo{
-		TransportDiscovery: http.StatusNotFound,
-		RouteFinder:        http.StatusNotFound,
-		SetupNode:          http.StatusNotFound,
-		UptimeTracker:      http.StatusNotFound,
-		AddressResolver:    http.StatusNotFound,
+		TransportDiscovery: stats["td"],
+		RouteFinder:        stats["rf"],
+		UptimeTracker:      stats["ut"],
+		AddressResolver:    stats["ar"],
 	}
-
-	if tdClient := v.tpDiscClient(); tdClient != nil {
-		tdStatus, err := tdClient.Health(ctx)
-		if err != nil {
-			v.log.WithError(err).Warnf("Failed to check transport discovery health")
-
-			healthInfo.TransportDiscovery = http.StatusInternalServerError
-		}
-
-		healthInfo.TransportDiscovery = tdStatus
-	}
-
-	if rfClient := v.routeFinderClient(); rfClient != nil {
-		rfStatus, err := rfClient.Health(ctx)
-		if err != nil {
-			v.log.WithError(err).Warnf("Failed to check route finder health")
-
-			healthInfo.RouteFinder = http.StatusInternalServerError
-		}
-
-		healthInfo.RouteFinder = rfStatus
-	}
-
 	// TODO(evanlinjin): This should actually poll the setup nodes services.
 	if len(v.conf.Routing.SetupNodes) == 0 {
 		healthInfo.SetupNode = http.StatusNotFound
 	} else {
 		healthInfo.SetupNode = http.StatusOK
-	}
-
-	if utClient := v.uptimeTrackerClient(); utClient != nil {
-		utStatus, err := utClient.Health(ctx)
-		if err != nil {
-			v.log.WithError(err).Warnf("Failed to check uptime tracker health")
-
-			healthInfo.UptimeTracker = http.StatusInternalServerError
-		}
-
-		healthInfo.UptimeTracker = utStatus
-	}
-
-	if arClient := v.addressResolverClient(); arClient != nil {
-		arStatus, err := arClient.Health(ctx)
-		if err != nil {
-			v.log.WithError(err).Warnf("Failed to check address resolver health")
-
-			healthInfo.AddressResolver = http.StatusInternalServerError
-		}
-
-		healthInfo.AddressResolver = arStatus
 	}
 
 	return healthInfo, nil
@@ -256,6 +290,29 @@ func (v *Visor) StartApp(appName string) error {
 func (v *Visor) StopApp(appName string) error {
 	_, err := v.appL.StopApp(appName)
 	return err
+}
+
+// SetAppDetailedStatus implements API.
+func (v *Visor) SetAppDetailedStatus(appName, status string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting app detailed status %v for app %v", status, appName)
+	proc.SetDetailedStatus(status)
+
+	return nil
+}
+
+// RestartApp implements API.
+func (v *Visor) RestartApp(appName string) error {
+	if _, ok := v.procM.ProcByName(appName); ok {
+		v.log.Infof("Updated %v password, restarting it", appName)
+		return v.appL.RestartApp(appName)
+	}
+
+	return nil
 }
 
 // SetAutoStart implements API.
@@ -295,11 +352,6 @@ func (v *Visor) SetAppPassword(appName, password string) error {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v password, restarting it", appName)
-		return v.appL.RestartApp(appName)
-	}
-
 	v.log.Infof("Updated %v password", appName)
 
 	return nil
@@ -314,23 +366,11 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	v.log.Infof("Setting %s killswitch to %q", appName, killswitch)
 
 	const (
-		killSwitchArg = "-killswitch"
+		killSwitchArg = "--killswitch"
 	)
 
-	var value string
-	if killswitch {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
 		return err
-	}
-
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v killswitch state, restarting it", appName)
-		return v.appL.RestartApp(appName)
 	}
 
 	v.log.Infof("Updated %v killswitch state", appName)
@@ -347,23 +387,11 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	v.log.Infof("Setting %s secure to %q", appName, isSecure)
 
 	const (
-		secureArgName = "-secure"
+		secureArgName = "--secure"
 	)
 
-	var value string
-	if isSecure {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
 		return err
-	}
-
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v secure state, restarting it", appName)
-		return v.appL.RestartApp(appName)
 	}
 
 	v.log.Infof("Updated %v secure state", appName)
@@ -397,11 +425,6 @@ func (v *Visor) SetAppPK(appName string, pk cipher.PubKey) error {
 		return err
 	}
 
-	if _, ok := v.procM.ProcByName(appName); ok {
-		v.log.Infof("Updated %v PK, restarting it", appName)
-		return v.appL.RestartApp(appName)
-	}
-
 	v.log.Infof("Updated %v PK", appName)
 
 	return nil
@@ -420,6 +443,16 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 	}
 
 	return res, nil
+}
+
+// GetAppStats implements API.
+func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
+	stats, err := v.procM.Stats(appName)
+	if err != nil {
+		return appserver.AppStats{}, err
+	}
+
+	return stats, nil
 }
 
 // GetAppConnectionsSummary implements API.

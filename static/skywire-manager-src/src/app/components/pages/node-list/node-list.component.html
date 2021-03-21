@@ -122,10 +122,11 @@
             {{ node.label }}
           </td>
           <td>
-            {{ node.local_pk }}
+            {{ node.localPk }}
           </td>
           <td *ngIf="showDmsgInfo">
             <app-labeled-element-text
+              *ngIf="node.dmsgServerPk"
               [short]="true"
               id="{{ node.dmsgServerPk }}"
               shortTextLength="4"
@@ -134,7 +135,9 @@
             </app-labeled-element-text>
           </td>
           <td *ngIf="showDmsgInfo">
-            {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+            <ng-container *ngIf="node.dmsgServerPk">
+              {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+            </ng-container>
           </td>
           <td (click)="$event.stopPropagation()" class="actions">
             <button
@@ -214,7 +217,7 @@
               </div>
               <div class="list-row long-content">
                 <span class="title">{{ 'nodes.key' | translate }}</span>:
-                {{ node.local_pk }}
+                {{ node.localPk }}
               </div>
               <div class="list-row long-content" *ngIf="showDmsgInfo">
                 <span class="title">{{ 'nodes.dmsg-server' | translate }}</span>:
