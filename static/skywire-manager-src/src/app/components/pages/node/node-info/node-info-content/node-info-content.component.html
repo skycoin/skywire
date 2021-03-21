@@ -11,7 +11,7 @@
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.public-key' | translate }}&nbsp;</span>
-      <app-copy-to-clipboard-text text="{{ node.local_pk }}"></app-copy-to-clipboard-text>
+      <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.port' | translate }}&nbsp;</span>
@@ -27,7 +27,7 @@
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.node-version' | translate }}</span>
-      {{ node.build_info.version ? node.build_info.version : ('common.unknown' | translate) }}
+      {{ node.version ? node.version : ('common.unknown' | translate) }}
     </span>
     <span class="info-line">
       <span class="title">{{ 'node.details.node-info.time.title' | translate }}</span>

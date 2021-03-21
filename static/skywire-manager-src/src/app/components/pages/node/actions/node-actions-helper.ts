@@ -1,5 +1,4 @@
-import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
-import { Component, AfterViewInit, OnDestroy, Input } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
@@ -13,8 +12,6 @@ import { NodeService } from 'src/app/services/node.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
-import { ConfirmationData, ConfirmationComponent } from 'src/app/components/layout/confirmation/confirmation.component';
-import { AppConfig } from 'src/app/app.config';
 import { MenuOptionData } from 'src/app/components/layout/top-bar/top-bar.component';
 import { UpdateComponent } from 'src/app/components/layout/update/update.component';
 import { StorageService } from 'src/app/services/storage.service';

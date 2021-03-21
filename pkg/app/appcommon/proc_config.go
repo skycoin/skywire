@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
@@ -104,6 +105,48 @@ func (c *ProcConfig) EnsureKey() {
 func (c *ProcConfig) Envs() []string {
 	const format = "%s=%s"
 	return append(c.ProcEnvs, fmt.Sprintf(format, EnvProcConfig, string(c.encodeJSON())))
+}
+
+// ContainsFlag checks if a given flag has been passed to the ProcConfig.
+func (c *ProcConfig) ContainsFlag(flag string) bool {
+	for _, arg := range c.ProcArgs {
+		if argEqualsFlag(arg, flag) {
+			return true
+		}
+	}
+	return false
+}
+
+// ArgVal returns the value associated in ProcConfig with a given flag.
+func (c *ProcConfig) ArgVal(flag string) string {
+	for idx, arg := range c.ProcArgs {
+		if argEqualsFlag(arg, flag) && idx+1 < len(c.ProcArgs) {
+			return c.ProcArgs[idx+1]
+		}
+	}
+
+	return ""
+}
+
+func argEqualsFlag(arg, flag string) bool {
+	arg = strings.TrimSpace(arg)
+
+	// strip prefixed '-'s.
+	for {
+		if len(arg) < 1 {
+			return false
+		}
+		if arg[0] == '-' {
+			arg = arg[1:]
+			continue
+		}
+		break
+	}
+
+	// strip anything after (inclusive) of '='.
+	arg = strings.Split(arg, "=")[0]
+
+	return arg == flag
 }
 
 func (c *ProcConfig) encodeJSON() []byte {

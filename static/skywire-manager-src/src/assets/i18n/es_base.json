@@ -273,6 +273,7 @@
     "update-instructions": "Click the 'Install updates' button to continue.",
     "updating": "The update operation has been started, you can open this window again for checking the progress:",
     "version-change": "From {{ currentVersion }} to {{ newVersion }}",
+    "selected-channel": "Selected channel:",
     "downloaded-file-name-prefix": "Downloading: ",
     "speed-prefix": "Speed: ",
     "time-downloading-prefix": "Time downloading: ",
@@ -312,6 +313,8 @@
       "enable-autostart": "Enable autostart",
       "autostart-disabled": "Autostart disabled",
       "autostart-enabled": "Autostart enabled",
+      "unavailable-logs-error": "Unable to show the logs while the app is not running.",
+
       "filter-dialog": {
         "state": "The state must be",
         "name": "The name must contain",
@@ -471,8 +474,10 @@
     },
     "dialog": {
       "remote-key": "Remote public key",
+      "label": "Identification name (optional)",
       "transport-type": "Transport type",
       "success": "Transport created.",
+      "success-without-label": "The transport was created, but it was not possible to save the label.",
       "errors": {
         "remote-key-length-error": "The remote public key must be 66 characters long.",
         "remote-key-chars-error": "The remote public key must only contain hexadecimal characters.",
@@ -497,7 +502,9 @@
     "info": "Paths used to reach the remote visors to which transports have been established. Routes are automatically generated as needed.",
     "list-title": "Route list",
     "key": "Key",
-    "rule": "Rule",
+    "type": "Type",
+    "source": "Source",
+    "destination": "Destination",
     "delete-confirmation": "Are you sure you want to delete the route?",
     "delete-selected-confirmation": "Are you sure you want to delete the selected routes?",
     "delete": "Delete route",
@@ -533,7 +540,10 @@
     },
     "filter-dialog": {
       "key": "The key must contain",
-      "rule": "The rule must contain"
+      "type": "The type must be",
+      "source": "The source must contain",
+      "destination": "The destination must contain",
+      "any-type-option": "Any"
     }
   },
 
