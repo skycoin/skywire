@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter, OnDestroy } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 
 import { SelectOptionComponent, SelectableOption } from '../select-option/select-option.component';
 import { StorageService, LabelInfo, LabeledElementTypes } from 'src/app/services/storage.service';
@@ -7,7 +8,6 @@ import { ClipboardService } from 'src/app/services/clipboard.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { EditLabelComponent } from '../edit-label/edit-label.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
-import { TranslateService } from '@ngx-translate/core';
 
 /**
  * Represents the parts of a label.

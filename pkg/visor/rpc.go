@@ -22,8 +22,12 @@ import (
 const (
 	// RPCPrefix is the prefix used with all RPC calls.
 	RPCPrefix = "app-visor"
-	// HealthTimeout defines timeout for /health endpoint calls.
+	// HealthTimeout defines timeout for /health endpoint calls done from hypervisor.
 	HealthTimeout = 5 * time.Second
+	// InnerHealthTimeout defines timeout for /health endpoint calls done from visor.
+	// We keep it is less than the `HealthTimeout`, so that the outer call would
+	// definitely complete.
+	InnerHealthTimeout = 3 * time.Second
 )
 
 var (
@@ -196,6 +200,19 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 	<<< APP MANAGEMENT >>>
 */
 
+// SetAppDetailedStatusIn is input for SetAppDetailedStatus.
+type SetAppDetailedStatusIn struct {
+	AppName string
+	Status  string
+}
+
+// SetAppDetailedStatus sets app's detailed status.
+func (r *RPC) SetAppDetailedStatus(in *SetAppDetailedStatusIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppDetailedStatus", in)(nil, &err)
+
+	return r.visor.SetAppDetailedStatus(in.AppName, in.Status)
+}
+
 // Apps returns list of Apps registered on the Visor.
 func (r *RPC) Apps(_ *struct{}, reply *[]*launcher.AppState) (err error) {
 	defer rpcutil.LogCall(r.log, "Apps", nil)(reply, &err)
@@ -218,6 +235,13 @@ func (r *RPC) StopApp(name *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StopApp", name)(nil, &err)
 
 	return r.visor.StopApp(*name)
+}
+
+// RestartApp restarts App with provided name.
+func (r *RPC) RestartApp(name *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RestartApp", name)(nil, &err)
+
+	return r.visor.RestartApp(*name)
 }
 
 // SetAutoStartIn is input for SetAutoStart.
@@ -277,6 +301,18 @@ func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppSecure", in)(nil, &err)
 
 	return r.visor.SetAppSecure(in.AppName, in.Val)
+}
+
+// GetAppStats gets app runtime statistics.
+func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppStats", appName)(out, &err)
+
+	stats, err := r.visor.GetAppStats(*appName)
+	if err != nil {
+		*out = stats
+	}
+
+	return err
 }
 
 // GetAppConnectionsSummary returns connections stats for the app.

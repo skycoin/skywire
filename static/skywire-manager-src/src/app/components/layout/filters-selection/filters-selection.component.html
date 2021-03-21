@@ -38,15 +38,15 @@
         </mat-select>
       </mat-form-field>
     </ng-container>
-
-    <!-- button. -->
-    <app-button
-      #button
-      (action)="apply()"
-      color="primary"
-      class="float-right"
-    >
-      {{ 'common.ok' | translate }}
-    </app-button>
   </form>
+
+  <!-- button. -->
+  <app-button
+    #button
+    (action)="apply()"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'common.ok' | translate }}
+  </app-button>
 </app-dialog>
