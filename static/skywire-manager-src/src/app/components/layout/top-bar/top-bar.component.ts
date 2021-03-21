@@ -9,6 +9,7 @@ import { SelectableOption, SelectOptionComponent } from '../select-option/select
 import { SelectLanguageComponent } from '../select-language/select-language.component';
 import { AppState, VpnClientService } from 'src/app/services/vpn-client.service';
 import { VpnHelpers } from '../../vpn/vpn-helpers';
+import { DataUnits, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 
 /**
  * Properties of a tab shown in TopBarComponent.
@@ -175,6 +176,8 @@ export class TopBarComponent implements OnInit, OnDestroy {
   // If the control with the animation for the vpn state dot must be shown one time. For
   // running the animation again, this var is set to false and then to true again, after a moment.
   showVpnStateAnimatedDot = true;
+  // If the VPN data speed stats must be shown in bits (true) or bytes (false).
+  showVpnDataStatsInBits = true;
   // Allows to know if the app is being accessed from a remote localtion.
   remoteAccess = false;
 
@@ -188,6 +191,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private router: Router,
     private vpnClientService: VpnClientService,
+    private vpnSavedDataService: VpnSavedDataService,
   ) { }
 
   ngOnInit() {
@@ -221,6 +225,9 @@ export class TopBarComponent implements OnInit, OnDestroy {
   startGettingVpnInfo() {
     this.showVpnInfo = true;
     this.vpnClientService.initialize(this.localVpnKeyInternal);
+
+    // Update the data units.
+    this.updateVpnDataStatsUnit();
 
     // Get the data.
     this.vpnDataSubscription = this.vpnClientService.backendState.subscribe(data => {
@@ -332,5 +339,17 @@ export class TopBarComponent implements OnInit, OnDestroy {
         }
       }
     });
+  }
+
+  /**
+   * Makes the UI show the VPN data speed stats in bits or bytes, as specified in the settings.
+   */
+  updateVpnDataStatsUnit() {
+    const units: DataUnits = this.vpnSavedDataService.getDataUnitsSetting();
+    if (units === DataUnits.BitsSpeedAndBytesVolume || units === DataUnits.OnlyBits) {
+      this.showVpnDataStatsInBits = true;
+    } else {
+      this.showVpnDataStatsInBits = false;
+    }
   }
 }

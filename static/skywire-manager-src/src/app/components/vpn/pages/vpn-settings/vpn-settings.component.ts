@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -8,8 +8,10 @@ import { BackendState, VpnClientService, VpnServiceStates } from 'src/app/servic
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AppsService } from 'src/app/services/apps.service';
 import { processServiceError } from 'src/app/utils/errors';
-import { VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
+import { DataUnits, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
+import { TopBarComponent } from 'src/app/components/layout/top-bar/top-bar.component';
 
 /**
  * Options that VpnSettingsComponent might be changing asynchronously.
@@ -28,12 +30,17 @@ enum WorkingOptions {
   styleUrls: ['./vpn-settings.component.scss'],
 })
 export class VpnSettingsComponent implements OnDestroy {
+  @ViewChild('topBarLoading') topBarLoading: TopBarComponent;
+  @ViewChild('topBarLoaded') topBarLoaded: TopBarComponent;
+
   // If the data is being loaded.
   loading = true;
   // Current state of the VPN client app in the backend.
   backendData: BackendState;
   // If the option for getting the browser IP is active.
   getIpOption: boolean;
+  // Units that must be used for displaying the data stats.
+  dataUnitsOption: DataUnits;
   // Data for populating the tabs of the top bar.
   tabsData = VpnHelpers.vpnTabsData;
 
@@ -75,6 +82,7 @@ export class VpnSettingsComponent implements OnDestroy {
     });
 
     this.getIpOption = this.vpnSavedDataService.getCheckIpSetting();
+    this.dataUnitsOption = this.vpnSavedDataService.getDataUnitsSetting();
   }
 
   ngOnDestroy() {
@@ -109,6 +117,20 @@ export class VpnSettingsComponent implements OnDestroy {
         return 'vpn.settings-page.setting-on';
       default:
         return 'vpn.settings-page.setting-off';
+    }
+  }
+
+  /**
+   * Gets the translatable string for a data units selection.
+   */
+  getUnitsOptionText(units: DataUnits): string {
+    switch (units) {
+      case DataUnits.OnlyBits:
+        return 'vpn.settings-page.data-units-modal.only-bits';
+      case DataUnits.OnlyBytes:
+        return 'vpn.settings-page.data-units-modal.only-bytes';
+      default:
+        return 'vpn.settings-page.data-units-modal.bits-speed-and-bytes-volume';;
     }
   }
 
@@ -169,5 +191,42 @@ export class VpnSettingsComponent implements OnDestroy {
     this.getIpOption = !this.getIpOption;
 
     this.vpnSavedDataService.setCheckIpSetting(this.getIpOption);
+  }
+
+  /**
+   * Opens the UI for changing the data units option.
+   */
+  changeDataUnits() {
+    const options: SelectableOption[] = [];
+    const optionValues: DataUnits[] = [];
+
+    // Get all the available options and mark the currently selected one.
+    Object.keys(DataUnits).forEach(key => {
+      const option: SelectableOption = { label: this.getUnitsOptionText(DataUnits[key]) };
+
+      if (this.dataUnitsOption === DataUnits[key]) {
+        option.icon = 'done';
+      }
+
+      options.push(option);
+      optionValues.push(DataUnits[key]);
+    });
+
+    // Open the option selection modal window.
+    SelectOptionComponent.openDialog(this.dialog, options, 'vpn.settings-page.data-units-modal.title').afterClosed().subscribe((result: number) => {
+      if (result) {
+        // Save the new value.
+        this.dataUnitsOption = optionValues[result - 1];
+        this.vpnSavedDataService.setDataUnitsSetting(this.dataUnitsOption);
+
+        // Make the top bar use the new value.
+        if (this.topBarLoading) {
+          this.topBarLoading.updateVpnDataStatsUnit();
+        }
+        if (this.topBarLoaded) {
+          this.topBarLoaded.updateVpnDataStatsUnit();
+        }
+      }
+    });
   }
 }

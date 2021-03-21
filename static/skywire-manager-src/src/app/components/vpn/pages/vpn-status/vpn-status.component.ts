@@ -8,7 +8,7 @@ import BigNumber from 'bignumber.js';
 import { VpnHelpers } from '../../vpn-helpers';
 import { AppState, BackendState, VpnClientService, VpnServiceStates } from 'src/app/services/vpn-client.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
-import { LocalServerData, ServerFlags, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
+import { DataUnits, LocalServerData, ServerFlags, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { countriesList } from 'src/app/utils/countries-list';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { LineChartComponent } from 'src/app/components/layout/line-chart/line-chart.component';
@@ -48,6 +48,9 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
   totalUploaded = 0;
   totalDownloaded = 0;
   latency = 0;
+
+  showSpeedsInBits = true;
+  showTotalsInBits = false;
 
   // If the state is being loaded for the first time.
   loading = true;
@@ -102,6 +105,19 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
     private router: Router,
   ) {
     this.ipInfoAllowed = this.vpnSavedDataService.getCheckIpSetting();
+
+    // Set which units must be used for showing the data stats.
+    const units: DataUnits = this.vpnSavedDataService.getDataUnitsSetting();
+    if (units === DataUnits.OnlyBits) {
+      this.showSpeedsInBits = true;
+      this.showTotalsInBits = true;
+    } else if (units === DataUnits.OnlyBytes) {
+      this.showSpeedsInBits = false;
+      this.showTotalsInBits = false;
+    } else {
+      this.showSpeedsInBits = true;
+      this.showTotalsInBits = false;
+    }
   }
 
   ngOnInit() {

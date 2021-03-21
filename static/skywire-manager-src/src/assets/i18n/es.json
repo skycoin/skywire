@@ -804,10 +804,19 @@
       "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN es interrumpida (por errores temporales o cualquier otro problema). Esto evita fugas de datos.",
       "get-ip": "Obtener información de IP",
       "get-ip-info": "Cuando está activa, la aplicación utilizará servicios externos para obtener información sobre la IP actual.",
+      "data-units": "Unidades de datos",
+      "data-units-info": "Permite seleccionar las unidades que se utilizarán para mostrar las estadísticas de transmisión de datos.",
       "setting-on": "Encendido",
       "setting-off": "Apagado",
       "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
-      "change-while-connected-confirmation": "La protección VPN se interrumpirá mientras se realiza el cambio. ¿Desea continuar?"
+      "change-while-connected-confirmation": "La protección VPN se interrumpirá mientras se realiza el cambio. ¿Desea continuar?",
+
+      "data-units-modal": {
+        "title": "Unidades de Datos",
+        "only-bits": "Bits para todas las estadísticas",
+        "only-bytes": "Bytes para todas las estadísticas",
+        "bits-speed-and-bytes-volume": "Bits para velocidad y bytes para volumen (predeterminado)"
+      }
     }
   }
 }
