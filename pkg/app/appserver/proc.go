@@ -48,6 +48,12 @@ type Proc struct {
 
 	m       ProcManager
 	appName string
+
+	startTimeMx sync.RWMutex
+	startTime   time.Time
+
+	statusMx sync.RWMutex
+	status   string
 }
 
 // NewProc constructs `Proc`.
@@ -88,6 +94,18 @@ func (p *Proc) Cmd() *exec.Cmd {
 	return p.cmd
 }
 
+// StartTime returns app start time.
+func (p *Proc) StartTime() (time.Time, bool) {
+	if !p.IsRunning() {
+		return time.Time{}, false
+	}
+
+	p.startTimeMx.RLock()
+	defer p.startTimeMx.RUnlock()
+
+	return p.startTime, true
+}
+
 // InjectConn introduces the connection to the Proc after it is started.
 // Only the first call will return true.
 // It also prepares the RPC gateway.
@@ -98,7 +116,7 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 		ok = true
 		p.conn = conn
 		p.rpcGWMu.Lock()
-		p.rpcGW = NewRPCGateway(p.log)
+		p.rpcGW = NewRPCGateway(p.log, p)
 		p.rpcGWMu.Unlock()
 
 		// Send ready signal.
@@ -154,6 +172,10 @@ func (p *Proc) Start() error {
 		p.waitMx.Unlock()
 		return err
 	}
+
+	p.startTimeMx.Lock()
+	p.startTime = time.Now().UTC()
+	p.startTimeMx.Unlock()
 
 	go func() {
 		waitErrCh := make(chan error)
@@ -262,13 +284,31 @@ func (p *Proc) IsRunning() bool {
 	return atomic.LoadInt32(&p.isRunning) == 1
 }
 
+// SetDetailedStatus sets proc's detailed status.
+func (p *Proc) SetDetailedStatus(status string) {
+	p.statusMx.Lock()
+	defer p.statusMx.Unlock()
+
+	p.status = status
+}
+
+// DetailedStatus gets proc's detailed status.
+func (p *Proc) DetailedStatus() string {
+	p.statusMx.RLock()
+	defer p.statusMx.RUnlock()
+
+	return p.status
+}
+
 // ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
-	IsAlive       bool          `json:"is_alive"`
-	Latency       time.Duration `json:"latency"`
-	Throughput    uint32        `json:"throughput"`
-	BandwidthSent uint64        `json:"bandwidth_sent"`
-	Error         string        `json:"error"`
+	IsAlive           bool          `json:"is_alive"`
+	Latency           time.Duration `json:"latency"`
+	UploadSpeed       uint32        `json:"upload_speed"`
+	DownloadSpeed     uint32        `json:"download_speed"`
+	BandwidthSent     uint64        `json:"bandwidth_sent"`
+	BandwidthReceived uint64        `json:"bandwidth_received"`
+	Error             string        `json:"error"`
 }
 
 // ConnectionsSummary returns all of the proc's connections stats.
@@ -304,10 +344,12 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 		}
 
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive:       skywireConn.IsAlive(),
-			Latency:       skywireConn.Latency(),
-			Throughput:    skywireConn.Throughput(),
-			BandwidthSent: skywireConn.BandwidthSent(),
+			IsAlive:           skywireConn.IsAlive(),
+			Latency:           skywireConn.Latency(),
+			UploadSpeed:       skywireConn.UploadSpeed(),
+			DownloadSpeed:     skywireConn.DownloadSpeed(),
+			BandwidthSent:     skywireConn.BandwidthSent(),
+			BandwidthReceived: skywireConn.BandwidthReceived(),
 		})
 
 		return true

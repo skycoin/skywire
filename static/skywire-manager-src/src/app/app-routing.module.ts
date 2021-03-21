@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
+import { StartComponent } from './components/pages/start/start.component';
 import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
@@ -20,6 +21,10 @@ import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-se
 import { VpnAuthGuardService } from './services/vpn-auth-guard.service';
 
 const routes: Routes = [
+  {
+    path: '',
+    component: StartComponent
+  },
   {
     path: 'login',
     component: LoginComponent
@@ -167,7 +172,7 @@ const routes: Routes = [
   },
   {
     path: '**',
-    redirectTo: 'login'
+    redirectTo: ''
   },
 ];
 

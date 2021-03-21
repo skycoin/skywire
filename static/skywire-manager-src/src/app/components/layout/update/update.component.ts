@@ -4,7 +4,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { Subscription, forkJoin, interval } from 'rxjs';
 
 import { AppConfig } from 'src/app/app.config';
-import { NodeService } from 'src/app/services/node.service';
+import { NodeService, UpdaterStorageKeys } from 'src/app/services/node.service';
 import { StorageService } from 'src/app/services/storage.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
@@ -144,6 +144,9 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
   // How many nodes inside nodesToUpdate have updates available and are not currently
   // being updated.
   nodesForUpdatesFound: number;
+
+  // Custom channel set by the user for downloading the updates.
+  customChannel: string = localStorage.getItem(UpdaterStorageKeys.Channel);
 
   updatingStates = UpdatingStates;
 

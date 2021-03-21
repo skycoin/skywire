@@ -4,6 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { HttpClientModule } from '@angular/common/http';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
+import { StartComponent } from './components/pages/start/start.component';
 import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
@@ -101,6 +102,7 @@ const globalRippleConfig: RippleGlobalOptions = {
 @NgModule({
   declarations: [
     AppComponent,
+    StartComponent,
     LoginComponent,
     NodeListComponent,
     NodeComponent,

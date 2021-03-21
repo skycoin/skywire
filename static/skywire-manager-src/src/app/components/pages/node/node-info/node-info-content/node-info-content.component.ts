@@ -20,7 +20,7 @@ export class NodeInfoContentComponent {
   @Input() set nodeInfo(val: Node) {
     this.node = val;
     this.nodeHealthInfo = this.nodeService.getHealthStatus(val);
-    this.timeOnline = TimeUtils.getElapsedTime(val.seconds_online);
+    this.timeOnline = TimeUtils.getElapsedTime(val.secondsOnline);
   }
 
   node: Node;
@@ -34,10 +34,10 @@ export class NodeInfoContentComponent {
   ) { }
 
   showEditLabelDialog() {
-    let labelInfo =  this.storageService.getLabelInfo(this.node.local_pk);
+    let labelInfo =  this.storageService.getLabelInfo(this.node.localPk);
     if (!labelInfo) {
       labelInfo = {
-        id: this.node.local_pk,
+        id: this.node.localPk,
         label: '',
         identifiedElementType: LabeledElementTypes.Node,
       };

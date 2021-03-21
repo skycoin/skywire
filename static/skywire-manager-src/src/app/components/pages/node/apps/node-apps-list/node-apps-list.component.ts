@@ -142,6 +142,11 @@ export class NodeAppsListComponent implements OnDestroy {
     },
   ];
 
+  /**
+   * Indicates that, after updating the data, it has to be updated again after a small delay.
+   */
+  private refreshAgain = false;
+
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
 
@@ -193,6 +198,7 @@ export class NodeAppsListComponent implements OnDestroy {
     this.dataSortedSubscription.unsubscribe();
     this.dataFiltererSubscription.unsubscribe();
     this.dataSorter.dispose();
+    this.dataFilterer.dispose();
   }
 
   /**
@@ -238,7 +244,7 @@ export class NodeAppsListComponent implements OnDestroy {
    */
   changeStateOfSelected(startApps: boolean) {
     const elementsToChange: string[] = [];
-    // Ignore all elements shich already have the desired settings applied.
+    // Ignore all elements which already have the desired settings applied.
     this.selections.forEach((val, key) => {
       if (val) {
         if ((startApps && this.appsMap.get(key).status !== 1) || (!startApps && this.appsMap.get(key).status === 1)) {
@@ -384,14 +390,22 @@ export class NodeAppsListComponent implements OnDestroy {
           confirmationDialog.close();
         }
 
-        // Make the parent page reload the data.
-        setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
+        // Make the parent page reload the data and do it again after a small delay, to catch
+        // slow changes.
+        setTimeout(() => {
+          this.refreshAgain = true;
+          NodeComponent.refreshCurrentDisplayedData();
+        }, 50);
         this.snackbarService.showDone('apps.operation-completed');
       }, (err: OperationError) => {
         err = processServiceError(err);
 
-        // Make the parent page reload the data.
-        setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
+        // Make the parent page reload the data and do it again after a small delay, to catch
+        // slow changes.
+        setTimeout(() => {
+          this.refreshAgain = true;
+          NodeComponent.refreshCurrentDisplayedData();
+        }, 50);
 
         if (confirmationDialog) {
           confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
@@ -406,7 +420,11 @@ export class NodeAppsListComponent implements OnDestroy {
    * Shows a modal window with the logs of an app.
    */
   viewLogs(app: Application): void {
-    LogComponent.openDialog(this.dialog, app);
+    if (app.status === 1) {
+      LogComponent.openDialog(this.dialog, app);
+    } else {
+      this.snackbarService.showError('apps.apps-list.unavailable-logs-error');
+    }
   }
 
   /**
@@ -470,6 +488,13 @@ export class NodeAppsListComponent implements OnDestroy {
     }
 
     this.dataSource = this.appsToShow;
+
+    // Refresh the data again after a small delay, if requested.
+    if (this.refreshAgain) {
+      this.refreshAgain = false;
+
+      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 2000);
+    }
   }
 
   /**
@@ -528,8 +553,14 @@ export class NodeAppsListComponent implements OnDestroy {
         if (confirmationDialog) {
           confirmationDialog.close();
         }
-        // Make the parent page reload the data.
-        setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
+
+        // Make the parent page reload the data and do it again after a small delay, to catch
+        // slow changes.
+        setTimeout(() => {
+          this.refreshAgain = true;
+          NodeComponent.refreshCurrentDisplayedData();
+        }, 50);
+
         this.snackbarService.showDone('apps.operation-completed');
       } else {
         this.changeAppsValRecursively(names, changingAutostart, newVal, confirmationDialog);
@@ -537,7 +568,13 @@ export class NodeAppsListComponent implements OnDestroy {
     }, (err: OperationError) => {
       err = processServiceError(err);
 
-      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
+      // Make the parent page reload the data and do it again after a small delay, to catch
+      // slow changes.
+      setTimeout(() => {
+        this.refreshAgain = true;
+        NodeComponent.refreshCurrentDisplayedData();
+      }, 50);
+
       if (confirmationDialog) {
         confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
       } else {
