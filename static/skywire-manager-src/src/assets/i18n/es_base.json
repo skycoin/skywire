@@ -804,10 +804,19 @@
       "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
       "get-ip": "Get IP info",
       "get-ip-info": "When active, the application will use external services to obtain information about the current IP.",
+      "data-units": "Data units",
+      "data-units-info": "Allows to select the units that will be used to display the data transmission statistics.",
       "setting-on": "On",
       "setting-off": "Off",
       "working-warning": "The system is busy. Please wait for the previous operation to finish.",
-      "change-while-connected-confirmation": "The VPN protection will be interrupted while changing the setting. Do you want to continue?"
+      "change-while-connected-confirmation": "The VPN protection will be interrupted while changing the setting. Do you want to continue?",
+
+      "data-units-modal": {
+        "title": "Data Units",
+        "only-bits": "Bits for all stats",
+        "only-bytes": "Bytes for all stats",
+        "bits-speed-and-bytes-volume": "Bits for speed and bytes for volume (default)"
+      }
     }
   }
 }
