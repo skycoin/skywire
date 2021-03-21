@@ -158,12 +158,12 @@
           <!-- Upload. -->
           <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
             <mat-icon [inline]="true">arrow_upward</mat-icon>
-            {{ vpnData.uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}
+            {{ vpnData.uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
           </td>
           <!-- Download. -->
           <td [matTooltip]="'vpn.connection-info.download-info' | translate">
             <mat-icon [inline]="true">arrow_downward</mat-icon>
-            {{ vpnData.downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}
+            {{ vpnData.downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
           </td>
         </tr>
       </table>

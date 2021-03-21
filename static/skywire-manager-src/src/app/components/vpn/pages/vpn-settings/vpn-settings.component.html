@@ -2,6 +2,7 @@
 <div *ngIf="loading" class="d-flex flex-column h-100 w-100">
   <div>
     <app-top-bar
+      #topBarLoading
       [titleParts]="['vpn.title']"
       [tabsData]="tabsData"
       [selectedTabIndex]="2"
@@ -17,6 +18,7 @@
 <div *ngIf="!loading" class="row">
   <div class="col-12">
     <app-top-bar
+      #topBarLoaded
       [titleParts]="['vpn.title']"
       [tabsData]="tabsData"
       [selectedTabIndex]="2"
@@ -67,6 +69,18 @@
           <td class="data-column">
             <span [class]="getStatusClass(getIpOption)"></span>
             {{ (getStatusText(getIpOption)) | translate }}
+          </td>
+        </tr>
+        <!-- Data units. -->
+        <tr class="selectable" (click)="changeDataUnits()">
+          <td class="data-column">
+            <div>
+              {{ 'vpn.settings-page.data-units' | translate }}
+              <mat-icon [inline]="true" class="help-icon" [matTooltip]="'vpn.settings-page.data-units-info' | translate">help</mat-icon>
+            </div>
+          </td>
+          <td class="data-column">
+            {{ getUnitsOptionText(dataUnitsOption) | translate }}
           </td>
         </tr>
       </table>

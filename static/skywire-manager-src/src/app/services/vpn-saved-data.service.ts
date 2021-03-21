@@ -94,6 +94,15 @@ interface SavedServersData {
 }
 
 /**
+ * Options for how to show the VPN data transmission stats.
+ */
+export enum DataUnits {
+  BitsSpeedAndBytesVolume = 'BitsSpeedAndBytesVolume',
+  OnlyBytes = 'OnlyBytes',
+  OnlyBits = 'OnlyBits',
+}
+
+/**
  * Manages the local data of the VPN client. Regarding the saved servers, the service only
  * maintains in local storage the servers which are currently selected, in a special server lists
  * or have personal data, so it is normal not to receive a response when consulting the pk of
@@ -110,6 +119,8 @@ export class VpnSavedDataService {
   private readonly savedServersStorageKey = 'VpnServers';
   // Local storage key for the setting allowing to get the local IP.
   private readonly checkIpSettingStorageKey = 'VpnGetIp';
+  // Local storage key for the data units setting.
+  private readonly dataUnitsSettingStorageKey = 'VpnDataUnits';
 
   // Public key of the currently selected server.
   private currentServerPk: string;
@@ -221,6 +232,26 @@ export class VpnSavedDataService {
    */
   setCheckIpSetting(value: boolean) {
     localStorage.setItem(this.checkIpSettingStorageKey, value ? 'true' : 'false');
+  }
+
+  /**
+   * Returs the data units that must be shown in the UI. If the user has not changed
+   * the setting, it returns DataUnits.BitsSpeedAndBytesVolume by default.
+   */
+   getDataUnitsSetting(): DataUnits {
+    const val = localStorage.getItem(this.dataUnitsSettingStorageKey);
+    if (val === null || val === undefined) {
+      return DataUnits.BitsSpeedAndBytesVolume;
+    }
+
+    return val as DataUnits;
+  }
+
+  /**
+   * Sets the data units that must be shown in the UI.
+   */
+   setDataUnitsSetting(value: DataUnits) {
+    localStorage.setItem(this.dataUnitsSettingStorageKey, value);
   }
 
   /**
