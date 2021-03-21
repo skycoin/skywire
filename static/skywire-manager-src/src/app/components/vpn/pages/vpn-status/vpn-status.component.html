@@ -116,7 +116,7 @@
             <div class="chart-label">
               <div class="label-container label-top">
                 <div class="label">
-                  {{ maxUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true } }}
+                  {{ maxUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
                 </div>
                 <div class="line" [style]="'margin-top: ' + graphsTopInternalMargin + 'px;'"></div>
               </div>
@@ -124,7 +124,7 @@
             <div class="chart-label">
               <div class="label-container label-mid">
                 <div class="label">
-                  {{ midUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true } }}
+                  {{ midUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
                 </div>
                 <div class="line" [style]="'margin-top: ' + (graphsTopInternalMargin / 2) + 'px;'"></div>
               </div>
@@ -132,15 +132,15 @@
             <div class="chart-label">
               <div class="label-container label-bottom">
                 <div class="label">
-                  {{ minUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true } }}
+                  {{ minUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
                 </div>
               </div>
             </div>
             <div class="content">
               <mat-icon [inline]="true" class="upload">keyboard_backspace</mat-icon>
-              <div class="speed">{{ uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}</div>
+              <div class="speed">{{ uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showSpeedsInBits } }}</div>
               <div class="total">
-                {{ totalUploaded | autoScale }}
+                {{ totalUploaded | autoScale:{ showValue: true, showUnit: true, useBits: showTotalsInBits } }}
                 {{ 'vpn.status-page.total-data-label' | translate }}
               </div>
             </div>
@@ -153,7 +153,7 @@
             <div class="chart-label top-chart-label">
               <div class="label-container label-top">
                 <div class="label">
-                  {{ maxDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true } }}
+                  {{ maxDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
                 </div>
                 <div class="line" [style]="'margin-top: ' + graphsTopInternalMargin + 'px;'"></div>
               </div>
@@ -161,7 +161,7 @@
             <div class="chart-label">
               <div class="label-container label-mid">
                 <div class="label">
-                  {{ midDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true } }}
+                  {{ midDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
                 </div>
                 <div class="line" [style]="'margin-top: ' + (graphsTopInternalMargin / 2) + 'px;'"></div>
               </div>
@@ -169,15 +169,15 @@
             <div class="chart-label">
               <div class="label-container label-bottom">
                 <div class="label">
-                  {{ minDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true } }}
+                  {{ minDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
                 </div>
               </div>
             </div>
             <div class="content">
               <mat-icon [inline]="true" class="download">keyboard_backspace</mat-icon>
-              <div class="speed">{{ downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true } }}</div>
+              <div class="speed">{{ downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showSpeedsInBits } }}</div>
               <div class="total">
-                {{ totalDownloaded | autoScale }}
+                {{ totalDownloaded | autoScale:{ showValue: true, showUnit: true, useBits: showTotalsInBits } }}
                 {{ 'vpn.status-page.total-data-label' | translate }}
               </div>
             </div>
