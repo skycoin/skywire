@@ -2,6 +2,7 @@ package init
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -23,6 +24,9 @@ type Module struct {
 	mux     *sync.Mutex
 	running bool
 }
+
+// ErrNoInit is returned when module init function is not set
+var ErrNoInit = errors.New("module initialization function is not set")
 
 // MakeModule returns a new module with given init function and dependencies
 func MakeModule(name string, init Hook, deps ...*Module) Module {
@@ -64,6 +68,9 @@ func (m *Module) InitSequential() error {
 			return err
 		}
 	}
+	if m.init == nil {
+		return fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
+	}
 	return m.init()
 }
 
@@ -93,7 +100,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		return
 	}
 	defer func() {
-		log.Printf("mod %s: finishing init", m.Name)
+		log.Printf("%s: finishing initialization", m.Name)
 		close(m.done)
 		ok = m.setRunning(false)
 		// this should never happen
@@ -103,7 +110,6 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 	}()
 	// start init in every dependency
 	for _, dep := range m.deps {
-		log.Printf("mod %s: init dep %s", m.Name, dep.Name)
 		go dep.InitConcurrent(ctx)
 	}
 
@@ -114,14 +120,17 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 	// todo: waitgroup + errors channel might be quicker to fail than
 	// iterating and waiting
 	for _, dep := range m.deps {
-		log.Printf("mod %s: wait dep %s", m.Name, dep.Name)
 		err := dep.Wait(ctx)
 		if err != nil {
 			m.err = err
 			return
 		}
 	}
-	log.Printf("mod %s: init self", m.Name)
+	log.Printf("mod %s: started initialization", m.Name)
+	if m.init == nil {
+		m.err = fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
+		return
+	}
 	// init the module itself
 	err := m.init()
 	if err != nil {
