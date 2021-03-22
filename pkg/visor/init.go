@@ -9,15 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/dmsg"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
+
 	"github.com/rakyll/statik/fs"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
-
-	_ "github.com/skycoin/skywire/cmd/skywire-visor/statik" // embedded static files
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -35,29 +34,106 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
+	"github.com/skycoin/skywire/pkg/visor/init"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-type initFunc func(v *Visor) bool
+type visorCtxKey int
 
-func initStack() []initFunc {
-	return []initFunc{
-		initUpdater,
-		initEventBroadcaster,
-		initAddressResolver,
-		initDiscovery,
-		initSNet,
-		initDmsgpty,
-		initTransport,
-		initRouter,
-		initLauncher,
-		initCLI,
-		initHypervisors,
-		initUptimeTracker,
-		initTrustedVisors,
-		initHypervisor,
-	}
+const visorKey visorCtxKey = iota
+
+var up init.Module
+
+func regUpdater(ctx context.Context) {
+	up = init.MakeModule("updater", withVisorCtx(ctx, initUpdater))
 }
+
+var ebc init.Module
+
+func regEventBroadcaster(ctx context.Context) {
+	ebc = init.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+}
+
+var ar init.Module
+
+func regAddressResolver(ctx context.Context) {
+	ar = init.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+}
+
+var disc init.Module
+
+func regDiscovery(ctx context.Context) {
+	disc = init.MakeModule("discovery", withVisorCtx(ctx, initUpdater))
+}
+
+var snetModule init.Module
+
+func regSNet(ctx context.Context) {
+	snetModule = init.MakeModule("snet", withVisorCtx(ctx, initSNet))
+}
+
+var dmsgptyModule init.Module
+
+func regDmsgpty(ctx context.Context) {
+	dmsgptyModule = init.MakeModule("dmsgpty", withVisorCtx(ctx, initDmsgpty))
+}
+
+var tr init.Module
+
+func regTransport(ctx context.Context) {
+	ar = init.MakeModule("transport", withVisorCtx(ctx, initTransport))
+}
+
+var rt init.Module
+
+func regRouter(ctx context.Context) {
+	rt = init.MakeModule("router", withVisorCtx(ctx, initRouter))
+}
+
+var lcher init.Module
+
+func regLauncher(ctx context.Context) {
+	lcher = init.MakeModule("launcher", withVisorCtx(ctx, initLauncher))
+}
+
+var cli init.Module
+
+func regCLI(ctx context.Context) {
+	cli = init.MakeModule("cli", withVisorCtx(ctx, initCLI))
+}
+
+var hvs init.Module
+
+func regHypervisors(ctx context.Context) {
+	trVisors = init.MakeModule("hypervisors", withVisorCtx(ctx, initHypervisors))
+}
+
+var ut init.Module
+
+func regUptimeTracker(ctx context.Context) {
+	ut = init.MakeModule("updater", withVisorCtx(ctx, initUptimeTracker))
+}
+
+var trVisors init.Module
+
+func regTrustedVisors(ctx context.Context) {
+	trVisors = init.MakeModule("trusted-visors", withVisorCtx(ctx, initTrustedVisors))
+}
+
+// "fake" visor module to ensure dependencies are met
+var vis init.Module
+
+func regVisor(ctx context.Context) {
+	hv = init.MakeModule("visor", withVisorCtx(ctx, func(v *Visor) bool { return true }))
+}
+
+var hv init.Module
+
+func regHypervisor(ctx context.Context) {
+	hv = init.MakeModule("hv", withVisorCtx(ctx, initHypervisor))
+}
+
+// -------------------------------------------------------------------
 
 func initUpdater(v *Visor) bool {
 	report := v.makeReporter("updater")
@@ -607,4 +683,20 @@ func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hy
 	}()
 	log.WithField("addr", dmsg.Addr{PK: conf.PK, Port: conf.DmsgPort}).
 		Info("Serving RPC client over dmsg.")
+}
+
+func withVisorCtx(ctx context.Context, f func(v *Visor) bool) init.Hook {
+	return func(_ context.Context) error {
+		val := ctx.Value(visorKey)
+		v, ok := val.(*Visor)
+		if !ok && v == nil {
+			return fmt.Errorf("visor not set in module initialization context")
+		}
+		res := f(v)
+		if !res {
+			return fmt.Errorf("init failed")
+		}
+		return nil
+	}
+
 }
