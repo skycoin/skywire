@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -230,17 +229,4 @@ func (v *Visor) uptimeTrackerClient() utclient.APIClient {
 // addressResolverClient is a convenience function to obtain uptime address resovler client.
 func (v *Visor) addressResolverClient() arclient.APIClient {
 	return v.arClient
-}
-
-// unlinkSocketFiles removes unix socketFiles from file system
-func unlinkSocketFiles(socketFiles ...string) error {
-	for _, f := range socketFiles {
-		if err := syscall.Unlink(f); err != nil {
-			if !strings.Contains(err.Error(), "no such file or directory") {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
