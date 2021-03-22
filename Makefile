@@ -85,7 +85,6 @@ clean: ## Clean project: remove created binaries and apps
 install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${OPTS} go install ${BUILD_OPTS} ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
-
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
@@ -104,14 +103,6 @@ lint-extra: ## Run linters with extra checks.
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
 	${OPTS} go vet -all ./...
 
-vendorcheck:  ## Run vendorcheck
-	GO111MODULE=off vendorcheck ./internal/...
-	GO111MODULE=off vendorcheck ./pkg/...
-	GO111MODULE=off vendorcheck ./cmd/apps/...
-	GO111MODULE=off vendorcheck ./cmd/setup-node/...
-	GO111MODULE=off vendorcheck ./cmd/skywire-cli/...
-	GO111MODULE=off vendorcheck ./cmd/skywire-visor/...
-
 test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/...
@@ -119,16 +110,11 @@ test: ## Run tests
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
-	# GO111MODULE=off go get -u github.com/FiloSottile/vendorcheck
-	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
-	# However, they suggest `curl ... | bash` which we should not do
-	# ${OPTS} go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
 	${OPTS} go get -u github.com/incu6us/goimports-reviser
 
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
-	${OPTS} go mod vendor -v
 
 format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg
@@ -136,7 +122,7 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./internal
 	find . -type f -name '*.go' -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} -file-path {} \;
 
-dep: ## Sorts dependencies
+dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
 host-apps: ## Build app
@@ -165,26 +151,6 @@ bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
-
-release: ## Build `skywire-visor`, `skywire-cli` and apps without -race flag
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
-
-release-static: ## Build `skywire-visor`, `skywire-cli` and apps without -race flag
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-cli  ./cmd/skywire-cli
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./setup-node ./cmd/setup-node
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skychat ./cmd/apps/skychat
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks ./cmd/apps/skysocks
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 build-deploy: ## Build for deployment Docker images
 	${OPTS} go build -tags netgo ${BUILD_OPTS_DEPLOY} -o /release/skywire-visor ./cmd/skywire-visor
@@ -259,7 +225,7 @@ docker-rerun: docker-stop
 	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
 	docker container start -i ${DOCKER_NODE}
 
-run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
+docker-run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
 	-rm -rf /tmp/syslog
 	-mkdir -p /tmp/syslog
 	-docker container rm syslog-ng -f
