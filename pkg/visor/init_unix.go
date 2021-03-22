@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
 const ownerRWX = 0700
@@ -27,7 +28,7 @@ func initDmsgpty(v *Visor) bool {
 
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
-		if err := unlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
 			return report(err)
 		}
 	}
