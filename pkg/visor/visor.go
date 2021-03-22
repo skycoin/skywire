@@ -2,12 +2,9 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"reflect"
-	"runtime"
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -138,29 +135,14 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	log.WithField("public_key", conf.PK).
 		Info("Begin startup.")
 	v.startedAt = time.Now()
-
-	for i, startFn := range initStack() {
-		name := strings.ToLower(strings.TrimPrefix(filepath.Base(runtime.FuncForPC(reflect.ValueOf(startFn).Pointer()).Name()), "visor.init"))
-		start := time.Now()
-
-		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:startup:%s", name)).
-			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(initStack())))
-		log.Info("Starting module...")
-
-		if ok := startFn(v); !ok {
-			log.WithField("elapsed", time.Since(start)).Error("Failed to start module.")
-			v.processReports(log, nil)
-			return v, ok
-		}
-
-		log.WithField("elapsed", time.Since(start)).Info("Module started successfully.")
-	}
-
-	if v.processReports(log, &ok); !ok {
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, visorKey, v)
+	vis.InitConcurrent(ctx)
+	v.processReports(log, &ok)
+	if err := vis.Wait(ctx); err != nil {
 		log.Error("Failed to startup visor.")
-		return v, ok
+		return v, false
 	}
-
 	log.Info("Startup complete!")
 	return v, ok
 }
