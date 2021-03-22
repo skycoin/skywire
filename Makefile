@@ -26,18 +26,14 @@ DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 
-TEST_OPTS_BASE:=-cover -timeout=5m -mod=vendor
+TEST_OPTS:=-cover -timeout=5m -mod=vendor
 
 RACE_FLAG:=-race
 GOARCH:=$(shell go env GOARCH)
 
 ifneq (,$(findstring 64,$(GOARCH)))
-    TEST_OPTS_BASE:=$(TEST_OPTS_BASE) $(RACE_FLAG)
+    TEST_OPTS:=$(TEST_OPTS) $(RACE_FLAG)
 endif
-
-TEST_OPTS_NOCI:=-$(TEST_OPTS_BASE) -v
-TEST_OPTS:=$(TEST_OPTS_BASE) -tags no_ci
-
 
 BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
 
@@ -120,10 +116,6 @@ test: ## Run tests
 	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/...
 	${OPTS} go test ${TEST_OPTS} ./pkg/...
-
-test-no-ci: ## Run no_ci tests
-	-go clean -testcache
-	${OPTS} go test ${TEST_OPTS_NOCI} ./pkg/transport/... -run "TCP|PubKeyTable"
 
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
