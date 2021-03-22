@@ -10,7 +10,9 @@ import (
 
 // Hook is a function that can be run at some point as part
 // of module initialization
-type Hook func() error
+// This function will be called with initialization context. Pass your custom
+// data via that context, and retrieve it within your hooks.
+type Hook func(ctx context.Context) error
 
 // Module is a single system unit that represents a part of the system that must
 // be initialized. Module can have dependencies, that should be initialized before
@@ -54,7 +56,7 @@ func (m *Module) setRunning(val bool) bool {
 // InitSequential initializes all module dependencies recursively and sequentially, one by one
 // first to last and depth first
 // If any of the underlying dependencies, or this module initialize with error, return that error
-func (m *Module) InitSequential() error {
+func (m *Module) InitSequential(ctx context.Context) error {
 	// early quit if initialized
 	select {
 	case <-m.done:
@@ -63,7 +65,7 @@ func (m *Module) InitSequential() error {
 	}
 	defer close(m.done)
 	for _, dep := range m.deps {
-		err := dep.InitSequential()
+		err := dep.InitSequential(ctx)
 		if err != nil {
 			return err
 		}
@@ -71,7 +73,7 @@ func (m *Module) InitSequential() error {
 	if m.init == nil {
 		return fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
 	}
-	return m.init()
+	return m.init(ctx)
 }
 
 // Wait for the module to be initialized
@@ -132,7 +134,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		return
 	}
 	// init the module itself
-	err := m.init()
+	err := m.init(ctx)
 	if err != nil {
 		m.err = err
 	}
