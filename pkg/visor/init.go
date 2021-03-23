@@ -60,7 +60,7 @@ func registerModules() {
 	ar = vinit.MakeModule("address resolver", initAddressResolver)
 	disc = vinit.MakeModule("discovery", initDiscovery)
 	sn = vinit.MakeModule("snet", initSNet, &ar, &disc)
-	pty = vinit.MakeModule("dmsgpty", initDmsgpty, &sn)
+	pty = vinit.MakeModule("dmsg pty", initDmsgpty, &sn)
 	tr = vinit.MakeModule("transport", initTransport, &sn, &ebc)
 	rt = vinit.MakeModule("router", initRouter, &tr, &sn)
 	launch = vinit.MakeModule("launcher", initLauncher, &ebc, &disc, &sn, &tr)
@@ -69,7 +69,7 @@ func registerModules() {
 	ut = vinit.MakeModule("uptime tracker", initUptimeTracker)
 	trv = vinit.MakeModule("trusted visors", initTrustedVisors, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, &up, &ebc, &ar, &disc, &sn, &pty,
-		&ar, &rt, &launch, &cli, &hvs, &ut, &trv)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &trv)
 	hv = vinit.MakeModule("hypervisor", initHypervisor, &vis)
 }
 
