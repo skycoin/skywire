@@ -607,6 +607,7 @@ func initHypervisor(ctx context.Context) error {
 
 }
 
+// todo: consider moving to td package
 func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
@@ -641,6 +642,7 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	return tpdC, nil
 }
 
+// todo: move to hypervisor file, make a method and remove conf argument
 func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hypervisorconfig.Config) {
 	go func() {
 		if err := hv.ServeRPC(ctx, conf.DmsgPort); err != nil {
