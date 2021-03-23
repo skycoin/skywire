@@ -1,4 +1,4 @@
-package init
+package visorinit
 
 import (
 	"context"
@@ -33,13 +33,13 @@ var ErrNoInit = errors.New("module initialization function is not set")
 // MakeModule returns a new module with given init function and dependencies
 func MakeModule(name string, init Hook, deps ...*Module) Module {
 	done := make(chan struct{}, 0)
-	var mux sync.Mutex
+	mux := new(sync.Mutex)
 	return Module{
 		Name: name,
 		init: init,
 		deps: deps,
 		done: done,
-		mux:  &mux,
+		mux:  mux,
 	}
 }
 
