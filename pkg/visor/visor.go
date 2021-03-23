@@ -137,7 +137,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	v.startedAt = time.Now()
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
-	regVisor(ctx)
+	registerModules(ctx)
 	vis.InitConcurrent(ctx)
 	v.processReports(log, &ok)
 	if err := vis.Wait(ctx); err != nil {
