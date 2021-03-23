@@ -617,6 +617,12 @@ func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hy
 		Info("Serving RPC client over dmsg.")
 }
 
+// withVisorCtx wraps old-style init function and returns a hook that can be used in
+// the module system
+// Passed context should have visor value under visorKey key, this visor will be used
+// in the passed function
+// The point of this function is to avoid circular dependency of module system (visorinit) and visor, and
+// to make use of existing init functions that take visor as argument
 func withVisorCtx(ctx context.Context, f func(v *Visor) bool) vinit.Hook {
 	return func(_ context.Context) error {
 		val := ctx.Value(visorKey)
