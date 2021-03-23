@@ -35,102 +35,34 @@ import (
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-	"github.com/skycoin/skywire/pkg/visor/visorinit"
+	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
 
 type visorCtxKey int
 
 const visorKey visorCtxKey = iota
 
-var up visorinit.Module
+var up, ebc, ar, disc, sn, pty, tr, rt, launch, cli, hvs, ut, trv, hv vinit.Module
 
-func regUpdater(ctx context.Context) {
-	up = visorinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
-}
+// visor module to group all visor dependencies
+var vis vinit.Module
 
-var ebc visorinit.Module
-
-func regEventBroadcaster(ctx context.Context) {
-	ebc = visorinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
-}
-
-var ar visorinit.Module
-
-func regAddressResolver(ctx context.Context) {
-	ar = visorinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
-}
-
-var disc visorinit.Module
-
-func regDiscovery(ctx context.Context) {
-	disc = visorinit.MakeModule("discovery", withVisorCtx(ctx, initUpdater))
-}
-
-var snetModule visorinit.Module
-
-func regSNet(ctx context.Context) {
-	snetModule = visorinit.MakeModule("snet", withVisorCtx(ctx, initSNet))
-}
-
-var dmsgptyModule visorinit.Module
-
-func regDmsgpty(ctx context.Context) {
-	dmsgptyModule = visorinit.MakeModule("dmsgpty", withVisorCtx(ctx, initDmsgpty))
-}
-
-var tr visorinit.Module
-
-func regTransport(ctx context.Context) {
-	ar = visorinit.MakeModule("transport", withVisorCtx(ctx, initTransport))
-}
-
-var rt visorinit.Module
-
-func regRouter(ctx context.Context) {
-	rt = visorinit.MakeModule("router", withVisorCtx(ctx, initRouter))
-}
-
-var lcher visorinit.Module
-
-func regLauncher(ctx context.Context) {
-	lcher = visorinit.MakeModule("launcher", withVisorCtx(ctx, initLauncher))
-}
-
-var cli visorinit.Module
-
-func regCLI(ctx context.Context) {
-	cli = visorinit.MakeModule("cli", withVisorCtx(ctx, initCLI))
-}
-
-var hvs visorinit.Module
-
-func regHypervisors(ctx context.Context) {
-	trVisors = visorinit.MakeModule("hypervisors", withVisorCtx(ctx, initHypervisors))
-}
-
-var ut visorinit.Module
-
-func regUptimeTracker(ctx context.Context) {
-	ut = visorinit.MakeModule("updater", withVisorCtx(ctx, initUptimeTracker))
-}
-
-var trVisors visorinit.Module
-
-func regTrustedVisors(ctx context.Context) {
-	trVisors = visorinit.MakeModule("trusted-visors", withVisorCtx(ctx, initTrustedVisors))
-}
-
-// "fake" visor module to ensure dependencies are met
-var vis visorinit.Module
-
-func regVisor(ctx context.Context) {
-	vis = visorinit.MakeModule("visor", withVisorCtx(ctx, func(v *Visor) bool { return true }))
-}
-
-var hv visorinit.Module
-
-func regHypervisor(ctx context.Context) {
-	hv = visorinit.MakeModule("hv", withVisorCtx(ctx, initHypervisor))
+func registerModules(ctx context.Context) {
+	up = vinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+	ebc = vinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+	ar = vinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+	disc = vinit.MakeModule("discovery", withVisorCtx(ctx, initUpdater))
+	sn = vinit.MakeModule("snet", withVisorCtx(ctx, initSNet))
+	pty = vinit.MakeModule("dmsgpty", withVisorCtx(ctx, initDmsgpty))
+	ar = vinit.MakeModule("transport", withVisorCtx(ctx, initTransport))
+	rt = vinit.MakeModule("router", withVisorCtx(ctx, initRouter))
+	launch = vinit.MakeModule("launcher", withVisorCtx(ctx, initLauncher))
+	cli = vinit.MakeModule("cli", withVisorCtx(ctx, initCLI))
+	hvs = vinit.MakeModule("hypervisors", withVisorCtx(ctx, initHypervisors))
+	ut = vinit.MakeModule("updater", withVisorCtx(ctx, initUptimeTracker))
+	trv = vinit.MakeModule("trusted-visors", withVisorCtx(ctx, initTrustedVisors))
+	vis = vinit.MakeModule("visor", vinit.DoNothing)
+	hv = vinit.MakeModule("hv", withVisorCtx(ctx, initHypervisor))
 }
 
 // -------------------------------------------------------------------
@@ -685,7 +617,7 @@ func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hy
 		Info("Serving RPC client over dmsg.")
 }
 
-func withVisorCtx(ctx context.Context, f func(v *Visor) bool) visorinit.Hook {
+func withVisorCtx(ctx context.Context, f func(v *Visor) bool) vinit.Hook {
 	return func(_ context.Context) error {
 		val := ctx.Value(visorKey)
 		v, ok := val.(*Visor)
@@ -698,5 +630,4 @@ func withVisorCtx(ctx context.Context, f func(v *Visor) bool) visorinit.Hook {
 		}
 		return nil
 	}
-
 }
