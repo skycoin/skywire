@@ -24,7 +24,7 @@ type Module struct {
 	done    chan struct{}
 	deps    []*Module
 	mux     *sync.Mutex
-	running bool
+	started bool
 }
 
 // DoNothing is an initialization hook that does nothing
@@ -48,14 +48,36 @@ func MakeModule(name string, init Hook, deps ...*Module) Module {
 	}
 }
 
-func (m *Module) setRunning(val bool) bool {
+// start module initialiation process
+// return true if successfuly started, false otherwise
+// start can fail in case if init has already started concurrently,
+// or if the module has finished initializing
+func (m *Module) start() bool {
 	m.mux.Lock()
 	defer m.mux.Unlock()
-	if m.running == val {
+	if m.started || m.isFinished() {
 		return false
 	}
-	m.running = val
+	m.started = true
 	return true
+}
+
+// finish module initialization process
+func (m *Module) stop() {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+	if m.started && !m.isFinished() {
+		close(m.done)
+	}
+}
+
+func (m *Module) isFinished() bool {
+	select {
+	case <-m.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // InitSequential initializes all module dependencies recursively and sequentially, one by one
@@ -63,12 +85,11 @@ func (m *Module) setRunning(val bool) bool {
 // If any of the underlying dependencies, or this module initialize with error, return that error
 func (m *Module) InitSequential(ctx context.Context) error {
 	// early quit if initialized
-	select {
-	case <-m.done:
+	ok := m.start()
+	if !ok {
 		return nil
-	default:
 	}
-	defer close(m.done)
+	defer m.stop()
 	for _, dep := range m.deps {
 		err := dep.InitSequential(ctx)
 		if err != nil {
@@ -101,20 +122,12 @@ func (m *Module) Wait(ctx context.Context) error {
 // yet fully initialized themselves
 // This function blocks until all dependencis are initialized
 func (m *Module) InitConcurrent(ctx context.Context) {
-	// don't do anything if we already started
-	ok := m.setRunning(true)
+	ok := m.start()
+	// either init process has been started
 	if !ok {
 		return
 	}
-	defer func() {
-		log.Printf("%s: finishing initialization", m.Name)
-		close(m.done)
-		ok = m.setRunning(false)
-		// this should never happen
-		if !ok {
-			panic(fmt.Sprintf("double initialization of module %s", m.Name))
-		}
-	}()
+	defer m.stop()
 	// start init in every dependency
 	for _, dep := range m.deps {
 		go dep.InitConcurrent(ctx)
@@ -133,7 +146,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 			return
 		}
 	}
-	log.Printf("mod %s: started initialization", m.Name)
+	log.Printf("mod %s: finished deps, running self-init", m.Name)
 	if m.init == nil {
 		m.err = fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
 		return
