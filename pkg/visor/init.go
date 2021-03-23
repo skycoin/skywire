@@ -47,22 +47,29 @@ var up, ebc, ar, disc, sn, pty, tr, rt, launch, cli, hvs, ut, trv, hv vinit.Modu
 // visor module to group all visor dependencies
 var vis vinit.Module
 
+// todo: add visor transaction that allows updating visor fields atomically
+
 func registerModules() {
+	// procedure:
+	// look at init function for module x. if init function makes use of
+	// field v.y for some module y of visor v, then y depends on x.
+	// if init function for x passes v itself, it's fucked up. All deps should be added, but
+	// better yet this should be refactored to pass the actual dep
 	up = vinit.MakeModule("updater", initUpdater)
-	ebc = vinit.MakeModule("updater", initUpdater)
-	ar = vinit.MakeModule("updater", initUpdater)
-	disc = vinit.MakeModule("discovery", initUpdater)
+	ebc = vinit.MakeModule("event broadcaster", initEventBroadcaster)
+	ar = vinit.MakeModule("address resolver", initAddressResolver)
+	disc = vinit.MakeModule("discovery", initDiscovery)
 	sn = vinit.MakeModule("snet", initSNet)
 	pty = vinit.MakeModule("dmsgpty", initDmsgpty)
-	ar = vinit.MakeModule("transport", initTransport)
+	tr = vinit.MakeModule("transport", initTransport)
 	rt = vinit.MakeModule("router", initRouter)
 	launch = vinit.MakeModule("launcher", initLauncher)
 	cli = vinit.MakeModule("cli", initCLI)
 	hvs = vinit.MakeModule("hypervisors", initHypervisors)
-	ut = vinit.MakeModule("updater", initUptimeTracker)
-	trv = vinit.MakeModule("trusted-visors", initTrustedVisors)
+	ut = vinit.MakeModule("uptime tracker", initUptimeTracker)
+	trv = vinit.MakeModule("trusted visors", initTrustedVisors)
 	vis = vinit.MakeModule("visor", vinit.DoNothing)
-	hv = vinit.MakeModule("hv", initHypervisor)
+	hv = vinit.MakeModule("hypervisor", initHypervisor, &vis)
 }
 
 // -------------------------------------------------------------------
@@ -91,6 +98,47 @@ func initEventBroadcaster(ctx context.Context) error {
 		})
 
 		v.ebc = ebc
+		return report(nil)
+	})(ctx)
+}
+
+func initAddressResolver(ctx context.Context) error {
+	return withVisorCtx(ctx, func(v *Visor) bool {
+		report := v.makeReporter("address-resolver")
+		conf := v.conf.Transport
+
+		arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+		if err != nil {
+			return report(fmt.Errorf("failed to create address resolver client: %w", err))
+		}
+
+		v.arClient = arClient
+
+		return report(nil)
+	})(ctx)
+
+}
+
+func initDiscovery(ctx context.Context) error {
+	return withVisorCtx(ctx, func(v *Visor) bool {
+		report := v.makeReporter("discovery")
+
+		// Prepare app discovery factory.
+		factory := appdisc.Factory{
+			Log: v.MasterLogger().PackageLogger("app_discovery"),
+		}
+
+		conf := v.conf.Launcher
+
+		if conf.Discovery != nil {
+			factory.PK = v.conf.PK
+			factory.SK = v.conf.SK
+			factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
+			factory.ProxyDisc = conf.Discovery.ServiceDisc
+		}
+
+		v.serviceDisc = factory
+
 		return report(nil)
 	})(ctx)
 }
@@ -158,23 +206,6 @@ func initDmsgpty(ctx context.Context) error {
 	return withVisorCtx(ctx, func(v *Visor) bool {
 		return initDmsgptyVisor(v)
 	})(ctx)
-}
-
-func initAddressResolver(ctx context.Context) error {
-	return withVisorCtx(ctx, func(v *Visor) bool {
-		report := v.makeReporter("address-resolver")
-		conf := v.conf.Transport
-
-		arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
-		if err != nil {
-			return report(fmt.Errorf("failed to create address resolver client: %w", err))
-		}
-
-		v.arClient = arClient
-
-		return report(nil)
-	})(ctx)
-
 }
 
 func initTransport(ctx context.Context) error {
@@ -287,30 +318,6 @@ func initRouter(ctx context.Context) error {
 
 		v.rfClient = rfClient
 		v.router = r
-
-		return report(nil)
-	})(ctx)
-}
-
-func initDiscovery(ctx context.Context) error {
-	return withVisorCtx(ctx, func(v *Visor) bool {
-		report := v.makeReporter("discovery")
-
-		// Prepare app discovery factory.
-		factory := appdisc.Factory{
-			Log: v.MasterLogger().PackageLogger("app_discovery"),
-		}
-
-		conf := v.conf.Launcher
-
-		if conf.Discovery != nil {
-			factory.PK = v.conf.PK
-			factory.SK = v.conf.SK
-			factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
-			factory.ProxyDisc = conf.Discovery.ServiceDisc
-		}
-
-		v.serviceDisc = factory
 
 		return report(nil)
 	})(ctx)
