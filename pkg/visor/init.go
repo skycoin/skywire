@@ -34,103 +34,103 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
-	"github.com/skycoin/skywire/pkg/visor/init"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorinit"
 )
 
 type visorCtxKey int
 
 const visorKey visorCtxKey = iota
 
-var up init.Module
+var up visorinit.Module
 
 func regUpdater(ctx context.Context) {
-	up = init.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+	up = visorinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
 }
 
-var ebc init.Module
+var ebc visorinit.Module
 
 func regEventBroadcaster(ctx context.Context) {
-	ebc = init.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+	ebc = visorinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
 }
 
-var ar init.Module
+var ar visorinit.Module
 
 func regAddressResolver(ctx context.Context) {
-	ar = init.MakeModule("updater", withVisorCtx(ctx, initUpdater))
+	ar = visorinit.MakeModule("updater", withVisorCtx(ctx, initUpdater))
 }
 
-var disc init.Module
+var disc visorinit.Module
 
 func regDiscovery(ctx context.Context) {
-	disc = init.MakeModule("discovery", withVisorCtx(ctx, initUpdater))
+	disc = visorinit.MakeModule("discovery", withVisorCtx(ctx, initUpdater))
 }
 
-var snetModule init.Module
+var snetModule visorinit.Module
 
 func regSNet(ctx context.Context) {
-	snetModule = init.MakeModule("snet", withVisorCtx(ctx, initSNet))
+	snetModule = visorinit.MakeModule("snet", withVisorCtx(ctx, initSNet))
 }
 
-var dmsgptyModule init.Module
+var dmsgptyModule visorinit.Module
 
 func regDmsgpty(ctx context.Context) {
-	dmsgptyModule = init.MakeModule("dmsgpty", withVisorCtx(ctx, initDmsgpty))
+	dmsgptyModule = visorinit.MakeModule("dmsgpty", withVisorCtx(ctx, initDmsgpty))
 }
 
-var tr init.Module
+var tr visorinit.Module
 
 func regTransport(ctx context.Context) {
-	ar = init.MakeModule("transport", withVisorCtx(ctx, initTransport))
+	ar = visorinit.MakeModule("transport", withVisorCtx(ctx, initTransport))
 }
 
-var rt init.Module
+var rt visorinit.Module
 
 func regRouter(ctx context.Context) {
-	rt = init.MakeModule("router", withVisorCtx(ctx, initRouter))
+	rt = visorinit.MakeModule("router", withVisorCtx(ctx, initRouter))
 }
 
-var lcher init.Module
+var lcher visorinit.Module
 
 func regLauncher(ctx context.Context) {
-	lcher = init.MakeModule("launcher", withVisorCtx(ctx, initLauncher))
+	lcher = visorinit.MakeModule("launcher", withVisorCtx(ctx, initLauncher))
 }
 
-var cli init.Module
+var cli visorinit.Module
 
 func regCLI(ctx context.Context) {
-	cli = init.MakeModule("cli", withVisorCtx(ctx, initCLI))
+	cli = visorinit.MakeModule("cli", withVisorCtx(ctx, initCLI))
 }
 
-var hvs init.Module
+var hvs visorinit.Module
 
 func regHypervisors(ctx context.Context) {
-	trVisors = init.MakeModule("hypervisors", withVisorCtx(ctx, initHypervisors))
+	trVisors = visorinit.MakeModule("hypervisors", withVisorCtx(ctx, initHypervisors))
 }
 
-var ut init.Module
+var ut visorinit.Module
 
 func regUptimeTracker(ctx context.Context) {
-	ut = init.MakeModule("updater", withVisorCtx(ctx, initUptimeTracker))
+	ut = visorinit.MakeModule("updater", withVisorCtx(ctx, initUptimeTracker))
 }
 
-var trVisors init.Module
+var trVisors visorinit.Module
 
 func regTrustedVisors(ctx context.Context) {
-	trVisors = init.MakeModule("trusted-visors", withVisorCtx(ctx, initTrustedVisors))
+	trVisors = visorinit.MakeModule("trusted-visors", withVisorCtx(ctx, initTrustedVisors))
 }
 
 // "fake" visor module to ensure dependencies are met
-var vis init.Module
+var vis visorinit.Module
 
 func regVisor(ctx context.Context) {
-	hv = init.MakeModule("visor", withVisorCtx(ctx, func(v *Visor) bool { return true }))
+	vis = visorinit.MakeModule("visor", withVisorCtx(ctx, func(v *Visor) bool { return true }))
 }
 
-var hv init.Module
+var hv visorinit.Module
 
 func regHypervisor(ctx context.Context) {
-	hv = init.MakeModule("hv", withVisorCtx(ctx, initHypervisor))
+	hv = visorinit.MakeModule("hv", withVisorCtx(ctx, initHypervisor))
 }
 
 // -------------------------------------------------------------------
@@ -685,7 +685,7 @@ func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hy
 		Info("Serving RPC client over dmsg.")
 }
 
-func withVisorCtx(ctx context.Context, f func(v *Visor) bool) init.Hook {
+func withVisorCtx(ctx context.Context, f func(v *Visor) bool) visorinit.Hook {
 	return func(_ context.Context) error {
 		val := ctx.Value(visorKey)
 		v, ok := val.(*Visor)
