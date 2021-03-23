@@ -17,7 +17,7 @@ import (
 
 const ownerRWX = 0700
 
-func initDmsgpty(v *Visor) bool {
+func initDmsgptyVisor(v *Visor) bool {
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
 
