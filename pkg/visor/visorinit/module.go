@@ -27,6 +27,11 @@ type Module struct {
 	running bool
 }
 
+// DoNothing is an initialization hook that does nothing
+var DoNothing Hook = func(ctx context.Context) error {
+	return nil
+}
+
 // ErrNoInit is returned when module init function is not set
 var ErrNoInit = errors.New("module initialization function is not set")
 
