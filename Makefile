@@ -143,13 +143,6 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-build-deploy-static: ## Build for deployment Docker images
-	${STATIC_OPTS} go build -tags netgo -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/skywire-visor ./cmd/skywire-visor
-	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/skywire-cli ./cmd/skywire-cli
-	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skychat ./cmd/apps/skychat
-	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skysocks ./cmd/apps/skysocks
-	${STATIC_OPTS} go build -trimpath --ldflags '-w -s -linkmode external -extldflags "-static" -buildid=' -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
-
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
 
