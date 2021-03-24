@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -63,6 +64,7 @@ type Visor struct {
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
+	initLock    *sync.Mutex
 }
 
 type vReport struct {
@@ -105,6 +107,8 @@ type closeElem struct {
 }
 
 func (v *Visor) pushCloseStack(src string, fn func() bool) {
+	v.initLock.Lock()
+	defer v.initLock.Unlock()
 	v.closeStack = append(v.closeStack, closeElem{src: src, fn: fn})
 }
 
@@ -122,6 +126,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		log:        conf.MasterLogger().PackageLogger("visor"),
 		conf:       conf,
 		restartCtx: restartCtx,
+		initLock:   new(sync.Mutex),
 	}
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
