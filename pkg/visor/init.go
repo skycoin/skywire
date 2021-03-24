@@ -47,7 +47,8 @@ var up, ebc, ar, disc, sn, pty, tr, rt, launch, cli, hvs, ut, trv, hv vinit.Modu
 // visor module to group all visor dependencies
 var vis vinit.Module
 
-// todo: add visor transaction that allows updating visor fields atomically
+// todo: return error from init functions with meaningful values instead of bool
+// todo: consider refactoring reporting system
 
 func registerModules() {
 	// procedure:
@@ -63,7 +64,7 @@ func registerModules() {
 	pty = vinit.MakeModule("dmsg pty", initDmsgpty, &sn)
 	tr = vinit.MakeModule("transport", initTransport, &sn, &ebc)
 	rt = vinit.MakeModule("router", initRouter, &tr, &sn)
-	launch = vinit.MakeModule("launcher", initLauncher, &ebc, &disc, &sn, &tr)
+	launch = vinit.MakeModule("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
 	cli = vinit.MakeModule("cli", initCLI)
 	hvs = vinit.MakeModule("hypervisors", initHypervisors, &sn)
 	ut = vinit.MakeModule("uptime tracker", initUptimeTracker)
@@ -78,10 +79,13 @@ func registerModules() {
 func initUpdater(ctx context.Context) error {
 	return withVisorCtx(ctx, func(v *Visor) bool {
 		report := v.makeReporter("updater")
+		updater := updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
 
+		v.initLock.Lock()
+		defer v.initLock.Unlock()
 		v.restartCtx.SetCheckDelay(time.Duration(v.conf.RestartCheckDelay))
 		v.restartCtx.RegisterLogger(v.log)
-		v.updater = updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
+		v.updater = updater
 		return report(nil)
 	})(ctx)
 }
@@ -93,12 +97,13 @@ func initEventBroadcaster(ctx context.Context) error {
 		log := v.MasterLogger().PackageLogger("event_broadcaster")
 		const ebcTimeout = time.Second
 		ebc := appevent.NewBroadcaster(log, ebcTimeout)
-
 		v.pushCloseStack("event_broadcaster", func() bool {
 			return report(ebc.Close())
 		})
 
+		v.initLock.Lock()
 		v.ebc = ebc
+		v.initLock.Unlock()
 		return report(nil)
 	})(ctx)
 }
@@ -113,8 +118,9 @@ func initAddressResolver(ctx context.Context) error {
 			return report(fmt.Errorf("failed to create address resolver client: %w", err))
 		}
 
+		v.initLock.Lock()
 		v.arClient = arClient
-
+		v.initLock.Unlock()
 		return report(nil)
 	})(ctx)
 
@@ -137,9 +143,9 @@ func initDiscovery(ctx context.Context) error {
 			factory.UpdateInterval = time.Duration(conf.Discovery.UpdateInterval)
 			factory.ProxyDisc = conf.Discovery.ServiceDisc
 		}
-
+		v.initLock.Lock()
 		v.serviceDisc = factory
-
+		v.initLock.Unlock()
 		return report(nil)
 	})(ctx)
 }
@@ -170,7 +176,6 @@ func initSNet(ctx context.Context) error {
 		if err := n.Init(); err != nil {
 			return report(err)
 		}
-
 		v.pushCloseStack("snet", func() bool {
 			return report(n.Close())
 		})
@@ -197,8 +202,9 @@ func initSNet(ctx context.Context) error {
 
 			dmsgctrl.ServeListener(cl, 0)
 		}
-
+		v.initLock.Lock()
 		v.net = n
+		v.initLock.Unlock()
 		return report(nil)
 	})(ctx)
 }
@@ -271,8 +277,9 @@ func initTransport(ctx context.Context) error {
 			return ok
 		})
 
+		v.initLock.Lock()
 		v.tpM = tpM
-
+		v.initLock.Unlock()
 		return report(nil)
 	})(ctx)
 }
@@ -317,8 +324,10 @@ func initRouter(ctx context.Context) error {
 			return ok
 		})
 
+		v.initLock.Lock()
 		v.rfClient = rfClient
 		v.router = r
+		v.initLock.Unlock()
 
 		return report(nil)
 	})(ctx)
@@ -364,8 +373,10 @@ func initLauncher(ctx context.Context) error {
 			return report(fmt.Errorf("failed to autostart apps: %w", err))
 		}
 
+		v.initLock.Lock()
 		v.procM = procM
 		v.appL = launch
+		v.initLock.Unlock()
 
 		return report(nil)
 	})(ctx)
@@ -527,7 +538,9 @@ func initUptimeTracker(ctx context.Context) error {
 			return report(nil)
 		})
 
+		v.initLock.Lock()
 		v.uptimeTracker = ut
+		v.initLock.Unlock()
 
 		return true
 	})(ctx)
