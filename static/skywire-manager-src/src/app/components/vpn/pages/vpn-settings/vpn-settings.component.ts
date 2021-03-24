@@ -130,7 +130,7 @@ export class VpnSettingsComponent implements OnDestroy {
       case DataUnits.OnlyBytes:
         return 'vpn.settings-page.data-units-modal.only-bytes';
       default:
-        return 'vpn.settings-page.data-units-modal.bits-speed-and-bytes-volume';;
+        return 'vpn.settings-page.data-units-modal.bits-speed-and-bytes-volume';
     }
   }
 
@@ -213,20 +213,21 @@ export class VpnSettingsComponent implements OnDestroy {
     });
 
     // Open the option selection modal window.
-    SelectOptionComponent.openDialog(this.dialog, options, 'vpn.settings-page.data-units-modal.title').afterClosed().subscribe((result: number) => {
-      if (result) {
-        // Save the new value.
-        this.dataUnitsOption = optionValues[result - 1];
-        this.vpnSavedDataService.setDataUnitsSetting(this.dataUnitsOption);
+    SelectOptionComponent.openDialog(this.dialog, options, 'vpn.settings-page.data-units-modal.title').afterClosed()
+      .subscribe((result: number) => {
+        if (result) {
+          // Save the new value.
+          this.dataUnitsOption = optionValues[result - 1];
+          this.vpnSavedDataService.setDataUnitsSetting(this.dataUnitsOption);
 
-        // Make the top bar use the new value.
-        if (this.topBarLoading) {
-          this.topBarLoading.updateVpnDataStatsUnit();
+          // Make the top bar use the new value.
+          if (this.topBarLoading) {
+            this.topBarLoading.updateVpnDataStatsUnit();
+          }
+          if (this.topBarLoaded) {
+            this.topBarLoaded.updateVpnDataStatsUnit();
+          }
         }
-        if (this.topBarLoaded) {
-          this.topBarLoaded.updateVpnDataStatsUnit();
-        }
-      }
-    });
+      });
   }
 }
