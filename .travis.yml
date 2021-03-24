@@ -1,7 +1,7 @@
 language: go
 go:
-  # - "1.14.x" At minimum the code should run make check on the latest two go versions in the default linux environment provided by Travis.
-  - "1.14.x"
+  # - "1.16.x" At minimum the code should run make check on the latest two go versions in the default linux environment provided by Travis.
+  - "1.16.x"
 
 dist: xenial
 
@@ -32,6 +32,7 @@ before_script:
 
 script:
   - make lint # TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
+  - make build
   - make test
   - make test-no-ci
   - make install-deps-ui

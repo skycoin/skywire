@@ -37,15 +37,15 @@
         <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-server-settings.secure-mode-info' | translate">help</mat-icon>
       </mat-checkbox>
     </div>
-
-    <app-button
-      #button
-      (action)="saveChanges()"
-      [disabled]="!form.valid"
-      color="primary"
-      class="float-right"
-    >
-      {{ 'apps.vpn-socks-server-settings.save' | translate }}
-    </app-button>
   </form>
+
+  <app-button
+    #button
+    (action)="saveChanges()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'apps.vpn-socks-server-settings.save' | translate }}
+  </app-button>
 </app-dialog>

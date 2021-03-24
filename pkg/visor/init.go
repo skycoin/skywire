@@ -12,11 +12,11 @@ import (
 	"github.com/skycoin/dmsg"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 
-	"github.com/rakyll/statik/fs"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -317,6 +317,7 @@ func initRouter(ctx context.Context, log *logging.Logger) error {
 		RouteGroupDialer: setupclient.NewSetupNodeDialer(),
 		SetupNodes:       conf.SetupNodes,
 		RulesGCInterval:  0, // TODO
+		MinHops:          v.conf.Routing.MinHops,
 	}
 
 	r, err := router.New(v.net, &rConf)
@@ -627,18 +628,13 @@ func initHypervisor(ctx context.Context, log *logging.Logger) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	assets, err := fs.New()
-	if err != nil {
-		v.log.Fatalf("Failed to obtain embedded static files: %v", err)
-	}
-
 	conf := *v.conf.Hypervisor
 	conf.PK = v.conf.PK
 	conf.SK = v.conf.SK
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, assets, v, v.net.Dmsg())
+	hv, err := New(conf, v, v.net.Dmsg())
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}

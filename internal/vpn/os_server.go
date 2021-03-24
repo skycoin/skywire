@@ -38,11 +38,6 @@ func BlockIPToLocalNetwork(_, _ net.IP) error {
 	return errServerMethodsNotSupported
 }
 
-// DefaultNetworkInterface fetches default network interface name.
-func DefaultNetworkInterface() (string, error) {
-	return "", errServerMethodsNotSupported
-}
-
 // GetIPv4ForwardingValue gets current value of IPv4 forwarding.
 func GetIPv4ForwardingValue() (string, error) {
 	return "", errServerMethodsNotSupported
