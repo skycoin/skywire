@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	skynetutil "github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (
@@ -159,9 +160,7 @@ func (c *Client) Serve() error {
 
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
-		fmt.Println("Serve stopped, inside defer")
 		if c.cfg.Killswitch {
-			fmt.Println("Killswitch enabled")
 			err := c.setSysPrivileges()
 			if err != nil {
 				fmt.Printf("Error setting up system privileges: %v\n", err)
@@ -185,17 +184,29 @@ func (c *Client) Serve() error {
 		fmt.Println("Closed TUN")
 	}()
 
-	for {
-		if err := c.dialServeConn(); err != nil {
-			fmt.Printf("dialServeConn: %v\n", err)
-		}
+	defer c.setAppStatus(ClientStatusShuttingDown)
 
+	c.setAppStatus(ClientStatusConnecting)
+
+	r := netutil.NewDefaultRetrier(c.log)
+	err := r.Do(context.Background(), func() error {
 		if c.isClosed() {
 			return nil
 		}
 
-		fmt.Println("Connection broke, reconnecting...")
+		if err := c.dialServeConn(); err != nil {
+			c.setAppStatus(ClientStatusReconnecting)
+			fmt.Println("Connection broke, reconnecting...")
+			return fmt.Errorf("dialServeConn: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to the server: %w", err)
 	}
+
+	return nil
 }
 
 // Close closes client.
@@ -373,6 +384,8 @@ func (c *Client) serveConn(conn net.Conn) error {
 	if err := c.routeTrafficThroughTUN(tunGateway, isNewRoute); err != nil {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
+
+	c.setAppStatus(ClientStatusRunning)
 
 	defer func() {
 		if !c.cfg.Killswitch {
@@ -626,7 +639,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 }
 
 func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
-	unavailableIPs, err := LocalNetworkInterfaceIPs()
+	unavailableIPs, err := skynetutil.LocalNetworkInterfaceIPs()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
 	}
@@ -702,6 +715,12 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	}
 
 	return conn, nil
+}
+
+func (c *Client) setAppStatus(status ClientStatus) {
+	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
+		fmt.Printf("Failed to set status %v: %v\n", status, err)
+	}
 }
 
 func (c *Client) isClosed() bool {

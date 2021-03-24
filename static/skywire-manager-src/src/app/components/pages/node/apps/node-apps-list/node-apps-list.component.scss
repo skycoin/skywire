@@ -1,4 +1,5 @@
 @import "bootstrap_overrides";
+@import 'variables';
 
 .actions {
   text-align: right;
@@ -8,4 +9,13 @@
 .alert-icon {
   vertical-align: middle;
   margin-right: 10px;
+}
+
+.skychat-link {
+  color: $white;
+  text-decoration: none;
+
+  .big-action-button {
+    margin-right: 5px;
+  }
 }
