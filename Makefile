@@ -3,7 +3,6 @@
 .PHONY : check lint lint-extra install-linters dep test
 .PHONY : build clean install format  bin
 .PHONY : host-apps bin
-.PHONY : run stop config
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
 .PHONY : docker-run docker-stop
@@ -57,15 +56,6 @@ build: host-apps bin ## Install dependencies, build apps and binaries. `go build
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
-run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
-	./skywire-visor -c ./skywire-config.json --launch-browser
-
-stop: ## Stop running skywire-visor on host
-	-bash -c "kill $$(ps aux |grep '[s]kywire-visor' | awk '{print $$2}')"
-
-config: ## Generate skywire-config.json
-	-./skywire-cli visor gen-config -o ./skywire-config.json  -r --is-hypervisor
-
 install-generate: ## Installs required execs for go generate.
 	${OPTS} go install github.com/mjibson/esc
 	${OPTS} go install github.com/vektra/mockery/cmd/mockery
@@ -87,12 +77,6 @@ install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
-
-rerun: stop
-	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
-	-./skywire-cli visor gen-config -o  ./skywire.json -r
-	perl -pi -e 's/localhost//g' ./skywire.json
-	./skywire-visor skywire.json
 
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
@@ -230,12 +214,6 @@ docker-run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslo
 	-mkdir -p /tmp/syslog
 	-docker container rm syslog-ng -f
 	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest
-
-mod-comm: ## Comments the 'replace' rule in go.mod
-	./ci_scripts/go_mod_replace.sh comment go.mod
-
-mod-uncomm: ## Uncomments the 'replace' rule in go.mod
-	./ci_scripts/go_mod_replace.sh uncomment go.mod
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
