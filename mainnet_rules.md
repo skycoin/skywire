@@ -30,7 +30,7 @@ This article represents the central source of information for the Skywire mainne
 ## Rules
 This section covers the rules of the mainnet. Dependent on the amount of miners that are associated with your emails, some of these rules may apply to you or not.
 
-Currently, each person participating in the Skywire mainnet may own one DIY miner or multiple official Skyminers to be eligible for rewards.
+Currently, each person participating in the Skywire mainnet may own one DIY miner and/or multiple official Skyminers to be eligible for rewards.
 <div align="center"><b>A DIY miner cannot be in the same location as another DIY or official Skyminer.</b></div><br>
 
 Based on this central rule, each whitelisted person is eligible to receive rewards for:
