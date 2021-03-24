@@ -142,14 +142,20 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	v.startedAt = time.Now()
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
-	registerModules()
-	vis.InitConcurrent(ctx)
+	registerModules(v.MasterLogger())
+	start := time.Now()
+	if v.conf.Hypervisor == nil {
+		vis.InitSequential(ctx)
+	} else {
+		hv.InitSequential(ctx)
+	}
+	elapsed := time.Since(start)
 	v.processReports(log, &ok)
 	if err := vis.Wait(ctx); err != nil {
 		log.Error("Failed to startup visor.")
 		return v, false
 	}
-	log.Info("Startup complete!")
+	log.Infof("startup complete, took %s", elapsed)
 	return v, ok
 }
 
