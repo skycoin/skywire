@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
+	"time"
+
+	"github.com/skycoin/skycoin/src/util/logging"
 )
 
 // Hook is a function that can be run at some point as part
@@ -25,6 +27,7 @@ type Module struct {
 	deps    []*Module
 	mux     *sync.Mutex
 	started bool
+	log     *logging.Logger
 }
 
 // DoNothing is an initialization hook that does nothing
@@ -36,7 +39,7 @@ var DoNothing Hook = func(ctx context.Context) error {
 var ErrNoInit = errors.New("module initialization function is not set")
 
 // MakeModule returns a new module with given init function and dependencies
-func MakeModule(name string, init Hook, deps ...*Module) Module {
+func MakeModule(name string, init Hook, ml *logging.MasterLogger, deps ...*Module) Module {
 	done := make(chan struct{}, 0)
 	mux := new(sync.Mutex)
 	return Module{
@@ -45,6 +48,7 @@ func MakeModule(name string, init Hook, deps ...*Module) Module {
 		deps: deps,
 		done: done,
 		mux:  mux,
+		log:  ml.PackageLogger(name),
 	}
 }
 
@@ -90,6 +94,8 @@ func (m *Module) InitSequential(ctx context.Context) error {
 		return nil
 	}
 	defer m.stop()
+	m.log.Infof("Starting %s", m.Name)
+	start := time.Now()
 	for _, dep := range m.deps {
 		err := dep.InitSequential(ctx)
 		if err != nil {
@@ -99,7 +105,11 @@ func (m *Module) InitSequential(ctx context.Context) error {
 	if m.init == nil {
 		return fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
 	}
-	return m.init(ctx)
+	startSelf := time.Now()
+	// init the module itself
+	err := m.init(ctx)
+	m.log.Infof("Initialized %s in %s (%s with dependencies)", m.Name, time.Since(startSelf), time.Since(start))
+	return err
 }
 
 // Wait for the module to be initialized
@@ -128,6 +138,8 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		return
 	}
 	defer m.stop()
+	m.log.Infof("Starting %s", m.Name)
+	start := time.Now()
 	// start init in every dependency
 	for _, dep := range m.deps {
 		go dep.InitConcurrent(ctx)
@@ -146,13 +158,14 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 			return
 		}
 	}
-	log.Printf("mod %s: finished deps, running self-init", m.Name)
 	if m.init == nil {
 		m.err = fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
 		return
 	}
+	startSelf := time.Now()
 	// init the module itself
 	err := m.init(ctx)
+	m.log.Infof("Initialized %s in %s (%s with dependencies)", m.Name, time.Since(startSelf), time.Since(start))
 	if err != nil {
 		m.err = err
 	}

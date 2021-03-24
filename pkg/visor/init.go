@@ -50,28 +50,28 @@ var vis vinit.Module
 // todo: return error from init functions with meaningful values instead of bool
 // todo: consider refactoring reporting system
 
-func registerModules() {
+func registerModules(logger *logging.MasterLogger) {
 	// procedure:
 	// look at init function for module x. if init function makes use of
 	// field v.y for some module y of visor v, then y depends on x.
 	// if init function for x passes v itself, it's fucked up. All deps should be added, but
 	// better yet this should be refactored to pass the actual dep
-	up = vinit.MakeModule("updater", initUpdater)
-	ebc = vinit.MakeModule("event broadcaster", initEventBroadcaster)
-	ar = vinit.MakeModule("address resolver", initAddressResolver)
-	disc = vinit.MakeModule("discovery", initDiscovery)
-	sn = vinit.MakeModule("snet", initSNet, &ar, &disc)
-	pty = vinit.MakeModule("dmsg pty", initDmsgpty, &sn)
-	tr = vinit.MakeModule("transport", initTransport, &sn, &ebc)
-	rt = vinit.MakeModule("router", initRouter, &tr, &sn)
-	launch = vinit.MakeModule("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
-	cli = vinit.MakeModule("cli", initCLI)
-	hvs = vinit.MakeModule("hypervisors", initHypervisors, &sn)
-	ut = vinit.MakeModule("uptime tracker", initUptimeTracker)
-	trv = vinit.MakeModule("trusted visors", initTrustedVisors, &tr)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, &up, &ebc, &ar, &disc, &sn, &pty,
+	up = vinit.MakeModule("updater", initUpdater, logger)
+	ebc = vinit.MakeModule("event_broadcaster", initEventBroadcaster, logger)
+	ar = vinit.MakeModule("address_resolver", initAddressResolver, logger)
+	disc = vinit.MakeModule("discovery", initDiscovery, logger)
+	sn = vinit.MakeModule("snet", initSNet, logger, &ar, &disc, &ebc)
+	pty = vinit.MakeModule("dmsg_pty", initDmsgpty, logger, &sn)
+	tr = vinit.MakeModule("transport", initTransport, logger, &sn, &ebc)
+	rt = vinit.MakeModule("router", initRouter, logger, &tr, &sn)
+	launch = vinit.MakeModule("launcher", initLauncher, logger, &ebc, &disc, &sn, &tr, &rt)
+	cli = vinit.MakeModule("cli", initCLI, logger)
+	hvs = vinit.MakeModule("hypervisors", initHypervisors, logger, &sn)
+	ut = vinit.MakeModule("uptime_tracker", initUptimeTracker, logger)
+	trv = vinit.MakeModule("trusted_visors", initTrustedVisors, logger, &tr)
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &trv)
-	hv = vinit.MakeModule("hypervisor", initHypervisor, &vis)
+	hv = vinit.MakeModule("hypervisor", initHypervisor, logger, &vis)
 }
 
 // -------------------------------------------------------------------
