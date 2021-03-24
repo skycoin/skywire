@@ -15,6 +15,7 @@ import { NodeComponent } from '../node.component';
 export class AppsComponent implements OnInit, OnDestroy {
   apps: Application[];
   nodePK: string;
+  nodeIp: string;
 
   private dataSubscription: Subscription;
 
@@ -23,6 +24,7 @@ export class AppsComponent implements OnInit, OnDestroy {
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;
       this.apps = node.apps;
+      this.nodeIp = node.ip;
     });
   }
 
