@@ -145,9 +145,9 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	registerModules(v.MasterLogger())
 	start := time.Now()
 	if v.conf.Hypervisor == nil {
-		vis.InitSequential(ctx)
+		vis.InitConcurrent(ctx)
 	} else {
-		hv.InitSequential(ctx)
+		hv.InitConcurrent(ctx)
 	}
 	elapsed := time.Since(start)
 	v.processReports(log, &ok)

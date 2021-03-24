@@ -2,15 +2,14 @@
 
 package visor
 
-func initDmsgptyVisor(v *Visor) bool {
-	report := v.makeReporter("dmsgpty")
+func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 	conf := v.conf.Dmsgpty
 
 	if conf == nil {
-		v.log.Info("'dmsgpty' is not configured, skipping.")
-		return report(nil)
+		log.Info("'dmsgpty' is not configured, skipping.")
+		return nil
 	}
 
-	v.log.Error("dmsgpty is not supported on windows.")
-	return report(nil)
+	log.Error("dmsgpty is not supported on windows.")
+	return nil
 }
