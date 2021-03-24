@@ -30,34 +30,34 @@ This article represents the central source of information for the Skywire mainne
 ## Rules
 This section covers the rules of the mainnet. Dependent on the amount of miners that are associated with your emails, some of these rules may apply to you or not.
 
-As of now, each person participating in the Skywire mainnet may own one DIY miner and multiple official Skyminers wrt. to being eligible for rewards.
-<div align="center"><b>"A DIY miner cannot be in the same location as another DIY or official Skyminer.</b></div><br>
+Currently, each person participating in the Skywire mainnet may own one DIY miner or multiple official Skyminers to be eligible for rewards.
+<div align="center"><b>A DIY miner cannot be in the same location as another DIY or official Skyminer.</b></div><br>
 
-Based on this central rule, each whitelisted person is eligible for receiving rewards for:
-* one or multiple official miners 
+Based on this central rule, each whitelisted person is eligible to receive rewards for:
+* one or multiple official Skyminers 
 
-*and/or*
+*or*
 
 * one DIY miner with up to 8 (eight) nodes
 
-<div align="center"><b>You must use the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a> to keep your submitted data up to date</b>
+<div align="center"><b>You must use the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a> to keep your submitted data up-to-date</b>
 <br><em> Read<a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System"> the Skywire whitelisting system user guide</a> to familiarize yourself with the new system.</em></div>
 <br>
 Different locations are required due to the fact that we want to spread out the meshnet and not create built-up areas. This prevents paying people to simply run single board computers (SBC) and to require them to provide a service to the network.
 
-* If you are running two separate miners in the same location because you're joining the network living in the same house you still have to move one of your miners to another location. 
+* If you are running two separate miners in the same location because you're joining the network with someone living in the same house you still have to move one of your miners to another location. 
 
-<div align="center"><em>Submitting miners under multiple email addresses is illegal and very likely to be detected - measures will be taken if such actions are recognized.</em></div>
+<div align="center"><em>Submitting miners under multiple email addresses is forbidden and very likely to be detected - measures will be taken if such actions are recognized.</em></div>
 
 ***
 
 ## Rewards
-**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time to time.
+**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time-to-time.
 <br>
 * The rewards are **paid every subsequent month around the 5th** (short delays are possible)
 * Adjustments of previous months are included in these reward distributions on the 5th.
 * The deadline to submit complaints is being published in the monthly Skywire status update emails and in the [Skywire PSA channel on Telegram](https://t.me/SkywirePSA).
-* Eligible for rewards are only the whitelisted nodes, that **comply with the Skywire mainnet rules** and **meet the uptime requirement** of the respective month (usually 75%).
+* Eligible for rewards are only the whitelisted nodes that **comply with the Skywire mainnet rules** and **meet the uptime requirement** of the respective month (usually 75%).
 
 <div align="center">
 <em>During Skywire’s testnet phase, owners of official Skyminers were required to have all eight nodes online in order to qualify for full uptime rewards. With the launch of Mainnet, official Skyminers now only require seven nodes to be online at least 75% of the time in order to earn full rewards.
@@ -71,14 +71,14 @@ There are two different reward categories for official miners:
 * official Skyminers first & second batch - **not sold through** the hardware store 
 * official Skyminers new batches - **sold through** the [hardware store](https://store.skycoin.com)
 
-<em>Faulty orange pi prime's/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
+<em>Faulty Orange Pi Primes/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
 
 <h4>Official Skyminers -  First & Second Batch</h4>
 <div align="center"><em><u>We are currently revising the reward strucure for our early supporters. Details of the rewards going forward will be announced very soon. </u></em></div><br/>
 
 Rewards are being paid on a node by node basis. The total amount of rewards is limited by a pool size that is subject to change:
 * You can receive a maximum of 13.714 Skycoin per node
-    - official Skyminer consist of seven nodes (visors) and one manager (hypervisor)
+    - official Skyminers consist of seven nodes (visors) and one manager (hypervisor)
 * Rewards are being calculated on a node by node basis
     - you'll receive up to 7 Skycoin per-node rewards
 * The total pool size is being divided evenly between all nodes eligible for receiving rewards. This implies that you will receive less than 13.714 Skycoin per-node rewards in case the pool size would be surpassed. 
@@ -92,17 +92,17 @@ Rewards are being paid on a node by node basis. The total amount of rewards is l
 You will receive a fixed Skycoin payment per month <b>in addition</b> to any traffic forwarding payments <br/> that you will receive in the Skywire mainnet.<br/><strong>
 Fixed Skycoin payments per month = USD Miner Price / 24 = $83.30 USD.</strong></div>
 <br/>
-<div align="center"><i>Your fixed Skycoin payments are dependent on your the uptime of your nodes. All of your 7 nodes must meet the uptime requirement for you to receive the full $83.30 USD, it is therefore <strong>superimportant to keep your nodes online.</strong></i></div>
+<div align="center"><i>Your fixed Skycoin payments are dependent on the uptime of your nodes. All of your 7 nodes must meet the uptime requirement for you to receive the full $83.30 USD, it is therefore <strong>super important to keep your nodes online.</strong></i></div>
 <br>
-<em>Faulty orange pi prime's/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
+<em>Faulty Orange Pi Primes/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
 
 Summary:
 * You are eligible to receive 24 fixed Skycoin payments ($83.30 USD)
 * The 24 fixed Skycoin payments are comprised of 7 Skycoin node payments ($11.9 USD)
-    - official Skyminer consist of seven nodes (visors) and one manager (hypervisor)
+    - official Skyminers consist of seven nodes (visors) and one manager (hypervisor)
 * You'll receive up to 7 Skycoin node payments per month based on the individual uptime of your nodes 
-* The uptime of all nodes in your official Skyminer is being evaluated on a node by node basis
-* *You will receive traffic forwarding payments once the Skywire mainnet is live*
+* The uptime of all nodes in your official Skyminer is being evaluated on a node-by-node basis
+* *You will receive traffic forwarding payments once the Skywire mainnet with bandwidth metering is live*
 
 #### Skycoin Price Calculation
 We are calculating the underlying Skycoin price for your rewards based on the moving average exponential method:
@@ -114,7 +114,7 @@ We are calculating the underlying Skycoin price for your rewards based on the mo
 
 ### DIY Skyminers
 
-- Rewards are being paid on a node by node basis wrt. to the uptime requirement of 75%.
+- Rewards are being paid on a node-by-node basis according to the uptime requirement of 75%.
 - Up to eight (8) DIY nodes are being rewarded per user account in the Skywire Whitelisting System.
 - The total amount of DIY rewards is limited by a pool size that is subject to change. 
 
