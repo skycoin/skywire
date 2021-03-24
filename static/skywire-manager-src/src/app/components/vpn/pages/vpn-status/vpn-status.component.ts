@@ -362,7 +362,7 @@ export class VpnStatusComponent implements OnInit, OnDestroy {
    * @returns An array with the min(0), mid(1) and max(2) values.
    */
   private calculateGraphLimits(arrayToCheck: number[]) {
-    let min = 0;
+    const min = 0;
     let max = 0;
     let mid = 0;
 
