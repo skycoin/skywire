@@ -36,9 +36,9 @@ Currently, each person participating in the Skywire mainnet may own one DIY mine
 Based on this central rule, each whitelisted person is eligible to receive rewards for:
 * one or multiple official Skyminers 
 
-*or*
+*and/or*
 
-* one DIY miner with up to 8 (eight) nodes
+* one DIY miner with up to 8 (eight) nodes, (provided it is at a different location if you also have an official Skyminer).
 
 <div align="center"><b>You must use the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a> to keep your submitted data up-to-date</b>
 <br><em> Read<a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System"> the Skywire whitelisting system user guide</a> to familiarize yourself with the new system.</em></div>
@@ -157,7 +157,7 @@ All necessary steps to get up and running are described in  <a href="https://git
           - view your whitelisted miners 
           - adjust public keys if necessary
           - adjust your Skycoin wallet reward address as you like
-    - Contact support@skycoin.net in case your account is disabled or other issues occur
+    - Contact support@skycoin.com in case your account is disabled or other issues occur
     - You can double check with our team members (see above) if we received your application.
 
 
@@ -172,7 +172,7 @@ All necessary steps to get up and running are described in  <a href="https://git
      - Update public keys if it's necessary
      - Add more boards and include new pictures to receive the verification of an admin
      - Transfer your whitelisted miner to another email address
-* The whitelist is a queue based on a first come first serve basis, the benchmark for applications is the hardware list above + the official miner specifications.
+* The whitelist is a queue based on a first come first served basis, the benchmark for applications is the hardware list above + the official miner specifications.
 * For email address changes of official miners please use the [transfer miner function](https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System#transfer-miner) of the Skywire Whitelisting System.
 
 #### Official Miner - Required Data for the Whitelisting System
