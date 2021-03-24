@@ -12,24 +12,30 @@ import (
 	"sync"
 
 	"github.com/skycoin/dmsg/dmsgpty"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
 const ownerRWX = 0700
 
-func initDmsgptyVisor(v *Visor) bool {
+func initDmsgpty(ctx context.Context, log *logging.Logger) error {
+	v, err := getVisor(ctx)
+	if err != nil {
+		return err
+	}
 	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
 
 	if conf == nil {
-		v.log.Info("'dmsgpty' is not configured, skipping.")
-		return report(nil)
+		log.Info("'dmsgpty' is not configured, skipping.")
+		return nil
 	}
 
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			return report(err)
+			report(err)
+			return err
 		}
 	}
 
@@ -39,13 +45,15 @@ func initDmsgptyVisor(v *Visor) bool {
 	} else {
 		var err error
 		if wl, err = dmsgpty.NewJSONFileWhiteList(v.conf.Dmsgpty.AuthFile); err != nil {
-			return report(err)
+			report(err)
+			return err
 		}
 	}
 
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
-		return report(err)
+		report(err)
+		return err
 	}
 	// add itself to the whitelist to allow local pty
 	if err := wl.Add(v.conf.PK); err != nil {
@@ -54,7 +62,9 @@ func initDmsgptyVisor(v *Visor) bool {
 
 	dmsgC := v.net.Dmsg()
 	if dmsgC == nil {
-		return report(errors.New("cannot create dmsgpty with nil dmsg client"))
+		err := errors.New("cannot create dmsgpty with nil dmsg client")
+		report(err)
+		return err
 	}
 
 	pty := dmsgpty.NewHost(dmsgC, wl)
@@ -81,13 +91,17 @@ func initDmsgptyVisor(v *Visor) bool {
 	if conf.CLINet != "" {
 		if conf.CLINet == "unix" {
 			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
-				return report(fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err))
+				err := fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err)
+				report(err)
+				return err
 			}
 		}
 
 		cliL, err := net.Listen(conf.CLINet, conf.CLIAddr)
 		if err != nil {
-			return report(fmt.Errorf("failed to start dmsgpty cli listener: %w", err))
+			err := fmt.Errorf("failed to start dmsgpty cli listener: %w", err)
+			report(err)
+			return err
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -109,5 +123,5 @@ func initDmsgptyVisor(v *Visor) bool {
 		})
 	}
 
-	return report(nil)
+	return nil
 }

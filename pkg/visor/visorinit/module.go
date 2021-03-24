@@ -14,7 +14,7 @@ import (
 // of module initialization
 // This function will be called with initialization context. Pass your custom
 // data via that context, and retrieve it within your hooks.
-type Hook func(ctx context.Context) error
+type Hook func(ctx context.Context, log *logging.Logger) error
 
 // Module is a single system unit that represents a part of the system that must
 // be initialized. Module can have dependencies, that should be initialized before
@@ -31,7 +31,7 @@ type Module struct {
 }
 
 // DoNothing is an initialization hook that does nothing
-var DoNothing Hook = func(ctx context.Context) error {
+var DoNothing Hook = func(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
@@ -107,7 +107,7 @@ func (m *Module) InitSequential(ctx context.Context) error {
 	}
 	startSelf := time.Now()
 	// init the module itself
-	err := m.init(ctx)
+	err := m.init(ctx, m.log)
 	m.log.Infof("Initialized %s in %s (%s with dependencies)", m.Name, time.Since(startSelf), time.Since(start))
 	return err
 }
@@ -164,7 +164,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 	}
 	startSelf := time.Now()
 	// init the module itself
-	err := m.init(ctx)
+	err := m.init(ctx, m.log)
 	m.log.Infof("Initialized %s in %s (%s with dependencies)", m.Name, time.Since(startSelf), time.Since(start))
 	if err != nil {
 		m.err = err
