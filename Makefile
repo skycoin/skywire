@@ -27,11 +27,10 @@ DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker con
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
 
-RACE_FLAG:=-race
 GOARCH:=$(shell go env GOARCH)
 
 ifneq (,$(findstring 64,$(GOARCH)))
-    TEST_OPTS:=$(TEST_OPTS) $(RACE_FLAG)
+    TEST_OPTS:=$(TEST_OPTS) -race
 endif
 
 BUILDINFO_PATH := $(DMSG_BASE)/buildinfo
@@ -42,7 +41,7 @@ BUILDINFO_COMMIT := -X $(BUILDINFO_PATH).commit=$(COMMIT)
 
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT)
 
-BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
+BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
