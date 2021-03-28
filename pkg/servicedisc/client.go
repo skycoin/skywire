@@ -189,6 +189,7 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read response body: %w", err)
 		}
+		c.log.Infof("GOT RESP ERR BODY: %v", string(respBody))
 
 		var hErr HTTPResponse
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
@@ -198,6 +199,15 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 		return nil, hErr.Error
 	}
 
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	c.log.Infof("GOT OK RESP BODY: %v", string(respBody))
+	if err := json.Unmarshal(respBody, &c.entry); err != nil {
+		return nil, err
+	}
+	return &c.entry, nil
 	err = json.NewDecoder(resp.Body).Decode(&c.entry)
 	return &c.entry, err
 }
