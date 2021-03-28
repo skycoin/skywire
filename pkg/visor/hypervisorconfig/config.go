@@ -3,6 +3,7 @@ package hypervisorconfig
 import (
 	"encoding/hex"
 	"encoding/json"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -47,6 +48,7 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // Config configures the hypervisor.
 type Config struct {
+	UIAssets      fs.FS         `json:"-"`
 	PK            cipher.PubKey `json:"-"`
 	SK            cipher.SecKey `json:"-"`
 	DBPath        string        `json:"db_path"`             // Path to store database file.

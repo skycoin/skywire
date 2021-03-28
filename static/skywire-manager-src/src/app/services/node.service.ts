@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Observable, Subscription, BehaviorSubject, of, forkJoin } from 'rxjs';
-import { flatMap, map, mergeMap, delay, tap } from 'rxjs/operators';
+import { Observable, Subscription, BehaviorSubject, of } from 'rxjs';
+import { flatMap, map, delay, tap } from 'rxjs/operators';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
-import { HealthInfo, Node, Route, Transport } from '../app.datatypes';
+import { Node, Transport } from '../app.datatypes';
 import { ApiService } from './api.service';
 import { TransportService } from './transport.service';
 import { RouteService } from './route.service';
@@ -486,9 +486,8 @@ export class NodeService {
    */
   private getNodes(): Observable<Node[]> {
     let nodes: Node[] = [];
-    let dmsgInfo: any[];
 
-    return this.apiService.get('visors').pipe(mergeMap((result: any[]) => {
+    return this.apiService.get('visors-summary').pipe(map((result: any[]) => {
       // Save the visor list.
       if (result) {
         result.forEach(response => {
@@ -497,65 +496,55 @@ export class NodeService {
           // Basic data.
           node.online = response.online;
           node.tcpAddr = response.tcp_addr;
-          node.ip = this.getAddressPart(node.tcpAddr, 0);
           node.port = this.getAddressPart(node.tcpAddr, 1);
-          node.localPk = response.local_pk;
+          node.localPk = response.summary.local_pk;
+
+          // Ip.
+          if (response.summary.local_ip && (response.summary.local_ip as string).trim()) {
+            node.ip = response.summary.local_ip;
+          } else {
+            node.ip = null;
+          }
 
           // Label.
           const labelInfo = this.storageService.getLabelInfo(node.localPk);
-          node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+          node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
+
+          // Health data.
+          node.health = {
+            status: 200,
+            addressResolver: response.health.address_resolver,
+            routeFinder: response.health.route_finder,
+            setupNode: response.health.setup_node,
+            transportDiscovery: response.health.transport_discovery,
+            uptimeTracker: response.health.uptime_tracker,
+          };
+
+          // DMSG info.
+          node.dmsgServerPk = response.dmsg_stats.server_public_key;
+          node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
+
+          // Check if is hypervisor.
+          node.isHypervisor = response.is_hypervisor;
 
           nodes.push(node);
         });
       }
 
-      // Get the dmsg info.
-      return this.apiService.get('dmsg');
-    }), mergeMap((result: any[]) => {
-      dmsgInfo = result;
-
-      // Get the health info of each node.
-      return forkJoin(nodes.map(node => this.apiService.get(`visors/${node.localPk}/health`)));
-    }), mergeMap((result: any[]) => {
-      nodes.forEach((node, i) => {
-        node.health = {
-          status: result[i].status,
-          addressResolver: result[i].address_resolver,
-          routeFinder: result[i].route_finder,
-          setupNode: result[i].setup_node,
-          transportDiscovery: result[i].transport_discovery,
-          uptimeTracker: result[i].uptime_tracker,
-        };
-      });
-
-      // Get the basic info about the hypervisor.
-      return this.apiService.get('about');
-    }), map((aboutInfo: any) => {
-      // Create a map to associate the dmsg info with the visors.
-      const dmsgInfoMap = new Map<string, any>();
-      dmsgInfo.forEach(info => dmsgInfoMap.set(info.public_key, info));
-
-      // Process the node data and create a helper map.
+      // Create lists with the nodes returned by the api.
       const obtainedNodes = new Map<string, Node>();
       const nodesToRegisterInLocalStorageAsOnline: string[] = [];
+      const ipsToRegisterInLocalStorageAsOnline: string[] = [];
       nodes.forEach(node => {
-        if (dmsgInfoMap.has(node.localPk)) {
-          node.dmsgServerPk = dmsgInfoMap.get(node.localPk).server_public_key;
-          node.roundTripPing = this.nsToMs(dmsgInfoMap.get(node.localPk).round_trip);
-        } else {
-          node.dmsgServerPk = '-';
-          node.roundTripPing = '-1';
-        }
-
-        node.isHypervisor = node.localPk === aboutInfo.public_key;
-
         obtainedNodes.set(node.localPk, node);
         if (node.online) {
           nodesToRegisterInLocalStorageAsOnline.push(node.localPk);
+          ipsToRegisterInLocalStorageAsOnline.push(node.ip);
         }
       });
 
-      this.storageService.includeVisibleLocalNodes(nodesToRegisterInLocalStorageAsOnline);
+      // Save all online nodes.
+      this.storageService.includeVisibleLocalNodes(nodesToRegisterInLocalStorageAsOnline, ipsToRegisterInLocalStorageAsOnline);
 
       const missingSavedNodes: Node[] = [];
       this.storageService.getSavedLocalNodes().forEach(node => {
@@ -564,8 +553,10 @@ export class NodeService {
           const newNode: Node = new Node();
           newNode.localPk = node.publicKey;
           const labelInfo = this.storageService.getLabelInfo(node.publicKey);
-          newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.publicKey);
+          newNode.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(newNode);
           newNode.online = false;
+          newNode.dmsgServerPk = '';
+          newNode.roundTripPing = '';
 
           missingSavedNodes.push(newNode);
         }
@@ -613,15 +604,21 @@ export class NodeService {
         // Basic data.
         node.online = response.online;
         node.tcpAddr = response.tcp_addr;
-        node.ip = this.getAddressPart(node.tcpAddr, 0);
         node.port = this.getAddressPart(node.tcpAddr, 1);
         node.localPk = response.summary.local_pk;
         node.version = response.summary.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
 
+        // Ip.
+        if (response.summary.local_ip && (response.summary.local_ip as string).trim()) {
+          node.ip = response.summary.local_ip;
+        } else {
+          node.ip = null;
+        }
+
         // Label.
         const labelInfo = this.storageService.getLabelInfo(node.localPk);
-        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node.localPk);
+        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
 
         // Health info.
         node.health = {

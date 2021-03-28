@@ -205,6 +205,16 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	return res, nil
 }
 
+func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
+	var stats appserver.AppStats
+
+	if err := rc.Call("GetAppStats", &appName, &stats); err != nil {
+		return appserver.AppStats{}, err
+	}
+
+	return stats, nil
+}
+
 // GetAppConnectionsSummary get connections stats for the app.
 func (rc *rpcClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
 	var summary []appserver.ConnectionSummary
@@ -725,8 +735,12 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 	return mc.logS.LogsSince(timestamp)
 }
 
+func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
+	return appserver.AppStats{}, nil
+}
+
 // GetAppConnectionsSummary get connections stats for the app.
-func (mc *mockRPCClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+func (mc *mockRPCClient) GetAppConnectionsSummary(_ string) ([]appserver.ConnectionSummary, error) {
 	return nil, nil
 }
 
