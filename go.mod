@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.14
+go 1.16
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
@@ -22,7 +22,7 @@ require (
 	github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pkg/profile v1.5.0
-	github.com/rakyll/statik v0.1.7
+	github.com/prometheus/client_golang v1.7.1 // indirect
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/sirupsen/logrus v1.7.0
