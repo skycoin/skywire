@@ -27,14 +27,24 @@ func (c *SkywireConn) Latency() time.Duration {
 	return c.nrg.Latency()
 }
 
-// Throughput returns throughput till remote (bytes/s).
-func (c *SkywireConn) Throughput() uint32 {
-	return c.nrg.Throughput()
+// UploadSpeed returns upload speed (bytes/s).
+func (c *SkywireConn) UploadSpeed() uint32 {
+	return c.nrg.UploadSpeed()
+}
+
+// DownloadSpeed returns download speed (bytes/s).
+func (c *SkywireConn) DownloadSpeed() uint32 {
+	return c.nrg.DownloadSpeed()
 }
 
 // BandwidthSent returns amount of bandwidth sent (bytes).
 func (c *SkywireConn) BandwidthSent() uint64 {
 	return c.nrg.BandwidthSent()
+}
+
+// BandwidthReceived returns amount of bandwidth received (bytes).
+func (c *SkywireConn) BandwidthReceived() uint64 {
+	return c.nrg.BandwidthReceived()
 }
 
 // Close closes connection.
