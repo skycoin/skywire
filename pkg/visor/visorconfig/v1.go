@@ -14,8 +14,15 @@ import (
 
 //go:generate readmegen -n V1 -o ./README.md ./v1.go
 
-// V1Name is the semantic version string for V1.
-const V1Name = "v1.0.0"
+// V100Name is the semantic version string for v1.0.0.
+const V100Name = "v1.0.0"
+
+// V110Name is the semantic version string for v1.1.0.
+// Added MinHops field to V1Routing section of config
+const V110Name = "v1.1.0"
+
+// V1Name is the semantic version string for the most recent version of V1.
+const V1Name = V110Name
 
 // V1 is visor config v1.0.0
 type V1 struct {
@@ -67,6 +74,7 @@ type V1Routing struct {
 	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
+	MinHops            uint16          `json:"min_hops"`
 }
 
 // V1UptimeTracker configures uptime tracker.
