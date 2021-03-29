@@ -115,16 +115,13 @@ func initAddressResolver(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("address-resolver")
 	conf := v.conf.Transport
 
 	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
-		report(err)
 		return err
 	}
-
 	v.initLock.Lock()
 	v.arClient = arClient
 	v.initLock.Unlock()
@@ -179,12 +176,10 @@ func initSNet(ctx context.Context, log *logging.Logger) error {
 
 	n, err := snet.New(conf, v.ebc)
 	if err != nil {
-		report(err)
 		return err
 	}
 
 	if err := n.Init(); err != nil {
-		report(err)
 		return err
 	}
 	v.pushCloseStack("snet", func() bool {
@@ -205,7 +200,6 @@ func initSNet(ctx context.Context, log *logging.Logger) error {
 		// dmsgctrl setup
 		cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
 		if err != nil {
-			report(err)
 			return err
 		}
 		v.pushCloseStack("snet.dmsgctrl", func() bool {
@@ -231,7 +225,6 @@ func initTransport(ctx context.Context, log *logging.Logger) error {
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
 		err := fmt.Errorf("failed to create transport discovery client: %w", err)
-		report(err)
 		return err
 	}
 
@@ -241,14 +234,12 @@ func initTransport(ctx context.Context, log *logging.Logger) error {
 		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
 		if err != nil {
 			err := fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err)
-			report(err)
 			return err
 		}
 	case visorconfig.MemoryLogStore:
 		logS = transport.InMemoryTransportLogStore()
 	default:
 		err := fmt.Errorf("invalid log store type: %s", conf.LogStore.Type)
-		report(err)
 		return err
 	}
 
@@ -263,7 +254,6 @@ func initTransport(ctx context.Context, log *logging.Logger) error {
 	tpM, err := transport.NewManager(managerLogger, v.net, &tpMConf)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
-		report(err)
 		return err
 	}
 
@@ -323,26 +313,25 @@ func initRouter(ctx context.Context, log *logging.Logger) error {
 	r, err := router.New(v.net, &rConf)
 	if err != nil {
 		err := fmt.Errorf("failed to create router: %w", err)
-		report(err)
 		return err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
+	routeInitErr := make(chan error)
 	go func() {
-		defer wg.Done()
 		if err := r.Serve(ctx); err != nil {
-			err := fmt.Errorf("serve router stopped: %w", err)
-			report(err)
+			routeInitErr <- fmt.Errorf("serve router stopped: %w", err)
 		}
+		close(routeInitErr)
 	}()
-
+	err, ok := <-routeInitErr
+	if ok {
+		cancel()
+		return err
+	}
 	v.pushCloseStack("router.serve", func() bool {
 		cancel()
 		ok := report(r.Close())
-		wg.Wait()
 		return ok
 	})
 
@@ -366,7 +355,6 @@ func initLauncher(ctx context.Context, log *logging.Logger) error {
 	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, conf.ServerAddr)
 	if err != nil {
 		err := fmt.Errorf("failed to start proc_manager: %w", err)
-		report(err)
 		return err
 	}
 
@@ -388,7 +376,6 @@ func initLauncher(ctx context.Context, log *logging.Logger) error {
 	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
 	if err != nil {
 		err := fmt.Errorf("failed to start launcher: %w", err)
-		report(err)
 		return err
 	}
 
@@ -399,7 +386,6 @@ func initLauncher(ctx context.Context, log *logging.Logger) error {
 
 	if err != nil {
 		err := fmt.Errorf("failed to autostart apps: %w", err)
-		report(err)
 		return err
 	}
 
@@ -478,7 +464,6 @@ func initCLI(ctx context.Context, log *logging.Logger) error {
 
 	cliL, err := net.Listen("tcp", v.conf.CLIAddr)
 	if err != nil {
-		report(err)
 		return err
 	}
 
@@ -489,7 +474,6 @@ func initCLI(ctx context.Context, log *logging.Logger) error {
 	rpcS, err := newRPCServer(v, "CLI")
 	if err != nil {
 		err := fmt.Errorf("failed to start rpc server for cli: %w", err)
-		report(err)
 		return err
 	}
 	go rpcS.Accept(cliL) // We do not use sync.WaitGroup here as it will never return anyway.
@@ -502,7 +486,6 @@ func initHypervisors(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("hypervisors")
 
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
@@ -516,7 +499,6 @@ func initHypervisors(ctx context.Context, log *logging.Logger) error {
 		rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
 		if err != nil {
 			err := fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
-			report(err)
 			return err
 		}
 
@@ -546,7 +528,6 @@ func initUptimeTracker(ctx context.Context, log *logging.Logger) error {
 	}
 	const tickDuration = 1 * time.Minute
 
-	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker
 
 	if conf == nil {
@@ -557,7 +538,6 @@ func initUptimeTracker(ctx context.Context, log *logging.Logger) error {
 	ut, err := utclient.NewHTTP(conf.Addr, v.conf.PK, v.conf.SK)
 	if err != nil {
 		// TODO(evanlinjin): We should design utclient to retry automatically instead of returning error.
-		// return report(err)
 		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
 		return nil
 	}
@@ -575,7 +555,7 @@ func initUptimeTracker(ctx context.Context, log *logging.Logger) error {
 
 	v.pushCloseStack("uptime_tracker", func() bool {
 		ticker.Stop()
-		return report(nil)
+		return true
 	})
 
 	v.initLock.Lock()
