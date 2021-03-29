@@ -42,7 +42,7 @@ type visorCtxKey int
 
 const visorKey visorCtxKey = iota
 
-var up, ebc, ar, disc, sn, pty, tr, rt, launch, cli, hvs, ut, trv, hv vinit.Module
+var up, ebc, ar, disc, sn, pty, tr, rt, launch, cli, hvs, ut, trv, hv, dmsgCtrl vinit.Module
 
 // visor module to group all visor dependencies
 var vis vinit.Module
@@ -61,6 +61,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ar = vinit.MakeModule("address_resolver", initAddressResolver, logger)
 	disc = vinit.MakeModule("discovery", initDiscovery, logger)
 	sn = vinit.MakeModule("snet", initSNet, logger, &ar, &disc, &ebc)
+	dmsgCtrl = vinit.MakeModule("dmsg_ctrl", initDmsgCtrl, logger, &sn)
 	pty = vinit.MakeModule("dmsg_pty", initDmsgpty, logger, &sn)
 	tr = vinit.MakeModule("transport", initTransport, logger, &sn, &ebc)
 	rt = vinit.MakeModule("router", initRouter, logger, &tr, &sn)
@@ -70,7 +71,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = vinit.MakeModule("uptime_tracker", initUptimeTracker, logger)
 	trv = vinit.MakeModule("trusted_visors", initTrustedVisors, logger, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &trv)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &trv, &dmsgCtrl)
 	hv = vinit.MakeModule("hypervisor", initHypervisor, logger, &vis)
 }
 
@@ -191,32 +192,45 @@ func initSNet(ctx context.Context, log *logging.Logger) error {
 		return report(n.Close())
 	})
 
-	if dmsgC := n.Dmsg(); dmsgC != nil {
-		const dmsgTimeout = time.Second * 20
-		log := dmsgC.Logger().WithField("timeout", dmsgTimeout)
-		log.Info("Connecting to the dmsg network...")
-		select {
-		case <-time.After(dmsgTimeout):
-			log.Warn("Failed to connect to the dmsg network, will try again later.")
-		case <-n.Dmsg().Ready():
-			log.Info("Connected to the dmsg network.")
-		}
-
-		// dmsgctrl setup
-		cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
-		if err != nil {
-			report(err)
-			return err
-		}
-		v.pushCloseStack("snet.dmsgctrl", func() bool {
-			return report(cl.Close())
-		})
-
-		dmsgctrl.ServeListener(cl, 0)
-	}
 	v.initLock.Lock()
 	v.net = n
 	v.initLock.Unlock()
+	return nil
+}
+
+func initDmsgCtrl(ctx context.Context, _ *logging.Logger) error {
+	v, err := getVisor(ctx)
+	if err != nil {
+		return err
+	}
+	report := v.makeReporter("snet.dmsg.ctrl")
+	dmsgC := v.net.Dmsg()
+	if dmsgC == nil {
+		return nil
+	}
+	const dmsgTimeout = time.Second * 20
+	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
+	logger.Info("Connecting to the dmsg network...")
+	go func() {
+		select {
+		case <-time.After(dmsgTimeout):
+			logger.Warn("Failed to connect to the dmsg network, will try again later.")
+		case <-v.net.Dmsg().Ready():
+			logger.Info("Connected to the dmsg network.")
+		}
+	}()
+
+	// dmsgctrl setup
+	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
+	if err != nil {
+		report(err)
+		return err
+	}
+	v.pushCloseStack("snet.dmsgctrl", func() bool {
+		return report(cl.Close())
+	})
+
+	dmsgctrl.ServeListener(cl, 0)
 	return nil
 }
 
