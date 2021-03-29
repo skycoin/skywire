@@ -52,33 +52,29 @@ Different locations are required due to the fact that we want to spread out the 
 ***
 
 ## Rewards
-**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time-to-time.
+**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time-to-time. We'll keep the minimal version requirement one release behind the most recent one to provide everyone with sufficient time to upgrade.
 <br>
 * The rewards are **paid every subsequent month around the 5th** (short delays are possible)
 * Adjustments of previous months are included in these reward distributions on the 5th.
 * The deadline to submit complaints is being published in the monthly Skywire status update emails and in the [Skywire PSA channel on Telegram](https://t.me/SkywirePSA).
 * Eligible for rewards are only the whitelisted nodes that **comply with the Skywire mainnet rules** and **meet the uptime requirement** of the respective month (usually 75%).
 
-<div align="center">
-<em>During Skywire’s testnet phase, owners of official Skyminers were required to have all eight nodes online in order to qualify for full uptime rewards. With the launch of Mainnet, official Skyminers now only require seven nodes to be online at least 75% of the time in order to earn full rewards.
-</em>
-</div>
-<br> 
-
 ### Official Skyminers 
 
-There are two different reward categories for official miners:
-* official Skyminers first & second batch - **not sold through** the hardware store 
-* official Skyminers new batches - **sold through** the [hardware store](https://store.skycoin.com)
+There are two different reward methods for official miners:
+* official Skyminers Skycoin Pool Method:
+  - first & second batch official Skyminer
+  - third batch official Skyminers that have received all of the 24 fixed Skycoin payments
+* official Skyminers SKY/USD Method:
+  - **sold through** the [hardware store](https://store.skycoin.com)
 
 <em>Faulty Orange Pi Primes/routers of official Skyminers will be rewarded regardless of your uptime until you receive a replacement. If the replacement doesn't arrive in time for you to make the uptime requirement because it arrived on short notice or not on the schedule at all you will be rewarded as well. Since we are taking care of this manually you are requested to contact one of our team members on Telegram (@Paperstream @asxtree) or at store.skycoin.com/pages/support</em>
 
-<h4>Official Skyminers -  First & Second Batch</h4>
-<div align="center"><em><u>We are currently revising the reward strucure for our early supporters. Details of the rewards going forward will be announced very soon. </u></em></div><br/>
+<h4>Official Skyminers - Pool Method</h4>
 
 Rewards are being paid on a node by node basis. The total amount of rewards is limited by a pool size that is subject to change:
 * You can receive a maximum of 13.714 Skycoin per node
-    - official Skyminers consist of seven nodes (visors) and one manager (hypervisor)
+    - official Skyminers consist of seven nodes (visors) and one node serving as manager (hypervisor)
 * Rewards are being calculated on a node by node basis
     - you'll receive up to 7 Skycoin per-node rewards
 * The total pool size is being divided evenly between all nodes eligible for receiving rewards. This implies that you will receive less than 13.714 Skycoin per-node rewards in case the pool size would be surpassed. 
@@ -87,10 +83,14 @@ Rewards are being paid on a node by node basis. The total amount of rewards is l
 
 ### Official Skyminers - New Batches
 
+<h4>Official Skyminers - SKY/USD Method</h4>
+
 <div align="center">
 <em><u>Fixed Skycoin payments can be claimed within three years after purchase.</u></em><br/><br/>
-You will receive a fixed Skycoin payment per month <b>in addition</b> to any traffic forwarding payments <br/> that you will receive in the Skywire mainnet.<br/><strong>
-Fixed Skycoin payments per month = USD Miner Price / 24 = $83.30 USD.</strong></div>
+You will receive a fixed Skycoin payments per month <b>in addition</b> to any traffic forwarding payments <br/> that you will receive in the Skywire mainnet.<br/><strong>
+Fixed Skycoin payments per month = USD Miner Price / 24 = $83.30 USD.</strong>
+<br>
+</div>
 <br/>
 <div align="center"><i>Your fixed Skycoin payments are dependent on the uptime of your nodes. All of your 7 nodes must meet the uptime requirement for you to receive the full $83.30 USD, it is therefore <strong>super important to keep your nodes online.</strong></i></div>
 <br>
@@ -100,8 +100,9 @@ Summary:
 * You are eligible to receive 24 fixed Skycoin payments ($83.30 USD)
 * The 24 fixed Skycoin payments are comprised of 7 Skycoin node payments ($11.9 USD)
     - official Skyminers consist of seven nodes (visors) and one manager (hypervisor)
-* You'll receive up to 7 Skycoin node payments per month based on the individual uptime of your nodes 
+    - you'll receive up to 7 Skycoin node payments per month based on the individual uptime of your nodes 
 * The uptime of all nodes in your official Skyminer is being evaluated on a node-by-node basis
+* After these 24 payments, the reward model automatically changes to the [pool method reward model](https://github.com/skycoin/skywire/blob/master/mainnet_rules.md#official-skyminers)
 * *You will receive traffic forwarding payments once the Skywire mainnet with bandwidth metering is live*
 
 #### Skycoin Price Calculation
@@ -136,7 +137,7 @@ You are advised to use [this guide](https://github.com/skycoin/skywire/wiki/Trou
 ## Whitelist
 
 <div align="center">Whitelist applications must be submitted using the <a href="https://whitelist.skycoin.com">Skywire Whitelisting System</a>.<br> 
-All necessary steps to get up and running are described in  <a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System">this guide</a></div>
+All necessary steps to get up and running are described in  <a href="https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System">this guide</a><br></div>
 
 
 <div align="center">
@@ -146,6 +147,7 @@ All necessary steps to get up and running are described in  <a href="https://git
           </em>
      </p>
 </div>
+
 - The whitelist is being **updated retroactively on a monthly basis** so it is **not important** in which week you are being approved for the whitelist.
 - **Official Skyminers are whitelisted by default after purchase.**
 - There is no waiting period at the moment
