@@ -118,10 +118,8 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 // NewVisor constructs new Visor.
-func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok bool) {
-	ok = true
-
-	v = &Visor{
+func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
+	v := &Visor{
 		reportCh:   make(chan vReport, 100),
 		log:        conf.MasterLogger().PackageLogger("visor"),
 		conf:       conf,
@@ -143,20 +141,16 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
 	registerModules(v.MasterLogger())
-	start := time.Now()
 	if v.conf.Hypervisor == nil {
 		vis.InitConcurrent(ctx)
 	} else {
 		hv.InitConcurrent(ctx)
 	}
-	elapsed := time.Since(start)
-	v.processReports(log, &ok)
 	if err := vis.Wait(ctx); err != nil {
-		log.Error("Failed to startup visor.")
+		log.Error(err)
 		return v, false
 	}
-	log.Infof("startup complete, took %s", elapsed)
-	return v, ok
+	return v, true
 }
 
 // Close safely stops spawned Apps and Visor.
