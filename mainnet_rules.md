@@ -52,7 +52,7 @@ Different locations are required due to the fact that we want to spread out the 
 ***
 
 ## Rewards
-**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time-to-time. We'll keep the minimal version requirement one release behind the most recent one to provide everyone with sufficient time to upgrade.
+**Skywire Visors must be running Skywire v0.3.0 or higher to receive rewards.** Note that the required minimal Skywire version is subject to change and will be updated from time-to-time. We'll keep the minimal version requirement at least one release behind the most recent one to provide everyone with sufficient time to upgrade.
 <br>
 * The rewards are **paid every subsequent month around the 5th** (short delays are possible)
 * Adjustments of previous months are included in these reward distributions on the 5th.
