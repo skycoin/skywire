@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -23,7 +22,6 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("dmsgpty")
 	conf := v.conf.Dmsgpty
 
 	if conf == nil {
@@ -34,7 +32,6 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			report(err)
 			return err
 		}
 	}
@@ -45,14 +42,12 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 	} else {
 		var err error
 		if wl, err = dmsgpty.NewJSONFileWhiteList(v.conf.Dmsgpty.AuthFile); err != nil {
-			report(err)
 			return err
 		}
 	}
 
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
-		report(err)
 		return err
 	}
 	// add itself to the whitelist to allow local pty
@@ -63,7 +58,6 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 	dmsgC := v.net.Dmsg()
 	if dmsgC == nil {
 		err := errors.New("cannot create dmsgpty with nil dmsg client")
-		report(err)
 		return err
 	}
 
@@ -71,20 +65,23 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 
 	if ptyPort := conf.Port; ptyPort != 0 {
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-
+		errCh := make(chan error)
 		go func() {
-			defer wg.Done()
 			if err := pty.ListenAndServe(ctx, ptyPort); err != nil {
-				report(fmt.Errorf("listen and serve stopped: %w", err))
+				errCh <- fmt.Errorf("listen and serve stopped: %w", err)
 			}
+			close(errCh)
 		}()
 
-		v.pushCloseStack("dmsgpty.serve", func() bool {
+		err, ok := <-errCh
+		if ok {
 			cancel()
-			wg.Wait()
-			return report(nil)
+			return err
+		}
+
+		v.pushCloseStack("dmsgpty.serve", func() error {
+			cancel()
+			return nil
 		})
 	}
 
@@ -92,7 +89,6 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 		if conf.CLINet == "unix" {
 			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
 				err := fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err)
-				report(err)
 				return err
 			}
 		}
@@ -100,26 +96,29 @@ func initDmsgpty(ctx context.Context, log *logging.Logger) error {
 		cliL, err := net.Listen(conf.CLINet, conf.CLIAddr)
 		if err != nil {
 			err := fmt.Errorf("failed to start dmsgpty cli listener: %w", err)
-			report(err)
 			return err
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
 
+		errCh := make(chan error)
 		go func() {
-			defer wg.Done()
 			if err := pty.ServeCLI(ctx, cliL); err != nil {
-				report(fmt.Errorf("serve cli stopped: %w", err))
+				errCh <- fmt.Errorf("serve cli stopped: %w", err)
 			}
+			close(errCh)
 		}()
 
-		v.pushCloseStack("dmsgpty.cli", func() bool {
+		err, ok := <-errCh
+		if ok {
 			cancel()
-			ok := report(cliL.Close())
-			wg.Wait()
-			return ok
+			return err
+		}
+
+		v.pushCloseStack("dmsgpty.cli", func() error {
+			cancel()
+			err := cliL.Close()
+			return err
 		})
 	}
 
