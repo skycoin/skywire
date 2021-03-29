@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -42,8 +41,7 @@ const (
 // Visor provides messaging runtime for Apps by setting up all
 // necessary connections and performing messaging gateway functions.
 type Visor struct {
-	reportCh   chan vReport
-	closeStack []closeElem
+	closeStack []closer
 
 	conf *visorconfig.V1
 	log  *logging.Logger
@@ -67,49 +65,19 @@ type Visor struct {
 	initLock    *sync.Mutex
 }
 
-type vReport struct {
+// todo: consider moving module closing to the module system
+
+type closeFn func() error
+
+type closer struct {
 	src string
-	err error
+	fn  closeFn
 }
 
-type reportFunc func(err error) bool
-
-func (v *Visor) makeReporter(src string) reportFunc {
-	return func(err error) bool {
-		v.reportCh <- vReport{src: src, err: err}
-		return err == nil
-	}
-}
-
-func (v *Visor) processReports(log logrus.FieldLogger, ok *bool) {
-	if log == nil {
-		// nolint:ineffassign
-		log = v.log
-	}
-	for {
-		select {
-		case report := <-v.reportCh:
-			if report.err != nil {
-				v.log.WithError(report.err).WithField("_src", report.src).Error()
-				if ok != nil {
-					*ok = false
-				}
-			}
-		default:
-			return
-		}
-	}
-}
-
-type closeElem struct {
-	src string
-	fn  func() bool
-}
-
-func (v *Visor) pushCloseStack(src string, fn func() bool) {
+func (v *Visor) pushCloseStack(src string, fn closeFn) {
 	v.initLock.Lock()
 	defer v.initLock.Unlock()
-	v.closeStack = append(v.closeStack, closeElem{src: src, fn: fn})
+	v.closeStack = append(v.closeStack, closer{src, fn})
 }
 
 // MasterLogger returns the underlying master logger (currently contained in visor config).
@@ -120,7 +88,6 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 // NewVisor constructs new Visor.
 func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) {
 	v := &Visor{
-		reportCh:   make(chan vReport, 100),
 		log:        conf.MasterLogger().PackageLogger("visor"),
 		conf:       conf,
 		restartCtx: restartCtx,
@@ -163,28 +130,26 @@ func (v *Visor) Close() error {
 	log.Info("Begin shutdown.")
 
 	for i := len(v.closeStack) - 1; i >= 0; i-- {
-		ce := v.closeStack[i]
+		cl := v.closeStack[i]
 
 		start := time.Now()
-		done := make(chan bool, 1)
+		errCh := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
 
-		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", ce.src)).
+		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
 			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
 		log.Info("Shutting down module...")
 
-		go func(ce closeElem) {
-			done <- ce.fn()
-			close(done)
-		}(ce)
+		go func(cl closer) {
+			errCh <- cl.fn()
+			close(errCh)
+		}(cl)
 
 		select {
-		case ok := <-done:
+		case err := <-errCh:
 			t.Stop()
-
-			if !ok {
-				log.WithField("elapsed", time.Since(start)).Warn("Module stopped with unexpected result.")
-				v.processReports(log, nil)
+			if err != nil {
+				log.WithError(err).WithField("elapsed", time.Since(start)).Warn("Module stopped with unexpected result.")
 				continue
 			}
 			log.WithField("elapsed", time.Since(start)).Info("Module stopped cleanly.")
@@ -193,8 +158,6 @@ func (v *Visor) Close() error {
 			log.WithField("elapsed", time.Since(start)).Error("Module timed out.")
 		}
 	}
-
-	v.processReports(v.log, nil)
 	log.Info("Shutdown complete. Goodbye!")
 	return nil
 }

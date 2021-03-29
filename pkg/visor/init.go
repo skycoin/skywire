@@ -96,13 +96,9 @@ func initEventBroadcaster(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("event_broadcaster")
-
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
-	v.pushCloseStack("event_broadcaster", func() bool {
-		return report(ebc.Close())
-	})
+	v.pushCloseStack("event_broadcaster", ebc.Close)
 
 	v.initLock.Lock()
 	v.ebc = ebc
@@ -158,8 +154,6 @@ func initSNet(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("snet")
-
 	nc := snet.NetworkConfigs{
 		Dmsg: v.conf.Dmsg,
 		STCP: v.conf.STCP,
@@ -182,9 +176,7 @@ func initSNet(ctx context.Context, log *logging.Logger) error {
 	if err := n.Init(); err != nil {
 		return err
 	}
-	v.pushCloseStack("snet", func() bool {
-		return report(n.Close())
-	})
+	v.pushCloseStack("snet", n.Close)
 
 	if dmsgC := n.Dmsg(); dmsgC != nil {
 		const dmsgTimeout = time.Second * 20
@@ -202,9 +194,7 @@ func initSNet(ctx context.Context, log *logging.Logger) error {
 		if err != nil {
 			return err
 		}
-		v.pushCloseStack("snet.dmsgctrl", func() bool {
-			return report(cl.Close())
-		})
+		v.pushCloseStack("snet.dmsgctrl", cl.Close)
 
 		dmsgctrl.ServeListener(cl, 0)
 	}
@@ -219,7 +209,6 @@ func initTransport(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("transport")
 	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
@@ -276,11 +265,11 @@ func initTransport(ctx context.Context, log *logging.Logger) error {
 		tpM.Serve(ctx)
 	}()
 
-	v.pushCloseStack("transport.manager", func() bool {
+	v.pushCloseStack("transport.manager", func() error {
 		cancel()
-		ok := report(tpM.Close())
+		err := tpM.Close()
 		wg.Wait()
-		return ok
+		return err
 	})
 
 	v.initLock.Lock()
@@ -294,7 +283,6 @@ func initRouter(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("router")
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
 
@@ -329,10 +317,9 @@ func initRouter(ctx context.Context, log *logging.Logger) error {
 		cancel()
 		return err
 	}
-	v.pushCloseStack("router.serve", func() bool {
+	v.pushCloseStack("router.serve", func() error {
 		cancel()
-		ok := report(r.Close())
-		return ok
+		return r.Close()
 	})
 
 	v.initLock.Lock()
@@ -348,7 +335,6 @@ func initLauncher(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("launcher")
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
@@ -358,9 +344,7 @@ func initLauncher(ctx context.Context, log *logging.Logger) error {
 		return err
 	}
 
-	v.pushCloseStack("launcher.proc_manager", func() bool {
-		return report(procM.Close())
-	})
+	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
 	// Prepare launcher.
 	launchConf := launcher.Config{
@@ -455,7 +439,6 @@ func initCLI(ctx context.Context, log *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	report := v.makeReporter("cli")
 
 	if v.conf.CLIAddr == "" {
 		v.log.Info("'cli_addr' is not configured, skipping.")
@@ -467,9 +450,7 @@ func initCLI(ctx context.Context, log *logging.Logger) error {
 		return err
 	}
 
-	v.pushCloseStack("cli.listener", func() bool {
-		return report(cliL.Close())
-	})
+	v.pushCloseStack("cli.listener", cliL.Close)
 
 	rpcS, err := newRPCServer(v, "CLI")
 	if err != nil {
@@ -511,10 +492,10 @@ func initHypervisors(ctx context.Context, log *logging.Logger) error {
 			ServeRPCClient(ctx, log, v.net, rpcS, addr, hvErrs)
 		}(hvErrs)
 
-		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() bool {
+		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
 			cancel()
 			wg.Wait()
-			return true
+			return nil
 		})
 	}
 
@@ -553,9 +534,9 @@ func initUptimeTracker(ctx context.Context, log *logging.Logger) error {
 		}
 	}()
 
-	v.pushCloseStack("uptime_tracker", func() bool {
+	v.pushCloseStack("uptime_tracker", func() error {
 		ticker.Stop()
-		return true
+		return nil
 	})
 
 	v.initLock.Lock()
