@@ -282,6 +282,8 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 	}
 
 	ticker := time.NewTicker(updateInterval)
+	defer ticker.Stop()
+
 	for {
 		if err := update(); err != nil {
 			if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
@@ -291,7 +293,6 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 
 		select {
 		case <-ctx.Done():
-			ticker.Stop()
 			return
 		case <-ticker.C:
 		}
