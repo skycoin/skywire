@@ -86,6 +86,7 @@ import { AllLabelsComponent } from './components/pages/settings/all-labels/all-l
 import { LabelListComponent } from './components/pages/settings/all-labels/label-list/label-list.component';
 import { UpdateComponent } from './components/layout/update/update.component';
 import { UpdaterConfigComponent } from './components/pages/settings/updater-config/updater-config.component';
+import { RouterConfigComponent } from './components/pages/node/node-info/node-info-content/router-config/router-config.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -148,6 +149,7 @@ const globalRippleConfig: RippleGlobalOptions = {
     EditSkysocksClientNoteComponent,
     SkysocksClientFilterComponent,
     SkysocksClientPasswordComponent,
+    RouterConfigComponent,
   ],
   imports: [
     BrowserModule,
