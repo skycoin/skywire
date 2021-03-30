@@ -221,11 +221,8 @@ func (n *Network) Init() error {
 	}
 
 	if n.conf.ARClient != nil {
-		log.Infoln("AR CLIENT IS NOT NIL")
 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
-			log.Infoln("GOT SCTCPR CLIENT")
 			if err := client.Serve(); err != nil {
-				log.Infof("FAILED TO SERVE STCPR CLIENT: %v", err)
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
 
@@ -241,8 +238,6 @@ func (n *Network) Init() error {
 		} else {
 			log.Infof("No config found for sudph")
 		}
-	} else {
-		log.Infoln("ARCLIENT IS NIL")
 	}
 
 	return nil
@@ -256,22 +251,18 @@ func (n *Network) registerAsPublic(client directtp.Client) {
 		log.WithError(err).Errorln("Failed to get STCPR local addr")
 		return
 	}
-	log.Infof("LOCAL ADDR: %s", la.String())
 
 	_, portStr, err := net.SplitHostPort(la.String())
 	if err != nil {
 		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
 		return
 	}
-	log.Infof("LOCAL PORT STR: %v", portStr)
 
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to convert port to int")
 		return
 	}
-
-	log.Infof("LOCAL PORT: %v", port)
 
 	n.visorUpdater = n.conf.ServiceDisc.VisorUpdater(uint16(port))
 	n.visorUpdater.Start()
