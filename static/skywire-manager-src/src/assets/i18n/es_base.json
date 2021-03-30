@@ -108,8 +108,14 @@
           "weeks": "{{ time }} weeks"
         }
       },
+      "router-info": {
+        "title": "Router Info",
+        "min-hops": "Min hops:",
+        "max-hops": "Max hops:",
+        "change-config-button": "Change configuration"
+      },
       "node-health": {
-        "title": "Health info",
+        "title": "Health Info",
         "status": "Status:",
         "transport-discovery": "Transport discovery:",
         "route-finder": "Route finder:",
@@ -126,6 +132,14 @@
       "routing": "Routing"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
+  },
+
+  "router-config": {
+    "title": "Router Configuration",
+    "min-hops": "Min hops",
+    "max-hops": "Max hops",
+    "save-config-button": "Save configuration",
+    "done": "Changes saved."
   },
 
   "nodes": {
