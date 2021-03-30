@@ -131,7 +131,7 @@
   "nodes": {
     "title": "Lista de visores",
     "dmsg-title": "DMSG",
-    "update-all": "Actualizar todos los visores",
+    "update-all": "Actualizar todos los visores online",
     "hypervisor": "Hypervisor",
     "state": "Estado",
     "state-tooltip": "Estado actual",
