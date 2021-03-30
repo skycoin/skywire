@@ -250,16 +250,17 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duration) {
 	defer func() { _ = c.DeleteEntry(context.Background()) }() //nolint:errcheck
 
-	update := func() {
+	update := func() error {
 		for {
 			c.entryMx.Lock()
 			entry, err := c.UpdateEntry(ctx)
 			c.entryMx.Unlock()
 
 			if err != nil {
+				c.log.Infof("ERROR FROM SERVICE DISC REGISTER: %v", err)
 				if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
 					c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
-					return
+					return err
 				}
 
 				c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
@@ -276,21 +277,23 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 			}
 
 			c.log.WithField("entry", string(j)).Debug("Entry updated.")
-			return
+			return nil
 		}
 	}
 
-	// Run initial update.
-	update()
-
 	ticker := time.NewTicker(updateInterval)
 	for {
+		if err := update(); err != nil {
+			if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
+				return
+			}
+		}
+
 		select {
 		case <-ctx.Done():
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			update()
 		}
 	}
 }
