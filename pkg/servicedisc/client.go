@@ -13,13 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/util/netutil"
-
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 var (
@@ -189,7 +188,6 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read response body: %w", err)
 		}
-		c.log.Infof("GOT RESP ERR BODY: %v", string(respBody))
 
 		var hErr HTTPResponse
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
@@ -199,15 +197,6 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 		return nil, hErr.Error
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	c.log.Infof("GOT OK RESP BODY: %v", string(respBody))
-	if err := json.Unmarshal(respBody, &c.entry); err != nil {
-		return nil, err
-	}
-	return &c.entry, nil
 	err = json.NewDecoder(resp.Body).Decode(&c.entry)
 	return &c.entry, err
 }
@@ -257,7 +246,6 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 			c.entryMx.Unlock()
 
 			if err != nil {
-				c.log.Infof("ERROR FROM SERVICE DISC REGISTER: %v", err)
 				if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
 					c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
 					return err
