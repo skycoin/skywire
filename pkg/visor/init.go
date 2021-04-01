@@ -83,37 +83,35 @@ var (
 )
 
 func registerModules(logger *logging.MasterLogger) {
-	// procedure:
-	// look at init function for module x. if init function makes use of
-	// field v.y for some module y of visor v, then y depends on x.
-	// if init function for x passes v itself, it's fucked up. All deps should be added, but
-	// better yet this should be refactored to pass the actual dep
-	up = vinit.MakeModule("updater", initUpdater, logger)
-	ebc = vinit.MakeModule("event_broadcaster", initEventBroadcaster, logger)
-	ar = vinit.MakeModule("address_resolver", initAddressResolver, logger)
-	disc = vinit.MakeModule("discovery", initDiscovery, logger)
-	sn = vinit.MakeModule("snet", initSNet, logger, &ar, &disc, &ebc)
-	dmsgCtrl = vinit.MakeModule("dmsg_ctrl", initDmsgCtrl, logger, &sn)
-	pty = vinit.MakeModule("dmsg_pty", initDmsgpty, logger, &sn)
-	tr = vinit.MakeModule("transport", initTransport, logger, &sn, &ebc)
-	rt = vinit.MakeModule("router", initRouter, logger, &tr, &sn)
-	launch = vinit.MakeModule("launcher", initLauncher, logger, &ebc, &disc, &sn, &tr, &rt)
-	cli = vinit.MakeModule("cli", initCLI, logger)
-	hvs = vinit.MakeModule("hypervisors", initHypervisors, logger, &sn)
-	ut = vinit.MakeModule("uptime_tracker", initUptimeTracker, logger)
-	trv = vinit.MakeModule("trusted_visors", initTrustedVisors, logger, &tr)
+	// utility module maker, to avoid passing logger and wrapping each init function
+	// in withVisorCtx
+	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
+		return vinit.MakeModule(name, withVisorCtx(f), logger, deps...)
+	}
+	up = maker("updater", initUpdater)
+	ebc = maker("event_broadcaster", initEventBroadcaster)
+	ar = maker("address_resolver", initAddressResolver)
+	disc = maker("discovery", initDiscovery)
+	sn = maker("snet", initSNet, &ar, &disc, &ebc)
+	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
+	pty = maker("dmsg_pty", initDmsgpty, &sn)
+	tr = maker("transport", initTransport, &sn, &ebc)
+	rt = maker("router", initRouter, &tr, &sn)
+	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
+	cli = maker("cli", initCLI)
+	hvs = maker("hypervisors", initHypervisors, &sn)
+	ut = maker("uptime_tracker", initUptimeTracker)
+	trv = maker("trusted_visors", initTrustedVisors, &tr)
+
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &trv, &dmsgCtrl)
-	hv = vinit.MakeModule("hypervisor", initHypervisor, logger, &vis)
+
+	hv = maker("hypervisor", initHypervisor, &vis)
 }
 
-// -------------------------------------------------------------------
+type initFn func(context.Context, *Visor, *logging.Logger) error
 
-func initUpdater(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initUpdater(ctx context.Context, v *Visor, log *logging.Logger) error {
 	updater := updater.New(v.log, v.restartCtx, v.conf.Launcher.BinPath)
 
 	v.initLock.Lock()
@@ -124,11 +122,7 @@ func initUpdater(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initEventBroadcaster(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const ebcTimeout = time.Second
 	ebc := appevent.NewBroadcaster(log, ebcTimeout)
 	v.pushCloseStack("event_broadcaster", ebc.Close)
@@ -139,11 +133,7 @@ func initEventBroadcaster(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initAddressResolver(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
 	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
@@ -157,12 +147,7 @@ func initAddressResolver(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initDiscovery(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
-
+func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Prepare app discovery factory.
 	factory := appdisc.Factory{
 		Log: v.MasterLogger().PackageLogger("app_discovery"),
@@ -182,11 +167,7 @@ func initDiscovery(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initSNet(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 	nc := snet.NetworkConfigs{
 		Dmsg: v.conf.Dmsg,
 		STCP: v.conf.STCP,
@@ -217,11 +198,7 @@ func initSNet(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initDmsgCtrl(ctx context.Context, _ *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgC := v.net.Dmsg()
 	if dmsgC == nil {
 		return nil
@@ -246,11 +223,7 @@ func initDmsgCtrl(ctx context.Context, _ *logging.Logger) error {
 	return nil
 }
 
-func initTransport(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
@@ -320,11 +293,7 @@ func initTransport(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initRouter(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
 
@@ -372,11 +341,7 @@ func initRouter(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initLauncher(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Launcher
 
 	// Prepare proc manager.
@@ -476,12 +441,7 @@ func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) 
 	return envs, nil
 }
 
-func initCLI(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
-
+func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Info("'cli_addr' is not configured, skipping.")
 		return nil
@@ -504,12 +464,7 @@ func initCLI(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initHypervisors(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
-
+func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	hvErrs := make(map[cipher.PubKey]chan error, len(v.conf.Hypervisors))
 	for _, hv := range v.conf.Hypervisors {
 		hvErrs[hv] = make(chan error, 1)
@@ -544,11 +499,7 @@ func initHypervisors(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initUptimeTracker(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 1 * time.Minute
 
 	conf := v.conf.UptimeTracker
@@ -588,11 +539,7 @@ func initUptimeTracker(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initTrustedVisors(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initTrustedVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const trustedVisorsTransportType = tptypes.STCPR
 
 	go func() {
@@ -618,11 +565,7 @@ func initTrustedVisors(ctx context.Context, log *logging.Logger) error {
 	return nil
 }
 
-func initHypervisor(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Hypervisor == nil {
 		return nil
 	}
@@ -717,11 +660,17 @@ func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hy
 // ErrNoVisorInCtx is returned when visor is not set in module initialization context
 var ErrNoVisorInCtx = errors.New("visor not set in module initialization context")
 
-func getVisor(ctx context.Context) (*Visor, error) {
-	val := ctx.Value(visorKey)
-	v, ok := val.(*Visor)
-	if !ok || v == nil {
-		return nil, ErrNoVisorInCtx
+// withVisorCtx wraps init function and returns a hook that can be used in
+// the module system
+// Passed context should have visor value under visorKey key, this visor will be used
+// in the passed function
+func withVisorCtx(f initFn) vinit.Hook {
+	return func(ctx context.Context, log *logging.Logger) error {
+		val := ctx.Value(visorKey)
+		v, ok := val.(*Visor)
+		if !ok && v == nil {
+			return ErrNoVisorInCtx
+		}
+		return f(ctx, v, log)
 	}
-	return v, nil
 }
