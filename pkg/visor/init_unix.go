@@ -17,11 +17,7 @@ import (
 
 const ownerRWX = 0700
 
-func initDmsgpty(ctx context.Context, log *logging.Logger) error {
-	v, err := getVisor(ctx)
-	if err != nil {
-		return err
-	}
+func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Dmsgpty
 
 	if conf == nil {
