@@ -42,13 +42,45 @@ type visorCtxKey int
 
 const visorKey visorCtxKey = iota
 
-var up, ebc, ar, disc, sn, pty, tr, rt, launch, cli, hvs, ut, trv, hv, dmsgCtrl vinit.Module
-
-// visor module to group all visor dependencies
-var vis vinit.Module
-
-// todo: return error from init functions with meaningful values instead of bool
-// todo: consider refactoring reporting system
+// Visor initialization is split into modules, that can be initialized independently
+// Modules are declared here as package-level variables, but also need to be registered
+// in the modules system: they need init function and dependencies and their name to be set
+// To add new piece of functionality to visor, you need to create a new module variable
+// and register it properly in registerModules function
+var (
+	// Event broadcasting system
+	ebc vinit.Module
+	// visor updater
+	up vinit.Module
+	// Address resolver
+	ar vinit.Module
+	// App discovery
+	disc vinit.Module
+	// Snet (different network types)
+	sn vinit.Module
+	// dmsg pty: a remote terminal to the visor working over dmsg protocol
+	pty vinit.Module
+	// Transport setup
+	tr vinit.Module
+	// Routing system
+	rt vinit.Module
+	// Application launcer
+	launch vinit.Module
+	// CLI
+	cli vinit.Module
+	// hypervisors to control this visor
+	hvs vinit.Module
+	// Uptime tracker
+	ut vinit.Module
+	// Trusted visors
+	trv vinit.Module
+	// hypervisor module
+	hv vinit.Module
+	// dmsg ctrl
+	dmsgCtrl vinit.Module
+	// visor that groups all modules together
+	vis vinit.Module
+)
 
 func registerModules(logger *logging.MasterLogger) {
 	// procedure:
