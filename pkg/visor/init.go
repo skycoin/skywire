@@ -316,6 +316,8 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	// todo: run this function in a goroutine and give it an error channel to report
+	// module runtime errors
 	if err := runAsync(func() error { return r.Serve(ctx) }); err != nil {
 		cancel()
 		return fmt.Errorf("serve router stopped: %w", err)
@@ -665,21 +667,4 @@ func withVisorCtx(f initFn) vinit.Hook {
 		}
 		return f(ctx, v, log)
 	}
-}
-
-// run f in a separate goroutine and check if it returns error. If it does, return
-// that error
-func runAsync(f func() error) error {
-	errCh := make(chan error)
-	go func() {
-		if err := f(); err != nil {
-			errCh <- err
-		}
-		close(errCh)
-	}()
-	err, ok := <-errCh
-	if ok {
-		return err
-	}
-	return nil
 }
