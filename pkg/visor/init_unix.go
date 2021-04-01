@@ -61,18 +61,9 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	if ptyPort := conf.Port; ptyPort != 0 {
 		ctx, cancel := context.WithCancel(context.Background())
-		errCh := make(chan error)
-		go func() {
-			if err := pty.ListenAndServe(ctx, ptyPort); err != nil {
-				errCh <- fmt.Errorf("listen and serve stopped: %w", err)
-			}
-			close(errCh)
-		}()
-
-		err, ok := <-errCh
-		if ok {
+		if err := runAsync(func() error { return pty.ListenAndServe(ctx, ptyPort) }); err != nil {
 			cancel()
-			return err
+			return fmt.Errorf("serve cli stopped: %w", err)
 		}
 
 		v.pushCloseStack("dmsgpty.serve", func() error {
@@ -97,18 +88,9 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		ctx, cancel := context.WithCancel(context.Background())
 
-		errCh := make(chan error)
-		go func() {
-			if err := pty.ServeCLI(ctx, cliL); err != nil {
-				errCh <- fmt.Errorf("serve cli stopped: %w", err)
-			}
-			close(errCh)
-		}()
-
-		err, ok := <-errCh
-		if ok {
+		if err := runAsync(func() error { return pty.ServeCLI(ctx, cliL) }); err != nil {
 			cancel()
-			return err
+			return fmt.Errorf("serve cli stopped: %w", err)
 		}
 
 		v.pushCloseStack("dmsgpty.cli", func() error {
