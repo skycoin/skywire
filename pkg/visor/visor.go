@@ -117,6 +117,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		log.Error(err)
 		return v, false
 	}
+	// todo: add a goroutine that will watch for module runtime errors and stop visor
+	// in case there are any
 	return v, true
 }
 
@@ -125,6 +127,12 @@ func (v *Visor) Close() error {
 	if v == nil {
 		return nil
 	}
+
+	// todo: with timout: wait for the module to initialize,
+	// then try to stop it
+	// don't need waitgroups this way because modules are concurrent anyway
+	// start what you need in a module's goroutine?
+	//
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
