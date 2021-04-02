@@ -42,6 +42,10 @@ type visorCtxKey int
 
 const visorKey visorCtxKey = iota
 
+type runtimeErrsCtxKey int
+
+const runtimeErrsKey runtimeErrsCtxKey = iota
+
 // Visor initialization is split into modules, that can be initialized independently
 // Modules are declared here as package-level variables, but also need to be registered
 // in the modules system: they need init function and dependencies and their name to be set
@@ -82,11 +86,13 @@ var (
 	vis vinit.Module
 )
 
+// register all modules: instantiate modules with correct names and dependencies, wrap init
+// functions to have access to visor and runtime errors channel
 func registerModules(logger *logging.MasterLogger) {
 	// utility module maker, to avoid passing logger and wrapping each init function
 	// in withVisorCtx
 	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
-		return vinit.MakeModule(name, withVisorCtx(f), logger, deps...)
+		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
 	up = maker("updater", initUpdater)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
@@ -315,16 +321,27 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	// todo: run this function in a goroutine and give it an error channel to report
-	// module runtime errors
-	if err := runAsync(func() error { return r.Serve(ctx) }); err != nil {
-		cancel()
-		return fmt.Errorf("serve router stopped: %w", err)
-	}
+	// todo: this can be abstracted out as some kind of task
+	// what we do is basically run a task concurrently, add
+	// closeStack function to close it and then wait for it to signal ending
+	// failure to run task is reported to runtime errors channel
+	serveCtx, cancel := context.WithCancel(context.Background())
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		runtimeErrors := getErrors(ctx)
+		if err := r.Serve(serveCtx); err != nil {
+			runtimeErrors <- fmt.Errorf("serve router stopped: %w", err)
+		}
+	}()
+
 	v.pushCloseStack("router.serve", func() error {
 		cancel()
-		return r.Close()
+		err := r.Close()
+		wg.Wait()
+		return err
 	})
 
 	v.initLock.Lock()
@@ -654,17 +671,38 @@ func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hy
 // ErrNoVisorInCtx is returned when visor is not set in module initialization context
 var ErrNoVisorInCtx = errors.New("visor not set in module initialization context")
 
-// withVisorCtx wraps init function and returns a hook that can be used in
+// ErrNoErrorsCtx is returned when errors channel is not set in module initialization context
+var ErrNoErrorsCtx = errors.New("errors not set in module initialization context")
+
+// withInitCtx wraps init function and returns a hook that can be used in
 // the module system
 // Passed context should have visor value under visorKey key, this visor will be used
 // in the passed function
-func withVisorCtx(f initFn) vinit.Hook {
+// Passed context should have errors channel for module runtime errors. It can be accessed
+// through a function call
+func withInitCtx(f initFn) vinit.Hook {
 	return func(ctx context.Context, log *logging.Logger) error {
 		val := ctx.Value(visorKey)
 		v, ok := val.(*Visor)
 		if !ok && v == nil {
 			return ErrNoVisorInCtx
 		}
+		val = ctx.Value(runtimeErrsKey)
+		errs, ok := val.(chan error)
+		if !ok && errs == nil {
+			return ErrNoErrorsCtx
+		}
 		return f(ctx, v, log)
 	}
+}
+
+func getErrors(ctx context.Context) chan error {
+	val := ctx.Value(runtimeErrsKey)
+	errs, ok := val.(chan error)
+	if !ok && errs == nil {
+		// ok to panic because with check for this value in withInitCtx
+		// probably will never be reached, but better than generic NPE just in case
+		panic("runtime errors channel is not set in context")
+	}
+	return errs
 }
