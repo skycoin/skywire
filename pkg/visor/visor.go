@@ -107,6 +107,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	v.startedAt = time.Now()
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
+	runtimeErrors := make(chan error)
+	ctx = context.WithValue(ctx, runtimeErrsKey, runtimeErrors)
 	registerModules(v.MasterLogger())
 	if v.conf.Hypervisor == nil {
 		vis.InitConcurrent(ctx)
