@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -60,16 +61,24 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	pty := dmsgpty.NewHost(dmsgC, wl)
 
 	if ptyPort := conf.Port; ptyPort != 0 {
-		ctx, cancel := context.WithCancel(context.Background())
-		if err := runAsync(func() error { return pty.ListenAndServe(ctx, ptyPort) }); err != nil {
-			cancel()
-			return fmt.Errorf("serve cli stopped: %w", err)
-		}
+		serveCtx, cancel := context.WithCancel(context.Background())
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
 
-		v.pushCloseStack("dmsgpty.serve", func() error {
+		go func() {
+			defer wg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ListenAndServe(serveCtx, ptyPort); err != nil {
+				runtimeErrors <- fmt.Errorf("listen and serve stopped: %w", err)
+			}
+		}()
+
+		v.pushCloseStack("router.serve", func() error {
 			cancel()
+			wg.Wait()
 			return nil
 		})
+
 	}
 
 	if conf.CLINet != "" {
@@ -86,16 +95,22 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			return err
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		serveCtx, cancel := context.WithCancel(context.Background())
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
 
-		if err := runAsync(func() error { return pty.ServeCLI(ctx, cliL) }); err != nil {
-			cancel()
-			return fmt.Errorf("serve cli stopped: %w", err)
-		}
+		go func() {
+			defer wg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ServeCLI(serveCtx, cliL); err != nil {
+				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
+			}
+		}()
 
-		v.pushCloseStack("dmsgpty.cli", func() error {
+		v.pushCloseStack("router.serve", func() error {
 			cancel()
 			err := cliL.Close()
+			wg.Wait()
 			return err
 		})
 	}
