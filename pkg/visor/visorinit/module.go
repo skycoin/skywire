@@ -94,7 +94,7 @@ func (m *Module) InitSequential(ctx context.Context) error {
 		return nil
 	}
 	defer m.stop()
-	m.log.Infof("Starting %s", m.Name)
+	m.log.Infof("Starting")
 	start := time.Now()
 	for _, dep := range m.deps {
 		err := dep.InitSequential(ctx)
@@ -108,7 +108,7 @@ func (m *Module) InitSequential(ctx context.Context) error {
 	startSelf := time.Now()
 	// init the module itself
 	err := m.init(ctx, m.log)
-	m.log.Infof("Initialized %s in %s (%s with dependencies)", m.Name, time.Since(startSelf), time.Since(start))
+	m.log.Infof("Initialized in %s (%s with dependencies)", time.Since(startSelf), time.Since(start))
 	return err
 }
 
@@ -138,7 +138,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		return
 	}
 	defer m.stop()
-	m.log.Infof("Starting %s", m.Name)
+	m.log.Infof("Starting")
 	start := time.Now()
 	// start init in every dependency
 	for _, dep := range m.deps {
@@ -165,7 +165,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 	startSelf := time.Now()
 	// init the module itself
 	err := m.init(ctx, m.log)
-	m.log.Infof("Initialized %s in %s (%s with dependencies)", m.Name, time.Since(startSelf), time.Since(start))
+	m.log.Infof("Initialized in %s (%s with dependencies)", time.Since(startSelf), time.Since(start))
 	if err != nil {
 		m.err = err
 	}
