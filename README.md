@@ -11,11 +11,6 @@
   - [Run `skywire-visor`](#run-skywire-visor)
     - [Using the Skywire VPN](#using-the-skywire-vpn)
   - [Creating a GitHub release](#creating-a-github-release)
-    - [How to create a GitHub release](#how-to-create-a-github-release)
-
-## Build
-
-Skywire requires a Golang version of `1.16` or higher.
 
 ```bash
 # Clone.
