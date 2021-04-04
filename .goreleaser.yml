@@ -26,7 +26,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -47,7 +47,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -68,7 +68,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -89,7 +89,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -110,7 +110,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -131,7 +131,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -152,7 +152,7 @@ builds:
       - arm64
       - arm
     goarm:
-      - 7
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
