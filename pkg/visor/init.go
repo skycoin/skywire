@@ -576,10 +576,6 @@ func initTrustedVisors(ctx context.Context, v *Visor, log *logging.Logger) error
 }
 
 func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
-	if v.conf.Hypervisor == nil {
-		return nil
-	}
-
 	v.log.Infof("Initializing hypervisor")
 
 	ctx, cancel := context.WithCancel(context.Background())
