@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorinit"
 )
 
 var (
@@ -114,12 +115,14 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	registerModules(v.MasterLogger())
+	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {
-		vis.InitConcurrent(ctx)
+		mainModule = vis
 	} else {
-		hv.InitConcurrent(ctx)
+		mainModule = hv
 	}
-	if err := vis.Wait(ctx); err != nil {
+	mainModule.InitConcurrent(ctx)
+	if err := mainModule.Wait(ctx); err != nil {
 		log.Error(err)
 		return nil, false
 	}
