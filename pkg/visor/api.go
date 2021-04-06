@@ -277,7 +277,10 @@ func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
 	if appName == skyenv.VPNClientName {
-		envs, err = makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		// todo: can we use some kind of app start hook that will be used for both autostart
+		// and start? Reason: this is also called in init for autostart
+		maker := vpnEnvMaker(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		envs, err = maker()
 		if err != nil {
 			return err
 		}
