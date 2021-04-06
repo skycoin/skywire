@@ -40,7 +40,7 @@ var ErrNoInit = errors.New("module initialization function is not set")
 
 // MakeModule returns a new module with given init function and dependencies
 func MakeModule(name string, init Hook, ml *logging.MasterLogger, deps ...*Module) Module {
-	done := make(chan struct{}, 0)
+	done := make(chan struct{})
 	mux := new(sync.Mutex)
 	return Module{
 		Name: name,
@@ -53,7 +53,7 @@ func MakeModule(name string, init Hook, ml *logging.MasterLogger, deps ...*Modul
 }
 
 // start module initialiation process
-// return true if successfuly started, false otherwise
+// return true if successfully started, false otherwise
 // start can fail in case if init has already started concurrently,
 // or if the module has finished initializing
 func (m *Module) start() bool {
@@ -148,7 +148,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 	// wait for every dependency to finish
 	// collect error status for each, and set own error in case
 	// any dependency errored
-	// when cancelled return immediately
+	// when canceled return immediately
 	// todo: waitgroup + errors channel might be quicker to fail than
 	// iterating and waiting
 	for _, dep := range m.deps {
