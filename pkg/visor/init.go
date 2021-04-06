@@ -393,9 +393,9 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	err = launch.AutoStart(map[string]func() ([]string, error){
-		skyenv.VPNClientName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs()) },
-		skyenv.VPNServerName: func() ([]string, error) { return makeVPNEnvs(v.conf, v.net, nil) },
+	err = launch.AutoStart(launcher.EnvMap{
+		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.net, v.tpM.STCPRRemoteAddrs()),
+		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.net, nil),
 	})
 
 	if err != nil {
@@ -411,57 +411,60 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func makeVPNEnvs(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) ([]string, error) {
-	var envCfg vpn.DirectRoutesEnvConfig
+// Make an env maker function for vpn application
+func vpnEnvMaker(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) launcher.EnvMaker {
+	return launcher.EnvMaker(func() ([]string, error) {
+		var envCfg vpn.DirectRoutesEnvConfig
 
-	if conf.Dmsg != nil {
-		envCfg.DmsgDiscovery = conf.Dmsg.Discovery
+		if conf.Dmsg != nil {
+			envCfg.DmsgDiscovery = conf.Dmsg.Discovery
 
-		r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
-		err := r.Do(context.Background(), func() error {
-			for _, ses := range n.Dmsg().AllSessions() {
-				envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+			r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
+			err := r.Do(context.Background(), func() error {
+				for _, ses := range n.Dmsg().AllSessions() {
+					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
+				}
+
+				if len(envCfg.DmsgServers) == 0 {
+					return errors.New("no dmsg servers found")
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 			}
-
-			if len(envCfg.DmsgServers) == 0 {
-				return errors.New("no dmsg servers found")
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			return nil, fmt.Errorf("error getting Dmsg servers: %w", err)
 		}
-	}
 
-	if conf.Transport != nil {
-		envCfg.TPDiscovery = conf.Transport.Discovery
-		envCfg.AddressResolver = conf.Transport.AddressResolver
-	}
+		if conf.Transport != nil {
+			envCfg.TPDiscovery = conf.Transport.Discovery
+			envCfg.AddressResolver = conf.Transport.AddressResolver
+		}
 
-	if conf.Routing != nil {
-		envCfg.RF = conf.Routing.RouteFinder
-	}
+		if conf.Routing != nil {
+			envCfg.RF = conf.Routing.RouteFinder
+		}
 
-	if conf.UptimeTracker != nil {
-		envCfg.UptimeTracker = conf.UptimeTracker.Addr
-	}
+		if conf.UptimeTracker != nil {
+			envCfg.UptimeTracker = conf.UptimeTracker.Addr
+		}
 
-	if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
-		envCfg.STCPTable = conf.STCP.PKTable
-	}
+		if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {
+			envCfg.STCPTable = conf.STCP.PKTable
+		}
 
-	envCfg.TPRemoteIPs = tpRemoteAddrs
+		envCfg.TPRemoteIPs = tpRemoteAddrs
 
-	envMap := vpn.AppEnvArgs(envCfg)
+		envMap := vpn.AppEnvArgs(envCfg)
 
-	envs := make([]string, 0, len(envMap))
-	for k, v := range envMap {
-		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
-	}
+		envs := make([]string, 0, len(envMap))
+		for k, v := range envMap {
+			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+		}
 
-	return envs, nil
+		return envs, nil
+	})
 }
 
 func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
