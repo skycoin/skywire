@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
