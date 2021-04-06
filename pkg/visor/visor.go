@@ -63,6 +63,10 @@ type Visor struct {
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
 	initLock    *sync.Mutex
+	// when module is failed it pushes its error to this channel
+	// used by init and shutdown to show/check for any residual errors
+	// produced by concurrent parts of modules
+	runtimeErrors chan error
 }
 
 // todo: consider moving module closing to the module system
@@ -107,8 +111,8 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	v.startedAt = time.Now()
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, visorKey, v)
-	runtimeErrors := make(chan error)
-	ctx = context.WithValue(ctx, runtimeErrsKey, runtimeErrors)
+	v.runtimeErrors = make(chan error)
+	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	registerModules(v.MasterLogger())
 	if v.conf.Hypervisor == nil {
 		vis.InitConcurrent(ctx)
@@ -117,11 +121,27 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 	}
 	if err := vis.Wait(ctx); err != nil {
 		log.Error(err)
-		return v, false
+		return nil, false
 	}
-	// todo: add a goroutine that will watch for module runtime errors and stop visor
-	// in case there are any
+	// todo: rewrite to be infinite concurrent loop that will watch for
+	// module runtime errors and act on it (by stopping visor for example)
+	if !v.processRuntimeErrs() {
+		return nil, false
+	}
 	return v, true
+}
+
+func (v *Visor) processRuntimeErrs() bool {
+	ok := true
+	for {
+		select {
+		case err := <-v.runtimeErrors:
+			v.log.Error(err)
+			ok = false
+		default:
+			return ok
+		}
+	}
 }
 
 // Close safely stops spawned Apps and Visor.
@@ -168,6 +188,7 @@ func (v *Visor) Close() error {
 			log.WithField("elapsed", time.Since(start)).Error("Module timed out.")
 		}
 	}
+	v.processRuntimeErrs()
 	log.Info("Shutdown complete. Goodbye!")
 	return nil
 }
