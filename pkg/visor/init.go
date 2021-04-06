@@ -33,7 +33,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/updater"
-	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -596,7 +595,7 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
 
-	serveDmsg(ctx, v.log, hv, conf)
+	hv.serveDmsg(ctx, v.log)
 
 	// Serve HTTP(s).
 	v.log.WithField("addr", conf.HTTPAddr).
@@ -622,7 +621,6 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-// todo: consider moving to td package
 func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	const (
 		initBO = 1 * time.Second
@@ -655,17 +653,6 @@ func connectToTpDisc(v *Visor) (transport.DiscoveryClient, error) {
 	}
 
 	return tpdC, nil
-}
-
-// todo: move to hypervisor file, make a method and remove conf argument
-func serveDmsg(ctx context.Context, log *logging.Logger, hv *Hypervisor, conf hypervisorconfig.Config) {
-	go func() {
-		if err := hv.ServeRPC(ctx, conf.DmsgPort); err != nil {
-			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
-		}
-	}()
-	log.WithField("addr", dmsg.Addr{PK: conf.PK, Port: conf.DmsgPort}).
-		Info("Serving RPC client over dmsg.")
 }
 
 // ErrNoVisorInCtx is returned when visor is not set in module initialization context
