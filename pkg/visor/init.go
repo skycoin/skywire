@@ -320,10 +320,23 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	// todo: this can be abstracted out as some kind of task
-	// what we do is basically run a task concurrently, add
-	// closeStack function to close it and then wait for it to signal ending
-	// failure to run task is reported to runtime errors channel
+	// todo: this piece is somewhat ugly and inherited from the times when init was
+	// calling init functions sequentially
+	// It is probably a hack to run init
+	// "somewhat concurrently", where the heaviest init functions will be partially concurrent
+
+	// to avoid this we can:
+	// either introduce some kind of "task" functionality that abstracts out
+	// something that has to be run concurrent to the init, and check on their status
+	// stop in close functions, etc
+
+	// or, we can completely rely on the module system, and just wait for everything
+	// in init functions, instead of spawning more goroutines.
+	// but, even though modules themselves are concurrent this can introduce some
+	// performance penalties, because dependencies will be waiting on complete init
+
+	// leaving as it is until future requirements about init and modules are known
+
 	serveCtx, cancel := context.WithCancel(context.Background())
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
