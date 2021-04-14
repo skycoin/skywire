@@ -26,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -48,8 +49,9 @@ type Visor struct {
 	reportCh   chan vReport
 	closeStack []closeElem
 
-	conf *visorconfig.V1
-	log  *logging.Logger
+	conf     *visorconfig.V1
+	log      *logging.Logger
+	logstore logstore.Store
 
 	startedAt     time.Time
 	restartCtx    *restart.Context
@@ -115,6 +117,13 @@ func (v *Visor) pushCloseStack(src string, fn func() bool) {
 // MasterLogger returns the underlying master logger (currently contained in visor config).
 func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
+}
+
+func (v *Visor) setupRuntimeLogStore() {
+	store := logstore.MakeStore(0)
+	ml := v.MasterLogger()
+	ml.AddHook(store.GetHook())
+	v.logstore = store
 }
 
 // NewVisor constructs new Visor.
