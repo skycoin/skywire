@@ -120,9 +120,9 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 }
 
 func (v *Visor) setupRuntimeLogStore() {
-	store, hook := logstore.MakeStore(0)
-	ml := v.MasterLogger()
-	ml.AddHook(hook)
+	// todo: add config to change the capacity of in-memory log store
+	store, hook := logstore.MakeStore(5)
+	v.MasterLogger().AddHook(hook)
 	v.logstore = store
 }
 
