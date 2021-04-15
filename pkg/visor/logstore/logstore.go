@@ -6,6 +6,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// LogRealLineKey is a key in the log enry that denote real log line number
+// in the total log (not limited by capacity of runtime log store)
+const LogRealLineKey = "real_line"
+
 // Store is in-memory log store that returns all logs as a single string
 type Store interface {
 	// get logs returns stored logs and the number of log entries overwritten
@@ -75,7 +79,8 @@ func (s *store) Levels() []logrus.Level {
 
 func (s *store) Fire(entry *logrus.Entry) error {
 	idx := s.n % s.max
-	s.entries[idx] = entry
+	e := entry.WithField(LogRealLineKey, s.n)
+	s.entries[idx] = e
 	s.n++
 	return nil
 }
