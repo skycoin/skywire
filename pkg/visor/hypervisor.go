@@ -257,7 +257,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/ws/running", hv.isVisorWSUpdateRunning())
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
-				r.Post("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
+				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 			})
 		})
 

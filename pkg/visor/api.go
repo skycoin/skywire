@@ -728,5 +728,5 @@ func (v *Visor) UpdateStatus() (string, error) {
 
 // RuntimeLogs returns visor runtime logs
 func (v *Visor) RuntimeLogs() (string, error) {
-	return "", nil
+	return v.logstore.GetLogStr()
 }

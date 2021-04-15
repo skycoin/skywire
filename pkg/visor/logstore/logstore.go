@@ -38,8 +38,9 @@ func (s *store) GetLogs() ([]*logrus.Entry, int64) {
 	if s.n < s.max {
 		return s.collectLogs(0, s.n), 0
 	}
-	logs := s.collectLogs(s.n, s.max)
-	logs = append(logs, s.collectLogs(0, s.n)...)
+	idx := s.n % s.max
+	logs := s.collectLogs(idx, s.max)
+	logs = append(logs, s.collectLogs(0, idx)...)
 	return logs, s.n - s.max
 }
 

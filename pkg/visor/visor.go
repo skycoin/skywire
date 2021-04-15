@@ -143,6 +143,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		v.conf.MasterLogger().SetLevel(logLvl)
 		logging.SetLevel(logLvl)
 	}
+	v.setupRuntimeLogStore()
 
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
