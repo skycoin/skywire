@@ -70,6 +70,7 @@ type API interface {
 	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
+	RuntimeLogs() (string, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -723,4 +724,9 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 // UpdateStatus returns status of the current updating operation.
 func (v *Visor) UpdateStatus() (string, error) {
 	return v.updater.Status(), nil
+}
+
+// RuntimeLogs returns visor runtime logs
+func (v *Visor) RuntimeLogs() (string, error) {
+	return "", nil
 }
