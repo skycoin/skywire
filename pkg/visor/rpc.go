@@ -538,3 +538,9 @@ func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
 	*status, err = r.visor.UpdateStatus()
 	return
 }
+
+// RuntimeLogs returns visor runtime logs
+func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
+	*logs, err = r.visor.RuntimeLogs()
+	return
+}
