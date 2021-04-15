@@ -1312,7 +1312,9 @@ func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		httputil.WriteJSON(w, r, http.StatusOK, logs)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(logs))
 	})
 }
 

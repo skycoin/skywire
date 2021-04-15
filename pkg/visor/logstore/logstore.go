@@ -23,14 +23,16 @@ type Store interface {
 // store log entries
 func MakeStore(max int) (Store, logrus.Hook) {
 	entries := make([]*logrus.Entry, max)
-	store := &store{max: int64(max), entries: entries}
+	formatter := &logrus.JSONFormatter{}
+	store := &store{max: int64(max), entries: entries, formatter: formatter}
 	return store, store
 }
 
 type store struct {
-	max     int64
-	n       int64
-	entries []*logrus.Entry
+	max       int64
+	n         int64
+	entries   []*logrus.Entry
+	formatter logrus.Formatter
 }
 
 // GetLogs returns most resent log lines (up to max log lines is stored)
@@ -58,11 +60,11 @@ func (s *store) GetLogStr() (string, error) {
 	logs, _ := s.GetLogs()
 	var sb strings.Builder
 	for _, entry := range logs {
-		s, err := entry.String()
+		bs, err := s.formatter.Format(entry)
 		if err != nil {
 			return "", err
 		}
-		sb.WriteString(s)
+		sb.WriteString(string(bs))
 	}
 	return sb.String(), nil
 }
