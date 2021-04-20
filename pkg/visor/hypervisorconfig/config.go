@@ -3,7 +3,6 @@ package hypervisorconfig
 import (
 	"encoding/hex"
 	"encoding/json"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/skycoin/dmsg/cipher"
+	"io/fs"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
