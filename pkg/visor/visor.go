@@ -41,6 +41,7 @@ const (
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
 	moduleShutdownTimeout = time.Second * 2
+	runtimeLogMaxEntries  = 300
 )
 
 // Visor provides messaging runtime for Apps by setting up all
@@ -121,7 +122,7 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 
 func (v *Visor) setupRuntimeLogStore() {
 	// todo: add config to change the capacity of in-memory log store
-	store, hook := logstore.MakeStore(5)
+	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	v.MasterLogger().AddHook(hook)
 	v.logstore = store
 }
