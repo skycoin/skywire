@@ -1,14 +1,14 @@
-//go:generate esc -o static.go -prefix static static
-
 /*
 skychat app for skywire visor
 */
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -39,6 +39,9 @@ var (
 	connsMu  sync.Mutex
 )
 
+//go:embed static
+var embededFiles embed.FS
+
 func main() {
 	appC = app.NewClient(nil)
 	defer appC.Close()
@@ -56,7 +59,7 @@ func main() {
 	conns = make(map[cipher.PubKey]net.Conn)
 	go listenLoop()
 
-	http.Handle("/", http.FileServer(FS(false)))
+	http.Handle("/", http.FileServer(getFileSystem(false)))
 	http.HandleFunc("/message", messageHandler)
 	http.HandleFunc("/sse", sseHandler)
 
@@ -199,4 +202,19 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
+}
+
+func getFileSystem(useOS bool) http.FileSystem {
+	if useOS {
+		fmt.Print("using live mode")
+		return http.FS(os.DirFS("static"))
+	}
+
+	fmt.Print("using embed mode")
+	fsys, err := fs.Sub(embededFiles, "static")
+	if err != nil {
+		panic(err)
+	}
+
+	return http.FS(fsys)
 }
