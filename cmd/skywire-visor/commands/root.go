@@ -2,10 +2,8 @@ package commands
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io"
-	"io/fs"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
@@ -14,6 +12,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"embed"
+	"io/fs"
 
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"

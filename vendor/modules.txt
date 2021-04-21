@@ -1,13 +1,13 @@
-# github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
+# github.com/AudriusButkevicius/pfilter v0.0.0-20210218141631-7468b85d810a
 ## explicit
 github.com/AudriusButkevicius/pfilter
-# github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
+# github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46
 ## explicit
 github.com/StackExchange/wmi
-# github.com/VictoriaMetrics/metrics v1.12.3
+# github.com/VictoriaMetrics/metrics v1.17.2
 ## explicit
 github.com/VictoriaMetrics/metrics
-# github.com/andybalholm/brotli v0.0.0-20190621154722-5f990b63d2d6
+# github.com/andybalholm/brotli v1.0.0
 github.com/andybalholm/brotli
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 ## explicit
@@ -28,24 +28,21 @@ github.com/dsnet/compress/internal/prefix
 ## explicit
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
-# github.com/go-ole/go-ole v1.2.4
+# github.com/go-ole/go-ole v1.2.5
 ## explicit
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
-# github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
-github.com/golang/gddo/httputil
-github.com/golang/gddo/httputil/header
-# github.com/golang/protobuf v1.4.2
+# github.com/golang/protobuf v1.5.2
 ## explicit
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/google/go-github v17.0.0+incompatible
 ## explicit
 github.com/google/go-github/github
-# github.com/google/go-querystring v1.0.0
+# github.com/google/go-querystring v1.1.0
 ## explicit
 github.com/google/go-querystring/query
-# github.com/google/uuid v1.1.1
+# github.com/google/uuid v1.2.0
 ## explicit
 github.com/google/uuid
 # github.com/gorilla/securecookie v1.1.1
@@ -55,18 +52,19 @@ github.com/gorilla/securecookie
 github.com/inconshreveable/mousetrap
 # github.com/json-iterator/go v1.1.10
 github.com/json-iterator/go
-# github.com/klauspost/compress v1.10.0
+# github.com/klauspost/compress v1.10.10
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/fse
+github.com/klauspost/compress/gzip
 github.com/klauspost/compress/huff0
 github.com/klauspost/compress/snappy
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/klauspost/cpuid v1.2.4
-github.com/klauspost/cpuid
-# github.com/klauspost/pgzip v1.2.1
+# github.com/klauspost/cpuid/v2 v2.0.2
+github.com/klauspost/cpuid/v2
+# github.com/klauspost/pgzip v1.2.4
 github.com/klauspost/pgzip
-# github.com/klauspost/reedsolomon v1.9.9
+# github.com/klauspost/reedsolomon v1.9.12
 ## explicit
 github.com/klauspost/reedsolomon
 # github.com/kz/discordrus v1.2.0
@@ -79,36 +77,24 @@ github.com/mattn/go-isatty
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
 github.com/mgutz/ansi
-# github.com/mholt/archiver/v3 v3.3.0
+# github.com/mholt/archiver/v3 v3.5.0
 ## explicit
 github.com/mholt/archiver/v3
 # github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 github.com/mitchellh/colorstring
-# github.com/mmcloughlin/avo v0.0.0-20200523190732-4439b6b2c061
-## explicit
-github.com/mmcloughlin/avo/attr
-github.com/mmcloughlin/avo/build
-github.com/mmcloughlin/avo/buildtags
-github.com/mmcloughlin/avo/gotypes
-github.com/mmcloughlin/avo/internal/prnt
-github.com/mmcloughlin/avo/internal/stack
-github.com/mmcloughlin/avo/ir
-github.com/mmcloughlin/avo/operand
-github.com/mmcloughlin/avo/pass
-github.com/mmcloughlin/avo/printer
-github.com/mmcloughlin/avo/reg
-github.com/mmcloughlin/avo/src
-github.com/mmcloughlin/avo/x86
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
-# github.com/nwaples/rardecode v1.0.0
+# github.com/nwaples/rardecode v1.1.0
 github.com/nwaples/rardecode
-# github.com/pierrec/lz4 v2.0.5+incompatible
-github.com/pierrec/lz4
-github.com/pierrec/lz4/internal/xxh32
-# github.com/pkg/errors v0.8.1
+# github.com/pierrec/lz4/v4 v4.0.3
+github.com/pierrec/lz4/v4
+github.com/pierrec/lz4/v4/internal/lz4block
+github.com/pierrec/lz4/v4/internal/lz4errors
+github.com/pierrec/lz4/v4/internal/lz4stream
+github.com/pierrec/lz4/v4/internal/xxh32
+# github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
 # github.com/pkg/profile v1.5.0
@@ -116,23 +102,21 @@ github.com/pkg/errors
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/prometheus/client_golang v1.7.1
-## explicit
 # github.com/schollz/progressbar/v2 v2.15.0
 ## explicit
 github.com/schollz/progressbar/v2
-# github.com/shirou/gopsutil v2.20.5+incompatible
+# github.com/shirou/gopsutil v3.21.3+incompatible
 ## explicit
 github.com/shirou/gopsutil/cpu
 github.com/shirou/gopsutil/internal/common
 github.com/shirou/gopsutil/mem
 github.com/shirou/gopsutil/net
 github.com/shirou/gopsutil/process
-# github.com/sirupsen/logrus v1.7.0
+# github.com/sirupsen/logrus v1.8.1
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
+# github.com/skycoin/dmsg v0.0.0-20210329160412-4e25fc9ad26c
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
@@ -165,14 +149,14 @@ github.com/skycoin/yamux
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
-# github.com/spf13/cobra v1.0.0
+# github.com/spf13/cobra v1.1.3
 ## explicit
 github.com/spf13/cobra
-# github.com/spf13/pflag v1.0.3
+# github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
 # github.com/stretchr/objx v0.1.1
 github.com/stretchr/objx
-# github.com/stretchr/testify v1.6.1
+# github.com/stretchr/testify v1.7.0
 ## explicit
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
@@ -186,13 +170,18 @@ github.com/templexxx/cpufeat
 # github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b
 ## explicit
 github.com/templexxx/xor
-# github.com/tjfoc/gmsm v1.3.2
+# github.com/tjfoc/gmsm v1.4.0
 ## explicit
 github.com/tjfoc/gmsm/sm4
+# github.com/tklauser/go-sysconf v0.3.5
+## explicit
+github.com/tklauser/go-sysconf
+# github.com/tklauser/numcpus v0.2.2
+github.com/tklauser/numcpus
 # github.com/toqueteos/webbrowser v1.2.0
 ## explicit
 github.com/toqueteos/webbrowser
-# github.com/ulikunitz/xz v0.5.6
+# github.com/ulikunitz/xz v0.5.7
 github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
 github.com/ulikunitz/xz/internal/xlog
@@ -211,7 +200,7 @@ github.com/xtaci/kcp-go
 # go.etcd.io/bbolt v1.3.5
 ## explicit
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9
+# golang.org/x/crypto v0.0.0-20210415154028-4f45737414dc
 ## explicit
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
@@ -229,7 +218,7 @@ golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/net v0.0.0-20200625001655-4c5254603344
+# golang.org/x/net v0.0.0-20210420210106-798c2154c571
 ## explicit
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -240,7 +229,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20201214210602-f9fddec55a1e
+# golang.org/x/sys v0.0.0-20210420205809-ac73e9fd8988
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
@@ -248,26 +237,14 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf
+# golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72
 ## explicit
 golang.org/x/term
-# golang.org/x/text v0.3.2
+# golang.org/x/text v0.3.6
 golang.org/x/text/transform
 golang.org/x/text/unicode/norm
-# golang.org/x/tools v0.0.0-20200425043458-8463f397d07c
-golang.org/x/tools/go/gcexportdata
-golang.org/x/tools/go/internal/gcimporter
-golang.org/x/tools/go/internal/packagesdriver
-golang.org/x/tools/go/packages
-golang.org/x/tools/internal/event
-golang.org/x/tools/internal/event/core
-golang.org/x/tools/internal/event/keys
-golang.org/x/tools/internal/event/label
-golang.org/x/tools/internal/gocommand
-golang.org/x/tools/internal/packagesinternal
-# golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
-golang.org/x/xerrors
-golang.org/x/xerrors/internal
+# golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
+## explicit
 # golang.zx2c4.com/wireguard v0.0.20200320
 ## explicit
 golang.zx2c4.com/wireguard/rwcancel
@@ -280,7 +257,7 @@ golang.zx2c4.com/wireguard/tun/wintun/registry
 golang.zx2c4.com/wireguard/tun/wintun/setupapi
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
-# nhooyr.io/websocket v1.8.2
+# nhooyr.io/websocket v1.8.7
 ## explicit
 nhooyr.io/websocket
 nhooyr.io/websocket/internal/bpool
