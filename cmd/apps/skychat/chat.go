@@ -59,7 +59,7 @@ func main() {
 	conns = make(map[cipher.PubKey]net.Conn)
 	go listenLoop()
 
-	http.Handle("/", http.FileServer(getFileSystem(false)))
+	http.Handle("/", http.FileServer(getFileSystem()))
 	http.HandleFunc("/message", messageHandler)
 	http.HandleFunc("/sse", sseHandler)
 
@@ -204,17 +204,10 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func getFileSystem(useOS bool) http.FileSystem {
-	if useOS {
-		fmt.Print("using live mode")
-		return http.FS(os.DirFS("static"))
-	}
-
-	fmt.Print("using embed mode")
+func getFileSystem() http.FileSystem {
 	fsys, err := fs.Sub(embededFiles, "static")
 	if err != nil {
 		panic(err)
 	}
-
 	return http.FS(fsys)
 }
