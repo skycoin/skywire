@@ -93,7 +93,6 @@ func (d *PacketFilter) Start() {
 
 func (d *PacketFilter) loop() {
 	var buf []byte
-next:
 	for {
 		buf = bufPool.Get().([]byte)
 		n, addr, err := d.conn.ReadFrom(buf)
@@ -104,33 +103,39 @@ next:
 			buf:  buf[:n],
 		}
 
-		d.mut.Lock()
-		conns := d.conns
-		d.mut.Unlock()
-
 		if err != nil {
-			for _, conn := range conns {
+			d.mut.Lock()
+			for _, conn := range d.conns {
 				select {
 				case conn.recvBuffer <- pkt:
 				default:
 					atomic.AddUint64(&d.overflow, 1)
 				}
 			}
+			d.mut.Unlock()
 			return
 		}
 
-		for _, conn := range conns {
-			if conn.filter == nil || conn.filter.ClaimIncoming(pkt.buf, pkt.addr) {
-				select {
-				case conn.recvBuffer <- pkt:
-				default:
-					bufPool.Put(pkt.buf[:maxPacketSize])
-					atomic.AddUint64(&d.overflow, 1)
-				}
-				goto next
-			}
+		d.mut.Lock()
+		sent := d.sendPacketLocked(pkt)
+		d.mut.Unlock()
+		if !sent {
+			atomic.AddUint64(&d.dropped, 1)
 		}
 		bufPool.Put(pkt.buf[:maxPacketSize])
-		atomic.AddUint64(&d.dropped, 1)
 	}
+}
+
+func (d *PacketFilter) sendPacketLocked(pkt packet) bool {
+	for _, conn := range d.conns {
+		if conn.filter == nil || conn.filter.ClaimIncoming(pkt.buf, pkt.addr) {
+			select {
+			case conn.recvBuffer <- pkt:
+			default:
+				atomic.AddUint64(&d.overflow, 1)
+			}
+			return true
+		}
+	}
+	return false
 }
