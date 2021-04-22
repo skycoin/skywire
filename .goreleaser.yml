@@ -26,8 +26,28 @@ builds:
       - arm64
       - arm
     goarm:
-      - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/skywire-visor/
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+- id: skywire-visor-armv6
+    binary: skywire-visor
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -48,8 +68,28 @@ builds:
       - arm64
       - arm
     goarm:
-      - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/skywire-cli/
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+  - id: skywire-cli-armv6
+    binary: skywire-cli
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -70,8 +110,28 @@ builds:
       - arm64
       - arm
     goarm:
-      - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/skychat/
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+- id: skychat-armv6
+    binary: apps/skychat
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -92,8 +152,28 @@ builds:
       - arm64
       - arm
     goarm:
-      - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/skysocks/
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+  - id: skysocks-armv6
+    binary: apps/skysocks
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -114,8 +194,28 @@ builds:
       - arm64
       - arm
     goarm:
-      - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/skysocks-client/
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+  - id: skysocks-client-armv6
+    binary: apps/skysocks-client
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -136,8 +236,28 @@ builds:
       - arm64
       - arm
     goarm:
-      - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/vpn-server/
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+- id: vpn-server-armv6
+    binary: apps/vpn-server
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
@@ -158,8 +278,28 @@ builds:
       - arm64
       - arm
     goarm:
-      - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: darwin
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/apps/vpn-client/
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+- id: vpn-client-armv6
+    binary: apps/vpn-client
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+    goarm:
+      - 6
     ignore:
       - goos: darwin
         goarch: 386
