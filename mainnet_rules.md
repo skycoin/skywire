@@ -233,7 +233,8 @@ The following hardware is accepted in the Skywire mainnet:
      - 3-Model-B
      - 3-Model-B+
      - 4-Model-B
-     - Compute Model 3
+     - Compute Module 3
+     - Compute Module 4
      - Zero-W
      - Zero
 
@@ -302,6 +303,7 @@ The following hardware is accepted in the Skywire mainnet:
 
 #### Odroid
      - C2
+     - C4
      - HC1
      - HC2
      - MC1
