@@ -172,7 +172,7 @@ builds:
 archives:
   - format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
