@@ -36,7 +36,7 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/skywire-visor/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
-- id: skywire-visor-armv6
+  - id: skywire-visor-armv6
     binary: skywire-visor
     goos:
       - linux
@@ -120,7 +120,7 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/apps/skychat/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
-- id: skychat-armv6
+  - id: skychat-armv6
     binary: apps/skychat
     goos:
       - linux
@@ -246,7 +246,7 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/apps/vpn-server/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
-- id: vpn-server-armv6
+  - id: vpn-server-armv6
     binary: apps/vpn-server
     goos:
       - linux
@@ -288,7 +288,7 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
-- id: vpn-client-armv6
+  - id: vpn-client-armv6
     binary: apps/vpn-client
     goos:
       - linux
