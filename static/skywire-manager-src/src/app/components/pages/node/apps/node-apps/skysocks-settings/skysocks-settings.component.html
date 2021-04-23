@@ -27,7 +27,7 @@
         {{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}
       </mat-error>
     </mat-form-field>
-    <div class="main-theme settings-option">
+    <div class="main-theme settings-option" *ngIf="configuringVpn">
       <mat-checkbox
         color="primary"
         [checked]="secureMode"
