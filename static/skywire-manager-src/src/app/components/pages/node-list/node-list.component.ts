@@ -357,7 +357,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           if (result) {
             // If the data was obtained.
-            if (result.data) {
+            if (result.data && !result.error) {
               this.allNodes = result.data as Node[];
               if (this.showDmsgInfo) {
                 // Add the label data to the array, to be able to use it for filtering and sorting.
