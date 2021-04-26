@@ -39,6 +39,8 @@ var (
 	connsMu  sync.Mutex
 )
 
+// the go embed static points to skywire/cmd/apps/skychat/static
+
 //go:embed static
 var embededFiles embed.FS
 
