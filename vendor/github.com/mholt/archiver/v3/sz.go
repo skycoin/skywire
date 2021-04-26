@@ -13,7 +13,7 @@ type Snappy struct{}
 
 // Compress reads in, compresses it, and writes it to out.
 func (s *Snappy) Compress(in io.Reader, out io.Writer) error {
-	w := snappy.NewBufferedWriter(out)
+	w := snappy.NewWriter(out)
 	defer w.Close()
 	_, err := io.Copy(w, in)
 	return err
