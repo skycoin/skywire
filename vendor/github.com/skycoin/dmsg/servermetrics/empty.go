@@ -1,5 +1,9 @@
 package servermetrics
 
+import (
+	"net/http"
+)
+
 // NewEmpty constructs new empty metrics.
 func NewEmpty() Empty {
 	return Empty{}
@@ -14,11 +18,5 @@ func (Empty) RecordSession(_ DeltaType) {}
 // RecordStream implements `Metrics`.
 func (Empty) RecordStream(_ DeltaType) {}
 
-// SetPacketsPerMinute implements `Metrics`.
-func (Empty) SetPacketsPerMinute(_ uint64) {}
-
-// SetPacketsPerSecond implements `Metrics`.
-func (Empty) SetPacketsPerSecond(_ uint64) {}
-
-// SetClientsCount implements `Metrics`.
-func (Empty) SetClientsCount(_ int64) {}
+// HandleDisc implements `Metrics`.
+func (Empty) HandleDisc(next http.Handler) http.HandlerFunc { return next.ServeHTTP }

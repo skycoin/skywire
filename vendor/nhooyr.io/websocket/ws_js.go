@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"reflect"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall/js"
 
@@ -255,9 +254,6 @@ func dial(ctx context.Context, url string, opts *DialOptions) (*Conn, *http.Resp
 	if opts == nil {
 		opts = &DialOptions{}
 	}
-
-	url = strings.Replace(url, "http://", "ws://", 1)
-	url = strings.Replace(url, "https://", "wss://", 1)
 
 	ws, err := wsjs.New(url, opts.Subprotocols)
 	if err != nil {

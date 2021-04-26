@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/pierrec/lz4/v4"
+	"github.com/pierrec/lz4"
 )
 
 // TarLz4 facilitates lz4 compression
@@ -84,14 +84,7 @@ func (tlz4 *TarLz4) wrapWriter() {
 	var lz4w *lz4.Writer
 	tlz4.Tar.writerWrapFn = func(w io.Writer) (io.Writer, error) {
 		lz4w = lz4.NewWriter(w)
-		// TODO archiver v4: use proper lz4.Fast
-		// bitshifting for backwards compatibility with lz4/v3
-		options := []lz4.Option{
-			lz4.CompressionLevelOption(lz4.CompressionLevel(1 << (8 + tlz4.CompressionLevel))),
-		}
-		if err := lz4w.Apply(options...); err != nil {
-			return lz4w, err
-		}
+		lz4w.Header.CompressionLevel = tlz4.CompressionLevel
 		return lz4w, nil
 	}
 	tlz4.Tar.cleanupWrapFn = func() {
