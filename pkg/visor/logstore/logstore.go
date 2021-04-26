@@ -28,26 +28,28 @@ type Store interface {
 func MakeStore(max int) (Store, logrus.Hook) {
 	entries := make([]*logrus.Entry, max)
 	formatter := &logrus.JSONFormatter{}
-	store := &store{max: int64(max), entries: entries, formatter: formatter}
+	store := &store{cap: int64(max), entries: entries, formatter: formatter}
 	return store, store
 }
 
 type store struct {
-	max       int64
-	n         int64
+	// max number of entries to hold simultaneously
+	cap int64
+	// number of the next entry to come (also number of entries processed since the beginning)
+	entryNum  int64
 	entries   []*logrus.Entry
 	formatter logrus.Formatter
 }
 
-// GetLogs returns most resent log lines (up to max log lines is stored)
+// GetLogs returns most resent log lines (up to cap log lines is stored)
 func (s *store) GetLogs() ([]*logrus.Entry, int64) {
-	if s.n < s.max {
-		return s.collectLogs(0, s.n), 0
+	if s.entryNum < s.cap {
+		return s.collectLogs(0, s.entryNum), 0
 	}
-	idx := s.n % s.max
-	logs := s.collectLogs(idx, s.max)
+	idx := s.entryNum % s.cap
+	logs := s.collectLogs(idx, s.cap)
 	logs = append(logs, s.collectLogs(0, idx)...)
-	return logs, s.n - s.max
+	return logs, s.entryNum - s.cap
 }
 
 // collect log lines into a single string, starting at from (inclusive)
@@ -60,6 +62,8 @@ func (s *store) collectLogs(from, to int64) []*logrus.Entry {
 	return logs
 }
 
+// GetLogStr returns logs as a single string
+// log entries are formatted with store formatter and concatenated together
 func (s *store) GetLogStr() (string, error) {
 	logs, _ := s.GetLogs()
 	var sb strings.Builder
@@ -73,14 +77,18 @@ func (s *store) GetLogStr() (string, error) {
 	return sb.String(), nil
 }
 
+// Levels implements logrus.Hook interface. It denotes log levels
+// that we are interested in
 func (s *store) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
+// Fire implements logrus.Hook interface to process new log entry
+// that we simply store
 func (s *store) Fire(entry *logrus.Entry) error {
-	idx := s.n % s.max
-	e := entry.WithField(LogRealLineKey, s.n)
+	idx := s.entryNum % s.cap
+	e := entry.WithField(LogRealLineKey, s.entryNum)
 	s.entries[idx] = e
-	s.n++
+	s.entryNum++
 	return nil
 }
