@@ -18,7 +18,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/klauspost/cpuid/v2"
+	"github.com/klauspost/cpuid"
 )
 
 // Encoder is an interface to encode Reed-Salomon parity sets for your data.
@@ -110,16 +110,15 @@ type reedSolomon struct {
 	ParityShards int // Number of parity shards, should not be modified.
 	Shards       int // Total number of shards. Calculated, and should not be modified.
 	m            matrix
-	tree         *inversionTree
+	tree         inversionTree
 	parity       [][]byte
 	o            options
 	mPool        sync.Pool
 }
 
 // ErrInvShardNum will be returned by New, if you attempt to create
-// an Encoder with less than one data shard or less than zero parity
-// shards.
-var ErrInvShardNum = errors.New("cannot create Encoder with less than one data shard or less than zero parity shards")
+// an Encoder where either data or parity shards is zero or less.
+var ErrInvShardNum = errors.New("cannot create Encoder with zero or less data/parity shards")
 
 // ErrMaxShardNum will be returned by New, if you attempt to create an
 // Encoder where data and parity shards are bigger than the order of
@@ -250,16 +249,12 @@ func New(dataShards, parityShards int, opts ...Option) (Encoder, error) {
 	for _, opt := range opts {
 		opt(&r.o)
 	}
-	if dataShards <= 0 || parityShards < 0 {
+	if dataShards <= 0 || parityShards <= 0 {
 		return nil, ErrInvShardNum
 	}
 
 	if dataShards+parityShards > 256 {
 		return nil, ErrMaxShardNum
-	}
-
-	if parityShards == 0 {
-		return &r, nil
 	}
 
 	var err error
@@ -338,9 +333,7 @@ func New(dataShards, parityShards int, opts ...Option) (Encoder, error) {
 	// The inversion root node will have the identity matrix as
 	// its inversion matrix because it implies there are no errors
 	// with the original data.
-	if r.o.inversionCache {
-		r.tree = newInversionTree(dataShards, parityShards)
-	}
+	r.tree = newInversionTree(dataShards, parityShards)
 
 	r.parity = make([][]byte, parityShards)
 	for i := range r.parity {
@@ -428,10 +421,6 @@ func (r *reedSolomon) Update(shards [][]byte, newDatashards [][]byte) error {
 }
 
 func (r *reedSolomon) updateParityShards(matrixRows, oldinputs, newinputs, outputs [][]byte, outputCount, byteCount int) {
-	if len(outputs) == 0 {
-		return
-	}
-
 	if r.o.maxGoroutines > 1 && byteCount > r.o.minSplitSize {
 		r.updateParityShardsP(matrixRows, oldinputs, newinputs, outputs, outputCount, byteCount)
 		return
@@ -531,7 +520,7 @@ func (r *reedSolomon) codeSomeShards(matrixRows, inputs, outputs [][]byte, outpu
 	if end > len(inputs[0]) {
 		end = len(inputs[0])
 	}
-	if avx2CodeGen && r.o.useAVX2 && byteCount >= 32 && len(inputs)+len(outputs) >= 4 && len(inputs) <= maxAvx2Inputs && len(outputs) <= maxAvx2Outputs {
+	if avx2CodeGen && r.o.useAVX2 && byteCount >= 32 && len(inputs) > 1 && len(outputs) > 1 && len(inputs) <= maxAvx2Inputs && len(outputs) <= maxAvx2Outputs {
 		m := genAvx2Matrix(matrixRows, len(inputs), len(outputs), r.mPool.Get().([]byte))
 		start += galMulSlicesAvx2(m, inputs, outputs, 0, byteCount)
 		r.mPool.Put(m)
@@ -561,23 +550,18 @@ func (r *reedSolomon) codeSomeShards(matrixRows, inputs, outputs [][]byte, outpu
 // several goroutines.
 func (r *reedSolomon) codeSomeShardsP(matrixRows, inputs, outputs [][]byte, outputCount, byteCount int) {
 	var wg sync.WaitGroup
-	gor := r.o.maxGoroutines
-
-	var avx2Matrix []byte
-	useAvx2 := avx2CodeGen && r.o.useAVX2 && byteCount >= 32 && len(inputs)+len(outputs) >= 4 && len(inputs) <= maxAvx2Inputs && len(outputs) <= maxAvx2Outputs
-	if useAvx2 {
-		avx2Matrix = genAvx2Matrix(matrixRows, len(inputs), len(outputs), r.mPool.Get().([]byte))
-		defer r.mPool.Put(avx2Matrix)
-	}
-
-	do := byteCount / gor
+	do := byteCount / r.o.maxGoroutines
 	if do < r.o.minSplitSize {
 		do = r.o.minSplitSize
 	}
-
 	// Make sizes divisible by 64
 	do = (do + 63) & (^63)
 	start := 0
+	var avx2Matrix []byte
+	if avx2CodeGen && r.o.useAVX2 && byteCount >= 32 && len(inputs) > 1 && len(outputs) > 1 && len(inputs) <= maxAvx2Inputs && len(outputs) <= maxAvx2Outputs {
+		avx2Matrix = genAvx2Matrix(matrixRows, len(inputs), len(outputs), r.mPool.Get().([]byte))
+		defer r.mPool.Put(avx2Matrix)
+	}
 	for start < byteCount {
 		if start+do > byteCount {
 			do = byteCount - start
@@ -585,7 +569,7 @@ func (r *reedSolomon) codeSomeShardsP(matrixRows, inputs, outputs [][]byte, outp
 
 		wg.Add(1)
 		go func(start, stop int) {
-			if useAvx2 && stop-start >= 32 {
+			if avx2CodeGen && r.o.useAVX2 && stop-start >= 32 && len(inputs) > 1 && len(outputs) > 1 && len(inputs) <= maxAvx2Inputs && len(outputs) <= maxAvx2Outputs {
 				start += galMulSlicesAvx2(avx2Matrix, inputs, outputs, start, stop)
 			}
 
@@ -621,9 +605,6 @@ func (r *reedSolomon) codeSomeShardsP(matrixRows, inputs, outputs [][]byte, outp
 // except this will check values and return
 // as soon as a difference is found.
 func (r *reedSolomon) checkSomeShards(matrixRows, inputs, toCheck [][]byte, outputCount, byteCount int) bool {
-	if len(toCheck) == 0 {
-		return true
-	}
 	if r.o.maxGoroutines > 1 && byteCount > r.o.minSplitSize {
 		return r.checkSomeShardsP(matrixRows, inputs, toCheck, outputCount, byteCount)
 	}

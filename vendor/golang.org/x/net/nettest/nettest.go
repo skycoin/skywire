@@ -126,7 +126,7 @@ func TestableNetwork(network string) bool {
 		}
 	case "unixpacket":
 		switch runtime.GOOS {
-		case "aix", "android", "fuchsia", "hurd", "darwin", "ios", "js", "nacl", "plan9", "windows", "zos":
+		case "aix", "android", "fuchsia", "hurd", "darwin", "ios", "js", "nacl", "plan9", "windows":
 			return false
 		case "netbsd":
 			// It passes on amd64 at least. 386 fails

@@ -218,10 +218,7 @@ func (m matrix) gaussianElimination() error {
 		if m[r][r] == 0 {
 			for rowBelow := r + 1; rowBelow < rows; rowBelow++ {
 				if m[rowBelow][r] != 0 {
-					err := m.SwapRows(r, rowBelow)
-					if err != nil {
-						return err
-					}
+					m.SwapRows(r, rowBelow)
 					break
 				}
 			}
