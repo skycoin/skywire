@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/httpauth"
+	nu "github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/util/buildinfo"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 )
@@ -23,6 +24,7 @@ import (
 var (
 	// ErrVisorUnreachable is returned when visor is unreachable.
 	ErrVisorUnreachable = errors.New("visor is unreachable")
+	updateRetryDelay    = 5 * time.Second
 )
 
 // Config configures the HTTPClient.
@@ -238,41 +240,11 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duration) {
 	defer func() { _ = c.DeleteEntry(context.Background()) }() //nolint:errcheck
 
-	update := func() error {
-		for {
-			c.entryMx.Lock()
-			entry, err := c.UpdateEntry(ctx)
-			c.entryMx.Unlock()
-
-			if err != nil {
-				if errors.Is(err, ErrVisorUnreachable) {
-					c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
-					return err
-				}
-
-				c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
-				time.Sleep(time.Second * 10) // TODO(evanlinjin): Exponential backoff.
-				continue
-			}
-
-			c.entryMx.Lock()
-			j, err := json.Marshal(entry)
-			c.entryMx.Unlock()
-
-			if err != nil {
-				panic(err)
-			}
-
-			c.log.WithField("entry", string(j)).Debug("Entry updated.")
-			return nil
-		}
-	}
-
 	ticker := time.NewTicker(updateInterval)
 	defer ticker.Stop()
 
 	for {
-		if err := update(); errors.Is(err, ErrVisorUnreachable) {
+		if err := c.Update(ctx); errors.Is(err, ErrVisorUnreachable) {
 			return
 		}
 
@@ -282,6 +254,36 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 		case <-ticker.C:
 		}
 	}
+}
+
+// Update calls 'POST /api/services' to update service discovery entry
+// it performs exponential backoff in case of errors during update, unless
+// the error is unrecoverable from
+func (c *HTTPClient) Update(ctx context.Context) error {
+	retrier := nu.NewRetrier(updateRetryDelay, 0, 2).WithErrWhitelist(ErrVisorUnreachable)
+	run := func() error {
+		c.entryMx.Lock()
+		entry, err := c.UpdateEntry(ctx)
+		c.entryMx.Unlock()
+
+		if errors.Is(err, ErrVisorUnreachable) {
+			c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
+			return err
+		}
+
+		if err != nil {
+			c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
+			return err
+		}
+
+		c.entryMx.Lock()
+		j, err := json.Marshal(entry)
+		c.entryMx.Unlock()
+
+		c.log.WithField("entry", string(j)).Debug("Entry updated.")
+		return nil
+	}
+	return retrier.Do(run)
 }
 
 // UpdateStats updates the stats field of the internal service entry state.
