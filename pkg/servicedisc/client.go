@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -246,7 +245,7 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 			c.entryMx.Unlock()
 
 			if err != nil {
-				if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
+				if errors.Is(err, ErrVisorUnreachable) {
 					c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
 					return err
 				}
@@ -273,10 +272,8 @@ func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duratio
 	defer ticker.Stop()
 
 	for {
-		if err := update(); err != nil {
-			if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
-				return
-			}
+		if err := update(); errors.Is(err, ErrVisorUnreachable) {
+			return
 		}
 
 		select {
