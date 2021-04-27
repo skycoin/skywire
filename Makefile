@@ -94,7 +94,7 @@ test: ## Run tests
 install-linters: ## Install linters
 	- VERSION=latest ./ci_scripts/install-golangci-lint.sh
 	${OPTS} go get -u golang.org/x/tools/cmd/goimports
-	${OPTS} go get -u github.com/incu6us/goimports-reviser
+	${OPTS} go get -u github.com/incu6us/goimports-reviser/v2
 
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
