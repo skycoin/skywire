@@ -143,18 +143,12 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) error {
 	c.entryMx.Lock()
 	defer c.entryMx.Unlock()
 	if c.conf.Type == ServiceTypeVisor && len(c.entry.LocalIPs) == 0 {
-		networkIfc, err := netutil.DefaultNetworkInterface()
+		ips, err := netutil.DefaultNetworkInterfaceIPs()
 		if err != nil {
-			return fmt.Errorf("failed to get default network interface: %w", err)
+			return err
 		}
-
-		localIPs, err := netutil.NetworkInterfaceIPs(networkIfc)
-		if err != nil {
-			return fmt.Errorf("failed to get IPs of %s: %w", networkIfc, err)
-		}
-
-		c.entry.LocalIPs = make([]string, 0, len(localIPs))
-		for _, ip := range localIPs {
+		c.entry.LocalIPs = make([]string, 0, len(ips))
+		for _, ip := range ips {
 			c.entry.LocalIPs = append(c.entry.LocalIPs, ip.String())
 		}
 	}

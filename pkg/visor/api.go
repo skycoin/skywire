@@ -104,16 +104,6 @@ func (v *Visor) Summary() (*Summary, error) {
 		return true
 	})
 
-	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get default network interface: %w", err)
-	}
-
-	localIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get IPs of interface %s: %w", defaultNetworkIfc, err)
-	}
-
 	summary := &Summary{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
@@ -121,6 +111,11 @@ func (v *Visor) Summary() (*Summary, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      summaries,
 		RoutesCount:     v.router.RoutesCount(),
+	}
+
+	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		return nil, err
 	}
 
 	if len(localIPs) > 0 {
