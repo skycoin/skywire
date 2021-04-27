@@ -135,46 +135,59 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 	return out, err
 }
 
-// UpdateEntry calls 'POST /api/services'.
+// UpdateEntry calls 'POST /api/services', retrieves the entry
+// and updates local field with the result
+// if there are no ip addresses in the entry it also tries to fetch those
+// from local config
 func (c *HTTPClient) UpdateEntry(ctx context.Context) error {
-	if c.conf.Type == ServiceTypeVisor {
-		if len(c.entry.LocalIPs) == 0 {
-			networkIfc, err := netutil.DefaultNetworkInterface()
-			if err != nil {
-				return fmt.Errorf("failed to get default network interface: %w", err)
-			}
+	c.entryMx.Lock()
+	defer c.entryMx.Unlock()
+	if c.conf.Type == ServiceTypeVisor && len(c.entry.LocalIPs) == 0 {
+		networkIfc, err := netutil.DefaultNetworkInterface()
+		if err != nil {
+			return fmt.Errorf("failed to get default network interface: %w", err)
+		}
 
-			localIPs, err := netutil.NetworkInterfaceIPs(networkIfc)
-			if err != nil {
-				return fmt.Errorf("failed to get IPs of %s: %w", networkIfc, err)
-			}
+		localIPs, err := netutil.NetworkInterfaceIPs(networkIfc)
+		if err != nil {
+			return fmt.Errorf("failed to get IPs of %s: %w", networkIfc, err)
+		}
 
-			c.entry.LocalIPs = make([]string, 0, len(localIPs))
-			for _, ip := range localIPs {
-				c.entry.LocalIPs = append(c.entry.LocalIPs, ip.String())
-			}
+		c.entry.LocalIPs = make([]string, 0, len(localIPs))
+		for _, ip := range localIPs {
+			c.entry.LocalIPs = append(c.entry.LocalIPs, ip.String())
 		}
 	}
+	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
 
-	auth, err := c.Auth(ctx)
+	entry, err := c.postEntry(ctx)
 	if err != nil {
 		return err
 	}
+	c.entry = entry
+	return nil
+}
 
-	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
+// postEntry calls 'POST /api/services' and sends current service entry
+// as the payload
+func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
+	auth, err := c.Auth(ctx)
+	if err != nil {
+		return Service{}, err
+	}
 
 	raw, err := json.Marshal(&c.entry)
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/services", ""), bytes.NewReader(raw))
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 
 	resp, err := auth.Do(req)
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 	if resp != nil {
 		defer func() {
@@ -187,26 +200,20 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) error {
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return fmt.Errorf("read response body: %w", err)
+			return Service{}, fmt.Errorf("read response body: %w", err)
 		}
 
 		var hErr HTTPResponse
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
-			return err
+			return Service{}, err
 		}
 
-		return hErr.Error
+		return Service{}, hErr.Error
 	}
 
 	var entry Service
 	err = json.NewDecoder(resp.Body).Decode(&entry)
-	if err != nil {
-		return err
-	}
-	c.entryMx.Lock()
-	c.entry = entry
-	c.entryMx.Unlock()
-	return err
+	return entry, err
 }
 
 // DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
