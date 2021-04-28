@@ -97,6 +97,7 @@ func initSNet(v *Visor) bool {
 		ARClient:       v.arClient,
 		NetworkConfigs: nc,
 		ServiceDisc:    v.serviceDisc,
+		IsPublic:       v.conf.IsPublic,
 	}
 
 	n, err := snet.New(conf, v.ebc)
