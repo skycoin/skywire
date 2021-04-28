@@ -21,11 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/snettest"
 )
 
-const (
-	// PublicVisorsDelay defines a delay before adding transports to public visors.
-	PublicVisorsDelay = 5 * time.Second
-)
-
 // TPCloseCallback triggers after a session is closed.
 type TPCloseCallback func(network, addr string)
 
