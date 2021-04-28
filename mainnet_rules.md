@@ -225,6 +225,7 @@ The following hardware is accepted in the Skywire mainnet:
      - Zero LTS
      - Zero-Plus
      - Zero-Plus2
+     - 3
 
 #### Raspberry Pi
      - 1-Model-A+
