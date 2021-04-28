@@ -6,11 +6,14 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/internal/netutil"
 )
 
 const (
 	// PublicServiceDelay defines a delay before adding transports to public services.
 	PublicServiceDelay = 5 * time.Second
+
+	fetchServicesDelay = 2 * time.Second
 )
 
 // ConnectFn provides a way to connect to remote service
@@ -44,18 +47,23 @@ func MakeConnector(conf Config, maxConns int, log *logging.Logger) Autoconnector
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context, connector ConnectFn, checker CheckConnFN) error {
+	retrier := netutil.NewRetrier(fetchServicesDelay, 0, 2)
 	for {
 		time.Sleep(PublicServiceDelay * 2)
 		a.checkConns(checker)
 		if len(a.conns) == a.maxConns {
 			continue
 		}
-		services, err := a.client.Services(ctx, a.maxConns)
-		if err != nil {
-			// todo: exponential backoff
-			a.log.WithError(err).Errorln("Failed to fetch services")
-			continue
+		var services []Service
+		fetch := func() (err error) {
+			// "return" services up from the closure
+			services, err = a.client.Services(ctx, a.maxConns)
+			if err != nil {
+				return err
+			}
+			return nil
 		}
+		retrier.Do(fetch)
 
 		for _, service := range services {
 			pk := service.Addr.PubKey()
