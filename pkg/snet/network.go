@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/directtp"
 	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -76,6 +77,7 @@ type Config struct {
 	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
 	ServiceDisc    appdisc.Factory
+	IsPublic       bool
 }
 
 // NetworkConfigs represents all network configs.
@@ -225,7 +227,6 @@ func (n *Network) Init() error {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
-
 			go n.registerAsPublic(client)
 		} else {
 			log.Infof("No config found for stcpr")
@@ -243,7 +244,28 @@ func (n *Network) Init() error {
 	return nil
 }
 
+func (n *Network) shouldRegisterAsPublic() bool {
+	if !n.conf.IsPublic {
+		return false
+	}
+	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		return false
+	}
+	for _, IP := range defaultIPs {
+		if netutil.IsPublicIP(IP) {
+			return true
+		}
+	}
+	return false
+}
+
 func (n *Network) registerAsPublic(client directtp.Client) {
+	// check involves getting some OS information which migh take non-zero time,
+	// so moved in this function that runs in its own goroutine
+	if !n.shouldRegisterAsPublic() {
+		return
+	}
 	log.Infoln("Trying to register visor as public")
 
 	la, err := client.LocalAddr()
