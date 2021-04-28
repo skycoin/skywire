@@ -516,7 +516,7 @@ func initPublicVisors(v *Visor) bool {
 	}
 	discCl := servicedisc.NewClient(log, conf)
 
-	if v.conf.Launcher.Discovery.PublicVisorsEnabled {
+	if v.conf.Transport.AutoconnectPublic {
 		go func() {
 			time.Sleep(transport.PublicVisorsDelay * 2)
 

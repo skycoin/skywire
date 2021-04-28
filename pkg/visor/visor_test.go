@@ -65,6 +65,7 @@ func TestNewVisor(t *testing.T) {
 			LogStore: &visorconfig.V1LogStore{
 				Type: visorconfig.MemoryLogStore,
 			},
+			AutoconnectPublic: false,
 		},
 		Routing: &visorconfig.V1Routing{
 			SetupNodes:         nil,
@@ -79,9 +80,8 @@ func TestNewVisor(t *testing.T) {
 				{Name: "bar", AutoStart: true, Port: 2},
 			},
 			Discovery: &visorconfig.V1AppDisc{
-				UpdateInterval:      0,
-				ServiceDisc:         "",
-				PublicVisorsEnabled: false,
+				UpdateInterval: 0,
+				ServiceDisc:    "",
 			},
 		},
 	}
