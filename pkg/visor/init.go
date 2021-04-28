@@ -489,8 +489,10 @@ func initUptimeTracker(v *Visor) bool {
 }
 
 func initPublicVisors(v *Visor) bool {
-	const tpType = tptypes.STCPR
-
+	if !v.conf.Transport.AutoconnectPublic {
+		return true
+	}
+	log := v.MasterLogger().PackageLogger("public_visors")
 	proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
 	if proxyDisc == "" {
 		proxyDisc = skyenv.DefaultServiceDiscAddr
@@ -498,13 +500,13 @@ func initPublicVisors(v *Visor) bool {
 
 	_, portStr, err := net.SplitHostPort(v.conf.STCP.LocalAddr)
 	if err != nil {
-		v.log.WithError(err).Errorln("Failed to parse address string")
+		log.WithError(err).Errorln("Failed to parse address string")
 		return false
 	}
 
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		v.log.WithError(err).Errorln("Failed to parse port")
+		log.WithError(err).Errorln("Failed to parse port")
 		return false
 	}
 
@@ -515,36 +517,24 @@ func initPublicVisors(v *Visor) bool {
 		Port:     uint16(port),
 		DiscAddr: proxyDisc,
 	}
-	discCl := servicedisc.NewClient(log, conf)
-
-	if v.conf.Transport.AutoconnectPublic {
-		go func() {
-			time.Sleep(transport.PublicVisorsDelay * 2)
-
-			visors, err := discCl.Services(context.Background(), 5)
-			if err != nil {
-				log.WithError(err).Errorln("Failed to fetch public visors")
-				return
-			}
-
-			for _, visor := range visors {
-				pk := visor.Addr.PubKey()
-				v.log.WithField("pk", pk).Infoln("Adding transport to public visor")
-				if _, err := v.tpM.SaveTransport(context.Background(), pk, tpType); err != nil {
-					v.log.
-						WithError(err).
-						WithField("pk", pk).
-						WithField("type", tpType).
-						Warnln("Failed to add transport to public visor via")
-				} else {
-					v.log.
-						WithField("pk", pk).
-						WithField("type", tpType).
-						Infoln("Added transport to public visor")
-				}
-			}
-		}()
-	}
+	connectFn := servicedisc.ConnectFn(func(ctx context.Context, pk cipher.PubKey) error {
+		log.WithField("pk", pk).Infoln("Adding transport to public visor")
+		if _, err := v.tpM.SaveTransport(ctx, pk, tptypes.STCPR); err != nil {
+			log.
+				WithError(err).
+				WithField("pk", pk).
+				WithField("type", tptypes.STCPR).
+				Warnln("Failed to add transport to public visor via")
+			return err
+		}
+		log.
+			WithField("pk", pk).
+			WithField("type", tptypes.STCPR).
+			Infoln("Added transport to public visor")
+		return nil
+	})
+	connector := servicedisc.MakeConnector(conf, 5, log)
+	go connector.Run(context.Background(), connectFn)
 
 	return true
 }
