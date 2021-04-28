@@ -460,10 +460,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     const nodesData: NodeData[] = [];
     this.dataSource.forEach(node => {
-      nodesData.push({
-        key: node.localPk,
-        label: node.label,
-      });
+      if (node.online) {
+        nodesData.push({
+          key: node.localPk,
+          label: node.label,
+        });
+      }
     });
 
     UpdateComponent.openDialog(this.dialog, nodesData);

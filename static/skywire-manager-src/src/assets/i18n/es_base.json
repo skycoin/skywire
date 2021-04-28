@@ -131,7 +131,7 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
-    "update-all": "Update all visors",
+    "update-all": "Update all online visors",
     "hypervisor": "Hypervisor",
     "state": "State",
     "state-tooltip": "Current state",
