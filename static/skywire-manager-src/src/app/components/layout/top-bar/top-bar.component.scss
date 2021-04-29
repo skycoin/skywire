@@ -4,14 +4,21 @@
 
 $top-bar-height: 56px;
 
+.normal-height {
+  @media (max-width: (map-get($grid-breakpoints, lg) - 1)) {
+    height: 55px !important;
+  }
+}
+
 .main-container {
   border-bottom: 1px solid $separator;
   padding-bottom: 10px;
   margin-bottom: -5px;
   height: 100px;
+  display: flex;
 
-  @media (max-width: (map-get($grid-breakpoints, lg) - 1)) {
-    height: 55px;
+  .main-area {
+    flex-grow: 1;
   }
 
   .title {
@@ -23,6 +30,11 @@ $top-bar-height: 56px;
 
     .title-text {
       z-index: 1;
+    }
+
+    .title-image {
+      width: 124px;
+      height: 21px;
     }
 
     .return-container {
@@ -66,13 +78,13 @@ $top-bar-height: 56px;
       &[disabled] {
         opacity: 1 !important;
         color: $white;
-        background: rgba(0, 0, 0, 0.7) !important;
-        border-color: rgba(0, 0, 0, 0.1);
+        background: $dark-background !important;
       }
     
       .mat-icon {
-        margin-right: 5px;
+        margin-right: 2px;
         opacity: 0.75;
+        font-size: 18px;
       }
     
       span {
@@ -171,4 +183,133 @@ $top-bar-height: 56px;
 .top-bar-margin {
   margin-top: $top-bar-height;
   flex-shrink: 0;
+}
+
+.vpn-info {
+  font-size: $font-size-mini;
+  background: $dark-background;
+  padding: 15px 20px;
+  align-self: center;
+
+  table {
+    tr {
+      .state-td {
+        font-weight: bold;
+      }
+
+      td {
+        padding: 2px 0;
+        min-width: 90px;
+
+        mat-icon {
+          margin-right: 3px;
+          font-size: 12px;
+          position: relative;
+          top: 1px;
+          user-select: none;
+          width: auto;
+        }
+
+        .state-icon {
+          transform: scale(0.75);
+        }
+
+        .aminated-state-icon-container {
+          width: 0px;
+          height: 0px;
+
+          .state-icon {
+            height: auto;
+            animation: state-icon-animation 1s linear 1;
+          }
+
+          @keyframes state-icon-animation {
+            0% {
+              transform: perspective(1px) scale(1);
+              opacity: 0.8;
+            }
+            100% {
+              transform: scale(2);
+              opacity: 0;
+            }
+          }
+        }
+
+        .animation-container {
+          width: 0px;
+          height: 0px;
+
+          .internal-animation-container {
+            width: 200px;
+
+            .animation-area {
+              display: inline-block;
+              animation: state-animation 1s linear 1;
+              opacity: 0;
+
+              @keyframes state-animation {
+                0% {
+                  transform: scale(1);
+                  opacity: 1;
+                }
+                100% {
+                  transform: scale(2.5);
+                  opacity: 0;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      td:first-of-type {
+        padding-right: 30px;
+      }
+    }
+  }
+
+  mat-spinner ::ng-deep circle {
+    stroke: $white;
+  }
+}
+
+.languaje-button-vpn {
+  font-size: $font-size-mini-plus;
+  text-align: right;
+  margin: -5px 10px 5px 0px;
+
+  .text-container {
+    cursor: pointer;
+    display: inline;
+    opacity: 0.8;
+
+    &:hover {
+      opacity: 1;
+    }
+
+    .language-flag {
+      width: 11px;
+      height: 11px;
+      margin-right: 2px;
+    }
+  }
+}
+
+.remote-vpn-alert-container {
+  background-color: $red;
+  margin: 0 -21px;
+  padding: 10px 20px 15px;
+  text-align: center;
+
+  mat-icon {
+    font-size: 14px;
+  }
+
+  .top-line {
+    font-size: $font-size-lg;
+  }
+
+  .bottom-line {
+    font-size: $font-size-smaller;
+  }
 }

@@ -30,13 +30,3 @@
 .small-column {
   width: 1px;
 }
-
-.online-warning {
-  animation: alert-blinking 1s linear infinite;
-}
-
-@keyframes alert-blinking {
-  50% {
-    opacity: 0.5;
-  }
-}

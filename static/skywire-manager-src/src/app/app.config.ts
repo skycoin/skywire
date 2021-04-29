@@ -44,4 +44,14 @@ export const AppConfig = {
   smallModalWidth: '480px',
   mediumModalWidth: '640px',
   largeModalWidth: '900px',
+
+  /**
+   * Vpn desktop client configuration.
+   */
+  vpn: {
+    /**
+     * If true, a hardcoded ip will be shown in the UI while in development mode.
+     */
+    hardcodedIpWhileDeveloping: true,
+  },
 };

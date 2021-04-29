@@ -88,6 +88,9 @@ export class DataSorter {
   private data: any[];
   // Index inside sortableColumns of the default column.
   private defaultColumnIndex: number;
+  // Index inside sortableColumns of the column used for sorting the data when the currently
+  // selected column is is not enough.
+  private tieBreakerColumnIndex: number = null;
 
   // Prefixes used, along the ID, for saving the sorting options in localStorage.
   private readonly columnStorageKeyPrefix = 'col_';
@@ -171,6 +174,14 @@ export class DataSorter {
    */
   dispose() {
     this.dataUpdatedSubject.complete();
+  }
+
+  /**
+   * Sets the index of the column that will be used for sorting the data when the currently
+   * selected column is is not enough.
+   */
+  setTieBreakerColumnIndex(columnIndex: number) {
+    this.tieBreakerColumnIndex = columnIndex;
   }
 
   /**
@@ -308,7 +319,14 @@ export class DataSorter {
       this.data.sort((a, b) => {
         // Sort using the currently selected column.
         let response = this.getSortResponse(this.sortBy, a, b, true);
-        // If the 2 values are equal, sort using the default column, if it is not already
+        // If the 2 values are equal, sort using the tie-breaker column, if there is
+        // one and if it is not already the selected one.
+        if (response === 0) {
+          if (this.tieBreakerColumnIndex !== null && this.sortableColumns[this.tieBreakerColumnIndex] !== this.sortBy) {
+            response = this.getSortResponse(this.sortableColumns[this.tieBreakerColumnIndex], a, b, false);
+          }
+        }
+        // If the 2 values continue being equal, sort using the default column, if it is not already
         // the selected one.
         if (response === 0) {
           if (this.sortableColumns[this.defaultColumnIndex] !== this.sortBy) {
