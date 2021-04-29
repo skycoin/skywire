@@ -14,6 +14,11 @@ import { AllRoutesComponent } from './components/pages/node/routing/all-routes/a
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
+import { VpnServerListComponent } from './components/vpn/pages/vpn-server-list/vpn-server-list.component';
+import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
+import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
+import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
+import { VpnAuthGuardService } from './services/vpn-auth-guard.service';
 
 const routes: Routes = [
   {
@@ -122,6 +127,47 @@ const routes: Routes = [
         path: 'labels/:page',
         component: AllLabelsComponent
       },
+    ],
+  },
+  {
+    path: 'vpn',
+    canActivate: [VpnAuthGuardService],
+    canActivateChild: [VpnAuthGuardService],
+    children: [
+      {
+        path: 'unavailable',
+        component: VpnErrorComponent
+      },
+      {
+        path: ':key',
+        children: [
+          {
+            path: 'status',
+            component: VpnStatusComponent
+          },
+          {
+            path: 'servers',
+            redirectTo: 'servers/public/1',
+            pathMatch: 'full'
+          },
+          {
+            path: 'servers/:type/:page',
+            component: VpnServerListComponent
+          },
+          {
+            path: 'settings',
+            component: VpnSettingsComponent
+          },
+          {
+            path: '**',
+            redirectTo: 'status'
+          }
+        ]
+      },
+      {
+        path: '**',
+        redirectTo: '/vpn/unavailable?problem=pk'
+      }
     ],
   },
   {
