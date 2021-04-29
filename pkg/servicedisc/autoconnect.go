@@ -6,6 +6,7 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire/internal/netutil"
 )
 
@@ -63,7 +64,10 @@ func (a *autoconnector) Run(ctx context.Context, connector ConnectFn, checker Ch
 			}
 			return nil
 		}
-		retrier.Do(fetch)
+		if err := retrier.Do(fetch); err != nil {
+			a.log.Errorf("Cannot fetch services: %s", err)
+			return err
+		}
 
 		for _, service := range services {
 			pk := service.Addr.PubKey()

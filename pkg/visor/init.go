@@ -540,7 +540,7 @@ func initPublicVisors(v *Visor) bool {
 		return ok
 	})
 	connector := servicedisc.MakeConnector(conf, 5, log)
-	go connector.Run(context.Background(), connectFn, checkFN)
+	go connector.Run(context.Background(), connectFn, checkFN) //nolint:errcheck
 
 	return true
 }
