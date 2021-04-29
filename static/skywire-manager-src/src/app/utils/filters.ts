@@ -1,5 +1,3 @@
-import { PrintableLabel } from './generalUtils';
-
 /**
  * Contains the properties needed for showing the selected filters in the UI.
  * For the UI to work well, at least one of the value properties must have a value.
@@ -67,6 +65,54 @@ export interface FilterProperties {
    * This allows to compare a filter with more than one property.
    */
   secondaryKeyNameInElementsArray?: string;
+  /**
+   * General configuration settings indication how the PrintableLabel elements must be shown
+   * in the UI, if any. If no special configuration is needed, there is no need to set it.
+   */
+  printableLabelGeneralSettings?: PrintableLabelGeneralSettings;
+}
+
+/**
+ * Represents a possible value of a property. It allows to separate the actual value of the
+ * property and the text that will be shown in the UI.
+ */
+export interface PrintableLabel {
+  /**
+   * Actual value.
+   */
+  value: string;
+  /**
+   * Value to be shown in the UI. Preferably a var for the translate pipe.
+   */
+  label: string;
+  /**
+   * URL of the image to show with the label. For it to work, the parent FilterProperties element
+   * must have a valid PrintableLabelGeneralSettings object. If not set, no image is shown.
+   */
+  image?: string;
+}
+
+/**
+ * General configuration settings indication how the PrintableLabel elements must be shown
+ * in the UI.
+ */
+export interface PrintableLabelGeneralSettings {
+  /**
+   * Witdth, in px, of the images that will be shown with the labels in the UI. If any
+   * PrintableLabel element has a value in the image property, this property must have
+   * a valid value.
+   */
+  imageWidth: number;
+  /**
+   * Heigth, in px, of the images that will be shown with the labels in the UI. If any
+   * PrintableLabel element has a value in the image property, this property must have
+   * a valid value.
+   */
+  imageHeight: number;
+  /**
+   * Default image to show if the image set in a PrintableLabel element is not found.
+   */
+  defaultImage: string;
 }
 
 /**

@@ -14,12 +14,23 @@ export class TransportService {
     private apiService: ApiService,
   ) { }
 
+  /**
+   * Creates a transport.
+   * @param nodeKey Public key of the local node.
+   * @param remoteKey Public key of the remote node.
+   * @param type Transport type.
+   */
   create(nodeKey: string, remoteKey: string, type: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/transports`, {
+    const data = {
       remote_pk: remoteKey,
-      transport_type: type,
       public: true,
-    });
+    };
+
+    if (type) {
+      data['transport_type'] = type;
+    }
+
+    return this.apiService.post(`visors/${nodeKey}/transports`, data);
   }
 
   delete(nodeKey: string, transportId: string) {
