@@ -39,9 +39,3 @@ ENTRYPOINT [ "./skywire-visor" ]
 
 # default target
 FROM  visor-runner
-
-LABEL org.opencontainers.image.created="${BUILD_DATE}" \
-    org.opencontainers.image.title="${IMG_NAME}" \
-    org.opencontainers.image.authors="skycoin" \
-    org.opencontainers.image.revision="${VCS_REF}" \
-    org.opencontainers.image.vendor="skycoin"
