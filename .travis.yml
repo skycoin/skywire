@@ -52,5 +52,5 @@ deploy:
     script: make docker-push
     on:
       branch: develop
-      condition: $TRAVIS_PULL_REQUEST = true
+      condition: $TRAVIS_PULL_REQUEST = false
 
