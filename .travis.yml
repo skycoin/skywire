@@ -42,12 +42,12 @@ script:
 
 deploy:
   - provider: script
-    script: make docker-push
+    script: bash ./ci_scripts/docker-push.sh -t "$TRAVIS_BRANCH" -p
     on:
       branch: master
       condition: $TRAVIS_PULL_REQUEST = false
   - provider: script
-    script: make docker-push
+    script: bash ./ci_scripts/docker-push.sh -t "$TRAVIS_BRANCH" -p
     on:
       branch: develop
       condition: $TRAVIS_PULL_REQUEST = false
