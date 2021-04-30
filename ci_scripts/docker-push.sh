@@ -18,10 +18,9 @@ function docker_build() {
 }
 
 function docker_push() {
-  echo "pushed"
-  #  docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
-  #  docker tag skycoin/skywire:"$tag" skycoin/skywire:"$tag"
-  #  docker image push skycoin/skywire:"$tag"
+    docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+    docker tag skycoin/skywire:"$tag" skycoin/skywire:"$tag"
+    docker image push skycoin/skywire:"$tag"
 }
 
 while getopts ":t:pb" o; do
