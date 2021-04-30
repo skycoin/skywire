@@ -24,10 +24,6 @@ RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
 ## Resulting image
 FROM ${base} as visor-runner
 
-ARG BUILD_DATE
-ARG VCS_REF
-ARG IMG_NAME
-
 COPY --from=builder /go/skywire/skywire-visor skywire-visor
 COPY --from=builder /go/skywire/apps bin/apps
 COPY --from=builder /go/skywire/docker/images/visor/update.sh update.sh
