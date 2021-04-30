@@ -41,8 +41,14 @@ script:
   - make build-ui
 
 deploy:
-  provider: script
-  script: make docker-push
-  on:
-    type: push
-    condition: $TRAVIS_BRANCH =~ ^(develop|master)$
+  - provider: script
+    script: make docker-push
+    on:
+      branch: master
+      condition: $TRAVIS_PULL_REQUEST = false
+  - provider: script
+    script: make docker-push
+    on:
+      branch: develop
+      condition: $TRAVIS_PULL_REQUEST = true
+
