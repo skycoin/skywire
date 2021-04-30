@@ -13,6 +13,7 @@ VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
+BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
@@ -24,6 +25,16 @@ DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`go
 DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
+DOCKER_VISOR_IMAGE_NAME?=skywire
+DOCKER_VCS_REF?=${BRANCH}-${COMMIT}
+DOCKER_IMAGE_TAG_NAME:=""
+ifeq (${BRANCH},master)
+	DOCKER_IMAGE_TAG_NAME:=latest
+endif
+ifeq (${BRANCH},develop)
+	DOCKER_IMAGE_TAG_NAME:=test
+endif
+
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
 
@@ -159,7 +170,19 @@ build-ui: install-deps-ui  ## Builds the UI
 
 # Dockerized skywire-visor
 docker-image: ## Build docker image `skywire-runner`
-	docker image build --tag=skywire-runner --rm  - < skywire-runner.Dockerfile
+	#docker image build --tag=skywire-runner --rm  - < skywire-runner.Dockerfile
+	docker image build \
+	--tag=skycoin/skywire:${DOCKER_IMAGE_TAG_NAME} \
+	--build-arg BUILD_DATE=${DATE} \
+	--build-arg VCS_REF=${DOCKER_VCS_REF} \
+	--build-arg IMG_NAME=skywire \
+	-f ./docker/images/visor/Dockerfile .
+
+docker-push: docker-image
+	docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}
+	docker tag skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}  skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}
+	#docker container commit ${COMMIT} skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}
+	docker image push skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}
 
 docker-clean: ## Clean docker system: remove container ${DOCKER_NODE} and network ${DOCKER_NETWORK}
 	-docker network rm ${DOCKER_NETWORK}

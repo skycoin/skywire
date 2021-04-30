@@ -24,6 +24,10 @@ RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
 ## Resulting image
 FROM ${base} as visor-runner
 
+ARG BUILD_DATE
+ARG VCS_REF
+ARG IMG_NAME
+
 COPY --from=builder /go/skywire/skywire-visor skywire-visor
 COPY --from=builder /go/skywire/apps bin/apps
 COPY --from=builder /go/skywire/docker/images/visor/update.sh update.sh
@@ -35,3 +39,9 @@ ENTRYPOINT [ "./skywire-visor" ]
 
 # default target
 FROM  visor-runner
+
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+    org.opencontainers.image.title="${IMG_NAME}" \
+    org.opencontainers.image.authors="skycoin" \
+    org.opencontainers.image.revision="${VCS_REF}" \
+    org.opencontainers.image.vendor="skycoin"
