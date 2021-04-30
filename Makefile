@@ -25,8 +25,6 @@ DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`go
 DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
-DOCKER_VISOR_IMAGE_NAME?=skywire
-DOCKER_VCS_REF?=${BRANCH}-${COMMIT}
 DOCKER_IMAGE_TAG_NAME:=""
 ifeq (${BRANCH},master)
 	DOCKER_IMAGE_TAG_NAME:=latest
@@ -230,19 +228,15 @@ build-ui: install-deps-ui  ## Builds the UI
 	${PWD}/bin/statik -src=$(MANAGER_UI_DIR)/dist -dest ./cmd/skywire-visor -f
 
 # Dockerized skywire-visor
-docker-image: ## Build docker image `skywire-runner`
-	#docker image build --tag=skywire-runner --rm  - < skywire-runner.Dockerfile
+docker-image: ## Build docker image `skywire`
 	docker image build \
 	--tag=skycoin/skywire:${DOCKER_IMAGE_TAG_NAME} \
-	--build-arg BUILD_DATE=${DATE} \
-	--build-arg VCS_REF=${DOCKER_VCS_REF} \
-	--build-arg IMG_NAME=skywire \
 	-f ./docker/images/visor/Dockerfile .
 
+## docker-push, push image to dockerhub
 docker-push: docker-image
 	docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}
 	docker tag skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}  skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}
-	#docker container commit ${COMMIT} skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}
 	docker image push skycoin/skywire:${DOCKER_IMAGE_TAG_NAME}
 
 docker-clean: ## Clean docker system: remove container ${DOCKER_NODE} and network ${DOCKER_NETWORK}
