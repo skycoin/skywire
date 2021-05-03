@@ -1,5 +1,4 @@
 # Builder
-# ARG builder_base=golang:alpine 
 ARG base=alpine
 FROM golang:alpine  as builder
 
@@ -25,7 +24,7 @@ RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
 FROM ${base} as visor-runner
 
 COPY --from=builder /go/skywire/skywire-visor skywire-visor
-COPY --from=builder /go/skywire/apps bin/apps
+COPY --from=builder /go/skywire/apps /apps
 COPY --from=builder /go/skywire/docker/images/visor/update.sh update.sh
 COPY --from=builder /go/skywire/skywire-cli bin/skywire-cli
 COPY --from=builder /go/skywire/docker/images/visor/entrypoint.sh entrypoint.sh
