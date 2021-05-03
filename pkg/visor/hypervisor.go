@@ -470,6 +470,7 @@ type extraSummaryResp struct {
 	Online       bool   `json:"online"`
 	IsHypervisor bool   `json:"is_hypervisor"`
 	*ExtraSummary
+	DmsgStats *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 }
 
 // provides extra summary of single visor.
@@ -488,17 +489,6 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 			ExtraSummary: extraSummary,
 		})
 	})
-}
-
-type singleVisorSummary struct {
-	Summary      *Summary                       `json:"summary"`
-	Health       *HealthInfo                    `json:"health"`
-	Uptime       float64                        `json:"uptime"`
-	Routes       []routingRuleResp              `json:"routes"`
-	TCPAddr      string                         `json:"tcp_addr"`
-	Online       bool                           `json:"online"`
-	IsHypervisor bool                           `json:"is_hypervisor"`
-	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 }
 
 func generateSummary(online, hyper bool, addr dmsg.Addr, extra *ExtraSummary) extraSummaryResp {
@@ -581,10 +571,9 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		wg.Wait()
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Summary.PubKey.String()]; ok {
-				summaries[i].Dmsg = []dmsgtracker.DmsgClientSummary{}
-				summaries[i].Dmsg = append(summaries[i].Dmsg, stat)
+				summaries[i].DmsgStats = &stat
 			} else {
-				summaries[i].Dmsg = []dmsgtracker.DmsgClientSummary{}
+				summaries[i].DmsgStats = &dmsgtracker.DmsgClientSummary{}
 			}
 		}
 
