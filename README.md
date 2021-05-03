@@ -43,7 +43,7 @@ $ skywire-cli visor gen-config --is-hypervisor
 Docker container will create config automatically for you, should you want to run it manually, you can do:
 
 ```bash
-$ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/config \
+$ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
   skycoin/skywire:latest skywire-cli gen-config --is-hypervisor
 ```
 
@@ -61,7 +61,7 @@ $ skywire-cli visor update-config --hypervisor-pks <public-key>
 Or from docker image:
 
 ```bash
-$ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/config \
+$ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
   skycoin/skywire:latest skywire-cli update-config hypervisor-pks <public-key>
 
 ```
@@ -80,7 +80,7 @@ $ sudo skywire-visor -c skywire-config.json
 Or from docker image:
 
 ```bash
-docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/config --name=skywire skycoin/skywire:latest skywire-visor
+docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:latest skywire-visor
 ```
 
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
