@@ -226,7 +226,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/dmsg", hv.getDmsg())
 
 				r.Get("/visors", hv.getVisors())
-				r.Get("/visors-summary", hv.getVisorsExtraSummary())
+				r.Get("/visors-summary", hv.getAllVisorsSummary())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -466,8 +466,9 @@ func (hv *Hypervisor) getVisor() http.HandlerFunc {
 }
 
 type extraSummaryResp struct {
-	TCPAddr string `json:"tcp_addr"`
-	Online  bool   `json:"online"`
+	TCPAddr      string `json:"tcp_addr"`
+	Online       bool   `json:"online"`
+	IsHypervisor bool   `json:"is_hypervisor"`
 	*ExtraSummary
 }
 
@@ -489,7 +490,7 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 	})
 }
 
-type extraSummaryWithDmsgResp struct {
+type singleVisorSummary struct {
 	Summary      *Summary                       `json:"summary"`
 	Health       *HealthInfo                    `json:"health"`
 	Uptime       float64                        `json:"uptime"`
@@ -500,19 +501,21 @@ type extraSummaryWithDmsgResp struct {
 	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 }
 
-func makeExtraSummaryResp(online, hyper bool, addr dmsg.Addr, extra *ExtraSummary) extraSummaryWithDmsgResp {
-	var resp extraSummaryWithDmsgResp
+func generateSummary(online, hyper bool, addr dmsg.Addr, extra *ExtraSummary) extraSummaryResp {
+	var resp extraSummaryResp
 	resp.TCPAddr = addr.String()
 	resp.Online = online
 	resp.IsHypervisor = hyper
-	resp.Summary = extra.Summary
-	resp.Health = extra.Health
-	resp.Uptime = extra.Uptime
-	resp.Routes = extra.Routes
+	resp.ExtraSummary = &ExtraSummary{
+		Summary: extra.Summary,
+		Health:  extra.Health,
+		Uptime:  extra.Uptime,
+		Routes:  extra.Routes,
+	}
 	return resp
 }
 
-func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
+func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
@@ -530,7 +533,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 			wg.Done()
 		}()
 
-		summaries := make([]extraSummaryWithDmsgResp, len(hv.visors)+i)
+		summaries := make([]extraSummaryResp, len(hv.visors)+i)
 
 		summary, err := hv.visor.ExtraSummary()
 		if err != nil {
@@ -544,7 +547,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		}
 
 		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-		summaries[0] = makeExtraSummaryResp(err == nil, true, addr, summary)
+		summaries[0] = generateSummary(err == nil, true, addr, summary)
 
 		for pk, c := range hv.visors {
 			go func(pk cipher.PubKey, c Conn, i int) {
@@ -568,7 +571,7 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 				} else {
 					log.Debug("Obtained summary via RPC.")
 				}
-				resp := makeExtraSummaryResp(err == nil, false, c.Addr, summary)
+				resp := generateSummary(err == nil, false, c.Addr, summary)
 				summaries[i] = resp
 				wg.Done()
 			}(pk, c, i)
@@ -578,9 +581,10 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		wg.Wait()
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Summary.PubKey.String()]; ok {
-				summaries[i].DmsgStats = &stat
+				summaries[i].Dmsg = []dmsgtracker.DmsgClientSummary{}
+				summaries[i].Dmsg = append(summaries[i].Dmsg, stat)
 			} else {
-				summaries[i].DmsgStats = &dmsgtracker.DmsgClientSummary{}
+				summaries[i].Dmsg = []dmsgtracker.DmsgClientSummary{}
 			}
 		}
 
