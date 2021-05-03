@@ -44,7 +44,7 @@ Docker container will create config automatically for you, should you want to ru
 
 ```bash
 $ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/config \
-  skycoin/skywire:latest skywire-cli config-gen --is-hypervisor
+  skycoin/skywire:latest skywire-cli gen-config --is-hypervisor
 ```
 
 After starting up the visor, the UI will be exposed by default on `localhost:8000`.
@@ -80,7 +80,7 @@ $ sudo skywire-visor -c skywire-config.json
 Or from docker image:
 
 ```bash
-docker run --rm -P -v <YOUR_CONFIG_DIR>:/opt/config skywire-visor
+docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/config --name=skywire skycoin/skywire:latest skywire-visor
 ```
 
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
