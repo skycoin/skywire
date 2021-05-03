@@ -158,8 +158,7 @@ build-ui: install-deps-ui  ## Builds the UI
 	make move-built-frontend
 
 # Dockerized skywire-visor
-docker-image: ## Build docker image `skywire-runner`
-	docker image build --tag=skywire-runner --rm  - < skywire-runner.Dockerfile
+docker-image: ## Build docker image `skywire`
 
 docker-clean: ## Clean docker system: remove container ${DOCKER_NODE} and network ${DOCKER_NETWORK}
 	-docker network rm ${DOCKER_NETWORK}
