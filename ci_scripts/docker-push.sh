@@ -18,9 +18,9 @@ function docker_build() {
 }
 
 function docker_push() {
-    docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
-    docker tag skycoin/skywire:"$tag" skycoin/skywire:"$tag"
-    docker image push skycoin/skywire:"$tag"
+  docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+  docker tag skycoin/skywire:"$tag" skycoin/skywire:"$tag"
+  docker image push skycoin/skywire:"$tag"
 }
 
 while getopts ":t:pb" o; do
@@ -29,6 +29,8 @@ while getopts ":t:pb" o; do
     tag="$(echo "${OPTARG}" | tr -d '[:space:]')"
     if [[ $tag == "develop" ]]; then
       tag="test"
+    elif [[ $tag == "master" ]]; then
+      tag="latest"
     fi
     ;;
   p)
