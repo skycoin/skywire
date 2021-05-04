@@ -20,10 +20,6 @@ OPTS?=GO111MODULE=on
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 MANAGER_UI_BUILT_DIR=cmd/skywire-visor/static
-DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`golang`, `buildpack-deps:stretch-scm`  is OK too
-DOCKER_NETWORK?=SKYNET
-DOCKER_NODE?=SKY01
-DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
 
 TEST_OPTS:=-cover -timeout=5m -mod=vendor
 
@@ -156,55 +152,6 @@ build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
 	make move-built-frontend
-
-# Dockerized skywire-visor
-docker-image: ## Build docker image `skywire`
-
-docker-clean: ## Clean docker system: remove container ${DOCKER_NODE} and network ${DOCKER_NETWORK}
-	-docker network rm ${DOCKER_NETWORK}
-	-docker container rm --force ${DOCKER_NODE}
-
-docker-network: ## Create docker network ${DOCKER_NETWORK}
-	-docker network create ${DOCKER_NETWORK}
-
-docker-apps: ## Build apps binaries for dockerized skywire-visor. `go build` with  ${DOCKER_OPTS}
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skychat ./cmd/apps/skychat
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks ./cmd/apps/skysocks
-	-${DOCKER_OPTS} go build -race -o ./visor/apps/skysocks-client  ./cmd/apps/skysocks-client
-
-docker-bin: ## Build `skywire-visor`, `skywire-cli`. `go build` with  ${DOCKER_OPTS}
-	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
-
-docker-volume: dep docker-apps docker-bin bin  ## Prepare docker volume for dockerized skywire-visor
-	-${DOCKER_OPTS} go build  -o ./docker/skywire-services/setup-node ./cmd/setup-node
-	-./skywire-cli visor gen-config -o  ./skywire-visor/skywire.json -r
-	perl -pi -e 's/localhost//g' ./visor/skywire.json # To make visor accessible from outside with skywire-cli
-
-docker-run: docker-clean docker-image docker-network docker-volume ## Run dockerized skywire-visor ${DOCKER_NODE} in image ${DOCKER_IMAGE} with network ${DOCKER_NETWORK}
-	docker run -it -v $(shell pwd)/visor:/sky --network=${DOCKER_NETWORK} \
-		--name=${DOCKER_NODE} ${DOCKER_IMAGE} bash -c "cd /sky && ./skywire-visor skywire.json"
-
-docker-setup-node:	## Runs setup-node in detached state in ${DOCKER_NETWORK}
-	-docker container rm setup-node -f
-	docker run -d --network=${DOCKER_NETWORK}  	\
-	 				--name=setup-node	\
-	 				--hostname=setup-node	skywire-services \
-					  bash -c "./setup-node setup-node.json"
-
-docker-stop: ## Stop running dockerized skywire-visor ${DOCKER_NODE}
-	-docker container stop ${DOCKER_NODE}
-
-docker-rerun: docker-stop
-	-./skywire-cli gen-config -o ./visor/skywire.json -r
-	perl -pi -e 's/localhost//g' ./visor/skywire.json # To make visor accessible from outside with skywire-cli
-	${DOCKER_OPTS} go build -race -o ./visor/skywire-visor ./cmd/skywire-visor
-	docker container start -i ${DOCKER_NODE}
-
-docker-run-syslog: ## Run syslog-ng in docker. Logs are mounted under /tmp/syslog
-	-rm -rf /tmp/syslog
-	-mkdir -p /tmp/syslog
-	-docker container rm syslog-ng -f
-	docker run -d -p 514:514/udp  -v /tmp/syslog:/var/log  --name syslog-ng balabit/syslog-ng:latest
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
