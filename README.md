@@ -14,40 +14,6 @@
 
 ## Build
 
-Skywire requires a Golang version of `1.13` or higher.
-
-```bash
-# Clone.
-$ git clone https://github.com/skycoin/skywire.git
-$ cd skywire
-
-# Build and Install
-$ make build; make install
-
-# OR build docker image
-$ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev HEAD) -b
-```
-
-Skywire can be statically built. For instructions check [the docs](docs/static-builds.md).
-
-## Configure Skywire
-
-### Expose hypervisorUI
-
-In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` flag:
-
-```bash
-$ skywire-cli visor gen-config --is-hypervisor
-```
-
-Docker container will create config automatically for you, should you want to run it manually, you can do:
-
-```bash
-$ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:latest skywire-cli gen-config --is-hypervisor
-```
-
-After starting up the visor, the UI will be exposed by default on `localhost:8000`.
 
 ### Add remote hypervisor
 
