@@ -35,7 +35,6 @@ before_script:
   - ci_scripts/create-ip-aliases.sh
 
 script:
-  - make lint-ci # TODO(evanlinjin): Temporary due to https://github.com/golangci/golangci-lint/issues/827
   - make build
   - make test
   - make test-no-ci
