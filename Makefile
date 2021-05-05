@@ -87,18 +87,12 @@ install: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' ./cmd/skywire-visor ./cmd/skywire-cli ./cmd/setup-node
 
-rerun: stop
-	${OPTS} go build -race -o ./skywire-visor ./cmd/skywire-visor
-	-./skywire-cli visor gen-config -o  ./skywire.json -r
-	perl -pi -e 's/localhost//g' ./skywire.json
-	./skywire-visor skywire.json
-
-lint-ci:
-	${OPTS} golangci-lint run --build-tags=musl -c .golangci.yml ./...
-
 lint: ## Run linters. Use make install-linters first
 	${OPTS} golangci-lint run -c .golangci.yml ./...
 	# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
+
+lint-ci:
+	${OPTS} golangci-lint run --build-tags=musl -c .golangci.yml ./...
 
 lint-extra: ## Run linters with extra checks.
 	${OPTS} golangci-lint run --no-config --enable-all ./...

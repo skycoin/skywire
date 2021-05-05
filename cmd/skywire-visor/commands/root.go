@@ -90,13 +90,6 @@ var rootCmd = &cobra.Command{
 	Version: buildinfo.Version(),
 }
 
-// Execute executes root CLI command.
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-	}
-}
-
 func runVisor(args []string) {
 	log := initLogger(tag, syslogAddr)
 
@@ -186,6 +179,13 @@ func runVisor(args []string) {
 
 	if err := v.Close(); err != nil {
 		log.WithError(err).Error("Visor closed with error.")
+	}
+}
+
+// Execute executes root CLI command.
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
 	}
 }
 
