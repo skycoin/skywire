@@ -166,9 +166,6 @@ type Status struct {
 	// IsUp represents whether the Transport is up.
 	// A Transport that is down will fail to forward Packets.
 	IsUp bool `json:"is_up"`
-
-	// Updated is the epoch timestamp of when the status is last updated.
-	Updated int64 `json:"updated,omitempty"`
 }
 
 // EntryWithStatus stores Entry and Statuses returned by both Edges.
@@ -176,6 +173,7 @@ type EntryWithStatus struct {
 	Entry      *Entry  `json:"entry"`
 	IsUp       bool    `json:"is_up"`
 	Registered int64   `json:"registered"`
+	Updated    int64   `json:"updated"`
 	Statuses   [2]bool `json:"statuses"`
 }
 
