@@ -253,17 +253,20 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	return nil
 }
 
-// HasTransport checks if given transport is present in the manager
-func (tm *Manager) HasTransport(remote cipher.PubKey, tpType string) (bool, error) {
+// GetTransport gets transport entity to the given remote
+func (tm *Manager) GetTransport(remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
 	if !snet.IsKnownNetwork(tpType) {
-		return false, snet.ErrUnknownNetwork
+		return nil, snet.ErrUnknownNetwork
 	}
 
 	tpID := tm.tpIDFromPK(remote, tpType)
-	_, ok := tm.tps[tpID]
-	return ok, nil
+	t, ok := tm.tps[tpID]
+	if !ok {
+		return nil, fmt.Errorf("transport to %s of type %s not found", remote, tpType)
+	}
+	return t, nil
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
