@@ -536,8 +536,15 @@ func initPublicVisors(v *Visor) bool {
 	// check will use transport manager to check if transport exists
 	// todo: check if it's possible for a transport to exist but be broken
 	checkFN := servicedisc.CheckConnFN(func(pk cipher.PubKey) bool {
-		ok, _ := v.tpM.HasTransport(pk, tptypes.STCPR) //nolint:errcheck
-		return ok
+		t, err := v.tpM.GetTransport(pk, tptypes.STCPR)
+		if err != nil {
+			return false
+		}
+		up := t.IsUp()
+		if !up {
+			v.tpM.DeleteTransport(t.Entry.ID)
+		}
+		return up
 	})
 	connector := servicedisc.MakeConnector(conf, 5, log)
 	go connector.Run(context.Background(), connectFn, checkFN) //nolint:errcheck
