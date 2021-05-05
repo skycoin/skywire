@@ -1,8 +1,6 @@
 package logstore
 
 import (
-	"strings"
-
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,9 +14,7 @@ type Store interface {
 	// due to insufficient capacity.
 	// returned number n means that n log entries have been dropped and the oldest
 	// log entry is (n+1)th
-	GetLogs() ([]*logrus.Entry, int64)
-	// get logs as a single string
-	GetLogStr() (string, error)
+	GetLogs() ([]string, int64)
 }
 
 // MakeStore returns a new store that will hold up to max entries,
@@ -26,8 +22,8 @@ type Store interface {
 // returned hook should be registered in logrus master logger to
 // store log entries
 func MakeStore(max int) (Store, logrus.Hook) {
-	entries := make([]*logrus.Entry, max)
-	formatter := &logrus.JSONFormatter{}
+	entries := make([]string, max)
+	formatter := &logrus.TextFormatter{DisableColors: true}
 	store := &store{cap: int64(max), entries: entries, formatter: formatter}
 	return store, store
 }
@@ -37,12 +33,22 @@ type store struct {
 	cap int64
 	// number of the next entry to come (also number of entries processed since the beginning)
 	entryNum  int64
-	entries   []*logrus.Entry
+	entries   []string
 	formatter logrus.Formatter
 }
 
+// collect log lines into a single string, starting at from (inclusive)
+// and ending at to (not inclusive)
+func (s *store) collectLogs(from, to int64) []string {
+	logs := make([]string, 0)
+	for i := from; i < to; i++ {
+		logs = append(logs, s.entries[i])
+	}
+	return logs
+}
+
 // GetLogs returns most resent log lines (up to cap log lines is stored)
-func (s *store) GetLogs() ([]*logrus.Entry, int64) {
+func (s *store) GetLogs() ([]string, int64) {
 	if s.entryNum < s.cap {
 		return s.collectLogs(0, s.entryNum), 0
 	}
@@ -50,31 +56,6 @@ func (s *store) GetLogs() ([]*logrus.Entry, int64) {
 	logs := s.collectLogs(idx, s.cap)
 	logs = append(logs, s.collectLogs(0, idx)...)
 	return logs, s.entryNum - s.cap
-}
-
-// collect log lines into a single string, starting at from (inclusive)
-// and ending at to (not inclusive)
-func (s *store) collectLogs(from, to int64) []*logrus.Entry {
-	logs := make([]*logrus.Entry, 0)
-	for i := from; i < to; i++ {
-		logs = append(logs, s.entries[i])
-	}
-	return logs
-}
-
-// GetLogStr returns logs as a single string
-// log entries are formatted with store formatter and concatenated together
-func (s *store) GetLogStr() (string, error) {
-	logs, _ := s.GetLogs()
-	var sb strings.Builder
-	for _, entry := range logs {
-		bs, err := s.formatter.Format(entry)
-		if err != nil {
-			return "", err
-		}
-		sb.WriteString(string(bs))
-	}
-	return sb.String(), nil
 }
 
 // Levels implements logrus.Hook interface. It denotes log levels
@@ -87,8 +68,12 @@ func (s *store) Levels() []logrus.Level {
 // that we simply store
 func (s *store) Fire(entry *logrus.Entry) error {
 	idx := s.entryNum % s.cap
-	e := entry.WithField(LogRealLineKey, s.entryNum)
-	s.entries[idx] = e
+	e := entry.WithField(LogRealLineKey, s.entryNum).WithField("level", entry.Level.String())
+	bs, err := s.formatter.Format(e)
+	if err != nil {
+		return err
+	}
+	s.entries[idx] = string(bs)
 	s.entryNum++
 	return nil
 }
