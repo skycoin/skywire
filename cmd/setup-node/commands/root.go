@@ -11,7 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
-	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/dmsg/metricsutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
@@ -53,19 +52,6 @@ var rootCmd = &cobra.Command{
 			}
 
 			logging.AddHook(hook)
-		}
-
-		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-			discordOpts := discord.GetDefaultOpts()
-			hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
-			logging.AddHook(hook)
-
-			// Workaround for Discord logger hook. Actually, it's Info.
-			log.Error(discord.StartLogMessage)
-			defer log.Error(discord.StopLogMessage)
-		} else {
-			log.Info(discord.StartLogMessage)
-			defer log.Info(discord.StopLogMessage)
 		}
 
 		var rdr io.Reader
