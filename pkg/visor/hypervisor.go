@@ -507,7 +507,6 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 
 func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 	sum.NetworkStats = &NetworkStats{
-		// TCPAddr: addr.String(),
 		Online: online,
 	}
 	sum.IsHypervisor = hyper
