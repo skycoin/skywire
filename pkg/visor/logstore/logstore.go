@@ -4,7 +4,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// LogRealLineKey is a key in the log enry that denote real log line number
+// LogRealLineKey is a key in the log entry that denotes real log line number
 // in the total log (not limited by capacity of runtime log store)
 const LogRealLineKey = "log_line"
 
@@ -47,7 +47,7 @@ func (s *store) collectLogs(from, to int64) []string {
 	return logs
 }
 
-// GetLogs returns most resent log lines (up to cap log lines is stored)
+// GetLogs returns most recent log lines (up to cap log lines is stored
 func (s *store) GetLogs() ([]string, int64) {
 	if s.entryNum < s.cap {
 		return s.collectLogs(0, s.entryNum), 0
