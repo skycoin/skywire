@@ -495,8 +495,6 @@ export class NodeService {
 
           // Basic data.
           node.online = response.online;
-          node.tcpAddr = response.tcp_addr;
-          node.port = this.getAddressPart(node.tcpAddr, 1);
           node.localPk = response.overview.local_pk;
 
           // Ip.
