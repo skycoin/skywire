@@ -505,10 +505,10 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 	})
 }
 
-func makeSummaryResp(online, hyper bool, addr dmsg.Addr, sum *Summary) Summary {
+func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
 	sum.NetworkStats = &NetworkStats{
-		TCPAddr: addr.String(),
-		Online:  online,
+		// TCPAddr: addr.String(),
+		Online: online,
 	}
 	sum.IsHypervisor = hyper
 	return *sum
@@ -545,8 +545,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			}
 		}
 
-		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-		summaries[0] = makeSummaryResp(err == nil, true, addr, summary)
+		summaries[0] = makeSummaryResp(err == nil, true, summary)
 
 		for pk, c := range hv.visors {
 			go func(pk cipher.PubKey, c Conn, i int) {
@@ -570,7 +569,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 				} else {
 					log.Debug("Obtained summary via RPC.")
 				}
-				resp := makeSummaryResp(err == nil, false, c.Addr, summary)
+				resp := makeSummaryResp(err == nil, false, summary)
 				summaries[i] = resp
 				wg.Done()
 			}(pk, c, i)
