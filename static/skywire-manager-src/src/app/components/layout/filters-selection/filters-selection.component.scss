@@ -1,0 +1,11 @@
+.image-container {
+  display: inline-block;
+  background-size: contain;
+  margin-right: 5px;
+
+  .image {
+    background-size: contain;
+    width: 100%;
+    height: 100%;
+  }
+}

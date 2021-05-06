@@ -536,8 +536,12 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		summary, err := hv.visor.ExtraSummary()
 		if err != nil {
 			log.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &ExtraSummary{}
-			summary.Summary.PubKey = hv.visor.conf.PK
+			summary = &ExtraSummary{
+				Summary: &Summary{
+					PubKey: hv.visor.conf.PK,
+				},
+				Health: &HealthInfo{},
+			}
 		}
 
 		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
@@ -554,9 +558,14 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 				summary, err := c.API.ExtraSummary()
 				if err != nil {
 					log.WithError(err).
-						Warn("Failed to obtain summary via RPC.")
-					summary = &ExtraSummary{}
-					summary.Summary.PubKey = pk
+						Warn("Failed to obtain summary via RPC.", pk)
+
+					summary = &ExtraSummary{
+						Summary: &Summary{
+							PubKey: pk,
+						},
+						Health: &HealthInfo{},
+					}
 				} else {
 					log.Debug("Obtained summary via RPC.")
 				}
@@ -571,6 +580,8 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Summary.PubKey.String()]; ok {
 				summaries[i].DmsgStats = &stat
+			} else {
+				summaries[i].DmsgStats = &dmsgtracker.DmsgClientSummary{}
 			}
 		}
 

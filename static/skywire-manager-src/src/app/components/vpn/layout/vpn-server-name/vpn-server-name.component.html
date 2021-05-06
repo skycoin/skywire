@@ -1,0 +1,45 @@
+<!-- Condition icons. -->
+<mat-icon
+  *ngIf="isCurrentServer"
+  class="server-condition-icon"
+  [ngClass]="{'small-text-icon': !adjustIconsForBigText, 'big-text-icon': adjustIconsForBigText}"
+  [inline]="true"
+  [matTooltip]="'vpn.server-conditions.selected-info' | translate"
+>done</mat-icon>
+<mat-icon
+  *ngIf="isBlocked"
+  class="server-condition-icon red-clear-text"
+  [ngClass]="{'small-text-icon': !adjustIconsForBigText, 'big-text-icon': adjustIconsForBigText}"
+  [inline]="true"
+  [matTooltip]="'vpn.server-conditions.blocked-info' | translate"
+>clear</mat-icon>
+<mat-icon
+  *ngIf="isFavorite"
+  class="server-condition-icon yellow-clear-text"
+  [ngClass]="{'small-text-icon': !adjustIconsForBigText, 'big-text-icon': adjustIconsForBigText}"
+  [inline]="true"
+  [matTooltip]="'vpn.server-conditions.favorite-info' | translate"
+>star</mat-icon>
+<mat-icon
+  *ngIf="isInHistory"
+  class="server-condition-icon"
+  [ngClass]="{'small-text-icon': !adjustIconsForBigText, 'big-text-icon': adjustIconsForBigText}"
+  [inline]="true"
+  [matTooltip]="'vpn.server-conditions.history-info' | translate"
+>history</mat-icon>
+<mat-icon
+  *ngIf="hasPassword"
+  class="server-condition-icon"
+  [ngClass]="{'small-text-icon': !adjustIconsForBigText, 'big-text-icon': adjustIconsForBigText}"
+  [inline]="true"
+  [matTooltip]="'vpn.server-conditions.has-password-info' | translate"
+>lock_outlined</mat-icon>
+<!-- Name. -->
+<ng-container *ngIf="customName && name">
+  {{ customName }}
+  <mat-icon [inline]="true" class="name-separator">fiber_manual_record</mat-icon>
+  {{ name }}
+</ng-container>
+<ng-container *ngIf="!name && customName">{{ customName }}</ng-container>
+<ng-container *ngIf="name && !customName">{{ name }}</ng-container>
+<ng-container *ngIf="!name && !customName">{{ defaultName | translate }}</ng-container>
