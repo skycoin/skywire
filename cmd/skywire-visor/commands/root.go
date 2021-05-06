@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -35,7 +36,8 @@ var uiAssets fs.FS
 var restartCtx = restart.CaptureContext()
 
 const (
-	defaultConfigName = "skywire-config.json"
+	defaultConfigName    = "skywire-config.json"
+	runtimeLogMaxEntries = 300
 )
 
 var (
@@ -63,7 +65,8 @@ var rootCmd = &cobra.Command{
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
 		log := initLogger(tag, syslogAddr)
-
+		store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+		log.AddHook(hook)
 		if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
 			// Workaround for Discord logger hook. Actually, it's Info.
 			log.Error(discord.StartLogMessage)
@@ -128,6 +131,7 @@ var rootCmd = &cobra.Command{
 		if !ok {
 			log.Fatal("Failed to start visor.")
 		}
+		v.SetLogstore(store)
 
 		if launchBrowser {
 			runBrowser(conf, log)

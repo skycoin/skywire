@@ -41,7 +41,6 @@ const (
 	// moduleShutdownTimeout is the timeout given to a module to shutdown cleanly.
 	// Otherwise the shutdown logic will continue and report a timeout error.
 	moduleShutdownTimeout = time.Second * 2
-	runtimeLogMaxEntries  = 300
 )
 
 // Visor provides messaging runtime for Apps by setting up all
@@ -120,13 +119,6 @@ func (v *Visor) MasterLogger() *logging.MasterLogger {
 	return v.conf.MasterLogger()
 }
 
-func (v *Visor) setupRuntimeLogStore() {
-	// todo: add config to change the capacity of in-memory log store
-	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
-	v.MasterLogger().AddHook(hook)
-	v.logstore = store
-}
-
 // NewVisor constructs new Visor.
 func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok bool) {
 	ok = true
@@ -144,7 +136,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (v *Visor, ok b
 		v.conf.MasterLogger().SetLevel(logLvl)
 		logging.SetLevel(logLvl)
 	}
-	v.setupRuntimeLogStore()
 
 	log := v.MasterLogger().PackageLogger("visor:startup")
 	log.WithField("public_key", conf.PK).
@@ -221,6 +212,11 @@ func (v *Visor) Close() error {
 	v.processReports(v.log, nil)
 	log.Info("Shutdown complete. Goodbye!")
 	return nil
+}
+
+// SetLogstore sets visor runtime logstore
+func (v *Visor) SetLogstore(store logstore.Store) {
+	v.logstore = store
 }
 
 // tpDiscClient is a convenience function to obtain transport discovery client.
