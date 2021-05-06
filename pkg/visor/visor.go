@@ -26,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
+	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -48,8 +49,9 @@ type Visor struct {
 	reportCh   chan vReport
 	closeStack []closeElem
 
-	conf *visorconfig.V1
-	log  *logging.Logger
+	conf     *visorconfig.V1
+	log      *logging.Logger
+	logstore logstore.Store
 
 	startedAt     time.Time
 	restartCtx    *restart.Context
@@ -210,6 +212,11 @@ func (v *Visor) Close() error {
 	v.processReports(v.log, nil)
 	log.Info("Shutdown complete. Goodbye!")
 	return nil
+}
+
+// SetLogstore sets visor runtime logstore
+func (v *Visor) SetLogstore(store logstore.Store) {
+	v.logstore = store
 }
 
 // tpDiscClient is a convenience function to obtain transport discovery client.

@@ -331,6 +331,13 @@ func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	return updated, err
 }
 
+// Update calls Update.
+func (rc *rpcClient) RuntimeLogs() (string, error) {
+	var logs string
+	err := rc.Call("RuntimeLogs", &struct{}{}, &logs)
+	return logs, err
+}
+
 // StatusMessage defines a status of visor update.
 type StatusMessage struct {
 	Text    string
@@ -909,5 +916,10 @@ func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, e
 
 // UpdateStatus implements API.
 func (mc *mockRPCClient) UpdateStatus() (string, error) {
+	return "", nil
+}
+
+// UpdateStatus implements API.
+func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
 }
