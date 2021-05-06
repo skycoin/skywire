@@ -23,7 +23,7 @@ type Store interface {
 // store log entries
 func MakeStore(max int) (Store, logrus.Hook) {
 	entries := make([]string, max)
-	formatter := &logrus.TextFormatter{DisableColors: true}
+	formatter := &logrus.JSONFormatter{}
 	store := &store{cap: int64(max), entries: entries, formatter: formatter}
 	return store, store
 }
@@ -68,7 +68,7 @@ func (s *store) Levels() []logrus.Level {
 // that we simply store
 func (s *store) Fire(entry *logrus.Entry) error {
 	idx := s.entryNum % s.cap
-	e := entry.WithField(LogRealLineKey, s.entryNum)
+	e := entry.WithField(LogRealLineKey, s.entryNum+1)
 	e.Level = entry.Level
 	e.Message = entry.Message
 	bs, err := s.formatter.Format(e)
