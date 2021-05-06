@@ -1,3 +1,23 @@
+.size-alert {
+  background-color: rgba(0, 0, 0, 0.85);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+
+  > div {
+    margin: 0px 40px;
+    max-width: 400px;
+  }
+}
+
 :host {
   display: flex;
   flex-direction: column;
@@ -8,4 +28,16 @@
 
 .content {
   padding: 20px !important;
+}
+
+.background {
+  background-image: url('/assets/img/map.png');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.1;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  position: fixed;
 }

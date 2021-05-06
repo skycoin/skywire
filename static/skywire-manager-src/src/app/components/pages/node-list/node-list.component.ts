@@ -309,7 +309,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       case true:
         return this.nodesHealthInfo.get(node.localPk).allServicesOk ?
           (forDot ? 'dot-green' : 'green-text') :
-          (forDot ? 'dot-yellow online-warning' : 'yellow-text');
+          (forDot ? 'dot-yellow blinking' : 'yellow-text');
       default:
         return forDot ? 'dot-red' : 'red-text';
     }
@@ -357,7 +357,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
         this.ngZone.run(() => {
           if (result) {
             // If the data was obtained.
-            if (result.data) {
+            if (result.data && !result.error) {
               this.allNodes = result.data as Node[];
               if (this.showDmsgInfo) {
                 // Add the label data to the array, to be able to use it for filtering and sorting.
@@ -460,10 +460,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     const nodesData: NodeData[] = [];
     this.dataSource.forEach(node => {
-      nodesData.push({
-        key: node.localPk,
-        label: node.label,
-      });
+      if (node.online) {
+        nodesData.push({
+          key: node.localPk,
+          label: node.label,
+        });
+      }
     });
 
     UpdateComponent.openDialog(this.dialog, nodesData);
