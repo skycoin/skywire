@@ -497,11 +497,11 @@ export class NodeService {
           node.online = response.online;
           node.tcpAddr = response.tcp_addr;
           node.port = this.getAddressPart(node.tcpAddr, 1);
-          node.localPk = response.summary.local_pk;
+          node.localPk = response.overview.local_pk;
 
           // Ip.
-          if (response.summary.local_ip && (response.summary.local_ip as string).trim()) {
-            node.ip = response.summary.local_ip;
+          if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
+            node.ip = response.overview.local_ip;
           } else {
             node.ip = null;
           }
@@ -605,13 +605,13 @@ export class NodeService {
         node.online = response.online;
         node.tcpAddr = response.tcp_addr;
         node.port = this.getAddressPart(node.tcpAddr, 1);
-        node.localPk = response.summary.local_pk;
-        node.version = response.summary.build_info.version;
+        node.localPk = response.overview.local_pk;
+        node.version = response.overview.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
 
         // Ip.
-        if (response.summary.local_ip && (response.summary.local_ip as string).trim()) {
-          node.ip = response.summary.local_ip;
+        if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
+          node.ip = response.overview.local_ip;
         } else {
           node.ip = null;
         }
@@ -632,8 +632,8 @@ export class NodeService {
 
         // Transports.
         node.transports = [];
-        if (response.summary.transports) {
-          (response.summary.transports as any[]).forEach(transport => {
+        if (response.overview.transports) {
+          (response.overview.transports as any[]).forEach(transport => {
             node.transports.push({
               isUp: transport.is_up,
               id: transport.id,
@@ -706,8 +706,8 @@ export class NodeService {
 
         // Apps.
         node.apps = [];
-        if (response.summary.apps) {
-          (response.summary.apps as any[]).forEach(app => {
+        if (response.overview.apps) {
+          (response.overview.apps as any[]).forEach(app => {
             node.apps.push({
               name: app.name,
               status: app.status,
@@ -719,14 +719,11 @@ export class NodeService {
         }
 
         let dmsgServerFound = false;
-        for (let i = 0; i < response.dmsg.length; i++) {
-          if (response.dmsg[i].public_key === node.localPk) {
-            node.dmsgServerPk = response.dmsg[i].server_public_key;
-            node.roundTripPing = this.nsToMs(response.dmsg[i].round_trip);
+        if (response.dmsg_stats) {
+          node.dmsgServerPk = response.dmsg_stats.server_public_key;
+          node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
 
-            dmsgServerFound = true;
-            break;
-          }
+          dmsgServerFound = true;
         }
 
         if (!dmsgServerFound) {
