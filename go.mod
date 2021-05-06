@@ -4,7 +4,6 @@ go 1.14
 
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
-	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/VictoriaMetrics/metrics v1.12.3
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.11 // indirect
@@ -13,7 +12,6 @@ require (
 	github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6 // indirect
 	github.com/getlantern/systray v1.1.0
 	github.com/go-chi/chi v4.1.2+incompatible
-	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0 // indirect
@@ -28,7 +26,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/rakyll/statik v0.1.7
 	github.com/schollz/progressbar/v2 v2.15.0
-	github.com/shirou/gopsutil v2.20.5+incompatible
+	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.7.0
 	github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
 	github.com/skycoin/skycoin v0.27.1

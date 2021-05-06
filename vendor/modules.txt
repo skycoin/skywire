@@ -2,7 +2,6 @@
 ## explicit
 github.com/AudriusButkevicius/pfilter
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
-## explicit
 github.com/StackExchange/wmi
 # github.com/VictoriaMetrics/metrics v1.12.3
 ## explicit
@@ -47,7 +46,6 @@ github.com/getlantern/systray
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
 # github.com/go-ole/go-ole v1.2.4
-## explicit
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
 # github.com/go-stack/stack v1.8.0
@@ -144,13 +142,13 @@ github.com/rakyll/statik/fs
 # github.com/schollz/progressbar/v2 v2.15.0
 ## explicit
 github.com/schollz/progressbar/v2
-# github.com/shirou/gopsutil v2.20.5+incompatible
+# github.com/shirou/gopsutil/v3 v3.21.4
 ## explicit
-github.com/shirou/gopsutil/cpu
-github.com/shirou/gopsutil/internal/common
-github.com/shirou/gopsutil/mem
-github.com/shirou/gopsutil/net
-github.com/shirou/gopsutil/process
+github.com/shirou/gopsutil/v3/cpu
+github.com/shirou/gopsutil/v3/internal/common
+github.com/shirou/gopsutil/v3/mem
+github.com/shirou/gopsutil/v3/net
+github.com/shirou/gopsutil/v3/process
 # github.com/sirupsen/logrus v1.7.0
 ## explicit
 github.com/sirupsen/logrus
@@ -212,6 +210,10 @@ github.com/templexxx/xor
 # github.com/tjfoc/gmsm v1.3.2
 ## explicit
 github.com/tjfoc/gmsm/sm4
+# github.com/tklauser/go-sysconf v0.3.4
+github.com/tklauser/go-sysconf
+# github.com/tklauser/numcpus v0.2.1
+github.com/tklauser/numcpus
 # github.com/toqueteos/webbrowser v1.2.0
 ## explicit
 github.com/toqueteos/webbrowser
