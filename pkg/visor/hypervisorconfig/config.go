@@ -3,12 +3,13 @@ package hypervisorconfig
 import (
 	"encoding/hex"
 	"encoding/json"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"io/fs"
 
 	"github.com/skycoin/dmsg/cipher"
 

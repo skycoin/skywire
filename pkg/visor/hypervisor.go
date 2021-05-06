@@ -257,6 +257,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/ws/running", hv.isVisorWSUpdateRunning())
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
+				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 			})
 		})
 
@@ -1312,6 +1313,22 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
+	})
+}
+
+func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		logs, err := ctx.API.RuntimeLogs()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write([]byte(logs))
+		if err != nil {
+			hv.visor.log.Errorf("Cannot write response: %s", err)
+		}
 	})
 }
 
