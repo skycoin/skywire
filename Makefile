@@ -24,6 +24,7 @@ DOCKER_IMAGE?=skywire-runner # docker image to use for running skywire-visor.`go
 DOCKER_NETWORK?=SKYNET
 DOCKER_NODE?=SKY01
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux # go options for compiling for docker container
+GO_BUILDER_VERSION=v1.16.4
 
 TEST_OPTS_BASE:=-cover -timeout=5m -mod=vendor
 
@@ -137,6 +138,29 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 
 dep: ## Sorts dependencies
 	${OPTS} go mod vendor -v
+
+snapshot: sysroot
+	docker run --rm --privileged \
+		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(GOPATH)/src:/go/src \
+		-v $(CURDIR)/sysroot:/sysroot \
+		-w /go/src/github.com/skycoin/skywire \
+		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --snapshot --rm-dist
+
+	if [[ $(shell uname -s) == "Darwin" ]]; then  \
+	  goreleaser -f ./.goreleaser.darwin.yml --snapshot; \
+	fi
+
+
+sysroot:
+	mkdir -p ./sysroot
+	if [[ ! -d /tmp/sysroot-git ]]; then \
+  	  git clone https://github.com/alexadhy/sysroot.git --depth=1 /tmp/sysroot-git && \
+  	  tar xf /tmp/sysroot-git/release.tar.gz -C ./sysroot/; \
+	else \
+	  tar xf /tmp/sysroot-git/release.tar.gz -C ./sysroot/; \
+	fi
 
 host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat

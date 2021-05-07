@@ -41,3 +41,4 @@ dist
 
 # release
 *.deb
+sysroot
