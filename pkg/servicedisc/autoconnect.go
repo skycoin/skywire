@@ -12,7 +12,7 @@ import (
 
 const (
 	// PublicServiceDelay defines a delay before adding transports to public services.
-	PublicServiceDelay = 5 * time.Second
+	PublicServiceDelay = 10 * time.Second
 
 	fetchServicesDelay = 2 * time.Second
 )
@@ -50,7 +50,7 @@ func MakeConnector(conf Config, maxConns int, log *logging.Logger) Autoconnector
 func (a *autoconnector) Run(ctx context.Context, connector ConnectFn, checker CheckConnFN) error {
 	retrier := netutil.NewRetrier(fetchServicesDelay, 0, 2)
 	for {
-		time.Sleep(PublicServiceDelay * 2)
+		time.Sleep(PublicServiceDelay)
 		a.checkConns(checker)
 		if len(a.conns) == a.maxConns {
 			continue
@@ -76,7 +76,7 @@ func (a *autoconnector) Run(ctx context.Context, connector ConnectFn, checker Ch
 			}
 			err := connector(ctx, pk)
 			if err != nil {
-				// ignore for now?
+				a.log.WithField("remote_pk", pk).Warnf("Cannot connect to a service")
 			} else {
 				a.conns[pk] = struct{}{}
 			}
