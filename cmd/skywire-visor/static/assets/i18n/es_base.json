@@ -12,10 +12,13 @@
     "options": "Options",
     "logout": "Logout",
     "logout-error": "Error logging out.",
-    "time-in-ms": "{{ time }}ms",
+    "logout-confirmation": "Are you sure you want to log out?",
+    "time-in-ms": "{{ time }}ms.",
+    "time-in-segs": "{{ time }}s.",
     "ok": "Ok",
     "unknown": "Unknown",
-    "close": "Close"
+    "close": "Close",
+    "window-size-error": "The window is too narrow for the content."
   },
 
   "labeled-element": {
@@ -32,6 +35,7 @@
 
   "labels": {
     "title": "Labels",
+    "info": "Labels you have entered to easily identify visors, transports and other elements, instead of having to read machine generated identifiers.",
     "list-title": "Label list",
     "label": "Label",
     "id": "Element ID",
@@ -58,16 +62,18 @@
 
   "filters": {
     "filter-action": "Filter",
-    "active-filters": "Active filters: ",
-    "press-to-remove": "(Press to remove)",
+    "filter-info": "Filter list.",
+    "press-to-remove": "(Press to remove the filters)",
     "remove-confirmation": "Are you sure you want to remove the filters?"
   },
 
   "tables": {
     "title": "Order by",
     "sorting-title": "Ordered by:",
-    "ascending-order": "(ascending)",
-    "descending-order": "(descending)"
+    "sort-by-value": "Value",
+    "sort-by-label": "Label",
+    "label": "(label)",
+    "inverted-order": "(inverted)"
   },
 
   "start": {
@@ -90,6 +96,7 @@
         "title": "Visor Info",
         "label": "Label:",
         "public-key": "Public key:",
+        "ip": "IP:",
         "port": "Port:",
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
@@ -130,7 +137,7 @@
   "nodes": {
     "title": "Visor list",
     "dmsg-title": "DMSG",
-    "update-all": "Update all visors",
+    "update-all": "Update all online visors",
     "hypervisor": "Hypervisor",
     "state": "State",
     "state-tooltip": "Current state",
@@ -154,7 +161,6 @@
     "deleted": "Visor removed.",
     "deleted-singular": "1 offline visor removed.",
     "deleted-plural": "{{ number }} offline visors removed.",
-    "no-offline-nodes": "No offline visors found.",
     "no-visors-to-update": "There are no visors to update.",
     "filter-dialog": {
       "online": "The visor must be",
@@ -380,7 +386,7 @@
       "default-note-warning": "The default note has been used.",
       "pagination-info": "{{ currentElementsRange }} of {{ totalElements }}",
       "killswitch-check": "Activate killswitch",
-      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem).",
+      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
       "settings-changed-alert": " The changes have not been saved yet.",
       "save-settings": "Save settings",
 
@@ -409,6 +415,7 @@
     "start-app": "Start",
     "view-logs": "View logs",
     "settings": "Settings",
+    "open": "Open",
     "error": "An error has occured and it was not possible to perform the operation.",
     "stop-confirmation": "Are you sure you want to stop the app?",
     "stop-selected-confirmation": "Are you sure you want to stop the selected apps?",
@@ -431,6 +438,7 @@
     "remove-all-offline": "Remove all offline transports",
     "remove-all-offline-confirmation": "Are you sure you want to remove all offline transports?",
     "remove-all-filtered-offline-confirmation": "All offline transports satisfying the current filtering criteria will be removed. Are you sure you want to continue?",
+    "info": "Connections you have with remote Skywire visors, to allow local Skywire apps to communicate with apps running on those remote visors.",
     "list-title": "Transport list",
     "state": "State",
     "state-tooltip": "Current state",
@@ -493,6 +501,7 @@
 
   "routes": {
     "title": "Routes",
+    "info": "Paths used to reach the remote visors to which transports have been established. Routes are automatically generated as needed.",
     "list-title": "Route list",
     "key": "Key",
     "type": "Type",
@@ -595,5 +604,231 @@
 
   "tabs-window" : {
     "title" : "Change tab"
+  },
+
+  "vpn" : {
+    "title": "VPN Control Panel",
+    "start": "Start",
+    "servers": "Servers",
+    "settings": "Settings",
+
+    "starting-blocked-server-error": "Unable to connect to the selected server because it has been added to the blocked servers list.",
+    "unexpedted-error": "An unexpected error occurred and the operation could not be completed.",
+
+    "remote-access-title": "It appears that you are accessing the system remotely",
+    "remote-access-text": "This application only allows you to manage the VPN protection of the device on which it was installed. Changes made with it will not affect remote devices like the one you seem to be using. Also, the displayed IP data may be incorrect.",
+
+    "server-change": {
+      "busy-error": "The system is busy. Please wait.",
+      "backend-error": "It was not possible to change the server. Please make sure the public key is correct and the VPN app is running.",
+      "already-selected-warning": "The selected server is already being used.",
+      "change-server-while-connected-confirmation": "The VPN protection will be interrupted while changing the server and some data may be transmitted unprotected during the process. Do you want to continue?",
+      "start-same-server-confirmation": "You had already selected that server. Do you want to connect to it?"
+    },
+
+    "error-page": {
+      "text": "The VPN client app is not available.",
+      "more-info": "It was not possible to connect to the VPN client app. This may be due to a configuration error, an unexpected problem with the visor or because you used an invalid public key in the URL.",
+      "text-pk": "Invalid configuration.",
+      "more-info-pk": "The application cannot be started because you have not specified the visor public key.",
+      "text-storage": "Error saving data.",
+      "more-info-storage": "There has been a conflict when trying to save the data and the application has been closed to prevent errors. This could happen if you open the application in more than one tab or window.",
+      "text-pk-change": "Invalid operation.",
+      "more-info-pk-change": "Please use this application to manage only one VPN client."
+    },
+
+    "connection-info" : {
+      "state-connecting": "Connecting",
+      "state-connecting-info": "The VPN protection is being activated.",
+      "state-connected": "Connected",
+      "state-connected-info": "The VPN protection is on.",
+      "state-disconnecting": "Disconnecting",
+      "state-disconnecting-info": "The VPN protection is being deactivated.",
+      "state-reconnecting": "Reconnecting",
+      "state-reconnecting-info": "The VPN protection is being restored.",
+      "state-disconnected": "Disconnected",
+      "state-disconnected-info": "The VPN protection is off.",
+      "state-info": "Current connection status.",
+      "latency-info": "Current latency.",
+      "upload-info": "Upload speed.",
+      "download-info": "Download speed."
+    },
+
+    "status-page": {
+      "start-title": "Start VPN",
+      "no-server": "No server selected!",
+      "disconnect": "Disconnect",
+      "disconnect-confirmation": "Are you sure you want to stop the VPN protection?",
+      "entered-manually": "Entered manually",
+      "upload-info": "Uploaded data stats.",
+      "download-info": "Downloaded data stats.",
+      "latency-info": "Latency stats.",
+      "total-data-label": "total",
+      "problem-connecting-error": "It was not possible to connect to the server. The server may be invalid or temporarily down.",
+      "problem-starting-error": "It was not possible to start the VPN. Please make sure the base VPN client app is running.",
+      "problem-stopping-error": "It was not possible to stop the VPN. Please make sure the base VPN client app is running.",
+      "generic-problem-error": "It was not possible to perform the operation. Please make sure the base VPN client app is running.",
+      "select-server-warning": "Please select a server first.",
+
+      "data": {
+        "ip": "IP address:",
+        "ip-problem-info": "There was a problem trying to get the IP. Please verify it using an external service.",
+        "ip-country-problem-info": "There was a problem trying to get the country. Please verify it using an external service.",
+        "ip-refresh-info": "Refresh",
+        "ip-refresh-time-warning": "Please wait {{ seconds }} second(s) before refreshing the data.",
+        "ip-refresh-loading-warning": "Please wait for the previous operation to finish.",
+        "country": "Country:",
+        "server": "Server:",
+        "server-note": "Server note:",
+        "original-server-note": "Original server note:",
+        "local-pk": "Local visor public key:",
+        "remote-pk": "Remote visor public key:",
+        "unavailable": "Unavailable"
+      }
+    },
+
+    "server-options": {
+      "tooltip": "Options",
+      "connect-without-password": "Connect without password",
+      "connect-without-password-confirmation": "The connection will be made without the password. Are you sure you want to continue?",
+      "connect-using-password": "Connect using a password",
+      "edit-name": "Custom name",
+      "edit-label": "Custom note",
+      "make-favorite": "Make favorite",
+      "make-favorite-confirmation": "Are you sure you want to mark this server as favorite? It will be removed from the blocked list.",
+      "make-favorite-done": "Added to the favorites list.",
+      "remove-from-favorites": "Remove from favorites",
+      "remove-from-favorites-done": "Removed from the favorites list.",
+      "block": "Block server",
+      "block-done": "Added to the blocked list.",
+      "block-confirmation": "Are you sure you want to block this server? It will be removed from the favorites list.",
+      "block-selected-confirmation": "Are you sure you want to block the currently selected server? All connections will be closed.",
+      "block-selected-favorite-confirmation": "Are you sure you want to block the currently selected server? All connections will be closed and it will be removed from the favorites list.",
+      "unblock": "Unblock server",
+      "unblock-done": "Removed from the blocked list.",
+      "remove-from-history": "Remove from history",
+      "remove-from-history-confirmation": "Are you sure you want to remove this server from the history?",
+      "remove-from-history-done": "Removed from history.",
+
+      "edit-value": {
+        "name-title": "Custom Name",
+        "note-title": "Custom Note",
+        "name-label": "Custom name",
+        "note-label": "Custom note",
+        "apply-button": "Apply",
+        "changes-made-confirmation": "The change has been made."
+      }
+    },
+
+    "server-conditions": {
+      "selected-info": "This is the currently selected server.",
+      "blocked-info": "This server is in the blocked list.",
+      "favorite-info": "This server is in the favorites list.",
+      "history-info": "This server is in the server history.",
+      "has-password-info": "A password was set for connecting with this server."
+    },
+
+    "server-list" : {
+      "date-small-table-label": "Date",
+      "date-info": "Last time you used this server.",
+      "country-small-table-label": "Country",
+      "country-info": "Country where the server is located.",
+      "name-small-table-label": "Name",
+      "location-small-table-label": "Location",
+      "public-key-small-table-label": "Pk",
+      "public-key-info": "Server public key.",
+      "congestion-rating-small-table-label": "Congestion rating",
+      "congestion-rating-info": "Rating of the server related to how congested it tends to be.",
+      "congestion-small-table-label": "Congestion",
+      "congestion-info": "Current server congestion.",
+      "latency-rating-small-table-label": "Latency rating",
+      "latency-rating-info": "Rating of the server related to how much latency it tends to have.",
+      "latency-small-table-label": "Latency",
+      "latency-info": "Current server latency.",
+      "hops-small-table-label": "Hops",
+      "hops-info": "How many hops are needed for connecting with the server.",
+      "note-small-table-label": "Note",
+      "note-info": "Note about the server.",
+      "gold-rating-info": "Gold",
+      "silver-rating-info": "Silver",
+      "bronze-rating-info": "Bronze",
+      "notes-info": "Custom note: {{ custom }} - Original note: {{ original }}",
+      "empty-discovery": "Currently there are no VPN servers to show. Please try again later.",
+      "empty-history": "There is no history to show.",
+      "empty-favorites": "There are no favorite servers to show.",
+      "empty-blocked": "There are no blocked servers to show.",
+      "empty-with-filter": "No VPN server matches the selected filtering criteria.",
+      "add-manually-info": "Add server manually.",
+      "current-filters": "Current filters (press to remove)",
+      "none": "None",
+      "unknown": "Unknown",
+
+      "tabs": {
+        "public": "Public",
+        "history": "History",
+        "favorites": "Favorites",
+        "blocked": "Blocked"
+      },
+
+      "add-server-dialog": {
+        "title": "Enter manually",
+        "pk-label": "Server public key",
+        "password-label": "Server password (if any)",
+        "name-label": "Server name (optional)",
+        "note-label": "Personal note (optional)",
+        "pk-length-error": "The public key must be 66 characters long.",
+        "pk-chars-error": "The public key must only contain hexadecimal characters.",
+        "use-server-button": "Use server"
+      },
+
+      "password-dialog": {
+        "title": "Enter Password",
+        "password-if-any-label": "Server password (if any)",
+        "password-label": "Server password",
+        "continue-button": "Continue"
+      },
+
+      "filter-dialog": {
+        "country": "The country must be",
+        "name": "The name must contain",
+        "location": "The location must contain",
+        "public-key": "The public key must contain",
+        "congestion-rating": "The congestion rating must be",
+        "latency-rating": "The latency rating must be",
+  
+        "rating-options": {
+          "any": "Any",
+          "gold": "Gold",
+          "silver": "Silver",
+          "bronze": "Bronze"
+        },
+
+        "country-options": {
+          "any": "Any"
+        }
+      }
+    },
+
+    "settings-page": {
+      "setting-small-table-label": "Setting",
+      "value-small-table-label": "Value",
+      "killswitch": "Killswitch",
+      "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
+      "get-ip": "Get IP info",
+      "get-ip-info": "When active, the application will use external services to obtain information about the current IP.",
+      "data-units": "Data units",
+      "data-units-info": "Allows to select the units that will be used to display the data transmission statistics.",
+      "setting-on": "On",
+      "setting-off": "Off",
+      "working-warning": "The system is busy. Please wait for the previous operation to finish.",
+      "change-while-connected-confirmation": "The VPN protection will be interrupted while changing the setting. Do you want to continue?",
+
+      "data-units-modal": {
+        "title": "Data Units",
+        "only-bits": "Bits for all stats",
+        "only-bytes": "Bytes for all stats",
+        "bits-speed-and-bytes-volume": "Bits for speed and bytes for volume (default)"
+      }
+    }
   }
 }
