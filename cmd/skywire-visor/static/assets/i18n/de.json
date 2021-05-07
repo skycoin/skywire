@@ -1,9 +1,15 @@
 {
   "common": {
     "save": "Speichern",
+    "edit": "Ändern",
     "cancel": "Abbrechen",
+    "node-key": "Visor Schlüssel",
+    "app-key": "Anwendungs-Schlüssel",
+    "discovery": "Discovery",
     "downloaded": "Heruntergeladen",
     "uploaded": "Hochgeladen",
+    "delete": "Löschen",
+    "none": "Nichts",
     "loading-error": "Beim Laden der Daten ist ein Fehler aufgetreten. Versuche es erneut...",
     "operation-error": "Beim Ausführen der Aktion ist ein Fehler aufgetreten.",
     "no-connection-error": "Es ist keine Internetverbindung oder Verbindung zum Hypervisor vorhanden.",
@@ -11,66 +17,21 @@
     "refreshed": "Daten aktualisiert.",
     "options": "Optionen",
     "logout": "Abmelden",
-    "logout-error": "Fehler beim Abmelden.",
-    "logout-confirmation": "Wirklich abmelden?",
-    "time-in-ms": "{{ time }}ms",
-    "ok": "Ok",
-    "unknown": "Unbekannt",
-    "close": "Schließen"
-  },
-
-  "labeled-element": {
-    "edit-label": "Bezeichnung ändern",
-    "remove-label": "Bezeichnung löschen",
-    "copy": "Kopieren",
-    "remove-label-confirmation": "Bezeichnung wirklich löschen?",
-    "unnamed-element": "Unbenannt",
-    "unnamed-local-visor": "Lokaler Visor",
-    "local-element": "Lokal",
-    "tooltip": "Klicken um Eintrag zu kopieren oder Bezeichnung zu ändern",
-    "tooltip-with-text": "{{ text }} (Klicken um Eintrag zu kopieren oder Bezeichnung zu ändern)"
-  },
-
-  "labels": {
-    "title": "Bezeichnung",
-    "info": "Bezeichnungen, die eingegeben wurden um Visor, Transporte und andere Elemente einfach wiederzuerkennen.",
-    "list-title": "Bezeichnunen Liste",
-    "label": "Bezeichnung",
-    "id": "Element ID",
-    "type": "Typ",
-    "delete-confirmation": "Diese Bezeichnung wirklich löschen?",
-    "delete-selected-confirmation": "Ausgewählte Bezeichnungen wirklich löschen?",
-    "delete": "Bezeichnung löschen",
-    "deleted": "Bezeichnung gelöscht.",
-    "empty": "Keine gespeicherten Bezeichnungen vorhanden.",
-    "empty-with-filter": "Keine Bezeichnung erfüllt die gewählten Filterkriterien.",
-    "filter-dialog": {
-      "label": "Die Bezeichnung muss beinhalten",
-      "id": "Die ID muss beinhalten",
-      "type": "Der Typ muss sein",
-
-      "type-options": {
-        "any": "Jeder",
-        "visor": "Visor",
-        "dmsg-server": "DMSG Server",
-        "transport": "Transport"
-      }
-    }
-  },
-
-  "filters": {
-    "filter-action": "Filter",
-    "press-to-remove": "(Drücken um Filter zu löschen)",
-    "remove-confirmation": "Filter wirkliche löschen?"
+    "logout-error": "Fehler beim Abmelden."
   },
 
   "tables": {
     "title": "Ordnen nach",
     "sorting-title": "Geordnet nach:",
-    "sort-by-value": "Wert",
-    "sort-by-label": "Bezeichnung",
-    "label": "(Bezeichnung)",
-    "inverted-order": "(Umgekehrt)"
+    "ascending-order": "(aufsteigend)",
+    "descending-order": "(absteigend)"
+  },
+
+  "inputs": {
+    "errors": {
+      "key-required": "Schlüssel wird benötigt.",
+      "key-length": "Schlüssel muss 66 Zeichen lang sein."
+    }
   },
 
   "start": {
@@ -83,8 +44,6 @@
     "statuses": {
       "online": "Online",
       "online-tooltip": "Visor ist online",
-      "partially-online": "Online mit Problemen",
-      "partially-online-tooltip": "Visor ist online, aber nicht alle Dienste laufen. Für Informationen bitte die Details Seite öffnen und die \"Zustand Info\" überprüfen.",
       "offline": "Offline",
       "offline-tooltip": "Visor ist offline"
     },
@@ -94,9 +53,8 @@
         "label": "Bezeichnung:",
         "public-key": "Öffentlicher Schlüssel:",
         "port": "Port:",
-        "dmsg-server": "DMSG Server:",
-        "ping": "Ping:",
         "node-version": "Visor Version:",
+        "app-protocol-version": "Anwendungsprotokollversion:",
         "time": {
           "title": "Online seit:",
           "seconds": "ein paar Sekunden",
@@ -132,50 +90,22 @@
 
   "nodes": {
     "title": "Visor Liste",
-    "dmsg-title": "DMSG",
-    "update-all": "Alle Visor aktualisieren",
-    "hypervisor": "Hypervisor",
     "state": "Status",
-    "state-tooltip": "Aktueller Status",
     "label": "Bezeichnung",
     "key": "Schlüssel",
-    "dmsg-server": "DMSG Server",
-    "ping": "Ping",
-    "hypervisor-info": "Dieser Visor ist der aktuelle Hypervisor.",
-    "copy-key": "Schlüssel kopieren",
-    "copy-dmsg": "DMSG Server Schlüssel kopieren",
-    "copy-data": "Daten kopieren",
     "view-node": "Visor betrachten",
     "delete-node": "Visor löschen",
-    "delete-all-offline": "Alle offline Visor löschen",
     "error-load": "Beim Aktualisieren der Visor-Liste ist ein Fehler aufgetreten.",
     "empty": "Es ist kein Visor zu diesem Hypervisor verbunden.",
-    "empty-with-filter": "Kein Visor erfüllt die gewählten Filterkriterien",
     "delete-node-confirmation": "Visor wirklich von der Liste löschen?",
-    "delete-all-offline-confirmation": "Wirklich alle offline Visor von der Liste löschen?",
-    "delete-all-filtered-offline-confirmation": "Alle offline Visor, welche die Filterkriterien erfüllen werden von der Liste gelöscht. Wirklich fortfahren?",
-    "deleted": "Visor gelöscht.",
-    "deleted-singular": "Ein offline Visor gelöscht.",
-    "deleted-plural": "{{ number }} offline Visor gelöscht.",
-    "no-visors-to-update": "Kein Visor zum Aktualiseren vorhanden.",
-    "filter-dialog": {
-      "online": "Der Visor muss",
-      "label": "Der Bezeichner muss enthalten",
-      "key": "Der öffentliche Schlüssel muss enthalten",
-      "dmsg": "Der DMSG Server Schlüssel muss enthalten",
-
-      "online-options": {
-        "any": "Online oder offline",
-        "online": "Online",
-        "offline": "Offline"
-      }
-    }
+    "deleted": "Visor gelöscht."
   },
 
   "edit-label": {
+    "title": "Bezeichnung ändern",
     "label": "Bezeichnung",
     "done": "Bezeichnung gespeichert.",
-    "label-removed-warning": "Die Bezeichnung wurde gelöscht."
+    "default-label-warning": "Die Standardbezeichnung wurde verwendet."
   },
 
   "settings": {
@@ -204,22 +134,6 @@
         "default-password": "Das Standardpasswort darf nicht verwendet werden (1234)."
       }
     },
-    "updater-config" : {
-      "open-link": "Aktualisierungseinstellungen anzeigen",
-      "open-confirmation": "Es wird nur erfahrenen Benutzern empfohlen, die Aktualisierungseinstellungen zu modifizieren. Wirkich fortfahren?",
-      "help": "Dieses Formular benutzen um Einstellungen für die Aktualisierung zu überschreiben. Alle leeren Felder werden ignoriert. Die Einstellungen werden für alle Aktualisierungen übernommen. Dies geschieht unabhängig davon, welches Element aktualisiert wird. Bitte Vorsicht wahren.",
-      "channel": "Kanal",
-      "version": "Version",
-      "archive-url": "Archiv-URL",
-      "checksum-url": "Prüfsummen-URL",
-      "not-saved": "Die Änderungen wurden noch nicht gespeichert.",
-      "save": "Änderungen speichern",
-      "remove-settings": "Einstellungen löschen",
-      "saved": "Die benutzerdefinierten Einstellungen wurden gespeichert.",
-      "removed": "Die benutzerdefinierten Einstellungen wurden gelöscht.",
-      "save-confirmation": "Wirklich die benutzerdefinierten Einstellungen anwenden?",
-      "remove-confirmation": "Wirklich die benutzerdefinierten Einstellungen löschen?"
-    },
     "change-password": "Passwort ändern",
     "refresh-rate": "Aktualisierungsintervall",
     "refresh-rate-help": "Zeit, bis das System die Daten automatisch aktualisiert.",
@@ -244,6 +158,14 @@
       "confirmation": "Den Visor wirklich neustarten?",
       "done": "Der Visor wird neu gestartet."
     },
+    "config": {
+      "title": "Discovery Konfiguration",
+      "header": "Discovery Addresse",
+      "remove": "Addresse entfernen",
+      "add": "Addresse hinzufügen",
+      "cant-store": "Konfiguration kann nicht gespeichert werden.",
+      "success": "Discovery Konfiguration wird durch Neustart angewendet."
+    },
     "terminal-options": {
       "full": "Terminal",
       "simple": "Einfaches Terminal"
@@ -252,35 +174,54 @@
       "title": "Terminal",
       "input-start": "Skywire Terminal für {{address}}",
       "error": "Bei der Ausführung des Befehls ist ein Fehler aufgetreten."
+    },
+    "update": {
+      "title": "Update",
+      "processing": "Suche nach Updates...",
+      "processing-button": "Bitte warten",
+      "no-update": "Kein Update vorhanden.<br>Installierte Version: {{ version }}.",
+      "update-available": "Es ist ein Update möglich.<br>Installierte Version: {{ currentVersion }} <br>Neue Version: {{ newVersion }}.",
+      "done": "Ein Update für den Visor wird installiert.",
+      "update-error": "Update konnte nicht installiert werden.",
+      "install": "Update installieren"
     }
-  },
-  
-  "update": {
-    "title": "Aktualisierung",
-    "error-title": "Error",
-    "processing": "Suche nach Aktualisierungen...",
-    "no-update": "Keine Aktualisierung vorhanden.<br>Installierte Version:",
-    "no-updates": "Keine neuen Aktualisierungen gefunden.",
-    "already-updating": "Einige Visor werden schon aktualisiert:",
-    "update-available": "Folgende Aktualisierungen wurden gefunden:",
-    "update-available-singular": "Folgende Aktualisierungen wurden für einen Visor gefunden:",
-    "update-available-plural": "Folgende Aktualisierungen wurden für {{ number }} Visor gefunden:",
-    "update-available-additional-singular": "Folgende zusätzliche Aktualisierungen für einen Visor wurden gefunden:",
-    "update-available-additional-plural": "Folgende zusätzliche Aktualisierungen für {{ number }} Visor wurden gefunden:",
-    "update-instructions": "'Aktualisierungen installieren' klicken um fortzufahren.",
-    "updating": "Die Aktualisierung wurde gestartet. Das Fenster kann erneut geöffnet werden um den Fortschritt zu sehen:",
-    "version-change": "Von {{ currentVersion }} auf {{ newVersion }}",
-    "selected-channel": "Gewählter Kanal:",
-    "downloaded-file-name-prefix": "Herunterladen: ",
-    "speed-prefix": "Geschwindigkeit: ",
-    "time-downloading-prefix": "Dauer: ",
-    "time-left-prefix": "Dauert ungefähr noch: ",
-    "starting": "Aktualisierung wird vorbereitet",
-    "finished": "Status Verbindung beendet",
-    "install": "Aktualisierungen installieren"
   },
 
   "apps": {
+    "socksc": {
+      "title": "Mit Visor verbinden",
+      "connect-keypair": "Schlüsselpaar eingeben",
+      "connect-search": "Visor suchen",
+      "connect-history": "Verlauf",
+      "versions": "Versionen",
+      "location": "Standort",
+      "connect": "Verbinden",
+      "next-page": "Nächste Seite",
+      "prev-page": "Vorherige Seite",
+      "auto-startup": "Automatisch mit Visor verbinden"
+    },
+    "sshc": {
+      "title": "SSH Client",
+      "connect": "Verbinde mit SSH Server",
+      "auto-startup": "Starte SSH client automatisch",
+      "connect-keypair": "Schlüsselpaar eingeben",
+      "connect-history": "Verlauf"
+    },
+    "sshs": {
+      "title": "SSH-Server",
+      "whitelist": {
+        "title": "SSH-Server Whitelist",
+        "header": "Schlüssel",
+        "add": "Zu Liste hinzufügen",
+        "remove": "Schlüssel entfernen",
+        "enter-key": "Node Schlüssel eingeben",
+        "errors": {
+          "cant-save": "Änderungen an der Whitelist konnten nicht gespeichert werden."
+        },
+        "saved-correctly": "Änderungen an der Whitelist gespeichert"
+      },
+      "auto-startup": "Starte SSH-Server automatisch"
+    },
     "log": {
       "title": "Log",
       "empty": "Im ausgewählten Intervall sind keine Logs vorhanden",
@@ -296,116 +237,48 @@
         "all": "Zeige alle"
       }
     },
+    "config": {
+      "title": "Startup Konfiguration"
+    },
+    "menu": {
+      "startup-config": "Startup Konfiguration",
+      "log": "Log Nachrichten",
+      "whitelist": "Whitelist"
+    },
     "apps-list": {
       "title": "Anwendungen",
       "list-title": "Anwendungsliste",
       "app-name": "Name",
       "port": "Port",
-      "state": "Status",
-      "state-tooltip": "Aktueller Status",
+      "status": "Status",
       "auto-start": "Auto-Start",
       "empty": "Visor hat keine Anwendungen.",
-      "empty-with-filter": "Keine Anwendung erfüllt die Filterkriterien",
       "disable-autostart": "Autostart ausschalten",
       "enable-autostart": "Autostart einschalten",
       "autostart-disabled": "Autostart aus",
-      "autostart-enabled": "Autostart ein",
-      "unavailable-logs-error": "Kann Logs nicht zeigen, solange die Anwendung gestoppt ist.",
-    
-      "filter-dialog": {
-        "state": "Der Status muss sein",
-        "name": "Der Name muss enthalten",
-        "port": "Der Port muss enthalten",
-        "autostart": "Autostart muss sein",
-  
-        "state-options": {
-          "any": "Läuft oder gestoppt",
-          "running": "Läuft",
-          "stopped": "Gestoppt"
-        },
-
-        "autostart-options": {
-          "any": "An oder Aus",
-          "enabled": "An",
-          "disabled": "Aus"
-        }
-      }
+      "autostart-enabled": "Autostart ein"
     },
-    "vpn-socks-server-settings": {
-      "socks-title": "Skysocks Einstellungen",
-      "vpn-title": "VPN-Server Einstellungen",
+    "skysocks-settings": {
+      "title": "Skysocks Einstellungen",
       "new-password": "Neues Passwort (Um Passwort zu entfernen leer lassen)",
       "repeat-password": "Passwort wiederholen",
       "passwords-not-match": "Passwörter stimmen nicht überein.",
-      "secure-mode-check": "Sicherheitsmodus benutzen",
-      "secure-mode-info": "Wenn aktiv, erlaubt der Server kein Client/Server SSH und erlaubt kein Datenverkehr vom VPN-Client zum lokalen Netzwerk des Servers.",
       "save": "Speichern",
       "remove-passowrd-confirmation": "Kein Passwort eingegeben. Wirklich Passwort entfernen?",
       "change-passowrd-confirmation": "Passwort wirklich ändern?",
       "changes-made": "Änderungen wurden gespeichert."
     },
-    "vpn-socks-client-settings": {
-      "socks-title": "Skysocks-Client Einstellungen",
-      "vpn-title": "VPN-Client Einstellungen",
-      "discovery-tab": "Suche",
-      "remote-visor-tab": "Manuelle Eingabe",
+    "skysocks-client-settings": {
+      "title": "Skysocks-Client Einstellungen",
+      "remote-visor-tab": "Remote Visor",
       "history-tab": "Verlauf",
-      "settings-tab": "Einstellungen",
-      "use": "Diese Daten benutzen",
-      "change-note": "Notiz ändern",
-      "remove-entry": "Eintrag löschen",
-      "note": "Notiz:",
-      "note-entered-manually": "Manuell eingegeben",
-      "note-obtained": "Von Discovery-Service erhalten",
-      "key": "Schlüssel:",
-      "port": "Port:",
-      "location": "Ort:",
-      "state-available": "Verfügbar",
-      "state-offline": "Offline",
       "public-key": "Remote Visor öffentlicher Schlüssel",
-      "password": "Passwort",
-      "password-history-warning": "Achtung: Das Passwort wird nicht im Verlauf gespeichert.",
-      "copy-pk-info": "Öffentlichen Schlüssel kopieren.",
-      "copied-pk-info": "Öffentlicher Schlüssel wurde kopiert",
-      "copy-pk-error": "Beim Kopieren des öffentlichen Schlüssels ist ein Problem aufgetreten.",
-      "no-elements": "Derzeit können keine Elemente angezeigt werden. Bitte später versuchen.",
-      "no-elements-for-filters": "Keine Elemente, welche die Filterkriterien erfüllen.",
-      "no-filter": "Es wurde kein Filter gewählt.",
-      "click-to-change": "Zum Ändern klicken",
       "remote-key-length-error": "Der öffentliche Schlüssel muss 66 Zeichen lang sein.",
       "remote-key-chars-error": "Der öffentliche Schlüssel darf nur hexadezimale Zeichen enthalten.",
       "save": "Speichern",
-      "remove-from-history-confirmation": "Eintrag wirklich aus dem Verlauf löschen?",
-      "change-key-confirmation": "Wirklich den öffentlichen Schlüssel des remote Visors ändern?",
+      "change-key-confirmation": "Wirklich den öffentlichen Schlüssel des Remote Visors ändern?",
       "changes-made": "Änderungen wurden gespeichert.",
-      "no-history": "Dieser Tab zeigt die letzten {{ number }} öffentlichen Schlüssel, die benutzt wurden.",
-      "default-note-warning": "Die Standardnotiz wurde nicht benutzt.",
-      "pagination-info": "{{ currentElementsRange }} von {{ totalElements }}",
-      "killswitch-check": "Killswitch aktivieren",
-      "killswitch-info": "Wenn aktiv, werden alle Netzwerkverbindungen deaktiviert falls die Anwendung läuft aber der VPN Schutz unterbrochen wird (für temporäre Fehler oder andere Probleme).",
-      "settings-changed-alert": "Die Änderungen wurden noch nicht gespeichert.",
-      "save-settings": "Einstellungen speichern",
-    
-      "change-note-dialog": {
-        "title": "Notiz ändern",
-        "note": "Notiz"
-      },
-
-      "password-dialog": {
-        "title": "Passwort eingeben",
-        "password": "Passwort",
-        "info": "Ein Passwort wird abgefragt, da bei der Erstellung des gewählten Eintrags ein Passwort gesetzt wurde, aus Sicherheitsgründen aber nicht gespeichert wurde. Das Passwort kann frei gelassen werden.",
-        "continue-button": "Fortfahren"
-      },
-
-      "filter-dialog": {
-        "title": "Filter",
-        "country": "Das Land muss sein",
-        "any-country": "Jedes",
-        "location": "Der Ort muss enthalten",
-        "pub-key": "Der öffentliche Schlüssel muss enthalten",
-        "apply": "Anwenden"
-      }
+      "no-history": "Dieser Tab zeigt die letzten {{ number }} öffentlichen Schlüssel, die benutzt wurden."
     },
     "stop-app": "Stopp",
     "start-app": "Start",
@@ -430,13 +303,7 @@
 
   "transports": {
     "title": "Transporte",
-    "remove-all-offline": "Alle offline Transporte löschen",
-    "remove-all-offline-confirmation": "Wirkliche alle offline Transporte löschen?",
-    "remove-all-filtered-offline-confirmation": "Alle offline Transporte, welche die Filterkriterien erfüllen werden gelöscht. Wirklich fortfahren?",
-    "info": "Verbindungen mit remote Skywire Visor, um lokalen Skywire Anwendungen zu erlauben mit diesen remote Visor zu kommunizieren.",
     "list-title": "Transport-Liste",
-    "state": "Status",
-    "state-tooltip": "Aktueller Status",
     "id": "ID",
     "remote-node": "Remote",
     "type": "Typ",
@@ -446,18 +313,10 @@
     "delete": "Transport entfernen",
     "deleted": "Transport erfolgreich entfernt.",
     "empty": "Visor hat keine Transporte.",
-    "empty-with-filter": "Kein Transport erfüllt die gewählten Filterkriterien.",
-    "statuses": {
-      "online": "Online",
-      "online-tooltip": "Transport ist online",
-      "offline": "Offline",
-      "offline-tooltip": "Transport ist offline"
-    },
     "details": {
       "title": "Details",
       "basic": {
         "title": "Basis Info",
-        "state": "Status:",
         "id": "ID:",
         "local-pk": "Lokaler öffentlicher Schlüssel:",
         "remote-pk": "Remote öffentlicher Schlüssel:",
@@ -471,43 +330,26 @@
     },
     "dialog": {
       "remote-key": "Remote öffentlicher Schlüssel:",
-      "label": "Bezeichnung (optional)",
       "transport-type": "Transport-Typ",
       "success": "Transport erstellt.",
-      "success-without-label": "Der Transport wurde erstellt, aber die Bezeichnung konnte nicht gespeichert werden.",
       "errors": {
         "remote-key-length-error": "Der remote öffentliche Schlüssel muss 66 Zeichen lang sein.",
         "remote-key-chars-error": "Der remote öffentliche Schlüssel darf nur hexadezimale Zeichen enthalten.",
         "transport-type-error": "Ein Transport-Typ wird benötigt."
-      }
-    },
-    "filter-dialog": {
-      "online": "Der Transport muss sein",
-      "id": "Die ID muss enthalten",
-      "remote-node": "Der remote Schlüssel muss enthalten",
-
-      "online-options": {
-        "any": "Online oder offline",
-        "online": "Online",
-        "offline": "Offline"
       }
     }
   },
 
   "routes": {
     "title": "Routen",
-    "info": "Netzwerkpfade zum Erreichen von remote Visor. Routen werden bei Bedarf automatisch generiert.",
     "list-title": "Routen-Liste",
     "key": "Schlüssel",
-    "type": "Typ",
-    "source": "Quelle",
-    "destination": "Ziel",
+    "rule": "Regel",
     "delete-confirmation": "Diese Route wirklich entfernen?",
     "delete-selected-confirmation": "Ausgewählte Routen wirklich entfernen?",
     "delete": "Route entfernen",
     "deleted": "Route erfolgreich entfernt.",
     "empty": "Visor hat keine Routen.",
-    "empty-with-filter": "Keine Route erfüllt die gewählten Filterkriterien.",
     "details": {
       "title": "Details",
       "basic": {
@@ -534,13 +376,6 @@
         "destination-port": "Ziel Port:",
         "source-port": "Quelle Port:"
       }
-    },
-    "filter-dialog": {
-      "key": "Der Schlüssel muss enthalten",
-      "type": "Der Typ muss sein",
-      "source": "Die Quelle muss enhalten",
-      "destination": "Das Ziel muss enthalten",
-      "any-type-option": "Egal"
     }
   },
 
@@ -589,8 +424,7 @@
     "confirm-button": "Ja",
     "cancel-button": "Nein",
     "close": "Schließen",
-    "error-header-text": "Fehler",
-    "done-header-text": "Fertig"
+    "error-header-text": "Fehler"
   },
 
   "language" : {
