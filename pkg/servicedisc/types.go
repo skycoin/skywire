@@ -106,7 +106,7 @@ type Stats struct {
 type Service struct {
 	Addr     SWAddr       `json:"address"`
 	Type     string       `json:"type"`
-	Stats    *Stats       `json:"stats,omitempty"` // TODO: Have this implemented.
+	Stats    *Stats       `json:"stats,omitempty"`
 	Geo      *GeoLocation `json:"geo,omitempty"`
 	Version  string       `json:"version,omitempty"`
 	LocalIPs []string     `json:"local_ips,omitempty"`
