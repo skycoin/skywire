@@ -600,9 +600,9 @@ export class NodeService {
         const node = new Node();
 
         // Basic data.
-        // node.online = response.online;
-        // node.tcpAddr = response.tcp_addr;
-        node.port = response.port;
+        node.online = response.online;
+        node.tcpAddr = response.tcp_addr;
+        node.port = this.getAddressPart(node.tcpAddr, 1);
         node.localPk = response.overview.local_pk;
         node.version = response.overview.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
