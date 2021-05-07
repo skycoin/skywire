@@ -78,7 +78,7 @@ type HealthCheckable interface {
 	Health(ctx context.Context) (int, error)
 }
 
-// Overview provides a overview of a Skywire Visor.
+// Overview provides a range of basic information about a Visor.
 type Overview struct {
 	PubKey          cipher.PubKey        `json:"local_pk"`
 	BuildInfo       *buildinfo.Info      `json:"build_info"`
@@ -132,15 +132,16 @@ func (v *Visor) Overview() (*Overview, error) {
 	return overview, nil
 }
 
-// Summary provides an summary of a Skywire Visor.
+// Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	*NetworkStats
 	Overview     *Overview                      `json:"overview"`
 	Health       *HealthInfo                    `json:"health"`
 	Uptime       float64                        `json:"uptime"`
 	Routes       []routingRuleResp              `json:"routes"`
 	IsHypervisor bool                           `json:"is_hypervisor,omitempty"`
 	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
+	Port         uint16                         `json:"port"`
+	Online       bool                           `json:"online"`
 }
 
 // Summary implements API.

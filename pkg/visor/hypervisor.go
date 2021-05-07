@@ -382,15 +382,15 @@ func (hv *Hypervisor) getUptime() http.HandlerFunc {
 }
 
 // NetworkStats represents the network statistics of a visor
-type NetworkStats struct {
-	TCPAddr string `json:"tcp_addr"`
-	Online  bool   `json:"online"`
-}
+// type NetworkStats struct {
+// 	TCPAddr string `json:"tcp_addr"`
+// 	Online  bool   `json:"online"`
+// }
 
-type overviewResp struct {
-	*NetworkStats
-	*Overview
-}
+// type overviewResp struct {
+// 	*NetworkStats
+// 	*Overview
+// }
 
 // provides overview of all visors.
 func (hv *Hypervisor) getVisors() http.HandlerFunc {
@@ -404,7 +404,7 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 			i++
 		}
 
-		overviews := make([]overviewResp, len(hv.visors)+i)
+		overviews := make([]Overview, len(hv.visors)+i)
 
 		if hv.visor != nil {
 			overview, err := hv.visor.Overview()
@@ -413,14 +413,8 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 				overview = &Overview{PubKey: hv.visor.conf.PK}
 			}
 
-			addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-			overviews[0] = overviewResp{
-				NetworkStats: &NetworkStats{
-					TCPAddr: addr.String(),
-					Online:  err == nil,
-				},
-				Overview: overview,
-			}
+			// addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
+			overviews[0] = *overview
 		}
 
 		for pk, c := range hv.visors {
@@ -439,13 +433,7 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 				} else {
 					log.Debug("Obtained overview via RPC.")
 				}
-				overviews[i] = overviewResp{
-					NetworkStats: &NetworkStats{
-						TCPAddr: c.Addr.String(),
-						Online:  err == nil,
-					},
-					Overview: overview,
-				}
+				overviews[i] = *overview
 				wg.Done()
 			}(pk, c, i)
 			i++
@@ -467,12 +455,7 @@ func (hv *Hypervisor) getVisor() http.HandlerFunc {
 			return
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, overviewResp{
-			NetworkStats: &NetworkStats{
-				TCPAddr: ctx.Addr.String(),
-			},
-			Overview: overview,
-		})
+		httputil.WriteJSON(w, r, http.StatusOK, overview)
 	})
 }
 
@@ -497,18 +480,14 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 			summary.DmsgStats = &dmsgtracker.DmsgClientSummary{}
 		}
 
-		summary.NetworkStats = &NetworkStats{
-			TCPAddr: ctx.Addr.String(),
-		}
+		summary.Port = ctx.Addr.Port
 
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})
 }
 
 func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
-	sum.NetworkStats = &NetworkStats{
-		Online: online,
-	}
+	sum.Online = online
 	sum.IsHypervisor = hyper
 	return *sum
 }
