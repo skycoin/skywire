@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
@@ -43,6 +44,7 @@ type API interface {
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
+	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
 	TransportTypes() ([]string, error)
@@ -67,6 +69,7 @@ type API interface {
 	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
+	RuntimeLogs() (string, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -84,6 +87,7 @@ type Summary struct {
 	Apps            []*launcher.AppState `json:"apps"`
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
+	LocalIP         string               `json:"local_ip"`
 }
 
 // Summary implements API.
@@ -101,6 +105,16 @@ func (v *Visor) Summary() (*Summary, error) {
 		return true
 	})
 
+	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get default network interface: %w", err)
+	}
+
+	localIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IPs of interface %s: %w", defaultNetworkIfc, err)
+	}
+
 	summary := &Summary{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
@@ -108,6 +122,12 @@ func (v *Visor) Summary() (*Summary, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      summaries,
 		RoutesCount:     v.router.RoutesCount(),
+	}
+
+	if len(localIPs) > 0 {
+		// should be okay to have the first one, in the case of
+		// active network interface, there's usually just a single IP
+		summary.LocalIP = localIPs[0].String()
 	}
 
 	return summary, nil
@@ -425,6 +445,16 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 	return res, nil
 }
 
+// GetAppStats implements API.
+func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
+	stats, err := v.procM.Stats(appName)
+	if err != nil {
+		return appserver.AppStats{}, err
+	}
+
+	return stats, nil
+}
+
 // GetAppConnectionsSummary implements API.
 func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
 	summary, err := v.procM.ConnectionsSummary(appName)
@@ -693,4 +723,14 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 // UpdateStatus returns status of the current updating operation.
 func (v *Visor) UpdateStatus() (string, error) {
 	return v.updater.Status(), nil
+}
+
+// RuntimeLogs returns visor runtime logs
+func (v *Visor) RuntimeLogs() (string, error) {
+	var builder strings.Builder
+	builder.WriteString("[")
+	logs, _ := v.logstore.GetLogs()
+	builder.WriteString(strings.Join(logs, ","))
+	builder.WriteString("]")
+	return builder.String(), nil
 }

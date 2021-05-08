@@ -34,7 +34,10 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 	}
 
 	switch cc.Version {
-	case V1Name: // Current version.
+	// parse any v1-compatible version with v1 parse procedure
+	case V110Name:
+		fallthrough
+	case V100Name:
 		return parseV1(cc, raw)
 	case V0Name, V0NameOldFormat, "":
 		return parseV0(cc, raw)
@@ -47,7 +50,6 @@ func parseV1(cc *Common, raw []byte) (*V1, error) {
 	conf := MakeBaseConfig(cc)
 
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
 	if err := dec.Decode(&conf); err != nil {
 		return nil, err
 	}
