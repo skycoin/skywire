@@ -54,6 +54,7 @@ builds:
     goarch:
       - arm
     goarm:
+      - 6
       - 7
     env:
       - CGO_ENABLED=1
@@ -74,6 +75,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     env:
       - CGO_ENABLED=0
@@ -88,6 +90,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     env:
       - CGO_ENABLED=0
@@ -102,6 +105,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     env:
       - CGO_ENABLED=0
@@ -116,6 +120,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     env:
       - CGO_ENABLED=0
@@ -130,6 +135,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     env:
       - CGO_ENABLED=0
@@ -144,6 +150,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     env:
       - CGO_ENABLED=0
@@ -152,7 +159,7 @@ builds:
 archives:
   - format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:
@@ -161,5 +168,5 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
+    - '^docs:'
+    - '^test:'

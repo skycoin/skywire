@@ -4,19 +4,17 @@ import { HttpClient } from '@angular/common/http';
 import { retryWhen, delay, map } from 'rxjs/operators';
 
 import { ProxyDiscoveryEntry } from '../app.datatypes';
-import { environment } from 'src/environments/environment';
 import { countriesList } from '../utils/countries-list';
 
 /**
- * Allows to get the proxies registered in the proxy discovery service.
+ * Allows to get the proxies and vpn servers registered in the discovery service.
  */
 @Injectable({
   providedIn: 'root'
 })
 export class ProxyDiscoveryService {
   /**
-   * URL of the proxy discovery service. While in dev mode the url is managed by the
-   * dev server proxy.
+   * URL of the discovery service.
    */
   private readonly discoveryServiceUrl = 'https://service.discovery.skycoin.com/api/services?type=';
 
