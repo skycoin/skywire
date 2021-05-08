@@ -49,6 +49,9 @@ type Proc struct {
 	m       ProcManager
 	appName string
 
+	startTimeMx sync.RWMutex
+	startTime   time.Time
+
 	statusMx sync.RWMutex
 	status   string
 }
@@ -89,6 +92,18 @@ func (p *Proc) Logs() appcommon.LogStore {
 // Cmd returns the internal cmd name.
 func (p *Proc) Cmd() *exec.Cmd {
 	return p.cmd
+}
+
+// StartTime returns app start time.
+func (p *Proc) StartTime() (time.Time, bool) {
+	if !p.IsRunning() {
+		return time.Time{}, false
+	}
+
+	p.startTimeMx.RLock()
+	defer p.startTimeMx.RUnlock()
+
+	return p.startTime, true
 }
 
 // InjectConn introduces the connection to the Proc after it is started.
@@ -157,6 +172,10 @@ func (p *Proc) Start() error {
 		p.waitMx.Unlock()
 		return err
 	}
+
+	p.startTimeMx.Lock()
+	p.startTime = time.Now().UTC()
+	p.startTimeMx.Unlock()
 
 	go func() {
 		waitErrCh := make(chan error)
@@ -283,11 +302,13 @@ func (p *Proc) DetailedStatus() string {
 
 // ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
-	IsAlive       bool          `json:"is_alive"`
-	Latency       time.Duration `json:"latency"`
-	Throughput    uint32        `json:"throughput"`
-	BandwidthSent uint64        `json:"bandwidth_sent"`
-	Error         string        `json:"error"`
+	IsAlive           bool          `json:"is_alive"`
+	Latency           time.Duration `json:"latency"`
+	UploadSpeed       uint32        `json:"upload_speed"`
+	DownloadSpeed     uint32        `json:"download_speed"`
+	BandwidthSent     uint64        `json:"bandwidth_sent"`
+	BandwidthReceived uint64        `json:"bandwidth_received"`
+	Error             string        `json:"error"`
 }
 
 // ConnectionsSummary returns all of the proc's connections stats.
@@ -323,10 +344,12 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 		}
 
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive:       skywireConn.IsAlive(),
-			Latency:       skywireConn.Latency(),
-			Throughput:    skywireConn.Throughput(),
-			BandwidthSent: skywireConn.BandwidthSent(),
+			IsAlive:           skywireConn.IsAlive(),
+			Latency:           skywireConn.Latency(),
+			UploadSpeed:       skywireConn.UploadSpeed(),
+			DownloadSpeed:     skywireConn.DownloadSpeed(),
+			BandwidthSent:     skywireConn.BandwidthSent(),
+			BandwidthReceived: skywireConn.BandwidthReceived(),
 		})
 
 		return true

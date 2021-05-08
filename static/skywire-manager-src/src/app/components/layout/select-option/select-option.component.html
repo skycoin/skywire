@@ -6,7 +6,7 @@
       (click)="closePopup(i + 1)"
     >
       <div class="internal-container">
-        <mat-icon [inline]="true" *ngIf="option.icon">{{ option.icon }}</mat-icon>
+        <mat-icon class="icon" [inline]="true" *ngIf="option.icon">{{ option.icon }}</mat-icon>
         <span>{{ option.label | translate }}</span>
       </div>
     </button>
