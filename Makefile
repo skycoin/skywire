@@ -120,9 +120,9 @@ snapshot: sysroot ## create snapshot release
 		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --snapshot --skip-publish --rm-dist
 	mv ./dist ./dist-linux
 	if [[ $(shell uname -s) == "Darwin" ]]; then  \
-	  goreleaser -f ./.goreleaser.darwin.yml --snapshot --rm-dist --skip-publish; \
-	  mv ./dist-linux/* ./dist/
-	  rm -rf ./dist-linux
+	  goreleaser -f ./.goreleaser.darwin.yml --snapshot --rm-dist --skip-publish && \
+	  mv ./dist-linux/* ./dist/ && \
+	  rm -rf ./dist-linux; \
 	fi
 
 
@@ -186,9 +186,9 @@ github-release: sysroot ## Create a GitHub release
 		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --rm-dist
 	mv ./dist ./dist-linux
 	if [[ $(shell uname -s) == "Darwin" ]]; then  \
-	  goreleaser -f ./.goreleaser.darwin.yml --rm-dist; \
-	  mv ./dist-linux/* ./dist/
-	  rm -rf ./dist-linux
+	  goreleaser -f ./.goreleaser.darwin.yml --rm-dist && \
+	  mv ./dist-linux/* ./dist/ && \
+	  rm -rf ./dist-linux; \
 	fi
 
 
