@@ -8,6 +8,7 @@
 .PHONY : docker-run docker-stop
 .PHONY : sysroot sysroot-clean
 
+SHELL := /bin/bash
 VERSION := $(shell git describe)
 #VERSION := v0.1.0 # for debugging updater
 
