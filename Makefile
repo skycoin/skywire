@@ -120,9 +120,10 @@ snapshot: sysroot ## create snapshot release
 	mv ./dist ./dist-linux
 	if [[ $(shell uname -s) == "Darwin" ]]; then  \
 	  goreleaser -f ./.goreleaser.darwin.yml --snapshot --rm-dist --skip-publish; \
+	  mv ./dist-linux/* ./dist/
+	  rm -rf ./dist-linux
 	fi
-	mv ./dist-linux/* ./dist/
-	rm -rf ./dist-linux
+
 
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
@@ -185,9 +186,10 @@ github-release: sysroot ## Create a GitHub release
 	mv ./dist ./dist-linux
 	if [[ $(shell uname -s) == "Darwin" ]]; then  \
 	  goreleaser -f ./.goreleaser.darwin.yml --rm-dist; \
+	  mv ./dist-linux/* ./dist/
+	  rm -rf ./dist-linux
 	fi
-	mv ./dist-linux/* ./dist/
-	rm -rf ./dist-linux
+
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
