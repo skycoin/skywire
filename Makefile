@@ -6,6 +6,7 @@
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
 .PHONY : docker-run docker-stop
+.PHONY : sysroot sysroot-clean
 
 VERSION := $(shell git describe)
 #VERSION := v0.1.0 # for debugging updater
@@ -108,28 +109,36 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-snapshot: sysroot
+snapshot: sysroot ## create snapshot release
 	docker run --rm --privileged \
 		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(GOPATH)/src:/go/src \
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
-		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --snapshot --rm-dist
-
+		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --snapshot --skip-publish --rm-dist
+	mv ./dist ./dist-linux
 	if [[ $(shell uname -s) == "Darwin" ]]; then  \
-	  goreleaser -f ./.goreleaser.darwin.yml --snapshot; \
+	  goreleaser -f ./.goreleaser.darwin.yml --snapshot --rm-dist --skip-publish; \
 	fi
+	mv ./dist-linux/* ./dist/
+	rm -rf ./dist-linux
 
+snapshot-clean: ## Cleans snapshot / release
+	rm -rf ./dist
 
 sysroot:
+	# TODO: checksum it
 	mkdir -p ./sysroot
-	if [[ ! -d /tmp/sysroot-git ]]; then \
-  	  git clone https://github.com/alexadhy/sysroot.git --depth=1 /tmp/sysroot-git && \
-  	  tar xf /tmp/sysroot-git/release.tar.gz -C ./sysroot/; \
-	else \
-	  tar xf /tmp/sysroot-git/release.tar.gz -C ./sysroot/; \
+	@echo "getting sysroot for cross compilation"
+	if [[ ! -f /tmp/snapshot-05-08-2021.tar.gz ]]; then \
+  		curl -L -o /tmp/snapshot-05-08-2021.tar.gz "https://alexadhy-git.s3-ap-southeast-1.amazonaws.com/snapshot-05-08-2021.tar.gz"; \
 	fi
+	tar xf /tmp/snapshot-05-08-2021.tar.gz -C ./sysroot/
+
+sysroot-clean:
+	@rm -rf ./sysroot
+	@rm -rf /tmp/sysroot-git
 
 host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
@@ -165,8 +174,20 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: ## Create a GitHub release
-	goreleaser --rm-dist
+github-release: sysroot ## Create a GitHub release
+	docker run --rm --privileged \
+		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(GOPATH)/src:/go/src \
+		-v $(CURDIR)/sysroot:/sysroot \
+		-w /go/src/github.com/skycoin/skywire \
+		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --rm-dist
+	mv ./dist ./dist-linux
+	if [[ $(shell uname -s) == "Darwin" ]]; then  \
+	  goreleaser -f ./.goreleaser.darwin.yml --rm-dist; \
+	fi
+	mv ./dist-linux/* ./dist/
+	rm -rf ./dist-linux
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
