@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 // Server is a VPN server.
@@ -33,14 +35,14 @@ func NewServer(cfg ServerConfig, l logrus.FieldLogger) (*Server, error) {
 		ipGen: NewIPGenerator(),
 	}
 
-	defaultNetworkIfc, err := DefaultNetworkInterface()
+	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network interface: %w", err)
 	}
 
 	l.Infof("Got default network interface: %s", defaultNetworkIfc)
 
-	defaultNetworkIfcIPs, err := NetworkInterfaceIPs(defaultNetworkIfc)
+	defaultNetworkIfcIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
 	if err != nil {
 		return nil, fmt.Errorf("error getting IPs of interface %s: %w", defaultNetworkIfc, err)
 	}

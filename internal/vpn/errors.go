@@ -1,8 +1,6 @@
 package vpn
 
-import (
-	"errors"
-)
+import "errors"
 
 var (
 	errCouldFindDefaultNetworkGateway = errors.New("could not find default network gateway")

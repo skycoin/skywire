@@ -15,11 +15,13 @@ import (
 	"syscall"
 	"time"
 
+	"embed"
+	"io/fs"
+
 	"github.com/getlantern/systray"
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
-	"github.com/skycoin/dmsg/discord"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
@@ -28,13 +30,17 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+var uiAssets fs.FS
 
 var restartCtx = restart.CaptureContext()
 
 const (
-	defaultConfigName = "skywire-config.json"
+	defaultConfigName    = "skywire-config.json"
+	runtimeLogMaxEntries = 300
 )
 
 var (
@@ -92,15 +98,8 @@ var rootCmd = &cobra.Command{
 
 func runVisor(args []string) {
 	log := initLogger(tag, syslogAddr)
-
-	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		// Workaround for Discord logger hook. Actually, it's Info.
-		log.Error(discord.StartLogMessage)
-		defer log.Error(discord.StopLogMessage)
-	} else {
-		log.Info(discord.StartLogMessage)
-		defer log.Info(discord.StopLogMessage)
-	}
+	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+	log.AddHook(hook)
 
 	delayDuration, err := time.ParseDuration(delay)
 	if err != nil {
@@ -159,6 +158,7 @@ func runVisor(args []string) {
 		systray.Quit()
 		return
 	}
+	v.SetLogstore(store)
 
 	if launchBrowser {
 		runBrowser(conf, log)
@@ -183,7 +183,15 @@ func runVisor(args []string) {
 }
 
 // Execute executes root CLI command.
-func Execute() {
+func Execute(ui embed.FS) {
+	uiFS, err := fs.Sub(ui, "static")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	uiAssets = uiFS
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
@@ -200,12 +208,6 @@ func initLogger(tag string, syslogAddr string) *logging.MasterLogger {
 			log.AddHook(hook)
 			log.Out = ioutil.Discard
 		}
-	}
-
-	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		discordOpts := discord.GetDefaultOpts()
-		hook := discord.NewHook(tag, discordWebhookURL, discordOpts...)
-		log.AddHook(hook)
 	}
 
 	return log
@@ -297,6 +299,10 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	conf, err := visorconfig.Parse(mLog, confPath, raw)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to parse config.")
+	}
+
+	if conf.Hypervisor != nil {
+		conf.Hypervisor.UIAssets = uiAssets
 	}
 
 	return conf

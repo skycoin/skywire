@@ -1,5 +1,5 @@
 <!-- Content when loading. -->
-<div *ngIf="loading" class="flex-column h-100 w-100">
+<div *ngIf="loading" class="d-flex flex-column h-100 w-100">
   <div>
     <app-top-bar
       [titleParts]="['start.title']"
@@ -126,6 +126,7 @@
           </td>
           <td *ngIf="showDmsgInfo">
             <app-labeled-element-text
+              *ngIf="node.dmsgServerPk"
               [short]="true"
               id="{{ node.dmsgServerPk }}"
               shortTextLength="4"
@@ -134,7 +135,9 @@
             </app-labeled-element-text>
           </td>
           <td *ngIf="showDmsgInfo">
-            {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+            <ng-container *ngIf="node.dmsgServerPk">
+              {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+            </ng-container>
           </td>
           <td (click)="$event.stopPropagation()" class="actions">
             <button
@@ -202,7 +205,7 @@
             <div class="left-part">
               <div class="list-row" *ngIf="node.isHypervisor">
                 <mat-icon class="hypervisor-icon" [inline]="true">star</mat-icon>&nbsp;
-                <span class="yellow-text title">{{ 'nodes.hypervisor' | translate }}</span>
+                <span class="yellow-clear-text title">{{ 'nodes.hypervisor' | translate }}</span>
               </div>
               <div class="list-row">
                 <span class="title">{{ 'nodes.state' | translate }}</span>:

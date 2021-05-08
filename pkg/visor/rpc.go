@@ -303,6 +303,18 @@ func (r *RPC) SetAppSecure(in *SetAppBoolIn, _ *struct{}) (err error) {
 	return r.visor.SetAppSecure(in.AppName, in.Val)
 }
 
+// GetAppStats gets app runtime statistics.
+func (r *RPC) GetAppStats(appName *string, out *appserver.AppStats) (err error) {
+	defer rpcutil.LogCall(r.log, "GetAppStats", appName)(out, &err)
+
+	stats, err := r.visor.GetAppStats(*appName)
+	if err != nil {
+		*out = stats
+	}
+
+	return err
+}
+
 // GetAppConnectionsSummary returns connections stats for the app.
 func (r *RPC) GetAppConnectionsSummary(appName *string, out *[]appserver.ConnectionSummary) (err error) {
 	defer rpcutil.LogCall(r.log, "GetAppConnectionsSummary", appName)(out, &err)
@@ -524,5 +536,11 @@ func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version
 // UpdateStatus returns visor update status.
 func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
 	*status, err = r.visor.UpdateStatus()
+	return
+}
+
+// RuntimeLogs returns visor runtime logs
+func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
+	*logs, err = r.visor.RuntimeLogs()
 	return
 }
