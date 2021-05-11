@@ -33,7 +33,7 @@ func NewVictoriaMetrics() *VictoriaMetrics {
 		reqDurationsSuccesses: metrics.GetOrCreateHistogram("request_durations{success=\"false\"}"),
 		routesSetup:           metricsutil.NewVictoriaMetricsIntGauge("no_of_route_setups"),
 		routesSetupFailed:     metricsutil.NewVictoriaMetricsIntGauge("no_of_failed_route_setups"),
-		routesSetupDuration:   metrics.GetOrCreateHistogram("route_setup{success=\"true\"}"),
+		routesSetupDuration:   metrics.GetOrCreateHistogram("route_setup_duration{success=\"true\"}"),
 	}
 }
 
