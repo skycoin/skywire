@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -498,25 +497,19 @@ func initPublicVisors(v *Visor) bool {
 		proxyDisc = skyenv.DefaultServiceDiscAddr
 	}
 
-	_, portStr, err := net.SplitHostPort(v.conf.STCP.LocalAddr)
-	if err != nil {
-		log.WithError(err).Errorln("Failed to parse address string")
-		return false
-	}
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.WithError(err).Errorln("Failed to parse port")
-		return false
-	}
-
+	// todo: refactor appdisc: split connecting to services in appdisc and
+	// advertising oneself as a service. Currently, config is tailored to
+	// advertising oneself and requires things like port that are not used
+	// in connecting to services
 	conf := servicedisc.Config{
 		Type:     servicedisc.ServiceTypeVisor,
 		PK:       v.conf.PK,
 		SK:       v.conf.SK,
-		Port:     uint16(port),
+		Port:     uint16(0),
 		DiscAddr: proxyDisc,
 	}
+	// todo: refactor snet and app discovery in such a way that app discovery can make use of
+	// of transport directly, and avoid using callbacks
 	connectFn := servicedisc.ConnectFn(func(ctx context.Context, pk cipher.PubKey) error {
 		log.WithField("pk", pk).Infoln("Adding transport to public visor")
 		if _, err := v.tpM.SaveTransport(ctx, pk, tptypes.STCPR); err != nil {
@@ -533,8 +526,6 @@ func initPublicVisors(v *Visor) bool {
 			Infoln("Added transport to public visor")
 		return nil
 	})
-	// check will use transport manager to check if transport exists
-	// todo: check if it's possible for a transport to exist but be broken
 	checkFN := servicedisc.CheckConnFN(func(pk cipher.PubKey) bool {
 		t, err := v.tpM.GetTransport(pk, tptypes.STCPR)
 		if err != nil {
