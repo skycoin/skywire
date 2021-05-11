@@ -562,37 +562,8 @@ func initPublicVisors(v *Visor) bool {
 		Port:     uint16(0),
 		DiscAddr: proxyDisc,
 	}
-	// todo: refactor snet and app discovery in such a way that app discovery can make use of
-	// of transport directly, and avoid using callbacks
-	connectFn := servicedisc.ConnectFn(func(ctx context.Context, pk cipher.PubKey) error {
-		log.WithField("pk", pk).Infoln("Adding transport to public visor")
-		if _, err := v.tpM.SaveTransport(ctx, pk, tptypes.STCPR); err != nil {
-			log.
-				WithError(err).
-				WithField("pk", pk).
-				WithField("type", tptypes.STCPR).
-				Warnln("Failed to add transport to public visor via")
-			return err
-		}
-		log.
-			WithField("pk", pk).
-			WithField("type", tptypes.STCPR).
-			Infoln("Added transport to public visor")
-		return nil
-	})
-	checkFN := servicedisc.CheckConnFN(func(pk cipher.PubKey) bool {
-		t, err := v.tpM.GetTransport(pk, tptypes.STCPR)
-		if err != nil {
-			return false
-		}
-		up := t.IsUp()
-		if !up {
-			v.tpM.DeleteTransport(t.Entry.ID)
-		}
-		return up
-	})
 	connector := servicedisc.MakeConnector(conf, 5, v.tpM, log)
-	go connector.Run(context.Background(), connectFn, checkFN) //nolint:errcheck
+	go connector.Run(context.Background()) //nolint:errcheck
 
 	return true
 }
