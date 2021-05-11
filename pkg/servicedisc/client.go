@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -21,10 +22,13 @@ import (
 	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
-var (
-	// ErrVisorUnreachable is returned when visor is unreachable.
-	ErrVisorUnreachable = errors.New("visor is unreachable")
-	updateRetryDelay    = 5 * time.Second
+// ErrVisorUnreachable is returned when visor is not reachable
+var ErrVisorUnreachable = errors.New("visor is unreachable")
+
+const (
+	updateRetryDelay     = 5 * time.Second
+	discServiceTypeParam = "type"
+	discServiceQtyParam  = "quantity"
 )
 
 // Config configures the HTTPClient.
@@ -65,14 +69,22 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 	}
 }
 
-func (c *HTTPClient) addr(path string, sType string) string {
-	addr := c.conf.DiscAddr + path
-
-	if sType != "" {
-		addr += "?type=" + sType
+func (c *HTTPClient) addr(path, serviceType string, quantity int) (string, error) {
+	addr := c.conf.DiscAddr
+	url, err := url.Parse(addr)
+	if err != nil {
+		return "", errors.New("invalid service discovery address in config: " + addr)
 	}
-
-	return addr
+	url.Path = path
+	q := url.Query()
+	if serviceType != "" {
+		q.Set(discServiceTypeParam, serviceType)
+	}
+	if quantity > 1 {
+		q.Set(discServiceQtyParam, strconv.Itoa(quantity))
+	}
+	url.RawQuery = q.Encode()
+	return url.String(), nil
 }
 
 var (
@@ -102,11 +114,11 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 
 // Services calls 'GET /api/services'.
 func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service, err error) {
-	addr := c.addr("/api/services", c.entry.Type)
-	if quantity != 0 {
-		addr += "&quantity=" + strconv.Itoa(quantity)
+	url, err := c.addr("/api/services", c.entry.Type, quantity)
+	if err != nil {
+		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -170,11 +182,16 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 		return Service{}, err
 	}
 
+	url, err := c.addr("/api/services", "", 1)
+	if err != nil {
+		return Service{}, nil
+	}
+
 	raw, err := json.Marshal(&c.entry)
 	if err != nil {
 		return Service{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/services", ""), bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
 		return Service{}, err
 	}
@@ -217,7 +234,12 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type), nil)
+	url, err := c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type, 1)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err
 	}
