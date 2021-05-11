@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -46,6 +48,7 @@ func initStack() []initFunc {
 		initAddressResolver,
 		initDiscovery,
 		initSNet,
+		initPublicVisor,
 		initDmsgpty,
 		initTransport,
 		initRouter,
@@ -95,8 +98,6 @@ func initSNet(v *Visor) bool {
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
 		NetworkConfigs: nc,
-		ServiceDisc:    v.serviceDisc,
-		IsPublic:       v.conf.IsPublic,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -137,6 +138,59 @@ func initSNet(v *Visor) bool {
 
 	v.net = n
 	return report(nil)
+}
+
+// this service is not considered critical and always returns true
+// advertise this visor as public in service discovery
+func initPublicVisor(v *Visor) bool {
+	if !v.conf.IsPublic {
+		return true
+	}
+	if v.arClient == nil {
+		return true
+	}
+	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		return true
+	}
+	for _, IP := range defaultIPs {
+		if netutil.IsPublicIP(IP) {
+			return true
+		}
+	}
+
+	stcpr, ok := v.net.STcpr()
+	if !ok {
+		return true
+	}
+
+	la, err := stcpr.LocalAddr()
+	if err != nil {
+		log.WithError(err).Errorln("Failed to get STCPR local addr")
+		return true
+	}
+
+	_, portStr, err := net.SplitHostPort(la.String())
+	if err != nil {
+		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		return true
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to convert port to int")
+		return true
+	}
+
+	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater.Start()
+
+	v.log.Infof("Sent request to register visor as public")
+	v.pushCloseStack("visor updater", func() bool {
+		visorUpdater.Stop()
+		return true
+	})
+	return true
 }
 
 func initAddressResolver(v *Visor) bool {
@@ -537,7 +591,7 @@ func initPublicVisors(v *Visor) bool {
 		}
 		return up
 	})
-	connector := servicedisc.MakeConnector(conf, 5, log)
+	connector := servicedisc.MakeConnector(conf, 5, v.tpM, log)
 	go connector.Run(context.Background(), connectFn, checkFN) //nolint:errcheck
 
 	return true

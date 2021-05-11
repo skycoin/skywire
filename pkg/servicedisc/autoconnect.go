@@ -8,6 +8,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 const (
@@ -33,16 +34,18 @@ type autoconnector struct {
 	maxConns int
 	log      *logging.Logger
 	conns    map[cipher.PubKey]struct{}
+	tm       *transport.Manager
 }
 
 // MakeConnector returns a new connector that will try to connect to at most maxConns
 // services
-func MakeConnector(conf Config, maxConns int, log *logging.Logger) Autoconnector {
+func MakeConnector(conf Config, maxConns int, tm *transport.Manager, log *logging.Logger) Autoconnector {
 	connector := &autoconnector{}
 	connector.client = NewClient(log, conf)
 	connector.maxConns = maxConns
 	connector.log = log
 	connector.conns = make(map[cipher.PubKey]struct{})
+	connector.tm = tm
 	return connector
 }
 

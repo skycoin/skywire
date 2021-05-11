@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,13 +14,11 @@ import (
 	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
-	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp"
 	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
-	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -76,8 +73,6 @@ type Config struct {
 	SecKey         cipher.SecKey
 	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
-	ServiceDisc    appdisc.Factory
-	IsPublic       bool
 }
 
 // NetworkConfigs represents all network configs.
@@ -94,11 +89,10 @@ type NetworkClients struct {
 
 // Network represents a network between nodes in Skywire.
 type Network struct {
-	conf         Config
-	netsMu       sync.RWMutex
-	nets         map[string]struct{} // networks to be used with transports
-	clients      NetworkClients
-	visorUpdater appdisc.Updater
+	conf    Config
+	netsMu  sync.RWMutex
+	nets    map[string]struct{} // networks to be used with transports
+	clients NetworkClients
 
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
@@ -227,7 +221,6 @@ func (n *Network) Init() error {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
 			}
-			go n.registerAsPublic(client)
 		} else {
 			log.Infof("No config found for stcpr")
 		}
@@ -242,54 +235,6 @@ func (n *Network) Init() error {
 	}
 
 	return nil
-}
-
-func (n *Network) shouldRegisterAsPublic() bool {
-	if !n.conf.IsPublic {
-		return false
-	}
-	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
-	if err != nil {
-		return false
-	}
-	for _, IP := range defaultIPs {
-		if netutil.IsPublicIP(IP) {
-			return true
-		}
-	}
-	return false
-}
-
-func (n *Network) registerAsPublic(client directtp.Client) {
-	// check involves getting some OS information which migh take non-zero time,
-	// so moved in this function that runs in its own goroutine
-	if !n.shouldRegisterAsPublic() {
-		return
-	}
-	log.Infoln("Trying to register visor as public")
-
-	la, err := client.LocalAddr()
-	if err != nil {
-		log.WithError(err).Errorln("Failed to get STCPR local addr")
-		return
-	}
-
-	_, portStr, err := net.SplitHostPort(la.String())
-	if err != nil {
-		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
-		return
-	}
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.WithError(err).Errorf("Failed to convert port to int")
-		return
-	}
-
-	n.visorUpdater = n.conf.ServiceDisc.VisorUpdater(uint16(port))
-	n.visorUpdater.Start()
-
-	log.Infof("Sent request to register visor as public")
 }
 
 // OnNewNetworkType sets callback to be called when new network type is ready.
@@ -311,10 +256,6 @@ func (n *Network) IsNetworkReady(netType string) bool {
 func (n *Network) Close() error {
 	n.netsMu.Lock()
 	defer n.netsMu.Unlock()
-
-	if n.visorUpdater != nil {
-		n.visorUpdater.Stop()
-	}
 
 	wg := new(sync.WaitGroup)
 
@@ -382,18 +323,23 @@ func (n *Network) TransportNetworks() []string {
 func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
 
 // STcp returns the underlying stcp.Client.
-func (n *Network) STcp() directtp.Client {
-	return n.clients.Direct[tptypes.STCP]
+func (n *Network) STcp() (directtp.Client, bool) {
+	return n.getClient(tptypes.STCP)
 }
 
 // STcpr returns the underlying stcpr.Client.
-func (n *Network) STcpr() directtp.Client {
-	return n.clients.Direct[tptypes.STCPR]
+func (n *Network) STcpr() (directtp.Client, bool) {
+	return n.getClient(tptypes.STCPR)
 }
 
 // SUdpH returns the underlying sudph.Client.
-func (n *Network) SUdpH() directtp.Client {
-	return n.clients.Direct[tptypes.SUDPH]
+func (n *Network) SUdpH() (directtp.Client, bool) {
+	return n.getClient(tptypes.SUDPH)
+}
+
+func (n *Network) getClient(tpType string) (directtp.Client, bool) {
+	c, ok := n.clients.Direct[tpType]
+	return c, ok
 }
 
 // Dial dials a visor by its public key and returns a connection.
