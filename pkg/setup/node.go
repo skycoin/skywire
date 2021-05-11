@@ -106,19 +106,10 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 // * Intermediary rules are broadcasted to the intermediary routers.
 // * Edge rules are broadcasted to the responding router.
 // * Edge rules is returned (to the initiating router).
-func CreateRouteGroup(ctx context.Context, dialer snet.Dialer, biRt routing.BidirectionalRoute) (resp routing.EdgeRules, err error) {
-	start := time.Now()
+func CreateRouteGroup(ctx context.Context, dialer snet.Dialer, biRt routing.BidirectionalRoute, metrics setupmetrics.Metrics) (resp routing.EdgeRules, err error) {
 	log := logging.MustGetLogger(fmt.Sprintf("request:%s->%s", biRt.Desc.SrcPK(), biRt.Desc.DstPK()))
 	log.Info("Processing request.")
-	defer func() {
-		elapsed := time.Since(start)
-		log := log.WithField("elapsed", elapsed)
-		if err != nil {
-			log.WithError(err).Warn("Request processed with error.")
-		} else {
-			log.Info("Request processed successfully.")
-		}
-	}()
+	defer metrics.RecordRoute()(&err)
 
 	// Ensure bi routes input is valid.
 	if err = biRt.Check(); err != nil {
