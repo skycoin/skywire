@@ -531,12 +531,12 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, t
 
 	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, tpType)
+	tp, err := v.tpM.SaveTransport(ctx, remote, tpType, transport.LabelUser)
 	if err != nil {
 		return nil, err
 	}
 
-	v.log.Debugf("Saved transport to %v via %v", remote, tpType)
+	v.log.Debugf("Saved transport to %v via %v, label %s", remote, tpType, tp.Entry.Label)
 
 	return newTransportSummary(v.tpM, tp, false, v.router.SetupIsTrusted(tp.Remote())), nil
 }
