@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -76,8 +78,10 @@ var (
 	hvs vinit.Module
 	// Uptime tracker
 	ut vinit.Module
-	// Trusted visors
-	trv vinit.Module
+	// Public visors: automatically establish connections to public visors
+	pvs vinit.Module
+	// Public visor: advertise current visor as public
+	pv vinit.Module
 	// hypervisor module
 	hv vinit.Module
 	// dmsg ctrl
@@ -107,10 +111,10 @@ func registerModules(logger *logging.MasterLogger) {
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &sn)
 	ut = maker("uptime_tracker", initUptimeTracker)
-	trv = maker("trusted_visors", initPublicVisors, &tr)
-
+	pv = maker("public_visors", initPublicVisors, &tr)
+	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &trv, &dmsgCtrl)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -563,7 +567,62 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-func initPublicVisors(_ context.Context, v *Visor, log *logging.Logger) error {
+// this service is not considered critical and always returns true
+// advertise this visor as public in service discovery
+func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
+	if !v.conf.IsPublic {
+		return nil
+	}
+
+	// retrieve interface IPs and check if at least one is public
+	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		return nil
+	}
+	var found bool
+	for _, IP := range defaultIPs {
+		if netutil.IsPublicIP(IP) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+
+	// todo: consider moving this to transport into some helper function
+	stcpr, ok := v.net.STcpr()
+	if !ok {
+		return nil
+	}
+	la, err := stcpr.LocalAddr()
+	if err != nil {
+		log.WithError(err).Errorln("Failed to get STCPR local addr")
+		return nil
+	}
+	_, portStr, err := net.SplitHostPort(la.String())
+	if err != nil {
+		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		return nil
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to convert port to int")
+		return nil
+	}
+
+	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater.Start()
+
+	v.log.Infof("Sent request to register visor as public")
+	v.pushCloseStack("visor updater", func() error {
+		visorUpdater.Stop()
+		return nil
+	})
+	return nil
+}
+
+func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.Transport.AutoconnectPublic {
 		return nil
 	}
@@ -584,7 +643,7 @@ func initPublicVisors(_ context.Context, v *Visor, log *logging.Logger) error {
 		DiscAddr: proxyDisc,
 	}
 	connector := servicedisc.MakeConnector(conf, 5, v.tpM, log)
-	go connector.Run(context.Background()) //nolint:errcheck
+	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
 }
