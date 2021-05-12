@@ -1,7 +1,7 @@
 // Backgrounds for the tables used in the app.
 $responsive-table-colors: (
   // Background, background:hover, font color
-  translucid: (transparent, theme-color(translucid-hover), theme-color(white)),
+  translucid: (transparent, theme-color(translucid-hover), theme-color(white), theme-color(translucid-hover-hard)),
 );
 
 // Create styles for the tables. One per background color.
@@ -78,7 +78,13 @@ $responsive-table-colors: (
 
       &:hover
       {
-        background: nth($colors, 2) !important;
+        background: nth($colors, 2);
+      }
+    }
+
+    .click-effect {
+      &:active {
+        background: nth($colors, 4) !important;
       }
     }
 
