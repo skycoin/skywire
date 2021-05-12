@@ -15,6 +15,32 @@ before:
   hooks:
     - make tidy
 builds:
+  - id: skywire-visor-darwin-amd64
+    binary: skywire-visor
+    goos:
+      - darwin
+    goarch:
+      - amd64
+    main: ./cmd/skywire-visor/
+    env:
+      - CGO_ENABLED=1
+      - CC=o64-clang
+      - CXX=o64-clang++
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+
+  - id: skywire-visor-darwin-arm64
+    binary: skywire-visor
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    main: ./cmd/skywire-visor/
+    env:
+      - CGO_ENABLED=1
+      - CC=oa64-clang
+      - CXX=oa64-clang++
+    ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+
   - id: skywire-visor-linux-arm64
     binary: skywire-visor
     goos:
@@ -31,6 +57,7 @@ builds:
       - PKG_CONFIG_PATH=/sysroot/arm64/usr/lib/aarch64-linux-gnu/pkgconfig:/sysroot/arm64/usr/lib/pkgconfig:/sysroot/arm64/usr/share/pkgconfig
     main: ./cmd/skywire-visor/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+
   - id: skywire-visor-linux-amd64
     binary: skywire-visor
     goos:
@@ -41,12 +68,12 @@ builds:
       - CGO_ENABLED=1
       - CC=gcc
       - CXX=g++
-      - CGO_FLAGS=--sysroot=/sysroot/amd64
       - CGO_LDFLAGS=--sysroot=/sysroot/amd64
       - PKG_CONFIG_SYSROOT_DIR=/sysroot/amd64
       - PKG_CONFIG_PATH=/sysroot/amd64/usr/lib/x86_64-linux-gnu/pkgconfig:/sysroot/amd64/usr/lib/pkgconfig:/sysroot/amd64/usr/share/pkgconfig
     main: ./cmd/skywire-visor/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+
   - id: skywire-visor-linux-armhf
     binary: skywire-visor
     goos:
@@ -66,10 +93,12 @@ builds:
       - PKG_CONFIG_PATH=/sysroot/armhf/usr/lib/arm-linux-gnueabihf/pkgconfig:/sysroot/armhf/usr/lib/pkgconfig:/sysroot/armhf/usr/share/pkgconfig
     main: ./cmd/skywire-visor/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+
   - id: skywire-cli
     binary: skywire-cli
     goos:
       - linux
+      - darwin
     goarch:
       - amd64
       - arm64
@@ -77,14 +106,19 @@ builds:
     goarm:
       - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: arm
     env:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
+
   - id: skychat
     binary: apps/skychat
     goos:
       - linux
+      - darwin
     goarch:
       - amd64
       - arm64
@@ -92,6 +126,9 @@ builds:
     goarm:
       - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: arm
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skychat/
@@ -100,6 +137,7 @@ builds:
     binary: apps/skysocks
     goos:
       - linux
+      - darwin
     goarch:
       - amd64
       - arm64
@@ -107,6 +145,9 @@ builds:
     goarm:
       - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: arm
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks/
@@ -115,6 +156,7 @@ builds:
     binary: apps/skysocks-client
     goos:
       - linux
+      - darwin
     goarch:
       - amd64
       - arm64
@@ -122,6 +164,9 @@ builds:
     goarm:
       - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: arm
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks-client/
@@ -130,6 +175,7 @@ builds:
     binary: apps/vpn-server
     goos:
       - linux
+      - darwin
     goarch:
       - amd64
       - arm64
@@ -137,6 +183,9 @@ builds:
     goarm:
       - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: arm
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/vpn-server/
@@ -145,6 +194,7 @@ builds:
     binary: apps/vpn-client
     goos:
       - linux
+      - darwin
     goarch:
       - amd64
       - arm64
@@ -152,6 +202,9 @@ builds:
     goarm:
       - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: arm
     env:
       - CGO_ENABLED=0
     main: ./cmd/apps/vpn-client/
