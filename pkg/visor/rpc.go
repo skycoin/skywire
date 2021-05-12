@@ -126,6 +126,7 @@ type TransportSummary struct {
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
 	IsUp    bool                `json:"is_up"`
+	Label   transport.Label     `json:"label"`
 }
 
 func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
@@ -136,6 +137,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		Type:    tp.Type(),
 		IsSetup: isSetup,
 		IsUp:    tp.IsUp(),
+		Label:   tp.Entry.Label,
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
@@ -536,5 +538,11 @@ func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version
 // UpdateStatus returns visor update status.
 func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
 	*status, err = r.visor.UpdateStatus()
+	return
+}
+
+// RuntimeLogs returns visor runtime logs
+func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
+	*logs, err = r.visor.RuntimeLogs()
 	return
 }

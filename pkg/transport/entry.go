@@ -14,6 +14,19 @@ var (
 	ErrEdgeIndexNotFound = errors.New("edge index not found")
 )
 
+// Label is a part of transport entry that signifies the origin
+// of this entry
+type Label string
+
+const (
+	// LabelUser signifies a user-created transport entry
+	LabelUser Label = "user"
+	// LabelAutomatic are transports to publically advertised visors
+	LabelAutomatic = "automatic"
+	// LabelSkycoin are transports created by skycoin system to improve network resiliency
+	LabelSkycoin = "skycoin"
+)
+
 // Entry is the unsigned representation of a Transport.
 type Entry struct {
 
@@ -29,15 +42,18 @@ type Entry struct {
 	// Public determines whether the transport is to be exposed to other nodes or not.
 	// Public transports are to be registered in the Transport Discovery.
 	Public bool `json:"public"` // TODO(evanlinjin): remove this.
+
+	Label Label `json:"label"`
 }
 
-// NewEntry constructs *Entry
-func NewEntry(localPK, remotePK cipher.PubKey, tpType string, public bool) *Entry {
-	return &Entry{
-		ID:     MakeTransportID(localPK, remotePK, tpType),
-		Edges:  SortEdges(localPK, remotePK),
+// MakeEntry creates a new transport entry
+func MakeEntry(pk1, pk2 cipher.PubKey, tpType string, public bool, label Label) Entry {
+	return Entry{
+		ID:     MakeTransportID(pk1, pk2, tpType),
+		Edges:  SortEdges(pk1, pk2),
 		Type:   tpType,
 		Public: public,
+		Label:  label,
 	}
 }
 
@@ -166,9 +182,6 @@ type Status struct {
 	// IsUp represents whether the Transport is up.
 	// A Transport that is down will fail to forward Packets.
 	IsUp bool `json:"is_up"`
-
-	// Updated is the epoch timestamp of when the status is last updated.
-	Updated int64 `json:"updated,omitempty"`
 }
 
 // EntryWithStatus stores Entry and Statuses returned by both Edges.
@@ -176,6 +189,7 @@ type EntryWithStatus struct {
 	Entry      *Entry  `json:"entry"`
 	IsUp       bool    `json:"is_up"`
 	Registered int64   `json:"registered"`
+	Updated    int64   `json:"updated"`
 	Statuses   [2]bool `json:"statuses"`
 }
 

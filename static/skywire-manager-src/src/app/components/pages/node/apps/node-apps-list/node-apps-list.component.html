@@ -197,13 +197,13 @@
           </div>
           <div class="list-row">
             <span class="title">{{ 'apps.apps-list.state' | translate }}</span>:
-            <span [class]="(app.status === 1 ? 'green-text' : 'red-text') + ' title'">
+            <span [class]="(app.status === 1 ? 'green-clear-text' : 'red-clear-text') + ' title'">
               {{ (app.status === 1 ? 'apps.status-running' : 'apps.status-stopped') | translate }}
             </span>
           </div>
           <div class="list-row">
             <span class="title">{{ 'apps.apps-list.auto-start' | translate }}</span>:
-            <span [class]="(app.autostart ? 'green-text' : 'red-text') + ' title'">
+            <span [class]="(app.autostart ? 'green-clear-text' : 'red-clear-text') + ' title'">
               {{ (app.autostart ? 'apps.apps-list.autostart-enabled' : 'apps.apps-list.autostart-disabled') | translate }}
             </span>
           </div>

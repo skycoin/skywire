@@ -191,7 +191,7 @@ func (tm *Manager) initTransports(ctx context.Context) {
 			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
 			tpID   = entry.Entry.ID
 		)
-		if _, err := tm.saveTransport(remote, tpType); err != nil {
+		if _, err := tm.saveTransport(remote, tpType, entry.Entry.Label); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		} else {
 			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
@@ -223,12 +223,13 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 		tm.Logger.Debugln("No TP found, creating new one")
 
 		mTp = NewManagedTransport(ManagedTransportConfig{
-			Net:         tm.n,
-			DC:          tm.Conf.DiscoveryClient,
-			LS:          tm.Conf.LogStore,
-			RemotePK:    conn.RemotePK(),
-			NetName:     lis.Network(),
-			AfterClosed: tm.afterTPClosed,
+			Net:            tm.n,
+			DC:             tm.Conf.DiscoveryClient,
+			LS:             tm.Conf.LogStore,
+			RemotePK:       conn.RemotePK(),
+			NetName:        lis.Network(),
+			AfterClosed:    tm.afterTPClosed,
+			TransportLabel: LabelUser,
 		})
 
 		go func() {
@@ -270,14 +271,14 @@ func (tm *Manager) GetTransport(remote cipher.PubKey, tpType string) (*ManagedTr
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
-func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
+func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string, label Label) (*ManagedTransport, error) {
 
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
 
 	for {
-		mTp, err := tm.saveTransport(remote, tpType)
+		mTp, err := tm.saveTransport(remote, tpType, label)
 		if err != nil {
 			return nil, fmt.Errorf("save transport: %w", err)
 		}
@@ -320,7 +321,7 @@ func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
 
-func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
+func (tm *Manager) saveTransport(remote cipher.PubKey, netName string, label Label) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 	if !snet.IsKnownNetwork(netName) {
@@ -339,12 +340,13 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string) (*Managed
 	afterTPClosed := tm.afterTPClosed
 
 	mTp := NewManagedTransport(ManagedTransportConfig{
-		Net:         tm.n,
-		DC:          tm.Conf.DiscoveryClient,
-		LS:          tm.Conf.LogStore,
-		RemotePK:    remote,
-		NetName:     netName,
-		AfterClosed: afterTPClosed,
+		Net:            tm.n,
+		DC:             tm.Conf.DiscoveryClient,
+		LS:             tm.Conf.LogStore,
+		RemotePK:       remote,
+		NetName:        netName,
+		AfterClosed:    afterTPClosed,
+		TransportLabel: label,
 	})
 
 	if mTp.netName == tptypes.STCPR {
@@ -544,7 +546,7 @@ func CreateTransportPair(
 	go m1.Serve(context.TODO())
 
 	// Create data transport between manager 1 & manager 2.
-	tp1, err = m1.SaveTransport(context.TODO(), pk0, network)
+	tp1, err = m1.SaveTransport(context.TODO(), pk0, network, LabelUser)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
