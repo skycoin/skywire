@@ -84,34 +84,6 @@ func (m *Module) isFinished() bool {
 	}
 }
 
-// InitSequential initializes all module dependencies recursively and sequentially, one by one
-// first to last and depth first
-// If any of the underlying dependencies, or this module initialize with error, return that error
-func (m *Module) InitSequential(ctx context.Context) error {
-	// early quit if initialized
-	ok := m.start()
-	if !ok {
-		return nil
-	}
-	defer m.stop()
-	m.log.Infof("Starting")
-	start := time.Now()
-	for _, dep := range m.deps {
-		err := dep.InitSequential(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	if m.init == nil {
-		return fmt.Errorf("init module %s error: %w", m.Name, ErrNoInit)
-	}
-	startSelf := time.Now()
-	// init the module itself
-	err := m.init(ctx, m.log)
-	m.log.Infof("Initialized in %s (%s with dependencies)", time.Since(startSelf), time.Since(start))
-	return err
-}
-
 // Wait for the module to be initialized
 // return initialization error if any
 func (m *Module) Wait(ctx context.Context) error {
@@ -138,7 +110,7 @@ func (m *Module) InitConcurrent(ctx context.Context) {
 		return
 	}
 	defer m.stop()
-	m.log.Infof("Starting")
+	m.log.Info("Starting")
 	start := time.Now()
 	// start init in every dependency
 	for _, dep := range m.deps {
