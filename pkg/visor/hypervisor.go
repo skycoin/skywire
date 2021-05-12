@@ -402,7 +402,6 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 				overview = &Overview{PubKey: hv.visor.conf.PK}
 			}
 
-			// addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
 			overviews[0] = *overview
 		}
 
