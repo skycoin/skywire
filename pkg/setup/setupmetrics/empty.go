@@ -16,3 +16,8 @@ type Empty struct{}
 func (Empty) RecordRequest() func(*routing.EdgeRules, *error) {
 	return func(*routing.EdgeRules, *error) {}
 }
+
+// RecordRoute implements `Metrics`.
+func (Empty) RecordRoute() func(*error) {
+	return func(*error) {}
+}
