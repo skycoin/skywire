@@ -257,6 +257,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/ws/running", hv.isVisorWSUpdateRunning())
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
+				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 			})
 		})
 
@@ -535,8 +536,12 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		summary, err := hv.visor.ExtraSummary()
 		if err != nil {
 			log.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &ExtraSummary{}
-			summary.Summary.PubKey = hv.visor.conf.PK
+			summary = &ExtraSummary{
+				Summary: &Summary{
+					PubKey: hv.visor.conf.PK,
+				},
+				Health: &HealthInfo{},
+			}
 		}
 
 		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
@@ -553,9 +558,14 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 				summary, err := c.API.ExtraSummary()
 				if err != nil {
 					log.WithError(err).
-						Warn("Failed to obtain summary via RPC.")
-					summary = &ExtraSummary{}
-					summary.Summary.PubKey = pk
+						Warn("Failed to obtain summary via RPC.", pk)
+
+					summary = &ExtraSummary{
+						Summary: &Summary{
+							PubKey: pk,
+						},
+						Health: &HealthInfo{},
+					}
 				} else {
 					log.Debug("Obtained summary via RPC.")
 				}
@@ -570,6 +580,8 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Summary.PubKey.String()]; ok {
 				summaries[i].DmsgStats = &stat
+			} else {
+				summaries[i].DmsgStats = &dmsgtracker.DmsgClientSummary{}
 			}
 		}
 
@@ -1304,6 +1316,22 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		logs, err := ctx.API.RuntimeLogs()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write([]byte(logs))
+		if err != nil {
+			hv.visor.log.Errorf("Cannot write response: %s", err)
+		}
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1490,4 +1518,14 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 	}
 
 	return pks, nil
+}
+
+func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
+	go func() {
+		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
+			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+		}
+	}()
+	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
+		Info("Serving RPC client over dmsg.")
 }

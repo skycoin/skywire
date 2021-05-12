@@ -44,3 +44,4 @@ dist
 
 static/skywire-manager-src/dist/*
 
+/visor/

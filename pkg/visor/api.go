@@ -69,6 +69,7 @@ type API interface {
 	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
+	RuntimeLogs() (string, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -271,7 +272,10 @@ func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
 	if appName == skyenv.VPNClientName {
-		envs, err = makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		// todo: can we use some kind of app start hook that will be used for both autostart
+		// and start? Reason: this is also called in init for autostart
+		maker := vpnEnvMaker(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		envs, err = maker()
 		if err != nil {
 			return err
 		}
@@ -522,12 +526,12 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, t
 
 	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, tpType)
+	tp, err := v.tpM.SaveTransport(ctx, remote, tpType, transport.LabelUser)
 	if err != nil {
 		return nil, err
 	}
 
-	v.log.Debugf("Saved transport to %v via %v", remote, tpType)
+	v.log.Debugf("Saved transport to %v via %v, label %s", remote, tpType, tp.Entry.Label)
 
 	return newTransportSummary(v.tpM, tp, false, v.router.SetupIsTrusted(tp.Remote())), nil
 }
@@ -717,4 +721,14 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 // UpdateStatus returns status of the current updating operation.
 func (v *Visor) UpdateStatus() (string, error) {
 	return v.updater.Status(), nil
+}
+
+// RuntimeLogs returns visor runtime logs
+func (v *Visor) RuntimeLogs() (string, error) {
+	var builder strings.Builder
+	builder.WriteString("[")
+	logs, _ := v.logstore.GetLogs()
+	builder.WriteString(strings.Join(logs, ","))
+	builder.WriteString("]")
+	return builder.String(), nil
 }

@@ -108,7 +108,7 @@ func (a *autoconnector) checkConn(pk cipher.PubKey) bool {
 
 func (a *autoconnector) connect(ctx context.Context, pk cipher.PubKey) {
 	a.log.WithField("pk", pk).Infoln("Adding transport to public visor")
-	if _, err := a.tm.SaveTransport(ctx, pk, tptypes.STCPR); err != nil {
+	if _, err := a.tm.SaveTransport(ctx, pk, tptypes.STCPR, transport.LabelAutomatic); err != nil {
 		a.log.
 			WithError(err).
 			WithField("pk", pk).
