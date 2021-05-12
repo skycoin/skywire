@@ -1519,3 +1519,13 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 
 	return pks, nil
 }
+
+func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
+	go func() {
+		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
+			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+		}
+	}()
+	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
+		Info("Serving RPC client over dmsg.")
+}
