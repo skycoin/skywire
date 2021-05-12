@@ -1,0 +1,28 @@
+@import "variables";
+
+.main-container {
+  height: 100%;
+  display: flex;
+
+  .text-container {
+    width: 100%;
+    align-self: center;
+    text-align: center;
+
+    .inner-container {
+      max-width: 550px;
+      display: inline-block;
+      font-size: $font-size-lg;
+
+      .error-icon {
+        font-size: 80px;
+      }
+
+      .more-info {
+        font-size: $font-size-smaller;
+        opacity: 0.75;
+        margin-top: 10px;
+      }
+    }
+  }
+}

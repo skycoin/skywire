@@ -309,7 +309,7 @@ export class NodeListComponent implements OnInit, OnDestroy {
       case true:
         return this.nodesHealthInfo.get(node.localPk).allServicesOk ?
           (forDot ? 'dot-green' : 'green-text') :
-          (forDot ? 'dot-yellow online-warning' : 'yellow-text');
+          (forDot ? 'dot-yellow blinking' : 'yellow-text');
       default:
         return forDot ? 'dot-red' : 'red-text';
     }
@@ -460,10 +460,12 @@ export class NodeListComponent implements OnInit, OnDestroy {
 
     const nodesData: NodeData[] = [];
     this.dataSource.forEach(node => {
-      nodesData.push({
-        key: node.localPk,
-        label: node.label,
-      });
+      if (node.online) {
+        nodesData.push({
+          key: node.localPk,
+          label: node.label,
+        });
+      }
     });
 
     UpdateComponent.openDialog(this.dialog, nodesData);

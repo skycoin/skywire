@@ -1,0 +1,62 @@
+<app-dialog [headline]="'vpn.server-list.add-server-dialog.title' | translate">
+  <form [formGroup]="form">
+    <!-- Public key. -->
+    <mat-form-field>
+      <input
+        formControlName="pk"
+        maxlength="66"
+        [placeholder]="'vpn.server-list.add-server-dialog.pk-label' | translate"
+        #firstInput
+        matInput
+      >
+      <mat-error>
+        <ng-container *ngIf="!this.form.get('pk').hasError('pattern');else hexError">
+          {{ 'vpn.server-list.add-server-dialog.pk-length-error' | translate }}
+        </ng-container>
+      </mat-error>
+      <ng-template #hexError>
+        {{ 'vpn.server-list.add-server-dialog.pk-chars-error' | translate }}
+      </ng-template>
+    </mat-form-field>
+
+    <!-- Password. -->
+    <mat-form-field>
+      <input
+        formControlName="password"
+        [placeholder]="'vpn.server-list.add-server-dialog.password-label' | translate"
+        type="password"
+        matInput
+      >
+    </mat-form-field>
+
+    <!-- Name. -->
+    <mat-form-field>
+      <input
+        formControlName="name"
+        maxlength="100"
+        [placeholder]="'vpn.server-list.add-server-dialog.name-label' | translate"
+        matInput
+      >
+    </mat-form-field>
+
+    <!-- Note. -->
+    <mat-form-field>
+      <input
+        formControlName="note"
+        maxlength="100"
+        [placeholder]="'vpn.server-list.add-server-dialog.note-label' | translate"
+        matInput
+      >
+    </mat-form-field>
+  </form>
+
+  <!-- Button. -->
+  <app-button
+    (action)="process()"
+    [disabled]="!form.valid"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'vpn.server-list.add-server-dialog.use-server-button' | translate }}
+  </app-button>
+</app-dialog>
