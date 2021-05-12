@@ -190,7 +190,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
     this.data.forEach(node => {
       this.nodesToUpdate.push({
         key: node.key,
-        label: node.label ? node.label : this.storageService.getDefaultLabel(node.key),
+        label: node.label,
         update: false,
         updateProgressInfo: new UpdateProgressInfo(),
       });

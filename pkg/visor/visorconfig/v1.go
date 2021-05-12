@@ -1,6 +1,8 @@
 package visorconfig
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/skycoin/dmsg/cipher"
@@ -12,8 +14,15 @@ import (
 
 //go:generate readmegen -n V1 -o ./README.md ./v1.go
 
-// V1Name is the semantic version string for V1.
-const V1Name = "v1.0.0"
+// V100Name is the semantic version string for v1.0.0.
+const V100Name = "v1.0.0"
+
+// V110Name is the semantic version string for v1.1.0.
+// Added MinHops field to V1Routing section of config
+const V110Name = "v1.1.0"
+
+// V1Name is the semantic version string for the most recent version of V1.
+const V1Name = V110Name
 
 // V1 is visor config v1.0.0
 type V1 struct {
@@ -69,6 +78,7 @@ type V1Routing struct {
 	SetupNodes         []cipher.PubKey `json:"setup_nodes,omitempty"`
 	RouteFinder        string          `json:"route_finder"`
 	RouteFinderTimeout Duration        `json:"route_finder_timeout,omitempty"`
+	MinHops            uint16          `json:"min_hops"`
 }
 
 // V1UptimeTracker configures uptime tracker.
@@ -129,15 +139,22 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.Launcher, appName string, auto
 }
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the launcher.
-// It removes argName from app args if value is an empty string.
 // The updated config gets flushed to file if there are any changes.
-func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value string) error {
+func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, value interface{}) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
 	conf := v1.Launcher
 
-	configChanged := updateArg(conf, appName, argName, value)
+	var configChanged bool
+	switch val := value.(type) {
+	case string:
+		configChanged = updateStringArg(conf, appName, argName, val)
+	case bool:
+		configChanged = updateBoolArg(conf, appName, argName, val)
+	default:
+		return fmt.Errorf("invalid arg type %T", value)
+	}
 
 	if !configChanged {
 		return nil
@@ -152,32 +169,114 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName, value st
 	return v1.flush(v1)
 }
 
-func updateArg(conf *V1Launcher, appName, argName, value string) bool {
+// updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
+// It removes argName from app args if value is an empty string.
+// The updated config gets flushed to file if there are any changes.
+func updateStringArg(conf *V1Launcher, appName, argName, value string) bool {
 	configChanged := false
 
 	for i := range conf.Apps {
-		if conf.Apps[i].Name == appName {
-			configChanged = true
+		if conf.Apps[i].Name != appName {
+			continue
+		}
 
-			argChanged := false
-			l := len(conf.Apps[i].Args)
-			for j := 0; j < l; j++ {
-				if conf.Apps[i].Args[j] == argName && j+1 < len(conf.Apps[i].Args) {
-					if value == "" {
-						conf.Apps[i].Args = append(conf.Apps[i].Args[:j], conf.Apps[i].Args[j+2:]...)
-						j--
+		configChanged = true
+
+		argChanged := false
+		l := len(conf.Apps[i].Args)
+		for j := 0; j < l; j++ {
+			equalArgName := conf.Apps[i].Args[j] == argName && j+1 < len(conf.Apps[i].Args)
+			if !equalArgName {
+				continue
+			}
+
+			if value == "" {
+				conf.Apps[i].Args = append(conf.Apps[i].Args[:j], conf.Apps[i].Args[j+2:]...)
+				j-- //nolint:ineffassign
+			} else {
+				conf.Apps[i].Args[j+1] = value
+			}
+
+			argChanged = true
+			break
+		}
+
+		if !argChanged && value != "" {
+			conf.Apps[i].Args = append(conf.Apps[i].Args, argName, value)
+		}
+
+		break
+	}
+
+	return configChanged
+}
+
+// updateBoolArg updates the cli boolean flag of the specified app config and also within the launcher.
+// All flag names and values are formatted as "-name=value" to allow arbitrary values with respect to different
+// possible default values.
+// The updated config gets flushed to file if there are any changes.
+func updateBoolArg(conf *V1Launcher, appName, argName string, value bool) bool {
+	const argFmt = "%s=%v"
+
+	configChanged := false
+
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+
+		// we format it to have a single dash, just to unify representation
+		fmtedArgName := argName
+		if argName[1] == '-' {
+			fmtedArgName = fmtedArgName[1:]
+		}
+
+		arg := fmt.Sprintf(argFmt, fmtedArgName, value)
+
+		configChanged = true
+
+		argChanged := false
+		for j := 0; j < len(conf.Apps[i].Args); j++ {
+			// there shouldn't be such values if config is modified automatically,
+			// but might happen if done manually, so we avoid further panic with this check
+			if len(conf.Apps[i].Args[j]) < 2 {
+				continue
+			}
+
+			equalArgName := conf.Apps[i].Args[j][1] != '-' && strings.HasPrefix(conf.Apps[i].Args[j], fmtedArgName)
+			if conf.Apps[i].Args[j][1] == '-' {
+				equalArgName = strings.HasPrefix(conf.Apps[i].Args[j], "-"+fmtedArgName)
+			}
+
+			if !equalArgName {
+				continue
+			}
+
+			// check next value. currently we store value along with the flag name in a single string,
+			// but there're may be some broken configs because of the previous functionality, so we
+			// make our best effort to fix this on the go
+			if (j + 1) < len(conf.Apps[i].Args) {
+				// bool value shouldn't be present there, so we remove it, if it is
+				if conf.Apps[i].Args[j+1] == "true" || conf.Apps[i].Args[j+1] == "false" {
+					if (j + 2) < len(conf.Apps[i].Args) {
+						conf.Apps[i].Args = append(conf.Apps[i].Args[:j+1], conf.Apps[i].Args[j+2:]...)
 					} else {
-						conf.Apps[i].Args[j+1] = value
+						conf.Apps[i].Args = conf.Apps[i].Args[:j+1]
 					}
-					argChanged = true
-					break
 				}
 			}
 
-			if !argChanged {
-				conf.Apps[i].Args = append(conf.Apps[i].Args, argName, value)
-			}
+			conf.Apps[i].Args[j] = arg
+			argChanged = true
+
+			break
 		}
+
+		if !argChanged {
+			conf.Apps[i].Args = append(conf.Apps[i].Args, arg)
+		}
+
+		break
 	}
 
 	return configChanged

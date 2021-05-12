@@ -137,6 +137,14 @@ func (rc *rpcClient) StopApp(appName string) error {
 	return rc.Call("StopApp", &appName, &struct{}{})
 }
 
+// SetAppDetailedStatus sets app's detailed state.
+func (rc *rpcClient) SetAppDetailedStatus(appName, status string) error {
+	return rc.Call("SetAppDetailedStatus", &SetAppDetailedStatusIn{
+		AppName: appName,
+		Status:  status,
+	}, &struct{}{})
+}
+
 // RestartApp calls `RestartApp`.
 func (rc *rpcClient) RestartApp(appName string) error {
 	return rc.Call("RestartApp", &appName, &struct{}{})
@@ -195,6 +203,16 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	}
 
 	return res, nil
+}
+
+func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
+	var stats appserver.AppStats
+
+	if err := rc.Call("GetAppStats", &appName, &stats); err != nil {
+		return appserver.AppStats{}, err
+	}
+
+	return stats, nil
 }
 
 // GetAppConnectionsSummary get connections stats for the app.
@@ -311,6 +329,13 @@ func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	var updated bool
 	err := rc.Call("Update", &config, &updated)
 	return updated, err
+}
+
+// Update calls Update.
+func (rc *rpcClient) RuntimeLogs() (string, error) {
+	var logs string
+	err := rc.Call("RuntimeLogs", &struct{}{}, &logs)
+	return logs, err
 }
 
 // StatusMessage defines a status of visor update.
@@ -620,6 +645,20 @@ func (*mockRPCClient) StopApp(string) error {
 	return nil
 }
 
+// SetAppDetailedStatus sets app's detailed state.
+func (mc *mockRPCClient) SetAppDetailedStatus(appName, status string) error {
+	return mc.do(true, func() error {
+		for _, a := range mc.s.Apps {
+			if a.Name == appName {
+				a.DetailedStatus = status
+				return nil
+			}
+		}
+
+		return fmt.Errorf("app of name '%s' does not exist", appName)
+	})
+}
+
 // RestartApp implements API.
 func (*mockRPCClient) RestartApp(string) error {
 	return nil
@@ -703,8 +742,12 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 	return mc.logS.LogsSince(timestamp)
 }
 
+func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
+	return appserver.AppStats{}, nil
+}
+
 // GetAppConnectionsSummary get connections stats for the app.
-func (mc *mockRPCClient) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
+func (mc *mockRPCClient) GetAppConnectionsSummary(_ string) ([]appserver.ConnectionSummary, error) {
 	return nil, nil
 }
 
@@ -873,5 +916,10 @@ func (mc *mockRPCClient) UpdateAvailable(_ updater.Channel) (*updater.Version, e
 
 // UpdateStatus implements API.
 func (mc *mockRPCClient) UpdateStatus() (string, error) {
+	return "", nil
+}
+
+// UpdateStatus implements API.
+func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
 }

@@ -1,0 +1,340 @@
+<!-- Content when loading. -->
+<div *ngIf="loading" class="d-flex flex-column h-100 w-100">
+  <div>
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="0"
+      [showUpdateButton]="false"
+      [localVpnKey]="currentLocalPk"
+    ></app-top-bar>
+  </div>
+  <app-loading-indicator></app-loading-indicator>
+</div>
+
+<!-- Content when loaded. -->
+<div class="general-container" *ngIf="!loading">
+  <div class="row">
+    <div class="col-12">
+      <app-top-bar
+        [titleParts]="['vpn.title']"
+        [tabsData]="tabsData"
+        [selectedTabIndex]="0"
+        [showUpdateButton]="false"
+        [localVpnKey]="currentLocalPk"
+      ></app-top-bar>
+    </div>
+  </div>
+  <div class="row flex-1">
+    <!-- VPN stopped info. -->
+    <div *ngIf="!showStarted" class="col-7 column left-area">
+      <div class="column-container">
+        <div class="title">{{ 'vpn.status-page.start-title' | translate }}</div>
+        <!-- Staert button. -->
+        <div>
+          <div class="start-button" (click)="start()" [ngClass]="{'disabled-button': showBusy}">
+            <div class="start-button-img-container">
+              <div class="start-button-img"></div>
+            </div>
+            <div class="start-button-img-container">
+              <div class="start-button-img animated-button"></div>
+            </div>
+            <mat-spinner [diameter]="40" *ngIf="showBusy"></mat-spinner>
+            <mat-icon [inline]="true" *ngIf="!showBusy">power_settings_new</mat-icon>
+          </div>
+        </div>
+        <div class="current-server">
+          <!-- Current server box. -->
+          <ng-container *ngIf="currentRemoteServer">
+            <div class="flag">
+              <div
+                [style]="'background-image: url(\'assets/img/big-flags/' + currentRemoteServer.countryCode.toLocaleLowerCase() + '.png\');'"
+                [matTooltip]="getCountryName(currentRemoteServer.countryCode)"
+              ></div>
+            </div>
+            <div class="text-container">
+              <div class="top-line">
+                <app-vpn-server-name
+                  [isFavorite]="currentRemoteServer.flag === serverFlags.Favorite"
+                  [isBlocked]="currentRemoteServer.flag === serverFlags.Blocked"
+                  [hasPassword]="currentRemoteServer.usedWithPassword"
+                  [name]="currentRemoteServer.name"
+                  [customName]="currentRemoteServer.customName"
+                  defaultName="vpn.status-page.entered-manually">
+                </app-vpn-server-name>
+              </div>
+              <div class="bottom-line">
+                <app-copy-to-clipboard-text [shortSimple]="true" [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
+              </div>
+            </div>
+            <div class="icon-button-separator">
+              <div></div>
+            </div>
+            <div class="icon-button">
+              <mat-icon
+                [inline]="true"
+                class="transparent-button vpn-small-button"
+                (click)="openServerOptions()"
+                [matTooltip]="'vpn.server-options.tooltip' | translate"
+              >settings</mat-icon>
+            </div>
+          </ng-container>
+          <!-- No server selected msg box. -->
+          <ng-container *ngIf="!currentRemoteServer">
+            <div class="none">{{ 'vpn.status-page.no-server' | translate }}</div>
+          </ng-container>
+        </div>
+        <!-- Current server note. -->
+        <div>
+          <div class="current-server-note" *ngIf="currentRemoteServer && (currentRemoteServer.note || currentRemoteServer.personalNote)">
+            <mat-icon [inline]="true">info_outline</mat-icon>
+            {{ getNoteVar() | translate:{custom: currentRemoteServer.personalNote, original: currentRemoteServer.note} }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- VPN started info. -->
+    <div *ngIf="showStarted" class="col-7 column left-area-connected">
+      <div class="column-container">
+        <div class="time-container">
+          <div class="time-content">
+            <!-- Time. -->
+            <mat-icon [inline]="true">timer</mat-icon>
+            <span>01:12:21</span>
+          </div>
+        </div>
+        <div class="state-title">Your connection is currently:</div>
+        <div class="state-text">{{ currentStateText | translate }}</div>
+        <div class="state-explanation">{{ (currentStateText + '-info') | translate }}</div>
+        <!-- Square graphs. -->
+        <div class="data-container">
+          <!-- Uploaded data. -->
+          <div class="rounded-elevated-box data-box big-box" [matTooltip]="'vpn.status-page.upload-info' | translate">
+            <div class="chart-container">
+              <app-line-chart [animated]="false" [data]="sentHistory" [min]="minUploadInGraph" [max]="maxUploadInGraph" height="140" color="#00000080"></app-line-chart>
+            </div>
+            <div class="chart-label">
+              <div class="label-container label-top">
+                <div class="label">
+                  {{ maxUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
+                </div>
+                <div class="line" [style]="'margin-top: ' + graphsTopInternalMargin + 'px;'"></div>
+              </div>
+            </div>
+            <div class="chart-label">
+              <div class="label-container label-mid">
+                <div class="label">
+                  {{ midUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
+                </div>
+                <div class="line" [style]="'margin-top: ' + (graphsTopInternalMargin / 2) + 'px;'"></div>
+              </div>
+            </div>
+            <div class="chart-label">
+              <div class="label-container label-bottom">
+                <div class="label">
+                  {{ minUploadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
+                </div>
+              </div>
+            </div>
+            <div class="content">
+              <mat-icon [inline]="true" class="upload">keyboard_backspace</mat-icon>
+              <div class="speed">{{ uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showSpeedsInBits } }}</div>
+              <div class="total">
+                {{ totalUploaded | autoScale:{ showValue: true, showUnit: true, useBits: showTotalsInBits } }}
+                {{ 'vpn.status-page.total-data-label' | translate }}
+              </div>
+            </div>
+          </div>
+          <!-- Downloaded data. -->
+          <div class="rounded-elevated-box data-box big-box" [matTooltip]="'vpn.status-page.download-info' | translate">
+            <div class="chart-container">
+              <app-line-chart [animated]="false" [data]="receivedHistory" [min]="minDownloadInGraph" [max]="maxDownloadInGraph" height="140" color="#00000080"></app-line-chart>
+            </div>
+            <div class="chart-label top-chart-label">
+              <div class="label-container label-top">
+                <div class="label">
+                  {{ maxDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
+                </div>
+                <div class="line" [style]="'margin-top: ' + graphsTopInternalMargin + 'px;'"></div>
+              </div>
+            </div>
+            <div class="chart-label">
+              <div class="label-container label-mid">
+                <div class="label">
+                  {{ midDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
+                </div>
+                <div class="line" [style]="'margin-top: ' + (graphsTopInternalMargin / 2) + 'px;'"></div>
+              </div>
+            </div>
+            <div class="chart-label">
+              <div class="label-container label-bottom">
+                <div class="label">
+                  {{ minDownloadInGraph | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, limitDecimals:true, useBits: showSpeedsInBits } }}
+                </div>
+              </div>
+            </div>
+            <div class="content">
+              <mat-icon [inline]="true" class="download">keyboard_backspace</mat-icon>
+              <div class="speed">{{ downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showSpeedsInBits } }}</div>
+              <div class="total">
+                {{ totalDownloaded | autoScale:{ showValue: true, showUnit: true, useBits: showTotalsInBits } }}
+                {{ 'vpn.status-page.total-data-label' | translate }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Latency graph. -->
+        <div class="latency-container">
+          <div class="rounded-elevated-box data-box small-box" [matTooltip]="'vpn.status-page.latency-info' | translate">
+            <div class="chart-container">
+              <app-line-chart [animated]="false" [data]="latencyHistory" [min]="minLatencyInGraph" [max]="maxLatencyInGraph" height="50" color="#00000080"></app-line-chart>
+            </div>
+            <div class="chart-label top-chart-label">
+              <div class="label-container label-top">
+                <div class="label">
+                  {{ ('common.' + getLatencyValueString(maxLatencyInGraph)) | translate:{ time: getPrintableLatency(maxLatencyInGraph) } }}
+                </div>
+                <div class="line" [style]="'margin-top: ' + graphsTopInternalMargin + 'px;'"></div>
+              </div>
+            </div>
+            <div class="chart-label">
+              <div class="label-container label-mid">
+                <div class="label">
+                  {{ ('common.' + getLatencyValueString(midLatencyInGraph)) | translate:{ time: getPrintableLatency(midLatencyInGraph) } }}
+                </div>
+                <div class="line" [style]="'margin-top: ' + (graphsTopInternalMargin / 2) + 'px;'"></div>
+              </div>
+            </div>
+            <div class="chart-label">
+              <div class="label-container label-bottom">
+                <div class="label">
+                  {{ ('common.' + getLatencyValueString(minLatencyInGraph)) | translate:{ time: getPrintableLatency(minLatencyInGraph) } }}
+                </div>
+              </div>
+            </div>
+            <div class="content">
+              <mat-icon [inline]="true">swap_horiz</mat-icon>
+              <div>{{ ('common.' + getLatencyValueString(latency)) | translate:{ time: getPrintableLatency(latency) } }}</div>
+            </div>
+          </div>
+        </div>
+        <!-- Disconnect button. -->
+        <div class="disconnect-button" (click)="stop()" [ngClass]="{'disabled-button': showBusy}">
+          <div class="disconnect-button-container">
+            <div class="d-inline-flex">
+              <div *ngIf="showBusy">
+                <mat-spinner [diameter]="24"></mat-spinner>
+              </div>
+              <mat-icon [inline]="true" *ngIf="!showBusy">power_settings_new</mat-icon>
+              <span>{{ 'vpn.status-page.disconnect' | translate }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right info panel. -->
+    <div class="col-5 column right-area">
+      <div class="column-container">
+        <div class="content-area">
+          <!-- Ip. -->
+          <div>
+            <div class="title">{{ 'vpn.status-page.data.ip' | translate }}</div>
+            <div class="big-text" *ngIf="ipInfoAllowed">
+              <ng-container *ngIf="currentIp">{{ currentIp }}</ng-container>
+              <ng-container *ngIf="!currentIp && !loadingCurrentIp">{{ 'common.unknown' | translate }}</ng-container>
+              <mat-spinner *ngIf="loadingCurrentIp" [diameter]="20"></mat-spinner>
+              <mat-icon
+                *ngIf="problemGettingIp"
+                class="small-icon blinking"
+                [inline]="true"
+                [matTooltip]="'vpn.status-page.data.ip-problem-info' | translate"
+              >warning</mat-icon>
+              <mat-icon
+                *ngIf="!loadingCurrentIp"
+                (click)="getIp()"
+                class="big-icon transparent-button vpn-small-button"
+                [inline]="true"
+                [matTooltip]="'vpn.status-page.data.ip-refresh-info' | translate"
+              >refresh</mat-icon>
+            </div>
+            <div class="big-text" *ngIf="!ipInfoAllowed">
+              {{ 'vpn.status-page.data.unavailable' | translate }}
+            </div>
+          </div>
+          <!-- Ip country. -->
+          <div class="margin"></div>
+          <div>
+            <div class="title">{{ 'vpn.status-page.data.country' | translate }}</div>
+            <div class="big-text" *ngIf="ipInfoAllowed">
+              <ng-container *ngIf="ipCountry">{{ ipCountry }}</ng-container>
+              <ng-container *ngIf="!ipCountry && !loadingIpCountry">{{ 'common.unknown' | translate }}</ng-container>
+              <mat-spinner *ngIf="loadingIpCountry" [diameter]="20"></mat-spinner>
+              <mat-icon *ngIf="problemGettingIpCountry" class="small-icon blinking" [inline]="true" [matTooltip]="'vpn.status-page.data.ip-country-problem-info' | translate">warning</mat-icon>
+            </div>
+            <div class="big-text" *ngIf="!ipInfoAllowed">
+              {{ 'vpn.status-page.data.unavailable' | translate }}
+            </div>
+          </div>
+          <!-- Separator. -->
+          <div class="big-margin"></div>
+          <div class="separator"></div>
+          <div class="big-margin"></div>
+          <!-- Server name. -->
+          <div *ngIf="showStarted && currentRemoteServer">
+            <div class="title">{{ 'vpn.status-page.data.server' | translate }}</div>
+            <div class="big-text">
+              <app-vpn-server-name
+                [isFavorite]="currentRemoteServer.flag === serverFlags.Favorite"
+                [isBlocked]="currentRemoteServer.flag === serverFlags.Blocked"
+                [hasPassword]="currentRemoteServer.usedWithPassword"
+                [adjustIconsForBigText]="true"
+                [name]="currentRemoteServer.name"
+                [customName]="currentRemoteServer.customName"
+                defaultName="vpn.status-page.entered-manually">
+              </app-vpn-server-name>
+              <mat-icon
+                (click)="openServerOptions()"
+                class="big-icon transparent-button vpn-small-button"
+                [inline]="true"
+                [matTooltip]="'vpn.server-options.tooltip' | translate"
+              >settings</mat-icon>
+            </div>
+          </div>
+          <div class="margin" *ngIf="showStarted && currentRemoteServer"></div>
+          <!-- Server custom note. -->
+          <div *ngIf="showStarted && currentRemoteServer && currentRemoteServer.personalNote">
+            <div class="title">{{ 'vpn.status-page.data.server-note' | translate }}</div>
+            <div class="small-text">
+              {{ currentRemoteServer.personalNote }}
+            </div>
+          </div>
+          <div class="margin" *ngIf="showStarted && currentRemoteServer && currentRemoteServer.personalNote"></div>
+          <!-- Server original note. -->
+          <div *ngIf="showStarted && currentRemoteServer && currentRemoteServer.note">
+            <div class="title">{{ ('vpn.status-page.data.' + (currentRemoteServer.personalNote ? 'original-' : '') + 'server-note') | translate }}</div>
+            <div class="small-text">
+              {{ currentRemoteServer.note }}
+            </div>
+          </div>
+          <div class="margin" *ngIf="showStarted && currentRemoteServer && currentRemoteServer.note"></div>
+          <!-- Server pk. -->
+          <div *ngIf="showStarted && currentRemoteServer">
+            <div class="title">{{ 'vpn.status-page.data.remote-pk' | translate }}</div>
+            <div class="small-text">
+              <app-copy-to-clipboard-text [text]="currentRemoteServer.pk"></app-copy-to-clipboard-text>
+            </div>
+          </div>
+          <div class="margin" *ngIf="showStarted && currentRemoteServer"></div>
+          <!-- Local pk. -->
+          <div>
+            <div class="title">{{ 'vpn.status-page.data.local-pk' | translate }}</div>
+            <div class="small-text">
+              <app-copy-to-clipboard-text [text]="currentLocalPk"></app-copy-to-clipboard-text>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

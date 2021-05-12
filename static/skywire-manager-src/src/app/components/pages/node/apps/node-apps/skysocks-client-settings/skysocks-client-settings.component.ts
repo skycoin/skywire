@@ -172,8 +172,8 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
         if (this.data.args[i] === '-srv' && i + 1 < this.data.args.length) {
           currentVal = this.data.args[i + 1];
         }
-        if (this.data.args[i] === '-killswitch' && i + 1 < this.data.args.length) {
-          this.killswitch = (this.data.args[i + 1] as string).toLowerCase() === 'true';
+        if ((this.data.args[i] as string).toLowerCase().includes('-killswitch')) {
+          this.killswitch = (this.data.args[i] as string).toLowerCase().includes('true');
           this.initialKillswitchSetting = this.killswitch;
         }
       }
