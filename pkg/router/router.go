@@ -61,6 +61,8 @@ type Config struct {
 	RouteGroupDialer setupclient.RouteGroupDialer
 	SetupNodes       []cipher.PubKey
 	RulesGCInterval  time.Duration
+	MinHops          uint16
+	MaxHops          uint16
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -75,6 +77,10 @@ func (c *Config) SetDefaults() {
 
 	if c.RulesGCInterval <= 0 {
 		c.RulesGCInterval = DefaultRulesGCInterval
+	}
+
+	if c.MaxHops == 0 {
+		c.MaxHops = maxHops
 	}
 }
 
@@ -827,7 +833,7 @@ fetchRoutesAgain:
 	ctx := context.Background()
 
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-		&rfclient.RouteOptions{MinHops: minHops, MaxHops: maxHops})
+		&rfclient.RouteOptions{MinHops: r.conf.MinHops, MaxHops: r.conf.MaxHops})
 
 	if err == rfclient.ErrTransportNotFound {
 		return nil, nil, err

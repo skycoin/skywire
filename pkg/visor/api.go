@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
@@ -35,6 +36,7 @@ type API interface {
 	Apps() ([]*launcher.AppState, error)
 	StartApp(appName string) error
 	StopApp(appName string) error
+	SetAppDetailedStatus(appName, state string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppPassword(appName, password string) error
@@ -42,6 +44,7 @@ type API interface {
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
+	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
 
 	TransportTypes() ([]string, error)
@@ -66,6 +69,7 @@ type API interface {
 	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
+	RuntimeLogs() (string, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -83,6 +87,7 @@ type Summary struct {
 	Apps            []*launcher.AppState `json:"apps"`
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
+	LocalIP         string               `json:"local_ip"`
 }
 
 // Summary implements API.
@@ -100,6 +105,16 @@ func (v *Visor) Summary() (*Summary, error) {
 		return true
 	})
 
+	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get default network interface: %w", err)
+	}
+
+	localIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IPs of interface %s: %w", defaultNetworkIfc, err)
+	}
+
 	summary := &Summary{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
@@ -107,6 +122,12 @@ func (v *Visor) Summary() (*Summary, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      summaries,
 		RoutesCount:     v.router.RoutesCount(),
+	}
+
+	if len(localIPs) > 0 {
+		// should be okay to have the first one, in the case of
+		// active network interface, there's usually just a single IP
+		summary.LocalIP = localIPs[0].String()
 	}
 
 	return summary, nil
@@ -168,32 +189,41 @@ func (v *Visor) collectHealthStats(services map[string]HealthCheckable) map[stri
 		name   string
 		status int
 	}
-	var wg sync.WaitGroup
-	ctx := context.Background()
+
+	ctx, cancel := context.WithTimeout(context.Background(), InnerHealthTimeout)
+	defer cancel()
+
 	responses := make(chan healthResponse, len(services))
+
+	var wg sync.WaitGroup
 	wg.Add(len(services))
 	for name, service := range services {
 		go func(name string, service HealthCheckable) {
+			defer wg.Done()
+
 			if service == nil {
 				responses <- healthResponse{name, http.StatusNotFound}
-				wg.Done()
 				return
 			}
+
 			status, err := service.Health(ctx)
 			if err != nil {
 				v.log.WithError(err).Warnf("Failed to check service health, service name: %s", name)
 				status = http.StatusInternalServerError
 			}
+
 			responses <- healthResponse{name, status}
-			wg.Done()
 		}(name, service)
 	}
 	wg.Wait()
+
 	close(responses)
+
 	results := make(map[string]int)
 	for response := range responses {
 		results[response.name] = response.status
 	}
+
 	return results
 }
 
@@ -262,6 +292,19 @@ func (v *Visor) StopApp(appName string) error {
 	return err
 }
 
+// SetAppDetailedStatus implements API.
+func (v *Visor) SetAppDetailedStatus(appName, status string) error {
+	proc, ok := v.procM.ProcByName(appName)
+	if !ok {
+		return ErrAppProcNotRunning
+	}
+
+	v.log.Infof("Setting app detailed status %v for app %v", status, appName)
+	proc.SetDetailedStatus(status)
+
+	return nil
+}
+
 // RestartApp implements API.
 func (v *Visor) RestartApp(appName string) error {
 	if _, ok := v.procM.ProcByName(appName); ok {
@@ -323,17 +366,10 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 	v.log.Infof("Setting %s killswitch to %q", appName, killswitch)
 
 	const (
-		killSwitchArg = "-killswitch"
+		killSwitchArg = "--killswitch"
 	)
 
-	var value string
-	if killswitch {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, killSwitchArg, killswitch); err != nil {
 		return err
 	}
 
@@ -351,17 +387,10 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	v.log.Infof("Setting %s secure to %q", appName, isSecure)
 
 	const (
-		secureArgName = "-secure"
+		secureArgName = "--secure"
 	)
 
-	var value string
-	if isSecure {
-		value = "true"
-	} else {
-		value = "false"
-	}
-
-	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, value); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
 		return err
 	}
 
@@ -414,6 +443,16 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 	}
 
 	return res, nil
+}
+
+// GetAppStats implements API.
+func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
+	stats, err := v.procM.Stats(appName)
+	if err != nil {
+		return appserver.AppStats{}, err
+	}
+
+	return stats, nil
 }
 
 // GetAppConnectionsSummary implements API.
@@ -684,4 +723,14 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 // UpdateStatus returns status of the current updating operation.
 func (v *Visor) UpdateStatus() (string, error) {
 	return v.updater.Status(), nil
+}
+
+// RuntimeLogs returns visor runtime logs
+func (v *Visor) RuntimeLogs() (string, error) {
+	var builder strings.Builder
+	builder.WriteString("[")
+	logs, _ := v.logstore.GetLogs()
+	builder.WriteString(strings.Join(logs, ","))
+	builder.WriteString("]")
+	return builder.String(), nil
 }

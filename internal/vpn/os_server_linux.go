@@ -6,12 +6,12 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"os/exec"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
 const (
-	defaultNetworkInterfaceCMD     = "ip r | awk '$1 == \"default\" {print $5}'"
 	getIPv4ForwardingCMD           = "sysctl net.ipv4.ip_forward"
 	getIPv6ForwardingCMD           = "sysctl net.ipv6.conf.all.forwarding"
 	setIPv4ForwardingCMDFmt        = "sysctl -w net.ipv4.ip_forward=%s"
@@ -26,9 +26,9 @@ const (
 
 // GetIPTablesForwardPolicy gets current policy for iptables `forward` chain.
 func GetIPTablesForwardPolicy() (string, error) {
-	outputBytes, err := exec.Command("sh", "-c", getIPTablesForwardPolicyCMD).Output()
+	outputBytes, err := osutil.RunWithResult("sh", "-c", getIPTablesForwardPolicyCMD)
 	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", getIPTablesForwardPolicyCMD, err)
+		return "", err
 	}
 
 	return strings.TrimRight(string(outputBytes), "\n"), nil
@@ -37,11 +37,7 @@ func GetIPTablesForwardPolicy() (string, error) {
 // SetIPTablesForwardPolicy sets `policy` for iptables `forward` chain.
 func SetIPTablesForwardPolicy(policy string) error {
 	cmd := fmt.Sprintf(setIPTablesForwardPolicyCMDFmt, policy)
-	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // SetIPTablesForwardAcceptPolicy sets ACCEPT policy for iptables `forward` chain.
@@ -54,35 +50,14 @@ func SetIPTablesForwardAcceptPolicy() error {
 // to private IP ranges.
 func AllowIPToLocalNetwork(src, dst net.IP) error {
 	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, src)
-	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // BlockIPToLocalNetwork blocks all the packets coming from `source`
 // to private IP ranges.
 func BlockIPToLocalNetwork(src, dst net.IP) error {
 	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, src)
-	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
-}
-
-// DefaultNetworkInterface fetches default network interface name.
-func DefaultNetworkInterface() (string, error) {
-	outputBytes, err := exec.Command("sh", "-c", defaultNetworkInterfaceCMD).Output()
-	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", defaultNetworkInterfaceCMD, err)
-	}
-
-	// just in case
-	outputBytes = bytes.TrimRight(outputBytes, "\n")
-
-	return string(outputBytes), nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // GetIPv4ForwardingValue gets current value of IPv4 forwarding.
@@ -98,21 +73,13 @@ func GetIPv6ForwardingValue() (string, error) {
 // SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
 func SetIPv4ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
-	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // SetIPv6ForwardingValue sets `val` value of IPv6 forwarding.
 func SetIPv6ForwardingValue(val string) error {
 	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
-	if err := exec.Command("sh", "-c", cmd).Run(); err != nil { //nolint:gosec
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // EnableIPv4Forwarding enables IPv4 forwarding.
@@ -128,29 +95,19 @@ func EnableIPv6Forwarding() error {
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
 func EnableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
-	//nolint:gosec
-	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 // DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
 func DisableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(disableIPMasqueradingCMDFmt, ifcName)
-	//nolint:gosec
-	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
-		return fmt.Errorf("error running command %s: %w", cmd, err)
-	}
-
-	return nil
+	return osutil.Run("sh", "-c", cmd)
 }
 
 func getIPForwardingValue(cmd string) (string, error) {
-	outBytes, err := exec.Command("sh", "-c", cmd).Output() //nolint:gosec
+	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
 	if err != nil {
-		return "", fmt.Errorf("error running command %s: %w", cmd, err)
+		return "", err
 	}
 
 	val, err := parseIPForwardingOutput(outBytes)

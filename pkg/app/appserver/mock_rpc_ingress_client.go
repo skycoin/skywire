@@ -156,6 +156,20 @@ func (_m *MockRPCIngressClient) SetDeadline(connID uint16, d time.Time) error {
 	return r0
 }
 
+// SetDetailedStatus provides a mock function with given fields: status
+func (_m *MockRPCIngressClient) SetDetailedStatus(status string) error {
+	ret := _m.Called(status)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(status)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetReadDeadline provides a mock function with given fields: connID, d
 func (_m *MockRPCIngressClient) SetReadDeadline(connID uint16, d time.Time) error {
 	ret := _m.Called(connID, d)
