@@ -118,25 +118,17 @@ snapshot: sysroot ## create snapshot release
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
 		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --snapshot --skip-publish --rm-dist
-	mv ./dist ./dist-linux
-	if [[ $(shell uname -s) == "Darwin" ]]; then  \
-	  goreleaser -f ./.goreleaser.darwin.yml --snapshot --rm-dist --skip-publish && \
-	  mv ./dist-linux/* ./dist/ && \
-	  rm -rf ./dist-linux; \
-	fi
-
 
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
 
 sysroot:
-	# TODO: checksum it
 	mkdir -p ./sysroot
 	@echo "getting sysroot for cross compilation"
-	if [[ ! -f /tmp/snapshot-05-08-2021.tar.gz ]]; then \
-  		curl -L -o /tmp/snapshot-05-08-2021.tar.gz "https://alexadhy-git.s3-ap-southeast-1.amazonaws.com/snapshot-05-08-2021.tar.gz"; \
+	if [[ ! -f /tmp/snapshot-05-12-2021.tar.gz ]]; then \
+  		curl -L -o /tmp/snapshot-05-12-2021.tar.gz "https://alexadhy-git.s3-ap-southeast-1.amazonaws.com/snapshot-05-12-2021.tar.gz"; \
 	fi
-	tar xf /tmp/snapshot-05-08-2021.tar.gz -C ./sysroot/
+	tar xf /tmp/snapshot-05-12-2021.tar.gz -C ./sysroot/
 
 sysroot-clean:
 	@rm -rf ./sysroot
@@ -184,13 +176,6 @@ github-release: sysroot ## Create a GitHub release
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
 		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --rm-dist
-	mv ./dist ./dist-linux
-	if [[ $(shell uname -s) == "Darwin" ]]; then  \
-	  goreleaser -f ./.goreleaser.darwin.yml --rm-dist && \
-	  mv ./dist-linux/* ./dist/ && \
-	  rm -rf ./dist-linux; \
-	fi
-
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
