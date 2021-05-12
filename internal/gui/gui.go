@@ -11,13 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getlantern/systray"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
-
-	"github.com/getlantern/systray"
-	"github.com/skycoin/skycoin/src/util/logging"
-
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
