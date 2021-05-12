@@ -41,3 +41,7 @@ dist
 
 # release
 *.deb
+
+static/skywire-manager-src/dist/*
+
+/visor/

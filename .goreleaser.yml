@@ -9,6 +9,8 @@ release:
     owner: i-hate-nicknames
     name: skywire
 
+  draft: true
+
 before:
   hooks:
     - go mod tidy
@@ -24,6 +26,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     ignore:
       - goos: darwin
@@ -45,6 +48,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     ignore:
       - goos: darwin
@@ -66,6 +70,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     ignore:
       - goos: darwin
@@ -87,6 +92,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     ignore:
       - goos: darwin
@@ -108,6 +114,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     ignore:
       - goos: darwin
@@ -129,6 +136,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     ignore:
       - goos: darwin
@@ -150,6 +158,7 @@ builds:
       - arm64
       - arm
     goarm:
+      - 6
       - 7
     ignore:
       - goos: darwin
@@ -163,7 +172,7 @@ builds:
 archives:
   - format: tar.gz
     wrap_in_directory: false
-    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: 'skywire-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
 checksum:
   name_template: 'checksums.txt'
 snapshot:

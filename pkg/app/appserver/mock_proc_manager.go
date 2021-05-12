@@ -68,6 +68,27 @@ func (_m *MockProcManager) ConnectionsSummary(appName string) ([]ConnectionSumma
 	return r0, r1
 }
 
+// DetailedStatus provides a mock function with given fields: appName
+func (_m *MockProcManager) DetailedStatus(appName string) (string, error) {
+	ret := _m.Called(appName)
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func(string) string); ok {
+		r0 = rf(appName)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(appName)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ProcByName provides a mock function with given fields: appName
 func (_m *MockProcManager) ProcByName(appName string) (*Proc, bool) {
 	ret := _m.Called(appName)
@@ -94,6 +115,20 @@ func (_m *MockProcManager) ProcByName(appName string) (*Proc, bool) {
 // Range provides a mock function with given fields: next
 func (_m *MockProcManager) Range(next func(string, *Proc) bool) {
 	_m.Called(next)
+}
+
+// SetDetailedStatus provides a mock function with given fields: appName, status
+func (_m *MockProcManager) SetDetailedStatus(appName string, status string) error {
+	ret := _m.Called(appName, status)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string) error); ok {
+		r0 = rf(appName, status)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // Start provides a mock function with given fields: conf

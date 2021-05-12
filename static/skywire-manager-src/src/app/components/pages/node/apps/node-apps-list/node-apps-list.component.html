@@ -118,6 +118,15 @@
         </button>
       </td>
       <td class="actions">
+        <a [href]="getLink(app)" target="_blank" rel="noreferrer nofollow noopener" class="skychat-link" *ngIf="getLink(app)">
+          <button
+            mat-icon-button
+            [matTooltip]="'apps.open' | translate"
+            class="big-action-button transparent-button"
+          >
+            <mat-icon [inline]="true">open_in_browser</mat-icon>
+          </button>
+        </a>
         <button
           (click)="config(app)"
           mat-icon-button
@@ -188,19 +197,29 @@
           </div>
           <div class="list-row">
             <span class="title">{{ 'apps.apps-list.state' | translate }}</span>:
-            <span [class]="(app.status === 1 ? 'green-text' : 'red-text') + ' title'">
+            <span [class]="(app.status === 1 ? 'green-clear-text' : 'red-clear-text') + ' title'">
               {{ (app.status === 1 ? 'apps.status-running' : 'apps.status-stopped') | translate }}
             </span>
           </div>
           <div class="list-row">
             <span class="title">{{ 'apps.apps-list.auto-start' | translate }}</span>:
-            <span [class]="(app.autostart ? 'green-text' : 'red-text') + ' title'">
+            <span [class]="(app.autostart ? 'green-clear-text' : 'red-clear-text') + ' title'">
               {{ (app.autostart ? 'apps.apps-list.autostart-enabled' : 'apps.apps-list.autostart-disabled') | translate }}
             </span>
           </div>
         </div>
         <div class="margin-part"></div>
         <div class="right-part">
+          <a *ngIf="getLink(app)" (click)="$event.stopPropagation()" [href]="getLink(app)" target="_blank" rel="noreferrer nofollow noopener" class="skychat-link">
+            <button
+              mat-icon-button
+              [matTooltip]="'apps.open' | translate"
+              class="transparent-button"
+            >
+              <mat-icon>open_in_browser</mat-icon>
+            </button>
+          </a>
+
           <button
             (click)="$event.stopPropagation(); showOptionsDialog(app)"
             mat-icon-button
