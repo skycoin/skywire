@@ -600,7 +600,6 @@ export class NodeService {
         const node = new Node();
 
         // Basic data.
-        node.port = response.port;
         node.localPk = response.overview.local_pk;
         node.version = response.overview.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));

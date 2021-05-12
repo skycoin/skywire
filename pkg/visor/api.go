@@ -140,7 +140,6 @@ type Summary struct {
 	Routes       []routingRuleResp              `json:"routes"`
 	IsHypervisor bool                           `json:"is_hypervisor,omitempty"`
 	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
-	Port         uint16                         `json:"port"`
 	Online       bool                           `json:"online"`
 }
 

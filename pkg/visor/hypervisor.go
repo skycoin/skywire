@@ -468,9 +468,6 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 		} else {
 			summary.DmsgStats = &dmsgtracker.DmsgClientSummary{}
 		}
-
-		summary.Port = ctx.Addr.Port
-
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})
 }
