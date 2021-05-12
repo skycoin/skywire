@@ -230,9 +230,7 @@ func initTransportSetup(v *Visor) bool {
 		cancel()
 		return report(err)
 	}
-	go func() {
-		ts.Serve(ctx)
-	}()
+	go ts.Serve(ctx)
 	v.pushCloseStack("transport_setup.rpc", func() bool {
 		cancel()
 		return true
