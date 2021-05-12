@@ -122,6 +122,7 @@ type TransportSummary struct {
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
 	IsUp    bool                `json:"is_up"`
+	Label   transport.Label     `json:"label"`
 }
 
 func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
@@ -132,6 +133,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		Type:    tp.Type(),
 		IsSetup: isSetup,
 		IsUp:    tp.IsUp(),
+		Label:   tp.Entry.Label,
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
