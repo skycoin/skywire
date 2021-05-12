@@ -11,9 +11,9 @@ release:
 
   draft: true
 
-before:
-  hooks:
-    - make tidy
+#before:
+#  hooks:
+#    - make tidy
 builds:
   - id: skywire-visor-darwin-amd64
     binary: skywire-visor
