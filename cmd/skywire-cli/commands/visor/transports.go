@@ -149,15 +149,14 @@ var rmTpCmd = &cobra.Command{
 func printTransports(tps ...*visor.TransportSummary) {
 	sortTransports(tps...)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode\tis_up")
+	_, err := fmt.Fprintln(w, "type\tid\tremote\tmode\tlabel\tis_up")
 	internal.Catch(err)
 	for _, tp := range tps {
 		tpMode := "regular"
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
-
-		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%v\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.IsUp)
+		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%v\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, tp.IsUp)
 		internal.Catch(err)
 	}
 	internal.Catch(w.Flush())
