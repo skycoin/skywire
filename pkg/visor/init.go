@@ -303,7 +303,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	ts, err := ts.NewTransportListener(ctx, v.conf, v.net.Dmsg(), v.tpM)
 	if err != nil {
 		cancel()
