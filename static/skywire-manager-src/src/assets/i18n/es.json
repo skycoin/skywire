@@ -97,7 +97,6 @@
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
         "ip": "IP:",
-        "port": "Puerto:",
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
         "node-version": "Versión del visor:",

@@ -93,7 +93,6 @@
         "title": "Visor Info",
         "label": "Label:",
         "public-key": "Public key:",
-        "port": "Port:",
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
