@@ -1,94 +1,82 @@
+// todo: tests here seems to be at very least of integration flavor: taking multiple
+// parts and checking if they work together
+// either remove them completely and rely on tests that setup infrastructure
+// or rewrite them to use mocks
+
 package visor
 
-import (
-	"encoding/json"
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"testing"
+// import (
+// 	"github.com/skycoin/skycoin/src/util/logging"
+// )
 
-	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+// var masterLogger *logging.MasterLogger
 
-	"github.com/skycoin/skywire/internal/httpauth"
-	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/restart"
-	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-)
+// func TestMain(m *testing.M) {
+// 	masterLogger = logging.NewMasterLogger()
+// 	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
+// 	if ok {
+// 		lvl, err := logging.LevelFromString(loggingLevel)
+// 		if err != nil {
+// 			log.Fatal(err)
+// 		}
+// 		masterLogger.SetLevel(lvl)
+// 	} else {
+// 		masterLogger.Out = ioutil.Discard
+// 	}
 
-var masterLogger *logging.MasterLogger
+// 	os.Exit(m.Run())
+// }
 
-func TestMain(m *testing.M) {
-	masterLogger = logging.NewMasterLogger()
-	loggingLevel, ok := os.LookupEnv("TEST_LOGGING_LEVEL")
-	if ok {
-		lvl, err := logging.LevelFromString(loggingLevel)
-		if err != nil {
-			log.Fatal(err)
-		}
-		masterLogger.SetLevel(lvl)
-	} else {
-		masterLogger.Out = ioutil.Discard
-	}
+// func TestNewVisor(t *testing.T) {
+// 	pk, sk := cipher.GenerateKeyPair()
+// 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: pk, NextNonce: 1}))
+// 	}))
+// 	defer srv.Close()
 
-	os.Exit(m.Run())
-}
+// 	conf := visorconfig.V1{
+// 		Common: &visorconfig.Common{
+// 			PK: pk,
+// 			SK: sk,
+// 		},
+// 		Dmsg: &snet.DmsgConfig{
+// 			Discovery:     skyenv.DefaultDmsgDiscAddr,
+// 			SessionsCount: 10,
+// 		},
+// 		Transport: &visorconfig.V1Transport{
+// 			Discovery:       srv.URL,
+// 			AddressResolver: skyenv.DefaultAddressResolverAddr,
+// 			LogStore: &visorconfig.V1LogStore{
+// 				Type: visorconfig.MemoryLogStore,
+// 			},
+// 			TrustedVisors: nil,
+// 		},
+// 		Routing: &visorconfig.V1Routing{
+// 			SetupNodes:         nil,
+// 			RouteFinder:        skyenv.DefaultRouteFinderAddr,
+// 			RouteFinderTimeout: 0,
+// 		},
+// 		Launcher: &visorconfig.V1Launcher{
+// 			LocalPath: "local",
+// 			BinPath:   "apps",
+// 			Apps: []launcher.AppConfig{
+// 				{Name: "foo", Port: 1},
+// 				{Name: "bar", AutoStart: true, Port: 2},
+// 			},
+// 		},
+// 	}
 
-func TestNewVisor(t *testing.T) {
-	pk, sk := cipher.GenerateKeyPair()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.NoError(t, json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: pk, NextNonce: 1}))
-	}))
-	defer srv.Close()
+// 	conf.SetLogger(logging.NewMasterLogger())
 
-	conf := visorconfig.V1{
-		Common: &visorconfig.Common{
-			PK: pk,
-			SK: sk,
-		},
-		Dmsg: &snet.DmsgConfig{
-			Discovery:     skyenv.DefaultDmsgDiscAddr,
-			SessionsCount: 10,
-		},
-		Transport: &visorconfig.V1Transport{
-			Discovery:       srv.URL,
-			AddressResolver: skyenv.DefaultAddressResolverAddr,
-			LogStore: &visorconfig.V1LogStore{
-				Type: visorconfig.MemoryLogStore,
-			},
-			TrustedVisors: nil,
-		},
-		Routing: &visorconfig.V1Routing{
-			SetupNodes:         nil,
-			RouteFinder:        skyenv.DefaultRouteFinderAddr,
-			RouteFinderTimeout: 0,
-		},
-		Launcher: &visorconfig.V1Launcher{
-			LocalPath: "local",
-			BinPath:   "apps",
-			Apps: []launcher.AppConfig{
-				{Name: "foo", Port: 1},
-				{Name: "bar", AutoStart: true, Port: 2},
-			},
-		},
-	}
+// 	defer func() {
+// 		require.NoError(t, os.RemoveAll("local"))
+// 	}()
 
-	conf.SetLogger(logging.NewMasterLogger())
+// 	visor, ok := NewVisor(&conf, restart.CaptureContext())
+// 	require.True(t, ok)
 
-	defer func() {
-		require.NoError(t, os.RemoveAll("local"))
-	}()
-
-	visor, ok := NewVisor(&conf, restart.CaptureContext())
-	require.True(t, ok)
-
-	assert.NotNil(t, visor.router)
-}
+// 	assert.NotNil(t, visor.router)
+// }
 
 // TODO(evanlinjin): Move to /pkg/app/launcher
 //func TestVisorStartClose(t *testing.T) {
