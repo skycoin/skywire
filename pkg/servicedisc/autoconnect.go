@@ -31,7 +31,6 @@ type autoconnector struct {
 	client   *HTTPClient
 	maxConns int
 	log      *logging.Logger
-	conns    map[cipher.PubKey]struct{}
 	tm       *transport.Manager
 }
 
@@ -42,83 +41,83 @@ func MakeConnector(conf Config, maxConns int, tm *transport.Manager, log *loggin
 	connector.client = NewClient(log, conf)
 	connector.maxConns = maxConns
 	connector.log = log
-	connector.conns = make(map[cipher.PubKey]struct{})
 	connector.tm = tm
 	return connector
 }
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context) error {
-	retrier := netutil.NewRetrier(fetchServicesDelay, 0, 2)
 	for {
 		time.Sleep(PublicServiceDelay)
-		a.checkConns()
-		if len(a.conns) == a.maxConns {
-			continue
-		}
-		var services []Service
-		fetch := func() (err error) {
-			// "return" services up from the closure
-			services, err = a.client.Services(ctx, a.maxConns)
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-		if err := retrier.Do(fetch); err != nil {
-			a.log.Errorf("Cannot fetch services: %s", err)
-			return err
+		a.log.Infof("Fetching public visors")
+		addresses, err := a.fetchPubAddresses(ctx)
+		if err != nil {
+			a.log.Errorf("Cannot fetch public services: %s", err)
 		}
 
-		for _, service := range services {
-			pk := service.Addr.PubKey()
-			if _, ok := a.conns[pk]; ok {
+		trs := a.updateTransports()
+		absent := a.calculateAbsent(addresses, trs)
+		for _, pk := range absent {
+			a.log.WithField("pk", pk).Infoln("Adding transport to public visor")
+			logger := a.log.WithField("pk", pk).WithField("type", tptypes.STCPR)
+			if _, err := a.tm.SaveTransport(ctx, pk, tptypes.STCPR, transport.LabelAutomatic); err != nil {
+				logger.WithError(err).Warnln("Failed to add transport to public visor")
 				continue
 			}
-			a.connect(ctx, pk)
+			logger.Infoln("Added transport to public visor")
 		}
 	}
 }
 
-// check if existing connections are still active using checker
-// and delete those that are not
-func (a *autoconnector) checkConns() {
-	toDelete := make([]cipher.PubKey, 0)
-	for pk := range a.conns {
-		if !a.checkConn(pk) {
-			toDelete = append(toDelete, pk)
+// Remove all inactive automatic transports and return all active
+// automatic transports
+func (a *autoconnector) updateTransports() []*transport.ManagedTransport {
+	trs := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
+	var trsActive []*transport.ManagedTransport
+	for _, tr := range trs {
+		if !tr.IsUp() {
+			a.tm.DeleteTransport(tr.Entry.ID)
+		} else {
+			trsActive = append(trsActive, tr)
 		}
 	}
-	for _, pk := range toDelete {
-		delete(a.conns, pk)
-	}
+	return trsActive
 }
 
-func (a *autoconnector) checkConn(pk cipher.PubKey) bool {
-	t, err := a.tm.GetTransport(pk, tptypes.STCPR)
-	if err != nil {
-		return false
+func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
+	retrier := netutil.NewRetrier(fetchServicesDelay, 0, 2)
+	var services []Service
+	fetch := func() (err error) {
+		// "return" services up from the closure
+		services, err = a.client.Services(ctx, a.maxConns)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
-	up := t.IsUp()
-	if !up {
-		a.tm.DeleteTransport(t.Entry.ID)
+	if err := retrier.Do(fetch); err != nil {
+		return nil, err
 	}
-	return up
+	var pkeys []cipher.PubKey
+	for _, service := range services {
+		pkeys = append(pkeys, service.Addr.PubKey())
+	}
+	return pkeys, nil
 }
 
-func (a *autoconnector) connect(ctx context.Context, pk cipher.PubKey) {
-	a.log.WithField("pk", pk).Infoln("Adding transport to public visor")
-	if _, err := a.tm.SaveTransport(ctx, pk, tptypes.STCPR, transport.LabelAutomatic); err != nil {
-		a.log.
-			WithError(err).
-			WithField("pk", pk).
-			WithField("type", tptypes.STCPR).
-			Warnln("Failed to add transport to public visor")
-		return
+func (a *autoconnector) calculateAbsent(pkeys []cipher.PubKey, trs []*transport.ManagedTransport) []cipher.PubKey {
+	var absent []cipher.PubKey
+	for _, pk := range pkeys {
+		found := false
+		for _, tr := range trs {
+			if tr.Entry.HasEdge(pk) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			absent = append(absent, pk)
+		}
 	}
-	a.log.
-		WithField("pk", pk).
-		WithField("type", tptypes.STCPR).
-		Infoln("Added transport to public visor")
-	a.conns[pk] = struct{}{}
+	return absent
 }
