@@ -67,6 +67,11 @@ export class NodeActionsHelper {
         name: 'actions.menu.update',
         actionName: 'update',
         icon: 'get_app',
+      },
+      {
+        name: 'actions.menu.logs',
+        actionName: 'logs',
+        icon: 'subject',
       }
     ];
 
@@ -92,12 +97,14 @@ export class NodeActionsHelper {
    * Must be called when an option form the top bar is selected.
    * @param actionName Name of the selected option, as defined in the options array.
    */
-  performAction(actionName: string) {
+  performAction(actionName: string, nodePk: string) {
     // Call the adequate function if the user clicks any of the options.
     if (actionName === 'terminal') {
       this.terminal();
     } else if (actionName === 'update') {
       this.update();
+    } else if (actionName === 'logs') {
+      window.open(window.location.origin + '/api/visors/' + nodePk + '/runtime-logs', '_blank');
     } else if (actionName === 'reboot') {
       this.reboot();
     } else if (actionName === null) {
