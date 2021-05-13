@@ -242,7 +242,8 @@
       "terminal": "Terminal",
       "config": "Configuración",
       "update": "Actualizar",
-      "reboot": "Reiniciar"
+      "reboot": "Reiniciar",
+      "logs": "Ver logs"
     },
     "reboot": {
       "confirmation": "¿Seguro que desea reiniciar el visor?",
