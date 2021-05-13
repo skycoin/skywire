@@ -270,6 +270,19 @@ func (tm *Manager) GetTransport(remote cipher.PubKey, tpType string) (*ManagedTr
 	return t, nil
 }
 
+// GetTransportsByLabel returns all transports that have given label
+func (tm *Manager) GetTransportsByLabel(label Label) []*ManagedTransport {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	var trs []*ManagedTransport
+	for _, tr := range tm.tps {
+		if tr.Entry.Label == label {
+			trs = append(trs, tr)
+		}
+	}
+	return trs
+}
+
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
 func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string, label Label) (*ManagedTransport, error) {
 
