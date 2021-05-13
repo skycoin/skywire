@@ -229,7 +229,7 @@ export class NodeComponent implements OnInit, OnDestroy {
    */
   performAction(actionName: string) {
     // The helper object manages the event.
-    this.nodeActionsHelper.performAction(actionName);
+    this.nodeActionsHelper.performAction(actionName, NodeComponent.currentNodeKey);
   }
 
   /**
