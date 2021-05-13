@@ -145,9 +145,9 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 	return summary
 }
 
-// ExtraSummary provides an extra summary of the AppNode.
-func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
-	summary, err := r.visor.Summary()
+// Summary provides an extra summary of the AppNode.
+func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
+	overview, err := r.visor.Overview()
 	if err != nil {
 		return fmt.Errorf("summary")
 	}
@@ -176,23 +176,23 @@ func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
 		})
 	}
 
-	*out = ExtraSummary{
-		Summary: summary,
-		Health:  health,
-		Uptime:  uptime,
-		Routes:  extraRoutes,
+	*out = Summary{
+		Overview: overview,
+		Health:   health,
+		Uptime:   uptime,
+		Routes:   extraRoutes,
 	}
 
 	return nil
 }
 
-// Summary provides a summary of the AppNode.
-func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
-	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
+// Overview provides a overview of the AppNode.
+func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
+	defer rpcutil.LogCall(r.log, "Overview", nil)(out, &err)
 
-	summary, err := r.visor.Summary()
-	if summary != nil {
-		*out = *summary
+	overview, err := r.visor.Overview()
+	if overview != nil {
+		*out = *overview
 	}
 
 	return err
