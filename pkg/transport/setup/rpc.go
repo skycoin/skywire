@@ -46,8 +46,7 @@ type BoolResponse struct {
 func (gw *TransportGateway) AddTransport(req TransportRequest, res *TransportResponse) error {
 	ctx := context.Background()
 	gw.log.WithField("PK", req.RemotePK).WithField("type", req.Type).Info("Adding transport")
-	// todo: pass transport type "skycoin"
-	mt, err := gw.tm.SaveTransport(ctx, req.RemotePK, req.Type)
+	mt, err := gw.tm.SaveTransport(ctx, req.RemotePK, req.Type, transport.LabelSkycoin)
 	if err != nil {
 		gw.log.WithError(err).Error("Cannot save transport")
 		return err
