@@ -1,9 +1,7 @@
 export class Node {
   label: string;
   localPk: string;
-  tcpAddr: string;
   ip: string;
-  port: string;
   version: string;
   apps: Application[];
   transports: Transport[];

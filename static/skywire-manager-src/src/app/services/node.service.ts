@@ -498,7 +498,7 @@ export class NodeService {
           node.localPk = response.overview.local_pk;
 
           // Ip.
-          if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
+          if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
             node.ip = response.overview.local_ip;
           } else {
             node.ip = null;
@@ -507,6 +507,15 @@ export class NodeService {
           // Label.
           const labelInfo = this.storageService.getLabelInfo(node.localPk);
           node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
+
+          // If the node is offline, there if no need for getting the rest of the data.
+          if (!node.online) {
+            node.dmsgServerPk = '';
+            node.roundTripPing = '';
+            nodes.push(node);
+
+            return;
+          }
 
           // Health data.
           node.health = {
@@ -729,22 +738,6 @@ export class NodeService {
         return node;
       })
     );
-  }
-
-  /**
-   * Gets a part of the node address: the ip or the port.
-   * @param tcpAddr Complete address.
-   * @param part 0 for the ip or 1 for the port.
-   */
-  private getAddressPart(tcpAddr: string, part: number): string {
-    const addressParts = tcpAddr.split(':');
-    let port = tcpAddr;
-
-    if (addressParts && addressParts.length === 2) {
-      port = addressParts[part];
-    }
-
-    return port;
   }
 
   /**
