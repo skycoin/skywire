@@ -323,6 +323,11 @@ The following hardware is accepted in the Skywire mainnet:
      - Sopine-A64
      - Rock64
      - ROCKPro64
+#### ROCKPI
+     - Rockpi 4
+     - Rockpi S
+     - Rockpi E
+     - Rockpi N10
 
 #### SolidRun
      - CuBox-i
