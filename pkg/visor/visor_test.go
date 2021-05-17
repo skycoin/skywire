@@ -55,13 +55,17 @@ func TestNewVisor(t *testing.T) {
 			Discovery:     skyenv.DefaultDmsgDiscAddr,
 			SessionsCount: 10,
 		},
+		STCP: &snet.STCPConfig{
+			PKTable:   nil,
+			LocalAddr: "localhost:7777",
+		},
 		Transport: &visorconfig.V1Transport{
 			Discovery:       srv.URL,
 			AddressResolver: skyenv.DefaultAddressResolverAddr,
 			LogStore: &visorconfig.V1LogStore{
 				Type: visorconfig.MemoryLogStore,
 			},
-			TrustedVisors: nil,
+			AutoconnectPublic: false,
 		},
 		Routing: &visorconfig.V1Routing{
 			SetupNodes:         nil,
@@ -74,6 +78,10 @@ func TestNewVisor(t *testing.T) {
 			Apps: []launcher.AppConfig{
 				{Name: "foo", Port: 1},
 				{Name: "bar", AutoStart: true, Port: 2},
+			},
+			Discovery: &visorconfig.V1AppDisc{
+				UpdateInterval: 0,
+				ServiceDisc:    "",
 			},
 		},
 	}

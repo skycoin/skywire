@@ -4,5 +4,5 @@ package netutil
 
 // DefaultNetworkInterface fetches default network interface name.
 func DefaultNetworkInterface() (string, error) {
-	return "", nil
+	return "", errServerMethodsNotSupported
 }
