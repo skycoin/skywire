@@ -55,8 +55,8 @@ func (a *autoconnector) Run(ctx context.Context) error {
 			a.log.Errorf("Cannot fetch public services: %s", err)
 		}
 
-		trs := a.updateTransports()
-		absent := a.calculateAbsent(addresses, trs)
+		tps := a.updateTransports()
+		absent := a.filterDuplicates(addresses, tps)
 		for _, pk := range absent {
 			a.log.WithField("pk", pk).Infoln("Adding transport to public visor")
 			logger := a.log.WithField("pk", pk).WithField("type", tptypes.STCPR)
@@ -72,16 +72,16 @@ func (a *autoconnector) Run(ctx context.Context) error {
 // Remove all inactive automatic transports and return all active
 // automatic transports
 func (a *autoconnector) updateTransports() []*transport.ManagedTransport {
-	trs := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
-	var trsActive []*transport.ManagedTransport
-	for _, tr := range trs {
+	tps := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
+	var tpsActive []*transport.ManagedTransport
+	for _, tr := range tps {
 		if !tr.IsUp() {
 			a.tm.DeleteTransport(tr.Entry.ID)
 		} else {
-			trsActive = append(trsActive, tr)
+			tpsActive = append(tpsActive, tr)
 		}
 	}
-	return trsActive
+	return tpsActive
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
@@ -98,16 +98,17 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey,
 	if err := retrier.Do(fetch); err != nil {
 		return nil, err
 	}
-	var pkeys []cipher.PubKey
+	var pks []cipher.PubKey
 	for _, service := range services {
-		pkeys = append(pkeys, service.Addr.PubKey())
+		pks = append(pks, service.Addr.PubKey())
 	}
-	return pkeys, nil
+	return pks, nil
 }
 
-func (a *autoconnector) calculateAbsent(pkeys []cipher.PubKey, trs []*transport.ManagedTransport) []cipher.PubKey {
+// return public keys from pks that are absent in given list of transports
+func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.ManagedTransport) []cipher.PubKey {
 	var absent []cipher.PubKey
-	for _, pk := range pkeys {
+	for _, pk := range pks {
 		found := false
 		for _, tr := range trs {
 			if tr.Entry.HasEdge(pk) {
