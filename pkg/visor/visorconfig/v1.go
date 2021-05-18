@@ -35,7 +35,7 @@ const V112Name = "v1.1.2"
 // V1Name is the semantic version string for the most recent version of V1.
 const V1Name = V112Name
 
-// V1 is visor config v1.0.0
+// V1 is visor config
 type V1 struct {
 	*Common
 	mu sync.RWMutex
