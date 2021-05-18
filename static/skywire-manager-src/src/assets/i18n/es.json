@@ -97,7 +97,6 @@
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
         "ip": "IP:",
-        "port": "Puerto:",
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
         "node-version": "Versión del visor:",
@@ -242,7 +241,8 @@
       "terminal": "Terminal",
       "config": "Configuración",
       "update": "Actualizar",
-      "reboot": "Reiniciar"
+      "reboot": "Reiniciar",
+      "logs": "Ver logs"
     },
     "reboot": {
       "confirmation": "¿Seguro que desea reiniciar el visor?",

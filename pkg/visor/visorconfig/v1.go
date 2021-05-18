@@ -21,8 +21,19 @@ const V100Name = "v1.0.0"
 // Added MinHops field to V1Routing section of config
 const V110Name = "v1.1.0"
 
+// V111Name is the semantic version string for v1.1.1.
+// Removed public_trusted_visor field from root section
+// Removed trusted_visors field from transport section
+// Added is_public field to root section
+// Added public_autoconnect field to transport section
+const V111Name = "v1.1.1"
+
+// V112Name is the semantic version string for v1.1.2.
+// Added transport_setup_nodes field to transport section
+const V112Name = "v1.1.2"
+
 // V1Name is the semantic version string for the most recent version of V1.
-const V1Name = V110Name
+const V1Name = V112Name
 
 // V1 is visor config v1.0.0
 type V1 struct {
@@ -43,8 +54,7 @@ type V1 struct {
 	LogLevel          string   `json:"log_level"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
-
-	PublicTrustedVisor bool `json:"public_trusted_visor,omitempty"`
+	IsPublic          bool     `json:"is_public"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
@@ -59,11 +69,11 @@ type V1Dmsgpty struct {
 
 // V1Transport defines a transport config.
 type V1Transport struct {
-	Discovery       string          `json:"discovery"`
-	AddressResolver string          `json:"address_resolver"`
-	LogStore        *V1LogStore     `json:"log_store"`
-	TrustedVisors   []cipher.PubKey `json:"trusted_visors"`
-	TransportSetup  []cipher.PubKey `json:"transport_setup_nodes"`
+	Discovery         string          `json:"discovery"`
+	AddressResolver   string          `json:"address_resolver"`
+	LogStore          *V1LogStore     `json:"log_store"`
+	AutoconnectPublic bool            `json:"public_autoconnect"`
+	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
 
 // V1LogStore configures a LogStore.
