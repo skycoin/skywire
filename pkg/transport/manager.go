@@ -21,11 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/snettest"
 )
 
-const (
-	// TrustedVisorsDelay defines a delay before adding transports to trusted visors.
-	TrustedVisorsDelay = 5 * time.Second
-)
-
 // TPCloseCallback triggers after a session is closed.
 type TPCloseCallback func(network, addr string)
 
@@ -33,7 +28,6 @@ type TPCloseCallback func(network, addr string)
 type ManagerConfig struct {
 	PubKey          cipher.PubKey
 	SecKey          cipher.SecKey
-	DefaultVisors   []cipher.PubKey // Visors to automatically connect to
 	DiscoveryClient DiscoveryClient
 	LogStore        LogStore
 }
@@ -258,6 +252,35 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
 
 	return nil
+}
+
+// GetTransport gets transport entity to the given remote
+func (tm *Manager) GetTransport(remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	if !snet.IsKnownNetwork(tpType) {
+		return nil, snet.ErrUnknownNetwork
+	}
+
+	tpID := tm.tpIDFromPK(remote, tpType)
+	t, ok := tm.tps[tpID]
+	if !ok {
+		return nil, fmt.Errorf("transport to %s of type %s not found", remote, tpType)
+	}
+	return t, nil
+}
+
+// GetTransportsByLabel returns all transports that have given label
+func (tm *Manager) GetTransportsByLabel(label Label) []*ManagedTransport {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	var trs []*ManagedTransport
+	for _, tr := range tm.tps {
+		if tr.Entry.Label == label {
+			trs = append(trs, tr)
+		}
+	}
+	return trs
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.

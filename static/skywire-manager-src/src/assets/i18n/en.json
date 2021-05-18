@@ -97,7 +97,6 @@
         "label": "Label:",
         "public-key": "Public key:",
         "ip": "IP:",
-        "port": "Port:",
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
@@ -242,7 +241,8 @@
       "terminal": "Terminal",
       "config": "Configuration",
       "update": "Update",
-      "reboot": "Reboot"
+      "reboot": "Reboot",
+      "logs": "View logs"
     },
     "reboot": {
       "confirmation": "Are you sure you want to reboot the visor?",
