@@ -16,11 +16,11 @@ var pkCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 
 		client := rpcClient()
-		summary, err := client.Summary()
+		overview, err := client.Overview()
 		if err != nil {
 			logger.Fatal("Failed to connect:", err)
 		}
 
-		fmt.Println(summary.PubKey)
+		fmt.Println(overview.PubKey)
 	},
 }
