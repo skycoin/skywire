@@ -254,6 +254,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 	return nil
 }
 
+// ErrNotFound is returned when requested transport is not found
+var ErrNotFound = errors.New("transport not found")
+
 // GetTransport gets transport entity to the given remote
 func (tm *Manager) GetTransport(remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
 	tm.mx.RLock()
@@ -263,11 +266,20 @@ func (tm *Manager) GetTransport(remote cipher.PubKey, tpType string) (*ManagedTr
 	}
 
 	tpID := tm.tpIDFromPK(remote, tpType)
-	t, ok := tm.tps[tpID]
+	tp, ok := tm.tps[tpID]
 	if !ok {
-		return nil, fmt.Errorf("transport to %s of type %s not found", remote, tpType)
+		return nil, fmt.Errorf("transport to %s of type %s error: %w", remote, tpType, ErrNotFound)
 	}
-	return t, nil
+	return tp, nil
+}
+
+// GetTransportByID retrieves transport by its ID, if it exists
+func (tm *Manager) GetTransportByID(tpID uuid.UUID) (*ManagedTransport, error) {
+	tp, ok := tm.tps[tpID]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return tp, nil
 }
 
 // GetTransportsByLabel returns all transports that have given label
