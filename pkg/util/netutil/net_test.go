@@ -1,9 +1,11 @@
 package netutil_test
 
 import (
-	"github.com/skycoin/skywire/pkg/util/netutil"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 func TestDefaultNetworkInterfaceIPs(t *testing.T) {
