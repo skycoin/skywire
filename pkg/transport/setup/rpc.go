@@ -46,26 +46,49 @@ type BoolResponse struct {
 func (gw *TransportGateway) AddTransport(req TransportRequest, res *TransportResponse) error {
 	ctx := context.Background()
 	gw.log.WithField("PK", req.RemotePK).WithField("type", req.Type).Info("Adding transport")
-	mt, err := gw.tm.SaveTransport(ctx, req.RemotePK, req.Type, transport.LabelSkycoin)
+	tp, err := gw.tm.SaveTransport(ctx, req.RemotePK, req.Type, transport.LabelSkycoin)
 	if err != nil {
 		gw.log.WithError(err).Error("Cannot save transport")
 		return err
 	}
-	res.ID = mt.Entry.ID
+	res.ID = tp.Entry.ID
 	res.Local = gw.tm.Local()
-	res.Remote = mt.Remote()
-	res.Type = mt.Type()
-	res.IsUp = mt.IsUp()
+	res.Remote = tp.Remote()
+	res.Type = tp.Type()
+	res.IsUp = tp.IsUp()
 	return nil
 }
 
-// ErrNotFound is returned when requested transport is not found
-var ErrNotFound = errors.New("transport not found")
+// ErrIncorrectType is returned when transport was not created by transport setup
+var ErrIncorrectType = errors.New("transport was not created by skycoin")
 
 // RemoveTransport removes all transports that match given request
 func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) error {
 	gw.log.WithField("ID", req.ID).Info("Removing transport")
+	tr, err := gw.tm.GetTransportByID(req.ID)
+	if err != nil {
+		return err
+	}
+	if tr.Entry.Label != transport.LabelSkycoin {
+		return ErrIncorrectType
+	}
 	gw.tm.DeleteTransport(req.ID)
 	res.Result = true
+	return nil
+}
+
+// GetTransports returns all transports of this node that have been established by transport setup system
+func (gw *TransportGateway) GetTransports(res *[]TransportResponse) error {
+	tps := gw.tm.GetTransportsByLabel(transport.LabelSkycoin)
+	for _, tp := range tps {
+		tResp := TransportResponse{
+			ID:     tp.Entry.ID,
+			Local:  gw.tm.Local(),
+			Remote: tp.Remote(),
+			Type:   tp.Type(),
+			IsUp:   tp.IsUp(),
+		}
+		*res = append(*res, tResp)
+	}
 	return nil
 }
