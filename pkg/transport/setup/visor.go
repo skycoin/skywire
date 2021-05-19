@@ -46,7 +46,7 @@ func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg
 
 // Serve transport setup rpc to trusted nodes over dmsg
 func (ts *TransportListener) Serve(ctx context.Context) {
-	ts.log.WithField("dmesg_port", skyenv.DmsgTransportSetupPort).Info("starting listener")
+	ts.log.WithField("dmsg_port", skyenv.DmsgTransportSetupPort).Info("starting listener")
 	lis, err := ts.dmsgC.Listen(skyenv.DmsgTransportSetupPort)
 	if err != nil {
 		ts.log.WithError(err).Error("failed to listen")
