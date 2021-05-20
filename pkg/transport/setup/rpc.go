@@ -78,7 +78,7 @@ func (gw *TransportGateway) RemoveTransport(req UUIDRequest, res *BoolResponse) 
 }
 
 // GetTransports returns all transports of this node that have been established by transport setup system
-func (gw *TransportGateway) GetTransports(res *[]TransportResponse) error {
+func (gw *TransportGateway) GetTransports(_ struct{}, res *[]TransportResponse) error {
 	tps := gw.tm.GetTransportsByLabel(transport.LabelSkycoin)
 	for _, tp := range tps {
 		tResp := TransportResponse{
