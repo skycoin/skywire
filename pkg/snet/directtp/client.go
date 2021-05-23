@@ -341,21 +341,21 @@ func (c *client) listen(addr string) (net.Listener, error) {
 		}
 
 		go func() {
-			for addr := range addrCh {
-				udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
+			for address := range addrCh {
+				udpAddr, err := net.ResolveUDPAddr("udp", address.Addr)
 				if err != nil {
 					c.log.WithError(err).Errorf("Failed to resolve UDP address %q", addr)
 					continue
 				}
 
-				c.log.Infof("Sending hole punch packet to %v", addr)
+				c.log.Infof("Sending hole punch packet to %v", address)
 
 				if _, err := c.sudphVisorsConn.WriteTo([]byte(holePunchMessage), udpAddr); err != nil {
 					c.log.WithError(err).Errorf("Failed to send hole punch packet to %v", udpAddr)
 					continue
 				}
 
-				c.log.Infof("Sent hole punch packet to %v", addr)
+				c.log.Infof("Sent hole punch packet to %v", address)
 			}
 		}()
 
