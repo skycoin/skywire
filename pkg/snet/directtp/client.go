@@ -323,7 +323,7 @@ func (c *client) listen(addr string) (net.Listener, error) {
 		return net.Listen("tcp", addr)
 
 	case tptypes.SUDPH:
-		packetListener, err := net.ListenPacket("udp", "")
+		packetListener, err := net.ListenPacket("udp", addr)
 		if err != nil {
 			return nil, err
 		}
