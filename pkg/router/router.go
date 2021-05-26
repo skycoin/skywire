@@ -318,12 +318,7 @@ func (r *router) Serve(ctx context.Context) error {
 
 	go r.serveTransportManager(ctx)
 
-	r.wg.Add(1)
-
-	go func() {
-		defer r.wg.Done()
-		r.serveSetup()
-	}()
+	go r.serveSetup()
 
 	r.tm.Serve(ctx)
 
@@ -744,8 +739,6 @@ func (r *router) Close() error {
 	if err := r.sl.Close(); err != nil {
 		r.logger.WithError(err).Warnf("closing route_manager returned error")
 	}
-
-	r.wg.Wait()
 
 	return r.tm.Close()
 }
