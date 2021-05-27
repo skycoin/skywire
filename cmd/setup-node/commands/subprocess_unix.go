@@ -5,10 +5,10 @@ package commands
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cmdutil"
-	"github.com/skycoin/skycoin/src/util/logging"
 )
 
-func signalContext(ctx context.Context, log *logging.MasterLogger) (context.Context, context.CancelFunc) {
+func signalContext(ctx context.Context, log logrus.FieldLogger) (context.Context, context.CancelFunc) {
 	return cmdutil.SignalContext(ctx, log)
 }
