@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defaultNetworkInterfaceCMD = "netstat -rn | sed -n '/Internet/,/Internet6/p' | grep default | awk '{print $4}'"
+	defaultNetworkInterfaceCMD = "route -n get default | awk 'FNR == 5 {print $2}'"
 )
 
 // DefaultNetworkInterface fetches default network interface name.
