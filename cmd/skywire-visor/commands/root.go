@@ -74,7 +74,7 @@ var rootCmd = &cobra.Command{
 			WithField("parent_systemd", restartCtx.ParentSystemd()).
 			Debugf("Process info")
 
-		detachProcess(delayDuration)
+		detachProcess(delayDuration, log)
 
 		time.Sleep(delayDuration)
 

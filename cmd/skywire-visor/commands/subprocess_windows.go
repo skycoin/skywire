@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func detachProcess(_ time.Duration) {
+func detachProcess(_ time.Duration, _ logrus.FieldLogger) {
 	return
 }
 

@@ -2,7 +2,9 @@
 
 package restart
 
-import "os/exec"
+import (
+	"os/exec"
+)
 
 func attachTTY(*exec.Cmd) {
 	// not used for Windows
