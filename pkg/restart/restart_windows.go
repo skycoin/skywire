@@ -9,3 +9,7 @@ func attachTTY(*exec.Cmd) {
 
 	return
 }
+
+func (c *Context) ignoreSignals() {
+	return
+}
