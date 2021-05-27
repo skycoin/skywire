@@ -146,7 +146,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			NetworkConfigs: networkConfigs,
 		}
 
-		n := snet.NewRaw(snetConfig, clients)
+		n := snet.NewRaw(snetConfig, clients, addressResolver)
 		require.NoError(t, n.Init())
 		ns[i] = n
 	}
