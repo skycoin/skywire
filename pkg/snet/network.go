@@ -71,7 +71,6 @@ func (c *STCPConfig) Type() string {
 type Config struct {
 	PubKey         cipher.PubKey
 	SecKey         cipher.SecKey
-	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
 }
 
@@ -94,12 +93,13 @@ type Network struct {
 	nets    map[string]struct{} // networks to be used with transports
 	clients NetworkClients
 
+	arc                arclient.APIClient
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
 }
 
 // New creates a network from a config.
-func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
+func New(conf Config, eb *appevent.Broadcaster, arc arclient.APIClient) (*Network, error) {
 	clients := NetworkClients{
 		Direct: make(map[string]directtp.Client),
 	}
@@ -143,12 +143,12 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 		clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
 	}
 
-	if conf.ARClient != nil {
+	if arc != nil {
 		stcprConf := directtp.Config{
 			Type:            tptypes.STCPR,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
-			AddressResolver: conf.ARClient,
+			AddressResolver: arc,
 			BeforeDialCallback: func(network, addr string) error {
 				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
 				event := appevent.NewEvent(appevent.TCPDial, data)
@@ -163,21 +163,22 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			Type:            tptypes.SUDPH,
 			PK:              conf.PubKey,
 			SK:              conf.SecKey,
-			AddressResolver: conf.ARClient,
+			AddressResolver: arc,
 		}
 
 		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf)
 	}
 
-	return NewRaw(conf, clients), nil
+	return NewRaw(conf, clients, arc), nil
 }
 
 // NewRaw creates a network from a config and a dmsg client.
-func NewRaw(conf Config, clients NetworkClients) *Network {
+func NewRaw(conf Config, clients NetworkClients, arc arclient.APIClient) *Network {
 	n := &Network{
 		conf:    conf,
 		nets:    make(map[string]struct{}),
 		clients: clients,
+		arc:     arc,
 	}
 
 	if clients.DmsgC != nil {
@@ -216,7 +217,7 @@ func (n *Network) Init() error {
 		}
 	}
 
-	if n.conf.ARClient != nil {
+	if n.arc != nil {
 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
 			if err := client.Serve(); err != nil {
 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
