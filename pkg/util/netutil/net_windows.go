@@ -25,7 +25,6 @@ func DefaultNetworkInterface() (string, error) {
 			ipAddr := re.Split(strings.TrimSpace(line), -1)
 
 			if len(ipAddr) > 2 {
-				fmt.Printf("Ip address is %s\n", ipAddr[2])
 				ip := net.ParseIP(ipAddr[2])
 				if ip != nil && !ip.IsLoopback() {
 					ips[i] = ipAddr[2]
