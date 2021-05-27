@@ -155,7 +155,6 @@ type router struct {
 	rpcSrv        *rpc.Server
 	accept        chan routing.EdgeRules
 	done          chan struct{}
-	wg            sync.WaitGroup
 	once          sync.Once
 }
 
