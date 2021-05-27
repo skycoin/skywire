@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/snettest"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -49,7 +50,7 @@ func TestNewManager(t *testing.T) {
 	// Prepare tp manager 0.
 	pk0, sk0 := keys[0].PK, keys[0].SK
 	ls0 := transport.InMemoryTransportLogStore()
-	m0, err := transport.NewManager(nil, nEnv.Nets[0], &transport.ManagerConfig{
+	m0, err := transport.NewManager(nil, nEnv.Nets[0], new(arclient.MockAPIClient), &transport.ManagerConfig{
 		PubKey:          pk0,
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
@@ -62,7 +63,7 @@ func TestNewManager(t *testing.T) {
 	// Prepare tp manager 1.
 	pk1, sk1 := keys[1].PK, keys[1].SK
 	ls1 := transport.InMemoryTransportLogStore()
-	m2, err := transport.NewManager(nil, nEnv.Nets[1], &transport.ManagerConfig{
+	m2, err := transport.NewManager(nil, nEnv.Nets[1], new(arclient.MockAPIClient), &transport.ManagerConfig{
 		PubKey:          pk1,
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,

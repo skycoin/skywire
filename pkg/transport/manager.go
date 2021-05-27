@@ -34,10 +34,11 @@ type ManagerConfig struct {
 
 // Manager manages Transports.
 type Manager struct {
-	Logger *logging.Logger
-	Conf   *ManagerConfig
-	tps    map[uuid.UUID]*ManagedTransport
-	n      *snet.Network
+	Logger   *logging.Logger
+	Conf     *ManagerConfig
+	tps      map[uuid.UUID]*ManagedTransport
+	n        *snet.Network
+	arClient arclient.APIClient
 
 	listenersMu   sync.Mutex
 	listeners     []*snet.Listener
@@ -56,7 +57,7 @@ type Manager struct {
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(log *logging.Logger, n *snet.Network, config *ManagerConfig) (*Manager, error) {
+func NewManager(log *logging.Logger, n *snet.Network, arClient arclient.APIClient, config *ManagerConfig) (*Manager, error) {
 	if log == nil {
 		log = logging.MustGetLogger("tp_manager")
 	}
@@ -68,6 +69,7 @@ func NewManager(log *logging.Logger, n *snet.Network, config *ManagerConfig) (*M
 		n:           n,
 		readCh:      make(chan routing.Packet, 20),
 		done:        make(chan struct{}),
+		arClient:    arClient,
 	}
 	return tm, nil
 }
@@ -363,9 +365,8 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string, label Lab
 	})
 
 	if mTp.netName == tptypes.STCPR {
-		ar := mTp.n.Conf().ARClient
-		if ar != nil {
-			visorData, err := ar.Resolve(context.Background(), mTp.netName, remote)
+		if tm.arClient != nil {
+			visorData, err := tm.arClient.Resolve(context.Background(), mTp.netName, remote)
 			if err == nil {
 				mTp.remoteAddr = visorData.RemoteAddr
 			} else {
@@ -531,7 +532,7 @@ func CreateTransportPair(
 	// Prepare tp manager 0.
 	pk0, sk0 := keys[0].PK, keys[0].SK
 	ls0 := InMemoryTransportLogStore()
-	m0, err = NewManager(nil, nEnv.Nets[0], &ManagerConfig{
+	m0, err = NewManager(nil, nEnv.Nets[0], new(arclient.MockAPIClient), &ManagerConfig{
 		PubKey:          pk0,
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
@@ -546,7 +547,7 @@ func CreateTransportPair(
 	// Prepare tp manager 1.
 	pk1, sk1 := keys[1].PK, keys[1].SK
 	ls1 := InMemoryTransportLogStore()
-	m1, err = NewManager(nil, nEnv.Nets[1], &ManagerConfig{
+	m1, err = NewManager(nil, nEnv.Nets[1], new(arclient.MockAPIClient), &ManagerConfig{
 		PubKey:          pk1,
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,

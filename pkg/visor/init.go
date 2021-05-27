@@ -105,7 +105,7 @@ func registerModules(logger *logging.MasterLogger) {
 	sn = maker("snet", initSNet, &ar, &disc, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
-	tr = maker("transport", initTransport, &sn, &ebc)
+	tr = maker("transport", initTransport, &ar, &sn, &ebc)
 	rt = maker("router", initRouter, &tr, &sn)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
 	cli = maker("cli", initCLI)
@@ -186,11 +186,10 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := snet.Config{
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
-		ARClient:       v.arClient,
 		NetworkConfigs: nc,
 	}
 
-	n, err := snet.New(conf, v.ebc)
+	n, err := snet.New(conf, v.ebc, v.arClient)
 	if err != nil {
 		return err
 	}
@@ -262,7 +261,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		LogStore:        logS,
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
-	tpM, err := transport.NewManager(managerLogger, v.net, &tpMConf)
+	tpM, err := transport.NewManager(managerLogger, v.net, v.arClient, &tpMConf)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err
