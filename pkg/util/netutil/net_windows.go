@@ -24,7 +24,7 @@ func DefaultNetworkInterface() (string, error) {
 	}
 	// parse output
 	splitLines := strings.Split(string(output), "\n")
-	ips := make([]string, len(splitLines))
+	var ips []string
 
 	if len(splitLines) > 0 {
 		re := regexp.MustCompile("\\s+")
@@ -34,7 +34,7 @@ func DefaultNetworkInterface() (string, error) {
 			if len(ipAddr) > 2 {
 				ip := net.ParseIP(ipAddr[2])
 				if ip != nil && !ip.IsLoopback() {
-					ips[i] = ipAddr[2]
+					ips = append(ips, ipAddr[2])
 				}
 			}
 		}
