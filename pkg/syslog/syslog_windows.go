@@ -5,7 +5,7 @@ package syslog
 import (
 	"errors"
 
-	_ "github.com/konsorten/go-windows-terminal-sequences"
+	_ "github.com/konsorten/go-windows-terminal-sequences" // for satisfying logrus dependencies on windows
 	"github.com/sirupsen/logrus"
 )
 
