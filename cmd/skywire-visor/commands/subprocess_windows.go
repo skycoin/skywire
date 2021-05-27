@@ -13,7 +13,6 @@ import (
 )
 
 func detachProcess(_ time.Duration, _ logrus.FieldLogger) {
-	return
 }
 
 // signalContext is just wrapper for cmdutil.SignalContext with its signal uses windows specific signals

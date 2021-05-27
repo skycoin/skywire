@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// DupTo basically just duplicates / capture the handle into the new handle
 func DupTo(stdhandle uintptr, handle windows.Handle) error {
 	procSetHandle := windows.MustLoadDLL("kernel32.dll").MustFindProc("SetStdHandle")
 	r0, _, e1 := syscall.Syscall(procSetHandle.Addr(), 2, stdhandle, uintptr(handle), 0)
@@ -24,6 +25,7 @@ func DupTo(stdhandle uintptr, handle windows.Handle) error {
 	return nil
 }
 
+// CaptureStdout captures stdout output
 func (oc *outputCapturer) CaptureStdout() (io.Writer, error) {
 	oc.capturing = true
 	stdoutReader, stdoutWriter, err := os.Pipe()
