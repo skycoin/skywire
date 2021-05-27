@@ -16,6 +16,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
+	github.com/konsorten/go-windows-terminal-sequences v1.0.2
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/archiver/v3 v3.3.0

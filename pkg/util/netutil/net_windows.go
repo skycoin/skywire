@@ -28,7 +28,7 @@ func DefaultNetworkInterface() (string, error) {
 
 	if len(splitLines) > 0 {
 		re := regexp.MustCompile("\\s+")
-		for i, line := range splitLines {
+		for _, line := range splitLines {
 			ipAddr := re.Split(strings.TrimSpace(line), -1)
 
 			if len(ipAddr) > 2 {
