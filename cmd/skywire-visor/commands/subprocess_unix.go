@@ -8,14 +8,13 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/cmdutil"
-	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/restart"
 )
 
-func detachProcess(delayDuration time.Duration) {
+func detachProcess(delayDuration time.Duration, log logrus.FieldLogger) {
 	// Versions v0.2.3 and below return 0 exit-code after update and do not trigger systemd to restart a process
 	// and therefore do not support restart via systemd.
 	// If --delay flag is passed, version is v0.2.3 or below.
@@ -47,6 +46,6 @@ func detachProcess(delayDuration time.Duration) {
 
 }
 
-func signalContext(ctx context.Context, log *logging.MasterLogger) (context.Context, context.CancelFunc) {
+func signalContext(ctx context.Context, log logrus.FieldLogger) (context.Context, context.CancelFunc) {
 	return cmdutil.SignalContext(ctx, log)
 }
