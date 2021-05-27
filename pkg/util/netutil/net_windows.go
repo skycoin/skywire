@@ -2,7 +2,14 @@
 
 package netutil
 
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"net"
+	"os/exec"
+	"regexp"
+	"strings"
+)
 
 const (
 	defaultNetworkInterfaceCMD = `netsh int ip show config | findstr /r "IP Address.*([0-9]{1,3}\.|){4}"`
@@ -45,5 +52,5 @@ func DefaultNetworkInterface() (string, error) {
 		return "", fmt.Errorf("unable to get default interface: %v", err)
 	}
 
-	return strings.TrimSpace(output), nil
+	return strings.TrimSpace(string(output)), nil
 }
