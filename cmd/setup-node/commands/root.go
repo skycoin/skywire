@@ -10,7 +10,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg/buildinfo"
-	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/dmsg/metricsutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
@@ -92,7 +91,7 @@ var rootCmd = &cobra.Command{
 
 		m := prepareMetrics(log)
 
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+		ctx, cancel := signalContext(context.Background(), log)
 		defer cancel()
 
 		log.Fatal(sn.Serve(ctx, m))
