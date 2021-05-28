@@ -22,6 +22,8 @@ func init() {
 		ruleCmd,
 		rmRuleCmd,
 		addRuleCmd,
+		getMinHopsCmd,
+		setMinHopsCmd,
 	)
 }
 
@@ -115,6 +117,32 @@ var addRuleCmd = &cobra.Command{
 
 		internal.Catch(rpcClient().SaveRoutingRule(rule))
 		fmt.Println("Routing Rule Key:", rIDKey)
+	},
+}
+
+var getMinHopsCmd = &cobra.Command{
+	Use:   "get-min-hops",
+	Short: "Gets local visor's min_hops routing config",
+	Run: func(_ *cobra.Command, _ []string) {
+		hops, err := rpcClient().GetMinHops()
+		internal.Catch(err)
+
+		_, err = fmt.Fprintf(os.Stdout, "Visor's min hops: %d\n", hops)
+		internal.Catch(err)
+	},
+}
+
+var setMinHopsCmd = &cobra.Command{
+	Use:   "set-min-hops",
+	Short: "Sets the local visor's min_hops routing config",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		hops, err := strconv.ParseUint(args[0], 10, 16)
+		internal.Catch(err)
+
+		err = rpcClient().SetMinHops(uint16(hops))
+		internal.Catch(err)
+		fmt.Printf("Successfully sets min_hops to: %d\n", hops)
 	},
 }
 
