@@ -70,6 +70,9 @@ type API interface {
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
 	RuntimeLogs() (string, error)
+
+	GetMinHops() (uint16, error)
+	SetMinHops(uint16) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -733,4 +736,14 @@ func (v *Visor) RuntimeLogs() (string, error) {
 	builder.WriteString(strings.Join(logs, ","))
 	builder.WriteString("]")
 	return builder.String(), nil
+}
+
+// GetMinHops gets min_hops routing config of visor
+func (v *Visor) GetMinHops() (uint16, error) {
+	return v.conf.Routing.MinHops, nil
+}
+
+// SetMinHops sets min_hops routing config of visor
+func (v *Visor) SetMinHops(in uint16) error {
+	return v.conf.UpdateMinHops(in)
 }
