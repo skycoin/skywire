@@ -1,4 +1,4 @@
-# github.com/AudriusButkevicius/pfilter v0.0.0-20190627213056-c55ef6137fc6
+# github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51
 ## explicit
 github.com/AudriusButkevicius/pfilter
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
@@ -35,15 +35,12 @@ github.com/go-ole/go-ole/oleutil
 # github.com/golang/gddo v0.0.0-20190419222130-af0f2af80721
 github.com/golang/gddo/httputil
 github.com/golang/gddo/httputil/header
-# github.com/golang/protobuf v1.4.2
-## explicit
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/google/go-github v17.0.0+incompatible
 ## explicit
 github.com/google/go-github/github
 # github.com/google/go-querystring v1.0.0
-## explicit
 github.com/google/go-querystring/query
 # github.com/google/uuid v1.1.1
 ## explicit
@@ -109,7 +106,6 @@ github.com/nwaples/rardecode
 github.com/pierrec/lz4
 github.com/pierrec/lz4/internal/xxh32
 # github.com/pkg/errors v0.9.1
-## explicit
 github.com/pkg/errors
 # github.com/pkg/profile v1.5.0
 ## explicit
