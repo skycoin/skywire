@@ -10,12 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
-
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
