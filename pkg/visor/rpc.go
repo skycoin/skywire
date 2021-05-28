@@ -548,13 +548,15 @@ func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
 }
 
 // GetMinHops gets min_hops from visor's routing config
-func (r *RPC) GetMinHops() (n uint16, err error) {
+func (r *RPC) GetMinHops(_ *struct{}, hops *uint16) (err error) {
 	defer rpcutil.LogCall(r.log, "GetMinHops", nil)
-	return r.visor.GetMinHops()
+	*hops, err = r.visor.GetMinHops()
+	return
 }
 
 // SetMinHops sets min_hops from visor's routing config
-func (r *RPC) SetMinHops(n uint16) error {
-	defer rpcutil.LogCall(r.log, "SetMinHops", n)
-	return r.visor.SetMinHops(n)
+func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
+	err = r.visor.SetMinHops(*n)
+	return
 }
