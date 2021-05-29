@@ -230,11 +230,7 @@ func (c *client) acceptConn() error {
 		return err
 	}
 
-	if err := lis.Introduce(wrappedConn); err != nil {
-		return err
-	}
-
-	return nil
+	return lis.Introduce(wrappedConn)
 }
 
 // Dial dials a new Conn to specified remote public key and port.
