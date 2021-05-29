@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire/pkg/restart"
 )
 

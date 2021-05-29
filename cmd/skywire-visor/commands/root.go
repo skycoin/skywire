@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"github.com/skycoin/dmsg/cmdutil"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
+	"github.com/skycoin/dmsg/cmdutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
