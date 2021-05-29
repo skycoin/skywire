@@ -45,11 +45,7 @@ func AtomicWriteFile(filename string, data []byte) error {
 		return err
 	}
 
-	if err := rename.Rename(tempFilePath, filename); err != nil {
-		return err
-	}
-
-	return nil
+	return rename.Rename(tempFilePath, filename)
 }
 
 // AtomicAppendToFile calls AtomicWriteFile but appends new data to destiny file
