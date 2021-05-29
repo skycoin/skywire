@@ -268,31 +268,29 @@ func (n *Network) Close() error {
 		}()
 	}
 
-	var directErrorsMu sync.Mutex
-	directErrors := make(map[string]error)
+	directErrors := make(chan error)
 
-	for k, v := range n.clients.Direct {
-		if v != nil {
-			wg.Add(1)
-			go func() {
-				err := v.Close()
-
-				directErrorsMu.Lock()
-				directErrors[k] = err
-				directErrorsMu.Unlock()
-
-				wg.Done()
-			}()
+	for _, directClient := range n.clients.Direct {
+		if directClient == nil {
+			continue
 		}
+		wg.Add(1)
+		go func(client directtp.Client) {
+			err := client.Close()
+			if err != nil {
+				directErrors <- err
+			}
+			wg.Done()
+		}(directClient)
 	}
-
 	wg.Wait()
+	close(directErrors)
 
 	if dmsgErr != nil {
 		return dmsgErr
 	}
 
-	for _, err := range directErrors {
+	for err := range directErrors {
 		if err != nil {
 			return err
 		}
