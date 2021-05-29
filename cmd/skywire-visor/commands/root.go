@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/skycoin/dmsg/cmdutil"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -97,7 +98,7 @@ var rootCmd = &cobra.Command{
 			runBrowser(conf, log)
 		}
 
-		ctx, cancel := signalContext(context.Background(), log)
+		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 
 		// Wait.
