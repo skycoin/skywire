@@ -3,14 +3,11 @@
 package commands
 
 import (
-	"context"
 	"os/exec"
 	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg/cmdutil"
-
 	"github.com/skycoin/skywire/pkg/restart"
 )
 
@@ -44,8 +41,4 @@ func detachProcess(delayDuration time.Duration, log logrus.FieldLogger) {
 		}
 	}
 
-}
-
-func signalContext(ctx context.Context, log logrus.FieldLogger) (context.Context, context.CancelFunc) {
-	return cmdutil.SignalContext(ctx, log)
 }
