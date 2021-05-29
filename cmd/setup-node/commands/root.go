@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"github.com/skycoin/dmsg/cmdutil"
 	"io"
 	"io/ioutil"
 	"os"
@@ -91,7 +92,7 @@ var rootCmd = &cobra.Command{
 
 		m := prepareMetrics(log)
 
-		ctx, cancel := signalContext(context.Background(), log)
+		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 
 		log.Fatal(sn.Serve(ctx, m))
