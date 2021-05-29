@@ -69,11 +69,7 @@ func (c *Client) Close() error {
 		return err
 	}
 
-	if err := c.conn.Close(); err != nil {
-		return err
-	}
-
-	return nil
+	return c.conn.Close()
 }
 
 // DialRouteGroup generates rules for routes from a visor and sends them to visors.
