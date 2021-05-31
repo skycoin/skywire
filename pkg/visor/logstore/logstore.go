@@ -2,6 +2,7 @@ package logstore
 
 import (
 	"github.com/sirupsen/logrus"
+	"sync"
 )
 
 // LogRealLineKey is a key in the log entry that denotes real log line number
@@ -29,6 +30,7 @@ func MakeStore(max int) (Store, logrus.Hook) {
 }
 
 type store struct {
+	mu sync.RWMutex
 	// max number of entries to hold simultaneously
 	cap int64
 	// number of the next entry to come (also number of entries processed since the beginning)
@@ -67,6 +69,8 @@ func (s *store) Levels() []logrus.Level {
 // Fire implements logrus.Hook interface to process new log entry
 // that we simply store
 func (s *store) Fire(entry *logrus.Entry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	idx := s.entryNum % s.cap
 	e := entry.WithField(LogRealLineKey, s.entryNum+1)
 	e.Level = entry.Level
