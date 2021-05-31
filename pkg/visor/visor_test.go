@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -51,7 +52,7 @@ func TestNewVisor(t *testing.T) {
 			PK: pk,
 			SK: sk,
 		},
-		Dmsg: &snet.DmsgConfig{
+		Dmsg: &dmsgc.DmsgConfig{
 			Discovery:     skyenv.DefaultDmsgDiscAddr,
 			SessionsCount: 10,
 		},

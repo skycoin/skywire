@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -54,7 +55,8 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc *appevent.Broadcaster // event broadcaster
+	ebc   *appevent.Broadcaster // event broadcaster
+	dmsgC *dmsg.Client
 
 	net      *snet.Network
 	tpM      *transport.Manager

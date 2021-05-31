@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -18,7 +19,7 @@ import (
 func MakeBaseConfig(common *Common) *V1 {
 	conf := new(V1)
 	conf.Common = common
-	conf.Dmsg = &snet.DmsgConfig{
+	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
 	}
