@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strings"
+	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -16,12 +17,18 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/httpauth"
+	nu "github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/util/buildinfo"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
-var (
-	// ErrVisorUnreachable is returned when visor is unreachable.
-	ErrVisorUnreachable = errors.New("visor is unreachable")
+// ErrVisorUnreachable is returned when visor is not reachable
+var ErrVisorUnreachable = errors.New("visor is unreachable")
+
+const (
+	updateRetryDelay     = 5 * time.Second
+	discServiceTypeParam = "type"
+	discServiceQtyParam  = "quantity"
 )
 
 // Config configures the HTTPClient.
@@ -62,14 +69,22 @@ func NewClient(log logrus.FieldLogger, conf Config) *HTTPClient {
 	}
 }
 
-func (c *HTTPClient) addr(path string, sType string) string {
-	addr := c.conf.DiscAddr + path
-
-	if sType != "" {
-		addr += "?type=" + sType
+func (c *HTTPClient) addr(path, serviceType string, quantity int) (string, error) {
+	addr := c.conf.DiscAddr
+	url, err := url.Parse(addr)
+	if err != nil {
+		return "", errors.New("invalid service discovery address in config: " + addr)
 	}
-
-	return addr
+	url.Path = path
+	q := url.Query()
+	if serviceType != "" {
+		q.Set(discServiceTypeParam, serviceType)
+	}
+	if quantity > 1 {
+		q.Set(discServiceQtyParam, strconv.Itoa(quantity))
+	}
+	url.RawQuery = q.Encode()
+	return url.String(), nil
 }
 
 var (
@@ -98,8 +113,12 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 }
 
 // Services calls 'GET /api/services'.
-func (c *HTTPClient) Services(ctx context.Context) (out []Service, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.addr("/api/services", c.entry.Type), nil)
+func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service, err error) {
+	url, err := c.addr("/api/services", c.entry.Type, quantity)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -125,30 +144,61 @@ func (c *HTTPClient) Services(ctx context.Context) (out []Service, err error) {
 		return nil, &hErr
 	}
 	err = json.NewDecoder(resp.Body).Decode(&out)
-	return
+	return out, err
 }
 
-// UpdateEntry calls 'POST /api/services'.
-func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
+// UpdateEntry calls 'POST /api/services', retrieves the entry
+// and updates local field with the result
+// if there are no ip addresses in the entry it also tries to fetch those
+// from local config
+func (c *HTTPClient) UpdateEntry(ctx context.Context) error {
+	c.entryMx.Lock()
+	defer c.entryMx.Unlock()
+	if c.conf.Type == ServiceTypeVisor && len(c.entry.LocalIPs) == 0 {
+		ips, err := netutil.DefaultNetworkInterfaceIPs()
+		if err != nil {
+			return err
+		}
+		c.entry.LocalIPs = make([]string, 0, len(ips))
+		for _, ip := range ips {
+			c.entry.LocalIPs = append(c.entry.LocalIPs, ip.String())
+		}
+	}
+	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
+
+	entry, err := c.postEntry(ctx)
+	if err != nil {
+		return err
+	}
+	c.entry = entry
+	return nil
+}
+
+// postEntry calls 'POST /api/services' and sends current service entry
+// as the payload
+func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	auth, err := c.Auth(ctx)
 	if err != nil {
-		return nil, err
+		return Service{}, err
 	}
 
-	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
+	url, err := c.addr("/api/services", "", 1)
+	if err != nil {
+		return Service{}, nil
+	}
 
 	raw, err := json.Marshal(&c.entry)
 	if err != nil {
-		return nil, err
+		return Service{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr("/api/services", ""), bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
-		return nil, err
+		return Service{}, err
 	}
 
 	resp, err := auth.Do(req)
 	if err != nil {
-		return nil, err
+		return Service{}, err
 	}
 	if resp != nil {
 		defer func() {
@@ -161,19 +211,20 @@ func (c *HTTPClient) UpdateEntry(ctx context.Context) (*Service, error) {
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("read response body: %w", err)
+			return Service{}, fmt.Errorf("read response body: %w", err)
 		}
 
 		var hErr HTTPResponse
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
-			return nil, err
+			return Service{}, err
 		}
 
-		return nil, hErr.Error
+		return Service{}, hErr.Error
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&c.entry)
-	return &c.entry, err
+	var entry Service
+	err = json.NewDecoder(resp.Body).Decode(&entry)
+	return entry, err
 }
 
 // DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
@@ -183,7 +234,12 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type), nil)
+	url, err := c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type, 1)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err
 	}
@@ -214,49 +270,52 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 func (c *HTTPClient) UpdateLoop(ctx context.Context, updateInterval time.Duration) {
 	defer func() { _ = c.DeleteEntry(context.Background()) }() //nolint:errcheck
 
-	update := func() {
-		for {
-			c.entryMx.Lock()
-			entry, err := c.UpdateEntry(ctx)
-			c.entryMx.Unlock()
+	ticker := time.NewTicker(updateInterval)
+	defer ticker.Stop()
 
-			if err != nil {
-				if strings.Contains(err.Error(), ErrVisorUnreachable.Error()) {
-					c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
-					return
-				}
-
-				c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
-				time.Sleep(time.Second * 10) // TODO(evanlinjin): Exponential backoff.
-				continue
-			}
-
-			c.entryMx.Lock()
-			j, err := json.Marshal(entry)
-			c.entryMx.Unlock()
-
-			if err != nil {
-				panic(err)
-			}
-
-			c.log.WithField("entry", string(j)).Debug("Entry updated.")
+	for {
+		if err := c.Update(ctx); errors.Is(err, ErrVisorUnreachable) {
 			return
 		}
-	}
+		c.entryMx.Lock()
+		j, err := json.Marshal(c.entry)
+		c.entryMx.Unlock()
+		logger := c.log.WithField("entry", string(j))
+		if err == nil {
+			logger.Debug("Entry updated.")
+		} else {
+			logger.Errorf("Service returned malformed entry, error: %s", err)
+			return
+		}
 
-	// Run initial update.
-	update()
-
-	ticker := time.NewTicker(updateInterval)
-	for {
 		select {
 		case <-ctx.Done():
-			ticker.Stop()
 			return
 		case <-ticker.C:
-			update()
 		}
 	}
+}
+
+// Update calls 'POST /api/services' to update service discovery entry
+// it performs exponential backoff in case of errors during update, unless
+// the error is unrecoverable from
+func (c *HTTPClient) Update(ctx context.Context) error {
+	retrier := nu.NewRetrier(updateRetryDelay, 0, 2).WithErrWhitelist(ErrVisorUnreachable)
+	run := func() error {
+		err := c.UpdateEntry(ctx)
+
+		if errors.Is(err, ErrVisorUnreachable) {
+			c.log.Errorf("Unable to register visor as public trusted as it's unreachable from WAN")
+			return err
+		}
+
+		if err != nil {
+			c.log.WithError(err).Warn("Failed to update service entry in discovery. Retrying...")
+			return err
+		}
+		return nil
+	}
+	return retrier.Do(run)
 }
 
 // UpdateStats updates the stats field of the internal service entry state.

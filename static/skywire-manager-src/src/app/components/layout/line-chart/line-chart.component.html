@@ -1,4 +1,4 @@
-<div class="chart-container">
+<div class="chart-container" [style]="'height: ' + height + 'px;'">
   <!-- If the height is changed, also change the height of the container in the scss file. -->
-  <canvas height="100" #chart></canvas>
+  <canvas #chart></canvas>
 </div>

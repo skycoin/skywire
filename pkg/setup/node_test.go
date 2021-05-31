@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/setup/setupmetrics"
 )
 
 func TestMain(m *testing.M) {
@@ -74,11 +75,14 @@ func TestCreateRouteGroup(t *testing.T) {
 			// arrange: mock dialer
 			dialer := newMockDialer(t, routers)
 
+			// arrange: mock dialer
+			metrics := setupmetrics.NewEmpty()
+
 			// arrange: bidirectional route input
 			biRt := biRouteFromKeys(tc.fwdPKs, tc.revPKs, tc.SrcPort, tc.DstPort)
 
 			// act
-			resp, err := CreateRouteGroup(context.TODO(), dialer, biRt)
+			resp, err := CreateRouteGroup(context.TODO(), dialer, biRt, metrics)
 			if err == nil {
 				// if successful, inject response (response edge rules) to responding router
 				var ok bool

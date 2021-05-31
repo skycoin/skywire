@@ -1,3 +1,11 @@
+<!-- Window size alert for the VPN client. -->
+<div class="size-alert d-md-none" *ngIf="inVpnClient">
+  <div>
+    <img src="assets/img/size-alert.png">
+    <div>{{ 'common.window-size-error' | translate }}</div>
+  </div>
+</div>
 <div class="flex-1 content container-fluid">
+  <div [ngClass]="{'background': inVpnClient}"></div>
   <router-outlet></router-outlet>
 </div>

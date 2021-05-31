@@ -1,0 +1,89 @@
+<!-- Content when loading. -->
+<div *ngIf="loading" class="d-flex flex-column h-100 w-100">
+  <div>
+    <app-top-bar
+      #topBarLoading
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="2"
+      [showUpdateButton]="false"
+      [localVpnKey]="currentLocalPk"
+    ></app-top-bar>
+  </div>
+  <!-- Loading animation. -->
+  <app-loading-indicator class="h-100"></app-loading-indicator>
+</div>
+
+<!-- Content when loaded. -->
+<div *ngIf="!loading" class="row">
+  <div class="col-12">
+    <app-top-bar
+      #topBarLoaded
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="2"
+      [showUpdateButton]="false"
+      [localVpnKey]="currentLocalPk"
+    ></app-top-bar>
+  </div>
+  <div class="col-12 mt-4.5 vpn-table-container"><div class="width-limiter">
+    <div class="rounded-elevated-box"><div class="box-internal-container">
+      <!-- Table. -->
+      <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
+        <!-- Column names. -->
+        <tr>
+          <th class="data-column">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.settings-page.setting-small-table-label' | translate }}
+              </div>
+            </div>
+          </th>
+          <th class="data-column">
+            {{ 'vpn.settings-page.value-small-table-label' | translate }}
+          </th>
+        </tr>
+
+        <!-- Killswitch. -->
+        <tr class="selectable" (click)="changeKillswitchOption()">
+          <td class="data-column">
+            <div>
+              {{ 'vpn.settings-page.killswitch' | translate }}
+              <mat-icon [inline]="true" class="help-icon" [matTooltip]="'vpn.settings-page.killswitch-info' | translate">help</mat-icon>
+            </div>
+          </td>
+          <td class="data-column">
+            <span [class]="getStatusClass(backendData.vpnClientAppData.killswitch)"></span>
+            {{ (getStatusText(backendData.vpnClientAppData.killswitch)) | translate }}
+            <mat-spinner *ngIf="this.working === workingOptions.Killswitch" [diameter]="12"></mat-spinner>
+          </td>
+        </tr>
+        <!-- Get IP info. -->
+        <tr class="selectable" (click)="changeGetIpOption()">
+          <td class="data-column">
+            <div>
+              {{ 'vpn.settings-page.get-ip' | translate }}
+              <mat-icon [inline]="true" class="help-icon" [matTooltip]="'vpn.settings-page.get-ip-info' | translate">help</mat-icon>
+            </div>
+          </td>
+          <td class="data-column">
+            <span [class]="getStatusClass(getIpOption)"></span>
+            {{ (getStatusText(getIpOption)) | translate }}
+          </td>
+        </tr>
+        <!-- Data units. -->
+        <tr class="selectable" (click)="changeDataUnits()">
+          <td class="data-column">
+            <div>
+              {{ 'vpn.settings-page.data-units' | translate }}
+              <mat-icon [inline]="true" class="help-icon" [matTooltip]="'vpn.settings-page.data-units-info' | translate">help</mat-icon>
+            </div>
+          </td>
+          <td class="data-column">
+            {{ getUnitsOptionText(dataUnitsOption) | translate }}
+          </td>
+        </tr>
+      </table>
+    </div></div>
+  </div></div>
+</div>

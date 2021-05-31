@@ -7,9 +7,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/util/netutil"
-
 	"github.com/sirupsen/logrus"
+
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 // Server is a VPN server.

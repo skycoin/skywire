@@ -1,215 +1,745 @@
 <!doctype html>
 
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
 
-    <title>Chat App</title>
+<head>
+  <meta charset="utf-8">
 
-    <style>
-     html {
-         font-family: sans-serif;
-         font-size: 13px;
-         color: #666;
-     }
+  <style>
+    html {
+      font-family: sans-serif;
+      font-size: 13px;
+    }
 
-     body {
-         display: flex;
-         min-height: 100vh;
-         margin: 0;
-         background: #455164;
-     }
+    body {
+      display: flex;
+      height: 100vh;
+      margin: 0;
+      background: #455164;
+    }
 
-     a {
-         text-decoration: none;
-         color: inherit;
-     }
+    a {
+      text-decoration: none;
+      color: inherit;
+    }
 
-     ul {
-         list-style: none;
-         padding: 0;
-         margin: 0;
-     }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
 
-     .sidebar {
-         display: flex;
-         flex-direction: column;
-         width: 220px;
-         padding: 1em;
-         color: #99a2b4;
-     }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      width: 240px;
+      padding: 1em;
+      color: #99a2b4;
+      overflow: auto;
+    }
 
-     .recipient-list {
-         flex: 1;
-         margin-top: 1em;
-     }
+    .recipient-list {
+      flex: 1;
+      margin-top: 1em;
+    }
 
-     .recipient-list li {
-         margin-bottom: 1em;
-         overflow: hidden;
-         white-space: nowrap;
-         text-overflow: ellipsis;
-     }
+    .recipient-list a {
+      display: flex;
+      border-bottom: solid black 1px;
+      margin: 0 -1em;
+      padding: 1em;
+    }
 
-     .recipient-list a.active { color: white; }
+    .recipient-list a.active {
+      color: white;
+      background: black;
+      cursor: unset;
+    }
 
-     .chatbox {
-         flex: 1;
-         display: flex;
-         flex-direction: column;
-         margin: 0.3em;
-         background: white;
-         border-radius: 2px;
-     }
+    .recipient-list a .small-profile-picture {
+      width: 30px;
+      height: 30px;
+      margin-right: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
 
-     .message-list {
-         padding: 1em;
-         flex: 1;
-     }
+    .recipient-list a .text-container {
+      min-width: 0;
+    }
 
-     .message-list li { display: flex; }
+    .recipient-list a .pk {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
 
-     .message-item date {
-         width: 55px;
-         color: #ddd;
-     }
+    .recipient-list a .msg {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+      opacity: 0.8;
+      font-size: 11px;
+    }
 
-     .message-item em {
-         width: 134px;
-         padding: 0 0.5em;
-         overflow: hidden;
-         white-space: nowrap;
-         text-overflow: ellipsis;
-         font-style: normal;
-     }
+    .recipient-list a .unreaded {
+      color: white;
+      background: red;
+      border-radius: 5px;
+      padding: 5px 8px;
+      margin-left: 5px;
+      flex-shrink: 0;
+    }
 
-     .message-item em.sender { color: #16cc6a; }
-     .message-item em.receiver { color: #ff4846; }
+    .chatbox {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      margin: 0.3em;
+      background: white;
+      border-radius: 2px;
+    }
 
-     .message-item span {
-         flex: 1;
-         padding-left: 1em;
-         border-left: 2px solid #f6f6f6;
-     }
+    .message-list {
+      overflow: auto;
+      padding: 1em;
+      flex: 1;
+    }
 
-     .message-form {
-         display: flex;
-         padding: 0.3em;
-         background: #eee;
-         border-top: 2px solid #ddd;
-     }
+    .content-left {
+      text-align: left;
+    }
 
-     input[type=text] {
-         flex: 1;
-         padding: 0.5em;
-         margin-right: 1em;
-         border: 1px solid #ddd;
-         border-radius: 2px;
-     }
+    .content-right {
+      text-align: right;
+    }
 
-     input[type=submit] {
-         padding: 0.5em 2em;
-         background: #f6f6f6;
-         border: 1px solid #ddd;
-         border-radius: 2px;
-         outline: none;
-     }
+    .content-center {
+      text-align: center;
+    }
 
-     .recipient-form input[type=submit] {
-         padding: 0.5em 0.7em;
-     }
-    </style>
-  </head>
+    .date-container {
+      display: inline-block;
+      background-color: #eaeaea;
+      padding: 10px;
+      font-size: 12px;
+      border-radius: 10px;
+      margin-bottom: 5px;
+    }
 
-  <body>
-    <aside class="sidebar">
-      <form class="recipient-form" onsubmit="app.createRecipient(this); return false;">
-        <input type="text" placeholder="Enter public key" />
-        <input type="submit" value="+">
-      </form>
-      <ul id="recipients" class="recipient-list"></ul>
-    </aside>
+    .msg-container {
+      color: white;
+      padding: 8px 12px;
+      border-radius: 10px;
+      margin-bottom: 5px;
+      display: inline-block;
+      max-width: 80%;
+      font-size: 14px;
+      line-height: 1.3;
+    }
 
-    <main class="chatbox">
-      <ul id="messages" class="message-list"></ul>
+    .msg-received {
+      background-color: #525f73;
+      border-bottom-left-radius: 0;
+    }
 
-      <form class="message-form" onsubmit="app.sendMessage(this); return false;">
-        <input type="text" placeholder="Write your message" />
-        <input type="submit" value="Send">
-      </form>
-    </main>
+    .msg-sent {
+      background-color: #5ba74a;
+      border-bottom-right-radius: 0;
+    }
 
-    <script>
-     class Chat {
-         constructor() {
-             this.recipients = [];
-             this.recipient = null;
-             this.messages = {};
-             this.recipients.forEach(r => this._addRecipient(r));
-             this._sseSubscribe();
-         }
+    .message-time {
+      font-size: 11px;
+      opacity: 0.5;
+      text-align: right;
+      margin-top: 3px;
+    }
 
-         _addRecipient(r) {
-             this.recipients.push(r);
-             this.messages[r] = [];
-             document.getElementById('recipients').innerHTML +=
-                 `<li><a href="#" class="${r === this.recipient ? 'active' : ''}" onclick="app.selectRecipient(this); return false;">${r}</a></li>`;
-         }
+    .message-form {
+      flex-shrink: 0;
+      display: flex;
+      padding: 0.3em;
+      background: #eee;
+      border-top: 2px solid #ddd;
+    }
 
-         _addMessage(msg) {
-             const className = msg.from === 'me' ? 'sender' : 'receiver';
-             const ts = `${msg.ts.getHours().toString().padStart(2, '0')}:${msg.ts.getMinutes().toString().padStart(2, '0')}`;
+    input[type=text] {
+      flex: 1;
+      padding: 0.5em;
+      margin-right: 1em;
+      border: 1px solid #ddd;
+      border-radius: 2px;
+    }
 
-             if (msg.from !== 'me' && !this.recipients.includes(msg.from)) {
-                 this._addRecipient(msg.from);
-             }
+    input[type=submit] {
+      padding: 0.5em 2em;
+      background: #f6f6f6;
+      border: 1px solid #ddd;
+      border-radius: 2px;
+      outline: none;
+    }
 
-             document.getElementById('messages').innerHTML +=
-                 `<li class="message-item"><date>${ts}</date><em class="${className}">${msg.from}:</em><span>${msg.text}</span></li>`
-         }
+    .recipient-form input[type=submit] {
+      padding: 0.5em 0.7em;
+    }
 
-         _sseSubscribe() {
-             const source = new EventSource('/sse');
-             source.onmessage = (msg) => {
-                 const data = JSON.parse(msg.data);
-                 const message = { ts: new Date, from: data.sender, text: data.message };
-                 this._addMessage(message);
-                 this.messages[data.sender].push(message);
-             };
-         }
+    .hidden {
+      display: none !important;
+    }
 
-         createRecipient(el) {
-             const recipient = el[0].value;
-             this.recipients.push(recipient);
-             this._addRecipient(recipient);
-         }
+    .chat-buttons-container {
+      height: 0px;
+      z-index: 10;
+      align-self: flex-end;
+      margin-right: 25px;
+      transform: translateY(5px);
+      display: flex;
+    }
 
-         selectRecipient(el) {
-             this.recipient = el.text;
-             document.querySelectorAll('a.active').forEach(item => item.classList.remove('active'));
-             el.classList.add('active');
-             document.getElementById('messages').innerHTML = '';
-             this.messages[this.recipient].forEach(msg => this._addMessage(msg));
-         }
+    .chat-button {
+      border: solid #d5d5d5 1px;
+      background: white;
+      color: #5e5e5e;
+      width: 30px;
+      height: 30px;
+      line-height: 32px;
+      text-align: center;
+      border-radius: 100%;
+      font-weight: bolder;
+      font-size: 15px;
+      cursor: pointer;
+      margin-left: 5px;
+    }
 
-         sendMessage(el) {
-             const msg = el[0].value;
-             fetch('message', { method: 'POST',  body: JSON.stringify({ recipient: this.recipient, message: msg }) })
-                 .then(res => {
-                     if (res.ok) {
-                         const message = { ts: new Date, from: 'me', text: msg };
-                         this._addMessage(message);
-                         this.messages[this.recipient].push(message);
-                         el[0].value = '';
-                     } else {
-                         res.text().then(text => alert(`Failed to send message: ${text}`));
-                     }
-                 })
-                 .catch(e => alert(e.message));
-         }
-     }
+    .chat-image-config {
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      background: white;
+      z-index: 100;
+      overflow: auto;
+    }
 
-     window.app = new Chat()
-    </script>
-  </body>
+    .chat-image-config .small-text {
+      font-size: 10px;
+    }
+
+    .chat-image-config .close-button {
+      position: fixed;
+      right: 25px;
+      padding: 10px;
+      font-size: 20px;
+      font-weight: bolder;
+      cursor: pointer;
+    }
+
+    .chat-image-config .main-area {
+      margin: 30px;
+      text-align: center;
+    }
+
+    .chat-image-config .main-area .big-profile-picture {
+      width: 250px;
+      height: 250px;
+      margin-top: 20px;
+      object-fit: cover;
+    }
+
+    .chat-image-config .main-area .name {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .chat-image-config .main-area .buttons-area {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <aside class="sidebar">
+    <form class="recipient-form" onsubmit="app.createRecipient(this); return false;">
+      <input id="destinationPk" type="text" placeholder="Enter public key" />
+      <input type="submit" value="+">
+    </form>
+    <ul id="recipients" class="recipient-list"></ul>
+  </aside>
+
+  <main class="chatbox">
+    <div id="chatButtonsContainer" class="chat-buttons-container hidden">
+      <div class="chat-button" onclick="app.openImageOptions();">&#x058D</div>
+      <div class="chat-button" onclick="app.deleteChat();">X</div>
+    </div>
+    <ul id="messages" onscroll="app.onMessagesScroll(this)" class="message-list"></ul>
+
+    <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
+      <input id="msgField" type="text" placeholder="Write your message" />
+      <input type="submit" value="Send">
+    </form>
+  </main>
+
+  <div class="chat-image-config hidden">
+    <div class="close-button" onclick="app.closeImageOptions();">X</div>
+    <div class="main-area">
+      <div class="name">---</div>
+      <img class="big-profile-picture" src="p.png" />
+      <div class="small-text">
+        (Current profile picture)
+      </div>
+      <div class="buttons-area">
+        <input type="file" id="profilePicture">
+        <div class="small-text">
+          (New profile picture)
+        </div>
+      </div>
+      <div class="buttons-area">
+        <input type="button" value="Use the new profile picture" onclick="app.updatePicture();">
+        <input type="button" value="Remove the current profile picture" onclick="app.removePicture();">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    class Chat {
+      constructor() {
+        this.recipients = [];
+        this.recipient = null;
+        this.messages = {};
+        this.messagesQuantity = {};
+        this.messagesSeen = {};
+
+        this.loadData();
+
+        this.recipients.forEach(r => this._addRecipient(r));
+        this._sseSubscribe();
+      }
+
+      _addRecipient(r) {
+        if (!this.recipients.includes(r)) {
+          this.recipients.push(r);
+          this.saveRecipients();
+          this.messages[r] = [];
+          this.messagesQuantity[r] = 0;
+          this.messagesSeen[r] = 0;
+          this.saveSeenList();
+        }
+
+        let image = localStorage.getItem(`i_${r}`);
+        if (!image) {
+          image = 'p.png';
+        }
+
+        document.getElementById('recipients').innerHTML +=
+          `<li><a href="#" class="${r === this.recipient ? 'active' : ''} destination" onclick="app.selectRecipient('${r}'); return false;">
+            <img class="small-profile-picture" src="${image}" />
+            <div class="text-container">
+              <div class="pk">
+                ${r}
+              </div>
+              <div class="msg">
+                New chat
+              </div>
+            </div>
+            <div>
+              <div class="unreaded">
+                0
+              </div>
+            </div>
+          </a></li>`;
+
+        this.updatedUnreadedWarnings();
+      }
+
+      _showMessage(msg) {
+        if (!msg.date) {
+          const liClassName = msg.from === 'me' ? 'content-right' : 'content-left';
+          const containerClassName = msg.from === 'me' ? 'msg-sent' : 'msg-received';
+          const ts = `${msg.ts.getHours().toString().padStart(2, '0')}:${msg.ts.getMinutes().toString().padStart(2, '0')}`;
+
+          if (msg.from !== 'me' && !this.recipients.includes(msg.from)) {
+            this._addRecipient(msg.from);
+          }
+
+          let msgArea = document.getElementById('messages');
+          let mustScroll = (msgArea.scrollHeight - msgArea.scrollTop) === msgArea.clientHeight;
+
+          document.getElementById('messages').innerHTML +=
+            `<li class="${liClassName}"><div class="msg-container ${containerClassName}"><div>${msg.text}</div><div class="message-time">${ts}</div></div></li>`;
+
+          if (mustScroll) {
+            msgArea.scrollTop = msgArea.scrollHeight;
+          }
+        } else {
+          let date = msg.date.getFullYear().toString().padStart(2, '0') + '-';
+          date += (msg.date.getMonth() + 1).toString().padStart(2, '0') + '-';
+          date += msg.date.getDate().toString().padStart(2, '0');
+
+          document.getElementById('messages').innerHTML += `<li class="content-center"><div class="date-container">${date}</div></li>`;
+        }
+      }
+
+      _sseSubscribe() {
+        const source = new EventSource('/sse');
+        source.onmessage = (msg) => {
+          const data = JSON.parse(msg.data);
+          const message = { ts: new Date(), from: this.processPk(data.sender), text: data.message };
+          this.addMsgToList(data.sender, message);
+
+          const msgArea = document.getElementById('messages');
+          if (message.from === this.recipient && (msgArea.scrollHeight - msgArea.scrollTop) === msgArea.clientHeight) {
+            this.messagesSeen[this.recipient] = this.messagesQuantity[this.recipient];
+            this.saveSeenList();
+          }
+
+          this.updatedUnreadedWarnings();
+        };
+      }
+
+      onMessagesScroll(msgArea) {
+        if (this.recipient && (msgArea.scrollHeight - msgArea.scrollTop) === msgArea.clientHeight) {
+          if (this.messagesSeen[this.recipient] !== this.messagesQuantity[this.recipient]) {
+            this.messagesSeen[this.recipient] = this.messagesQuantity[this.recipient];
+            this.saveSeenList();
+            this.updatedUnreadedWarnings();
+          }
+        }
+      }
+
+      createRecipient(el) {
+        const recipient = this.processPk(el[0].value.trim());
+
+        if (recipient.length != 66) {
+          alert('Public keys must be 66 characters long.')
+          return;
+        }
+
+        if (!/^[0-9a-fA-F]+$/.test(recipient)) {
+          alert('The public key includes invalid characters.')
+          return;
+        }
+
+        if (this.recipients.includes(recipient)) {
+          alert('The public key has already been added.')
+          return;
+        }
+
+        document.getElementById('destinationPk').value = "";
+
+        this._addRecipient(recipient);
+        this.selectRecipient(recipient);
+      }
+
+      selectRecipient(pk) {
+        if (this.recipient === pk) {
+          return;
+        }
+
+        this.recipient = pk;
+        document.querySelectorAll('.destination').forEach(item => {
+          const pkArea = item.getElementsByClassName('pk')[0];
+
+          if (pkArea.innerText === pk) {
+            item.classList.add('active');
+          } else {
+            item.classList.remove('active');
+          }
+        });
+
+        document.getElementById('messages').innerHTML = '';
+        this.messages[this.recipient].forEach(msg => this._showMessage(msg));
+        document.getElementById('chatButtonsContainer').classList.remove('hidden');
+        document.getElementById('msgForm').classList.remove('hidden');
+        document.getElementById('msgField').focus();
+
+        let msgArea = document.getElementById('messages');
+        msgArea.scrollTop = msgArea.scrollHeight;
+
+        this.messagesSeen[this.recipient] = this.messagesQuantity[this.recipient];
+        this.saveSeenList();
+        this.updatedUnreadedWarnings();
+      }
+
+      updatedUnreadedWarnings() {
+        let totalUnreaded = 0;
+
+        document.querySelectorAll('.destination').forEach(item => {
+          const pkArea = item.getElementsByClassName('pk')[0];
+          const unreadedArea = item.getElementsByClassName('unreaded')[0];
+
+          if (this.messagesSeen[pkArea.innerText] || this.messagesSeen[pkArea.innerText] === 0) {
+            const unreaded = this.messagesQuantity[pkArea.innerText] - this.messagesSeen[pkArea.innerText];
+
+            if (unreaded > 0) {
+              totalUnreaded += unreaded;
+              unreadedArea.innerText = unreaded;
+              unreadedArea.classList.remove('hidden');
+            } else {
+              unreadedArea.classList.add('hidden');
+            }
+          } else {
+            unreadedArea.classList.add('hidden');
+          }
+        });
+
+        if (totalUnreaded > 0) {
+          document.title = `(${totalUnreaded}) Chat App`;
+        } else {
+          document.title = `Chat App`;
+        }
+      }
+
+      sendMessage(el) {
+        const msg = el[0].value;
+
+        if (msg.length == 0) {
+          return;
+        }
+
+        const destination = this.recipient;
+
+        fetch('message', { method: 'POST', body: JSON.stringify({ recipient: destination, message: msg }) })
+          .then(res => {
+            if (res.ok) {
+              const message = { ts: new Date, from: 'me', text: msg };
+              this.addMsgToList(destination, message);
+              el[0].value = '';
+
+              let msgArea = document.getElementById('messages');
+              msgArea.scrollTop = msgArea.scrollHeight;
+
+              this.messagesSeen[destination] = this.messagesQuantity[destination];
+              this.saveSeenList();
+              this.updatedUnreadedWarnings();
+            } else {
+              res.text().then(text => alert(`Failed to send message: ${text}`));
+            }
+          })
+          .catch(e => alert(e.message));
+      }
+
+      processPk(pk) {
+        return pk.toLowerCase();
+      }
+
+      addMsgToList(remotePk, msg) {
+        if (msg.from !== 'me' && !this.recipients.includes(msg.from)) {
+          this._addRecipient(msg.from);
+        }
+
+        let needsDate = false;
+        if (this.messages[remotePk].length == 0 || this.messages[remotePk][this.messages[remotePk].length - 1].date) {
+          needsDate = true;
+        } else {
+          const lastMsgDate = this.messages[remotePk][this.messages[remotePk].length - 1].ts;
+          const now = new Date();
+
+          if (lastMsgDate.getFullYear() != now.getFullYear() || lastMsgDate.getMonth() != now.getMonth() || lastMsgDate.getDate() != now.getDate()) {
+            needsDate = true;
+          }
+        }
+
+        if (needsDate === true) {
+          const dateMsg = { date: new Date() };
+          this.messages[remotePk].push(dateMsg);
+          if (remotePk === this.recipient) {
+            this._showMessage(dateMsg);
+          }
+        }
+
+        this.messages[remotePk].push(msg);
+        this.messagesQuantity[remotePk] += 1;
+        if (remotePk === this.recipient) {
+          this._showMessage(msg);
+        }
+
+        this.saveChat(remotePk);
+
+        this.addMsgToChatList(remotePk, msg);
+      }
+
+      addMsgToChatList(remotePk, msg) {
+        document.querySelectorAll('.destination').forEach(item => {
+          const pkArea = item.getElementsByClassName('pk')[0];
+
+          if (pkArea.innerText === remotePk) {
+            const arrow = msg.from === 'me' ? '&#x2B9D; ' : '&#x2B9F; ';
+            item.getElementsByClassName('msg')[0].innerHTML = arrow + msg.text;
+          }
+        });
+      }
+
+      saveChat(remotePk) {
+        if (this.messages[remotePk]) {
+          const dataToSave = JSON.stringify(this.messages[remotePk]);
+          localStorage.setItem(`c_${remotePk}`, dataToSave);
+        }
+      }
+
+      saveSeenList() {
+        const dataToSave = JSON.stringify(this.messagesSeen);
+        localStorage.setItem(`s`, dataToSave);
+      }
+
+      saveRecipients() {
+        const dataToSave = JSON.stringify(this.recipients);
+        localStorage.setItem(`r`, dataToSave);
+      }
+
+      loadData() {
+        const savedSeenList = localStorage.getItem(`s`);
+        if (savedSeenList) {
+          this.messagesSeen = JSON.parse(savedSeenList);
+        }
+
+        const savedDestinations = localStorage.getItem(`r`);
+        if (savedDestinations) {
+          this.recipients = JSON.parse(savedDestinations);
+
+          this.recipients.forEach(d => {
+            if (!this.messagesSeen[d]) {
+              this.messagesSeen[d] = 0;
+            }
+
+            this.messagesQuantity[d] = 0;
+
+            const savedMessages = localStorage.getItem(`c_${d}`);
+            if (savedMessages) {
+              this.messages[d] = JSON.parse(savedMessages);
+
+              this.messages[d].forEach(m => {
+                if (m.date) {
+                  m.date = new Date(Date.parse(m.date));
+                } else {
+                  this.messagesQuantity[d] += 1;
+                  m.ts = new Date(Date.parse(m.ts));
+                }
+              });
+
+              setTimeout(() => this.addMsgToChatList(d, this.messages[d][this.messages[d].length - 1]));
+            } else {
+              this.messages[d] = [];
+            }
+          });
+        }
+      }
+
+      deleteChat() {
+        if (!this.recipient) {
+          return;
+        }
+
+        const response = window.confirm("Are you sure you want to delete the chat?");
+
+        if (response) {
+          this.recipients = this.recipients.filter(v => v !== this.recipient);
+          delete this.messages[this.recipient];
+          delete this.messagesQuantity[this.recipient];
+          delete this.messagesSeen[this.recipient];
+
+          document.getElementById('messages').innerHTML = '';
+          document.getElementById('chatButtonsContainer').classList.add('hidden');
+          document.getElementById('msgForm').classList.add('hidden');
+
+          document.querySelectorAll('.destination').forEach(item => {
+            const pkArea = item.getElementsByClassName('pk')[0];
+
+            if (pkArea.innerText === this.recipient) {
+              item.parentNode.removeChild(item);
+            }
+          });
+
+          this.saveRecipients();
+          this.saveSeenList();
+          localStorage.removeItem(`c_${this.recipient}`);
+          localStorage.removeItem(`i_${this.recipient}`);
+
+          this.recipient = null;
+        }
+      }
+
+      openImageOptions() {
+        const configArea = document.getElementsByClassName('chat-image-config')[0];
+        configArea.classList.remove('hidden');
+        configArea.getElementsByClassName('name')[0].innerHTML = this.recipient;
+
+        const image = localStorage.getItem(`i_${this.recipient}`);
+        if (image) {
+          configArea.getElementsByClassName('big-profile-picture')[0].src = image;
+        } else {
+          configArea.getElementsByClassName('big-profile-picture')[0].src = 'p.png';
+        }
+      }
+
+      closeImageOptions() {
+        document.getElementsByClassName('chat-image-config')[0].classList.add('hidden');
+      }
+
+      updatePicture() {
+        const profilePictureInput = document.getElementById('profilePicture');
+
+        if (profilePictureInput.files.length < 1) {
+          alert('Please select a file.');
+          return;
+        }
+
+        const file = profilePictureInput.files[0];
+
+        if (file.type.indexOf('image') < 0) {
+          alert('Invalid file type.');
+          return;
+        }
+
+        if (file.size > 250 * 1024) {
+          alert('The file must be smaller than 250 KB.');
+          return;
+        }
+
+        const fileReader = new FileReader();
+        fileReader.onload = () => {
+          localStorage.setItem(`i_${this.recipient}`, fileReader.result);
+          this.closeImageOptions();
+
+          this.updatePictureInMenu(this.recipient);
+        };
+
+        fileReader.readAsDataURL(file);
+      }
+
+      removePicture() {
+        if (!localStorage.getItem(`i_${this.recipient}`)) {
+          alert('There is no profile picture to remove.');
+          return;
+        }
+
+        const response = window.confirm("Are you sure you want to delete the image?");
+
+        if (response) {
+          localStorage.removeItem(`i_${this.recipient}`);
+          this.closeImageOptions();
+
+          this.updatePictureInMenu(this.recipient);
+        }
+      }
+
+      updatePictureInMenu(remotePk) {
+        let image = localStorage.getItem(`i_${remotePk}`);
+        if (!image) {
+          image = 'p.png';
+        }
+
+        document.querySelectorAll('.destination').forEach(item => {
+          const pkArea = item.getElementsByClassName('pk')[0];
+
+          if (pkArea.innerText === remotePk) {
+            item.getElementsByClassName('small-profile-picture')[0].src = image;
+          }
+        });
+      }
+    }
+
+    window.app = new Chat()
+  </script>
+</body>
+
 </html>

@@ -1,0 +1,23 @@
+<app-dialog [headline]="('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-title') | translate">
+  <form [formGroup]="form">
+    <!-- Value field. -->
+    <mat-form-field>
+      <input
+        formControlName="value"
+        maxlength="100"
+        [placeholder]="('vpn.server-options.edit-value.' + (data.editName ? 'name' : 'note' ) + '-label') | translate"
+        #firstInput
+        matInput
+      >
+    </mat-form-field>
+  </form>
+
+  <!-- Button. -->
+  <app-button
+    (action)="process()"
+    color="primary"
+    class="float-right"
+  >
+    {{ 'vpn.server-options.edit-value.apply-button' | translate }}
+  </app-button>
+</app-dialog>
