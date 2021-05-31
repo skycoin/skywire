@@ -211,10 +211,16 @@ export class NodeAppsListComponent implements OnDestroy {
       let port = '8001';
 
       // Try to get the port from the config array.
-      for (let i = 0; i < app.args.length; i++) {
-        if (app.args[i] === '-addr' && i + 1 < app.args.length) {
-          port = app.args[i + 1];
+      if (app.args) {
+        for (let i = 0; i < app.args.length; i++) {
+          if (app.args[i] === '-addr' && i + 1 < app.args.length) {
+            port = (app.args[i + 1] as string).trim();
+          }
         }
+      }
+
+      if (!port.startsWith(':')) {
+        port = ':' + port;
       }
 
       return 'http://' + this.nodeIp + port;
