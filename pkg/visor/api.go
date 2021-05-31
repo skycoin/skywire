@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/util/netutil"
-
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
@@ -22,14 +20,15 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
 
 // API represents visor API.
 type API interface {
+	Overview() (*Overview, error)
 	Summary() (*Summary, error)
-	ExtraSummary() (*ExtraSummary, error)
 
 	Health() (*HealthInfo, error)
 	Uptime() (float64, error)
@@ -70,6 +69,7 @@ type API interface {
 	UpdateWithStatus(config updater.UpdateConfig) <-chan StatusMessage
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
+	RuntimeLogs() (string, error)
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -79,8 +79,8 @@ type HealthCheckable interface {
 	Health(ctx context.Context) (int, error)
 }
 
-// Summary provides a summary of a Skywire Visor.
-type Summary struct {
+// Overview provides a range of basic information about a Visor.
+type Overview struct {
 	PubKey          cipher.PubKey        `json:"local_pk"`
 	BuildInfo       *buildinfo.Info      `json:"build_info"`
 	AppProtoVersion string               `json:"app_protocol_version"`
@@ -90,9 +90,9 @@ type Summary struct {
 	LocalIP         string               `json:"local_ip"`
 }
 
-// Summary implements API.
-func (v *Visor) Summary() (*Summary, error) {
-	var summaries []*TransportSummary
+// Overview implements API.
+func (v *Visor) Overview() (*Overview, error) {
+	var tSummaries []*TransportSummary
 	if v == nil {
 		panic("v is nil")
 	}
@@ -100,53 +100,50 @@ func (v *Visor) Summary() (*Summary, error) {
 		panic("tpM is nil")
 	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		summaries = append(summaries,
+		tSummaries = append(tSummaries,
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
 
-	defaultNetworkIfc, err := netutil.DefaultNetworkInterface()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get default network interface: %w", err)
-	}
-
-	localIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get IPs of interface %s: %w", defaultNetworkIfc, err)
-	}
-
-	summary := &Summary{
+	overview := &Overview{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
 		AppProtoVersion: supportedProtocolVersion,
 		Apps:            v.appL.AppStates(),
-		Transports:      summaries,
+		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
+	}
+
+	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		return nil, err
 	}
 
 	if len(localIPs) > 0 {
 		// should be okay to have the first one, in the case of
 		// active network interface, there's usually just a single IP
-		summary.LocalIP = localIPs[0].String()
+		overview.LocalIP = localIPs[0].String()
 	}
 
-	return summary, nil
+	return overview, nil
 }
 
-// ExtraSummary provides an extra summary of a Skywire Visor.
-type ExtraSummary struct {
-	Summary *Summary                        `json:"summary"`
-	Dmsg    []dmsgtracker.DmsgClientSummary `json:"dmsg"`
-	Health  *HealthInfo                     `json:"health"`
-	Uptime  float64                         `json:"uptime"`
-	Routes  []routingRuleResp               `json:"routes"`
+// Summary provides detailed info including overview and health of the visor.
+type Summary struct {
+	Overview     *Overview                      `json:"overview"`
+	Health       *HealthInfo                    `json:"health"`
+	Uptime       float64                        `json:"uptime"`
+	Routes       []routingRuleResp              `json:"routes"`
+	IsHypervisor bool                           `json:"is_hypervisor,omitempty"`
+	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
+	Online       bool                           `json:"online"`
 }
 
-// ExtraSummary implements API.
-func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
-	summary, err := v.Summary()
+// Summary implements API.
+func (v *Visor) Summary() (*Summary, error) {
+	overview, err := v.Overview()
 	if err != nil {
-		return nil, fmt.Errorf("summary")
+		return nil, fmt.Errorf("overview")
 	}
 
 	health, err := v.Health()
@@ -173,14 +170,14 @@ func (v *Visor) ExtraSummary() (*ExtraSummary, error) {
 		})
 	}
 
-	extraSummary := &ExtraSummary{
-		Summary: summary,
-		Health:  health,
-		Uptime:  uptime,
-		Routes:  extraRoutes,
+	summary := &Summary{
+		Overview: overview,
+		Health:   health,
+		Uptime:   uptime,
+		Routes:   extraRoutes,
 	}
 
-	return extraSummary, nil
+	return summary, nil
 }
 
 // collectHealthStats for given services and return health statuses
@@ -277,7 +274,10 @@ func (v *Visor) StartApp(appName string) error {
 	var envs []string
 	var err error
 	if appName == skyenv.VPNClientName {
-		envs, err = makeVPNEnvs(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		// todo: can we use some kind of app start hook that will be used for both autostart
+		// and start? Reason: this is also called in init for autostart
+		maker := vpnEnvMaker(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		envs, err = maker()
 		if err != nil {
 			return err
 		}
@@ -457,12 +457,12 @@ func (v *Visor) GetAppStats(appName string) (appserver.AppStats, error) {
 
 // GetAppConnectionsSummary implements API.
 func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error) {
-	summary, err := v.procM.ConnectionsSummary(appName)
+	cSummary, err := v.procM.ConnectionsSummary(appName)
 	if err != nil {
 		return nil, err
 	}
 
-	return summary, nil
+	return cSummary, nil
 }
 
 // TransportTypes implements API.
@@ -528,12 +528,12 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, t
 
 	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, tpType)
+	tp, err := v.tpM.SaveTransport(ctx, remote, tpType, transport.LabelUser)
 	if err != nil {
 		return nil, err
 	}
 
-	v.log.Debugf("Saved transport to %v via %v", remote, tpType)
+	v.log.Debugf("Saved transport to %v via %v, label %s", remote, tpType, tp.Entry.Label)
 
 	return newTransportSummary(v.tpM, tp, false, v.router.SetupIsTrusted(tp.Remote())), nil
 }
@@ -723,4 +723,14 @@ func (v *Visor) UpdateAvailable(channel updater.Channel) (*updater.Version, erro
 // UpdateStatus returns status of the current updating operation.
 func (v *Visor) UpdateStatus() (string, error) {
 	return v.updater.Status(), nil
+}
+
+// RuntimeLogs returns visor runtime logs
+func (v *Visor) RuntimeLogs() (string, error) {
+	var builder strings.Builder
+	builder.WriteString("[")
+	logs, _ := v.logstore.GetLogs()
+	builder.WriteString(strings.Join(logs, ","))
+	builder.WriteString("]")
+	return builder.String(), nil
 }

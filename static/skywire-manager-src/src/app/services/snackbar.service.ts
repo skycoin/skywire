@@ -103,7 +103,7 @@ export class SnackbarService {
 
     this.snackBar.openFromComponent(SnackbarComponent, {
       duration: duration,
-      panelClass: 'p-0',
+      panelClass: 'snackbar-container',
       data: config,
     });
   }

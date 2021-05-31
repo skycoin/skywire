@@ -35,6 +35,10 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 
 	switch cc.Version {
 	// parse any v1-compatible version with v1 parse procedure
+	case V112Name:
+		fallthrough
+	case V111Name:
+		fallthrough
 	case V110Name:
 		fallthrough
 	case V100Name:
@@ -105,7 +109,6 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 		conf.Transport.LogStore = old.Transport.LogStore
 	}
 
-	conf.Transport.TrustedVisors = old.TrustedVisors
 	if old.Routing != nil {
 		conf.Routing = old.Routing
 	}

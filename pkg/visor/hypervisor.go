@@ -226,7 +226,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/dmsg", hv.getDmsg())
 
 				r.Get("/visors", hv.getVisors())
-				r.Get("/visors-summary", hv.getVisorsExtraSummary())
+				r.Get("/visors-summary", hv.getAllVisorsSummary())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -257,6 +257,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/ws/running", hv.isVisorWSUpdateRunning())
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
+				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 			})
 		})
 
@@ -381,13 +382,7 @@ func (hv *Hypervisor) getUptime() http.HandlerFunc {
 	})
 }
 
-type summaryResp struct {
-	TCPAddr string `json:"tcp_addr"`
-	Online  bool   `json:"online"`
-	*Summary
-}
-
-// provides summary of all visors.
+// provides overview of all visors.
 func (hv *Hypervisor) getVisors() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hv.mu.RLock()
@@ -399,21 +394,16 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 			i++
 		}
 
-		summaries := make([]summaryResp, len(hv.visors)+i)
+		overviews := make([]Overview, len(hv.visors)+i)
 
 		if hv.visor != nil {
-			summary, err := hv.visor.Summary()
+			overview, err := hv.visor.Overview()
 			if err != nil {
-				log.WithError(err).Warn("Failed to obtain summary of this visor.")
-				summary = &Summary{PubKey: hv.visor.conf.PK}
+				log.WithError(err).Warn("Failed to obtain overview of this visor.")
+				overview = &Overview{PubKey: hv.visor.conf.PK}
 			}
 
-			addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-			summaries[0] = summaryResp{
-				TCPAddr: addr.String(),
-				Online:  err == nil,
-				Summary: summary,
-			}
+			overviews[0] = *overview
 		}
 
 		for pk, c := range hv.visors {
@@ -422,21 +412,17 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 					WithField("visor_addr", c.Addr).
 					WithField("func", "getVisors")
 
-				log.Debug("Requesting summary via RPC.")
+				log.Debug("Requesting overview via RPC.")
 
-				summary, err := c.API.Summary()
+				overview, err := c.API.Overview()
 				if err != nil {
 					log.WithError(err).
-						Warn("Failed to obtain summary via RPC.")
-					summary = &Summary{PubKey: pk}
+						Warn("Failed to obtain overview via RPC.")
+					overview = &Overview{PubKey: pk}
 				} else {
-					log.Debug("Obtained summary via RPC.")
+					log.Debug("Obtained overview via RPC.")
 				}
-				summaries[i] = summaryResp{
-					TCPAddr: c.Addr.String(),
-					Online:  err == nil,
-					Summary: summary,
-				}
+				overviews[i] = *overview
 				wg.Done()
 			}(pk, c, i)
 			i++
@@ -445,12 +431,25 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 		wg.Wait()
 		hv.mu.RUnlock()
 
-		httputil.WriteJSON(w, r, http.StatusOK, summaries)
+		httputil.WriteJSON(w, r, http.StatusOK, overviews)
 	}
 }
 
-// provides summary of single visor.
+// provides overview of single visor.
 func (hv *Hypervisor) getVisor() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		overview, err := ctx.API.Overview()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, overview)
+	})
+}
+
+// provides extra summary of single visor.
+func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		summary, err := ctx.API.Summary()
 		if err != nil {
@@ -458,61 +457,28 @@ func (hv *Hypervisor) getVisor() http.HandlerFunc {
 			return
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, summaryResp{
-			TCPAddr: ctx.Addr.String(),
-			Summary: summary,
-		})
-	})
-}
-
-type extraSummaryResp struct {
-	TCPAddr string `json:"tcp_addr"`
-	Online  bool   `json:"online"`
-	*ExtraSummary
-}
-
-// provides extra summary of single visor.
-func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		extraSummary, err := ctx.API.ExtraSummary()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
+		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
+		dSummary := hv.getDmsgSummary()
+		for _, stat := range dSummary {
+			dmsgStats[stat.PK.String()] = stat
 		}
 
-		extraSummary.Dmsg = hv.getDmsgSummary()
-
-		httputil.WriteJSON(w, r, http.StatusOK, extraSummaryResp{
-			TCPAddr:      ctx.Addr.String(),
-			ExtraSummary: extraSummary,
-		})
+		if stat, ok := dmsgStats[summary.Overview.PubKey.String()]; ok {
+			summary.DmsgStats = &stat
+		} else {
+			summary.DmsgStats = &dmsgtracker.DmsgClientSummary{}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})
 }
 
-type extraSummaryWithDmsgResp struct {
-	Summary      *Summary                       `json:"summary"`
-	Health       *HealthInfo                    `json:"health"`
-	Uptime       float64                        `json:"uptime"`
-	Routes       []routingRuleResp              `json:"routes"`
-	TCPAddr      string                         `json:"tcp_addr"`
-	Online       bool                           `json:"online"`
-	IsHypervisor bool                           `json:"is_hypervisor"`
-	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
+func makeSummaryResp(online, hyper bool, sum *Summary) Summary {
+	sum.Online = online
+	sum.IsHypervisor = hyper
+	return *sum
 }
 
-func makeExtraSummaryResp(online, hyper bool, addr dmsg.Addr, extra *ExtraSummary) extraSummaryWithDmsgResp {
-	var resp extraSummaryWithDmsgResp
-	resp.TCPAddr = addr.String()
-	resp.Online = online
-	resp.IsHypervisor = hyper
-	resp.Summary = extra.Summary
-	resp.Health = extra.Health
-	resp.Uptime = extra.Uptime
-	resp.Routes = extra.Routes
-	return resp
-}
-
-func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
+func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hv.mu.RLock()
 		wg := new(sync.WaitGroup)
@@ -530,17 +496,20 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 			wg.Done()
 		}()
 
-		summaries := make([]extraSummaryWithDmsgResp, len(hv.visors)+i)
+		summaries := make([]Summary, len(hv.visors)+i)
 
-		summary, err := hv.visor.ExtraSummary()
+		summary, err := hv.visor.Summary()
 		if err != nil {
 			log.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &ExtraSummary{}
-			summary.Summary.PubKey = hv.visor.conf.PK
+			summary = &Summary{
+				Overview: &Overview{
+					PubKey: hv.visor.conf.PK,
+				},
+				Health: &HealthInfo{},
+			}
 		}
 
-		addr := dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}
-		summaries[0] = makeExtraSummaryResp(err == nil, true, addr, summary)
+		summaries[0] = makeSummaryResp(err == nil, true, summary)
 
 		for pk, c := range hv.visors {
 			go func(pk cipher.PubKey, c Conn, i int) {
@@ -550,16 +519,21 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 
 				log.Debug("Requesting summary via RPC.")
 
-				summary, err := c.API.ExtraSummary()
+				summary, err := c.API.Summary()
 				if err != nil {
 					log.WithError(err).
-						Warn("Failed to obtain summary via RPC.")
-					summary = &ExtraSummary{}
-					summary.Summary.PubKey = pk
+						Warn("Failed to obtain summary via RPC.", pk)
+
+					summary = &Summary{
+						Overview: &Overview{
+							PubKey: pk,
+						},
+						Health: &HealthInfo{},
+					}
 				} else {
 					log.Debug("Obtained summary via RPC.")
 				}
-				resp := makeExtraSummaryResp(err == nil, false, c.Addr, summary)
+				resp := makeSummaryResp(err == nil, false, summary)
 				summaries[i] = resp
 				wg.Done()
 			}(pk, c, i)
@@ -568,8 +542,10 @@ func (hv *Hypervisor) getVisorsExtraSummary() http.HandlerFunc {
 
 		wg.Wait()
 		for i := 0; i < len(summaries); i++ {
-			if stat, ok := dmsgStats[summaries[i].Summary.PubKey.String()]; ok {
+			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
 				summaries[i].DmsgStats = &stat
+			} else {
+				summaries[i].DmsgStats = &dmsgtracker.DmsgClientSummary{}
 			}
 		}
 
@@ -745,13 +721,13 @@ func (hv *Hypervisor) appLogsSince() http.HandlerFunc {
 
 func (hv *Hypervisor) appConnections() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		summary, err := ctx.API.GetAppConnectionsSummary(ctx.App.Name)
+		cSummary, err := ctx.API.GetAppConnectionsSummary(ctx.App.Name)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, &summary)
+		httputil.WriteJSON(w, r, http.StatusOK, &cSummary)
 	})
 }
 
@@ -811,13 +787,13 @@ func (hv *Hypervisor) postTransport() http.HandlerFunc {
 		}
 
 		const timeout = 30 * time.Second
-		summary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, reqBody.Public, timeout)
+		tSummary, err := ctx.API.AddTransport(reqBody.Remote, reqBody.TpType, reqBody.Public, timeout)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, summary)
+		httputil.WriteJSON(w, r, http.StatusOK, tSummary)
 	})
 }
 
@@ -973,8 +949,8 @@ func (hv *Hypervisor) getRoute() http.HandlerFunc {
 
 func (hv *Hypervisor) putRoute() http.HandlerFunc {
 	return hv.withCtx(hv.routeCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		var summary routing.RuleSummary
-		if err := httputil.ReadJSON(r, &summary); err != nil {
+		var rSummary routing.RuleSummary
+		if err := httputil.ReadJSON(r, &rSummary); err != nil {
 			if err != io.EOF {
 				hv.log(r).Warnf("putRoute request: %v", err)
 			}
@@ -984,7 +960,7 @@ func (hv *Hypervisor) putRoute() http.HandlerFunc {
 			return
 		}
 
-		rule, err := summary.ToRule()
+		rule, err := rSummary.ToRule()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
@@ -1279,7 +1255,7 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 			return
 		}
 
-		summary, err := ctx.API.Summary()
+		overview, err := ctx.API.Overview()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -1292,7 +1268,7 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 			ReleaseURL       string `json:"release_url,omitempty"`
 		}{
 			Available:      version != nil,
-			CurrentVersion: summary.BuildInfo.Version,
+			CurrentVersion: overview.BuildInfo.Version,
 		}
 
 		if version != nil {
@@ -1301,6 +1277,22 @@ func (hv *Hypervisor) visorUpdateAvailable() http.HandlerFunc {
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, output)
+	})
+}
+
+func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		logs, err := ctx.API.RuntimeLogs()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write([]byte(logs))
+		if err != nil {
+			hv.visor.log.Errorf("Cannot write response: %s", err)
+		}
 	})
 }
 
@@ -1490,4 +1482,14 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 	}
 
 	return pks, nil
+}
+
+func (hv *Hypervisor) serveDmsg(ctx context.Context, log *logging.Logger) {
+	go func() {
+		if err := hv.ServeRPC(ctx, hv.c.DmsgPort); err != nil {
+			log.WithError(err).Fatal("Failed to serve RPC client over dmsg.")
+		}
+	}()
+	log.WithField("addr", dmsg.Addr{PK: hv.c.PK, Port: hv.c.DmsgPort}).
+		Info("Serving RPC client over dmsg.")
 }
