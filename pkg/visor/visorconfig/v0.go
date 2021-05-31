@@ -5,6 +5,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 )
 
 // V0Name is the version string before proper versioning is implemented.
@@ -20,7 +21,7 @@ type V0 struct {
 		SecKey cipher.SecKey `json:"secret_key"`
 	} `json:"key_pair"`
 
-	Dmsg *snet.DmsgConfig `json:"dmsg"`
+	Dmsg *dmsgc.DmsgConfig `json:"dmsg"`
 
 	DmsgPty *V1Dmsgpty `json:"dmsg_pty,omitempty"`
 

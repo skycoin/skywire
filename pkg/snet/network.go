@@ -7,11 +7,9 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -45,17 +43,6 @@ type NetworkConfig interface {
 	Type() string
 }
 
-// DmsgConfig defines config for Dmsg network.
-type DmsgConfig struct {
-	Discovery     string `json:"discovery"`
-	SessionsCount int    `json:"sessions_count"`
-}
-
-// Type returns DmsgType.
-func (c *DmsgConfig) Type() string {
-	return dmsg.Type
-}
-
 // STCPConfig defines config for STCP network.
 type STCPConfig struct {
 	PKTable   map[cipher.PubKey]string `json:"pk_table"`
@@ -76,13 +63,11 @@ type Config struct {
 
 // NetworkConfigs represents all network configs.
 type NetworkConfigs struct {
-	Dmsg *DmsgConfig // The dmsg service will not be started if nil.
 	STCP *STCPConfig // The stcp service will not be started if nil.
 }
 
 // NetworkClients represents all network clients.
 type NetworkClients struct {
-	DmsgC  *dmsg.Client
 	Direct map[string]directtp.Client
 }
 
@@ -96,34 +81,13 @@ type Network struct {
 	arc                arclient.APIClient
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
+	dmsgC              *dmsg.Client
 }
 
 // New creates a network from a config.
-func New(conf Config, eb *appevent.Broadcaster, arc arclient.APIClient) (*Network, error) {
+func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc arclient.APIClient) (*Network, error) {
 	clients := NetworkClients{
 		Direct: make(map[string]directtp.Client),
-	}
-
-	if conf.NetworkConfigs.Dmsg != nil {
-		dmsgConf := &dmsg.Config{
-			MinSessions: conf.NetworkConfigs.Dmsg.SessionsCount,
-			Callbacks: &dmsg.ClientCallbacks{
-				OnSessionDial: func(network, addr string) error {
-					data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
-					event := appevent.NewEvent(appevent.TCPDial, data)
-					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-					// @evanlinjin: An error is not returned here as this will cancel the session dial.
-					return nil
-				},
-				OnSessionDisconnect: func(network, addr string, _ error) {
-					data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
-					event := appevent.NewEvent(appevent.TCPClose, data)
-					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-				},
-			},
-		}
-		clients.DmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.NetworkConfigs.Dmsg.Discovery), dmsgConf)
-		clients.DmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
 	}
 
 	if conf.NetworkConfigs.STCP != nil {
@@ -169,20 +133,21 @@ func New(conf Config, eb *appevent.Broadcaster, arc arclient.APIClient) (*Networ
 		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf)
 	}
 
-	return NewRaw(conf, clients, arc), nil
+	return NewRaw(conf, clients, dmsgC, arc), nil
 }
 
 // NewRaw creates a network from a config and a dmsg client.
-func NewRaw(conf Config, clients NetworkClients, arc arclient.APIClient) *Network {
+func NewRaw(conf Config, clients NetworkClients, dmsgC *dmsg.Client, arc arclient.APIClient) *Network {
 	n := &Network{
 		conf:    conf,
 		nets:    make(map[string]struct{}),
 		clients: clients,
 		arc:     arc,
+		dmsgC:   dmsgC,
 	}
 
-	if clients.DmsgC != nil {
-		n.addNetworkType(dmsg.Type)
+	if dmsgC != nil {
+		n.addNetworkType(dmsgC.Type())
 	}
 
 	for k, v := range clients.Direct {
@@ -201,11 +166,6 @@ func (n *Network) Conf() Config {
 
 // Init initiates server connections.
 func (n *Network) Init() error {
-	if n.clients.DmsgC != nil {
-		time.Sleep(200 * time.Millisecond)
-		go n.clients.DmsgC.Serve(context.Background())
-		time.Sleep(200 * time.Millisecond)
-	}
 
 	if n.conf.NetworkConfigs.STCP != nil {
 		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
@@ -260,15 +220,6 @@ func (n *Network) Close() error {
 
 	wg := new(sync.WaitGroup)
 
-	var dmsgErr error
-	if n.clients.DmsgC != nil {
-		wg.Add(1)
-		go func() {
-			dmsgErr = n.clients.DmsgC.Close()
-			wg.Done()
-		}()
-	}
-
 	var directErrorsMu sync.Mutex
 	directErrors := make(map[string]error)
 
@@ -288,10 +239,6 @@ func (n *Network) Close() error {
 	}
 
 	wg.Wait()
-
-	if dmsgErr != nil {
-		return dmsgErr
-	}
 
 	for _, err := range directErrors {
 		if err != nil {
@@ -321,7 +268,7 @@ func (n *Network) TransportNetworks() []string {
 }
 
 // Dmsg returns underlying dmsg client.
-func (n *Network) Dmsg() *dmsg.Client { return n.clients.DmsgC }
+func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
 
 // STcp returns the underlying stcp.Client.
 func (n *Network) STcp() (directtp.Client, bool) {
@@ -352,7 +299,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 			Port: port,
 		}
 
-		conn, err := n.clients.DmsgC.Dial(ctx, addr)
+		conn, err := n.dmsgC.Dial(ctx, addr)
 		if err != nil {
 			return nil, fmt.Errorf("dmsg client dial %v: %w", addr, err)
 		}
@@ -378,7 +325,7 @@ func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, po
 func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 	switch network {
 	case dmsg.Type:
-		lis, err := n.clients.DmsgC.Listen(port)
+		lis, err := n.dmsgC.Listen(port)
 		if err != nil {
 			return nil, err
 		}

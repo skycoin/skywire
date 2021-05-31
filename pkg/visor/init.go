@@ -10,12 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
-
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -32,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
@@ -66,6 +66,8 @@ var (
 	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
+	// Dmsg module
+	dmsgC vinit.Module
 	// Transport setup
 	tr vinit.Module
 	// Routing system
@@ -102,7 +104,8 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
-	sn = maker("snet", initSNet, &ar, &disc, &ebc)
+	dmsgC = maker("dmsg", initDmsg)
+	sn = maker("snet", initSNet, &dmsgC, &ar, &disc, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
 	tr = maker("transport", initTransport, &ar, &sn, &ebc)
@@ -177,9 +180,29 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
+func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.Dmsg == nil {
+		// todo: this is preserved behavior from snet. Do we need it?
+		return nil
+	}
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
+
+	time.Sleep(200 * time.Millisecond)
+	go dmsgC.Serve(context.Background())
+	time.Sleep(200 * time.Millisecond)
+
+	v.initLock.Lock()
+	v.dmsgC = dmsgC
+	v.initLock.Unlock()
+
+	v.pushCloseStack("dmsgC", func() error {
+		return dmsgC.Close()
+	})
+	return nil
+}
+
 func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 	nc := snet.NetworkConfigs{
-		Dmsg: v.conf.Dmsg,
 		STCP: v.conf.STCP,
 	}
 
@@ -189,7 +212,7 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 		NetworkConfigs: nc,
 	}
 
-	n, err := snet.New(conf, v.ebc, v.arClient)
+	n, err := snet.New(conf, v.dmsgC, v.ebc, v.arClient)
 	if err != nil {
 		return err
 	}
