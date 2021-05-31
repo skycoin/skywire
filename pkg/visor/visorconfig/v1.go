@@ -28,10 +28,14 @@ const V110Name = "v1.1.0"
 // Added public_autoconnect field to transport section
 const V111Name = "v1.1.1"
 
-// V1Name is the semantic version string for the most recent version of V1.
-const V1Name = V111Name
+// V112Name is the semantic version string for v1.1.2.
+// Added transport_setup_nodes field to transport section
+const V112Name = "v1.1.2"
 
-// V1 is visor config v1.0.0
+// V1Name is the semantic version string for the most recent version of V1.
+const V1Name = V112Name
+
+// V1 is visor config
 type V1 struct {
 	*Common
 	mu sync.RWMutex
@@ -65,10 +69,11 @@ type V1Dmsgpty struct {
 
 // V1Transport defines a transport config.
 type V1Transport struct {
-	Discovery         string      `json:"discovery"`
-	AddressResolver   string      `json:"address_resolver"`
-	LogStore          *V1LogStore `json:"log_store"`
-	AutoconnectPublic bool        `json:"public_autoconnect"`
+	Discovery         string          `json:"discovery"`
+	AddressResolver   string          `json:"address_resolver"`
+	LogStore          *V1LogStore     `json:"log_store"`
+	AutoconnectPublic bool            `json:"public_autoconnect"`
+	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
 
 // V1LogStore configures a LogStore.
