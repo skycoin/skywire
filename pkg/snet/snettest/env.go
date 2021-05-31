@@ -1,7 +1,9 @@
 package snettest
 
+// todo: this seems like an integration test, we set up a real dmsg server here
+// it doesn't test sending data, but it probably should
+// for now (while refactoring snet) dmsg parts are cut out
 import (
-	"context"
 	"strconv"
 	"testing"
 
@@ -65,12 +67,10 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	table := pktable.NewTable(tableEntries)
 
-	var hasDmsg, hasStcp, hasStcpr, hasSudph bool
+	var hasStcp, hasStcpr, hasSudph bool
 
 	for _, network := range networks {
 		switch network {
-		case dmsg.Type:
-			hasDmsg = true
 		case tptypes.STCP:
 			hasStcp = true
 		case tptypes.STCPR:
@@ -87,9 +87,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 	for i, pairs := range keys {
 		networkConfigs := snet.NetworkConfigs{
-			Dmsg: &snet.DmsgConfig{
-				SessionsCount: 1,
-			},
 			STCP: &snet.STCPConfig{
 				LocalAddr: "127.0.0.1:" + strconv.Itoa(stcpBasePort+i),
 			},
@@ -97,11 +94,6 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 
 		clients := snet.NetworkClients{
 			Direct: make(map[string]directtp.Client),
-		}
-
-		if hasDmsg {
-			clients.DmsgC = dmsg.NewClient(pairs.PK, pairs.SK, dmsgD, nil)
-			go clients.DmsgC.Serve(context.Background())
 		}
 
 		addressResolver := new(arclient.MockAPIClient)
@@ -146,7 +138,8 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			NetworkConfigs: networkConfigs,
 		}
 
-		n := snet.NewRaw(snetConfig, clients, addressResolver)
+		// todo: dmsg is not set up here
+		n := snet.NewRaw(snetConfig, clients, nil, addressResolver)
 		require.NoError(t, n.Init())
 		ns[i] = n
 	}
