@@ -267,9 +267,6 @@ func (n *Network) TransportNetworks() []string {
 	return networks
 }
 
-// Dmsg returns underlying dmsg client.
-func (n *Network) Dmsg() *dmsg.Client { return n.dmsgC }
-
 // STcp returns the underlying stcp.Client.
 func (n *Network) STcp() (directtp.Client, bool) {
 	return n.getClient(tptypes.STCP)
