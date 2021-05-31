@@ -5,7 +5,7 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 )
 
 //go:generate readmegen -n Config -o ./README.md ./config.go
@@ -18,9 +18,9 @@ const (
 
 // Config defines configuration parameters for setup Node.
 type Config struct {
-	PK                 cipher.PubKey   `json:"public_key"`
-	SK                 cipher.SecKey   `json:"secret_key"`
-	Dmsg               snet.DmsgConfig `json:"dmsg"`
-	TransportDiscovery string          `json:"transport_discovery"`
-	LogLevel           string          `json:"log_level"`
+	PK                 cipher.PubKey    `json:"public_key"`
+	SK                 cipher.SecKey    `json:"secret_key"`
+	Dmsg               dmsgc.DmsgConfig `json:"dmsg"`
+	TransportDiscovery string           `json:"transport_discovery"`
+	LogLevel           string           `json:"log_level"`
 }
