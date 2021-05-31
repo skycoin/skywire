@@ -126,6 +126,7 @@ type TransportSummary struct {
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
 	IsUp    bool                `json:"is_up"`
+	Label   transport.Label     `json:"label"`
 }
 
 func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
@@ -136,6 +137,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		Type:    tp.Type(),
 		IsSetup: isSetup,
 		IsUp:    tp.IsUp(),
+		Label:   tp.Entry.Label,
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
@@ -143,9 +145,9 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 	return summary
 }
 
-// ExtraSummary provides an extra summary of the AppNode.
-func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
-	summary, err := r.visor.Summary()
+// Summary provides an extra summary of the AppNode.
+func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
+	overview, err := r.visor.Overview()
 	if err != nil {
 		return fmt.Errorf("summary")
 	}
@@ -174,23 +176,23 @@ func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
 		})
 	}
 
-	*out = ExtraSummary{
-		Summary: summary,
-		Health:  health,
-		Uptime:  uptime,
-		Routes:  extraRoutes,
+	*out = Summary{
+		Overview: overview,
+		Health:   health,
+		Uptime:   uptime,
+		Routes:   extraRoutes,
 	}
 
 	return nil
 }
 
-// Summary provides a summary of the AppNode.
-func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
-	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
+// Overview provides a overview of the AppNode.
+func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
+	defer rpcutil.LogCall(r.log, "Overview", nil)(out, &err)
 
-	summary, err := r.visor.Summary()
-	if summary != nil {
-		*out = *summary
+	overview, err := r.visor.Overview()
+	if overview != nil {
+		*out = *overview
 	}
 
 	return err
@@ -536,5 +538,11 @@ func (r *RPC) UpdateAvailable(channel *updater.Channel, version *updater.Version
 // UpdateStatus returns visor update status.
 func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
 	*status, err = r.visor.UpdateStatus()
+	return
+}
+
+// RuntimeLogs returns visor runtime logs
+func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
+	*logs, err = r.visor.RuntimeLogs()
 	return
 }

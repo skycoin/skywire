@@ -17,7 +17,24 @@
           [formControlName]="fieldParams.keyNameInFiltersObject"
           [placeholder]="fieldParams.filterName | translate"
         >
-          <mat-option *ngFor="let option of fieldParams.printableLabelsForValues" [value]="option.value">{{ option.label | translate }}</mat-option>
+          <mat-option *ngFor="let option of fieldParams.printableLabelsForValues" [value]="option.value">
+            <!-- Option image. -->
+            <div
+              *ngIf="fieldParams.printableLabelGeneralSettings && option.image"
+              class="image-container"
+              [style]="
+                'background-image: url(\'' + fieldParams.printableLabelGeneralSettings.defaultImage + '\'); ' +
+                'width: ' + fieldParams.printableLabelGeneralSettings.imageWidth + 'px; ' +
+                'height: ' + fieldParams.printableLabelGeneralSettings.imageHeight + 'px;'"
+            >
+              <div
+                class="image"
+                [style]="'background-image: url(\'' + option.image + '\');'">
+              </div>
+            </div>
+            <!-- Option text. -->
+            {{ option.label | translate }}
+          </mat-option>
         </mat-select>
       </mat-form-field>
     </ng-container>
