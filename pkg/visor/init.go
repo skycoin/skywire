@@ -104,13 +104,13 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
-	dmsgC = maker("dmsg", initDmsg)
+	dmsgC = maker("dmsg", initDmsg, &ebc)
 	sn = maker("snet", initSNet, &dmsgC, &ar, &disc, &ebc)
-	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
-	pty = maker("dmsg_pty", initDmsgpty, &sn)
+	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
+	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	tr = maker("transport", initTransport, &ar, &sn, &ebc)
 	rt = maker("router", initRouter, &tr, &sn)
-	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
+	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &sn)
 	ut = maker("uptime_tracker", initUptimeTracker)
@@ -229,7 +229,7 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	dmsgC := v.net.Dmsg()
+	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		return nil
 	}
@@ -239,7 +239,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	select {
 	case <-time.After(dmsgTimeout):
 		logger.Warn("Failed to connect to the dmsg network, will try again later.")
-	case <-v.net.Dmsg().Ready():
+	case <-v.dmsgC.Ready():
 		logger.Info("Connected to the dmsg network.")
 	}
 	// dmsgctrl setup
@@ -411,15 +411,15 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
 
-	launch, err := launcher.NewLauncher(launchLog, launchConf, v.net.Dmsg(), v.router, procM)
+	launch, err := launcher.NewLauncher(launchLog, launchConf, v.dmsgC, v.router, procM)
 	if err != nil {
 		err := fmt.Errorf("failed to start launcher: %w", err)
 		return err
 	}
 
 	err = launch.AutoStart(launcher.EnvMap{
-		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.net, v.tpM.STCPRRemoteAddrs()),
-		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.net, nil),
+		skyenv.VPNClientName: vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs()),
+		skyenv.VPNServerName: vpnEnvMaker(v.conf, v.dmsgC, nil),
 	})
 
 	if err != nil {
@@ -436,7 +436,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 // Make an env maker function for vpn application
-func vpnEnvMaker(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) launcher.EnvMaker {
+func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []string) launcher.EnvMaker {
 	return launcher.EnvMaker(func() ([]string, error) {
 		var envCfg vpn.DirectRoutesEnvConfig
 
@@ -445,7 +445,7 @@ func vpnEnvMaker(conf *visorconfig.V1, n *snet.Network, tpRemoteAddrs []string) 
 
 			r := dmsgnetutil.NewRetrier(logrus.New(), 1*time.Second, 10*time.Second, 0, 1)
 			err := r.Do(context.Background(), func() error {
-				for _, ses := range n.Dmsg().AllSessions() {
+				for _, ses := range dmsgC.AllSessions() {
 					envCfg.DmsgServers = append(envCfg.DmsgServers, ses.RemoteTCPAddr().String())
 				}
 
@@ -681,7 +681,7 @@ func initHypervisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
 	// Prepare hypervisor.
-	hv, err := New(conf, v, v.net.Dmsg())
+	hv, err := New(conf, v, v.dmsgC)
 	if err != nil {
 		v.log.Fatalln("Failed to start hypervisor:", err)
 	}
