@@ -37,11 +37,12 @@ const (
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
-	DmsgCtrlPort       uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
-	DmsgSetupPort      uint16 = 36  // Listening port of a setup node.
-	DmsgAwaitSetupPort uint16 = 136 // Listening port of a visor for setup operations.
-	DmsgTransportPort  uint16 = 45  // Listening port of a visor for incoming transports.
-	DmsgHypervisorPort uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
+	DmsgCtrlPort           uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
+	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
+	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
+	DmsgTransportPort      uint16 = 45  // Listening port of a visor for incoming transports.
+	DmsgHypervisorPort     uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
+	DmsgTransportSetupPort uint16 = 47
 )
 
 // Default dmsgpty constants.
