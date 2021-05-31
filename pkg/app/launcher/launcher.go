@@ -122,10 +122,17 @@ func (l *Launcher) ResetConfig(conf Config) {
 	l.conf.ServerAddr = conf.ServerAddr
 }
 
+// EnvMaker makes a list of environment variables with their values set
+// It is used to let other code to decide how environment variables should be built
+type EnvMaker func() ([]string, error)
+
+// EnvMap is a mapping from application name to environment maker function
+type EnvMap map[string]EnvMaker
+
 // AutoStart auto-starts marked apps.
-func (l *Launcher) AutoStart(envMap map[string]func() ([]string, error)) error {
+func (l *Launcher) AutoStart(envMap EnvMap) error {
 	if envMap == nil {
-		envMap = make(map[string]func() ([]string, error))
+		envMap = make(EnvMap)
 	}
 	log := l.log.WithField("func", "AutoStart")
 

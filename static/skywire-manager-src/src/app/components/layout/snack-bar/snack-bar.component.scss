@@ -6,6 +6,7 @@
   display: flex;
   color: white;
   padding: 15px;
+  border-radius: 5px;
 }
 
 .red-background {
@@ -21,19 +22,27 @@
 }
 
 .icon-container {
-  margin-right: 15px;
+  margin-right: 10px;
+  position: relative;
+  top: 1px;
 }
 
 .text-container {
   flex-grow: 1;
   margin-right: 10px;
   font-size: $font-size-base;
-  margin-top: 2px;
   word-break: break-word;
 
   .second-line {
     font-size: $font-size-smaller;
+    opacity: 0.9;
   }
+}
+
+.close-button-separator {
+  width: 1px;
+  margin-right: 10px;
+  background-color: rgba(0, 0, 0, 0.3);
 }
 
 .close-button {
@@ -47,5 +56,6 @@
 
 mat-icon {
   position: relative;
-  top: 3px;
+  top: 1px;
+  user-select: none;
 }

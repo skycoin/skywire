@@ -295,7 +295,7 @@ func TestRouter_handleTransportPacket(t *testing.T) {
 	}()
 
 	// Create dmsg transport between two `snet.Network` entities.
-	tp1, err := rEnv.TpMngrs[1].SaveTransport(context.TODO(), pk1, dmsg.Type)
+	tp1, err := rEnv.TpMngrs[1].SaveTransport(context.TODO(), pk1, dmsg.Type, transport.LabelUser)
 	require.NoError(t, err)
 
 	testHandlePackets(t, r0, r1, tp1, pk1, pk2)

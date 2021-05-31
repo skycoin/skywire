@@ -38,7 +38,7 @@ func (g *RPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *rou
 		}
 	}()
 
-	initRules, err := CreateRouteGroup(ctx, g.Dialer, route)
+	initRules, err := CreateRouteGroup(ctx, g.Dialer, route, g.Metrics)
 	if err != nil {
 		return err
 	}

@@ -1,5 +1,8 @@
-<!-- Top bar shown on small screens. -->
-<div class="top-bar d-lg-none">
+<!-- Top bar shown on small screens. Hidden if the VPN info is being displayed. -->
+<div
+  class="top-bar"
+  [ngClass]="{'d-lg-none': !showVpnInfo, 'd-none': showVpnInfo}"
+>
   <div class="button-container">
     <button
       mat-icon-button
@@ -29,8 +32,8 @@
   </div>
 </div>
 
-<!-- Margin to prevent the top bar from covering the content. -->
-<div class="top-bar-margin d-lg-none"></div>
+<!-- Margin to prevent the top bar from covering the content. Hidden if the VPN info is being displayed. -->
+<div class="top-bar-margin" [ngClass]="{'d-lg-none': !showVpnInfo, 'd-none': showVpnInfo}"></div>
 
 <!-- Options menu. -->
 <mat-menu #menu="matMenu" [overlapTrigger]="false">
@@ -50,17 +53,18 @@
   </div>
 </mat-menu>
 
-<div class="main-container">
+<div class="main-container" [ngClass]="{'normal-height': !showVpnInfo}">
   <!-- Return button and title text. -->
-  <div class="title d-none d-lg-flex">
+  <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo, 'd-flex': showVpnInfo}">
     <div *ngIf="returnText" class="return-container">
       <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
         <mat-icon [inline]="true">chevron_left</mat-icon>
       </a>
     </div>
-    <span class="title-text">
+    <span class="title-text" *ngIf="!showVpnInfo">
       {{ titleParts[titleParts.length - 1] | translate }}
     </span>
+    <img class="title-image" *ngIf="showVpnInfo" src="./assets/img/logo-vpn.png" />
   </div>
 
   <div class="lower-container">
@@ -95,7 +99,7 @@
     </div>
     <div class="blank-space"></div>
     <!-- Right buttons area. -->
-    <div class="right-container">
+    <div class="right-container" *ngIf="!showVpnInfo">
       <app-refresh-button
         *ngIf="showUpdateButton"
         [secondsSinceLastUpdate]="secondsSinceLastUpdate"
@@ -113,5 +117,69 @@
         <mat-icon [inline]="true">menu</mat-icon>
       </button>
     </div>
+  </div></div>
+
+  <!-- VPN connection info. -->
+  <div *ngIf="showVpnInfo">
+    <!-- Languaje button. -->
+    <div class="languaje-button-vpn" *ngIf="!hideLanguageButton && language">
+      <div class="text-container" (click)="openLanguageWindow()">
+        <img [src]="'assets/img/lang/' + language.iconName" class="language-flag" />
+        {{ (language ? language.name : '') | translate }}
+      </div>
+    </div>
+    <div class="vpn-info vpn-dark-box-radius">
+      <!-- Data. -->
+      <table cellspacing="0" cellpadding="0" *ngIf="vpnData">
+        <tr>
+          <!-- Current state. -->
+          <td [class]="vpnData.stateClass + ' state-td'" [matTooltip]="(vpnData.state + '-info') | translate">
+            <div [ngClass]="{'animation-container': showVpnStateAnimation, 'd-none': !showVpnStateAnimation}">
+              <div class="internal-animation-container">
+                <div class="animation-area">
+                  <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+                  {{ vpnData.state | translate }}
+                </div>
+              </div>
+            </div>
+            <div class="aminated-state-icon-container" *ngIf="showVpnStateAnimatedDot">
+              <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+            </div>
+            <mat-icon [inline]="true" class="state-icon">brightness_1</mat-icon>
+            {{ vpnData.state | translate }}
+          </td>
+          <!-- Latency. -->
+          <td [matTooltip]="'vpn.connection-info.latency-info' | translate">
+            <mat-icon [inline]="true">swap_horiz</mat-icon>
+            {{ ('common.' + getLatencyValueString(vpnData.latency)) | translate:{ time: getPrintableLatency(vpnData.latency) } }}
+          </td>
+        </tr>
+        <tr>
+          <!-- Upload. -->
+          <td [matTooltip]="'vpn.connection-info.upload-info' | translate">
+            <mat-icon [inline]="true">arrow_upward</mat-icon>
+            {{ vpnData.uploadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
+          </td>
+          <!-- Download. -->
+          <td [matTooltip]="'vpn.connection-info.download-info' | translate">
+            <mat-icon [inline]="true">arrow_downward</mat-icon>
+            {{ vpnData.downloadSpeed | autoScale:{ showValue: true, showUnit: true, showPerSecond: true, useBits: showVpnDataStatsInBits } }}
+          </td>
+        </tr>
+      </table>
+      <!-- Loading animation. -->
+      <mat-spinner [diameter]="20" *ngIf="!vpnData"></mat-spinner>
+    </div>
+  </div>
+</div>
+
+<!-- Remote access warning for the VPN client. -->
+<div class="remote-vpn-alert-container" *ngIf="showVpnInfo && remoteAccess">
+  <div class="top-line">
+    <mat-icon [inline]="true">error_outline</mat-icon>
+    {{ 'vpn.remote-access-title' | translate }}
+  </div>
+  <div class="bottom-line">
+    {{ 'vpn.remote-access-text' | translate }}
   </div>
 </div>

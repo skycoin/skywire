@@ -215,9 +215,9 @@ export class TransportListComponent implements OnDestroy {
   transportStatusClass(transport: Transport, forDot: boolean): string {
     switch (transport.isUp) {
       case true:
-        return forDot ? 'dot-green' : 'green-text';
+        return forDot ? 'dot-green' : 'green-clear-text';
       default:
-        return forDot ? 'dot-red' : 'red-text';
+        return forDot ? 'dot-red' : 'red-clear-text';
     }
   }
 

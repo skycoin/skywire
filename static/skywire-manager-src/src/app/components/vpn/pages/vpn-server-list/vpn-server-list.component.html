@@ -1,0 +1,304 @@
+<!-- Content when loading. -->
+<div *ngIf="loading || loadingBackendData" class="d-flex flex-column h-100 w-100">
+  <div class="loading-top-container">
+    <!-- Top bar. -->
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="1"
+      [showUpdateButton]="false"
+      [localVpnKey]="currentLocalPk"
+    ></app-top-bar>
+
+    <!-- Lower tab bar. -->
+    <div class="main-container">
+      <div class="width-limiter">
+        <div class="center-container mt-4.5">
+          <ng-container *ngTemplateOutlet="topPart"></ng-container>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Loading animation. -->
+  <app-loading-indicator class="h-100 loading-indicator"></app-loading-indicator>
+</div>
+
+<!-- General declaration for the lower tab bar, used when loading and when not. -->
+<ng-template #topPart>
+  <!-- Tabs. -->
+  <div class="option-bar-container">
+    <div class="rounded-elevated-box mt-3"><div class="box-internal-container allow-overflow">
+      <div class="option-bar">
+        <div class="text-option selected" *ngIf="currentList === lists.Public"><span>{{ 'vpn.server-list.tabs.public' | translate }}</span></div>
+        <a class="text-option" *ngIf="currentList !== lists.Public" [routerLink]="['/vpn', currentLocalPk, 'servers', lists.Public, 1]">
+          <span>{{ 'vpn.server-list.tabs.public' | translate }}</span>
+        </a>
+        <div class="text-option selected" *ngIf="currentList === lists.History"><span>{{ 'vpn.server-list.tabs.history' | translate }}</span></div>
+        <a class="text-option" *ngIf="currentList !== lists.History" [routerLink]="['/vpn', currentLocalPk, 'servers', lists.History, 1]">
+          <span>{{ 'vpn.server-list.tabs.history' | translate }}</span>
+        </a>
+        <div class="text-option selected" *ngIf="currentList === lists.Favorites"><span>{{ 'vpn.server-list.tabs.favorites' | translate }}</span></div>
+        <a class="text-option" *ngIf="currentList !== lists.Favorites" [routerLink]="['/vpn', currentLocalPk, 'servers', lists.Favorites, 1]">
+          <span>{{ 'vpn.server-list.tabs.favorites' | translate }}</span>
+        </a>
+        <div class="text-option selected" *ngIf="currentList === lists.Blocked"><span>{{ 'vpn.server-list.tabs.blocked' | translate }}</span></div>
+        <a class="text-option" *ngIf="currentList !== lists.Blocked" [routerLink]="['/vpn', currentLocalPk, 'servers', lists.Blocked, 1]">
+          <span>{{ 'vpn.server-list.tabs.blocked' | translate }}</span>
+        </a>
+      </div>
+    </div></div>
+  </div>
+  <!-- Filter button. -->
+  <div class="option-bar-container option-bar-margin" [ngClass]="{'deactivated': loading}">
+    <div class="rounded-elevated-box mt-3"><div class="box-internal-container allow-overflow">
+      <div class="option-bar">
+        <div class="icon-option" (click)="dataFilterer ? dataFilterer.changeFilters() : null" [matTooltip]="'filters.filter-info' | translate">
+          <span><mat-icon [inline]="true">search</mat-icon></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <!-- Add button. -->
+  <div class="option-bar-container option-bar-margin">
+    <div class="rounded-elevated-box mt-3"><div class="box-internal-container allow-overflow">
+      <div class="option-bar">
+        <div class="icon-option" (click)="enterManually()" [matTooltip]="'vpn.server-list.add-manually-info' | translate">
+          <span><mat-icon [inline]="true">add</mat-icon></span>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <!-- Current filters info. -->
+  <ng-container *ngIf="dataFilterer">
+    <br *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0" />
+    <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()" *ngIf="dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0">
+      <div class="transparent-50"><mat-icon [inline]="true">search</mat-icon> {{ 'vpn.server-list.current-filters' | translate }}</div>
+      <div *ngFor="let filterTexts of dataFilterer.currentFiltersTexts" class="item">
+        <span>{{ filterTexts.filterName | translate }}: </span>
+        <ng-container *ngIf="filterTexts.translatableValue">{{ filterTexts.translatableValue | translate }}</ng-container>
+        <ng-container *ngIf="filterTexts.value">{{ filterTexts.value }}</ng-container>
+      </div>
+    </div>
+  </ng-container>
+</ng-template>
+
+<!-- Content when loaded. -->
+<div *ngIf="!loading && !loadingBackendData" class="row">
+  <div class="col-12">
+    <!-- Top bar. -->
+    <app-top-bar
+      [titleParts]="['vpn.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="1"
+      [showUpdateButton]="false"
+      [localVpnKey]="currentLocalPk"
+    ></app-top-bar>
+  </div>
+  <div class="col-12 vpn-table-container"><div class="width-limiter">
+    <!-- Lower tab bar. -->
+    <div class="center-container mt-4.5" [ngClass]="{'mb-3': !dataFilterer.currentFiltersTexts || dataFilterer.currentFiltersTexts.length < 1}">
+      <ng-container *ngTemplateOutlet="topPart"></ng-container>
+    </div>
+
+    <div class="rounded-elevated-box" *ngIf="dataSource.length !== 0"><div class="box-internal-container">
+      <!-- Table. -->
+      <table
+        class="responsive-table-translucid d-none d-md-table"
+        *ngIf="dataSource.length > 0"
+        cellspacing="0" cellpadding="0"
+      >
+        <!-- Column names. -->
+        <tr>
+          <th *ngIf="currentList === lists.History" class="sortable-column date-column click-effect" (click)="dataSorter.changeSortingOrder(dateSortData)" [matTooltip]="'vpn.server-list.date-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.date-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === dateSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column flag-column center click-effect" (click)="dataSorter.changeSortingOrder(countrySortData)" [matTooltip]="'vpn.server-list.country-info' | translate">
+            <mat-icon [inline]="true">flag</mat-icon>
+            <mat-icon *ngIf="dataSorter.currentSortingColumn === countrySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          </th>
+          <th class="sortable-column name-column click-effect" (click)="dataSorter.changeSortingOrder(nameSortData)">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.name-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === nameSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column location-column click-effect" (click)="dataSorter.changeSortingOrder(locationSortData)">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.location-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === locationSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column pk-column click-effect" [ngClass]="{'public-pk-column': currentList === lists.Public, 'history-pk-column': currentList === lists.History}" (click)="dataSorter.changeSortingOrder(pkSortData)" [matTooltip]="'vpn.server-list.public-key-info' | translate">
+            <div class="header-container">
+              <div class="header-text">
+                {{ 'vpn.server-list.public-key-small-table-label' | translate }}
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === pkSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th *ngIf="currentList === lists.Public" class="sortable-column short-column center click-effect" (click)="dataSorter.changeSortingOrder(congestionSortData)" [matTooltip]="'vpn.server-list.congestion-info' | translate">
+            <div class="header-container">
+              <mat-icon [inline]="true">person</mat-icon>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === congestionSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th *ngIf="currentList === lists.Public" class="sortable-column mini-column center click-effect" (click)="dataSorter.changeSortingOrder(congestionRatingSortData)" [matTooltip]="'vpn.server-list.congestion-rating-info' | translate">
+            <div class="header-container">
+              <div>
+                <div class="star-container">
+                  <mat-icon [inline]="true">star</mat-icon>
+                </div>
+                <mat-icon [inline]="true">person</mat-icon>
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === congestionRatingSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th *ngIf="currentList === lists.Public" class="sortable-column short-column center click-effect" (click)="dataSorter.changeSortingOrder(latencySortData)" [matTooltip]="'vpn.server-list.latency-info' | translate">
+            <div class="header-container">
+              <mat-icon [inline]="true">swap_horiz</mat-icon>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === latencySortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th *ngIf="currentList === lists.Public" class="sortable-column mini-column center click-effect" (click)="dataSorter.changeSortingOrder(latencyRatingSortData)" [matTooltip]="'vpn.server-list.latency-rating-info' | translate">
+            <div class="header-container">
+              <div>
+                <div class="star-container">
+                  <mat-icon [inline]="true">star</mat-icon>
+                </div>
+                <mat-icon [inline]="true">swap_horiz</mat-icon>
+              </div>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === latencyRatingSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th *ngIf="currentList === lists.Public" class="sortable-column mini-column center click-effect" (click)="dataSorter.changeSortingOrder(hopsSortData)" [matTooltip]="'vpn.server-list.hops-info' | translate">
+            <div class="header-container">
+              <mat-icon [inline]="true">timeline</mat-icon>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === hopsSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="sortable-column note-column center click-effect" (click)="dataSorter.changeSortingOrder(noteSortData)" [matTooltip]="'vpn.server-list.note-info' | translate">
+            <div class="header-container">
+              <mat-icon [inline]="true">info_outline</mat-icon>
+              <mat-icon *ngIf="dataSorter.currentSortingColumn === noteSortData" [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+            </div>
+          </th>
+          <th class="actions"></th>
+        </tr>
+
+        <!-- Values. -->
+        <tr
+          *ngFor="let server of dataSource"
+          [ngClass]="{'selectable click-effect': currentList !== lists.Blocked}"
+          (click)="currentList !== lists.Blocked ? selectServer(server) : null"
+        >
+          <td  *ngIf="currentList === lists.History" class="date-column">
+            {{ server.lastUsed | date:'yyyy/MM/dd, H:mm a' }}
+          </td>
+          <td class="flag-column icon-fixer">
+            <div class="flag">
+              <div
+                [style]="'background-image: url(\'assets/img/big-flags/' + server.countryCode.toLocaleLowerCase() + '.png\');'"
+                [matTooltip]="getCountryName(server.countryCode)"
+              ></div>
+            </div>
+          </td>
+          <td class="name-column">
+            <app-vpn-server-name
+              [isCurrentServer]="currentServer && server.pk === currentServer.pk"
+              [isFavorite]="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
+              [isBlocked]="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
+              [isInHistory]="server.inHistory && currentList !== lists.History"
+              [hasPassword]="server.usedWithPassword"
+              [name]="server.name"
+              [customName]="server.customName"
+              [defaultName]="'vpn.server-list.none'">
+            </app-vpn-server-name>
+          </td>
+          <td class="location-column">
+            <ng-container *ngIf="server.location">
+              {{ server.location }}
+            </ng-container>
+            <ng-container *ngIf="!server.location">
+              {{ 'vpn.server-list.unknown' | translate }}
+            </ng-container>
+          </td>
+          <td class="pk-column" [ngClass]="{'public-pk-column': currentList === lists.Public, 'history-pk-column': currentList === lists.History}">
+            <app-copy-to-clipboard-text (click)="$event.stopPropagation()" class="d-inline-block w-100" [shortSimple]="true" [text]="server.pk"></app-copy-to-clipboard-text>
+          </td>
+          <td *ngIf="currentList === lists.Public" [class]="getCongestionTextColorClass(server.congestion) + ' center short-column'">
+            {{ server.congestion }}%
+          </td>
+          <td  *ngIf="currentList === lists.Public" class="center mini-column icon-fixer">
+            <div
+              [style]="'background-image: url(\'assets/img/' + getRatingIcon(server.congestionRating) + '.png\');'"
+              class="rating"
+              [matTooltip]="getRatingText(server.congestionRating) | translate"
+            ></div>
+          </td>
+          <td *ngIf="currentList === lists.Public" [class]="getLatencyTextColorClass(server.latency) + ' center short-column'">
+            {{ ('common.' + getLatencyValueString(server.latency)) | translate:{ time: getPrintableLatency(server.latency) } }}
+          </td>
+          <td *ngIf="currentList === lists.Public" class="center mini-column icon-fixer">
+            <div
+              [style]="'background-image: url(\'assets/img/' + getRatingIcon(server.latencyRating) + '.png\');'"
+              class="rating"
+              [matTooltip]="getRatingText(server.latencyRating) | translate"
+            ></div>
+          </td>
+          <td *ngIf="currentList === lists.Public" [class]="getHopsTextColorClass(server.hops) + ' center mini-column'">
+            {{ server.hops }}
+          </td>
+          <td class="center note-column">
+            <mat-icon
+              *ngIf="server.note || server.personalNote"
+              (click)="$event.stopPropagation()"
+              [inline]="true"
+              [matTooltip]="getNoteVar(server) | translate:{custom: server.personalNote, original: server.note}"
+              class="note-icon"
+            >info_outline</mat-icon>
+          </td>
+          <td class="actions">
+            <button
+              mat-icon-button
+              class="big-action-button transparent-button vpn-small-button"
+              [matTooltip]="'vpn.server-options.tooltip' | translate"
+              (click)="$event.stopPropagation(); openOptions(server);"
+            >
+              <mat-icon [inline]="true">settings</mat-icon>
+            </button>
+          </td>
+        </tr>
+      </table>
+    </div></div>
+
+    <!-- Lower paginator. -->
+    <app-paginator
+      *ngIf="numberOfPages > 1"
+      [currentPage]="currentPage"
+      [numberOfPages]="numberOfPages"
+      [linkParts]="['/vpn']"
+      [queryParams]="dataFilterer.currentUrlQueryParams">
+    </app-paginator>
+
+    <!-- Msg shown if the list is empty. -->
+    <div class="rounded-elevated-box" *ngIf="dataSource.length === 0">
+      <div class="box-internal-container font-sm">
+        <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+        <span class="font-sm" *ngIf="allServers.length === 0 && currentList === lists.Public">{{ 'vpn.server-list.empty-discovery' | translate }}</span>
+        <span class="font-sm" *ngIf="allServers.length === 0 && currentList === lists.History">{{ 'vpn.server-list.empty-history' | translate }}</span>
+        <span class="font-sm" *ngIf="allServers.length === 0 && currentList === lists.Favorites">{{ 'vpn.server-list.empty-favorites' | translate }}</span>
+        <span class="font-sm" *ngIf="allServers.length === 0 && currentList === lists.Blocked">{{ 'vpn.server-list.empty-blocked' | translate }}</span>
+        <span class="font-sm" *ngIf="allServers.length !== 0">{{ 'vpn.server-list.empty-with-filter' | translate }}</span>
+      </div>
+    </div>
+  </div></div>
+</div>

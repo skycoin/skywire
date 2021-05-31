@@ -119,11 +119,17 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   private continueSavingChanges() {
     this.button.showLoading();
 
+    const data = { passcode: this.form.get('password').value };
+    // The "secure" value is only for the VPN app.
+    if (this.configuringVpn) {
+      data['secure'] = this.secureMode;
+    }
+
     this.operationSubscription = this.appsService.changeAppSettings(
       // The node pk is obtained from the currently openned node page.
       NodeComponent.getCurrentNodeKey(),
       this.data.name,
-      { passcode: this.form.get('password').value, secure: this.secureMode },
+      data,
     ).subscribe({
       next: this.onSuccess.bind(this),
       error: this.onError.bind(this)

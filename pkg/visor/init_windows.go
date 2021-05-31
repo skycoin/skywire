@@ -2,15 +2,13 @@
 
 package visor
 
-func initDmsgpty(v *Visor) bool {
-	report := v.makeReporter("dmsgpty")
-	conf := v.conf.Dmsgpty
+import (
+	"context"
 
-	if conf == nil {
-		v.log.Info("'dmsgpty' is not configured, skipping.")
-		return report(nil)
-	}
+	"github.com/skycoin/skycoin/src/util/logging"
+)
 
-	v.log.Error("dmsgpty is not supported on windows.")
-	return report(nil)
+func initDmsgpty(ctx context.Context, log *logging.Logger) error {
+	log.Error("dmsgpty is not supported on windows.")
+	return nil
 }
