@@ -1,8 +1,9 @@
 package logstore
 
 import (
-	"github.com/sirupsen/logrus"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 // LogRealLineKey is a key in the log entry that denotes real log line number
