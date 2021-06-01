@@ -338,13 +338,6 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 	return logs, err
 }
 
-// GetMinHops gets min_hops from visor routing config
-func (rc *rpcClient) GetMinHops() (uint16, error) {
-	var hops uint16
-	err := rc.Call("GetMinHops", &struct{}{}, &hops)
-	return hops, err
-}
-
 // SetMinHops sets the min_hops from visor routing config
 func (rc *rpcClient) SetMinHops(hops uint16) error {
 	err := rc.Call("SetMinHops", &hops, &struct{}{})
