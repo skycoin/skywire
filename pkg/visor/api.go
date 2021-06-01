@@ -71,7 +71,6 @@ type API interface {
 	UpdateStatus() (string, error)
 	RuntimeLogs() (string, error)
 
-	GetMinHops() (uint16, error)
 	SetMinHops(uint16) error
 }
 
@@ -140,6 +139,7 @@ type Summary struct {
 	IsHypervisor bool                           `json:"is_hypervisor,omitempty"`
 	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 	Online       bool                           `json:"online"`
+	MinHops      uint16                         `json:"min_hops"`
 }
 
 // Summary implements API.
@@ -178,6 +178,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		Health:   health,
 		Uptime:   uptime,
 		Routes:   extraRoutes,
+		MinHops:  v.conf.Routing.MinHops,
 	}
 
 	return summary, nil
@@ -736,11 +737,6 @@ func (v *Visor) RuntimeLogs() (string, error) {
 	builder.WriteString(strings.Join(logs, ","))
 	builder.WriteString("]")
 	return builder.String(), nil
-}
-
-// GetMinHops gets min_hops routing config of visor
-func (v *Visor) GetMinHops() (uint16, error) {
-	return v.conf.Routing.MinHops, nil
 }
 
 // SetMinHops sets min_hops routing config of visor
