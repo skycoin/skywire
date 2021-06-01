@@ -258,7 +258,6 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
-				r.Get("/visors/{pk}/min-hops", hv.getMinHops())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 			})
 		})
@@ -1295,24 +1294,6 @@ func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
 		if err != nil {
 			hv.visor.log.Errorf("Cannot write response: %s", err)
 		}
-	})
-}
-
-func (hv *Hypervisor) getMinHops() http.HandlerFunc {
-	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		hops, err := ctx.API.GetMinHops()
-		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
-			return
-		}
-
-		hopsResp := struct {
-			MinHops uint16 `json:"min_hops"`
-		}{
-			MinHops: hops,
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, hopsResp)
 	})
 }
 

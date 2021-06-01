@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/rpc"
@@ -147,40 +146,11 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 
 // Summary provides an extra summary of the AppNode.
 func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
-	overview, err := r.visor.Overview()
+	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
+
+	out, err = r.visor.Summary()
 	if err != nil {
-		return fmt.Errorf("summary")
-	}
-
-	health, err := r.visor.Health()
-	if err != nil {
-		return fmt.Errorf("health")
-	}
-
-	uptime, err := r.visor.Uptime()
-	if err != nil {
-		return fmt.Errorf("uptime")
-	}
-
-	routes, err := r.visor.RoutingRules()
-	if err != nil {
-		return fmt.Errorf("routes")
-	}
-
-	extraRoutes := make([]routingRuleResp, 0, len(routes))
-	for _, route := range routes {
-		extraRoutes = append(extraRoutes, routingRuleResp{
-			Key:     route.KeyRouteID(),
-			Rule:    hex.EncodeToString(route),
-			Summary: route.Summary(),
-		})
-	}
-
-	*out = Summary{
-		Overview: overview,
-		Health:   health,
-		Uptime:   uptime,
-		Routes:   extraRoutes,
+		return err
 	}
 
 	return nil
@@ -544,13 +514,6 @@ func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
 // RuntimeLogs returns visor runtime logs
 func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
 	*logs, err = r.visor.RuntimeLogs()
-	return
-}
-
-// GetMinHops gets min_hops from visor's routing config
-func (r *RPC) GetMinHops(_ *struct{}, hops *uint16) (err error) {
-	defer rpcutil.LogCall(r.log, "GetMinHops", nil)
-	*hops, err = r.visor.GetMinHops()
 	return
 }
 
