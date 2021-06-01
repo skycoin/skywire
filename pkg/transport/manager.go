@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/snettest"
 )
@@ -72,6 +73,11 @@ func NewManager(log *logging.Logger, n *snet.Network, arClient arclient.APIClien
 		arClient:    arClient,
 	}
 	return tm, nil
+}
+
+// STcpr returns client for this transport and success status
+func (tm *Manager) STcpr() (directtp.Client, bool) {
+	return tm.n.STcpr()
 }
 
 // OnAfterTPClosed sets callback which will fire after transport gets closed.

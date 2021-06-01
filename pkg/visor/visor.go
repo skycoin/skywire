@@ -19,7 +19,6 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
@@ -58,7 +57,6 @@ type Visor struct {
 	ebc   *appevent.Broadcaster // event broadcaster
 	dmsgC *dmsg.Client
 
-	net      *snet.Network
 	tpM      *transport.Manager
 	arClient arclient.APIClient
 	router   router.Router
