@@ -147,12 +147,11 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 // Summary provides an extra summary of the AppNode.
 func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
-
-	out, err = r.visor.Summary()
+	sum, err := r.visor.Summary()
 	if err != nil {
 		return err
 	}
-
+	*out = *sum
 	return nil
 }
 
