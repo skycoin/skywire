@@ -62,8 +62,6 @@ var (
 	ar vinit.Module
 	// App discovery
 	disc vinit.Module
-	// Snet (different network types)
-	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
 	// Dmsg module
@@ -105,18 +103,17 @@ func registerModules(logger *logging.MasterLogger) {
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
 	dmsgC = maker("dmsg", initDmsg, &ebc)
-	sn = maker("snet", initSNet, &dmsgC, &ar, &disc, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
-	tr = maker("transport", initTransport, &ar, &sn, &ebc)
-	rt = maker("router", initRouter, &tr, &sn)
+	tr = maker("transport", initTransport, &ar, &ebc)
+	rt = maker("router", initRouter, &tr, &dmsgC)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
-	hvs = maker("hypervisors", initHypervisors, &sn)
+	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
-	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
@@ -202,29 +199,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
-	nc := snet.NetworkConfigs{
-		STCP: v.conf.STCP,
-	}
 
-	conf := snet.Config{
-		PubKey:         v.conf.PK,
-		SecKey:         v.conf.SK,
-		NetworkConfigs: nc,
-	}
-
-	n, err := snet.New(conf, v.dmsgC, v.ebc, v.arClient)
-	if err != nil {
-		return err
-	}
-
-	if err := n.Init(); err != nil {
-		return err
-	}
-	v.pushCloseStack("snet", n.Close)
-
-	v.initLock.Lock()
-	v.net = n
-	v.initLock.Unlock()
 	return nil
 }
 
@@ -284,7 +259,28 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		LogStore:        logS,
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
-	tpM, err := transport.NewManager(managerLogger, v.net, v.arClient, &tpMConf)
+
+	nc := snet.NetworkConfigs{
+		STCP: v.conf.STCP,
+	}
+
+	netconf := snet.Config{
+		PubKey:         v.conf.PK,
+		SecKey:         v.conf.SK,
+		NetworkConfigs: nc,
+	}
+
+	n, err := snet.New(netconf, v.dmsgC, v.ebc, v.arClient)
+	if err != nil {
+		return err
+	}
+
+	if err := n.Init(); err != nil {
+		return err
+	}
+	v.pushCloseStack("snet", n.Close)
+
+	tpM, err := transport.NewManager(managerLogger, n, v.arClient, &tpMConf)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err
@@ -338,7 +334,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		MinHops:          v.conf.Routing.MinHops,
 	}
 
-	r, err := router.New(v.net, &rConf)
+	r, err := router.New(v.dmsgC, &rConf)
 	if err != nil {
 		err := fmt.Errorf("failed to create router: %w", err)
 		return err
@@ -536,7 +532,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		go func(hvErrs chan error) {
 			defer wg.Done()
-			ServeRPCClient(ctx, log, v.net, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
 		}(hvErrs)
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
@@ -613,7 +609,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	// todo: consider moving this to transport into some helper function
-	stcpr, ok := v.net.STcpr()
+	stcpr, ok := v.tpM.STcpr()
 	if !ok {
 		return nil
 	}
