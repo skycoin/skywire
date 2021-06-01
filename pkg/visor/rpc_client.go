@@ -930,11 +930,6 @@ func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
 }
 
-// GetMinHops implements API.
-func (mc *mockRPCClient) GetMinHops() (uint16, error) {
-	return uint16(0), nil
-}
-
 // SetMinHops implements API
 func (mc *mockRPCClient) SetMinHops(n uint16) error {
 	return nil
