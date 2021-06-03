@@ -6,6 +6,7 @@ export class Node {
   apps: Application[];
   transports: Transport[];
   routesCount: number;
+  minHops: number;
   routes?: Route[];
   online?: boolean;
   secondsOnline?: number;
