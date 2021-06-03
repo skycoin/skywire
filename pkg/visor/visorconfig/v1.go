@@ -179,6 +179,15 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, v
 	return v1.flush(v1)
 }
 
+// UpdateMinHops updates min_hops config
+func (v1 *V1) UpdateMinHops(hops uint16) error {
+	v1.mu.Lock()
+	v1.Routing.MinHops = hops
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
 // It removes argName from app args if value is an empty string.
 // The updated config gets flushed to file if there are any changes.
