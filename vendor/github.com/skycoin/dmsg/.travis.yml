@@ -1,7 +1,7 @@
 language: go
 go:
   # - "1.11.x" At minimum the code should run make check on the latest two go versions in the default linux environment provided by Travis.
-  - "1.14.x"
+  - "1.16.x"
   
 dist: xenial
 

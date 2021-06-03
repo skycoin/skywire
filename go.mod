@@ -21,7 +21,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
-	github.com/sirupsen/logrus v1.7.0
+	github.com/sirupsen/logrus v1.8.1
 	github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
@@ -38,9 +38,8 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9 // indirect
 	golang.org/x/mod v0.4.2 // indirect
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974
+	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
 	golang.org/x/sys v0.0.0-20210420205809-ac73e9fd8988
-	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf // indirect
 	golang.org/x/tools v0.1.0 // indirect
 	golang.zx2c4.com/wireguard v0.0.20200320
 	nhooyr.io/websocket v1.8.2
@@ -48,3 +47,5 @@ require (
 
 // Uncomment for tests with alternate branches of 'dmsg'
 //replace github.com/skycoin/dmsg => ../dmsg
+
+replace github.com/skycoin/dmsg => ../dmsg
