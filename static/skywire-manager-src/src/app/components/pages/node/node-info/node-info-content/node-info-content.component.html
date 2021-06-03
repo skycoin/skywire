@@ -48,11 +48,7 @@
     <span class="section-title">{{ 'node.details.router-info.title' | translate }}</span>
     <span class="info-line">
       <span class="title">{{ 'node.details.router-info.min-hops' | translate }}</span>
-      --
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.router-info.max-hops' | translate }}</span>
-      --
+      {{ node.minHops }}
     </span>
     <div class="router-button-container">
       <app-button color="primary" (action)="changeRouterConfig()" [forDarkBackground]="true">

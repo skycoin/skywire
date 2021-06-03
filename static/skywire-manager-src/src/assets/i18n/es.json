@@ -141,8 +141,8 @@
 
   "router-config": {
     "title": "Configuración del Enrutador",
+    "info": "Aquí podrá configurar cuantos saltos la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final. NOTA: los cambios no afectarán a las rutas ya existentes.",
     "min-hops": "Saltos mínimos",
-    "max-hops": "Saltos máximos",
     "save-config-button": "Guardar configuración",
     "done": "Cambios guardados."
   },

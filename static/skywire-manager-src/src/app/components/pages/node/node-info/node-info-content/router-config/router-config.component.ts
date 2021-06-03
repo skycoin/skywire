@@ -1,15 +1,15 @@
-import { Component, Inject, ViewChild, ElementRef, AfterViewInit, OnInit, OnDestroy } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { FormGroup, FormBuilder, Validators } from '@angular/forms';
-import { of, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 
 import { SnackbarService } from '../../../../../../services/snackbar.service';
 import { AppConfig } from 'src/app/app.config';
 import { Node } from '../../../../../../app.datatypes';
 import { ButtonComponent } from 'src/app/components/layout/button/button.component';
-import { delay } from 'rxjs/operators';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+import { RouteService } from 'src/app/services/route.service';
 
 /**
  * Modal window for changing the configuration related to the router. It changes the values
@@ -20,7 +20,7 @@ import { processServiceError } from 'src/app/utils/errors';
   templateUrl: './router-config.component.html',
   styleUrls: ['./router-config.component.scss']
 })
-export class RouterConfigComponent implements OnInit, OnDestroy, AfterViewInit {
+export class RouterConfigComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
   @ViewChild('firstInput') firstInput: ElementRef;
 
@@ -45,22 +45,18 @@ export class RouterConfigComponent implements OnInit, OnDestroy, AfterViewInit {
     @Inject(MAT_DIALOG_DATA) private data: Node,
     private formBuilder: FormBuilder,
     private snackbarService: SnackbarService,
+    private routeService: RouteService,
   ) { }
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      'min': ['', Validators.compose([
+      'min': [this.data.minHops, Validators.compose([
         Validators.required,
         Validators.maxLength(3),
-        Validators.pattern('^[0-9]+$')])],
-      'max': ['', Validators.compose([
-        Validators.required,
-        Validators.maxLength(3),
-        Validators.pattern('^[0-9]+$')])],
+        Validators.pattern('^[0-9]+$'),
+      ])],
     });
-  }
 
-  ngAfterViewInit() {
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 
@@ -77,9 +73,10 @@ export class RouterConfigComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.button.showLoading();
 
-    // TODO: change the values only if changes were made.
-
-    this.operationSubscription = of(1).pipe(delay(1000)).subscribe({
+    this.operationSubscription = this.routeService.setMinHops(
+      this.data.localPk,
+      Number.parseInt(this.form.get('min').value, 10)
+    ).subscribe({
       next: this.onSuccess.bind(this),
       error: this.onError.bind(this)
     });

@@ -141,8 +141,8 @@
 
   "router-config": {
     "title": "Router Configuration",
+    "info": "Here you can configure how many hops the connections must pass through other Skywire visors before reaching the final destination.  NOTE: the changes will not affect the existing routes.",
     "min-hops": "Min hops",
-    "max-hops": "Max hops",
     "save-config-button": "Save configuration",
     "done": "Changes saved."
   },
