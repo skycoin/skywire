@@ -331,11 +331,17 @@ func (rc *rpcClient) Update(config updater.UpdateConfig) (bool, error) {
 	return updated, err
 }
 
-// Update calls Update.
+// RuntimeLogs calls RuntimeLogs.
 func (rc *rpcClient) RuntimeLogs() (string, error) {
 	var logs string
 	err := rc.Call("RuntimeLogs", &struct{}{}, &logs)
 	return logs, err
+}
+
+// SetMinHops sets the min_hops from visor routing config
+func (rc *rpcClient) SetMinHops(hops uint16) error {
+	err := rc.Call("SetMinHops", &hops, &struct{}{})
+	return err
 }
 
 // StatusMessage defines a status of visor update.
@@ -424,7 +430,7 @@ func (rc *rpcClient) UpdateAvailable(channel updater.Channel) (*updater.Version,
 	return &version, err
 }
 
-// UpdateAvailable calls UpdateAvailable.
+// UpdateStatus calls UpdateStatus
 func (rc *rpcClient) UpdateStatus() (string, error) {
 	var result string
 	err := rc.Call("UpdateStatus", &struct{}{}, &result)
@@ -919,7 +925,12 @@ func (mc *mockRPCClient) UpdateStatus() (string, error) {
 	return "", nil
 }
 
-// UpdateStatus implements API.
+// RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
+}
+
+// SetMinHops implements API
+func (mc *mockRPCClient) SetMinHops(n uint16) error {
+	return nil
 }
