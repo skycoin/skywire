@@ -712,8 +712,8 @@ export class VpnClientService {
               vpnClientData.serverPk = appData.args[i + 1];
             }
 
-            if (appData.args[i] === '-killswitch' && i + 1 < appData.args.length) {
-              vpnClientData.killswitch = (appData.args[i + 1] as string).toLowerCase() === 'true';
+            if (appData.args[i].toLowerCase().includes('-killswitch')) {
+              vpnClientData.killswitch = (appData.args[i] as string).toLowerCase().includes('true');
             }
           }
         }
