@@ -4,8 +4,7 @@ import "time"
 
 // Constants.
 const (
-	// TODO(evanlinjin): Reference the production address on release
-	DefaultDiscAddr = "http://dmsg.discovery.skywire.cc"
+	DefaultDiscAddr = "http://dmsg.discovery.skywire.skycoin.com"
 
 	DefaultMinSessions = 1
 
