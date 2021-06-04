@@ -1,0 +1,23 @@
+<app-dialog [headline]="'router-config.title' | translate">
+  <!-- TODO: add help text. -->
+  <div class="info-container">{{'router-config.info' | translate}}</div>
+  <form [formGroup]="form">
+    <mat-form-field>
+      <input
+        #firstInput
+        [placeholder]="'router-config.min-hops' | translate"
+        formControlName="min"
+        maxlength="3"
+        matInput
+      >
+    </mat-form-field>
+  </form>
+  <app-button
+    #button class="float-right"
+    color="primary"
+    (action)="save()"
+    [disabled]="!form.valid"
+  >
+    {{ 'router-config.save-config-button' | translate }}
+  </app-button>
+</app-dialog>
