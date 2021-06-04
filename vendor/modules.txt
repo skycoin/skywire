@@ -4,7 +4,7 @@ github.com/AudriusButkevicius/pfilter
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 ## explicit
 github.com/StackExchange/wmi
-# github.com/VictoriaMetrics/metrics v1.12.3
+# github.com/VictoriaMetrics/metrics v1.17.2
 ## explicit
 github.com/VictoriaMetrics/metrics
 # github.com/andybalholm/brotli v0.0.0-20190621154722-5f990b63d2d6
@@ -50,9 +50,10 @@ github.com/google/uuid
 github.com/gorilla/securecookie
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/json-iterator/go v1.1.10
+# github.com/json-iterator/go v1.1.11
+## explicit
 github.com/json-iterator/go
-# github.com/klauspost/compress v1.10.0
+# github.com/klauspost/compress v1.11.0
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -66,12 +67,10 @@ github.com/klauspost/pgzip
 # github.com/klauspost/reedsolomon v1.9.9
 ## explicit
 github.com/klauspost/reedsolomon
-# github.com/kz/discordrus v1.2.0
-github.com/kz/discordrus
 # github.com/mattn/go-colorable v0.1.8
-## explicit
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.12
+# github.com/mattn/go-isatty v0.0.13
+## explicit
 github.com/mattn/go-isatty
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
@@ -122,18 +121,17 @@ github.com/shirou/gopsutil/internal/common
 github.com/shirou/gopsutil/mem
 github.com/shirou/gopsutil/net
 github.com/shirou/gopsutil/process
-# github.com/sirupsen/logrus v1.7.0
+# github.com/sirupsen/logrus v1.8.1
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
+# github.com/skycoin/dmsg v0.0.0-20210603142231-3cba29fefe94
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
 github.com/skycoin/dmsg/cipher
 github.com/skycoin/dmsg/cmdutil
 github.com/skycoin/dmsg/disc
-github.com/skycoin/dmsg/discord
 github.com/skycoin/dmsg/dmsgctrl
 github.com/skycoin/dmsg/dmsgpty
 github.com/skycoin/dmsg/dmsgtest
@@ -205,7 +203,7 @@ github.com/xtaci/kcp-go
 # go.etcd.io/bbolt v1.3.5
 ## explicit
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9
+# golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a
 ## explicit
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
@@ -214,6 +212,7 @@ golang.org/x/crypto/cast5
 golang.org/x/crypto/chacha20
 golang.org/x/crypto/chacha20poly1305
 golang.org/x/crypto/curve25519
+golang.org/x/crypto/curve25519/internal/field
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/poly1305
@@ -226,7 +225,7 @@ golang.org/x/crypto/xtea
 # golang.org/x/mod v0.4.2
 ## explicit
 golang.org/x/mod/semver
-# golang.org/x/net v0.0.0-20201021035429-f5854403a974
+# golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
 ## explicit
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -237,7 +236,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/nettest
 golang.org/x/net/proxy
-# golang.org/x/sys v0.0.0-20210420205809-ac73e9fd8988
+# golang.org/x/sys v0.0.0-20210603125802-9665404d3644
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -246,7 +245,7 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf
+# golang.org/x/term v0.0.0-20210503060354-a79de5458b56
 ## explicit
 golang.org/x/term
 # golang.org/x/text v0.3.3
