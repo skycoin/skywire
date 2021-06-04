@@ -68,7 +68,6 @@ github.com/klauspost/pgzip
 ## explicit
 github.com/klauspost/reedsolomon
 # github.com/mattn/go-colorable v0.1.8
-## explicit
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.13
 ## explicit
