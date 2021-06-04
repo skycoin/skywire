@@ -24,11 +24,11 @@ RUN apk add --no-cache make && \
 FROM ${base} as visor-runner
 
 COPY --from=builder /skywire/docker/images/visor/install-preq.sh /release/install-preq.sh
+COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
+COPY --from=builder /release /release
+
 RUN sh -c /release/install-preq.sh \
     && rm -rf /release/install-preq.sh
-
-COPY --from=builder /release /release
-COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 
