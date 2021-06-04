@@ -39,7 +39,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		wl = dmsgpty.NewMemoryWhitelist()
 	} else {
 		var err error
-		if wl, err = dmsgpty.NewJSONFileWhiteList(v.conf.Dmsgpty.AuthFile); err != nil {
+		if wl, err = dmsgpty.NewConfigWhitelist(v.conf.Dmsgpty.AuthFile); err != nil {
 			return err
 		}
 	}

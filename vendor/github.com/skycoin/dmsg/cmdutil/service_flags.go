@@ -15,8 +15,6 @@ import (
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
-
-	"github.com/skycoin/dmsg/discord"
 )
 
 // Associated errors.
@@ -141,12 +139,6 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 				WithField("addr", sf.Syslog).
 				Fatal("Failed to connect to syslog daemon.")
 		}
-		logging.AddHook(hook)
-	}
-
-	if discordWebhookURL := discord.GetWebhookURLFromEnv(); discordWebhookURL != "" {
-		discordOpts := discord.GetDefaultOpts()
-		hook := discord.NewHook(sf.Tag, discordWebhookURL, discordOpts...)
 		logging.AddHook(hook)
 	}
 
