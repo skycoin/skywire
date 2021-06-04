@@ -25,8 +25,7 @@ FROM ${base} as visor-runner
 
 COPY --from=builder /skywire/docker/images/visor/install-preq.sh /release/install-preq.sh
 RUN sh -c /release/install-preq.sh \
-    && rm -rf /release/install-preq.sh \
-    && apk add --no-cache curl
+    && rm -rf /release/install-preq.sh
 
 COPY --from=builder /release /release
 COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
