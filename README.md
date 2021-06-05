@@ -63,7 +63,6 @@ Or from docker image:
 ```bash
 $ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
   skycoin/skywire:latest skywire-cli update-config hypervisor-pks <public-key>
-
 ```
 
 ## Run `skywire-visor`
@@ -80,7 +79,10 @@ $ sudo skywire-visor -c skywire-config.json
 Or from docker image:
 
 ```bash
-docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:latest skywire-visor
+# with custom config mounted on docker volume
+$ docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:latest skywire-visor -c /opt/skywire/<YOUR_CONFIG_NAME>.json
+# without custom config (config is automatically generated)
+$ docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:latest skywire-visor
 ```
 
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
