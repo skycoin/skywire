@@ -125,7 +125,7 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20210603142231-3cba29fefe94
+# github.com/skycoin/dmsg v0.0.0-20210607131549-0c02e58ac5ee
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
