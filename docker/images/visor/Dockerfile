@@ -28,7 +28,8 @@ COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
 COPY --from=builder /release /release
 
 RUN sh -c /release/install-preq.sh \
-    && rm -rf /release/install-preq.sh
+    && rm -rf /release/install-preq.sh \
+    && mkdir -p /opt/skywire
 
 ENTRYPOINT [ "/entrypoint.sh" ]
 

@@ -12,7 +12,7 @@ if [[ $# -ne 3 ]]; then
 fi
 
 function docker_build() {
-  docker image build --no-cache \
+  docker image build \
     --tag=skycoin/skywire:"$tag" \
     -f ./docker/images/visor/Dockerfile .
 }
