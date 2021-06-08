@@ -235,7 +235,6 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 }
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
@@ -243,20 +242,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	var logS transport.LogStore
-	switch conf.LogStore.Type {
-	case visorconfig.FileLogStore:
-		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
-		if err != nil {
-			err := fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err)
-			return err
-		}
-	case visorconfig.MemoryLogStore:
-		logS = transport.InMemoryTransportLogStore()
-	default:
-		err := fmt.Errorf("invalid log store type: %s", conf.LogStore.Type)
-		return err
-	}
+	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
 		PubKey:          v.conf.PK,
@@ -402,7 +388,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
+		LocalPath:  v.conf.LocalPath,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
