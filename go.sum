@@ -277,8 +277,6 @@ github.com/shurcooL/webdavfs v0.0.0-20170829043945-18c3829fa133/go.mod h1:hKmq5k
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.8.1 h1:dJKuHgqk1NNQlqoA6BTlM1Wf9DOH3NBjQyu0h9+AZZE=
 github.com/sirupsen/logrus v1.8.1/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
-github.com/skycoin/dmsg v0.0.0-20210603142231-3cba29fefe94 h1:pEXB812hRagn23n/SJQkFE/Pj0CJ1L5bA3qWSbUyC9M=
-github.com/skycoin/dmsg v0.0.0-20210603142231-3cba29fefe94/go.mod h1:kd73tig/WUzBvcRmR7UwPi1JprzDDBUcSSBmF7RTJjo=
 github.com/skycoin/dmsg v0.0.0-20210607131549-0c02e58ac5ee h1:amNDcQH4yce7nqs+P8RptKWhloC5q2upsQOk4YTXOKs=
 github.com/skycoin/dmsg v0.0.0-20210607131549-0c02e58ac5ee/go.mod h1:kd73tig/WUzBvcRmR7UwPi1JprzDDBUcSSBmF7RTJjo=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=

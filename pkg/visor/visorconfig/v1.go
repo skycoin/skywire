@@ -27,10 +27,6 @@ const V100Name = "v1.0.0"
 // Removed authorization_file field from dmsgpty section
 const V110Name = "v1.1.0"
 
-// to parse the previous versions that were moved under v1.1.0
-const V111Name = "v1.1.1"
-const V112Name = "v1.1.2"
-
 // V1Name is the semantic version string for the most recent version of V1.
 const V1Name = V110Name
 
