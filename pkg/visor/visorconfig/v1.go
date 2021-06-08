@@ -47,6 +47,7 @@ type V1 struct {
 	CLIAddr     string          `json:"cli_addr"`
 
 	LogLevel          string   `json:"log_level"`
+	LocalPath         string   `json:"local_path"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
@@ -65,7 +66,6 @@ type V1Dmsgpty struct {
 type V1Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
-	LogStore          *V1LogStore     `json:"log_store"`
 	AutoconnectPublic bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
@@ -102,7 +102,6 @@ type V1Launcher struct {
 	Apps       []launcher.AppConfig `json:"apps"`
 	ServerAddr string               `json:"server_addr"`
 	BinPath    string               `json:"bin_path"`
-	LocalPath  string               `json:"local_path"`
 }
 
 // Flush flushes the config to file (if specified).
