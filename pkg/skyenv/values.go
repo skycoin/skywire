@@ -51,8 +51,6 @@ const (
 
 	DefaultDmsgPtyCLINet  = "unix"
 	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
-	// DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
-	// PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
 )
 
 // Default STCP constants.
