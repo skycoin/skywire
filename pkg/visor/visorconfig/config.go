@@ -39,7 +39,7 @@ func MakeBaseConfig(common *Common) *V1 {
 		Apps:       nil,
 		ServerAddr: skyenv.DefaultAppSrvAddr,
 		BinPath:    skyenv.DefaultAppBinPath,
-		LocalPath:  skyenv.DefaultAppLocalPath,
+		LocalPath:  skyenv.DefaultLocalPath,
 	}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
@@ -83,7 +83,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 
 	conf.Transport.LogStore = &V1LogStore{
 		Type:     "file",
-		Location: skyenv.DefaultTpLogStore,
+		Location: skyenv.DefaultLocalPath,
 	}
 
 	conf.UptimeTracker = &V1UptimeTracker{
@@ -163,11 +163,11 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 
 	conf.Transport.LogStore = &V1LogStore{
 		Type:     "file",
-		Location: skyenv.PackageTpLogStore,
+		Location: skyenv.PackageLocalPath,
 	}
 
 	conf.Launcher.BinPath = skyenv.PackageAppBinPath
-	conf.Launcher.LocalPath = skyenv.PackageAppLocalPath
+	conf.Launcher.LocalPath = skyenv.PackageLocalPath
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
