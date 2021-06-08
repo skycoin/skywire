@@ -19,21 +19,20 @@ const V100Name = "v1.0.0"
 
 // V110Name is the semantic version string for v1.1.0.
 // Added MinHops field to V1Routing section of config
-const V110Name = "v1.1.0"
-
-// V111Name is the semantic version string for v1.1.1.
 // Removed public_trusted_visor field from root section
 // Removed trusted_visors field from transport section
 // Added is_public field to root section
 // Added public_autoconnect field to transport section
-const V111Name = "v1.1.1"
-
-// V112Name is the semantic version string for v1.1.2.
 // Added transport_setup_nodes field to transport section
+// Removed authorization_file field from dmsgpty section
+const V110Name = "v1.1.0"
+
+// to parse the previous versions that were moved under v1.1.0
+const V111Name = "v1.1.1"
 const V112Name = "v1.1.2"
 
 // V1Name is the semantic version string for the most recent version of V1.
-const V1Name = V112Name
+const V1Name = V110Name
 
 // V1 is visor config
 type V1 struct {
