@@ -49,10 +49,10 @@ const (
 const (
 	DmsgPtyPort uint16 = 22
 
-	DefaultDmsgPtyCLINet    = "unix"
-	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
-	DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
-	PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
+	DefaultDmsgPtyCLINet  = "unix"
+	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
+	// DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
+	// PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
 )
 
 // Default STCP constants.
@@ -93,17 +93,15 @@ const (
 const (
 	DefaultAppSrvAddr     = "localhost:5505"
 	AppDiscUpdateInterval = time.Minute
-	DefaultAppLocalPath   = DefaultSkywirePath + "/local"
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
-	PackageAppLocalPath   = PackageSkywirePath + "/local"
 	PackageAppBinPath     = PackageSkywirePath + "/apps"
 )
 
-// Default routing constants
+// Default local constants
 const (
-	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
-	PackageTpLogStore = PackageSkywirePath + "/transport_logs"
+	DefaultLocalPath = DefaultSkywirePath + "/local"
+	PackageLocalPath = PackageSkywirePath + "/local"
 )
 
 // Default hypervisor constants
