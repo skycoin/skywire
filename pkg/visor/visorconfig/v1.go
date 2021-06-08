@@ -61,10 +61,9 @@ type V1 struct {
 
 // V1Dmsgpty configures the dmsgpty-host.
 type V1Dmsgpty struct {
-	Port     uint16 `json:"port"`
-	AuthFile string `json:"authorization_file"`
-	CLINet   string `json:"cli_network"`
-	CLIAddr  string `json:"cli_address"`
+	Port    uint16 `json:"port"`
+	CLINet  string `json:"cli_network"`
+	CLIAddr string `json:"cli_address"`
 }
 
 // V1Transport defines a transport config.
