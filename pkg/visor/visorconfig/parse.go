@@ -35,10 +35,6 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 
 	switch cc.Version {
 	// parse any v1-compatible version with v1 parse procedure
-	case V112Name:
-		return parseV1(cc, raw)
-	case V111Name:
-		return parseV1(cc, raw)
 	case V110Name:
 		fallthrough
 	case V100Name:
