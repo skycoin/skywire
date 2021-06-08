@@ -102,7 +102,6 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 
 	if old.Transport != nil {
 		conf.Transport.Discovery = old.Transport.Discovery
-		conf.Transport.LogStore = old.Transport.LogStore
 	}
 
 	if old.Routing != nil {
@@ -138,8 +137,8 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 
 	conf.Launcher.Apps = append(conf.Launcher.Apps, vpnApps...)
 
+	conf.LocalPath = old.LocalPath
 	conf.Launcher.BinPath = old.AppsPath
-	conf.Launcher.LocalPath = old.LocalPath
 	conf.Launcher.ServerAddr = old.AppServerAddr
 
 	for _, hv := range old.Hypervisors {

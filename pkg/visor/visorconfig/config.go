@@ -25,9 +25,6 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.Transport = &V1Transport{
 		Discovery:       skyenv.DefaultTpDiscAddr,
 		AddressResolver: skyenv.DefaultAddressResolverAddr,
-		LogStore: &V1LogStore{
-			Type: "memory",
-		},
 	}
 	conf.Routing = &V1Routing{
 		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
@@ -39,10 +36,10 @@ func MakeBaseConfig(common *Common) *V1 {
 		Apps:       nil,
 		ServerAddr: skyenv.DefaultAppSrvAddr,
 		BinPath:    skyenv.DefaultAppBinPath,
-		LocalPath:  skyenv.DefaultLocalPath,
 	}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
+	conf.LocalPath = skyenv.DefaultLocalPath
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	return conf
@@ -79,11 +76,6 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	conf.STCP = &snet.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
 		PKTable:   nil,
-	}
-
-	conf.Transport.LogStore = &V1LogStore{
-		Type:     "file",
-		Location: skyenv.DefaultLocalPath,
 	}
 
 	conf.UptimeTracker = &V1UptimeTracker{
@@ -160,14 +152,8 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 		CLINet:  skyenv.DefaultDmsgPtyCLINet,
 		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
 	}
-
-	conf.Transport.LogStore = &V1LogStore{
-		Type:     "file",
-		Location: skyenv.PackageLocalPath,
-	}
-
+	conf.LocalPath = skyenv.PackageLocalPath
 	conf.Launcher.BinPath = skyenv.PackageAppBinPath
-	conf.Launcher.LocalPath = skyenv.PackageLocalPath
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth
