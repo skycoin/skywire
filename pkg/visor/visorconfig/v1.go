@@ -19,21 +19,16 @@ const V100Name = "v1.0.0"
 
 // V110Name is the semantic version string for v1.1.0.
 // Added MinHops field to V1Routing section of config
-const V110Name = "v1.1.0"
-
-// V111Name is the semantic version string for v1.1.1.
 // Removed public_trusted_visor field from root section
 // Removed trusted_visors field from transport section
 // Added is_public field to root section
 // Added public_autoconnect field to transport section
-const V111Name = "v1.1.1"
-
-// V112Name is the semantic version string for v1.1.2.
 // Added transport_setup_nodes field to transport section
-const V112Name = "v1.1.2"
+// Removed authorization_file field from dmsgpty section
+const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
-const V1Name = V112Name
+const V1Name = V110Name
 
 // V1 is visor config
 type V1 struct {
@@ -52,6 +47,7 @@ type V1 struct {
 	CLIAddr     string          `json:"cli_addr"`
 
 	LogLevel          string   `json:"log_level"`
+	LocalPath         string   `json:"local_path"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
@@ -70,7 +66,6 @@ type V1Dmsgpty struct {
 type V1Transport struct {
 	Discovery         string          `json:"discovery"`
 	AddressResolver   string          `json:"address_resolver"`
-	LogStore          *V1LogStore     `json:"log_store"`
 	AutoconnectPublic bool            `json:"public_autoconnect"`
 	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
@@ -107,7 +102,6 @@ type V1Launcher struct {
 	Apps       []launcher.AppConfig `json:"apps"`
 	ServerAddr string               `json:"server_addr"`
 	BinPath    string               `json:"bin_path"`
-	LocalPath  string               `json:"local_path"`
 }
 
 // Flush flushes the config to file (if specified).
