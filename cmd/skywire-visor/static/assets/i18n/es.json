@@ -12,10 +12,13 @@
     "options": "Opciones",
     "logout": "Cerrar sesión",
     "logout-error": "Error cerrando la sesión.",
-    "time-in-ms": "{{ time }}ms",
+    "logout-confirmation": "Are you sure you want to log out?",
+    "time-in-ms": "{{ time }}ms.",
+    "time-in-segs": "{{ time }}s.",
     "ok": "Ok",
     "unknown": "Desconocido",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "window-size-error": "La ventana es demasiado estrecha para el contenido."
   },
 
   "labeled-element": {
@@ -32,6 +35,7 @@
 
   "labels": {
     "title": "Etiquetas",
+    "info": "Etiquetas que ha introducido para identificar fácilmente visores, transportes y otros elementos, en lugar de tener que leer identificadores generados por una máquina.",
     "list-title": "Lista de etiquetas",
     "label": "Etiqueta",
     "id": "ID del elemento",
@@ -58,16 +62,18 @@
 
   "filters": {
     "filter-action": "Filtrar",
-    "active-filters": "Filtros activos: ",
-    "press-to-remove": "(Presione para remover)",
+    "filter-info": "Lista de filtros.",
+    "press-to-remove": "(Presione para remover los filtros)",
     "remove-confirmation": "¿Seguro que desea remover los filtros?"
   },
 
   "tables": {
     "title": "Ordenar por",
     "sorting-title": "Ordenado por:",
-    "ascending-order": "(ascendente)",
-    "descending-order": "(descendente)"
+    "sort-by-value": "Valor",
+    "sort-by-label": "Etiqueta",
+    "label": "(etiqueta)",
+    "inverted-order": "(invertido)"
   },
 
   "start": {
@@ -90,7 +96,7 @@
         "title": "Información del visor",
         "label": "Etiqueta:",
         "public-key": "Llave pública:",
-        "port": "Puerto:",
+        "ip": "IP:",
         "dmsg-server": "Servidor DMSG:",
         "ping": "Ping:",
         "node-version": "Versión del visor:",
@@ -107,8 +113,14 @@
           "weeks": "{{ time }} semanas"
         }
       },
+      "router-info": {
+        "title": "Información del Enrutador",
+        "min-hops": "Saltos mínimos:",
+        "max-hops": "Saltos máximos:",
+        "change-config-button": "Cambiar configuración"
+      },
       "node-health": {
-        "title": "Información de salud",
+        "title": "Información de Salud",
         "status": "Estatus:",
         "transport-discovery": "Transport discovery:",
         "route-finder": "Route finder:",
@@ -127,10 +139,18 @@
     "error-load": "Hubo un error al intentar refrescar los datos. Reintentando..."
   },
 
+  "router-config": {
+    "title": "Configuración del Enrutador",
+    "info": "Aquí podrá configurar cuantos saltos la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final. NOTA: los cambios no afectarán a las rutas ya existentes.",
+    "min-hops": "Saltos mínimos",
+    "save-config-button": "Guardar configuración",
+    "done": "Cambios guardados."
+  },
+
   "nodes": {
     "title": "Lista de visores",
     "dmsg-title": "DMSG",
-    "update-all": "Actualizar todos los visores",
+    "update-all": "Actualizar todos los visores online",
     "hypervisor": "Hypervisor",
     "state": "Estado",
     "state-tooltip": "Estado actual",
@@ -154,7 +174,6 @@
     "deleted": "Visor removido.",
     "deleted-singular": "1 visor offline removido.",
     "deleted-plural": "{{ number }} visores offline removidos.",
-    "no-offline-nodes": "No se encontraron visores offline.",
     "no-visors-to-update": "No hay visores para actualizar.",
     "filter-dialog": {
       "online": "El visor debe estar",
@@ -236,7 +255,8 @@
       "terminal": "Terminal",
       "config": "Configuración",
       "update": "Actualizar",
-      "reboot": "Reiniciar"
+      "reboot": "Reiniciar",
+      "logs": "Ver logs"
     },
     "reboot": {
       "confirmation": "¿Seguro que desea reiniciar el visor?",
@@ -380,7 +400,7 @@
       "default-note-warning": "La nota por defecto ha sido utilizada.",
       "pagination-info": "{{ currentElementsRange }} de {{ totalElements }}",
       "killswitch-check": "Activar killswitch",
-      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN está interrumpida (por errores temporales o cualquier otro problema).",
+      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN está interrumpida (por errores temporales o cualquier otro problema). Esto evita fugas de datos.",
       "settings-changed-alert": "Los cambios aún no se han guardado.",
       "save-settings": "Guardar configuracion",
 
@@ -409,6 +429,7 @@
     "start-app": "Iniciar",
     "view-logs": "Ver logs",
     "settings": "Configuración",
+    "open": "Abrir",
     "error": "Se produjo un error y no fue posible realizar la operación.",
     "stop-confirmation": "¿Seguro que desea detener la aplicación?",
     "stop-selected-confirmation": "¿Seguro que desea detener las aplicaciones seleccionadas?",
@@ -431,6 +452,7 @@
     "remove-all-offline": "Remover todos los transportes offline",
     "remove-all-offline-confirmation": "¿Seguro que desea remover todos los transportes offline?",
     "remove-all-filtered-offline-confirmation": "Todos los transportes offline que satisfagan los criterios de filtrado actuales serán removidos. ¿Seguro que desea continuar?",
+    "info": "Conexiones que tiene con visores remotos de Skywire, para permitir que las aplicaciones Skywire locales se comuniquen con las aplicaciones que se ejecutan en esos visores remotos.",
     "list-title": "Lista de transportes",
     "state": "Estado",
     "state-tooltip": "Estado actual",
@@ -493,6 +515,7 @@
 
   "routes": {
     "title": "Rutas",
+    "info": "Caminos utilizados para llegar a los visores remotos con los que se han establecido transportes. Las rutas se generan automáticamente según sea necesario.",
     "list-title": "Lista de rutas",
     "key": "Llave",
     "type": "Tipo",
@@ -595,5 +618,231 @@
 
   "tabs-window" : {
     "title" : "Cambiar pestaña"
+  },
+
+  "vpn" : {
+    "title": "Panel de Control de VPN",
+    "start": "Inicio",
+    "servers": "Servidores",
+    "settings": "Configuracion",
+
+    "starting-blocked-server-error": "No se puede conectar con el servidor seleccionado porque se ha agregado a la lista de servidores bloqueados.",
+    "unexpedted-error": "Se produjo un error inesperado y no se pudo completar la operación.",
+
+    "remote-access-title": "Parece que está accediendo al sistema de manera remota",
+    "remote-access-text": "Esta aplicación sólo permite administrar la protección VPN del dispositivo en el que fue instalada. Los cambios hechos con ella no afectarán a dispositivos remotos como el que parece estar usando. También es posible que los datos de IP que se muestren sean incorrectos.",
+
+    "server-change": {
+      "busy-error": "El sistema está ocupado. Por favor, espere.",
+      "backend-error": "No fue posible cambiar el servidor. Por favor, asegúrese de que la clave pública sea correcta y de que la aplicación VPN se esté ejecutando.",
+      "already-selected-warning": "El servidor seleccionado ya está siendo utilizando.",
+      "change-server-while-connected-confirmation": "La protección VPN se interrumpirá mientras se cambia el servidor y algunos datos pueden transmitirse sin protección durante el proceso. ¿Desea continuar?",
+      "start-same-server-confirmation": "Ya había seleccionado ese servidor. ¿Desea conectarte a él?"
+    },
+
+    "error-page": {
+      "text": "La aplicación de cliente VPN no está disponible.",
+      "more-info": "No fue posible conectarse a la aplicación cliente VPN. Esto puede deberse a un error de configuración, un problema inesperado con el visor o porque utilizó una clave pública no válida en la URL.",
+      "text-pk": "Configuración inválida.",
+      "more-info-pk": "La aplicación no puede ser iniciada porque no ha especificado la clave pública del visor.",
+      "text-storage": "Error al guardar los datos.",
+      "more-info-storage": "Ha habido un conflicto al intentar guardar los datos y la aplicación se ha cerrado para prevenir errores. Esto puede suceder si abre la aplicación en más de una pestaña o ventana.",
+      "text-pk-change": "Operación inválida.",
+      "more-info-pk-change": "Por favor, utilice esta aplicación para administrar sólo un cliente VPN."
+    },
+
+    "connection-info" : {
+      "state-connecting": "Conectando",
+      "state-connecting-info": "Se está activando la protección VPN.",
+      "state-connected": "Conectado",
+      "state-connected-info": "La protección VPN está activada.",
+      "state-disconnecting": "Desconectando",
+      "state-disconnecting-info": "Se está desactivando la protección VPN.",
+      "state-reconnecting": "Reconectando",
+      "state-reconnecting-info": "Se está restaurando la protección de VPN.",
+      "state-disconnected": "Desconectado",
+      "state-disconnected-info": "La protección VPN está desactivada.",
+      "state-info": "Estado actual de la conexión.",
+      "latency-info": "Latencia actual.",
+      "upload-info": "Velocidad de subida.",
+      "download-info": "Velocidad de descarga."
+    },
+
+    "status-page": {
+      "start-title": "Iniciar VPN",
+      "no-server": "¡Ningún servidor seleccionado!",
+      "disconnect": "Desconectar",
+      "disconnect-confirmation": "¿Realmente desea detener la protección VPN?",
+      "entered-manually": "Ingresado manualmente",
+      "upload-info": "Estadísticas de datos subidos.",
+      "download-info": "Estadísticas de datos descargados.",
+      "latency-info": "Estadísticas de latencia.",
+      "total-data-label": "total",
+      "problem-connecting-error": "No fue posible conectarse al servidor. El servidor puede no ser válido o estar temporalmente inactivo.",
+      "problem-starting-error": "No fue posible iniciar la VPN. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
+      "problem-stopping-error": "No fue posible detener la VPN. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
+      "generic-problem-error": "No fue posible realizar la operación. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
+      "select-server-warning": "Por favor, seleccione un servidor primero.",
+
+      "data": {
+        "ip": "Dirección IP:",
+        "ip-problem-info": "Hubo un problema al intentar obtener la IP. Por favor, verifíquela utilizando un servicio externo.",
+        "ip-country-problem-info": "Hubo un problema al intentar obtener el país. Por favor, verifíquelo utilizando un servicio externo.",
+        "ip-refresh-info": "Refrescar",
+        "ip-refresh-time-warning": "Por favor, espere {{ seconds }} segundo(s) antes de refrescar los datos.",
+        "ip-refresh-loading-warning": "Por favor, espere a que finalice la operación anterior.",
+        "country": "País:",
+        "server": "Servidor:",
+        "server-note": "Nota del servidor:",
+        "original-server-note": "Nota original del servidor:",
+        "local-pk": "Llave pública del visor local:",
+        "remote-pk": "Llave pública del visor remoto:",
+        "unavailable": "No disponible"
+      }
+    },
+
+    "server-options": {
+      "tooltip": "Opciones",
+      "connect-without-password": "Conectarse sin contraseña",
+      "connect-without-password-confirmation": "La conexión se realizará sin la contraseña. ¿Seguro que desea continuar?",
+      "connect-using-password": "Conectarse usando una contraseña",
+      "edit-name": "Nombre personalizado",
+      "edit-label": "Nota personalizada",
+      "make-favorite": "Hacer favorito",
+      "make-favorite-confirmation": "¿Realmente desea marcar este servidor como favorito? Se eliminará de la lista de bloqueados.",
+      "make-favorite-done": "Agregado a la lista de favoritos.",
+      "remove-from-favorites": "Quitar de favoritos",
+      "remove-from-favorites-done": "Eliminado de la lista de favoritos.",
+      "block": "Bloquear servidor",
+      "block-done": "Agregado a la lista de bloqueados.",
+      "block-confirmation": "¿Realmente desea bloquear este servidor? Se eliminará de la lista de favoritos.",
+      "block-selected-confirmation": "¿Realmente desea bloquear el servidor actualmente seleccionado? Se cerrarán todas las conexiones.",
+      "block-selected-favorite-confirmation": "¿Realmente desea bloquear el servidor actualmente seleccionado? Se cerrarán todas las conexiones y se eliminará de la lista de favoritos.",
+      "unblock": "Desbloquear servidor",
+      "unblock-done": "Eliminado de la lista de bloqueados.",
+      "remove-from-history": "Quitar del historial",
+      "remove-from-history-confirmation": "¿Realmente desea quitar del historial el servidor?",
+      "remove-from-history-done": "Eliminado del historial.",
+
+      "edit-value": {
+        "name-title": "Nombre Personalizado",
+        "note-title": "Nota Personalizada",
+        "name-label": "Nombre personalizado",
+        "note-label": "Nota personalizada",
+        "apply-button": "Aplicar",
+        "changes-made-confirmation": "Se ha realizado el cambio."
+      }
+    },
+
+    "server-conditions": {
+      "selected-info": "Este es el servidor actualmente seleccionado.",
+      "blocked-info": "Este servidor está en la lista de bloqueados.",
+      "favorite-info": "Este servidor está en la lista de favoritos.",
+      "history-info": "Este servidor está en el historial de servidores.",
+      "has-password-info": "Se estableció una contraseña para conectarse con este servidor."
+    },
+
+    "server-list" : {
+      "date-small-table-label": "Fecha",
+      "date-info": "Última vez en la que usó este servidor.",
+      "country-small-table-label": "País",
+      "country-info": "País donde se encuentra el servidor.",
+      "name-small-table-label": "Nombre",
+      "location-small-table-label": "Ubicación",
+      "public-key-small-table-label": "Lp",
+      "public-key-info": "Llave pública del servidor.",
+      "congestion-rating-small-table-label": "Calificación de congestión",
+      "congestion-rating-info": "Calificación del servidor relacionada con lo congestionado que suele estar.",
+      "congestion-small-table-label": "Congestión",
+      "congestion-info": "Congestión actual del servidor.",
+      "latency-rating-small-table-label": "Calificación de latencia",
+      "latency-rating-info": "Calificación del servidor relacionada con la latencia que suele tener.",
+      "latency-small-table-label": "Latencia",
+      "latency-info": "Latencia actual del servidor.",
+      "hops-small-table-label": "Saltos",
+      "hops-info": "Cuántos saltos se necesitan para conectarse con el servidor.",
+      "note-small-table-label": "Nota",
+      "note-info": "Nota acerca del servidor.",
+      "gold-rating-info": "Oro",
+      "silver-rating-info": "Plata",
+      "bronze-rating-info": "Bronce",
+      "notes-info": "Nota personalizada: {{ custom }} - Nota original: {{ original }}",
+      "empty-discovery": "Actualmente no hay servidores VPN para mostrar. Por favor, inténtelo de nuevo más tarde.",
+      "empty-history": "No hay historial que mostrar.",
+      "empty-favorites": "No hay servidores favoritos para mostrar.",
+      "empty-blocked": "No hay servidores bloqueados para mostrar.",
+      "empty-with-filter": "Ningún servidor VPN coincide con los criterios de filtrado seleccionados.",
+      "add-manually-info": "Agregar el servidor manualmente.",
+      "current-filters": "Filtros actuales (presione para eliminar)",
+      "none": "Ninguno",
+      "unknown": "Desconocido",
+
+      "tabs": {
+        "public": "Públicos",
+        "history": "Historial",
+        "favorites": "Favoritos",
+        "blocked": "Bloqueados"
+      },
+
+      "add-server-dialog": {
+        "title": "Ingresar manualmente",
+        "pk-label": "Llave pública del servidor",
+        "password-label": "Contraseña del servidor (si tiene)",
+        "name-label": "Nombre del servidor (opcional)",
+        "note-label": "Nota personal (opcional)",
+        "pk-length-error": "La llave pública debe tener 66 caracteres.",
+        "pk-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
+        "use-server-button": "Usar servidor"
+      },
+
+      "password-dialog": {
+        "title": "Introducir Contraseña",
+        "password-if-any-label": "Contraseña del servidor (si tiene)",
+        "password-label": "Contraseña del servidor",
+        "continue-button": "Continuar"
+      },
+
+      "filter-dialog": {
+        "country": "El país debe ser",
+        "name": "El nombre debe contener",
+        "location": "La ubicación debe contener",
+        "public-key": "La llave pública debe contener",
+        "congestion-rating": "La calificación de congestión debe ser",
+        "latency-rating": "La calificación de latencia debe ser",
+  
+        "rating-options": {
+          "any": "Cualquiera",
+          "gold": "Oro",
+          "silver": "Plata",
+          "bronze": "Bronce"
+        },
+
+        "country-options": {
+          "any": "Cualquiera"
+        }
+      }
+    },
+
+    "settings-page": {
+      "setting-small-table-label": "Ajuste",
+      "value-small-table-label": "Valor",
+      "killswitch": "Killswitch",
+      "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN es interrumpida (por errores temporales o cualquier otro problema). Esto evita fugas de datos.",
+      "get-ip": "Obtener información de IP",
+      "get-ip-info": "Cuando está activa, la aplicación utilizará servicios externos para obtener información sobre la IP actual.",
+      "data-units": "Unidades de datos",
+      "data-units-info": "Permite seleccionar las unidades que se utilizarán para mostrar las estadísticas de transmisión de datos.",
+      "setting-on": "Encendido",
+      "setting-off": "Apagado",
+      "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
+      "change-while-connected-confirmation": "La protección VPN se interrumpirá mientras se realiza el cambio. ¿Desea continuar?",
+
+      "data-units-modal": {
+        "title": "Unidades de Datos",
+        "only-bits": "Bits para todas las estadísticas",
+        "only-bytes": "Bytes para todas las estadísticas",
+        "bits-speed-and-bytes-volume": "Bits para velocidad y bytes para volumen (predeterminado)"
+      }
+    }
   }
 }
