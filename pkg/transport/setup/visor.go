@@ -63,6 +63,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		conn, err := lis.AcceptStream()
 		if err != nil {
 			ts.log.WithError(err).Error("failed to accept")
+			break
 		}
 		remotePK := conn.RawRemoteAddr().PK
 		found := false
