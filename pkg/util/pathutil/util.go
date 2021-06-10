@@ -11,7 +11,7 @@ import (
 
 const (
 	tmpSuffix      = ".tmp"
-	ownerRW        = 0600
+	ownerRW        = 0606
 	userRWXGroupRX = 0750
 )
 
