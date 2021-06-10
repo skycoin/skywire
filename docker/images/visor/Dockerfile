@@ -31,6 +31,8 @@ RUN sh -c /release/install-preq.sh \
     && rm -rf /release/install-preq.sh \
     && mkdir -p /opt/skywire
 
+STOPSIGNAL SIGINT
+
 ENTRYPOINT [ "/entrypoint.sh" ]
 
 # default target
