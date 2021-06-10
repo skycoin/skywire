@@ -16,13 +16,13 @@ gen_default_config() {
 
 sigint_handler() {
   if [ $pid -ne 0 ]; then
-    kill -SIGINT "$pid"
+    kill -INT "$pid"
     wait "$pid"
   fi
 	exit 130;
 }
 
-trap 'kill ${!}; sigint_handler' SIGINT
+trap 'kill ${!}; sigint_handler' INT
 
 cmd="$(echo "$1" | tr -d '[:space:]')"
 shift 1
