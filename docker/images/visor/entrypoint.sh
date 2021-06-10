@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
+set -x
 
 ## PID of skywire-visor
 pid=0
@@ -17,9 +19,10 @@ sigint_handler() {
     kill -SIGINT "$pid"
     wait "$pid"
   fi
+	exit 130;
 }
 
-trap 'kill ${!}; sigint_handler' INT TERM
+trap 'kill ${!}; sigint_handler' SIGINT
 
 cmd="$(echo "$1" | tr -d '[:space:]')"
 shift 1
@@ -29,17 +32,21 @@ skywire-visor)
   case "$1" in
   -c)
     /release/"$cmd" "$@" &
-    pid="$!"
     ;;
   *)
     gen_default_config
-    /release/"$cmd" -c "$default_config_path" "$@"
-    pid="$!"
+    /release/"$cmd" -c "$default_config_path" "$@" &
     ;;
   esac
   ;;
 skywire-cli)
-  /release/"$cmd" "$@"
-  pid="$!"
+  /release/"$cmd" "$@" &
   ;;
 esac
+
+pid="$!"
+
+while true
+do
+	wait ${!}
+done
