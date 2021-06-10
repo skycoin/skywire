@@ -11,7 +11,7 @@ import (
 
 const (
 	tmpSuffix      = ".tmp"
-	ownerRW        = 0606
+	ownerRWOtherRW = 0606
 	userRWXGroupRX = 0750
 )
 
@@ -41,7 +41,7 @@ func AtomicWriteFile(filename string, data []byte) error {
 		}
 	}
 
-	if err := ioutil.WriteFile(tempFilePath, data, ownerRW); err != nil {
+	if err := ioutil.WriteFile(tempFilePath, data, ownerRWOtherRW); err != nil {
 		return err
 	}
 
