@@ -312,7 +312,7 @@ func ensureDir(path *string) error {
 */
 
 func (l *Launcher) pidFile() (*os.File, error) {
-	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0600)
+	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0606) //nolint:gosec
 }
 
 func (l *Launcher) persistPID(appName string, pid appcommon.ProcID) error {
