@@ -1,13 +1,12 @@
 export class Node {
   label: string;
   localPk: string;
-  tcpAddr: string;
   ip: string;
-  port: string;
   version: string;
   apps: Application[];
   transports: Transport[];
   routesCount: number;
+  minHops: number;
   routes?: Route[];
   online?: boolean;
   secondsOnline?: number;

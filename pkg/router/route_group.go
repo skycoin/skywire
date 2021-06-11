@@ -428,11 +428,7 @@ func (rg *RouteGroup) sendNetworkProbe() error {
 
 	packet := routing.MakeNetworkProbePacket(rule.NextRouteID(), timestamp, throughput)
 
-	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-		return err
-	}
-
-	return nil
+	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
 func (rg *RouteGroup) networkProbeServiceFn(_ time.Duration) {

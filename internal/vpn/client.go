@@ -235,11 +235,7 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 	}
 	defer c.releaseSysPrivileges()
 
-	if err := c.setupDirectRoute(ip); err != nil {
-		return err
-	}
-
-	return nil
+	return c.setupDirectRoute(ip)
 }
 
 // RemoveDirectRoute removes direct route. Packets destined to `ip` will

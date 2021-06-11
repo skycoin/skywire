@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/rpc"
@@ -145,54 +144,24 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 	return summary
 }
 
-// ExtraSummary provides an extra summary of the AppNode.
-func (r *RPC) ExtraSummary(_ *struct{}, out *ExtraSummary) (err error) {
-	summary, err := r.visor.Summary()
+// Summary provides an extra summary of the AppNode.
+func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
+	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
+	sum, err := r.visor.Summary()
 	if err != nil {
-		return fmt.Errorf("summary")
+		return err
 	}
-
-	health, err := r.visor.Health()
-	if err != nil {
-		return fmt.Errorf("health")
-	}
-
-	uptime, err := r.visor.Uptime()
-	if err != nil {
-		return fmt.Errorf("uptime")
-	}
-
-	routes, err := r.visor.RoutingRules()
-	if err != nil {
-		return fmt.Errorf("routes")
-	}
-
-	extraRoutes := make([]routingRuleResp, 0, len(routes))
-	for _, route := range routes {
-		extraRoutes = append(extraRoutes, routingRuleResp{
-			Key:     route.KeyRouteID(),
-			Rule:    hex.EncodeToString(route),
-			Summary: route.Summary(),
-		})
-	}
-
-	*out = ExtraSummary{
-		Summary: summary,
-		Health:  health,
-		Uptime:  uptime,
-		Routes:  extraRoutes,
-	}
-
+	*out = *sum
 	return nil
 }
 
-// Summary provides a summary of the AppNode.
-func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
-	defer rpcutil.LogCall(r.log, "Summary", nil)(out, &err)
+// Overview provides a overview of the AppNode.
+func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
+	defer rpcutil.LogCall(r.log, "Overview", nil)(out, &err)
 
-	summary, err := r.visor.Summary()
-	if summary != nil {
-		*out = *summary
+	overview, err := r.visor.Overview()
+	if overview != nil {
+		*out = *overview
 	}
 
 	return err
@@ -544,5 +513,12 @@ func (r *RPC) UpdateStatus(_ *struct{}, status *string) (err error) {
 // RuntimeLogs returns visor runtime logs
 func (r *RPC) RuntimeLogs(_ *struct{}, logs *string) (err error) {
 	*logs, err = r.visor.RuntimeLogs()
+	return
+}
+
+// SetMinHops sets min_hops from visor's routing config
+func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
+	err = r.visor.SetMinHops(*n)
 	return
 }

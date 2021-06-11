@@ -84,6 +84,9 @@ func GetLogger(r *http.Request) logrus.FieldLogger {
 	return logging.NewMasterLogger()
 }
 
+// todo: investigate if it's used throughout the services (didn't work properly for UT)
+// remove and use structured logging
+
 // SetLoggerMiddleware sets logger to context of HTTP requests.
 func SetLoggerMiddleware(log logrus.FieldLogger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

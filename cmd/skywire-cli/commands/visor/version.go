@@ -16,12 +16,12 @@ var buildInfoCmd = &cobra.Command{
 	Short: "Obtains version and build info of the node",
 	Run: func(_ *cobra.Command, _ []string) {
 		client := rpcClient()
-		summary, err := client.Summary()
+		overview, err := client.Overview()
 		if err != nil {
 			log.Fatal("Failed to connect:", err)
 		}
 
-		if _, err := summary.BuildInfo.WriteTo(os.Stdout); err != nil {
+		if _, err := overview.BuildInfo.WriteTo(os.Stdout); err != nil {
 			log.Fatal("Failed to output build info:", err)
 		}
 	},
