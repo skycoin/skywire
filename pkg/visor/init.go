@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
-	"github.com/skycoin/dmsg"
-	dmsgnetutil "github.com/skycoin/dmsg/netutil"
-
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
+	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -25,13 +25,16 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	vinit "github.com/skycoin/skywire/pkg/visor/visorinit"
@@ -63,8 +66,10 @@ var (
 	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
-	// Transport setup
+	// Transport manager
 	tr vinit.Module
+	// Transport setup
+	trs vinit.Module
 	// Routing system
 	rt vinit.Module
 	// Application launcer
@@ -75,8 +80,10 @@ var (
 	hvs vinit.Module
 	// Uptime tracker
 	ut vinit.Module
-	// Trusted visors
-	trv vinit.Module
+	// Public visors: automatically establish connections to public visors
+	pvs vinit.Module
+	// Public visor: advertise current visor as public
+	pv vinit.Module
 	// hypervisor module
 	hv vinit.Module
 	// dmsg ctrl
@@ -101,15 +108,16 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
 	tr = maker("transport", initTransport, &sn, &ebc)
+	trs = maker("transport_setup", initTransportSetup, &sn, &tr)
 	rt = maker("router", initRouter, &tr, &sn)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &sn)
 	ut = maker("uptime_tracker", initUptimeTracker)
-	trv = maker("trusted_visors", initTrustedVisors, &tr)
-
+	pv = maker("public_visors", initPublicVisors, &tr)
+	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &trv, &dmsgCtrl)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -183,8 +191,6 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
 		NetworkConfigs: nc,
-		ServiceDisc:    v.serviceDisc,
-		PublicTrusted:  v.conf.PublicTrustedVisor,
 	}
 
 	n, err := snet.New(conf, v.ebc)
@@ -229,7 +235,6 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 }
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
@@ -237,25 +242,11 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	var logS transport.LogStore
-	switch conf.LogStore.Type {
-	case visorconfig.FileLogStore:
-		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
-		if err != nil {
-			err := fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err)
-			return err
-		}
-	case visorconfig.MemoryLogStore:
-		logS = transport.InMemoryTransportLogStore()
-	default:
-		err := fmt.Errorf("invalid log store type: %s", conf.LogStore.Type)
-		return err
-	}
+	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
 		PubKey:          v.conf.PK,
 		SecKey:          v.conf.SK,
-		DefaultVisors:   conf.TrustedVisors,
 		DiscoveryClient: tpdC,
 		LogStore:        logS,
 	}
@@ -295,6 +286,21 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.tpM = tpM
 	v.initLock.Unlock()
+	return nil
+}
+
+func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	ts, err := ts.NewTransportListener(ctx, v.conf, v.net.Dmsg(), v.tpM)
+	if err != nil {
+		cancel()
+		return err
+	}
+	go ts.Serve(ctx)
+	v.pushCloseStack("transport_setup.rpc", func() error {
+		cancel()
+		return nil
+	})
 	return nil
 }
 
@@ -382,7 +388,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
+		LocalPath:  v.conf.LocalPath,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
@@ -565,28 +571,83 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-func initTrustedVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const trustedVisorsTransportType = tptypes.STCPR
+// this service is not considered critical and always returns true
+// advertise this visor as public in service discovery
+func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
+	if !v.conf.IsPublic {
+		return nil
+	}
 
-	go func() {
-		time.Sleep(transport.TrustedVisorsDelay)
-		for _, pk := range v.tpM.Conf.DefaultVisors {
-			v.log.WithField("pk", pk).Infof("Adding trusted visor")
-
-			if _, err := v.tpM.SaveTransport(context.Background(), pk, trustedVisorsTransportType, transport.LabelAutomatic); err != nil {
-				v.log.
-					WithError(err).
-					WithField("pk", pk).
-					WithField("type", trustedVisorsTransportType).
-					Warnf("Failed to add transport to trusted visor via")
-			} else {
-				v.log.
-					WithField("pk", pk).
-					WithField("type", trustedVisorsTransportType).
-					Infof("Added transport to trusted visor")
-			}
+	// retrieve interface IPs and check if at least one is public
+	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	if err != nil {
+		return nil
+	}
+	var found bool
+	for _, IP := range defaultIPs {
+		if netutil.IsPublicIP(IP) {
+			found = true
+			break
 		}
-	}()
+	}
+	if !found {
+		return nil
+	}
+
+	// todo: consider moving this to transport into some helper function
+	stcpr, ok := v.net.STcpr()
+	if !ok {
+		return nil
+	}
+	la, err := stcpr.LocalAddr()
+	if err != nil {
+		log.WithError(err).Errorln("Failed to get STCPR local addr")
+		return nil
+	}
+	_, portStr, err := net.SplitHostPort(la.String())
+	if err != nil {
+		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		return nil
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to convert port to int")
+		return nil
+	}
+
+	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
+	visorUpdater.Start()
+
+	v.log.Infof("Sent request to register visor as public")
+	v.pushCloseStack("visor updater", func() error {
+		visorUpdater.Stop()
+		return nil
+	})
+	return nil
+}
+
+func initPublicVisors(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if !v.conf.Transport.AutoconnectPublic {
+		return nil
+	}
+	proxyDisc := v.conf.Launcher.Discovery.ServiceDisc
+	if proxyDisc == "" {
+		proxyDisc = skyenv.DefaultServiceDiscAddr
+	}
+
+	// todo: refactor appdisc: split connecting to services in appdisc and
+	// advertising oneself as a service. Currently, config is tailored to
+	// advertising oneself and requires things like port that are not used
+	// in connecting to services
+	conf := servicedisc.Config{
+		Type:     servicedisc.ServiceTypeVisor,
+		PK:       v.conf.PK,
+		SK:       v.conf.SK,
+		Port:     uint16(0),
+		DiscAddr: proxyDisc,
+	}
+	connector := servicedisc.MakeConnector(conf, 5, v.tpM, log)
+	go connector.Run(ctx) //nolint:errcheck
 
 	return nil
 }

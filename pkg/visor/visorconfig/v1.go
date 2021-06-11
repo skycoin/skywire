@@ -19,12 +19,18 @@ const V100Name = "v1.0.0"
 
 // V110Name is the semantic version string for v1.1.0.
 // Added MinHops field to V1Routing section of config
+// Removed public_trusted_visor field from root section
+// Removed trusted_visors field from transport section
+// Added is_public field to root section
+// Added public_autoconnect field to transport section
+// Added transport_setup_nodes field to transport section
+// Removed authorization_file field from dmsgpty section
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
 const V1Name = V110Name
 
-// V1 is visor config v1.0.0
+// V1 is visor config
 type V1 struct {
 	*Common
 	mu sync.RWMutex
@@ -41,28 +47,27 @@ type V1 struct {
 	CLIAddr     string          `json:"cli_addr"`
 
 	LogLevel          string   `json:"log_level"`
+	LocalPath         string   `json:"local_path"`
 	ShutdownTimeout   Duration `json:"shutdown_timeout,omitempty"`    // time value, examples: 10s, 1m, etc
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
-
-	PublicTrustedVisor bool `json:"public_trusted_visor,omitempty"`
+	IsPublic          bool     `json:"is_public"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
 
 // V1Dmsgpty configures the dmsgpty-host.
 type V1Dmsgpty struct {
-	Port     uint16 `json:"port"`
-	AuthFile string `json:"authorization_file"`
-	CLINet   string `json:"cli_network"`
-	CLIAddr  string `json:"cli_address"`
+	Port    uint16 `json:"port"`
+	CLINet  string `json:"cli_network"`
+	CLIAddr string `json:"cli_address"`
 }
 
 // V1Transport defines a transport config.
 type V1Transport struct {
-	Discovery       string          `json:"discovery"`
-	AddressResolver string          `json:"address_resolver"`
-	LogStore        *V1LogStore     `json:"log_store"`
-	TrustedVisors   []cipher.PubKey `json:"trusted_visors"`
+	Discovery         string          `json:"discovery"`
+	AddressResolver   string          `json:"address_resolver"`
+	AutoconnectPublic bool            `json:"public_autoconnect"`
+	TransportSetup    []cipher.PubKey `json:"transport_setup_nodes"`
 }
 
 // V1LogStore configures a LogStore.
@@ -97,7 +102,6 @@ type V1Launcher struct {
 	Apps       []launcher.AppConfig `json:"apps"`
 	ServerAddr string               `json:"server_addr"`
 	BinPath    string               `json:"bin_path"`
-	LocalPath  string               `json:"local_path"`
 }
 
 // Flush flushes the config to file (if specified).
@@ -164,6 +168,15 @@ func (v1 *V1) UpdateAppArg(launch *launcher.Launcher, appName, argName string, v
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 	})
+
+	return v1.flush(v1)
+}
+
+// UpdateMinHops updates min_hops config
+func (v1 *V1) UpdateMinHops(hops uint16) error {
+	v1.mu.Lock()
+	v1.Routing.MinHops = hops
+	v1.mu.Unlock()
 
 	return v1.flush(v1)
 }

@@ -301,7 +301,7 @@ func ensureDir(path *string) error {
 	if _, err := os.Stat(*path); !os.IsNotExist(err) {
 		return nil
 	}
-	if err := os.MkdirAll(*path, 0750); err != nil {
+	if err := os.MkdirAll(*path, 0707); err != nil {
 		return fmt.Errorf("failed to create dir: %s", err)
 	}
 	return nil
@@ -312,7 +312,7 @@ func ensureDir(path *string) error {
 */
 
 func (l *Launcher) pidFile() (*os.File, error) {
-	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0600)
+	return os.OpenFile(filepath.Join(l.conf.LocalPath, appsPIDFileName), os.O_RDWR|os.O_CREATE, 0606) //nolint:gosec
 }
 
 func (l *Launcher) persistPID(appName string, pid appcommon.ProcID) error {
