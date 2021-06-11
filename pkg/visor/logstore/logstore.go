@@ -1,6 +1,8 @@
 package logstore
 
 import (
+	"sync"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -10,7 +12,7 @@ const LogRealLineKey = "log_line"
 
 // Store is in-memory log store that returns all logs as a single string
 type Store interface {
-	// get logs returns stored logs and the number of log entries overwritten
+	// GetLogs returns stored logs and the number of log entries overwritten
 	// due to insufficient capacity.
 	// returned number n means that n log entries have been dropped and the oldest
 	// log entry is (n+1)th
@@ -29,6 +31,7 @@ func MakeStore(max int) (Store, logrus.Hook) {
 }
 
 type store struct {
+	mu sync.RWMutex
 	// max number of entries to hold simultaneously
 	cap int64
 	// number of the next entry to come (also number of entries processed since the beginning)
@@ -67,6 +70,8 @@ func (s *store) Levels() []logrus.Level {
 // Fire implements logrus.Hook interface to process new log entry
 // that we simply store
 func (s *store) Fire(entry *logrus.Entry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	idx := s.entryNum % s.cap
 	e := entry.WithField(LogRealLineKey, s.entryNum+1)
 	e.Level = entry.Level

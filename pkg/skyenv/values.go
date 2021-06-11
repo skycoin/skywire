@@ -36,20 +36,19 @@ const (
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
-	DmsgCtrlPort       uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
-	DmsgSetupPort      uint16 = 36  // Listening port of a setup node.
-	DmsgAwaitSetupPort uint16 = 136 // Listening port of a visor for setup operations.
-	DmsgTransportPort  uint16 = 45  // Listening port of a visor for incoming transports.
-	DmsgHypervisorPort uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
+	DmsgCtrlPort           uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
+	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
+	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
+	DmsgTransportPort      uint16 = 45  // Listening port of a visor for incoming transports.
+	DmsgHypervisorPort     uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
+	DmsgTransportSetupPort uint16 = 47
 )
 
 // Default dmsgpty constants.
 const (
-	DmsgPtyPort uint16 = 22
-
-	DefaultDmsgPtyCLINet    = "unix"
-	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
-	DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
+	DmsgPtyPort           uint16 = 22
+	DefaultDmsgPtyCLINet         = "unix"
+	DefaultDmsgPtyCLIAddr        = "/tmp/dmsgpty.sock"
 )
 
 // Default STCP constants.
@@ -89,15 +88,14 @@ const (
 // Default skywire app server and discovery constants
 const (
 	DefaultAppSrvAddr     = "localhost:5505"
-	AppDiscUpdateInterval = 30 * time.Second
-	DefaultAppLocalPath   = DefaultSkywirePath + "/local"
+	AppDiscUpdateInterval = time.Minute
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
 )
 
-// Default routing constants
+// Default local constants
 const (
-	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
+	DefaultLocalPath = DefaultSkywirePath + "/local"
 )
 
 // Default hypervisor constants

@@ -97,7 +97,6 @@
         "label": "Label:",
         "public-key": "Public key:",
         "ip": "IP:",
-        "port": "Port:",
         "dmsg-server": "DMSG server:",
         "ping": "Ping:",
         "node-version": "Visor version:",
@@ -114,8 +113,14 @@
           "weeks": "{{ time }} weeks"
         }
       },
+      "router-info": {
+        "title": "Router Info",
+        "min-hops": "Min hops:",
+        "max-hops": "Max hops:",
+        "change-config-button": "Change configuration"
+      },
       "node-health": {
-        "title": "Health info",
+        "title": "Health Info",
         "status": "Status:",
         "transport-discovery": "Transport discovery:",
         "route-finder": "Route finder:",
@@ -132,6 +137,14 @@
       "routing": "Routing"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
+  },
+
+  "router-config": {
+    "title": "Router Configuration",
+    "info": "Here you can configure how many hops the connections must pass through other Skywire visors before reaching the final destination. NOTE: the changes will not affect the existing routes.",
+    "min-hops": "Min hops",
+    "save-config-button": "Save configuration",
+    "done": "Changes saved."
   },
 
   "nodes": {
@@ -242,7 +255,8 @@
       "terminal": "Terminal",
       "config": "Configuration",
       "update": "Update",
-      "reboot": "Reboot"
+      "reboot": "Reboot",
+      "logs": "View logs"
     },
     "reboot": {
       "confirmation": "Are you sure you want to reboot the visor?",
