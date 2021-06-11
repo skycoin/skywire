@@ -34,15 +34,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	var wl dmsgpty.Whitelist
-	if conf.AuthFile == "" {
-		wl = dmsgpty.NewMemoryWhitelist()
-	} else {
-		var err error
-		if wl, err = dmsgpty.NewJSONFileWhiteList(v.conf.Dmsgpty.AuthFile); err != nil {
-			return err
-		}
-	}
+	wl := dmsgpty.NewMemoryWhitelist()
 
 	// Ensure hypervisors are added to the whitelist.
 	if err := wl.Add(v.conf.Hypervisors...); err != nil {
