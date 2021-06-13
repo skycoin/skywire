@@ -11,7 +11,7 @@ import (
 
 const (
 	tmpSuffix      = ".tmp"
-	ownerRW        = 0600
+	ownerRWOtherRW = 0606
 	userRWXGroupRX = 0750
 )
 
@@ -41,15 +41,11 @@ func AtomicWriteFile(filename string, data []byte) error {
 		}
 	}
 
-	if err := ioutil.WriteFile(tempFilePath, data, ownerRW); err != nil {
+	if err := ioutil.WriteFile(tempFilePath, data, ownerRWOtherRW); err != nil {
 		return err
 	}
 
-	if err := rename.Rename(tempFilePath, filename); err != nil {
-		return err
-	}
-
-	return nil
+	return rename.Rename(tempFilePath, filename)
 }
 
 // AtomicAppendToFile calls AtomicWriteFile but appends new data to destiny file

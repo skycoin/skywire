@@ -12,7 +12,7 @@ const LogRealLineKey = "log_line"
 
 // Store is in-memory log store that returns all logs as a single string
 type Store interface {
-	// get logs returns stored logs and the number of log entries overwritten
+	// GetLogs returns stored logs and the number of log entries overwritten
 	// due to insufficient capacity.
 	// returned number n means that n log entries have been dropped and the oldest
 	// log entry is (n+1)th
