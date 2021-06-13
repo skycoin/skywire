@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/AudriusButkevicius/pfilter v0.0.0-20210515103320-4b4b86609d51
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
-	github.com/VictoriaMetrics/metrics v1.12.3
+	github.com/VictoriaMetrics/metrics v1.17.2
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.11 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible
@@ -13,6 +13,7 @@ require (
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
+	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/klauspost/reedsolomon v1.9.9 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2
 	github.com/mattn/go-colorable v0.1.8 // indirect
@@ -22,8 +23,8 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil v2.20.5+incompatible
-	github.com/sirupsen/logrus v1.7.0
-	github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14
+	github.com/sirupsen/logrus v1.8.1
+	github.com/skycoin/dmsg v0.0.0-20210607131549-0c02e58ac5ee
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
@@ -37,12 +38,11 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	go.etcd.io/bbolt v1.3.5
-	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9 // indirect
-	golang.org/x/mod v0.4.2 // indirect
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974
-	golang.org/x/sys v0.0.0-20210420205809-ac73e9fd8988
-	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf // indirect
-	golang.org/x/tools v0.1.0 // indirect
+	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a // indirect
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
+	golang.org/x/sys v0.0.0-20210608053332-aa57babbf139
+	golang.org/x/term v0.0.0-20210503060354-a79de5458b56 // indirect
+	golang.org/x/tools v0.1.2 // indirect
 	golang.zx2c4.com/wireguard v0.0.20200320
 	nhooyr.io/websocket v1.8.2
 )
