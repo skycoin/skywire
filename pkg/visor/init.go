@@ -32,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
@@ -65,8 +66,10 @@ var (
 	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
-	// Transport setup
+	// Transport manager
 	tr vinit.Module
+	// Transport setup
+	trs vinit.Module
 	// Routing system
 	rt vinit.Module
 	// Application launcer
@@ -105,6 +108,7 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
 	tr = maker("transport", initTransport, &sn, &ebc)
+	trs = maker("transport_setup", initTransportSetup, &sn, &tr)
 	rt = maker("router", initRouter, &tr, &sn)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
 	cli = maker("cli", initCLI)
@@ -113,7 +117,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pv = maker("public_visors", initPublicVisors, &tr)
 	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -231,7 +235,6 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 }
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
@@ -239,20 +242,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	var logS transport.LogStore
-	switch conf.LogStore.Type {
-	case visorconfig.FileLogStore:
-		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
-		if err != nil {
-			err := fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err)
-			return err
-		}
-	case visorconfig.MemoryLogStore:
-		logS = transport.InMemoryTransportLogStore()
-	default:
-		err := fmt.Errorf("invalid log store type: %s", conf.LogStore.Type)
-		return err
-	}
+	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
 		PubKey:          v.conf.PK,
@@ -296,6 +286,21 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.tpM = tpM
 	v.initLock.Unlock()
+	return nil
+}
+
+func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	ts, err := ts.NewTransportListener(ctx, v.conf, v.net.Dmsg(), v.tpM)
+	if err != nil {
+		cancel()
+		return err
+	}
+	go ts.Serve(ctx)
+	v.pushCloseStack("transport_setup.rpc", func() error {
+		cancel()
+		return nil
+	})
 	return nil
 }
 
@@ -383,7 +388,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
+		LocalPath:  v.conf.LocalPath,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")

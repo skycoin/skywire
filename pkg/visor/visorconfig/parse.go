@@ -35,8 +35,6 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 
 	switch cc.Version {
 	// parse any v1-compatible version with v1 parse procedure
-	case V111Name:
-		fallthrough
 	case V110Name:
 		fallthrough
 	case V100Name:
@@ -50,7 +48,6 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 
 func parseV1(cc *Common, raw []byte) (*V1, error) {
 	conf := MakeBaseConfig(cc)
-
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(&conf); err != nil {
 		return nil, err
@@ -59,6 +56,7 @@ func parseV1(cc *Common, raw []byte) (*V1, error) {
 	if err := conf.ensureKeys(); err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
+	conf.Version = V1Name
 	return conf, conf.flush(conf)
 }
 
@@ -104,7 +102,6 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 
 	if old.Transport != nil {
 		conf.Transport.Discovery = old.Transport.Discovery
-		conf.Transport.LogStore = old.Transport.LogStore
 	}
 
 	if old.Routing != nil {
@@ -140,8 +137,8 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 
 	conf.Launcher.Apps = append(conf.Launcher.Apps, vpnApps...)
 
+	conf.LocalPath = old.LocalPath
 	conf.Launcher.BinPath = old.AppsPath
-	conf.Launcher.LocalPath = old.LocalPath
 	conf.Launcher.ServerAddr = old.AppServerAddr
 
 	for _, hv := range old.Hypervisors {

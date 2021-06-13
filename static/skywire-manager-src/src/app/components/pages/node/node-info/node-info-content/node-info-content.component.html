@@ -43,6 +43,20 @@
     </span>
   </div>
   <div class="separator"></div>
+  <!-- Router info section. -->
+  <div class="d-flex flex-column">
+    <span class="section-title">{{ 'node.details.router-info.title' | translate }}</span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.router-info.min-hops' | translate }}</span>
+      {{ node.minHops }}
+    </span>
+    <div class="router-button-container">
+      <app-button color="primary" (action)="changeRouterConfig()" [forDarkBackground]="true">
+        {{ 'node.details.router-info.change-config-button' | translate }}
+      </app-button>
+    </div>
+  </div>
+  <div class="separator"></div>
   <!-- Health info section. -->
   <div class="d-flex flex-column">
     <span class="section-title">{{ 'node.details.node-health.title' | translate }}</span>
