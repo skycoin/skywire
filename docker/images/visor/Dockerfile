@@ -18,7 +18,9 @@ RUN apk add --no-cache make && \
     make host-apps && \
     make build-deploy && \
     cp ./apps/vpn-server /release/apps/ && \
-    cp ./apps/vpn-client /release/apps/
+    cp ./apps/vpn-client /release/apps/ && \
+		cp ./apps/skysocks /release/apps/ && \
+		cp ./apps/skychat /release/apps/ 
 
 ## Resulting image
 FROM ${base} as visor-runner
