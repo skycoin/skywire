@@ -17,10 +17,11 @@ RUN apk add --no-cache make && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
     make host-apps && \
     make build-deploy && \
-    cp ./apps/vpn-server /release/apps/ && \
-    cp ./apps/vpn-client /release/apps/ && \
-		cp ./apps/skysocks /release/apps/ && \
-		cp ./apps/skychat /release/apps/ 
+    mkdir -p /apps && \
+    cp ./apps/vpn-server /apps/ && \
+    cp ./apps/vpn-client /apps/ && \
+	cp ./apps/skysocks /apps/ && \
+	cp ./apps/skychat /apps/
 
 ## Resulting image
 FROM ${base} as visor-runner
@@ -28,6 +29,7 @@ FROM ${base} as visor-runner
 COPY --from=builder /skywire/docker/images/visor/install-preq.sh /release/install-preq.sh
 COPY --from=builder /skywire/docker/images/visor/entrypoint.sh /entrypoint.sh
 COPY --from=builder /release /release
+COPY --from=builder /apps /apps
 
 RUN sh -c /release/install-preq.sh \
     && rm -rf /release/install-preq.sh \
