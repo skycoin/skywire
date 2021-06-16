@@ -12,7 +12,18 @@ const (
 	PackageSkywirePath = "/opt/skywire"
 )
 
-// Constants for default services.
+// Constants for old default services.
+const (
+	OldDefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
+	OldDefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
+	OldDefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
+	OldDefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
+	OldDefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
+	OldDefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+	OldDefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
+)
+
+// Constants for new default services.
 const (
 	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
 	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
