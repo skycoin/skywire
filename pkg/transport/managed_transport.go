@@ -36,10 +36,11 @@ var (
 
 // Constants associated with transport redial loop.
 const (
-	tpInitBO = time.Millisecond * 500
-	tpMaxBO  = time.Minute
-	tpTries  = 0
-	tpFactor = 2
+	tpInitBO  = time.Millisecond * 500
+	tpMaxBO   = time.Minute
+	tpTries   = 0
+	tpFactor  = 2
+	tpTimeout = time.Second * 3 // timeout for a sigle try
 )
 
 // ManagedTransportConfig is a configuration for managed transport.
@@ -371,9 +372,11 @@ func (mt *ManagedTransport) redialLoop(ctx context.Context) error {
 
 	// Only redial when there is no underlying conn.
 	return retry.Do(ctx, func() (err error) {
+		tryCtx, cancel := context.WithTimeout(ctx, tpTimeout)
+		defer cancel()
 		mt.connMx.Lock()
 		if mt.conn == nil {
-			err = mt.redial(ctx)
+			err = mt.redial(tryCtx)
 		}
 		mt.connMx.Unlock()
 		return err
