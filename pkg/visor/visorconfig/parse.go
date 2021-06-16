@@ -163,11 +163,23 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 }
 
 func updateUrls(conf *V1) *V1 {
-	conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
-	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
-	conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
-	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
-	conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
-	conf.Launcher.Discovery.ServiceDisc = skyenv.DefaultServiceDiscAddr
+	if conf.Dmsg.Discovery == skyenv.OldDefaultDmsgDiscAddr {
+		conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+	}
+	if conf.Transport.Discovery == skyenv.OldDefaultTpDiscAddr {
+		conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	}
+	if conf.Transport.AddressResolver == skyenv.DefaultAddressResolverAddr {
+		conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
+	}
+	if conf.Routing.RouteFinder == skyenv.DefaultRouteFinderAddr {
+		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	}
+	if conf.UptimeTracker.Addr == skyenv.DefaultUptimeTrackerAddr {
+		conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
+	}
+	if conf.Launcher.Discovery.ServiceDisc == skyenv.DefaultServiceDiscAddr {
+		conf.Launcher.Discovery.ServiceDisc = skyenv.DefaultServiceDiscAddr
+	}
 	return conf
 }
