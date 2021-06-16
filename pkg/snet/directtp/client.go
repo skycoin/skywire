@@ -265,7 +265,7 @@ func (c *client) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tp
 
 		c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
 
-		conn, err := c.dialVisor(visorData)
+		conn, err := c.dialVisor(ctx, visorData)
 		if err != nil {
 			return nil, err
 		}
@@ -304,6 +304,20 @@ func (c *client) dial(addr string) (net.Conn, error) {
 	switch c.conf.Type {
 	case tptypes.STCP, tptypes.STCPR:
 		return net.Dial("tcp", addr)
+
+	case tptypes.SUDPH:
+		return c.dialUDPWithTimeout(addr)
+
+	default:
+		return nil, ErrUnknownTransportType
+	}
+}
+
+func (c *client) dialContext(ctx context.Context, addr string) (net.Conn, error) {
+	dialer := net.Dialer{}
+	switch c.conf.Type {
+	case tptypes.STCP, tptypes.STCPR:
+		return dialer.DialContext(ctx, "tcp", addr)
 
 	case tptypes.SUDPH:
 		return c.dialUDPWithTimeout(addr)
@@ -405,7 +419,7 @@ func (c *client) dialUDPWithTimeout(addr string) (net.Conn, error) {
 	}
 }
 
-func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
+func (c *client) dialVisor(ctx context.Context, visorData arclient.VisorData) (net.Conn, error) {
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
@@ -416,7 +430,7 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 				}
 			}
 
-			conn, err := c.dial(addr)
+			conn, err := c.dialContext(ctx, addr)
 			if err == nil {
 				return conn, nil
 			}
@@ -434,7 +448,7 @@ func (c *client) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
 		}
 	}
 
-	return c.dial(addr)
+	return c.dialContext(ctx, addr)
 }
 
 // Listen creates a new listener for sudp.
