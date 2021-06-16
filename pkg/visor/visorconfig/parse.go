@@ -34,7 +34,9 @@ func Parse(log *logging.MasterLogger, path string, raw []byte) (*V1, error) {
 	}
 
 	switch cc.Version {
-	case V1Name: // Current version.
+	case V101Name: // Current version.
+		fallthrough
+	case V100Name:
 		return parseV1(cc, raw)
 	case V0Name, V0NameOldFormat, "":
 		return parseV0(cc, raw)
@@ -55,6 +57,10 @@ func parseV1(cc *Common, raw []byte) (*V1, error) {
 	if err := conf.ensureKeys(); err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrInvalidSK, err)
 	}
+
+	conf = updateUrls(conf)
+
+	conf.Version = V1Name
 	return conf, conf.flush(conf)
 }
 
@@ -154,4 +160,14 @@ func parseV0(cc *Common, raw []byte) (*V1, error) {
 	conf.RestartCheckDelay = old.RestartCheckDelay
 
 	return conf, conf.flush(conf)
+}
+
+func updateUrls(conf *V1) *V1 {
+	conf.Dmsg.Discovery = skyenv.DefaultDmsgDiscAddr
+	conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
+	conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
+	conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
+	conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
+	conf.Launcher.Discovery.ServiceDisc = skyenv.DefaultServiceDiscAddr
+	return conf
 }
