@@ -91,7 +91,7 @@ const (
 // Default skywire app server and discovery constants
 const (
 	DefaultAppSrvAddr     = "localhost:5505"
-	AppDiscUpdateInterval = 30 * time.Second
+	AppDiscUpdateInterval = time.Minute
 	DefaultAppLocalPath   = DefaultSkywirePath + "/local"
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
