@@ -14,12 +14,12 @@ const (
 
 // Constants for default services.
 const (
-	DefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
-	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
+	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
+	DefaultServiceDiscAddr     = "http://sd.skycoin.com"
+	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
+	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
+	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
 	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
