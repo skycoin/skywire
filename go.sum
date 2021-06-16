@@ -195,10 +195,6 @@ github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPx
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.7.0 h1:ShrD1U9pZB12TX0cVy0DtePoCH97K8EtX+mg7ZARUtM=
 github.com/sirupsen/logrus v1.7.0/go.mod h1:yWOB1SBYBC5VeMP7gHvWumXLIWorT60ONWic61uBYv0=
-github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14 h1:ettvdRq5O1+bx1wIZPS9w+BnjzTxhZeNItDgwYI8KHs=
-github.com/skycoin/dmsg v0.0.0-20201216183836-dae8a7acfc14/go.mod h1:aP/e1DEQQ16i5AzHy2e+2EFYT3ZN/sIyWRY0js56yY8=
-github.com/skycoin/dmsg v0.0.0-20210616081803-f3bc8dff3383 h1:EEM882F+rZJKYo2pdP6FgP26rKFw5/5VUL19z2Qtan8=
-github.com/skycoin/dmsg v0.0.0-20210616081803-f3bc8dff3383/go.mod h1:tR/47K4BLJ2MT6eyE2BCxcXHLUhfnWiDhgE1OQmtA70=
 github.com/skycoin/dmsg v0.0.0-20210616115957-702a819a9b3d h1:39KtADgOPhnUuATKBA59uB2BmzhtOzjeK11aOM+LEyw=
 github.com/skycoin/dmsg v0.0.0-20210616115957-702a819a9b3d/go.mod h1:tR/47K4BLJ2MT6eyE2BCxcXHLUhfnWiDhgE1OQmtA70=
 github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6 h1:1Nc5EBY6pjfw1kwW0duwyG+7WliWz5u9kgk1h5MnLuA=
