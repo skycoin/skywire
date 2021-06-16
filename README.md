@@ -25,7 +25,7 @@ $ cd skywire
 $ make build; make install
 
 # OR build docker image
-$ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev HEAD) -b
+$ ./ci_scripts/docker-push.sh -t $(git rev-parse --abbrev-ref HEAD) -b
 ```
 
 Skywire can be statically built. For instructions check [the docs](docs/static-builds.md).
@@ -44,7 +44,7 @@ Docker container will create config automatically for you, should you want to ru
 
 ```bash
 $ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:latest skywire-cli gen-config --is-hypervisor
+  skycoin/skywire:test skywire-cli gen-config --is-hypervisor
 ```
 
 After starting up the visor, the UI will be exposed by default on `localhost:8000`.
@@ -62,8 +62,7 @@ Or from docker image:
 
 ```bash
 $ docker run --rm -v <YOUR_CONFIG_DIR>:/opt/skywire \
-  skycoin/skywire:latest skywire-cli update-config hypervisor-pks <public-key>
-
+  skycoin/skywire:test skywire-cli update-config hypervisor-pks <public-key>
 ```
 
 ## Run `skywire-visor`
@@ -80,7 +79,10 @@ $ sudo skywire-visor -c skywire-config.json
 Or from docker image:
 
 ```bash
-docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:latest skywire-visor
+# with custom config mounted on docker volume
+$ docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire skycoin/skywire:test skywire-visor -c /opt/skywire/<YOUR_CONFIG_NAME>.json
+# without custom config (config is automatically generated)
+$ docker run --rm -p 8000:8000 --name=skywire skycoin/skywire:test skywire-visor
 ```
 
 `skywire-visor` can be run on Windows. The setup requires additional setup steps that are specified
