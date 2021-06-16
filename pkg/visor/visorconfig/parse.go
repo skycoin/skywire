@@ -169,16 +169,16 @@ func updateUrls(conf *V1) *V1 {
 	if conf.Transport.Discovery == skyenv.OldDefaultTpDiscAddr {
 		conf.Transport.Discovery = skyenv.DefaultTpDiscAddr
 	}
-	if conf.Transport.AddressResolver == skyenv.DefaultAddressResolverAddr {
+	if conf.Transport.AddressResolver == skyenv.OldDefaultAddressResolverAddr {
 		conf.Transport.AddressResolver = skyenv.DefaultAddressResolverAddr
 	}
-	if conf.Routing.RouteFinder == skyenv.DefaultRouteFinderAddr {
+	if conf.Routing.RouteFinder == skyenv.OldDefaultRouteFinderAddr {
 		conf.Routing.RouteFinder = skyenv.DefaultRouteFinderAddr
 	}
-	if conf.UptimeTracker.Addr == skyenv.DefaultUptimeTrackerAddr {
+	if conf.UptimeTracker.Addr == skyenv.OldDefaultUptimeTrackerAddr {
 		conf.UptimeTracker.Addr = skyenv.DefaultUptimeTrackerAddr
 	}
-	if conf.Launcher.Discovery.ServiceDisc == skyenv.DefaultServiceDiscAddr {
+	if conf.Launcher.Discovery.ServiceDisc == skyenv.OldDefaultServiceDiscAddr {
 		conf.Launcher.Discovery.ServiceDisc = skyenv.DefaultServiceDiscAddr
 	}
 	return conf
