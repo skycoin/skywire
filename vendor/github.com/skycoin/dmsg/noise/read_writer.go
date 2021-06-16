@@ -42,6 +42,7 @@ type netError struct {
 func (e *netError) Error() string   { return e.err.Error() }
 func (e *netError) Timeout() bool   { return e.timeout }
 func (e *netError) Temporary() bool { return e.temp }
+func (e *netError) Unwrap() error   { return e.err }
 
 // ReadWriter implements noise encrypted read writer.
 type ReadWriter struct {
