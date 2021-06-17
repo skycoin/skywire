@@ -205,8 +205,8 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 				continue
 			}
 
-			// Only least significant edge is responsible for redialing.
-			if !mt.isLeastSignificantEdge() {
+			// Only initiator is responsible for redialing.
+			if !mt.isInitiator() {
 				continue
 			}
 
@@ -384,6 +384,11 @@ func (mt *ManagedTransport) redialLoop(ctx context.Context) error {
 }
 
 func (mt *ManagedTransport) isLeastSignificantEdge() bool {
+	sorted := SortEdges(mt.Entry.Edges[0], mt.Entry.Edges[1])
+	return sorted[0] == mt.n.LocalPK()
+}
+
+func (mt *ManagedTransport) isInitiator() bool {
 	return mt.Entry.EdgeIndex(mt.n.LocalPK()) == 0
 }
 
