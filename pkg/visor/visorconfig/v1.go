@@ -17,6 +17,9 @@ import (
 // V100Name is the semantic version string for v1.0.0.
 const V100Name = "v1.0.0"
 
+// V100Name is the semantic version string for v1.0.1.
+const V101Name = "v1.0.1"
+
 // V110Name is the semantic version string for v1.1.0.
 // Added MinHops field to V1Routing section of config
 // Removed public_trusted_visor field from root section
@@ -25,6 +28,7 @@ const V100Name = "v1.0.0"
 // Added public_autoconnect field to transport section
 // Added transport_setup_nodes field to transport section
 // Removed authorization_file field from dmsgpty section
+// Default urls are changed to newer shortned ones
 const V110Name = "v1.1.0"
 
 // V1Name is the semantic version string for the most recent version of V1.
