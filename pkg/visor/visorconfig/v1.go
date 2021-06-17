@@ -17,7 +17,7 @@ import (
 // V100Name is the semantic version string for v1.0.0.
 const V100Name = "v1.0.0"
 
-// V100Name is the semantic version string for v1.0.1.
+// V101Name is the semantic version string for v1.0.1.
 const V101Name = "v1.0.1"
 
 // V110Name is the semantic version string for v1.1.0.
