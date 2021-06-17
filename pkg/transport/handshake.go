@@ -14,6 +14,15 @@ import (
 	"github.com/skycoin/skywire/pkg/snet"
 )
 
+type hsResponse byte
+
+const (
+	responseOK hsResponse = iota
+	responseFailure
+	responseSignatureErr
+	responseInvalidEntry
+)
+
 func makeEntryFromTpConn(conn *snet.Conn) Entry {
 	return MakeEntry(conn.LocalPK(), conn.RemotePK(), conn.Network(), true, LabelUser)
 }
@@ -110,10 +119,18 @@ func MakeSettlementHS(init bool) SettlementHS {
 		if _, err := io.ReadFull(conn, accepted); err != nil {
 			return fmt.Errorf("failed to read response: %w", err)
 		}
-		if accepted[0] == 0 {
+		switch hsResponse(accepted[0]) {
+		case responseOK:
+			return nil
+		case responseFailure:
 			return fmt.Errorf("transport settlement rejected by remote")
+		case responseInvalidEntry:
+			return fmt.Errorf("invalid entry")
+		case responseSignatureErr:
+			return fmt.Errorf("signature error")
+		default:
+			return fmt.Errorf("invalid remote response")
 		}
-		return nil
 	}
 
 	// responding logic.
@@ -123,10 +140,12 @@ func MakeSettlementHS(init bool) SettlementHS {
 		// receive, verify and sign entry.
 		recvSE, err := receiveAndVerifyEntry(conn, &entry, conn.RemotePK())
 		if err != nil {
+			writeHsResponse(conn, responseInvalidEntry)
 			return err
 		}
 
 		if err := recvSE.Sign(conn.LocalPK(), sk); err != nil {
+			writeHsResponse(conn, responseSignatureErr)
 			return fmt.Errorf("failed to sign received entry: %w", err)
 		}
 
@@ -141,16 +160,18 @@ func MakeSettlementHS(init bool) SettlementHS {
 				log.WithError(err).Error("Failed to register transport.")
 			}
 		}
-
-		// inform initiating visor.
-		if _, err := conn.Write([]byte{1}); err != nil {
-			return fmt.Errorf("failed to accept transport settlement: write failed: %w", err)
-		}
-		return nil
+		return writeHsResponse(conn, responseOK)
 	}
 
 	if init {
 		return initHS
 	}
 	return respHS
+}
+
+func writeHsResponse(w io.Writer, response hsResponse) error {
+	if _, err := w.Write([]byte{byte(response)}); err != nil {
+		return fmt.Errorf("failed to accept transport settlement: write failed: %w", err)
+	}
+	return nil
 }
