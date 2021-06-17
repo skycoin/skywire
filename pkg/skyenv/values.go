@@ -12,14 +12,24 @@ const (
 	PackageSkywirePath = "/opt/skywire"
 )
 
-// Constants for default services.
+// Constants for old default services.
 const (
-	DefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
-	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+	OldDefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
+	OldDefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
+	OldDefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
+	OldDefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
+	OldDefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
+	OldDefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+)
+
+// Constants for new default services.
+const (
+	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
+	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
+	DefaultServiceDiscAddr     = "http://sd.skycoin.com"
+	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
+	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
+	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
 	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
