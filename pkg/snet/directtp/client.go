@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tplistener"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 const (
@@ -136,7 +137,14 @@ func (c *client) Serve() error {
 				c.log.Errorf("Failed to extract port from addr %v: %v", err)
 				return
 			}
-
+			hasPublic, err := netutil.HasPublicIP()
+			if err != nil {
+				c.log.Errorf("Failed to check for public IP: %v", err)
+			}
+			if !hasPublic {
+				c.log.Infof("Not binding STCPR: no public IP address found")
+				return
+			}
 			if err := c.conf.AddressResolver.BindSTCPR(context.Background(), port); err != nil {
 				c.log.Errorf("Failed to bind STCPR: %v", err)
 				return
