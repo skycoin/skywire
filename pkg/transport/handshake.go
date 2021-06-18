@@ -144,12 +144,12 @@ func MakeSettlementHS(init bool) SettlementHS {
 		// receive, verify and sign entry.
 		recvSE, err := receiveAndVerifyEntry(conn, &entry, conn.RemotePK())
 		if err != nil {
-			writeHsResponse(conn, responseInvalidEntry)
+			writeHsResponse(conn, responseInvalidEntry) //nolint:errcheck, gosec
 			return err
 		}
 
 		if err := recvSE.Sign(conn.LocalPK(), sk); err != nil {
-			writeHsResponse(conn, responseSignatureErr)
+			writeHsResponse(conn, responseSignatureErr) //nolint:errcheck, gosec
 			return fmt.Errorf("failed to sign received entry: %w", err)
 		}
 
