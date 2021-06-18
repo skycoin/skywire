@@ -17,8 +17,8 @@ import (
 type hsResponse byte
 
 const (
-	responseOK hsResponse = iota
-	responseFailure
+	responseFailure hsResponse = iota
+	responseOK
 	responseSignatureErr
 	responseInvalidEntry
 )
