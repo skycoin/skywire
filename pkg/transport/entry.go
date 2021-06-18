@@ -60,13 +60,6 @@ func MakeEntry(initiator, target cipher.PubKey, tpType string, public bool, labe
 	return entry
 }
 
-// SetEdges sets edges of Entry
-func (e *Entry) SetEdges(initiator, target cipher.PubKey) {
-	e.ID = MakeTransportID(initiator, target, e.Type)
-	e.Edges[0] = initiator
-	e.Edges[1] = target
-}
-
 // RemoteEdge returns the remote edge's public key.
 func (e *Entry) RemoteEdge(local cipher.PubKey) cipher.PubKey {
 	for _, pk := range e.Edges {
