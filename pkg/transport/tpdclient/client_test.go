@@ -45,7 +45,8 @@ func newTestEntry() *transport.Entry {
 		Type:   "dmsg",
 		Public: true,
 	}
-	entry.SetEdges(pk1, testPubKey)
+	entry.Edges[0] = pk1
+	entry.Edges[1] = testPubKey
 
 	return entry
 }
