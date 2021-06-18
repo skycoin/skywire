@@ -40,7 +40,7 @@ const (
 	tpMaxBO   = time.Minute
 	tpTries   = 0
 	tpFactor  = 2
-	tpTimeout = time.Second * 3 // timeout for a sigle try
+	tpTimeout = time.Second * 3 // timeout for a single try
 )
 
 // ManagedTransportConfig is a configuration for managed transport.
