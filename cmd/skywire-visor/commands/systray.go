@@ -50,3 +50,7 @@ func stopSystray(cancel context.CancelFunc) {
 		stopVisorWg.Wait()
 	})
 }
+
+func quitSystray() {
+	systray.Quit()
+}
