@@ -12,6 +12,7 @@ import (
 
 var (
 	stopVisorWg sync.WaitGroup
+	runSysTrayApp bool
 )
 
 func init() {
