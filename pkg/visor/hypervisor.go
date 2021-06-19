@@ -118,7 +118,9 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	}
 
 	// setup
+	hv.mu.Lock()
 	hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
+	hv.mu.Unlock()
 
 	for {
 		conn, err := lis.AcceptStream()
@@ -1377,9 +1379,12 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 			Conn: v,
 		}, true
 	}
+	hv.mu.Lock()
+	conn := hv.selfConn
+	hv.mu.Unlock()
 
 	return &httpCtx{
-		Conn: hv.selfConn,
+		Conn: conn,
 	}, true
 }
 
