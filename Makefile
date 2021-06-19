@@ -15,6 +15,7 @@ VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
+BRANCH := latest
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
@@ -163,7 +164,7 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
-github-release: sysroot ## Create a GitHub release
+github-release-systray: sysroot ## Create a GitHub release
 	docker run --rm --privileged \
 		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
 		-v /var/run/docker.sock:/var/run/docker.sock \
@@ -171,6 +172,12 @@ github-release: sysroot ## Create a GitHub release
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
 		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --rm-dist
+
+github-release:
+	goreleaser --rm-dist
+
+build-docker: ## Build docker image
+	./ci_scripts/docker-push.sh -t ${BRANCH} -b
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
