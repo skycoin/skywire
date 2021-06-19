@@ -1,3 +1,5 @@
+//+build systray
+
 package gui
 
 import (
@@ -214,7 +216,7 @@ func openHypervisor() error {
 
 	log.Infof("Opening hypervisor at %s", hvAddr)
 
-	if err := webbrowser.Open("http://golang.org"); err != nil {
+	if err := webbrowser.Open(hvAddr); err != nil {
 		return fmt.Errorf("failed to open link: %w", err)
 	}
 

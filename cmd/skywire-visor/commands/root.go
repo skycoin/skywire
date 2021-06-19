@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
 
-	"github.com/skycoin/skywire/internal/gui"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/syslog"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -43,10 +41,6 @@ const (
 )
 
 var (
-	stopVisorWg sync.WaitGroup
-)
-
-var (
 	tag           string
 	syslogAddr    string
 	pprofMode     string
@@ -57,40 +51,12 @@ var (
 	launchBrowser bool
 )
 
-func init() {
-	rootCmd.Flags().StringVar(&tag, "tag", "skywire", "logging tag")
-	rootCmd.Flags().StringVar(&syslogAddr, "syslog", "", "syslog server address. E.g. localhost:514")
-	rootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "p", "", "pprof profiling mode. Valid values: cpu, mem, mutex, block, trace, http")
-	rootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port if mode is 'http'")
-	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
-	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
-	rootCmd.Flags().BoolVar(&runSysTrayApp, "systray", false, "Run system tray app")
-	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "skywire-visor",
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
-		if runSysTrayApp {
-			l := logging.MustGetLogger("sys_tray_setup")
-
-			sysTrayIcon, err := gui.ReadSysTrayIcon()
-			if err != nil {
-				l.WithError(err).Fatalln("Failed to read system tray icon")
-			}
-
-			go func() {
-				runVisor(args)
-				gui.Stop()
-			}()
-
-			systray.Run(gui.GetOnGUIReady(sysTrayIcon), gui.OnGUIQuit)
-
-			return
-		}
-
-		runVisor(args)
+		runApp(args...)
+		return
 	},
 	Version: buildinfo.Version(),
 }
@@ -163,14 +129,10 @@ func runVisor(args []string) {
 		runBrowser(conf, log)
 	}
 
-	stopVisorWg.Add(1)
-	defer stopVisorWg.Done()
-
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-	gui.SetStopVisorFn(func() {
-		cancel()
-		stopVisorWg.Wait()
-	})
+	go func() {
+		stopSystray(cancel)
+	}()
 	defer cancel()
 
 	// Wait.
