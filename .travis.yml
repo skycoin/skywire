@@ -43,7 +43,6 @@ script:
   - make install-deps-ui
   - make lint-ui
   - make build-ui
-  - make snapshot
 
 deploy:
   - provider: script
