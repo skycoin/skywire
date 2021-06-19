@@ -27,7 +27,7 @@ builds:
       - CC=o64-clang
       - CXX=o64-clang++
     flags:
-      - -tags=systray
+      - -tags systray
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
 
   - id: skywire-visor-darwin-arm64
@@ -42,7 +42,7 @@ builds:
       - CC=oa64-clang
       - CXX=oa64-clang++
     flags:
-      - tags=systray
+      - -tags systray
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
 
   - id: skywire-visor-linux-arm64
@@ -61,7 +61,7 @@ builds:
       - PKG_CONFIG_PATH=/sysroot/arm64/usr/lib/aarch64-linux-gnu/pkgconfig:/sysroot/arm64/usr/lib/pkgconfig:/sysroot/arm64/usr/share/pkgconfig
     main: ./cmd/skywire-visor/
     flags:
-      - tags=systray
+      - -tags systray
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
 
   - id: skywire-visor-linux-amd64
@@ -79,7 +79,7 @@ builds:
       - PKG_CONFIG_PATH=/sysroot/amd64/usr/lib/x86_64-linux-gnu/pkgconfig:/sysroot/amd64/usr/lib/pkgconfig:/sysroot/amd64/usr/share/pkgconfig
     main: ./cmd/skywire-visor/
     flags:
-      - tags=systray
+      - -tags systray
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
 
   - id: skywire-visor-linux-armhf
@@ -101,7 +101,7 @@ builds:
       - PKG_CONFIG_PATH=/sysroot/armhf/usr/lib/arm-linux-gnueabihf/pkgconfig:/sysroot/armhf/usr/lib/pkgconfig:/sysroot/armhf/usr/share/pkgconfig
     main: ./cmd/skywire-visor/
     flags:
-      - tags=systray
+      - -tags systray
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
 
   - id: skywire-cli
@@ -123,7 +123,7 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/skywire-cli/
     flags:
-      - tags=systray
+      - -tags systray
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
 
   - id: skychat
@@ -164,7 +164,7 @@ builds:
       - CGO_ENABLED=0
     main: ./cmd/apps/skysocks/
     flags:
-      - tags=systray
+      - -tags systray
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
 
   - id: skysocks-client
@@ -187,7 +187,7 @@ builds:
     main: ./cmd/apps/skysocks-client/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
     flags:
-      - tags=systray
+      - -tags systray
   - id: vpn-server
     binary: apps/vpn-server
     goos:
@@ -208,7 +208,7 @@ builds:
     main: ./cmd/apps/vpn-server/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
     flags:
-      - tags=systray
+      - -tags systray
   - id: vpn-client
     binary: apps/vpn-client
     goos:
@@ -229,7 +229,7 @@ builds:
     main: ./cmd/apps/vpn-client/
     ldflags: -s -w -X github.com/skycoin/dmsg/buildinfo.version={{.Version}} -X github.com/skycoin/dmsg/buildinfo.commit={{.ShortCommit}} -X github.com/skycoin/dmsg/buildinfo.date={{.Date}}
     flags:
-      - tags=systray
+      - -tags systray
 archives:
   - format: tar.gz
     wrap_in_directory: false
