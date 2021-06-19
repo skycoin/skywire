@@ -46,7 +46,6 @@ var (
 	pprofAddr     string
 	confPath      string
 	delay         string
-	runSysTrayApp bool
 	launchBrowser bool
 )
 
@@ -55,7 +54,6 @@ var rootCmd = &cobra.Command{
 	Short: "Skywire visor",
 	Run: func(_ *cobra.Command, args []string) {
 		runApp(args...)
-		return
 	},
 	Version: buildinfo.Version(),
 }
