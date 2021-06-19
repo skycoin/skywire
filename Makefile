@@ -48,6 +48,8 @@ check: lint test ## Run linters and tests
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
+build-systray: host-apps bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
+
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
 install-generate: ## Installs required execs for go generate.
@@ -106,14 +108,17 @@ format: tidy ## Formats the code. Must have goimports and goimports-reviser inst
 dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
-snapshot: sysroot ## create snapshot release
+snapshot-systray: sysroot ## create snapshot release
 	docker run --rm --privileged \
 		-v $(CURDIR):/go/src/github.com/skycoin/skywire \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(GOPATH)/src:/go/src \
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
-		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --snapshot --skip-publish --rm-dist
+		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --snapshot --skip-publish --rm-dist
+
+snapshot:
+	goreleaser --snapshot --skip-publish --rm-dist
 
 snapshot-clean: ## Cleans snapshot / release
 	rm -rf ./dist
@@ -151,6 +156,11 @@ bin: ## Build `skywire-visor`, `skywire-cli`
 	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
 	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 
+bin-systray:
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-visor ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-cli ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./setup-node ./cmd/setup-node
+
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./skywire-visor ./cmd/skywire-visor
@@ -171,7 +181,7 @@ github-release-systray: sysroot ## Create a GitHub release
 		-v $(GOPATH)/src:/go/src \
 		-v $(CURDIR)/sysroot:/sysroot \
 		-w /go/src/github.com/skycoin/skywire \
-		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) --rm-dist
+		alexadhyatma/golang-cross:$(GO_BUILDER_VERSION) -f /go/src/github.com/skycoin/skywire/.goreleaser-systray.yml --rm-dist
 
 github-release:
 	goreleaser --rm-dist
