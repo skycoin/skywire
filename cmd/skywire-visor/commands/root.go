@@ -16,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getlantern/systray"
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
@@ -120,7 +119,7 @@ func runVisor(args []string) {
 	v, ok := visor.NewVisor(conf, restartCtx)
 	if !ok {
 		log.Errorln("Failed to start visor.")
-		systray.Quit()
+		quitSystray()
 		return
 	}
 	v.SetLogstore(store)

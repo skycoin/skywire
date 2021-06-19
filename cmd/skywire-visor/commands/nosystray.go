@@ -20,5 +20,10 @@ func runApp(args ...string) {
 	runVisor(args)
 }
 
+// stopSystray is a stub
 func stopSystray(_ context.CancelFunc) {
+}
+
+// quitSystray is a stub
+func quitSystray() {
 }
