@@ -14,8 +14,6 @@ addons:
     packages:
       # For building MUSL static builds on Linux.
       - musl-tools
-      - libgtk-3-dev
-      - libappindicator3-dev
       #- gcc-mingw-w64-i686
       #- g++-mingw-w64-i686
       #- binutils-mingw-w64-i686
