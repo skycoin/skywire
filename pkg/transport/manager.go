@@ -192,7 +192,7 @@ func (tm *Manager) initTransports(ctx context.Context) {
 			tpID   = entry.Entry.ID
 		)
 		isInitiator := tm.n.LocalPK() == entry.Entry.Edges[0]
-		if _, err := tm.saveTransport(remote, isInitiator, tpType, entry.Entry.Label); err != nil {
+		if _, err := tm.saveTransport(ctx, remote, isInitiator, tpType, entry.Entry.Label); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		} else {
 			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
@@ -304,7 +304,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 	}
 
 	for {
-		mTp, err := tm.saveTransport(remote, true, tpType, label)
+		mTp, err := tm.saveTransport(ctx, remote, true, tpType, label)
 		if err != nil {
 			if err == ErrNotServing {
 				continue
@@ -321,8 +321,7 @@ func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
 	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
 
-func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netName string, label Label) (*ManagedTransport, error) {
-	ctx := context.Background()
+func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, initiator bool, netName string, label Label) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 	if !snet.IsKnownNetwork(netName) {
