@@ -13,6 +13,7 @@ VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
+BRANCH := latest
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
@@ -132,6 +133,9 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skychat ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
+
+build-docker: ## Build docker image
+	./ci_scripts/docker-push.sh -t ${BRANCH} -b
 
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
