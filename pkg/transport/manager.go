@@ -304,9 +304,10 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 
 	for {
 		mTp, err := tm.saveTransport(remote, tpType, label)
-		if err != nil && err == ErrNotServing {
-			continue
-		} else if err != nil {
+		if err != nil {
+			if err == ErrNotServing {
+				continue
+			}
 			return nil, fmt.Errorf("save transport: %w", err)
 		}
 		return mTp, nil
