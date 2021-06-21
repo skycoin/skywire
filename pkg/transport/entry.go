@@ -33,7 +33,8 @@ type Entry struct {
 	// ID is the Transport ID that uniquely identifies the Transport.
 	ID uuid.UUID `json:"t_id"`
 
-	// Edges contains the public keys of the Transport's edge nodes (should only have 2 edges and the least-significant edge should come first).
+	// Edges contains the public keys of the Transport's edge nodes
+	// (should only have 2 edges and the first edge is transport original initiator).
 	Edges [2]cipher.PubKey `json:"edges"`
 
 	// Type represents the transport type.
@@ -47,20 +48,16 @@ type Entry struct {
 }
 
 // MakeEntry creates a new transport entry
-func MakeEntry(pk1, pk2 cipher.PubKey, tpType string, public bool, label Label) Entry {
-	return Entry{
-		ID:     MakeTransportID(pk1, pk2, tpType),
-		Edges:  SortEdges(pk1, pk2),
+func MakeEntry(initiator, target cipher.PubKey, tpType string, public bool, label Label) Entry {
+	entry := Entry{
+		ID:     MakeTransportID(initiator, target, tpType),
 		Type:   tpType,
 		Public: public,
 		Label:  label,
 	}
-}
-
-// SetEdges sets edges of Entry
-func (e *Entry) SetEdges(localPK, remotePK cipher.PubKey) {
-	e.ID = MakeTransportID(localPK, remotePK, e.Type)
-	e.Edges = SortEdges(localPK, remotePK)
+	entry.Edges[0] = initiator
+	entry.Edges[1] = target
+	return entry
 }
 
 // RemoteEdge returns the remote edge's public key.
@@ -106,8 +103,8 @@ func (e *Entry) String() string {
 	res += fmt.Sprintf("\ttype: %s\n", e.Type)
 	res += fmt.Sprintf("\tid: %s\n", e.ID)
 	res += "\tedges:\n"
-	res += fmt.Sprintf("\t\tedge 1: %s\n", e.Edges[0])
-	res += fmt.Sprintf("\t\tedge 2: %s\n", e.Edges[1])
+	res += fmt.Sprintf("\t\tedge 1 (initiator): %s\n", e.Edges[0])
+	res += fmt.Sprintf("\t\tedge 2 (target): %s\n", e.Edges[1])
 	return res
 }
 

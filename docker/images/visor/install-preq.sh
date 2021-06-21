@@ -7,10 +7,7 @@ if type apt > /dev/null; then
 fi
 
 if type apk > /dev/null; then
-        
-        apk update 
-        apk upgrade 
-        apk add --no-cache ca-certificates openssl iproute2
+        apk update
+        apk add --no-cache ca-certificates openssl iproute2 bash
         update-ca-certificates --fresh
-        apk add iproute2
 fi
