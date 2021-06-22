@@ -34,6 +34,11 @@ func (w *VictoriaMetricsUintGaugeWrapper) Dec() {
 	atomic.AddUint64(&w.val, ^uint64(0))
 }
 
+// Set sets gauge value.
+func (w *VictoriaMetricsUintGaugeWrapper) Set(val uint64) {
+	atomic.StoreUint64(&w.val, val)
+}
+
 // Val gets gauge value.
 func (w *VictoriaMetricsUintGaugeWrapper) Val() uint64 {
 	return atomic.LoadUint64(&w.val)
