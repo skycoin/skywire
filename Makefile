@@ -125,6 +125,7 @@ dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
 host-apps: ## Build app
+	mkdir -p ./apps
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks-client
@@ -137,6 +138,7 @@ host-apps-windows:
 
 # Static Apps
 host-apps-static: ## Build app
+	mkdir -p ./apps
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skychat
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skysocks
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skysocks-client
