@@ -25,9 +25,6 @@ func MakeBaseConfig(common *Common) *V1 {
 	conf.Transport = &V1Transport{
 		Discovery:       skyenv.DefaultTpDiscAddr,
 		AddressResolver: skyenv.DefaultAddressResolverAddr,
-		LogStore: &V1LogStore{
-			Type: "memory",
-		},
 	}
 	conf.Routing = &V1Routing{
 		SetupNodes:         []cipher.PubKey{skyenv.MustPK(skyenv.DefaultSetupPK)},
@@ -39,10 +36,10 @@ func MakeBaseConfig(common *Common) *V1 {
 		Apps:       nil,
 		ServerAddr: skyenv.DefaultAppSrvAddr,
 		BinPath:    skyenv.DefaultAppBinPath,
-		LocalPath:  skyenv.DefaultAppLocalPath,
 	}
 	conf.CLIAddr = skyenv.DefaultRPCAddr
 	conf.LogLevel = skyenv.DefaultLogLevel
+	conf.LocalPath = skyenv.DefaultLocalPath
 	conf.ShutdownTimeout = DefaultTimeout
 	conf.RestartCheckDelay = Duration(restart.DefaultCheckDelay)
 	return conf
@@ -71,20 +68,14 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 	conf := MakeBaseConfig(cc)
 
 	conf.Dmsgpty = &V1Dmsgpty{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: skyenv.DefaultDmsgPtyWhitelist,
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+		Port:    skyenv.DmsgPtyPort,
+		CLINet:  skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
 	}
 
 	conf.STCP = &snet.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
 		PKTable:   nil,
-	}
-
-	conf.Transport.LogStore = &V1LogStore{
-		Type:     "file",
-		Location: skyenv.DefaultTpLogStore,
 	}
 
 	conf.UptimeTracker = &V1UptimeTracker{
@@ -157,19 +148,12 @@ func MakePackageConfig(log *logging.MasterLogger, confPath string, sk *cipher.Se
 	}
 
 	conf.Dmsgpty = &V1Dmsgpty{
-		Port:     skyenv.DmsgPtyPort,
-		AuthFile: skyenv.PackageDmsgPtyWhiteList,
-		CLINet:   skyenv.DefaultDmsgPtyCLINet,
-		CLIAddr:  skyenv.DefaultDmsgPtyCLIAddr,
+		Port:    skyenv.DmsgPtyPort,
+		CLINet:  skyenv.DefaultDmsgPtyCLINet,
+		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
 	}
-
-	conf.Transport.LogStore = &V1LogStore{
-		Type:     "file",
-		Location: skyenv.PackageTpLogStore,
-	}
-
+	conf.LocalPath = skyenv.PackageLocalPath
 	conf.Launcher.BinPath = skyenv.PackageAppBinPath
-	conf.Launcher.LocalPath = skyenv.PackageAppLocalPath
 
 	if conf.Hypervisor != nil {
 		conf.Hypervisor.EnableAuth = skyenv.DefaultEnableAuth

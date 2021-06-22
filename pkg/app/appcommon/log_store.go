@@ -65,7 +65,7 @@ type bBoltLogStore struct {
 
 // NewBBoltLogStore returns a bbolt implementation of an app log store.
 func NewBBoltLogStore(path, appName string) (_ LogStore, err error) {
-	db, err := bbolt.Open(path, 0600, nil)
+	db, err := bbolt.Open(path, 0606, nil)
 	if err != nil {
 		return nil, err
 	}
