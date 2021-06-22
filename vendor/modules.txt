@@ -9,7 +9,7 @@ github.com/Azure/go-ansiterm/winterm
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 ## explicit
 github.com/StackExchange/wmi
-# github.com/VictoriaMetrics/metrics v1.12.3
+# github.com/VictoriaMetrics/metrics v1.17.2
 ## explicit
 github.com/VictoriaMetrics/metrics
 # github.com/andybalholm/brotli v0.0.0-20190621154722-5f990b63d2d6
@@ -55,7 +55,8 @@ github.com/google/uuid
 github.com/gorilla/securecookie
 # github.com/inconshreveable/mousetrap v1.0.0
 github.com/inconshreveable/mousetrap
-# github.com/json-iterator/go v1.1.10
+# github.com/json-iterator/go v1.1.11
+## explicit
 github.com/json-iterator/go
 # github.com/klauspost/compress v1.11.0
 github.com/klauspost/compress/flate
@@ -163,14 +164,14 @@ github.com/skycoin/yamux
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
-# github.com/spf13/cobra v1.0.0
+# github.com/spf13/cobra v0.0.5
 ## explicit
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
-# github.com/stretchr/objx v0.1.1
+# github.com/stretchr/objx v0.1.0
 github.com/stretchr/objx
-# github.com/stretchr/testify v1.6.1
+# github.com/stretchr/testify v1.4.0
 ## explicit
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
@@ -184,7 +185,7 @@ github.com/templexxx/cpufeat
 # github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b
 ## explicit
 github.com/templexxx/xor
-# github.com/tjfoc/gmsm v1.3.2
+# github.com/tjfoc/gmsm v1.4.0
 ## explicit
 github.com/tjfoc/gmsm/sm4
 # github.com/toqueteos/webbrowser v1.2.0
@@ -206,7 +207,7 @@ github.com/xi2/xz
 github.com/xtaci/kcp-go
 # github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37
 ## explicit
-# go.etcd.io/bbolt v1.3.5
+# go.etcd.io/bbolt v1.3.6
 ## explicit
 go.etcd.io/bbolt
 # golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9
@@ -280,8 +281,8 @@ golang.zx2c4.com/wireguard/tun/wintun/namespaceapi
 golang.zx2c4.com/wireguard/tun/wintun/nci
 golang.zx2c4.com/wireguard/tun/wintun/registry
 golang.zx2c4.com/wireguard/tun/wintun/setupapi
-# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
-gopkg.in/yaml.v3
+# gopkg.in/yaml.v2 v2.3.0
+gopkg.in/yaml.v2
 # nhooyr.io/websocket v1.8.2
 ## explicit
 nhooyr.io/websocket

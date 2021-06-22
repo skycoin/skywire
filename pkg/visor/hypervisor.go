@@ -118,7 +118,9 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	}
 
 	// setup
+	hv.mu.Lock()
 	hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
+	hv.mu.Unlock()
 
 	for {
 		conn, err := lis.AcceptStream()
@@ -258,6 +260,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/available", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
+				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 			})
 		})
 
@@ -1296,6 +1299,28 @@ func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
 	})
 }
 
+func (hv *Hypervisor) postMinHops() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody struct {
+			MinHops uint16 `json:"min_hops"`
+		}
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postMinHops request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if err := ctx.API.SetMinHops(reqBody.MinHops); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
 /*
 	<<< Helper functions >>>
 */
@@ -1354,9 +1379,12 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 			Conn: v,
 		}, true
 	}
+	hv.mu.Lock()
+	conn := hv.selfConn
+	hv.mu.Unlock()
 
 	return &httpCtx{
-		Conn: hv.selfConn,
+		Conn: conn,
 	}, true
 }
 

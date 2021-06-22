@@ -23,4 +23,15 @@ export class RouteService {
   delete(nodeKey: string, routeId: string) {
     return this.apiService.delete(`visors/${nodeKey}/routes/${routeId}`);
   }
+
+  /**
+   * Sets the minimum number of hops the next routes must have.
+   */
+  setMinHops(nodeKey: string, minHops: number) {
+    const data = {
+      min_hops: minHops,
+    };
+
+    return this.apiService.post(`visors/${nodeKey}/min-hops`, data);
+  }
 }

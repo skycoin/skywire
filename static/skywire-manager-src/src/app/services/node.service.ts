@@ -612,6 +612,7 @@ export class NodeService {
         node.localPk = response.overview.local_pk;
         node.version = response.overview.build_info.version;
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
+        node.minHops = response.min_hops;
 
         // Ip.
         if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
