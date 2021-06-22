@@ -58,6 +58,7 @@ Different locations are required due to the fact that we want to spread out the 
 * Adjustments of previous months are included in these reward distributions on the 5th.
 * The deadline to submit complaints is being published in the monthly Skywire status update emails and in the [Skywire PSA channel on Telegram](https://t.me/SkywirePSA).
 * Eligible for rewards are only the whitelisted visors that **comply with the Skywire mainnet rules** and **meet the uptime requirement** of the respective month (usually 75%).
+* Updates of user data in the Skywire Whitelisting System are only guaranteed to be recognized for reward distributions if they are submitted during the respective calendar month for which the rewards are being calculated.
 
 ### Official Skyminers 
 
@@ -126,7 +127,7 @@ We are calculating the underlying Skycoin price for your rewards based on the mo
 <div align="center"><b>Each visor must have at least 75% uptime during the month to be eligible for rewards.</b></div> 
 
 As of now, you are provided with two tools to check whether or not you're online and generating uptime:
-* The [discovery website](https://uptime-tracker.skywire.skycoin.com/visors)
+* The [discovery website](https://uptime-tracker.skywire.skycoin.com/uptimes)
 * The [Skywire whitelisting system](https://whitelist.skycoin.com)
    - along with the [Skywire whitelisting system user guide](https://github.com/skycoin/skywire/wiki/Skywire-Whitelisting-System)
 
@@ -356,4 +357,7 @@ The following hardware is accepted in the Skywire mainnet:
 #### Radxa
      - ROCK Pi S
 
+#### ZTE
+     - ZXV10 B860H
+     
 **If you like to use other boards please contact the team first to be approved before you buy them, only the boards on the list are guaranteed to be whitelisted.**
