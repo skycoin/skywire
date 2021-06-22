@@ -113,8 +113,14 @@
           "weeks": "{{ time }} semanas"
         }
       },
+      "router-info": {
+        "title": "Información del Enrutador",
+        "min-hops": "Saltos mínimos:",
+        "max-hops": "Saltos máximos:",
+        "change-config-button": "Cambiar configuración"
+      },
       "node-health": {
-        "title": "Información de salud",
+        "title": "Información de Salud",
         "status": "Estatus:",
         "transport-discovery": "Transport discovery:",
         "route-finder": "Route finder:",
@@ -131,6 +137,14 @@
       "routing": "Enrutamiento"
     },
     "error-load": "Hubo un error al intentar refrescar los datos. Reintentando..."
+  },
+
+  "router-config": {
+    "title": "Configuración del Enrutador",
+    "info": "Aquí podrá configurar cuantos saltos la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final. NOTA: los cambios no afectarán a las rutas ya existentes.",
+    "min-hops": "Saltos mínimos",
+    "save-config-button": "Guardar configuración",
+    "done": "Cambios guardados."
   },
 
   "nodes": {
