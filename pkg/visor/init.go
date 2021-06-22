@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -14,8 +16,10 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/dmsgctrl"
+	"github.com/skycoin/dmsg/dmsgpty"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/util/osutil"
 
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/internal/vpn"
@@ -32,6 +36,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
@@ -65,8 +70,10 @@ var (
 	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
-	// Transport setup
+	// Transport manager
 	tr vinit.Module
+	// Transport setup
+	trs vinit.Module
 	// Routing system
 	rt vinit.Module
 	// Application launcer
@@ -105,6 +112,7 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
 	tr = maker("transport", initTransport, &sn, &ebc)
+	trs = maker("transport_setup", initTransportSetup, &sn, &tr)
 	rt = maker("router", initRouter, &tr, &sn)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
 	cli = maker("cli", initCLI)
@@ -113,7 +121,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pv = maker("public_visors", initPublicVisors, &tr)
 	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -230,8 +238,101 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
+const ownerRWX = 0700
+
+func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
+	conf := v.conf.Dmsgpty
+
+	if conf == nil {
+		log.Info("'dmsgpty' is not configured, skipping.")
+		return nil
+	}
+
+	// Unlink dmsg socket files (just in case).
+	if conf.CLINet == "unix" {
+		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
+			return err
+		}
+	}
+
+	wl := dmsgpty.NewMemoryWhitelist()
+
+	// Ensure hypervisors are added to the whitelist.
+	if err := wl.Add(v.conf.Hypervisors...); err != nil {
+		return err
+	}
+	// add itself to the whitelist to allow local pty
+	if err := wl.Add(v.conf.PK); err != nil {
+		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
+	}
+
+	dmsgC := v.net.Dmsg()
+	if dmsgC == nil {
+		err := errors.New("cannot create dmsgpty with nil dmsg client")
+		return err
+	}
+
+	pty := dmsgpty.NewHost(dmsgC, wl)
+
+	if ptyPort := conf.Port; ptyPort != 0 {
+		serveCtx, cancel := context.WithCancel(context.Background())
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ListenAndServe(serveCtx, ptyPort); err != nil {
+				runtimeErrors <- fmt.Errorf("listen and serve stopped: %w", err)
+			}
+		}()
+
+		v.pushCloseStack("router.serve", func() error {
+			cancel()
+			wg.Wait()
+			return nil
+		})
+
+	}
+
+	if conf.CLINet != "" {
+		if conf.CLINet == "unix" {
+			if err := os.MkdirAll(filepath.Dir(conf.CLIAddr), ownerRWX); err != nil {
+				err := fmt.Errorf("failed to prepare unix file for dmsgpty cli listener: %w", err)
+				return err
+			}
+		}
+
+		cliL, err := net.Listen(conf.CLINet, conf.CLIAddr)
+		if err != nil {
+			err := fmt.Errorf("failed to start dmsgpty cli listener: %w", err)
+			return err
+		}
+
+		serveCtx, cancel := context.WithCancel(context.Background())
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ServeCLI(serveCtx, cliL); err != nil {
+				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
+			}
+		}()
+
+		v.pushCloseStack("router.serve", func() error {
+			cancel()
+			err := cliL.Close()
+			wg.Wait()
+			return err
+		})
+	}
+
+	return nil
+}
+
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
@@ -239,20 +340,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	var logS transport.LogStore
-	switch conf.LogStore.Type {
-	case visorconfig.FileLogStore:
-		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
-		if err != nil {
-			err := fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err)
-			return err
-		}
-	case visorconfig.MemoryLogStore:
-		logS = transport.InMemoryTransportLogStore()
-	default:
-		err := fmt.Errorf("invalid log store type: %s", conf.LogStore.Type)
-		return err
-	}
+	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
 		PubKey:          v.conf.PK,
@@ -296,6 +384,21 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.tpM = tpM
 	v.initLock.Unlock()
+	return nil
+}
+
+func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	ts, err := ts.NewTransportListener(ctx, v.conf, v.net.Dmsg(), v.tpM)
+	if err != nil {
+		cancel()
+		return err
+	}
+	go ts.Serve(ctx)
+	v.pushCloseStack("transport_setup.rpc", func() error {
+		cancel()
+		return nil
+	})
 	return nil
 }
 
@@ -383,7 +486,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
+		LocalPath:  v.conf.LocalPath,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")

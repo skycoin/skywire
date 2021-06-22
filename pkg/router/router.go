@@ -39,7 +39,7 @@ const (
 
 	minHops       = 0
 	maxHops       = 50
-	retryDuration = 10 * time.Second
+	retryDuration = 2 * time.Second
 	retryInterval = 500 * time.Millisecond
 )
 
