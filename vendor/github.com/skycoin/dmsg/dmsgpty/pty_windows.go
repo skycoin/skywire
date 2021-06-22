@@ -1,12 +1,16 @@
+//+build windows
+
 package dmsgpty
 
 import (
 	"errors"
+	"fmt"
 	"os"
-	"os/exec"
 	"sync"
+	"syscall"
 
-	"github.com/creack/pty"
+	"github.com/ActiveState/termtest/conpty"
+	"golang.org/x/sys/windows"
 )
 
 // Pty errors.
@@ -17,34 +21,13 @@ var (
 
 // Pty runs a local pty.
 type Pty struct {
-	pty *os.File
+	pty *conpty.ConPty
 	mx  sync.RWMutex
 }
 
 // NewPty creates a new Pty.
 func NewPty() *Pty {
 	return new(Pty)
-}
-
-// Start runs a command with the given command name, args and optional window size.
-func (s *Pty) Start(name string, args []string, size *pty.Winsize) error {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-
-	if s.pty != nil {
-		return ErrPtyAlreadyRunning
-	}
-
-	cmd := exec.Command(name, args...) //nolint:gosec
-	cmd.Env = os.Environ()
-
-	f, err := pty.StartWithSize(cmd, size) //nolint:gosec
-	if err != nil {
-		return err
-	}
-
-	s.pty = f
-	return nil
 }
 
 // Stop stops the running command and closes the pty.
@@ -70,7 +53,7 @@ func (s *Pty) Read(b []byte) (int, error) {
 		return 0, ErrPtyNotRunning
 	}
 
-	return s.pty.Read(b)
+	return s.pty.OutPipe().Read(b)
 }
 
 // Write writes to the stdin of the pty.
@@ -82,11 +65,55 @@ func (s *Pty) Write(b []byte) (int, error) {
 		return 0, ErrPtyNotRunning
 	}
 
-	return s.pty.Write(b)
+	res, err := s.pty.Write(b)
+	return int(res), err
+}
+
+// Start runs a command with the given command name, args and optional window size.
+func (s *Pty) Start(name string, args []string, size *windows.Coord) error {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	if s.pty != nil {
+		return ErrPtyAlreadyRunning
+	}
+
+	var err error
+
+	if size == nil {
+		size, err = getSize()
+		if err != nil {
+			return err
+		}
+	}
+
+	pty, err := conpty.New(
+		size.X, size.Y,
+	)
+	if err != nil {
+		return err
+	}
+
+	pid, _, err := pty.Spawn(
+		name,
+		args,
+		&syscall.ProcAttr{
+			Env: os.Environ(),
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("starting process with pid %d \n", pid)
+
+	s.pty = pty
+	return nil
 }
 
 // SetPtySize sets the pty size.
-func (s *Pty) SetPtySize(size *pty.Winsize) error {
+func (s *Pty) SetPtySize(size *windows.Coord) error {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
 
@@ -94,5 +121,5 @@ func (s *Pty) SetPtySize(size *pty.Winsize) error {
 		return ErrPtyNotRunning
 	}
 
-	return pty.Setsize(s.pty, size)
+	return s.pty.Resize(uint16(size.X), uint16(size.Y))
 }

@@ -101,25 +101,25 @@ dep: tidy ## Sorts dependencies
 	${OPTS} go mod vendor -v
 
 host-apps: ## Build app
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/ ./cmd/apps/vpn-client
 
 # Static Apps
 host-apps-static: ## Build app
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skychat ./cmd/apps/skychat
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks ./cmd/apps/skysocks
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-server ./cmd/apps/vpn-server
-	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/vpn-client ./cmd/apps/vpn-client
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skychat
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skysocks
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/skysocks-client
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/vpn-server
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/ ./cmd/apps/vpn-client
 
 # Bin
 bin: ## Build `skywire-visor`, `skywire-cli`
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-visor ./cmd/skywire-visor
-	${OPTS} go build ${BUILD_OPTS} -o ./skywire-cli  ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-visor
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/skywire-cli
+	${OPTS} go build ${BUILD_OPTS} -o ./ ./cmd/setup-node
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
