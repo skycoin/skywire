@@ -2,14 +2,19 @@ package network
 
 import (
 	"context"
+	"errors"
 	"net"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
+	"github.com/skycoin/skywire/pkg/snet/directtp/tplistener"
+	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
 // Type is a type of network. Type affects the way connection is established
-// and the data is sent
+// and the way data is sent
 type Type string
 
 const (
@@ -56,20 +61,43 @@ type Dialer interface {
 // Client provides access to skywire network in terms of dialing remote visors
 // and listening to incoming connections
 type Client interface {
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Conn, error)
-	Listen(port uint16) (*Listener, error)
+	// todo: change return type to wrapped conn
+	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*tpconn.Conn, error)
+	Listen(port uint16) (*tplistener.Listener, error)
 	LocalAddr() (net.Addr, error)
 	Serve() error
 	Close() error
 	Type() Type
 }
 
+var (
+	// ErrUnknownTransportType is returned when transport type is unknown.
+	ErrUnknownTransportType = errors.New("unknown transport type")
+
+	// ErrTimeout indicates a timeout.
+	ErrTimeout = errors.New("timeout")
+
+	// ErrAlreadyListening is returned when transport is already listening.
+	ErrAlreadyListening = errors.New("already listening")
+
+	// ErrNotListening is returned when transport is not listening.
+	ErrNotListening = errors.New("not listening")
+
+	// ErrPortOccupied is returned when port is occupied.
+	ErrPortOccupied = errors.New("port is already occupied")
+)
+
 // ClientFactory is used to create Client instances
 // and holds dependencies for different clients
 type ClientFactory struct {
+	PK         cipher.PubKey
+	SK         cipher.SecKey
+	ListenAddr string
+	PKTable    stcp.PKTable
+	ARClient   arclient.APIClient
 }
 
 // MakeClient creates a new client of specified type
-func (f *ClientFactory) MakeClient(ctype Type) Client {
-	panic("not implemented")
+func (f *ClientFactory) MakeClient() Client {
+	return newStcp(f.PK, f.SK, f.ListenAddr, f.PKTable)
 }
