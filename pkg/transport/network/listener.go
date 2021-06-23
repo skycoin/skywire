@@ -18,15 +18,17 @@ type Listener struct {
 	freePort func()
 	accept   chan *Conn
 	done     chan struct{}
+	network  Type
 }
 
 // NewListener returns a new Listener.
-func NewListener(lAddr dmsg.Addr, freePort func()) *Listener {
+func NewListener(lAddr dmsg.Addr, freePort func(), network Type) *Listener {
 	return &Listener{
 		lAddr:    lAddr,
 		freePort: freePort,
 		accept:   make(chan *Conn),
 		done:     make(chan struct{}),
+		network:  network,
 	}
 }
 
@@ -81,4 +83,9 @@ func (l *Listener) Close() error {
 // Addr implements net.Listener
 func (l *Listener) Addr() net.Addr {
 	return l.lAddr
+}
+
+// Network returns network type
+func (l *Listener) Network() string {
+	return string(l.network)
 }
