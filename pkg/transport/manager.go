@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/directtp"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/snettest"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // TPCloseCallback triggers after a session is closed.
@@ -38,13 +39,12 @@ type Manager struct {
 	Logger   *logging.Logger
 	Conf     *ManagerConfig
 	tps      map[uuid.UUID]*ManagedTransport
-	n        *snet.Network
 	arClient arclient.APIClient
 
 	listenersMu   sync.Mutex
-	listeners     []*snet.Listener
+	listeners     []*network.Listener
 	servingNetsMu sync.Mutex
-	servingNets   map[string]struct{}
+	servingNets   map[network.Type]struct{}
 	readCh        chan routing.Packet
 	mx            sync.RWMutex
 	wgMu          sync.Mutex
@@ -54,30 +54,28 @@ type Manager struct {
 	done          chan struct{}
 
 	afterTPClosed TPCloseCallback
+	factory       network.ClientFactory
+	netClients    map[network.Type]network.Client
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(log *logging.Logger, n *snet.Network, arClient arclient.APIClient, config *ManagerConfig) (*Manager, error) {
+func NewManager(log *logging.Logger, arClient arclient.APIClient, config *ManagerConfig, factory network.ClientFactory) (*Manager, error) {
 	if log == nil {
 		log = logging.MustGetLogger("tp_manager")
 	}
 	tm := &Manager{
 		Logger:      log,
 		Conf:        config,
-		servingNets: make(map[string]struct{}),
+		servingNets: make(map[network.Type]struct{}),
 		tps:         make(map[uuid.UUID]*ManagedTransport),
-		n:           n,
 		readCh:      make(chan routing.Packet, 20),
 		done:        make(chan struct{}),
+		netClients:  make(map[network.Type]network.Client),
 		arClient:    arClient,
+		factory:     factory,
 	}
 	return tm, nil
-}
-
-// STcpr returns client for this transport and success status
-func (tm *Manager) STcpr() (directtp.Client, bool) {
-	return tm.n.STcpr()
 }
 
 // OnAfterTPClosed sets callback which will fire after transport gets closed.
@@ -96,11 +94,21 @@ func (tm *Manager) OnAfterTPClosed(f TPCloseCallback) {
 // Serve runs listening loop across all registered factories.
 func (tm *Manager) Serve(ctx context.Context) {
 	tm.serveOnce.Do(func() {
+		tm.netClients[network.STCP] = tm.factory.MakeClient(network.STCP)
 		tm.serve(ctx)
 	})
 }
 
-func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
+// Networks returns all the network types contained within the TransportManager.
+func (tm *Manager) Networks() []string {
+	var nets []string
+	for netType := range tm.netClients {
+		nets = append(nets, string(netType))
+	}
+	return nets
+}
+
+func (tm *Manager) serveNet(ctx context.Context, netType network.Type) {
 	if tm.isClosing() {
 		return
 	}
@@ -115,7 +123,12 @@ func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
 	tm.servingNets[netType] = struct{}{}
 	tm.servingNetsMu.Unlock()
 
-	lis, err := tm.n.Listen(netType, skyenv.DmsgTransportPort)
+	client, ok := tm.netClients[netType]
+	if !ok {
+		return
+	}
+
+	lis, err := client.Listen(skyenv.DmsgTransportPort)
 	if err != nil {
 		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
 			netType, skyenv.DmsgTransportPort)
@@ -155,15 +168,9 @@ func (tm *Manager) serveNetwork(ctx context.Context, netType string) {
 }
 
 func (tm *Manager) serve(ctx context.Context) {
-	// TODO: to get rid of this callback, we need to have method on future network interface like: `Ready() <-chan struct{}`
-	// some networks may not be ready yet, so we're setting a callback first
-	tm.n.OnNewNetworkType(func(netType string) {
-		tm.serveNetwork(ctx, netType)
-	})
 
-	// here we may start serving all the networks which are ready at this point
-	for _, netType := range tm.n.TransportNetworks() {
-		tm.serveNetwork(ctx, netType)
+	for netType := range tm.netClients {
+		tm.serveNet(ctx, netType)
 	}
 
 	tm.initTransports(ctx)
@@ -207,7 +214,11 @@ func (tm *Manager) initTransports(ctx context.Context) {
 	}
 }
 
-func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) error {
+func (tm *Manager) STcpr() (directtp.Client, bool) {
+	return nil, false
+}
+
+func (tm *Manager) acceptTransport(ctx context.Context, lis *network.Listener) error {
 	conn, err := lis.AcceptConn() // TODO: tcp panic.
 	if err != nil {
 		return err
@@ -226,12 +237,17 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *snet.Listener) erro
 
 	tpID := tm.tpIDFromPK(conn.RemotePK(), conn.Network())
 
+	client, ok := tm.netClients[network.Type(conn.Network())]
+	if !ok {
+		return fmt.Errorf("client not found for the type %s", conn.Network())
+	}
+
 	mTp, ok := tm.tps[tpID]
 	if !ok {
 		tm.Logger.Debugln("No TP found, creating new one")
 
 		mTp = NewManagedTransport(ManagedTransportConfig{
-			Net:            tm.n,
+			client:         client,
 			DC:             tm.Conf.DiscoveryClient,
 			LS:             tm.Conf.LogStore,
 			RemotePK:       conn.RemotePK(),
@@ -358,10 +374,15 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, netName string, label Lab
 		return oldMTp, nil
 	}
 
+	client, ok := tm.netClients[network.Type(netName)]
+	if !ok {
+		return nil, fmt.Errorf("client not found for the type %s", netName)
+	}
+
 	afterTPClosed := tm.afterTPClosed
 
 	mTp := NewManagedTransport(ManagedTransportConfig{
-		Net:            tm.n,
+		client:         client,
 		DC:             tm.Conf.DiscoveryClient,
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
@@ -453,11 +474,6 @@ func (tm *Manager) ReadPacket() (routing.Packet, error) {
 	STATE
 */
 
-// Networks returns all the network types contained within the TransportManager.
-func (tm *Manager) Networks() []string {
-	return tm.n.TransportNetworks()
-}
-
 // Transport obtains a Transport via a given Transport ID.
 func (tm *Manager) Transport(id uuid.UUID) *ManagedTransport {
 	tm.mx.RLock()
@@ -533,17 +549,17 @@ func CreateTransportPair(
 	tpDisc DiscoveryClient,
 	keys []snettest.KeyPair,
 	nEnv *snettest.Env,
-	network string,
+	net string,
 ) (m0 *Manager, m1 *Manager, tp0 *ManagedTransport, tp1 *ManagedTransport, err error) {
 	// Prepare tp manager 0.
 	pk0, sk0 := keys[0].PK, keys[0].SK
 	ls0 := InMemoryTransportLogStore()
-	m0, err = NewManager(nil, nEnv.Nets[0], new(arclient.MockAPIClient), &ManagerConfig{
+	m0, err = NewManager(nil, new(arclient.MockAPIClient), &ManagerConfig{
 		PubKey:          pk0,
 		SecKey:          sk0,
 		DiscoveryClient: tpDisc,
 		LogStore:        ls0,
-	})
+	}, network.ClientFactory{})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -553,12 +569,12 @@ func CreateTransportPair(
 	// Prepare tp manager 1.
 	pk1, sk1 := keys[1].PK, keys[1].SK
 	ls1 := InMemoryTransportLogStore()
-	m1, err = NewManager(nil, nEnv.Nets[1], new(arclient.MockAPIClient), &ManagerConfig{
+	m1, err = NewManager(nil, new(arclient.MockAPIClient), &ManagerConfig{
 		PubKey:          pk1,
 		SecKey:          sk1,
 		DiscoveryClient: tpDisc,
 		LogStore:        ls1,
-	})
+	}, network.ClientFactory{})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -566,12 +582,12 @@ func CreateTransportPair(
 	go m1.Serve(context.TODO())
 
 	// Create data transport between manager 1 & manager 2.
-	tp1, err = m1.SaveTransport(context.TODO(), pk0, network, LabelUser)
+	tp1, err = m1.SaveTransport(context.TODO(), pk0, net, LabelUser)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	tp0 = m0.Transport(MakeTransportID(pk0, pk1, network))
+	tp0 = m0.Transport(MakeTransportID(pk0, pk1, net))
 
 	return m0, m1, tp0, tp1, nil
 }
