@@ -8,8 +8,6 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tplistener"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
@@ -62,8 +60,8 @@ type Dialer interface {
 // and listening to incoming connections
 type Client interface {
 	// todo: change return type to wrapped conn
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*tpconn.Conn, error)
-	Listen(port uint16) (*tplistener.Listener, error)
+	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Conn, error)
+	Listen(port uint16) (*Listener, error)
 	LocalAddr() (net.Addr, error)
 	Serve() error
 	Close() error
