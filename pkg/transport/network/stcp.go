@@ -43,7 +43,7 @@ func newStcp(PK cipher.PubKey, SK cipher.SecKey, addr string, table stcp.PKTable
 	return client
 }
 
-func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*tpconn.Conn, error) {
+func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -70,7 +70,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 
 	hs := tphandshake.InitiatorHandshake(c.SK, dmsg.Addr{PK: c.PK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
 
-	connConfig := tpconn.Config{
+	connConfig := Config{
 		Log:       c.log,
 		Conn:      conn,
 		LocalPK:   c.PK,
@@ -81,15 +81,14 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 		Encrypt:   true,
 		Initiator: true,
 	}
-
-	return tpconn.NewConn(connConfig)
+	return NewConn(connConfig)
 }
 
 // Listen starts listening on a specified port number. The port is a skywire port
 // and is not related to local OS ports. Underlying connection will most likely use
 // a different port number
 // Listen requires Serve to be called, which will accept connections to all skywire ports
-func (c *stcpClient) Listen(port uint16) (*tplistener.Listener, error) {
+func (c *stcpClient) Listen(port uint16) (*Listener, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -103,7 +102,7 @@ func (c *stcpClient) Listen(port uint16) (*tplistener.Listener, error) {
 	defer c.mu.Unlock()
 
 	lAddr := dmsg.Addr{PK: c.PK, Port: port}
-	lis := tplistener.NewListener(lAddr, freePort)
+	lis := NewListener(lAddr, freePort)
 	c.listeners[port] = lis
 
 	return lis, nil
