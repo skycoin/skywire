@@ -28,11 +28,12 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
@@ -260,27 +261,36 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
-	nc := snet.NetworkConfigs{
-		STCP: v.conf.STCP,
-	}
+	// nc := snet.NetworkConfigs{
+	// 	STCP: v.conf.STCP,
+	// }
 
-	netconf := snet.Config{
-		PubKey:         v.conf.PK,
-		SecKey:         v.conf.SK,
-		NetworkConfigs: nc,
-	}
+	// netconf := snet.Config{
+	// 	PubKey:         v.conf.PK,
+	// 	SecKey:         v.conf.SK,
+	// 	NetworkConfigs: nc,
+	// }
 
-	n, err := snet.New(netconf, v.dmsgC, v.ebc, v.arClient)
-	if err != nil {
-		return err
-	}
+	// n, err := snet.New(netconf, v.dmsgC, v.ebc, v.arClient)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if err := n.Init(); err != nil {
-		return err
-	}
-	v.pushCloseStack("snet", n.Close)
+	// if err := n.Init(); err != nil {
+	// 	return err
+	// }
+	// v.pushCloseStack("snet", n.Close)
 
-	tpM, err := transport.NewManager(managerLogger, n, v.arClient, &tpMConf)
+	// todo: pass down configuration?
+	table := pktable.NewTable(v.conf.STCP.PKTable)
+	factory := network.ClientFactory{
+		PK:         v.conf.PK,
+		SK:         v.conf.SK,
+		ListenAddr: v.conf.STCP.LocalAddr,
+		PKTable:    table,
+		ARClient:   v.arClient,
+	}
+	tpM, err := transport.NewManager(managerLogger, v.arClient, &tpMConf, factory)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err

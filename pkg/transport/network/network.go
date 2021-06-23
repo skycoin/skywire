@@ -7,7 +7,10 @@ import (
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
@@ -64,6 +67,8 @@ type Client interface {
 	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Conn, error)
 	Listen(port uint16) (*Listener, error)
 	LocalAddr() (net.Addr, error)
+	PK() cipher.PubKey
+	SK() cipher.SecKey
 	Serve() error
 	Close() error
 	Type() Type
@@ -94,9 +99,15 @@ type ClientFactory struct {
 	ListenAddr string
 	PKTable    stcp.PKTable
 	ARClient   arclient.APIClient
+	eb         *appevent.Broadcaster
 }
 
 // MakeClient creates a new client of specified type
-func (f *ClientFactory) MakeClient() Client {
-	return newStcp(f.PK, f.SK, f.ListenAddr, f.PKTable)
+func (f *ClientFactory) MakeClient(netType Type) Client {
+	log := logging.MustGetLogger(string(netType))
+	p := porter.New(porter.MinEphemeral)
+	if netType == STCP {
+		return newStcp(f.PK, f.SK, f.ListenAddr, f.eb, f.PKTable, p, log)
+	}
+	return nil
 }

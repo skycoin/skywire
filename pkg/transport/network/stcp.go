@@ -12,32 +12,38 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
 type stcpClient struct {
-	PK           cipher.PubKey
-	SK           cipher.SecKey
-	listenAddr   string
-	table        stcp.PKTable
-	connListener net.Listener
-	// todo: change to listener wrapper type
+	lPK        cipher.PubKey
+	lSK        cipher.SecKey
+	listenAddr string
+
+	table  stcp.PKTable
+	log    *logging.Logger
+	porter *porter.Porter
+	eb     *appevent.Broadcaster
+
+	connListener  net.Listener
 	listeners     map[uint16]*Listener
-	log           *logging.Logger
-	mu            sync.RWMutex
 	listenStarted chan struct{}
+	mu            sync.RWMutex
 	done          chan struct{}
-	porter        *porter.Porter
 	closeOnce     sync.Once
 }
 
-func newStcp(PK cipher.PubKey, SK cipher.SecKey, addr string, table stcp.PKTable) Client {
-	client := &stcpClient{PK: PK, SK: SK, listenAddr: addr, table: table}
+func newStcp(PK cipher.PubKey, SK cipher.SecKey, addr string, eb *appevent.Broadcaster, table stcp.PKTable, porter *porter.Porter, log *logging.Logger) Client {
+	client := &stcpClient{lPK: PK, lSK: SK, listenAddr: addr, table: table}
 	client.listenStarted = make(chan struct{})
 	client.done = make(chan struct{})
 	client.listeners = make(map[uint16]*Listener)
+	client.log = log
+	client.porter = porter
+	client.eb = eb
 	return client
 }
 
@@ -65,13 +71,13 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	if err != nil {
 		return nil, err
 	}
-	lAddr, rAddr := dmsg.Addr{PK: c.PK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
-	hs := tphandshake.InitiatorHandshake(c.SK, lAddr, rAddr)
+	lAddr, rAddr := dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
+	hs := tphandshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
 
 	connConfig := ConnConfig{
 		Log:       c.log,
 		Conn:      conn,
-		LocalSK:   c.SK,
+		LocalSK:   c.lSK,
 		Deadline:  time.Now().Add(tphandshake.Timeout),
 		Handshake: hs,
 		FreePort:  freePort,
@@ -98,8 +104,8 @@ func (c *stcpClient) Listen(port uint16) (*Listener, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	lAddr := dmsg.Addr{PK: c.PK, Port: port}
-	lis := NewListener(lAddr, freePort)
+	lAddr := dmsg.Addr{PK: c.lPK, Port: port}
+	lis := NewListener(lAddr, freePort, STCP)
 	c.listeners[port] = lis
 
 	return lis, nil
@@ -181,8 +187,8 @@ func (c *stcpClient) acceptConn() error {
 	connConfig := ConnConfig{
 		Log:       c.log,
 		Conn:      conn,
-		LocalPK:   c.PK,
-		LocalSK:   c.SK,
+		LocalPK:   c.lPK,
+		LocalSK:   c.lSK,
 		Deadline:  time.Now().Add(tphandshake.Timeout),
 		Handshake: hs,
 		FreePort:  nil,
@@ -249,4 +255,12 @@ func (c *stcpClient) isClosed() bool {
 
 func (c *stcpClient) Type() Type {
 	return STCP
+}
+
+func (c *stcpClient) PK() cipher.PubKey {
+	return c.lPK
+}
+
+func (c *stcpClient) SK() cipher.SecKey {
+	return c.lSK
 }

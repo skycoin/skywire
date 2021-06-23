@@ -11,10 +11,10 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/httputil"
 
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
-func makeEntryFromTpConn(conn *snet.Conn) Entry {
+func makeEntryFromTpConn(conn *network.Conn) Entry {
 	return MakeEntry(conn.LocalPK(), conn.RemotePK(), conn.Network(), true, LabelUser)
 }
 
@@ -63,10 +63,10 @@ func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey)
 
 // SettlementHS represents a settlement handshake.
 // This is the handshake responsible for registering a transport to transport discovery.
-type SettlementHS func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) error
+type SettlementHS func(ctx context.Context, dc DiscoveryClient, conn *network.Conn, sk cipher.SecKey) error
 
 // Do performs the settlement handshake.
-func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) (err error) {
+func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, conn *network.Conn, sk cipher.SecKey) (err error) {
 	done := make(chan struct{})
 	go func() {
 		err = hs(ctx, dc, conn, sk)
@@ -85,7 +85,7 @@ func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, conn *snet.Co
 // The handshake logic only REGISTERS the transport, and does not update the status of the transport.
 func MakeSettlementHS(init bool) SettlementHS {
 	// initiating logic.
-	initHS := func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) (err error) {
+	initHS := func(ctx context.Context, dc DiscoveryClient, conn *network.Conn, sk cipher.SecKey) (err error) {
 		entry := makeEntryFromTpConn(conn)
 
 		// TODO(evanlinjin): Probably not needed as this is called in mTp already. Need to double check.
@@ -117,7 +117,7 @@ func MakeSettlementHS(init bool) SettlementHS {
 	}
 
 	// responding logic.
-	respHS := func(ctx context.Context, dc DiscoveryClient, conn *snet.Conn, sk cipher.SecKey) error {
+	respHS := func(ctx context.Context, dc DiscoveryClient, conn *network.Conn, sk cipher.SecKey) error {
 		entry := makeEntryFromTpConn(conn)
 
 		// receive, verify and sign entry.

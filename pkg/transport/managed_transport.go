@@ -18,7 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 const logWriteInterval = time.Second * 3
@@ -44,7 +44,7 @@ const (
 
 // ManagedTransportConfig is a configuration for managed transport.
 type ManagedTransportConfig struct {
-	Net            *snet.Network
+	client         network.Client
 	DC             DiscoveryClient
 	LS             LogStore
 	RemotePK       cipher.PubKey
@@ -76,8 +76,8 @@ type ManagedTransport struct {
 	redialCancel context.CancelFunc // for canceling redialling logic
 	redialMx     sync.Mutex
 
-	n      *snet.Network
-	conn   *snet.Conn
+	client network.Client
+	conn   *network.Conn
 	connCh chan struct{}
 	connMx sync.Mutex
 
@@ -97,10 +97,10 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
 		rPK:         conf.RemotePK,
 		netName:     conf.NetName,
-		n:           conf.Net,
 		dc:          conf.DC,
 		ls:          conf.LS,
-		Entry:       MakeEntry(conf.Net.LocalPK(), conf.RemotePK, conf.NetName, true, conf.TransportLabel),
+		client:      conf.client,
+		Entry:       MakeEntry(conf.client.PK(), conf.RemotePK, conf.NetName, true, conf.TransportLabel),
 		LogEntry:    new(LogEntry),
 		connCh:      make(chan struct{}, 1),
 		done:        make(chan struct{}),
@@ -266,7 +266,7 @@ func (mt *ManagedTransport) disconnect() {
 }
 
 // Accept accepts a new underlying connection.
-func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
+func (mt *ManagedTransport) Accept(ctx context.Context, conn *network.Conn) error {
 	mt.connMx.Lock()
 	defer mt.connMx.Unlock()
 
@@ -287,7 +287,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 	defer cancel()
 
 	mt.log.Debug("Performing settlement handshake...")
-	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.n.LocalSK()); err != nil {
+	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
@@ -311,7 +311,7 @@ func (mt *ManagedTransport) Dial(ctx context.Context) error {
 }
 
 func (mt *ManagedTransport) dial(ctx context.Context) error {
-	tp, err := mt.n.Dial(ctx, mt.netName, mt.rPK, skyenv.DmsgTransportPort)
+	conn, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
 		return fmt.Errorf("snet.Dial: %w", err)
 	}
@@ -319,11 +319,11 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	if err := MakeSettlementHS(true).Do(ctx, mt.dc, tp, mt.n.LocalSK()); err != nil {
+	if err := MakeSettlementHS(true).Do(ctx, mt.dc, conn, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
-	if err := mt.setConn(tp); err != nil {
+	if err := mt.setConn(conn); err != nil {
 		return fmt.Errorf("setConn: %w", err)
 	}
 
@@ -381,14 +381,14 @@ func (mt *ManagedTransport) redialLoop(ctx context.Context) error {
 }
 
 func (mt *ManagedTransport) isLeastSignificantEdge() bool {
-	return mt.Entry.EdgeIndex(mt.n.LocalPK()) == 0
+	return mt.Entry.EdgeIndex(mt.client.PK()) == 0
 }
 
 /*
 	<<< UNDERLYING CONNECTION >>>
 */
 
-func (mt *ManagedTransport) getConn() *snet.Conn {
+func (mt *ManagedTransport) getConn() *network.Conn {
 	if !mt.isServing() {
 		return nil
 	}
@@ -401,7 +401,7 @@ func (mt *ManagedTransport) getConn() *snet.Conn {
 
 // setConn sets 'mt.conn' (the underlying connection).
 // If 'mt.conn' is already occupied, close the newly introduced connection.
-func (mt *ManagedTransport) setConn(newConn *snet.Conn) error {
+func (mt *ManagedTransport) setConn(newConn *network.Conn) error {
 
 	if mt.conn != nil {
 		if mt.isLeastSignificantEdge() {
@@ -561,7 +561,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log := mt.log.WithField("func", "readPacket")
 
-	var conn *snet.Conn
+	var conn *network.Conn
 	for {
 		if conn = mt.getConn(); conn != nil {
 			break
