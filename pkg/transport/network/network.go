@@ -29,6 +29,7 @@ const (
 
 // skywire address consisting of pulic key, port and
 // type of transport we connect over
+// todo: use instead of dmsg.Addr for readability
 type addr struct {
 	PK   cipher.PubKey
 	Port uint16
