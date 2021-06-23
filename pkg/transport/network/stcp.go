@@ -13,9 +13,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tplistener"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
@@ -26,7 +24,7 @@ type stcpClient struct {
 	table        stcp.PKTable
 	connListener net.Listener
 	// todo: change to listener wrapper type
-	listeners     map[uint16]net.Listener
+	listeners     map[uint16]*Listener
 	log           *logging.Logger
 	mu            sync.RWMutex
 	listenStarted chan struct{}
@@ -39,7 +37,7 @@ func newStcp(PK cipher.PubKey, SK cipher.SecKey, addr string, table stcp.PKTable
 	client := &stcpClient{PK: PK, SK: SK, listenAddr: addr, table: table}
 	client.listenStarted = make(chan struct{})
 	client.done = make(chan struct{})
-	client.listeners = make(map[uint16]net.Listener)
+	client.listeners = make(map[uint16]*Listener)
 	return client
 }
 
@@ -67,13 +65,12 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	if err != nil {
 		return nil, err
 	}
+	lAddr, rAddr := dmsg.Addr{PK: c.PK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
+	hs := tphandshake.InitiatorHandshake(c.SK, lAddr, rAddr)
 
-	hs := tphandshake.InitiatorHandshake(c.SK, dmsg.Addr{PK: c.PK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort})
-
-	connConfig := Config{
+	connConfig := ConnConfig{
 		Log:       c.log,
 		Conn:      conn,
-		LocalPK:   c.PK,
 		LocalSK:   c.SK,
 		Deadline:  time.Now().Add(tphandshake.Timeout),
 		Handshake: hs,
@@ -81,7 +78,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 		Encrypt:   true,
 		Initiator: true,
 	}
-	return NewConn(connConfig)
+	return NewConn(connConfig, STCP)
 }
 
 // Listen starts listening on a specified port number. The port is a skywire port
@@ -174,14 +171,14 @@ func (c *stcpClient) acceptConn() error {
 	// 2. wrap connection in our own connection type (for now tpconn.Conn then refactored wrapper)
 	// 3. introduce wrapped connection to the listener
 
-	var lis *tplistener.Listener
+	var lis *Listener
 
 	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
 		lis, err = c.getListener(f2.DstAddr.Port)
 		return err
 	})
 
-	connConfig := tpconn.Config{
+	connConfig := ConnConfig{
 		Log:       c.log,
 		Conn:      conn,
 		LocalPK:   c.PK,
@@ -193,7 +190,7 @@ func (c *stcpClient) acceptConn() error {
 		Initiator: false,
 	}
 
-	wrappedConn, err := tpconn.NewConn(connConfig)
+	wrappedConn, err := NewConn(connConfig, STCP)
 	if err != nil {
 		return err
 	}
@@ -208,14 +205,14 @@ func (c *stcpClient) acceptConn() error {
 // getListener returns listener to specified skywire port
 // todo: proper listener type
 // todo: move to generic client
-func (c *stcpClient) getListener(port uint16) (*tplistener.Listener, error) {
+func (c *stcpClient) getListener(port uint16) (*Listener, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	lis, ok := c.listeners[port]
 	if !ok {
 		return nil, errors.New("not listening on given port")
 	}
-	return lis.(*tplistener.Listener), nil
+	return lis, nil
 }
 
 func (c *stcpClient) Close() error {
