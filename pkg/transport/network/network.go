@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 )
 
@@ -22,6 +23,27 @@ const (
 	// DMSG is a type of a transport that works through an intermediary service
 	DMSG = "dmsg"
 )
+
+// skywire address consisting of pulic key, port and
+// type of transport we connect over
+type addr struct {
+	PK   cipher.PubKey
+	Port uint16
+	Type Type
+}
+
+// Network name, e.g. stcpr
+func (a addr) Network() string {
+	return string(a.Type)
+}
+
+// String form of address
+func (a addr) String() string {
+	// use dmsg.Addr for printing. This address doesn't have
+	// to be dmsg though
+	dmsgAddr := dmsg.Addr{PK: a.PK, Port: a.Port}
+	return dmsgAddr.String()
+}
 
 //go:generate mockery -name Dialer -case underscore -inpkg
 
