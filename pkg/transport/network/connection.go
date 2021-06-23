@@ -16,17 +16,17 @@ import (
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
 type Conn struct {
 	net.Conn
-	lAddr    dmsg.Addr
-	rAddr    dmsg.Addr
-	freePort func()
+	lAddr, rAddr dmsg.Addr
+	freePort     func()
+	connType     Type
 }
 
-// Config describes a config for Conn.
-type Config struct {
+// ConnConfig describes a config for Conn.
+type ConnConfig struct {
 	Log       *logging.Logger
 	Conn      net.Conn
-	LocalPK   cipher.PubKey
 	LocalSK   cipher.SecKey
+	LocalPK   cipher.PubKey
 	Deadline  time.Time
 	Handshake tphandshake.Handshake
 	FreePort  func()
@@ -35,7 +35,8 @@ type Config struct {
 }
 
 // NewConn creates a new Conn.
-func NewConn(c Config) (*Conn, error) {
+// todo: move out handshake
+func NewConn(c ConnConfig, connType Type) (*Conn, error) {
 	if c.Log != nil {
 		c.Log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
 	}
@@ -100,3 +101,18 @@ func (c *Conn) Close() error {
 
 	return c.Conn.Close()
 }
+
+// LocalPK returns local public key of connection.
+func (c *Conn) LocalPK() cipher.PubKey { return c.lAddr.PK }
+
+// RemotePK returns remote public key of connection.
+func (c *Conn) RemotePK() cipher.PubKey { return c.rAddr.PK }
+
+// LocalPort returns local port of connection.
+func (c *Conn) LocalPort() uint16 { return c.lAddr.Port }
+
+// RemotePort returns remote port of connection.
+func (c *Conn) RemotePort() uint16 { return c.rAddr.Port }
+
+// Network returns network of connection.
+func (c *Conn) Network() string { return string(c.connType) }

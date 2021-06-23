@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/skycoin/dmsg"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
 )
 
 // Listener represents a skywire network listener. It wraps net.Listener
@@ -17,7 +16,7 @@ type Listener struct {
 	mx       sync.Mutex
 	once     sync.Once
 	freePort func()
-	accept   chan *tpconn.Conn
+	accept   chan *Conn
 	done     chan struct{}
 }
 
@@ -26,13 +25,13 @@ func NewListener(lAddr dmsg.Addr, freePort func()) *Listener {
 	return &Listener{
 		lAddr:    lAddr,
 		freePort: freePort,
-		accept:   make(chan *tpconn.Conn),
+		accept:   make(chan *Conn),
 		done:     make(chan struct{}),
 	}
 }
 
 // Introduce is used by Client to introduce Conn to Listener.
-func (l *Listener) Introduce(conn *tpconn.Conn) error {
+func (l *Listener) Introduce(conn *Conn) error {
 	select {
 	case <-l.done:
 		return io.ErrClosedPipe
@@ -49,8 +48,13 @@ func (l *Listener) Introduce(conn *tpconn.Conn) error {
 	}
 }
 
-// Accept implements net.Listener
+// Accept implements net.Listener, returns generic net.Conn
 func (l *Listener) Accept() (net.Conn, error) {
+	return l.AcceptConn()
+}
+
+// AcceptConn accepts a skywire connection and returns network.Conn
+func (l *Listener) AcceptConn() (*Conn, error) {
 	c, ok := <-l.accept
 	if !ok {
 		return nil, io.ErrClosedPipe
