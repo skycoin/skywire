@@ -14,10 +14,17 @@ import (
 
 //go:generate readmegen -n V1 -o ./README.md ./v1.go
 
-// V1Name is the semantic version string for V1.
-const V1Name = "v1.0.0"
+// V100Name is the semantic version string for V1.0.0
+const V100Name = "v1.0.0"
 
-// V1 is visor config v1.0.0
+// V101Name is the semantic version string for V1.0.1
+// Default urls are changed to newer ones in this version
+const V101Name = "v1.0.1"
+
+// V1Name is the current version of config
+const V1Name = V101Name
+
+// V1 is visor config v1.0.1
 type V1 struct {
 	*Common
 	mu sync.RWMutex
