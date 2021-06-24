@@ -99,7 +99,7 @@ type Network struct {
 }
 
 // New creates a network from a config.
-func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
+func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogger) (*Network, error) {
 	clients := NetworkClients{
 		Direct: make(map[string]directtp.Client),
 	}
@@ -123,7 +123,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			},
 		}
 		clients.DmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.NetworkConfigs.Dmsg.Discovery), dmsgConf)
-		clients.DmsgC.SetLogger(logging.MustGetLogger("snet.dmsgC"))
+		clients.DmsgC.SetLogger(masterLogger.PackageLogger("snet.dmsgC"))
 	}
 
 	if conf.NetworkConfigs.STCP != nil {
@@ -140,7 +140,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 				return nil
 			},
 		}
-		clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
+		clients.Direct[tptypes.STCP] = directtp.NewClient(conf, masterLogger)
 	}
 
 	if conf.ARClient != nil {
@@ -157,7 +157,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			},
 		}
 
-		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf)
+		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf, masterLogger)
 
 		sudphConf := directtp.Config{
 			Type:            tptypes.SUDPH,
@@ -166,7 +166,7 @@ func New(conf Config, eb *appevent.Broadcaster) (*Network, error) {
 			AddressResolver: conf.ARClient,
 		}
 
-		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf)
+		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
 	}
 
 	return NewRaw(conf, clients), nil

@@ -95,10 +95,10 @@ type client struct {
 }
 
 // NewClient creates a net Client.
-func NewClient(conf Config) Client {
+func NewClient(conf Config, masterLogger *logging.MasterLogger) Client {
 	return &client{
 		conf:               conf,
-		log:                logging.MustGetLogger(conf.Type),
+		log:                masterLogger.PackageLogger(conf.Type),
 		porter:             porter.New(porter.MinEphemeral),
 		listeners:          make(map[uint16]*tplistener.Listener),
 		done:               make(chan struct{}),

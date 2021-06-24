@@ -149,7 +149,7 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -193,7 +193,7 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 		NetworkConfigs: nc,
 	}
 
-	n, err := snet.New(conf, v.ebc)
+	n, err := snet.New(conf, v.ebc, v.MasterLogger())
 	if err != nil {
 		return err
 	}
@@ -291,7 +291,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
-	ts, err := ts.NewTransportListener(ctx, v.conf, v.net.Dmsg(), v.tpM)
+	ts, err := ts.NewTransportListener(ctx, v.conf, v.net.Dmsg(), v.tpM, v.MasterLogger())
 	if err != nil {
 		cancel()
 		return err
