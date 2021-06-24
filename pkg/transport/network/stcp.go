@@ -77,6 +77,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	connConfig := ConnConfig{
 		Log:       c.log,
 		Conn:      conn,
+		LocalPK:   c.lPK,
 		LocalSK:   c.lSK,
 		Deadline:  time.Now().Add(tphandshake.Timeout),
 		Handshake: hs,
@@ -181,6 +182,9 @@ func (c *stcpClient) acceptConn() error {
 
 	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
 		lis, err = c.getListener(f2.DstAddr.Port)
+		if err != nil {
+			c.log.Errorf("cannot get listener for port %d", f2.DstAddr.Port)
+		}
 		return err
 	})
 
