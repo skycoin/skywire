@@ -12,7 +12,7 @@ import (
 	"github.com/creack/pty"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/skycoin/src/util/logging"
-	terminal "golang.org/x/term"
+	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/skycoin/dmsg/cipher"
 )
