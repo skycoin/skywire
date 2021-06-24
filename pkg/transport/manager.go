@@ -98,11 +98,6 @@ func (tm *Manager) serve(ctx context.Context) {
 	tm.runClients(ctx)
 	tm.initTransports(ctx)
 	tm.Logger.Info("transport manager is serving.")
-
-	// closing logic
-	<-tm.done
-	tm.Logger.Info("transport manager is closing.")
-	tm.Logger.Info("transport manager closed.")
 }
 
 func (tm *Manager) initClients() {
@@ -473,16 +468,13 @@ func (tm *Manager) Local() cipher.PubKey {
 
 // Close closes opened transports and registered factories.
 func (tm *Manager) Close() error {
-	tm.closeOnce.Do(func() {
-		tm.close()
-	})
+	tm.closeOnce.Do(tm.close)
 	return nil
 }
 
 func (tm *Manager) close() {
-	if tm == nil {
-		return
-	}
+	tm.Logger.Info("transport manager is closing.")
+	defer tm.Logger.Info("transport manager closed.")
 
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
