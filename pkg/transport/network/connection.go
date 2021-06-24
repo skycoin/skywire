@@ -80,7 +80,7 @@ func NewConn(c ConnConfig, connType Type) (*Conn, error) {
 		c.Log.Infof("Connection with %v@%v is NOT encrypted", rAddr, c.Conn.RemoteAddr())
 	}
 
-	return &Conn{Conn: c.Conn, lAddr: lAddr, rAddr: rAddr, freePort: c.FreePort}, nil
+	return &Conn{Conn: c.Conn, lAddr: lAddr, rAddr: rAddr, freePort: c.FreePort, connType: connType}, nil
 }
 
 // LocalAddr implements net.Conn
