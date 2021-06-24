@@ -41,17 +41,13 @@ type Manager struct {
 	tps      map[uuid.UUID]*ManagedTransport
 	arClient arclient.APIClient
 
-	listenersMu   sync.Mutex
-	listeners     []*network.Listener
-	servingNetsMu sync.Mutex
-	servingNets   map[network.Type]struct{}
-	readCh        chan routing.Packet
-	mx            sync.RWMutex
-	wgMu          sync.Mutex
-	wg            sync.WaitGroup
-	serveOnce     sync.Once // ensure we only serve once.
-	closeOnce     sync.Once // ensure we only close once.
-	done          chan struct{}
+	readCh    chan routing.Packet
+	mx        sync.RWMutex
+	wgMu      sync.Mutex
+	wg        sync.WaitGroup
+	serveOnce sync.Once // ensure we only serve once.
+	closeOnce sync.Once // ensure we only close once.
+	done      chan struct{}
 
 	afterTPClosed TPCloseCallback
 	factory       network.ClientFactory
@@ -65,15 +61,14 @@ func NewManager(log *logging.Logger, arClient arclient.APIClient, config *Manage
 		log = logging.MustGetLogger("tp_manager")
 	}
 	tm := &Manager{
-		Logger:      log,
-		Conf:        config,
-		servingNets: make(map[network.Type]struct{}),
-		tps:         make(map[uuid.UUID]*ManagedTransport),
-		readCh:      make(chan routing.Packet, 20),
-		done:        make(chan struct{}),
-		netClients:  make(map[network.Type]network.Client),
-		arClient:    arClient,
-		factory:     factory,
+		Logger:     log,
+		Conf:       config,
+		tps:        make(map[uuid.UUID]*ManagedTransport),
+		readCh:     make(chan routing.Packet, 20),
+		done:       make(chan struct{}),
+		netClients: make(map[network.Type]network.Client),
+		arClient:   arClient,
+		factory:    factory,
 	}
 	return tm, nil
 }
@@ -94,11 +89,71 @@ func (tm *Manager) OnAfterTPClosed(f TPCloseCallback) {
 // Serve runs listening loop across all registered factories.
 func (tm *Manager) Serve(ctx context.Context) {
 	tm.serveOnce.Do(func() {
-		client := tm.factory.MakeClient(network.STCP)
-		tm.netClients[network.STCP] = client
-		go client.Serve()
 		tm.serve(ctx)
 	})
+}
+
+func (tm *Manager) serve(ctx context.Context) {
+	tm.initClients()
+	tm.runClients(ctx)
+	tm.initTransports(ctx)
+	tm.Logger.Info("transport manager is serving.")
+
+	// closing logic
+	<-tm.done
+	tm.Logger.Info("transport manager is closing.")
+	tm.Logger.Info("transport manager closed.")
+}
+
+func (tm *Manager) initClients() {
+	acceptedNetworks := []network.Type{network.STCP}
+	for _, netType := range acceptedNetworks {
+		tm.netClients[netType] = tm.factory.MakeClient(netType)
+	}
+}
+
+func (tm *Manager) runClients(ctx context.Context) {
+	if tm.isClosing() {
+		return
+	}
+	for _, client := range tm.netClients {
+		tm.Logger.Infof("Serving %s network", client.Type())
+		err := client.Serve()
+		if err != nil {
+			tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
+			continue
+		}
+		lis, err := client.Listen(skyenv.DmsgTransportPort)
+		if err != nil {
+			tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
+				client.Type(), skyenv.DmsgTransportPort)
+			return
+		}
+		tm.Logger.Infof("listening on network: %s", client.Type())
+		tm.wgMu.Lock()
+		tm.wg.Add(1)
+		tm.wgMu.Unlock()
+		go tm.acceptTransports(ctx, lis)
+	}
+}
+
+func (tm *Manager) acceptTransports(ctx context.Context, lis *network.Listener) {
+	defer tm.wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tm.done:
+			return
+		default:
+			if err := tm.acceptTransport(ctx, lis); err != nil {
+				tm.Logger.Warnf("Failed to accept connection: %v", err)
+				if strings.Contains(err.Error(), "closed") {
+					return
+				}
+			}
+		}
+	}
 }
 
 // Networks returns all the network types contained within the TransportManager.
@@ -108,90 +163,6 @@ func (tm *Manager) Networks() []string {
 		nets = append(nets, string(netType))
 	}
 	return nets
-}
-
-func (tm *Manager) serveNet(ctx context.Context, netType network.Type) {
-	if tm.isClosing() {
-		return
-	}
-
-	// this func may be called by either initiating routing or a callback,
-	// so we should check whether this type of network is already being served
-	tm.servingNetsMu.Lock()
-	if _, ok := tm.servingNets[netType]; ok {
-		tm.servingNetsMu.Unlock()
-		return
-	}
-	tm.servingNets[netType] = struct{}{}
-	tm.servingNetsMu.Unlock()
-
-	client, ok := tm.netClients[netType]
-	if !ok {
-		return
-	}
-
-	lis, err := client.Listen(skyenv.DmsgTransportPort)
-	if err != nil {
-		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
-			netType, skyenv.DmsgTransportPort)
-		return
-	}
-	tm.Logger.Infof("listening on network: %s", netType)
-	tm.listenersMu.Lock()
-	tm.listeners = append(tm.listeners, lis)
-	tm.listenersMu.Unlock()
-
-	if tm.isClosing() {
-		return
-	}
-
-	tm.wgMu.Lock()
-	tm.wg.Add(1)
-	tm.wgMu.Unlock()
-
-	go func() {
-		defer tm.wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-tm.done:
-				return
-			default:
-				if err := tm.acceptTransport(ctx, lis); err != nil {
-					tm.Logger.Warnf("Failed to accept connection: %v", err)
-					if strings.Contains(err.Error(), "closed") {
-						return
-					}
-				}
-			}
-		}
-	}()
-}
-
-func (tm *Manager) serve(ctx context.Context) {
-
-	for netType := range tm.netClients {
-		tm.serveNet(ctx, netType)
-	}
-
-	tm.initTransports(ctx)
-	tm.Logger.Info("transport manager is serving.")
-
-	// closing logic
-	<-tm.done
-
-	tm.Logger.Info("transport manager is closing.")
-	defer tm.Logger.Info("transport manager closed.")
-
-	// Close all listeners.
-	tm.listenersMu.Lock()
-	for i, lis := range tm.listeners {
-		if err := lis.Close(); err != nil {
-			tm.Logger.Warnf("listener %d of network '%s' closed with error: %v", i, lis.Network(), err)
-		}
-	}
-	tm.listenersMu.Unlock()
 }
 
 func (tm *Manager) initTransports(ctx context.Context) {
