@@ -139,8 +139,10 @@ func (c *stcpClient) serve() {
 		c.log.Errorf("Failed to listen on %q: %v", c.listenAddr, err)
 		return
 	}
+	c.mu.Lock()
 	c.connListener = l
 	close(c.listenStarted)
+	c.mu.Unlock()
 	c.log.Infof("listening on addr: %v", c.connListener.Addr())
 	for {
 		if err := c.acceptConn(); err != nil {
