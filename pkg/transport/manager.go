@@ -94,7 +94,9 @@ func (tm *Manager) OnAfterTPClosed(f TPCloseCallback) {
 // Serve runs listening loop across all registered factories.
 func (tm *Manager) Serve(ctx context.Context) {
 	tm.serveOnce.Do(func() {
-		tm.netClients[network.STCP] = tm.factory.MakeClient(network.STCP)
+		client := tm.factory.MakeClient(network.STCP)
+		tm.netClients[network.STCP] = client
+		go client.Serve()
 		tm.serve(ctx)
 	})
 }
