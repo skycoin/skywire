@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -137,13 +136,12 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis *network.Listener) 
 	for {
 		select {
 		case <-ctx.Done():
-			return
 		case <-tm.done:
 			return
 		default:
 			if err := tm.acceptTransport(ctx, lis); err != nil {
 				tm.Logger.Warnf("Failed to accept connection: %v", err)
-				if strings.Contains(err.Error(), "closed") {
+				if errors.Is(err, io.ErrClosedPipe) {
 					return
 				}
 			}
@@ -305,7 +303,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 			// This occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in
 			// the STCP table. There is no point in retrying as a connection would be impossible, so we just return an
 			// error.
-			if isSTCPTableError(remote, err) {
+			if errors.Is(err, network.ErrStcpEntryNotFound) {
 				if closeErr := mTp.Close(); closeErr != nil {
 					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
 				}
@@ -318,12 +316,6 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 
 		return mTp, nil
 	}
-}
-
-// isSTCPPKError returns true if the error is a STCP table error.
-// This occurs the requested remote public key does not exist in the STCP table.
-func isSTCPTableError(remotePK cipher.PubKey, err error) bool {
-	return err.Error() == fmt.Sprintf("pk table: entry of %s does not exist", remotePK.String())
 }
 
 func (tm *Manager) saveTransport(remote cipher.PubKey, netName string, label Label) (*ManagedTransport, error) {

@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -47,6 +46,10 @@ func newStcp(PK cipher.PubKey, SK cipher.SecKey, addr string, eb *appevent.Broad
 	return client
 }
 
+// ErrStcpEntryNotFound is returned when requested PK is not found in the local
+// PK table
+var ErrStcpEntryNotFound = errors.New("entry not found in PK table")
+
 func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
@@ -57,7 +60,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	var conn net.Conn
 	addr, ok := c.table.Addr(rPK)
 	if !ok {
-		return nil, fmt.Errorf("pk table: entry of %s does not exist", rPK)
+		return nil, ErrStcpEntryNotFound
 	}
 
 	conn, err := net.Dial("tcp", addr)
