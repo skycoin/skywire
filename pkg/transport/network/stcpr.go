@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 )
 
@@ -61,9 +60,7 @@ func (c *stcprClient) dialVisor(visorData arclient.VisorData) (net.Conn, error) 
 }
 
 func (c *stcprClient) dial(addr string) (net.Conn, error) {
-	data := appevent.TCPDialData{RemoteNet: string(STCPR), RemoteAddr: addr}
-	event := appevent.NewEvent(appevent.TCPDial, data)
-	_ = c.eb.Broadcast(context.Background(), event) //nolint:errcheck
+	c.eb.SendTCPDial(context.Background(), string(STCPR), addr)
 	return net.Dial("tcp", addr)
 }
 
