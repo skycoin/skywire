@@ -18,11 +18,11 @@ const (
 	STCPR Type = "stcpr"
 	// SUDPH is a type of a transport that works via UDP, resolves addresses using address-resolver service,
 	// and uses UDP hole punching.
-	SUDPH = "sudph"
+	SUDPH Type = "sudph"
 	// STCP is a type of a transport that works via TCP and resolves addresses using PK table.
-	STCP = "stcp"
+	STCP Type = "stcp"
 	// DMSG is a type of a transport that works through an intermediary service
-	DMSG = "dmsg"
+	DMSG Type = "dmsg"
 )
 
 // skywire address consisting of pulic key, port and

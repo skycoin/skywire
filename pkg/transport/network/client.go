@@ -242,15 +242,15 @@ func (c *genericClient) isClosed() bool {
 	}
 }
 
-func (c *stcpClient) PK() cipher.PubKey {
+func (c *genericClient) PK() cipher.PubKey {
 	return c.lPK
 }
 
-func (c *stcpClient) SK() cipher.SecKey {
+func (c *genericClient) SK() cipher.SecKey {
 	return c.lSK
 }
 
-func (c *stcpClient) Close() error {
+func (c *genericClient) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.done)
 
@@ -273,6 +273,6 @@ func (c *stcpClient) Close() error {
 	return nil
 }
 
-func (c *stcpClient) Type() Type {
+func (c *genericClient) Type() Type {
 	return c.netType
 }
