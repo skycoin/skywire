@@ -7,11 +7,6 @@ import (
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/skycoin/skywire/pkg/app/appevent"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
-	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
-	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
 // Type is a type of network. Type affects the way connection is established
@@ -60,20 +55,6 @@ type Dialer interface {
 	Type() Type
 }
 
-// Client provides access to skywire network in terms of dialing remote visors
-// and listening to incoming connections
-type Client interface {
-	// todo: change return type to wrapped conn
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Conn, error)
-	Listen(port uint16) (*Listener, error)
-	LocalAddr() (net.Addr, error)
-	PK() cipher.PubKey
-	SK() cipher.SecKey
-	Serve() error
-	Close() error
-	Type() Type
-}
-
 var (
 	// ErrUnknownTransportType is returned when transport type is unknown.
 	ErrUnknownTransportType = errors.New("unknown transport type")
@@ -90,24 +71,3 @@ var (
 	// ErrPortOccupied is returned when port is occupied.
 	ErrPortOccupied = errors.New("port is already occupied")
 )
-
-// ClientFactory is used to create Client instances
-// and holds dependencies for different clients
-type ClientFactory struct {
-	PK         cipher.PubKey
-	SK         cipher.SecKey
-	ListenAddr string
-	PKTable    stcp.PKTable
-	ARClient   arclient.APIClient
-	eb         *appevent.Broadcaster
-}
-
-// MakeClient creates a new client of specified type
-func (f *ClientFactory) MakeClient(netType Type) Client {
-	log := logging.MustGetLogger(string(netType))
-	p := porter.New(porter.MinEphemeral)
-	if netType == STCP {
-		return newStcp(f.PK, f.SK, f.ListenAddr, f.eb, f.PKTable, p, log)
-	}
-	return nil
-}
