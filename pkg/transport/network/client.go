@@ -95,36 +95,15 @@ type genericClient struct {
 // The process will perform handshake over raw connection
 // todo: rename to handshake, initHandshake, skyConnect or smth?
 func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, lPK, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
-
 	lPort, freePort, err := c.porter.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, err
 	}
 	lAddr, rAddr := dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
-
 	remoteAddr := conn.RemoteAddr()
-	// c.log.Infof("Accepted connection from %v", remoteAddr)
 	c.log.Infof("Performing handshake with %v", remoteAddr)
-
 	hs := tphandshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
-	_, _, err = hs(conn, time.Now().Add(tphandshake.Timeout))
-	if err != nil {
-		if err := conn.Close(); err != nil {
-			c.log.WithError(err).Warnf("Failed to close connection")
-		}
-		if freePort != nil {
-			freePort()
-		}
-		return nil, err
-	}
-	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", remoteAddr, lAddr, rAddr)
-
-	wrappedConn := &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: freePort, connType: c.netType}
-	err = wrappedConn.encrypt(c.lPK, c.lSK, true)
-	if err != nil {
-		return nil, err
-	}
-	return wrappedConn, nil
+	return c.wrapConn(conn, hs, true, freePort)
 }
 
 // todo: context?
@@ -142,15 +121,32 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 			if errors.Is(err, io.EOF) {
 				continue // likely it's a dummy connection from service discovery
 			}
-
 			c.log.Warnf("failed to accept incoming connection: %v", err)
-
 			if !tphandshake.IsHandshakeError(err) {
 				c.log.Warnf("stopped serving")
 				return
 			}
 		}
 	}
+}
+
+func (c *genericClient) wrapConn(conn net.Conn, hs tphandshake.Handshake, initiator bool, onClose func()) (*Conn, error) {
+	lAddr, rAddr, err := hs(conn, time.Now().Add(tphandshake.Timeout))
+	if err != nil {
+		if err := conn.Close(); err != nil {
+			c.log.WithError(err).Warnf("Failed to close connection")
+		}
+		onClose()
+		return nil, err
+	}
+	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", conn.RemoteAddr(), lAddr, rAddr)
+
+	wrappedConn := &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: onClose, connType: c.netType}
+	err = wrappedConn.encrypt(c.lPK, c.lSK, initiator)
+	if err != nil {
+		return nil, err
+	}
+	return wrappedConn, nil
 }
 
 // todo: better comments
@@ -164,44 +160,26 @@ func (c *genericClient) acceptConn() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
 	}
-
 	conn, err := c.connListener.Accept()
 	if err != nil {
 		return err
 	}
-
 	remoteAddr := conn.RemoteAddr()
 	c.log.Infof("Accepted connection from %v", remoteAddr)
-	c.log.Infof("Performing handshake with %v", conn.RemoteAddr())
 
-	var freePort func()
+	onClose := func() {}
 	hs := tphandshake.ResponderHandshake(tphandshake.MakeF2PortChecker(c.checkListener))
-	lAddr, rAddr, err := hs(conn, time.Now().Add(tphandshake.Timeout))
-	if err != nil {
-		if err := conn.Close(); err != nil {
-			c.log.WithError(err).Warnf("Failed to close connection")
-		}
-		if freePort != nil {
-			freePort()
-		}
-		return err
-	}
-	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", conn.RemoteAddr(), lAddr, rAddr)
-
-	wrappedConn := &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: freePort, connType: c.netType}
-	err = wrappedConn.encrypt(c.lPK, c.lSK, false)
+	wrappedConn, err := c.wrapConn(conn, hs, false, onClose)
 	if err != nil {
 		return err
 	}
-
-	lis, err := c._getListener(lAddr.Port)
+	lis, err := c.getListener(wrappedConn.lAddr.Port)
 	if err != nil {
 		return err
 	}
 	if err := lis.Introduce(wrappedConn); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -216,7 +194,7 @@ func (c *genericClient) LocalAddr() (net.Addr, error) {
 }
 
 // getListener returns listener to specified skywire port
-func (c *genericClient) _getListener(port uint16) (*Listener, error) {
+func (c *genericClient) getListener(port uint16) (*Listener, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	lis, ok := c.listeners[port]
@@ -227,7 +205,7 @@ func (c *genericClient) _getListener(port uint16) (*Listener, error) {
 }
 
 func (c *genericClient) checkListener(port uint16) error {
-	_, err := c._getListener(port)
+	_, err := c.getListener(port)
 	return err
 }
 
