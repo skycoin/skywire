@@ -16,26 +16,22 @@ skywire command line interface
 		- [disc tp](#disc-tp)
 		- [exec](#exec)
 		- [gen config](#gen-config)
-		- [add transport](#add-transport)
-
+		- [ls apps](#ls-apps)
+		- [ls rules](#ls-rules)
+		- [ls tp](#ls-tp)
+		- [ls types](#ls-types)
+		- [pk](#pk)
+		- [rm rule](#rm-rule)
+		- [rm tp](#rm-tp)
+		- [rule](#rule)
+		- [set app autostart](#set-app-autostart)
+		- [start app](#start-app)
+		- [stop app](#stop-app)
+		- [tp](#tp)
+		- [update config](#update-config)
+		- [version](#version)
   - [rtfind usage](#rtfind-usage)
-	- [](#)
-	- [](#)
-  - [](#)
-  - [](#)
-	- [](#)
-    - [](#)
-    - [](#)
-	- [](#)
-  - [](#)
-  - [](#)
-  - [](#)
-  - [](#)
-    - [](#)
-	- [](#)
-
 <!-- /MarkdownTOC -->
-
 
 ## Install
 
