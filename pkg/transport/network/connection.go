@@ -34,53 +34,21 @@ type ConnConfig struct {
 	Initiator bool
 }
 
-// NewConn creates a new Conn.
-// todo: move out handshake
-func NewConn(c ConnConfig, connType Type) (*Conn, error) {
-	if c.Log != nil {
-		c.Log.Infof("Performing handshake with %v", c.Conn.RemoteAddr())
+func (c *Conn) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool) error {
+	config := noise.Config{
+		LocalPK:   lPK,
+		LocalSK:   lSK,
+		RemotePK:  c.rAddr.PK,
+		Initiator: initator,
 	}
 
-	lAddr, rAddr, err := c.Handshake(c.Conn, c.Deadline)
+	wrappedConn, err := noisewrapper.WrapConn(config, c.Conn)
 	if err != nil {
-		if err := c.Conn.Close(); err != nil && c.Log != nil {
-			c.Log.WithError(err).Warnf("Failed to close connection")
-		}
-
-		if c.FreePort != nil {
-			c.FreePort()
-		}
-
-		return nil, err
+		return fmt.Errorf("encrypt connection to %v@%v: %w", c.rAddr, c.Conn.RemoteAddr(), err)
 	}
 
-	if c.Log != nil {
-		c.Log.Infof("Sent handshake to %v, local addr %v, remote addr %v", c.Conn.RemoteAddr(), lAddr, rAddr)
-	}
-
-	if c.Encrypt {
-		config := noise.Config{
-			LocalPK:   c.LocalPK,
-			LocalSK:   c.LocalSK,
-			RemotePK:  rAddr.PK,
-			Initiator: c.Initiator,
-		}
-
-		wrappedConn, err := noisewrapper.WrapConn(config, c.Conn)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt connection to %v@%v: %w", rAddr, c.Conn.RemoteAddr(), err)
-		}
-
-		c.Conn = wrappedConn
-
-		if c.Log != nil {
-			c.Log.Infof("Connection with %v@%v is encrypted", rAddr, c.Conn.RemoteAddr())
-		}
-	} else if c.Log != nil {
-		c.Log.Infof("Connection with %v@%v is NOT encrypted", rAddr, c.Conn.RemoteAddr())
-	}
-
-	return &Conn{Conn: c.Conn, lAddr: lAddr, rAddr: rAddr, freePort: c.FreePort, connType: connType}, nil
+	c.Conn = wrappedConn
+	return nil
 }
 
 // LocalAddr implements net.Conn

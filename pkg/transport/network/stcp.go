@@ -17,6 +17,7 @@ type stcpClient struct {
 
 func newStcp(generic *genericClient, table stcp.PKTable) Client {
 	client := &stcpClient{genericClient: generic, table: table}
+	client.netType = STCP
 	return client
 }
 
@@ -64,8 +65,4 @@ func (c *stcpClient) serve() {
 		return
 	}
 	c.acceptConnections(lis)
-}
-
-func (c *stcpClient) Type() Type {
-	return STCP
 }

@@ -76,6 +76,7 @@ type genericClient struct {
 	lPK        cipher.PubKey
 	lSK        cipher.SecKey
 	listenAddr string
+	netType    Type
 
 	log    *logging.Logger
 	porter *porter.Porter
@@ -100,20 +101,30 @@ func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, lPK, 
 		return nil, err
 	}
 	lAddr, rAddr := dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
-	hs := tphandshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
 
-	connConfig := ConnConfig{
-		Log:       c.log,
-		Conn:      conn,
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		Deadline:  time.Now().Add(tphandshake.Timeout),
-		Handshake: hs,
-		FreePort:  freePort,
-		Encrypt:   true,
-		Initiator: true,
+	remoteAddr := conn.RemoteAddr()
+	// c.log.Infof("Accepted connection from %v", remoteAddr)
+	c.log.Infof("Performing handshake with %v", remoteAddr)
+
+	hs := tphandshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
+	_, _, err = hs(conn, time.Now().Add(tphandshake.Timeout))
+	if err != nil {
+		if err := conn.Close(); err != nil {
+			c.log.WithError(err).Warnf("Failed to close connection")
+		}
+		if freePort != nil {
+			freePort()
+		}
+		return nil, err
 	}
-	return NewConn(connConfig, STCP)
+	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", remoteAddr, lAddr, rAddr)
+
+	wrappedConn := &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: freePort, connType: c.netType}
+	err = wrappedConn.encrypt(c.lPK, c.lSK, true)
+	if err != nil {
+		return nil, err
+	}
+	return wrappedConn, nil
 }
 
 // todo: context?
@@ -160,37 +171,33 @@ func (c *genericClient) acceptConn() error {
 	}
 
 	remoteAddr := conn.RemoteAddr()
-
 	c.log.Infof("Accepted connection from %v", remoteAddr)
+	c.log.Infof("Performing handshake with %v", conn.RemoteAddr())
 
-	// todo: move handshake process out of connection wrapping.
-	var lis *Listener
-
-	hs := tphandshake.ResponderHandshake(func(f2 tphandshake.Frame2) error {
-		lis, err = c.getListener(f2.DstAddr.Port)
-		if err != nil {
-			c.log.Errorf("cannot get listener for port %d", f2.DstAddr.Port)
+	var freePort func()
+	hs := tphandshake.ResponderHandshake(tphandshake.MakeF2PortChecker(c.checkListener))
+	lAddr, rAddr, err := hs(conn, time.Now().Add(tphandshake.Timeout))
+	if err != nil {
+		if err := conn.Close(); err != nil {
+			c.log.WithError(err).Warnf("Failed to close connection")
+		}
+		if freePort != nil {
+			freePort()
 		}
 		return err
-	})
-
-	connConfig := ConnConfig{
-		Log:       c.log,
-		Conn:      conn,
-		LocalPK:   c.lPK,
-		LocalSK:   c.lSK,
-		Deadline:  time.Now().Add(tphandshake.Timeout),
-		Handshake: hs,
-		FreePort:  nil,
-		Encrypt:   true,
-		Initiator: false,
 	}
+	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", conn.RemoteAddr(), lAddr, rAddr)
 
-	wrappedConn, err := NewConn(connConfig, STCP)
+	wrappedConn := &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: freePort, connType: c.netType}
+	err = wrappedConn.encrypt(c.lPK, c.lSK, false)
 	if err != nil {
 		return err
 	}
 
+	lis, err := c._getListener(lAddr.Port)
+	if err != nil {
+		return err
+	}
 	if err := lis.Introduce(wrappedConn); err != nil {
 		return err
 	}
@@ -209,7 +216,7 @@ func (c *genericClient) LocalAddr() (net.Addr, error) {
 }
 
 // getListener returns listener to specified skywire port
-func (c *genericClient) getListener(port uint16) (*Listener, error) {
+func (c *genericClient) _getListener(port uint16) (*Listener, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	lis, ok := c.listeners[port]
@@ -217,6 +224,11 @@ func (c *genericClient) getListener(port uint16) (*Listener, error) {
 		return nil, errors.New("not listening on given port")
 	}
 	return lis, nil
+}
+
+func (c *genericClient) checkListener(port uint16) error {
+	_, err := c._getListener(port)
+	return err
 }
 
 // Listen starts listening on a specified port number. The port is a skywire port
@@ -281,4 +293,8 @@ func (c *stcpClient) Close() error {
 	})
 
 	return nil
+}
+
+func (c *stcpClient) Type() Type {
+	return c.netType
 }
