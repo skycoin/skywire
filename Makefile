@@ -13,6 +13,7 @@ VERSION := $(shell git describe)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 DATE := $(shell date -u $(RFC_3339))
 COMMIT := $(shell git rev-list -1 HEAD)
+BRANCH := latest
 
 PROJECT_BASE := github.com/skycoin/skywire
 DMSG_BASE := github.com/skycoin/dmsg
@@ -41,11 +42,6 @@ BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor $(RACE_FLAG)
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 
 check: lint test ## Run linters and tests
-
-move-built-frontend:
-	rm -rf ${MANAGER_UI_BUILT_DIR}
-	mkdir ${MANAGER_UI_BUILT_DIR}
-	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
@@ -138,6 +134,9 @@ build-deploy: ## Build for deployment Docker images
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks ./cmd/apps/skysocks
 	${OPTS} go build ${BUILD_OPTS_DEPLOY} -o /release/apps/skysocks-client ./cmd/apps/skysocks-client
 
+build-docker: ## Build docker image
+	./ci_scripts/docker-push.sh -t ${BRANCH} -b
+
 github-release: ## Create a GitHub release
 	goreleaser --rm-dist
 
@@ -145,13 +144,18 @@ github-release: ## Create a GitHub release
 install-deps-ui:  ## Install the UI dependencies
 	cd $(MANAGER_UI_DIR) && npm ci
 
+run: ## Run skywire visor with skywire-config.json, and start a browser if running a hypervisor
+	./skywire-visor -c ./skywire-config.json
+
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
 
 build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
-	make move-built-frontend
+	rm -rf ${MANAGER_UI_BUILT_DIR}
+	mkdir ${MANAGER_UI_BUILT_DIR}
+	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
