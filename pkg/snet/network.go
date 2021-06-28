@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
+
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
@@ -159,14 +161,27 @@ func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogg
 
 		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf, masterLogger)
 
-		sudphConf := directtp.Config{
-			Type:            tptypes.SUDPH,
-			PK:              conf.PubKey,
-			SK:              conf.SecKey,
-			AddressResolver: conf.ARClient,
+		nC := stun.NewClient()
+		nC.SetServerAddr("194.195.240.138:3478")
+		nat, _, err := nC.Discover()
+		if err != nil {
+			return NewRaw(conf, clients), err
 		}
 
-		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
+		switch nat {
+		case stun.NATFull, stun.NATPortRestricted, stun.NATRestricted, stun.NATNone:
+			sudphConf := directtp.Config{
+				Type:            tptypes.SUDPH,
+				PK:              conf.PubKey,
+				SK:              conf.SecKey,
+				AddressResolver: conf.ARClient,
+			}
+
+			clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
+		case stun.NATBlocked:
+			log.Warn(stun.NATBlocked.String())
+		}
+
 	}
 
 	return NewRaw(conf, clients), nil
