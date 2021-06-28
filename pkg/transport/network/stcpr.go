@@ -35,7 +35,7 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 
 	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
 
-	conn, err := c.dialVisor(visorData)
+	conn, err := c.dialVisor(ctx, visorData)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +43,11 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 	return c.initConnection(ctx, conn, c.lPK, rPK, rPort)
 }
 
-func (c *stcprClient) dialVisor(visorData arclient.VisorData) (net.Conn, error) {
+func (c *stcprClient) dialVisor(ctx context.Context, visorData arclient.VisorData) (net.Conn, error) {
 	if visorData.IsLocal {
 		for _, host := range visorData.Addresses {
 			addr := net.JoinHostPort(host, visorData.Port)
-			conn, err := c.dial(addr)
+			conn, err := c.dial(ctx, addr)
 			if err == nil {
 				return conn, nil
 			}
@@ -57,12 +57,13 @@ func (c *stcprClient) dialVisor(visorData arclient.VisorData) (net.Conn, error) 
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		addr = net.JoinHostPort(addr, visorData.Port)
 	}
-	return c.dial(addr)
+	return c.dial(ctx, addr)
 }
 
-func (c *stcprClient) dial(addr string) (net.Conn, error) {
+func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {
 	c.eb.SendTCPDial(context.Background(), string(STCPR), addr)
-	return net.Dial("tcp", addr)
+	dialer := net.Dialer{}
+	return dialer.DialContext(ctx, "tcp", addr)
 }
 
 // Serve starts accepting all incoming connections (i.e. connections to all skywire ports)
@@ -97,7 +98,7 @@ func (c *stcprClient) serve() {
 		c.log.Infof("Not binding STCPR: no public IP address found")
 		return
 	}
-	c.log.Infof("Trying to bind stcpr")
+	c.log.Infof("Binding")
 	if err := c.addressResolver.BindSTCPR(context.Background(), port); err != nil {
 		c.log.Errorf("Failed to bind STCPR: %v", err)
 		return
