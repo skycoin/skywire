@@ -59,8 +59,11 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 	generic.lSK = f.SK
 	generic.listenAddr = f.ListenAddr
 
-	if netType == STCP {
+	switch netType {
+	case STCP:
 		return newStcp(generic, f.PKTable)
+	case STCPR:
+		return newStcpr(generic, f.ARClient)
 	}
 	return nil
 }
