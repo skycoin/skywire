@@ -73,7 +73,8 @@ type Config struct {
 	PubKey         cipher.PubKey
 	SecKey         cipher.SecKey
 	ARClient       arclient.APIClient
-	StunServers    []string
+	NATType        stun.NATType
+	PublicIP       *stun.Host
 	NetworkConfigs NetworkConfigs
 }
 
@@ -167,31 +168,16 @@ func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogg
 			SK:              conf.SecKey,
 			AddressResolver: conf.ARClient,
 		}
-
-	stunLoop:
-		for _, sServer := range conf.StunServers {
-			nC := stun.NewClient()
-			nC.SetServerAddr(sServer)
-			nat, _, err := nC.Discover()
-			if err != nil {
-				log.Warn(err)
-			}
-			switch nat {
-			case stun.NATFull, stun.NATPortRestricted, stun.NATRestricted, stun.NATNone:
-				clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
-				break stunLoop
-			case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-				log.Warn(nat.String())
-				break stunLoop
-			default:
-				log.Warn(nat.String())
-				if sServer == conf.StunServers[len(conf.StunServers)-1] {
-					log.Warn("All STUN servers offline")
-					clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
-				}
-			}
+		// SUDPH wont be initilised only if the visor is under any symmetric NAT
+		// along with the other NAT types all other errors will also initilise the SUDPH
+		// as without a proper response from a STUN server we cannot determine if the
+		// visor is un der any symmetric NAT
+		switch conf.NATType {
+		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			break
+		default:
+			clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
 		}
-
 	}
 
 	return NewRaw(conf, clients), nil
