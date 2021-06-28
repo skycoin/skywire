@@ -100,7 +100,7 @@ func (tm *Manager) serve(ctx context.Context) {
 }
 
 func (tm *Manager) initClients() {
-	acceptedNetworks := []network.Type{network.STCP}
+	acceptedNetworks := []network.Type{network.STCP, network.STCPR}
 	for _, netType := range acceptedNetworks {
 		tm.netClients[netType] = tm.factory.MakeClient(netType)
 	}
