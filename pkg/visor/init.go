@@ -532,7 +532,7 @@ func initHypervisors(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 1 * time.Minute
+	const tickDuration = 5 * time.Minute
 
 	conf := v.conf.UptimeTracker
 
