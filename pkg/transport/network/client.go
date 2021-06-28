@@ -40,7 +40,7 @@ type ClientFactory struct {
 	ListenAddr string
 	PKTable    stcp.PKTable
 	ARClient   arclient.APIClient
-	eb         *appevent.Broadcaster
+	EB         *appevent.Broadcaster
 }
 
 // MakeClient creates a new client of specified type
@@ -54,7 +54,7 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 	generic.listeners = make(map[uint16]*Listener)
 	generic.log = log
 	generic.porter = p
-	generic.eb = f.eb
+	generic.eb = f.EB
 	generic.lPK = f.PK
 	generic.lSK = f.SK
 	generic.listenAddr = f.ListenAddr
