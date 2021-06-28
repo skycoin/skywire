@@ -64,6 +64,8 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 		return newStcp(generic, f.PKTable)
 	case STCPR:
 		return newStcpr(generic, f.ARClient)
+	case SUDPH:
+		return newSudph(generic, f.ARClient)
 	}
 	return nil
 }
