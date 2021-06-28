@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
 type stcprClient struct {
@@ -76,10 +77,31 @@ func (c *stcprClient) Serve() error {
 }
 
 func (c *stcprClient) serve() {
-	lis, err := net.Listen("tcp", c.listenAddr)
+	lis, err := net.Listen("tcp", "")
 	if err != nil {
-		c.log.Errorf("Failed to listen on %q: %v", c.listenAddr, err)
+		c.log.Errorf("Failed to listen on random port: %v", "", err)
 		return
 	}
+
+	localAddr := lis.Addr().String()
+	_, port, err := net.SplitHostPort(localAddr)
+	if err != nil {
+		c.log.Errorf("Failed to extract port from addr %v: %v", err)
+		return
+	}
+	hasPublic, err := netutil.HasPublicIP()
+	if err != nil {
+		c.log.Errorf("Failed to check for public IP: %v", err)
+	}
+	if !hasPublic {
+		c.log.Infof("Not binding STCPR: no public IP address found")
+		return
+	}
+	c.log.Infof("Trying to bind stcpr")
+	if err := c.addressResolver.BindSTCPR(context.Background(), port); err != nil {
+		c.log.Errorf("Failed to bind STCPR: %v", err)
+		return
+	}
+	c.log.Infof("Successfuly bound stcpr to port %s", port)
 	c.acceptConnections(lis)
 }

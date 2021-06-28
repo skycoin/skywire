@@ -230,7 +230,7 @@ func (c *genericClient) Listen(port uint16) (*Listener, error) {
 	defer c.mu.Unlock()
 
 	lAddr := dmsg.Addr{PK: c.lPK, Port: port}
-	lis := NewListener(lAddr, freePort, STCP)
+	lis := NewListener(lAddr, freePort, c.netType)
 	c.listeners[port] = lis
 
 	return lis, nil
