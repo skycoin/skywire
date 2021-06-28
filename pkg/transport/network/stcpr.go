@@ -80,7 +80,7 @@ func (c *stcprClient) Serve() error {
 func (c *stcprClient) serve() {
 	lis, err := net.Listen("tcp", "")
 	if err != nil {
-		c.log.Errorf("Failed to listen on random port: %v", "", err)
+		c.log.Errorf("Failed to listen on random port: %v", err)
 		return
 	}
 
