@@ -156,8 +156,6 @@ func (ui *UI) Handler() http.HandlerFunc {
 		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
 
 		if err := ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, &pty.Winsize{Rows: wsRows, Cols: wsCols}); err != nil {
-			log.Print("xxxx")
-
 			writeWSError(log, wsConn, err)
 			return
 		}
