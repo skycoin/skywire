@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
@@ -90,11 +91,16 @@ type Overview struct {
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
 	LocalIP         string               `json:"local_ip"`
+	NATType         string               `json:"nat_type"`
+	PublicIP        string               `json:"public_ip"`
 }
 
 // Overview implements API.
 func (v *Visor) Overview() (*Overview, error) {
 	var tSummaries []*TransportSummary
+	var natType string
+	var publicIP string
+
 	if v == nil {
 		panic("v is nil")
 	}
@@ -107,6 +113,15 @@ func (v *Visor) Overview() (*Overview, error) {
 		return true
 	})
 
+	switch v.net.Conf().NATType {
+	case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
+		natType = v.net.Conf().NATType.String()
+		publicIP = v.net.Conf().PublicIP.String()
+	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+		natType = v.net.Conf().NATType.String()
+		publicIP = v.net.Conf().PublicIP.IP()
+	}
+
 	overview := &Overview{
 		PubKey:          v.conf.PK,
 		BuildInfo:       buildinfo.Get(),
@@ -114,6 +129,8 @@ func (v *Visor) Overview() (*Overview, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
+		NATType:         natType,
+		PublicIP:        publicIP,
 	}
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()

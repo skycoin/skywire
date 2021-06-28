@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -186,11 +187,39 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 		STCP: v.conf.STCP,
 	}
 
+	var nat stun.NATType
+	var host *stun.Host
+	var err error
+stunLoop:
+	for _, stunServer := range v.conf.StunServers {
+		nC := stun.NewClient()
+		nC.SetServerAddr(stunServer)
+
+		nat, host, err = nC.Discover()
+		if err != nil {
+			log.Warn(err)
+		}
+
+		switch nat {
+		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+			log.Warn(nat.String())
+			// incase we fail to connect to all the STUN servers give a warning
+			if stunServer == v.conf.StunServers[len(v.conf.StunServers)-1] {
+				log.Warn("All STUN servers offline")
+			}
+		default:
+			log.Info(nat.String())
+			log.Info(host.String())
+			break stunLoop
+		}
+	}
+
 	conf := snet.Config{
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
-		StunServers:    v.conf.StunServers,
+		NATType:        nat,
+		PublicIP:       host,
 		NetworkConfigs: nc,
 	}
 
