@@ -279,6 +279,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		ListenAddr: v.conf.STCP.LocalAddr,
 		PKTable:    table,
 		ARClient:   v.arClient,
+		EB:         v.ebc,
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, &tpMConf, factory)
 	if err != nil {
