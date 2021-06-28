@@ -34,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
@@ -67,8 +68,10 @@ var (
 	pty vinit.Module
 	// Dmsg module
 	dmsgC vinit.Module
-	// Transport setup
+	// Transport manager
 	tr vinit.Module
+	// Transport setup
+	trs vinit.Module
 	// Routing system
 	rt vinit.Module
 	// Application launcer
@@ -114,8 +117,9 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
+	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
+		&tr, &rt, &launch, &cli, &trs, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -147,7 +151,7 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK)
+	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -230,7 +234,6 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 }
 
 func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Transport
 
 	tpdC, err := connectToTpDisc(v)
 	if err != nil {
@@ -238,20 +241,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	var logS transport.LogStore
-	switch conf.LogStore.Type {
-	case visorconfig.FileLogStore:
-		logS, err = transport.FileTransportLogStore(conf.LogStore.Location)
-		if err != nil {
-			err := fmt.Errorf("failed to create %s log store: %w", visorconfig.FileLogStore, err)
-			return err
-		}
-	case visorconfig.MemoryLogStore:
-		logS = transport.InMemoryTransportLogStore()
-	default:
-		err := fmt.Errorf("invalid log store type: %s", conf.LogStore.Type)
-		return err
-	}
+	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
 		PubKey:          v.conf.PK,
@@ -325,6 +315,21 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.tpM = tpM
 	v.initLock.Unlock()
+	return nil
+}
+
+func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
+	ctx, cancel := context.WithCancel(ctx)
+	ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
+	if err != nil {
+		cancel()
+		return err
+	}
+	go ts.Serve(ctx)
+	v.pushCloseStack("transport_setup.rpc", func() error {
+		cancel()
+		return nil
+	})
 	return nil
 }
 
@@ -412,7 +417,7 @@ func initLauncher(ctx context.Context, v *Visor, log *logging.Logger) error {
 		Apps:       conf.Apps,
 		ServerAddr: conf.ServerAddr,
 		BinPath:    conf.BinPath,
-		LocalPath:  conf.LocalPath,
+		LocalPath:  v.conf.LocalPath,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")

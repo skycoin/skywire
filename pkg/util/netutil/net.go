@@ -90,3 +90,31 @@ func IsPublicIP(IP net.IP) bool {
 	}
 	return false
 }
+
+// DefaultNetworkInterfaceIPs returns IP addresses for the default network interface
+func DefaultNetworkInterfaceIPs() ([]net.IP, error) {
+	networkIfc, err := DefaultNetworkInterface()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get default network interface: %w", err)
+	}
+	localIPs, err := NetworkInterfaceIPs(networkIfc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IPs of %s: %w", networkIfc, err)
+	}
+	return localIPs, nil
+}
+
+// HasPublicIP returns true if this machine has at least one
+// publically available IP address
+func HasPublicIP() (bool, error) {
+	localIPs, err := LocalNetworkInterfaceIPs()
+	if err != nil {
+		return false, err
+	}
+	for _, IP := range localIPs {
+		if IsPublicIP(IP) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
