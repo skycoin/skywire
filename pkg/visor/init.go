@@ -190,6 +190,7 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
+		StunServers:    v.conf.StunServers,
 		NetworkConfigs: nc,
 	}
 
