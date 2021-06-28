@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ccding/go-stun/stun"
-
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
@@ -74,6 +73,7 @@ type Config struct {
 	PubKey         cipher.PubKey
 	SecKey         cipher.SecKey
 	ARClient       arclient.APIClient
+	StunServers    []string
 	NetworkConfigs NetworkConfigs
 }
 
@@ -161,25 +161,35 @@ func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogg
 
 		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf, masterLogger)
 
-		nC := stun.NewClient()
-		nC.SetServerAddr("194.195.240.138:3478")
-		nat, _, err := nC.Discover()
-		if err != nil {
-			return NewRaw(conf, clients), err
+		sudphConf := directtp.Config{
+			Type:            tptypes.SUDPH,
+			PK:              conf.PubKey,
+			SK:              conf.SecKey,
+			AddressResolver: conf.ARClient,
 		}
 
-		switch nat {
-		case stun.NATFull, stun.NATPortRestricted, stun.NATRestricted, stun.NATNone:
-			sudphConf := directtp.Config{
-				Type:            tptypes.SUDPH,
-				PK:              conf.PubKey,
-				SK:              conf.SecKey,
-				AddressResolver: conf.ARClient,
+	stunLoop:
+		for _, sServer := range conf.StunServers {
+			nC := stun.NewClient()
+			nC.SetServerAddr(sServer)
+			nat, _, err := nC.Discover()
+			if err != nil {
+				log.Warn(err)
 			}
-
-			clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
-		case stun.NATBlocked:
-			log.Warn(stun.NATBlocked.String())
+			switch nat {
+			case stun.NATFull, stun.NATPortRestricted, stun.NATRestricted, stun.NATNone:
+				clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
+				break stunLoop
+			case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+				log.Warn(nat.String())
+				break stunLoop
+			default:
+				log.Warn(nat.String())
+				if sServer == conf.StunServers[len(conf.StunServers)-1] {
+					log.Warn("All STUN servers offline")
+					clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
+				}
+			}
 		}
 
 	}
