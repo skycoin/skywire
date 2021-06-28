@@ -85,7 +85,7 @@ type Network struct {
 }
 
 // New creates a network from a config.
-func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc arclient.APIClient) (*Network, error) {
+func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc arclient.APIClient, masterLogger *logging.MasterLogger) (*Network, error) {
 	clients := NetworkClients{
 		Direct: make(map[string]directtp.Client),
 	}
@@ -104,7 +104,7 @@ func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc arclient
 				return nil
 			},
 		}
-		clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
+		clients.Direct[tptypes.STCP] = directtp.NewClient(conf, masterLogger)
 	}
 
 	if arc != nil {
@@ -121,7 +121,7 @@ func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc arclient
 			},
 		}
 
-		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf)
+		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf, masterLogger)
 
 		sudphConf := directtp.Config{
 			Type:            tptypes.SUDPH,
@@ -130,7 +130,7 @@ func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc arclient
 			AddressResolver: arc,
 		}
 
-		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf)
+		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
 	}
 
 	return NewRaw(conf, clients, dmsgC, arc), nil
@@ -220,24 +220,20 @@ func (n *Network) Close() error {
 
 	wg := new(sync.WaitGroup)
 
-	var directErrorsMu sync.Mutex
 	directErrors := make(map[string]error)
 
-	for k, v := range n.clients.Direct {
-		if v != nil {
-			wg.Add(1)
-			go func() {
-				err := v.Close()
-
-				directErrorsMu.Lock()
-				directErrors[k] = err
-				directErrorsMu.Unlock()
-
-				wg.Done()
-			}()
+	for _, directClient := range n.clients.Direct {
+		if directClient == nil {
+			continue
 		}
+		wg.Add(1)
+		go func(client directtp.Client) {
+			err := client.Close()
+			if err != nil {
+			}
+			wg.Done()
+		}(directClient)
 	}
-
 	wg.Wait()
 
 	for _, err := range directErrors {

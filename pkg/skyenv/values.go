@@ -12,14 +12,24 @@ const (
 	PackageSkywirePath = "/opt/skywire"
 )
 
-// Constants for default services.
+// Constants for old default services.
 const (
-	DefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
-	DefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
-	DefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
-	DefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
-	DefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
-	DefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+	OldDefaultTpDiscAddr          = "http://transport.discovery.skywire.skycoin.com"
+	OldDefaultDmsgDiscAddr        = "http://dmsg.discovery.skywire.skycoin.com"
+	OldDefaultServiceDiscAddr     = "http://service.discovery.skycoin.com"
+	OldDefaultRouteFinderAddr     = "http://routefinder.skywire.skycoin.com"
+	OldDefaultUptimeTrackerAddr   = "http://uptime-tracker.skywire.skycoin.com"
+	OldDefaultAddressResolverAddr = "http://address.resolver.skywire.skycoin.com"
+)
+
+// Constants for new default services.
+const (
+	DefaultTpDiscAddr          = "http://tpd.skywire.skycoin.com"
+	DefaultDmsgDiscAddr        = "http://dmsgd.skywire.skycoin.com"
+	DefaultServiceDiscAddr     = "http://sd.skycoin.com"
+	DefaultRouteFinderAddr     = "http://rf.skywire.skycoin.com"
+	DefaultUptimeTrackerAddr   = "http://ut.skywire.skycoin.com"
+	DefaultAddressResolverAddr = "http://ar.skywire.skycoin.com"
 	DefaultSetupPK             = "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 )
 
@@ -37,21 +47,20 @@ const (
 // Dmsg port constants.
 // TODO(evanlinjin): Define these properly. These are currently random.
 const (
-	DmsgCtrlPort       uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
-	DmsgSetupPort      uint16 = 36  // Listening port of a setup node.
-	DmsgAwaitSetupPort uint16 = 136 // Listening port of a visor for setup operations.
-	DmsgTransportPort  uint16 = 45  // Listening port of a visor for incoming transports.
-	DmsgHypervisorPort uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
+	DmsgCtrlPort           uint16 = 7   // Listening port for dmsgctrl protocol (similar to TCP Echo Protocol).
+	DmsgSetupPort          uint16 = 36  // Listening port of a setup node.
+	DmsgAwaitSetupPort     uint16 = 136 // Listening port of a visor for setup operations.
+	DmsgTransportPort      uint16 = 45  // Listening port of a visor for incoming transports.
+	DmsgHypervisorPort     uint16 = 46  // Listening port of a visor for incoming hypervisor connections.
+	DmsgTransportSetupPort uint16 = 47
 )
 
 // Default dmsgpty constants.
 const (
 	DmsgPtyPort uint16 = 22
 
-	DefaultDmsgPtyCLINet    = "unix"
-	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
-	DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
-	PackageDmsgPtyWhiteList = PackageSkywirePath + "/dmsgpty/whitelist.json"
+	DefaultDmsgPtyCLINet  = "unix"
+	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
 )
 
 // Default STCP constants.
@@ -91,18 +100,16 @@ const (
 // Default skywire app server and discovery constants
 const (
 	DefaultAppSrvAddr     = "localhost:5505"
-	AppDiscUpdateInterval = 30 * time.Second
-	DefaultAppLocalPath   = DefaultSkywirePath + "/local"
+	AppDiscUpdateInterval = time.Minute
 	DefaultAppBinPath     = DefaultSkywirePath + "/apps"
 	DefaultLogLevel       = "info"
-	PackageAppLocalPath   = PackageSkywirePath + "/local"
 	PackageAppBinPath     = PackageSkywirePath + "/apps"
 )
 
-// Default routing constants
+// Default local constants
 const (
-	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
-	PackageTpLogStore = PackageSkywirePath + "/transport_logs"
+	DefaultLocalPath = DefaultSkywirePath + "/local"
+	PackageLocalPath = PackageSkywirePath + "/local"
 )
 
 // Default hypervisor constants

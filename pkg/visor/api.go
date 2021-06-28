@@ -70,6 +70,8 @@ type API interface {
 	UpdateAvailable(channel updater.Channel) (*updater.Version, error)
 	UpdateStatus() (string, error)
 	RuntimeLogs() (string, error)
+
+	SetMinHops(uint16) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -137,6 +139,7 @@ type Summary struct {
 	IsHypervisor bool                           `json:"is_hypervisor,omitempty"`
 	DmsgStats    *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 	Online       bool                           `json:"online"`
+	MinHops      uint16                         `json:"min_hops"`
 }
 
 // Summary implements API.
@@ -175,6 +178,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		Health:   health,
 		Uptime:   uptime,
 		Routes:   extraRoutes,
+		MinHops:  v.conf.Routing.MinHops,
 	}
 
 	return summary, nil
@@ -733,4 +737,9 @@ func (v *Visor) RuntimeLogs() (string, error) {
 	builder.WriteString(strings.Join(logs, ","))
 	builder.WriteString("]")
 	return builder.String(), nil
+}
+
+// SetMinHops sets min_hops routing config of visor
+func (v *Visor) SetMinHops(in uint16) error {
+	return v.conf.UpdateMinHops(in)
 }
