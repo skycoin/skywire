@@ -151,7 +151,7 @@ linters-settings:
 
 linters:
   enable:
-    - golint
+    - revive
     - goimports
     - varcheck
     - unparam
