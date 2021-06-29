@@ -260,22 +260,11 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		ARClient:   v.arClient,
 		EB:         v.ebc,
 	}
-	tpM, err := transport.NewManager(managerLogger, v.arClient, &tpMConf, factory)
+	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err
 	}
-
-	// todo: move to transport manager
-	tpM.OnAfterTPClosed(func(netType network.Type, addr string) {
-		if netType == network.STCPR && addr != "" {
-			data := appevent.TCPCloseData{RemoteNet: string(netType), RemoteAddr: addr}
-			event := appevent.NewEvent(appevent.TCPClose, data)
-			if err := v.ebc.Broadcast(context.Background(), event); err != nil {
-				v.log.WithError(err).Errorln("Failed to broadcast TCPClose event")
-			}
-		}
-	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := new(sync.WaitGroup)
