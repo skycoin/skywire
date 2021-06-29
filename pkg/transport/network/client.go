@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
@@ -19,17 +20,29 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
-// Client provides access to skywire network in terms of dialing remote visors
-// and listening to incoming connections
+// Client provides access to skywire network
+// It allows dialing remote visors using their public keys, as
+// well as listening to incoming connections from other visors
 type Client interface {
-	// todo: change return type to wrapped conn
+	// Dial remote visor, that is listening on the given skywire port
 	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Conn, error)
+	// Start initializes the client and prepares it for listening. It is required
+	// to be called to start accepting connections
+	Start() error
+	// Listen on the given skywire port. This can be called multiple times
+	// for different ports for the same client. It requires Start to be called
+	// to start accepting connections
 	Listen(port uint16) (*Listener, error)
+	// todo: remove
 	LocalAddr() (net.Addr, error)
+	// PK returns public key of the visor running this client
 	PK() cipher.PubKey
+	// SK returns secret key of the visor running this client
 	SK() cipher.SecKey
-	Serve() error
+	// Close the client, stop accepting connections. Connections returned by the
+	// client should be closed manually
 	Close() error
+	// Type returns skywire network type in which this client operates
 	Type() Type
 }
 
@@ -66,9 +79,9 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 	case STCP:
 		return newStcp(generic, f.PKTable)
 	case STCPR:
-		return newStcpr(generic, f.ARClient)
+		return newStcpr(resolved)
 	case SUDPH:
-		return newSudph(resolved, f.ARClient)
+		return newSudph(resolved)
 	}
 	return nil
 }
@@ -102,7 +115,7 @@ type genericClient struct {
 // the remote client
 // The process will perform handshake over raw connection
 // todo: rename to handshake, initHandshake, skyConnect or smth?
-func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, lPK, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	lPort, freePort, err := c.porter.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, err
@@ -138,6 +151,8 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 	}
 }
 
+// wrapConn performs handshake over provided raw connection and wraps it in
+// network.Conn type using the data obtained from handshake process
 func (c *genericClient) wrapConn(conn net.Conn, hs tphandshake.Handshake, initiator bool, onClose func()) (*Conn, error) {
 	lAddr, rAddr, err := hs(conn, time.Now().Add(tphandshake.Timeout))
 	if err != nil {
@@ -157,13 +172,10 @@ func (c *genericClient) wrapConn(conn net.Conn, hs tphandshake.Handshake, initia
 	return wrappedConn, nil
 }
 
-// todo: better comments
-// acceptConn
-// 1. accepts new raw network connection
-// 2. performs accepting handshake over that connection
-// 3. obtains skywire port from handshake
-// 4. obtains skywire listener registered for that port
-// 5. delivers connection to the listener
+// acceptConn accepts new connection in underlying raw network listener,
+// performs handshake, and using the data from the handshake wraps
+// connection and delivers it to the appropriate listener.
+// The listener is chosen using skywire port from the incoming visor connection
 func (c *genericClient) acceptConn() error {
 	if c.isClosed() {
 		return io.ErrClosedPipe
@@ -185,12 +197,10 @@ func (c *genericClient) acceptConn() error {
 	if err != nil {
 		return err
 	}
-	if err := lis.Introduce(wrappedConn); err != nil {
-		return err
-	}
-	return nil
+	return lis.introduce(wrappedConn)
 }
 
+// todo: remove
 // LocalAddr returns local address. This is network address the client
 // listens to for incoming connections, not skywire address
 func (c *genericClient) LocalAddr() (net.Addr, error) {
@@ -250,14 +260,17 @@ func (c *genericClient) isClosed() bool {
 	}
 }
 
+// PK implements interface
 func (c *genericClient) PK() cipher.PubKey {
 	return c.lPK
 }
 
+// SK implements interface
 func (c *genericClient) SK() cipher.SecKey {
 	return c.lSK
 }
 
+// Close implements interface
 func (c *genericClient) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.done)
@@ -281,10 +294,14 @@ func (c *genericClient) Close() error {
 	return nil
 }
 
+// Type implements interface
 func (c *genericClient) Type() Type {
 	return c.netType
 }
 
+// resolvedClient is a wrapper around genericClient,
+// for the types of transports that use address resolver service
+// to resolve addresses of remote visors
 type resolvedClient struct {
 	*genericClient
 	ar arclient.APIClient
@@ -292,6 +309,9 @@ type resolvedClient struct {
 
 type dialFunc func(ctx context.Context, addr string) (net.Conn, error)
 
+// dialVisor uses address resovler to obtain network address of the target visor
+// and dials that visor address(es)
+// dial process is specific to transport type and is provided by the client
 func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial dialFunc) (net.Conn, error) {
 	c.log.Infof("Dialing PK %v", rPK)
 	visorData, err := c.ar.Resolve(ctx, string(c.netType), rPK)
