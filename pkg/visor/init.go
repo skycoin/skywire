@@ -28,12 +28,12 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
@@ -151,7 +151,7 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	arClient, err := arclient.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
+	arClient, err := addrresolver.NewHTTP(conf.AddressResolver, v.conf.PK, v.conf.SK, log)
 	if err != nil {
 		err := fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -625,7 +625,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	// todo: consider moving this to transport into some helper function
-	stcpr, ok := v.tpM.STcpr()
+	stcpr, ok := v.tpM.Stcpr()
 	if !ok {
 		return nil
 	}
