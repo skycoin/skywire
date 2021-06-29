@@ -19,7 +19,7 @@ import (
 )
 
 // TPCloseCallback triggers after a session is closed.
-type TPCloseCallback func(network, addr string)
+type TPCloseCallback func(netType network.Type, addr string)
 
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
@@ -216,7 +216,6 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *network.Listener) e
 			DC:             tm.Conf.DiscoveryClient,
 			LS:             tm.Conf.LogStore,
 			RemotePK:       conn.RemotePK(),
-			NetName:        lis.Network(),
 			AfterClosed:    tm.afterTPClosed,
 			TransportLabel: LabelUser,
 		}, false)
@@ -251,23 +250,23 @@ var ErrUnknownNetwork = errors.New("unknown network type")
 
 // IsKnownNetwork returns true when netName is a known
 // network type that we are able to operate in
-func (tm *Manager) IsKnownNetwork(netName string) bool {
-	_, ok := tm.netClients[network.Type(netName)]
+func (tm *Manager) IsKnownNetwork(netName network.Type) bool {
+	_, ok := tm.netClients[netName]
 	return ok
 }
 
 // GetTransport gets transport entity to the given remote
-func (tm *Manager) GetTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
+func (tm *Manager) GetTransport(remote cipher.PubKey, netType network.Type) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
-	if !tm.IsKnownNetwork(netName) {
+	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
 
-	tpID := tm.tpIDFromPK(remote, netName)
+	tpID := tm.tpIDFromPK(remote, netType)
 	tp, ok := tm.tps[tpID]
 	if !ok {
-		return nil, fmt.Errorf("transport to %s of type %s error: %w", remote, netName, ErrNotFound)
+		return nil, fmt.Errorf("transport to %s of type %s error: %w", remote, netType, ErrNotFound)
 	}
 	return tp, nil
 }
@@ -295,22 +294,20 @@ func (tm *Manager) GetTransportsByLabel(label Label) []*ManagedTransport {
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
-func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netName string, label Label) (*ManagedTransport, error) {
-
+func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netType network.Type, label Label) (*ManagedTransport, error) {
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
-
 	for {
-		mTp, err := tm.saveTransport(remote, true, netName, label)
+		mTp, err := tm.saveTransport(remote, true, netType, label)
 		if err != nil {
 			return nil, fmt.Errorf("save transport: %w", err)
 		}
 
-		tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.netName)
+		tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.Type())
 
 		if err = mTp.Dial(ctx); err != nil {
-			tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.netName, err)
+			tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.Type(), err)
 			// This occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
 			// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
 			if err == ErrNotServing {
@@ -339,14 +336,14 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netN
 	}
 }
 
-func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netName string, label Label) (*ManagedTransport, error) {
+func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netType network.Type, label Label) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
-	if !tm.IsKnownNetwork(netName) {
+	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
 
-	tpID := tm.tpIDFromPK(remote, netName)
+	tpID := tm.tpIDFromPK(remote, netType)
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
 	oldMTp, ok := tm.tps[tpID]
@@ -355,9 +352,9 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netName s
 		return oldMTp, nil
 	}
 
-	client, ok := tm.netClients[network.Type(netName)]
+	client, ok := tm.netClients[network.Type(netType)]
 	if !ok {
-		return nil, fmt.Errorf("client not found for the type %s", netName)
+		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
 
 	afterTPClosed := tm.afterTPClosed
@@ -367,20 +364,18 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netName s
 		DC:             tm.Conf.DiscoveryClient,
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
-		NetName:        netName,
 		AfterClosed:    afterTPClosed,
 		TransportLabel: label,
 	}, initiator)
 
-	if mTp.netName == string(network.STCPR) {
-		if tm.arClient != nil {
-			visorData, err := tm.arClient.Resolve(context.Background(), mTp.netName, remote)
-			if err == nil {
-				mTp.remoteAddr = visorData.RemoteAddr
-			} else {
-				if err != addrresolver.ErrNoEntry {
-					return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
-				}
+	// todo: do we need this here? Client dial will run resolve anyway
+	if mTp.Type() == network.STCPR && tm.arClient != nil {
+		visorData, err := tm.arClient.Resolve(context.Background(), string(mTp.Type()), remote)
+		if err == nil {
+			mTp.remoteAddr = visorData.RemoteAddr
+		} else {
+			if err != addrresolver.ErrNoEntry {
+				return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
 			}
 		}
 	}
@@ -389,7 +384,7 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netName s
 		tm.deleteTransport(mTp.Entry.ID)
 	}()
 	tm.tps[tpID] = mTp
-	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netName, tpID)
+	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 	return mTp, nil
 }
 
@@ -401,7 +396,7 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.Entry.Type == string(network.STCPR) && tp.remoteAddr != "" {
+		if tp.Entry.Type == network.STCPR && tp.remoteAddr != "" {
 			addrs = append(addrs, tp.remoteAddr)
 		}
 	}
@@ -518,6 +513,6 @@ func (tm *Manager) isClosing() bool {
 	}
 }
 
-func (tm *Manager) tpIDFromPK(pk cipher.PubKey, netName string) uuid.UUID {
-	return MakeTransportID(tm.Conf.PubKey, pk, netName)
+func (tm *Manager) tpIDFromPK(pk cipher.PubKey, netType network.Type) uuid.UUID {
+	return MakeTransportID(tm.Conf.PubKey, pk, netType)
 }

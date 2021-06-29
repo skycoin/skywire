@@ -28,7 +28,6 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -268,9 +267,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	// todo: move to transport manager
-	tpM.OnAfterTPClosed(func(network, addr string) {
-		if network == tptypes.STCPR && addr != "" {
-			data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
+	tpM.OnAfterTPClosed(func(netType network.Type, addr string) {
+		if netType == network.STCPR && addr != "" {
+			data := appevent.TCPCloseData{RemoteNet: string(netType), RemoteAddr: addr}
 			event := appevent.NewEvent(appevent.TCPClose, data)
 			if err := v.ebc.Broadcast(context.Background(), event); err != nil {
 				v.log.WithError(err).Errorln("Failed to broadcast TCPClose event")

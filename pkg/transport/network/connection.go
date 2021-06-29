@@ -90,4 +90,4 @@ func (c *Conn) RemotePort() uint16 { return c.rAddr.Port }
 
 // Network returns network of connection
 // todo: consider switching to Type instead of string
-func (c *Conn) Network() string { return string(c.connType) }
+func (c *Conn) Network() Type { return c.connType }
