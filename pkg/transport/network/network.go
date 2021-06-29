@@ -52,7 +52,7 @@ func (a addr) String() string {
 // Dialer is an entity that can be dialed and asked for its type.
 type Dialer interface {
 	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
-	Type() Type
+	Type() string
 }
 
 var (
