@@ -8,8 +8,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 const (
@@ -59,8 +59,8 @@ func (a *autoconnector) Run(ctx context.Context) error {
 		absent := a.filterDuplicates(addresses, tps)
 		for _, pk := range absent {
 			a.log.WithField("pk", pk).Infoln("Adding transport to public visor")
-			logger := a.log.WithField("pk", pk).WithField("type", tptypes.STCPR)
-			if _, err := a.tm.SaveTransport(ctx, pk, tptypes.STCPR, transport.LabelAutomatic); err != nil {
+			logger := a.log.WithField("pk", pk).WithField("type", string(network.STCPR))
+			if _, err := a.tm.SaveTransport(ctx, pk, network.STCPR, transport.LabelAutomatic); err != nil {
 				logger.WithError(err).Warnln("Failed to add transport to public visor")
 				continue
 			}

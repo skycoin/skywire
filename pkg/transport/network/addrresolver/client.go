@@ -57,7 +57,7 @@ type APIClient interface {
 	io.Closer
 	BindSTCPR(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error)
-	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
+	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Health(ctx context.Context) (int, error)
 }
 
