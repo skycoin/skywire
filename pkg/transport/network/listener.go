@@ -70,8 +70,8 @@ func (l *Listener) Addr() net.Addr {
 
 // Network returns network type
 // todo: consider switching to Type instead of string
-func (l *Listener) Network() string {
-	return string(l.network)
+func (l *Listener) Network() Type {
+	return l.network
 }
 
 // Introduce is used by Client to introduce a new connection to this Listener

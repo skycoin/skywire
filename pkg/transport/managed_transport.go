@@ -49,7 +49,6 @@ type ManagedTransportConfig struct {
 	DC             DiscoveryClient
 	LS             LogStore
 	RemotePK       cipher.PubKey
-	NetName        string
 	AfterClosed    TPCloseCallback
 	TransportLabel Label
 }
@@ -62,7 +61,6 @@ type ManagedTransport struct {
 	log *logging.Logger
 
 	rPK        cipher.PubKey
-	netName    string
 	Entry      Entry
 	LogEntry   *LogEntry
 	logUpdates uint32
@@ -101,11 +99,10 @@ func NewManagedTransport(conf ManagedTransportConfig, isInitiator bool) *Managed
 	mt := &ManagedTransport{
 		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
 		rPK:         conf.RemotePK,
-		netName:     conf.NetName,
 		dc:          conf.DC,
 		ls:          conf.LS,
 		client:      conf.client,
-		Entry:       MakeEntry(initiator, target, conf.NetName, true, conf.TransportLabel),
+		Entry:       MakeEntry(initiator, target, conf.client.Type(), true, conf.TransportLabel),
 		LogEntry:    new(LogEntry),
 		connCh:      make(chan struct{}, 1),
 		done:        make(chan struct{}),
@@ -259,7 +256,7 @@ func (mt *ManagedTransport) close() {
 	mt.afterClosedMu.RUnlock()
 
 	if afterClosed != nil {
-		afterClosed(mt.netName, mt.remoteAddr)
+		afterClosed(mt.Type(), mt.remoteAddr)
 	}
 }
 
@@ -275,7 +272,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *network.Conn) erro
 	mt.connMx.Lock()
 	defer mt.connMx.Unlock()
 
-	if conn.Network() != mt.netName {
+	if conn.Network() != mt.Type() {
 		return ErrWrongNetwork
 	}
 
@@ -639,4 +636,4 @@ func (mt *ManagedTransport) logMod() bool {
 func (mt *ManagedTransport) Remote() cipher.PubKey { return mt.rPK }
 
 // Type returns the transport type.
-func (mt *ManagedTransport) Type() string { return mt.netName }
+func (mt *ManagedTransport) Type() network.Type { return mt.client.Type() }
