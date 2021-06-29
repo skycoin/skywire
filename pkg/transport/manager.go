@@ -112,7 +112,7 @@ func (tm *Manager) runClients(ctx context.Context) {
 	}
 	for _, client := range tm.netClients {
 		tm.Logger.Infof("Serving %s network", client.Type())
-		err := client.Serve()
+		err := client.Start()
 		if err != nil {
 			tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
 			continue
