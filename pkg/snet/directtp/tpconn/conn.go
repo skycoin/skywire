@@ -9,9 +9,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/noise"
 	"github.com/skycoin/skycoin/src/util/logging"
-
-	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
+	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 )
 
 // Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
@@ -29,7 +27,7 @@ type Config struct {
 	LocalPK   cipher.PubKey
 	LocalSK   cipher.SecKey
 	Deadline  time.Time
-	Handshake tphandshake.Handshake
+	Handshake handshake.Handshake
 	FreePort  func()
 	Encrypt   bool
 	Initiator bool
@@ -66,7 +64,7 @@ func NewConn(c Config) (*Conn, error) {
 			Initiator: c.Initiator,
 		}
 
-		wrappedConn, err := noisewrapper.WrapConn(config, c.Conn)
+		wrappedConn, err := encryptConn(config, c.Conn)
 		if err != nil {
 			return nil, fmt.Errorf("encrypt connection to %v@%v: %w", rAddr, c.Conn.RemoteAddr(), err)
 		}
@@ -81,6 +79,21 @@ func NewConn(c Config) (*Conn, error) {
 	}
 
 	return &Conn{Conn: c.Conn, lAddr: lAddr, rAddr: rAddr, freePort: c.FreePort}, nil
+}
+
+// EncryptConn encrypts given connection using noise config
+func encryptConn(config noise.Config, conn net.Conn) (net.Conn, error) {
+	ns, err := noise.New(noise.HandshakeKK, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare stream noise object: %w", err)
+	}
+
+	wrappedConn, err := noise.WrapConn(conn, ns, time.Second*3)
+	if err != nil {
+		return nil, fmt.Errorf("error performing noise handshake: %w", err)
+	}
+
+	return wrappedConn, nil
 }
 
 // LocalAddr implements net.Conn
