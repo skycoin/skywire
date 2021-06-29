@@ -12,7 +12,7 @@ import (
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/internal/packetfilter"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
 
 const (
@@ -71,7 +71,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 }
 
 // todo: name
-func (c *sudphClient) PICKNAMEFORME(conn net.PacketConn, addrCh <-chan arclient.RemoteVisor) {
+func (c *sudphClient) PICKNAMEFORME(conn net.PacketConn, addrCh <-chan addrresolver.RemoteVisor) {
 	for addr := range addrCh {
 		udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
 		if err != nil {
