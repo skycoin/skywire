@@ -9,13 +9,14 @@ import (
 
 	"github.com/AudriusButkevicius/pfilter"
 	"github.com/skycoin/dmsg/cipher"
+	"github.com/xtaci/kcp-go"
+
 	"github.com/skycoin/skywire/internal/packetfilter"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
-	"github.com/xtaci/kcp-go"
 )
 
-// holePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
 const (
+	// holePunchMessage is sent in a dummy UDP packet that is sent by both parties to establish UDP hole punching.
 	holePunchMessage = "holepunch"
 	// dialConnPriority and visorsConnPriority are used to set an order how connection filters apply.
 	dialConnPriority   = 2
@@ -28,16 +29,14 @@ type sudphClient struct {
 	filter *pfilter.PacketFilter
 }
 
-func newSudph(resolved *resolvedClient, addressResolver arclient.APIClient) Client {
+func newSudph(resolved *resolvedClient) Client {
 	client := &sudphClient{resolvedClient: resolved}
 	client.netType = SUDPH
 	return client
 }
 
-// Serve starts accepting all incoming connections (i.e. connections to all skywire ports)
-// Connections that successfuly perform handshakes will be delivered to a listener
-// bound to a specific skywire port
-func (c *sudphClient) Serve() error {
+// Start implements Client interface
+func (c *sudphClient) Start() error {
 	if c.connListener != nil {
 		return ErrAlreadyListening
 	}
@@ -90,6 +89,7 @@ func (c *sudphClient) PICKNAMEFORME(conn net.PacketConn, addrCh <-chan arclient.
 	}
 }
 
+// Dial implements interface
 func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
@@ -100,7 +100,7 @@ func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 		return nil, err
 	}
 
-	return c.initConnection(ctx, conn, c.lPK, rPK, rPort)
+	return c.initConnection(ctx, conn, rPK, rPort)
 }
 
 func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
