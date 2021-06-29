@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -46,10 +47,10 @@ const (
 // ManagedTransportConfig is a configuration for managed transport.
 type ManagedTransportConfig struct {
 	client         network.Client
+	ebc            *appevent.Broadcaster
 	DC             DiscoveryClient
 	LS             LogStore
 	RemotePK       cipher.PubKey
-	AfterClosed    TPCloseCallback
 	TransportLabel Label
 }
 
@@ -65,8 +66,9 @@ type ManagedTransport struct {
 	LogEntry   *LogEntry
 	logUpdates uint32
 
-	dc DiscoveryClient
-	ls LogStore
+	dc  DiscoveryClient
+	ls  LogStore
+	ebc *appevent.Broadcaster
 
 	isUp    bool  // records last successful status update to discovery
 	isUpErr error // records whether the last status update was successful or not
@@ -85,9 +87,6 @@ type ManagedTransport struct {
 	wg   sync.WaitGroup
 
 	remoteAddr string
-
-	afterClosedMu sync.RWMutex
-	afterClosed   TPCloseCallback
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -97,16 +96,16 @@ func NewManagedTransport(conf ManagedTransportConfig, isInitiator bool) *Managed
 		initiator, target = target, initiator
 	}
 	mt := &ManagedTransport{
-		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
-		rPK:         conf.RemotePK,
-		dc:          conf.DC,
-		ls:          conf.LS,
-		client:      conf.client,
-		Entry:       MakeEntry(initiator, target, conf.client.Type(), true, conf.TransportLabel),
-		LogEntry:    new(LogEntry),
-		connCh:      make(chan struct{}, 1),
-		done:        make(chan struct{}),
-		afterClosed: conf.AfterClosed,
+		log:      logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		rPK:      conf.RemotePK,
+		dc:       conf.DC,
+		ls:       conf.LS,
+		client:   conf.client,
+		Entry:    MakeEntry(initiator, target, conf.client.Type(), true, conf.TransportLabel),
+		LogEntry: new(LogEntry),
+		connCh:   make(chan struct{}, 1),
+		done:     make(chan struct{}),
+		ebc:      conf.ebc,
 	}
 	mt.wg.Add(2)
 	return mt
@@ -219,12 +218,6 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	}
 }
 
-func (mt *ManagedTransport) onAfterClosed(f TPCloseCallback) {
-	mt.afterClosedMu.Lock()
-	mt.afterClosed = f
-	mt.afterClosedMu.Unlock()
-}
-
 func (mt *ManagedTransport) isServing() bool {
 	select {
 	case <-mt.done:
@@ -250,13 +243,8 @@ func (mt *ManagedTransport) Close() (err error) {
 
 func (mt *ManagedTransport) close() {
 	mt.disconnect()
-
-	mt.afterClosedMu.RLock()
-	afterClosed := mt.afterClosed
-	mt.afterClosedMu.RUnlock()
-
-	if afterClosed != nil {
-		afterClosed(mt.Type(), mt.remoteAddr)
+	if mt.Type() == network.STCPR && mt.remoteAddr != "" {
+		mt.ebc.SendTPClose(context.Background(), string(network.STCPR), mt.remoteAddr)
 	}
 }
 
