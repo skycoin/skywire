@@ -3,13 +3,14 @@ package network
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/noise"
-
-	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
 )
+
+const encryptHSTimout = 5 * time.Second
 
 // Conn represents a network connection between two visors in skywire network
 // This connection wraps raw network connection and is ready to use for sending data.
@@ -29,13 +30,29 @@ func (c *Conn) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool) erro
 		Initiator: initator,
 	}
 
-	wrappedConn, err := noisewrapper.WrapConn(config, c.Conn)
+	wrappedConn, err := EncryptConn(config, c.Conn)
 	if err != nil {
 		return fmt.Errorf("encrypt connection to %v@%v: %w", c.rAddr, c.Conn.RemoteAddr(), err)
 	}
 
 	c.Conn = wrappedConn
 	return nil
+}
+
+// EncryptConn encrypts given connection
+// todo: make private when tpconn.Conn is gone
+func EncryptConn(config noise.Config, conn net.Conn) (net.Conn, error) {
+	ns, err := noise.New(noise.HandshakeKK, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare stream noise object: %w", err)
+	}
+
+	wrappedConn, err := noise.WrapConn(conn, ns, encryptHSTimout)
+	if err != nil {
+		return nil, fmt.Errorf("error performing noise handshake: %w", err)
+	}
+
+	return wrappedConn, nil
 }
 
 // LocalAddr implements net.Conn

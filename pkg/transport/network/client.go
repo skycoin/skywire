@@ -14,9 +14,9 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
-	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/network/handshake"
+	"github.com/skycoin/skywire/pkg/transport/network/porter"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
@@ -123,7 +123,7 @@ func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK c
 	lAddr, rAddr := dmsg.Addr{PK: c.lPK, Port: lPort}, dmsg.Addr{PK: rPK, Port: rPort}
 	remoteAddr := conn.RemoteAddr()
 	c.log.Infof("Performing handshake with %v", remoteAddr)
-	hs := tphandshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
+	hs := handshake.InitiatorHandshake(c.lSK, lAddr, rAddr)
 	return c.wrapConn(conn, hs, true, freePort)
 }
 
@@ -143,7 +143,7 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 				continue // likely it's a dummy connection from service discovery
 			}
 			c.log.Warnf("failed to accept incoming connection: %v", err)
-			if !tphandshake.IsHandshakeError(err) {
+			if !handshake.IsHandshakeError(err) {
 				c.log.Warnf("stopped serving")
 				return
 			}
@@ -153,8 +153,8 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 
 // wrapConn performs handshake over provided raw connection and wraps it in
 // network.Conn type using the data obtained from handshake process
-func (c *genericClient) wrapConn(conn net.Conn, hs tphandshake.Handshake, initiator bool, onClose func()) (*Conn, error) {
-	lAddr, rAddr, err := hs(conn, time.Now().Add(tphandshake.Timeout))
+func (c *genericClient) wrapConn(conn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*Conn, error) {
+	lAddr, rAddr, err := hs(conn, time.Now().Add(handshake.Timeout))
 	if err != nil {
 		if err := conn.Close(); err != nil {
 			c.log.WithError(err).Warnf("Failed to close connection")
@@ -188,7 +188,7 @@ func (c *genericClient) acceptConn() error {
 	c.log.Infof("Accepted connection from %v", remoteAddr)
 
 	onClose := func() {}
-	hs := tphandshake.ResponderHandshake(tphandshake.MakeF2PortChecker(c.checkListener))
+	hs := handshake.ResponderHandshake(handshake.MakeF2PortChecker(c.checkListener))
 	wrappedConn, err := c.wrapConn(conn, hs, false, onClose)
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-package tphandshake
+package handshake
 
 import (
 	"bytes"

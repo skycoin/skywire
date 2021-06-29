@@ -25,7 +25,7 @@ import (
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/internal/packetfilter"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
+	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 )
 
 const (
@@ -396,14 +396,14 @@ func (c *httpClient) wrapConn(conn net.PacketConn) (*tpconn.Conn, error) {
 	}
 
 	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
-	hs := tphandshake.InitiatorHandshake(c.sk, dmsg.Addr{PK: c.pk, Port: 0}, emptyAddr)
+	hs := handshake.InitiatorHandshake(c.sk, dmsg.Addr{PK: c.pk, Port: 0}, emptyAddr)
 
 	connConfig := tpconn.Config{
 		Log:       c.log,
 		Conn:      arKCPConn,
 		LocalPK:   c.pk,
 		LocalSK:   c.sk,
-		Deadline:  time.Now().Add(tphandshake.Timeout),
+		Deadline:  time.Now().Add(handshake.Timeout),
 		Handshake: hs,
 		Encrypt:   false,
 		Initiator: true,

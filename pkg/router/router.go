@@ -21,8 +21,8 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 //go:generate mockery -name Router -case underscore -inpkg
@@ -451,7 +451,7 @@ func (r *router) saveRouteGroupRules(rules routing.EdgeRules, nsConf noise.Confi
 
 	if rg.encrypt {
 		// wrapping rg with noise
-		wrappedRG, err := noisewrapper.WrapConn(nsConf, rg)
+		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
 			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
 			if err := rg.Close(); err != nil {
