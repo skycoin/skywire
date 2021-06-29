@@ -12,14 +12,12 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
-
-// TPCloseCallback triggers after a session is closed.
-type TPCloseCallback func(netType network.Type, addr string)
 
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
@@ -35,6 +33,7 @@ type Manager struct {
 	Conf     *ManagerConfig
 	tps      map[uuid.UUID]*ManagedTransport
 	arClient addrresolver.APIClient
+	ebc      *appevent.Broadcaster
 
 	readCh    chan routing.Packet
 	mx        sync.RWMutex
@@ -44,14 +43,13 @@ type Manager struct {
 	closeOnce sync.Once // ensure we only close once.
 	done      chan struct{}
 
-	afterTPClosed TPCloseCallback
-	factory       network.ClientFactory
-	netClients    map[network.Type]network.Client
+	factory    network.ClientFactory
+	netClients map[network.Type]network.Client
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(log *logging.Logger, arClient addrresolver.APIClient, config *ManagerConfig, factory network.ClientFactory) (*Manager, error) {
+func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appevent.Broadcaster, config *ManagerConfig, factory network.ClientFactory) (*Manager, error) {
 	if log == nil {
 		log = logging.MustGetLogger("tp_manager")
 	}
@@ -64,21 +62,9 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, config *Ma
 		netClients: make(map[network.Type]network.Client),
 		arClient:   arClient,
 		factory:    factory,
+		ebc:        ebc,
 	}
 	return tm, nil
-}
-
-// OnAfterTPClosed sets callback which will fire after transport gets closed.
-func (tm *Manager) OnAfterTPClosed(f TPCloseCallback) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
-
-	tm.afterTPClosed = f
-
-	// set callback for all already known tps
-	for _, tp := range tm.tps {
-		tp.onAfterClosed(f)
-	}
 }
 
 // Serve runs listening loop across all registered factories.
@@ -216,8 +202,8 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *network.Listener) e
 			DC:             tm.Conf.DiscoveryClient,
 			LS:             tm.Conf.LogStore,
 			RemotePK:       conn.RemotePK(),
-			AfterClosed:    tm.afterTPClosed,
 			TransportLabel: LabelUser,
+			ebc:            tm.ebc,
 		}, false)
 
 		go func() {
@@ -357,14 +343,12 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netType n
 		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
 
-	afterTPClosed := tm.afterTPClosed
-
 	mTp := NewManagedTransport(ManagedTransportConfig{
 		client:         client,
+		ebc:            tm.ebc,
 		DC:             tm.Conf.DiscoveryClient,
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
-		AfterClosed:    afterTPClosed,
 		TransportLabel: label,
 	}, initiator)
 
