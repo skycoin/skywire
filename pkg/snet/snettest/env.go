@@ -6,11 +6,7 @@ package snettest
 import (
 	"testing"
 
-	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
-	"github.com/skycoin/dmsg/disc"
-
-	"github.com/skycoin/skywire/pkg/snet"
 )
 
 // KeyPair holds a public/private key pair.
@@ -36,11 +32,6 @@ func GenKeyPairs(n int) []KeyPair {
 
 // Env contains a network test environment.
 type Env struct {
-	DmsgD    disc.APIClient
-	DmsgS    *dmsg.Server
-	Keys     []KeyPair
-	Nets     []*snet.Network
-	teardown func()
 }
 
 // NewEnv creates a `network.Network` test environment.
