@@ -14,12 +14,8 @@ import (
 
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
-	"github.com/skycoin/skywire/pkg/snet/directtp"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
-	"github.com/skycoin/skywire/pkg/snet/snettest"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
 
 // TPCloseCallback triggers after a session is closed.
@@ -38,7 +34,7 @@ type Manager struct {
 	Logger   *logging.Logger
 	Conf     *ManagerConfig
 	tps      map[uuid.UUID]*ManagedTransport
-	arClient arclient.APIClient
+	arClient addrresolver.APIClient
 
 	readCh    chan routing.Packet
 	mx        sync.RWMutex
@@ -55,7 +51,7 @@ type Manager struct {
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(log *logging.Logger, arClient arclient.APIClient, config *ManagerConfig, factory network.ClientFactory) (*Manager, error) {
+func NewManager(log *logging.Logger, arClient addrresolver.APIClient, config *ManagerConfig, factory network.ClientFactory) (*Manager, error) {
 	if log == nil {
 		log = logging.MustGetLogger("tp_manager")
 	}
@@ -181,8 +177,10 @@ func (tm *Manager) initTransports(ctx context.Context) {
 	}
 }
 
-func (tm *Manager) STcpr() (directtp.Client, bool) {
-	return nil, false
+// Stcpr returns stcpr client
+func (tm *Manager) Stcpr() (network.Client, bool) {
+	c, ok := tm.netClients[network.STCP]
+	return c, ok
 }
 
 func (tm *Manager) acceptTransport(ctx context.Context, lis *network.Listener) error {
@@ -248,18 +246,28 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis *network.Listener) e
 // ErrNotFound is returned when requested transport is not found
 var ErrNotFound = errors.New("transport not found")
 
+// ErrUnknownNetwork occurs on attempt to use an unknown network type.
+var ErrUnknownNetwork = errors.New("unknown network type")
+
+// IsKnownNetwork returns true when netName is a known
+// network type that we are able to operate in
+func (tm *Manager) IsKnownNetwork(netName string) bool {
+	_, ok := tm.netClients[network.Type(netName)]
+	return ok
+}
+
 // GetTransport gets transport entity to the given remote
-func (tm *Manager) GetTransport(remote cipher.PubKey, tpType string) (*ManagedTransport, error) {
+func (tm *Manager) GetTransport(remote cipher.PubKey, netName string) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
-	if !snet.IsKnownNetwork(tpType) {
-		return nil, snet.ErrUnknownNetwork
+	if !tm.IsKnownNetwork(netName) {
+		return nil, ErrUnknownNetwork
 	}
 
-	tpID := tm.tpIDFromPK(remote, tpType)
+	tpID := tm.tpIDFromPK(remote, netName)
 	tp, ok := tm.tps[tpID]
 	if !ok {
-		return nil, fmt.Errorf("transport to %s of type %s error: %w", remote, tpType, ErrNotFound)
+		return nil, fmt.Errorf("transport to %s of type %s error: %w", remote, netName, ErrNotFound)
 	}
 	return tp, nil
 }
@@ -287,14 +295,14 @@ func (tm *Manager) GetTransportsByLabel(label Label) []*ManagedTransport {
 }
 
 // SaveTransport begins to attempt to establish data transports to the given 'remote' visor.
-func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpType string, label Label) (*ManagedTransport, error) {
+func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netName string, label Label) (*ManagedTransport, error) {
 
 	if tm.isClosing() {
 		return nil, io.ErrClosedPipe
 	}
 
 	for {
-		mTp, err := tm.saveTransport(remote, true, tpType, label)
+		mTp, err := tm.saveTransport(remote, true, netName, label)
 		if err != nil {
 			return nil, fmt.Errorf("save transport: %w", err)
 		}
@@ -334,8 +342,8 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, tpTy
 func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netName string, label Label) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
-	if !snet.IsKnownNetwork(netName) {
-		return nil, snet.ErrUnknownNetwork
+	if !tm.IsKnownNetwork(netName) {
+		return nil, ErrUnknownNetwork
 	}
 
 	tpID := tm.tpIDFromPK(remote, netName)
@@ -364,13 +372,13 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netName s
 		TransportLabel: label,
 	}, initiator)
 
-	if mTp.netName == tptypes.STCPR {
+	if mTp.netName == string(network.STCPR) {
 		if tm.arClient != nil {
 			visorData, err := tm.arClient.Resolve(context.Background(), mTp.netName, remote)
 			if err == nil {
 				mTp.remoteAddr = visorData.RemoteAddr
 			} else {
-				if err != arclient.ErrNoEntry {
+				if err != addrresolver.ErrNoEntry {
 					return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
 				}
 			}
@@ -393,7 +401,7 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.Entry.Type == tptypes.STCPR && tp.remoteAddr != "" {
+		if tp.Entry.Type == string(network.STCPR) && tp.remoteAddr != "" {
 			addrs = append(addrs, tp.remoteAddr)
 		}
 	}
@@ -510,54 +518,6 @@ func (tm *Manager) isClosing() bool {
 	}
 }
 
-func (tm *Manager) tpIDFromPK(pk cipher.PubKey, tpType string) uuid.UUID {
-	return MakeTransportID(tm.Conf.PubKey, pk, tpType)
-}
-
-// CreateTransportPair create a new transport pair for tests.
-func CreateTransportPair(
-	tpDisc DiscoveryClient,
-	keys []snettest.KeyPair,
-	nEnv *snettest.Env,
-	net string,
-) (m0 *Manager, m1 *Manager, tp0 *ManagedTransport, tp1 *ManagedTransport, err error) {
-	// Prepare tp manager 0.
-	pk0, sk0 := keys[0].PK, keys[0].SK
-	ls0 := InMemoryTransportLogStore()
-	m0, err = NewManager(nil, new(arclient.MockAPIClient), &ManagerConfig{
-		PubKey:          pk0,
-		SecKey:          sk0,
-		DiscoveryClient: tpDisc,
-		LogStore:        ls0,
-	}, network.ClientFactory{})
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	go m0.Serve(context.TODO())
-
-	// Prepare tp manager 1.
-	pk1, sk1 := keys[1].PK, keys[1].SK
-	ls1 := InMemoryTransportLogStore()
-	m1, err = NewManager(nil, new(arclient.MockAPIClient), &ManagerConfig{
-		PubKey:          pk1,
-		SecKey:          sk1,
-		DiscoveryClient: tpDisc,
-		LogStore:        ls1,
-	}, network.ClientFactory{})
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	go m1.Serve(context.TODO())
-
-	// Create data transport between manager 1 & manager 2.
-	tp1, err = m1.SaveTransport(context.TODO(), pk0, net, LabelUser)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	tp0 = m0.Transport(MakeTransportID(pk0, pk1, net))
-
-	return m0, m1, tp0, tp1, nil
+func (tm *Manager) tpIDFromPK(pk cipher.PubKey, netName string) uuid.UUID {
+	return MakeTransportID(tm.Conf.PubKey, pk, netName)
 }

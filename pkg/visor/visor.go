@@ -19,8 +19,8 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -58,7 +58,7 @@ type Visor struct {
 	dmsgC *dmsg.Client
 
 	tpM      *transport.Manager
-	arClient arclient.APIClient
+	arClient addrresolver.APIClient
 	router   router.Router
 	rfClient rfclient.Client
 
@@ -219,6 +219,6 @@ func (v *Visor) uptimeTrackerClient() utclient.APIClient {
 }
 
 // addressResolverClient is a convenience function to obtain uptime address resovler client.
-func (v *Visor) addressResolverClient() arclient.APIClient {
+func (v *Visor) addressResolverClient() addrresolver.APIClient {
 	return v.arClient
 }

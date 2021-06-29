@@ -14,9 +14,9 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/porter"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
@@ -53,7 +53,7 @@ type ClientFactory struct {
 	SK         cipher.SecKey
 	ListenAddr string
 	PKTable    stcp.PKTable
-	ARClient   arclient.APIClient
+	ARClient   addrresolver.APIClient
 	EB         *appevent.Broadcaster
 }
 
@@ -304,7 +304,7 @@ func (c *genericClient) Type() Type {
 // to resolve addresses of remote visors
 type resolvedClient struct {
 	*genericClient
-	ar arclient.APIClient
+	ar addrresolver.APIClient
 }
 
 type dialFunc func(ctx context.Context, addr string) (net.Conn, error)
