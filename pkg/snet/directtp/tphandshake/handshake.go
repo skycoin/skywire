@@ -105,10 +105,7 @@ type CheckF2 = func(f2 Frame2) error
 // port checker to check port in Frame2
 func MakeF2PortChecker(portChecker func(port uint16) error) CheckF2 {
 	return func(f2 Frame2) error {
-		if err := portChecker(f2.DstAddr.Port); err != nil {
-			return err
-		}
-		return nil
+		return portChecker(f2.DstAddr.Port)
 	}
 }
 

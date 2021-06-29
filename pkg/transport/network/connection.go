@@ -3,35 +3,22 @@ package network
 import (
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/noise"
-	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire/pkg/snet/directtp/noisewrapper"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
 )
 
-// Conn wraps an underlying net.Conn and modifies various methods to integrate better with the 'network' package.
+// Conn represents a network connection between two visors in skywire network
+// This connection wraps raw network connection and is ready to use for sending data.
+// It also provides skywire-specific methods on top of net.Conn
 type Conn struct {
 	net.Conn
 	lAddr, rAddr dmsg.Addr
 	freePort     func()
 	connType     Type
-}
-
-// ConnConfig describes a config for Conn.
-type ConnConfig struct {
-	Log       *logging.Logger
-	Conn      net.Conn
-	LocalSK   cipher.SecKey
-	LocalPK   cipher.PubKey
-	Deadline  time.Time
-	Handshake tphandshake.Handshake
-	FreePort  func()
-	Encrypt   bool
-	Initiator bool
 }
 
 func (c *Conn) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool) error {
@@ -70,17 +57,20 @@ func (c *Conn) Close() error {
 	return c.Conn.Close()
 }
 
-// LocalPK returns local public key of connection.
+// LocalPK returns local public key of connection
 func (c *Conn) LocalPK() cipher.PubKey { return c.lAddr.PK }
 
-// RemotePK returns remote public key of connection.
+// RemotePK returns remote public key of connection
 func (c *Conn) RemotePK() cipher.PubKey { return c.rAddr.PK }
 
-// LocalPort returns local port of connection.
+// LocalPort returns local skywire port of connection
+// This is not underlying OS port, but port within skywire network
 func (c *Conn) LocalPort() uint16 { return c.lAddr.Port }
 
-// RemotePort returns remote port of connection.
+// RemotePort returns remote skywire port of connection
+// This is not underlying OS port, but port within skywire network
 func (c *Conn) RemotePort() uint16 { return c.rAddr.Port }
 
-// Network returns network of connection.
+// Network returns network of connection
+// todo: consider switching to Type instead of string
 func (c *Conn) Network() string { return string(c.connType) }

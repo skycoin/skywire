@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/skycoin/dmsg/cipher"
+
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 )
 
@@ -25,6 +26,7 @@ func newStcp(generic *genericClient, table stcp.PKTable) Client {
 // PK table
 var ErrStcpEntryNotFound = errors.New("entry not found in PK table")
 
+// Dial implements Client interface
 func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
@@ -44,13 +46,11 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	}
 
 	c.log.Infof("Dialed %v:%v@%v", rPK, rPort, conn.RemoteAddr())
-	return c.initConnection(ctx, conn, c.lPK, rPK, rPort)
+	return c.initConnection(ctx, conn, rPK, rPort)
 }
 
-// Serve starts accepting all incoming connections (i.e. connections to all skywire ports)
-// Connections that successfuly perform handshakes will be delivered to a listener
-// bound to a specific skywire port
-func (c *stcpClient) Serve() error {
+// Start implements Client interface
+func (c *stcpClient) Start() error {
 	if c.connListener != nil {
 		return ErrAlreadyListening
 	}
