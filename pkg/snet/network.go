@@ -13,10 +13,9 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp"
-	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -78,171 +77,20 @@ type Network struct {
 	nets    map[string]struct{} // networks to be used with transports
 	clients NetworkClients
 
-	arc                arclient.APIClient
+	arc                addrresolver.APIClient
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
 	dmsgC              *dmsg.Client
 }
 
 // New creates a network from a config.
-func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc arclient.APIClient, masterLogger *logging.MasterLogger) (*Network, error) {
-	clients := NetworkClients{
-		Direct: make(map[string]directtp.Client),
-	}
-
-	if conf.NetworkConfigs.STCP != nil {
-		conf := directtp.Config{
-			Type:      tptypes.STCP,
-			PK:        conf.PubKey,
-			SK:        conf.SecKey,
-			Table:     pktable.NewTable(conf.NetworkConfigs.STCP.PKTable),
-			LocalAddr: conf.NetworkConfigs.STCP.LocalAddr,
-			BeforeDialCallback: func(network, addr string) error {
-				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
-				event := appevent.NewEvent(appevent.TCPDial, data)
-				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-				return nil
-			},
-		}
-		clients.Direct[tptypes.STCP] = directtp.NewClient(conf, masterLogger)
-	}
-
-	if arc != nil {
-		stcprConf := directtp.Config{
-			Type:            tptypes.STCPR,
-			PK:              conf.PubKey,
-			SK:              conf.SecKey,
-			AddressResolver: arc,
-			BeforeDialCallback: func(network, addr string) error {
-				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
-				event := appevent.NewEvent(appevent.TCPDial, data)
-				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-				return nil
-			},
-		}
-
-		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf, masterLogger)
-
-		sudphConf := directtp.Config{
-			Type:            tptypes.SUDPH,
-			PK:              conf.PubKey,
-			SK:              conf.SecKey,
-			AddressResolver: arc,
-		}
-
-		clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
-	}
-
-	return NewRaw(conf, clients, dmsgC, arc), nil
-}
-
-// NewRaw creates a network from a config and a dmsg client.
-func NewRaw(conf Config, clients NetworkClients, dmsgC *dmsg.Client, arc arclient.APIClient) *Network {
-	n := &Network{
-		conf:    conf,
-		nets:    make(map[string]struct{}),
-		clients: clients,
-		arc:     arc,
-		dmsgC:   dmsgC,
-	}
-
-	if dmsgC != nil {
-		n.addNetworkType(dmsgC.Type())
-	}
-
-	for k, v := range clients.Direct {
-		if v != nil {
-			n.addNetworkType(k)
-		}
-	}
-
-	return n
+func New(conf Config, dmsgC *dmsg.Client, eb *appevent.Broadcaster, arc addrresolver.APIClient, masterLogger *logging.MasterLogger) (*Network, error) {
+	panic("remove")
 }
 
 // Conf gets network configuration.
 func (n *Network) Conf() Config {
 	return n.conf
-}
-
-// Init initiates server connections.
-func (n *Network) Init() error {
-
-	if n.conf.NetworkConfigs.STCP != nil {
-		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcp': %w", err)
-			}
-		} else {
-			log.Infof("No config found for stcp")
-		}
-	}
-
-	if n.arc != nil {
-		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
-			}
-		} else {
-			log.Infof("No config found for stcpr")
-		}
-
-		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'sudph': %w", err)
-			}
-		} else {
-			log.Infof("No config found for sudph")
-		}
-	}
-
-	return nil
-}
-
-// OnNewNetworkType sets callback to be called when new network type is ready.
-func (n *Network) OnNewNetworkType(callback func(netType string)) {
-	n.onNewNetworkTypeMu.Lock()
-	n.onNewNetworkType = callback
-	n.onNewNetworkTypeMu.Unlock()
-}
-
-// IsNetworkReady checks whether network of type `netType` is ready.
-func (n *Network) IsNetworkReady(netType string) bool {
-	n.netsMu.Lock()
-	_, ok := n.nets[netType]
-	n.netsMu.Unlock()
-	return ok
-}
-
-// Close closes underlying connections.
-func (n *Network) Close() error {
-	n.netsMu.Lock()
-	defer n.netsMu.Unlock()
-
-	wg := new(sync.WaitGroup)
-
-	directErrors := make(map[string]error)
-
-	for _, directClient := range n.clients.Direct {
-		if directClient == nil {
-			continue
-		}
-		wg.Add(1)
-		go func(client directtp.Client) {
-			err := client.Close()
-			if err != nil {
-			}
-			wg.Done()
-		}(directClient)
-	}
-	wg.Wait()
-
-	for _, err := range directErrors {
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // LocalPK returns local public key.
@@ -285,58 +133,12 @@ func (n *Network) getClient(tpType string) (directtp.Client, bool) {
 
 // Dial dials a visor by its public key and returns a connection.
 func (n *Network) Dial(ctx context.Context, network string, pk cipher.PubKey, port uint16) (*Conn, error) {
-	switch network {
-	case dmsg.Type:
-		addr := dmsg.Addr{
-			PK:   pk,
-			Port: port,
-		}
-
-		conn, err := n.dmsgC.Dial(ctx, addr)
-		if err != nil {
-			return nil, fmt.Errorf("dmsg client dial %v: %w", addr, err)
-		}
-
-		return makeConn(conn, network), nil
-	default:
-		client, ok := n.clients.Direct[network]
-		if !ok {
-			return nil, ErrUnknownNetwork
-		}
-
-		conn, err := client.Dial(ctx, pk, port)
-		if err != nil {
-			return nil, fmt.Errorf("dial: %w", err)
-		}
-
-		log.Infof("Dialed %v, conn local address %q, remote address %q", network, conn.LocalAddr(), conn.RemoteAddr())
-		return makeConn(conn, network), nil
-	}
+	panic("remove")
 }
 
 // Listen listens on the specified port.
 func (n *Network) Listen(network string, port uint16) (*Listener, error) {
-	switch network {
-	case dmsg.Type:
-		lis, err := n.dmsgC.Listen(port)
-		if err != nil {
-			return nil, err
-		}
-
-		return makeListener(lis, network), nil
-	default:
-		client, ok := n.clients.Direct[network]
-		if !ok {
-			return nil, ErrUnknownNetwork
-		}
-
-		lis, err := client.Listen(port)
-		if err != nil {
-			return nil, fmt.Errorf("listen: %w", err)
-		}
-
-		return makeListener(lis, network), nil
-	}
+	panic("remove")
 }
 
 func (n *Network) addNetworkType(netType string) {
