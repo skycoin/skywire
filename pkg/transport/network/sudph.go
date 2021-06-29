@@ -24,13 +24,12 @@ const (
 )
 
 type sudphClient struct {
-	*genericClient
-	filter          *pfilter.PacketFilter
-	addressResolver arclient.APIClient
+	*resolvedClient
+	filter *pfilter.PacketFilter
 }
 
-func newSudph(generic *genericClient, addressResolver arclient.APIClient) Client {
-	client := &sudphClient{genericClient: generic, addressResolver: addressResolver}
+func newSudph(resolved *resolvedClient, addressResolver arclient.APIClient) Client {
+	client := &sudphClient{resolvedClient: resolved}
 	client.netType = SUDPH
 	return client
 }
@@ -64,7 +63,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	sudphVisorsConn := c.filter.NewConn(visorsConnPriority, nil)
 	c.filter.Start()
 	c.log.Infof("Binding")
-	addrCh, err := c.addressResolver.BindSUDPH(c.filter)
+	addrCh, err := c.ar.BindSUDPH(c.filter)
 	if err != nil {
 		return nil, err
 	}
@@ -96,39 +95,12 @@ func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 		return nil, io.ErrClosedPipe
 	}
 
-	c.log.Infof("Dialing PK %v", rPK)
-	visorData, err := c.addressResolver.Resolve(ctx, string(SUDPH), rPK)
-	if err != nil {
-		return nil, fmt.Errorf("resolve PK: %w", err)
-	}
-
-	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
-
-	conn, err := c.dialVisor(ctx, visorData)
+	conn, err := c.dialVisor(ctx, rPK, c.dialWithTimeout)
 	if err != nil {
 		return nil, err
 	}
 
 	return c.initConnection(ctx, conn, c.lPK, rPK, rPort)
-}
-
-func (c *sudphClient) dialVisor(ctx context.Context, visorData arclient.VisorData) (net.Conn, error) {
-	if visorData.IsLocal {
-		for _, host := range visorData.Addresses {
-			addr := net.JoinHostPort(host, visorData.Port)
-			conn, err := c.dialWithTimeout(ctx, addr)
-			if err == nil {
-				return conn, nil
-			}
-		}
-	}
-
-	addr := visorData.RemoteAddr
-	if _, _, err := net.SplitHostPort(addr); err != nil {
-		addr = net.JoinHostPort(addr, visorData.Port)
-	}
-
-	return c.dialWithTimeout(ctx, addr)
 }
 
 func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
