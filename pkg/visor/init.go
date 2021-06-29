@@ -28,12 +28,12 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
 	"github.com/skycoin/skywire/pkg/snet/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/util/netutil"
@@ -251,28 +251,8 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
-	// nc := snet.NetworkConfigs{
-	// 	STCP: v.conf.STCP,
-	// }
-
-	// netconf := snet.Config{
-	// 	PubKey:         v.conf.PK,
-	// 	SecKey:         v.conf.SK,
-	// 	NetworkConfigs: nc,
-	// }
-
-	// n, err := snet.New(netconf, v.dmsgC, v.ebc, v.arClient)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// if err := n.Init(); err != nil {
-	// 	return err
-	// }
-	// v.pushCloseStack("snet", n.Close)
-
 	// todo: pass down configuration?
-	table := pktable.NewTable(v.conf.STCP.PKTable)
+	table := stcp.NewTable(v.conf.STCP.PKTable)
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,
@@ -287,6 +267,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
+	// todo: move to transport manager
 	tpM.OnAfterTPClosed(func(network, addr string) {
 		if network == tptypes.STCPR && addr != "" {
 			data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}

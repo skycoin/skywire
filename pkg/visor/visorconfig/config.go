@@ -8,8 +8,8 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/dmsgc"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -79,7 +79,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool) (*V1, error) {
 		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
 	}
 
-	conf.STCP = &snet.STCPConfig{
+	conf.STCP = &network.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
 		PKTable:   nil,
 	}

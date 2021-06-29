@@ -8,8 +8,8 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/dmsgc"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -40,13 +40,13 @@ type V1 struct {
 	*Common
 	mu sync.RWMutex
 
-	Dmsg          *dmsgc.DmsgConfig `json:"dmsg"`
-	Dmsgpty       *V1Dmsgpty        `json:"dmsgpty,omitempty"`
-	STCP          *snet.STCPConfig  `json:"stcp,omitempty"`
-	Transport     *V1Transport      `json:"transport"`
-	Routing       *V1Routing        `json:"routing"`
-	UptimeTracker *V1UptimeTracker  `json:"uptime_tracker,omitempty"`
-	Launcher      *V1Launcher       `json:"launcher"`
+	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
+	Dmsgpty       *V1Dmsgpty          `json:"dmsgpty,omitempty"`
+	STCP          *network.STCPConfig `json:"stcp,omitempty"`
+	Transport     *V1Transport        `json:"transport"`
+	Routing       *V1Routing          `json:"routing"`
+	UptimeTracker *V1UptimeTracker    `json:"uptime_tracker,omitempty"`
+	Launcher      *V1Launcher         `json:"launcher"`
 
 	Hypervisors []cipher.PubKey `json:"hypervisors"`
 	CLIAddr     string          `json:"cli_addr"`
