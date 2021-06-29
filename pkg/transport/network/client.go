@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -59,13 +60,15 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 	generic.lSK = f.SK
 	generic.listenAddr = f.ListenAddr
 
+	resolved := &resolvedClient{genericClient: generic, ar: f.ARClient}
+
 	switch netType {
 	case STCP:
 		return newStcp(generic, f.PKTable)
 	case STCPR:
 		return newStcpr(generic, f.ARClient)
 	case SUDPH:
-		return newSudph(generic, f.ARClient)
+		return newSudph(resolved, f.ARClient)
 	}
 	return nil
 }
@@ -280,4 +283,36 @@ func (c *genericClient) Close() error {
 
 func (c *genericClient) Type() Type {
 	return c.netType
+}
+
+type resolvedClient struct {
+	*genericClient
+	ar arclient.APIClient
+}
+
+type dialFunc func(ctx context.Context, addr string) (net.Conn, error)
+
+func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial dialFunc) (net.Conn, error) {
+	c.log.Infof("Dialing PK %v", rPK)
+	visorData, err := c.ar.Resolve(ctx, string(c.netType), rPK)
+	if err != nil {
+		return nil, fmt.Errorf("resolve PK: %w", err)
+	}
+	c.log.Infof("Resolved PK %v to visor data %v", rPK, visorData)
+
+	if visorData.IsLocal {
+		for _, host := range visorData.Addresses {
+			addr := net.JoinHostPort(host, visorData.Port)
+			conn, err := dial(ctx, addr)
+			if err == nil {
+				return conn, nil
+			}
+		}
+	}
+
+	addr := visorData.RemoteAddr
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		addr = net.JoinHostPort(addr, visorData.Port)
+	}
+	return dial(ctx, addr)
 }
