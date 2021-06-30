@@ -25,14 +25,14 @@ import (
 // well as listening to incoming connections from other visors
 type Client interface {
 	// Dial remote visor, that is listening on the given skywire port
-	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Conn, error)
+	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Conn, error)
 	// Start initializes the client and prepares it for listening. It is required
 	// to be called to start accepting connections
 	Start() error
 	// Listen on the given skywire port. This can be called multiple times
 	// for different ports for the same client. It requires Start to be called
 	// to start accepting connections
-	Listen(port uint16) (*Listener, error)
+	Listen(port uint16) (Listener, error)
 	// todo: remove
 	LocalAddr() (net.Addr, error)
 	// PK returns public key of the visor running this client
@@ -65,7 +65,7 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 	generic := &genericClient{}
 	generic.listenStarted = make(chan struct{})
 	generic.done = make(chan struct{})
-	generic.listeners = make(map[uint16]*Listener)
+	generic.listeners = make(map[uint16]*listener)
 	generic.log = log
 	generic.porter = p
 	generic.eb = f.EB
@@ -104,7 +104,7 @@ type genericClient struct {
 	eb     *appevent.Broadcaster
 
 	connListener  net.Listener
-	listeners     map[uint16]*Listener
+	listeners     map[uint16]*listener
 	listenStarted chan struct{}
 	mu            sync.RWMutex
 	done          chan struct{}
@@ -115,7 +115,7 @@ type genericClient struct {
 // the remote client
 // The process will perform handshake over raw connection
 // todo: rename to handshake, initHandshake, skyConnect or smth?
-func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK cipher.PubKey, rPort uint16) (*conn, error) {
 	lPort, freePort, err := c.porter.ReserveEphemeral(ctx)
 	if err != nil {
 		return nil, err
@@ -153,18 +153,18 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 
 // wrapConn performs handshake over provided raw connection and wraps it in
 // network.Conn type using the data obtained from handshake process
-func (c *genericClient) wrapConn(conn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*Conn, error) {
-	lAddr, rAddr, err := hs(conn, time.Now().Add(handshake.Timeout))
+func (c *genericClient) wrapConn(rawConn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*conn, error) {
+	lAddr, rAddr, err := hs(rawConn, time.Now().Add(handshake.Timeout))
 	if err != nil {
-		if err := conn.Close(); err != nil {
+		if err := rawConn.Close(); err != nil {
 			c.log.WithError(err).Warnf("Failed to close connection")
 		}
 		onClose()
 		return nil, err
 	}
-	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", conn.RemoteAddr(), lAddr, rAddr)
+	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), lAddr, rAddr)
 
-	wrappedConn := &Conn{Conn: conn, lAddr: lAddr, rAddr: rAddr, freePort: onClose, connType: c.netType}
+	wrappedConn := &conn{Conn: rawConn, lAddr: lAddr, rAddr: rAddr, freePort: onClose, connType: c.netType}
 	err = wrappedConn.encrypt(c.lPK, c.lSK, initiator)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,7 @@ func (c *genericClient) LocalAddr() (net.Addr, error) {
 }
 
 // getListener returns listener to specified skywire port
-func (c *genericClient) getListener(port uint16) (*Listener, error) {
+func (c *genericClient) getListener(port uint16) (*listener, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	lis, ok := c.listeners[port]
@@ -231,7 +231,7 @@ func (c *genericClient) checkListener(port uint16) error {
 // and is not related to local OS ports. Underlying connection will most likely use
 // a different port number
 // Listen requires Serve to be called, which will accept connections to all skywire ports
-func (c *genericClient) Listen(port uint16) (*Listener, error) {
+func (c *genericClient) Listen(port uint16) (Listener, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
@@ -245,7 +245,7 @@ func (c *genericClient) Listen(port uint16) (*Listener, error) {
 	defer c.mu.Unlock()
 
 	lAddr := dmsg.Addr{PK: c.lPK, Port: port}
-	lis := NewListener(lAddr, freePort, c.netType)
+	lis := newListener(lAddr, freePort, c.netType)
 	c.listeners[port] = lis
 
 	return lis, nil

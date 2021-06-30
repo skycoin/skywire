@@ -78,7 +78,7 @@ type ManagedTransport struct {
 	redialMx     sync.Mutex
 
 	client network.Client
-	conn   *network.Conn
+	conn   network.Conn
 	connCh chan struct{}
 	connMx sync.Mutex
 
@@ -256,7 +256,7 @@ func (mt *ManagedTransport) disconnect() {
 }
 
 // Accept accepts a new underlying connection.
-func (mt *ManagedTransport) Accept(ctx context.Context, conn *network.Conn) error {
+func (mt *ManagedTransport) Accept(ctx context.Context, conn network.Conn) error {
 	mt.connMx.Lock()
 	defer mt.connMx.Unlock()
 
@@ -385,7 +385,7 @@ func (mt *ManagedTransport) isInitiator() bool {
 	<<< UNDERLYING CONNECTION >>>
 */
 
-func (mt *ManagedTransport) getConn() *network.Conn {
+func (mt *ManagedTransport) getConn() network.Conn {
 	if !mt.isServing() {
 		return nil
 	}
@@ -398,7 +398,7 @@ func (mt *ManagedTransport) getConn() *network.Conn {
 
 // setConn sets 'mt.conn' (the underlying connection).
 // If 'mt.conn' is already occupied, close the newly introduced connection.
-func (mt *ManagedTransport) setConn(newConn *network.Conn) error {
+func (mt *ManagedTransport) setConn(newConn network.Conn) error {
 
 	if mt.conn != nil {
 		if mt.isLeastSignificantEdge() {
@@ -558,7 +558,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log := mt.log.WithField("func", "readPacket")
 
-	var conn *network.Conn
+	var conn network.Conn
 	for {
 		if conn = mt.getConn(); conn != nil {
 			break

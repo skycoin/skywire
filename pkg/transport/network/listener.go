@@ -6,39 +6,52 @@ import (
 	"sync"
 
 	"github.com/skycoin/dmsg"
+	"github.com/skycoin/dmsg/cipher"
 )
 
 // Listener represents a skywire network listener. It wraps net.Listener
 // with other skywire-specific data
 // Listener implements net.Listener
-type Listener struct {
+type Listener interface {
+	net.Listener
+	PK() cipher.PubKey
+	Port() uint16
+	Network() Type
+	AcceptConn() (Conn, error)
+}
+
+type listener struct {
 	lAddr    dmsg.Addr
 	mx       sync.Mutex
 	once     sync.Once
 	freePort func()
-	accept   chan *Conn
+	accept   chan *conn
 	done     chan struct{}
 	network  Type
 }
 
 // NewListener returns a new Listener.
-func NewListener(lAddr dmsg.Addr, freePort func(), network Type) *Listener {
-	return &Listener{
+func NewListener(lAddr dmsg.Addr, freePort func(), network Type) Listener {
+	return newListener(lAddr, freePort, network)
+}
+
+func newListener(lAddr dmsg.Addr, freePort func(), network Type) *listener {
+	return &listener{
 		lAddr:    lAddr,
 		freePort: freePort,
-		accept:   make(chan *Conn),
+		accept:   make(chan *conn),
 		done:     make(chan struct{}),
 		network:  network,
 	}
 }
 
 // Accept implements net.Listener, returns generic net.Conn
-func (l *Listener) Accept() (net.Conn, error) {
+func (l *listener) Accept() (net.Conn, error) {
 	return l.AcceptConn()
 }
 
 // AcceptConn accepts a skywire connection and returns network.Conn
-func (l *Listener) AcceptConn() (*Conn, error) {
+func (l *listener) AcceptConn() (Conn, error) {
 	c, ok := <-l.accept
 	if !ok {
 		return nil, io.ErrClosedPipe
@@ -48,7 +61,7 @@ func (l *Listener) AcceptConn() (*Conn, error) {
 }
 
 // Close implements net.Listener
-func (l *Listener) Close() error {
+func (l *listener) Close() error {
 	l.once.Do(func() {
 		close(l.done)
 		// todo: consider if removing locks will change anything
@@ -64,18 +77,28 @@ func (l *Listener) Close() error {
 }
 
 // Addr implements net.Listener
-func (l *Listener) Addr() net.Addr {
+func (l *listener) Addr() net.Addr {
 	return l.lAddr
+}
+
+// Addr implements net.Listener
+func (l *listener) PK() cipher.PubKey {
+	return l.lAddr.PK
+}
+
+// Addr implements net.Listener
+func (l *listener) Port() uint16 {
+	return l.lAddr.Port
 }
 
 // Network returns network type
 // todo: consider switching to Type instead of string
-func (l *Listener) Network() Type {
+func (l *listener) Network() Type {
 	return l.network
 }
 
 // Introduce is used by Client to introduce a new connection to this Listener
-func (l *Listener) introduce(conn *Conn) error {
+func (l *listener) introduce(conn *conn) error {
 	// todo: think if this is needed
 	select {
 	case <-l.done:
