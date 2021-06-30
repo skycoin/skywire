@@ -108,7 +108,7 @@ func registerModules(logger *logging.MasterLogger) {
 	dmsgC = maker("dmsg", initDmsg, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
-	tr = maker("transport", initTransport, &ar, &ebc)
+	tr = maker("transport", initTransport, &ar, &ebc, &dmsgC)
 	rt = maker("router", initRouter, &tr, &dmsgC)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
@@ -259,6 +259,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PKTable:    table,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
+		DmsgC:      v.dmsgC,
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {

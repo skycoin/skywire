@@ -82,7 +82,11 @@ type dmsgListenerAdapter struct {
 
 // AcceptConn implements Listener interface
 func (lis *dmsgListenerAdapter) AcceptConn() (Conn, error) {
-	return nil, nil
+	stream, err := lis.Listener.AcceptStream()
+	if err != nil {
+		return nil, err
+	}
+	return &dmsgConnAdapter{stream}, nil
 }
 
 // Network implements Listener interface
