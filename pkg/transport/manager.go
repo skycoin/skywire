@@ -113,7 +113,7 @@ func (tm *Manager) runClients(ctx context.Context) {
 	}
 }
 
-func (tm *Manager) acceptTransports(ctx context.Context, lis *network.Listener) {
+func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener) {
 	defer tm.wg.Done()
 	for {
 		select {
@@ -169,7 +169,7 @@ func (tm *Manager) Stcpr() (network.Client, bool) {
 	return c, ok
 }
 
-func (tm *Manager) acceptTransport(ctx context.Context, lis *network.Listener) error {
+func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) error {
 	conn, err := lis.AcceptConn() // TODO: tcp panic.
 	if err != nil {
 		return err

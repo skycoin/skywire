@@ -33,7 +33,7 @@ func newStcp(generic *genericClient, table stcp.PKTable) Client {
 var ErrStcpEntryNotFound = errors.New("entry not found in PK table")
 
 // Dial implements Client interface
-func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
