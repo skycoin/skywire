@@ -55,6 +55,7 @@ type ClientFactory struct {
 	PKTable    stcp.PKTable
 	ARClient   addrresolver.APIClient
 	EB         *appevent.Broadcaster
+	DmsgC      *dmsg.Client
 }
 
 // MakeClient creates a new client of specified type
@@ -82,7 +83,10 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 		return newStcpr(resolved)
 	case SUDPH:
 		return newSudph(resolved)
+	case DMSG:
+		return newDmsgClient(f.DmsgC)
 	}
+	// todo: maybe return an error that type is not found
 	return nil
 }
 
