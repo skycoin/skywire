@@ -22,7 +22,7 @@ func newStcpr(resolved *resolvedClient) Client {
 }
 
 // Dial implements interface
-func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}

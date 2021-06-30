@@ -90,7 +90,7 @@ func (c *sudphClient) PICKNAMEFORME(conn net.PacketConn, addrCh <-chan addrresol
 }
 
 // Dial implements interface
-func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (*Conn, error) {
+func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Conn, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
