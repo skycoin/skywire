@@ -136,5 +136,5 @@ func MustPK(pk string) cipher.PubKey {
 
 // GetStunServers gives back deafault Stun Servers
 func GetStunServers() []string {
-	return []string{"194.195.240.138:3478", "stun.voipbuster.com:3478"}
+	return []string{"172.105.117.72:3478"}
 }
