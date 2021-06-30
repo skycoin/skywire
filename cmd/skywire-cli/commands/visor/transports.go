@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/internal"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -113,15 +113,15 @@ var addTpCmd = &cobra.Command{
 
 			logger.Infof("Established %v transport to %v", transportType, pk)
 		} else {
-			transportTypes := []string{
-				tptypes.STCP,
-				tptypes.STCPR,
-				tptypes.SUDPH,
+			transportTypes := []network.Type{
+				network.STCP,
+				network.STCPR,
+				network.SUDPH,
 				dmsg.Type,
 			}
 
 			for _, transportType := range transportTypes {
-				tp, err = rpcClient().AddTransport(pk, transportType, public, timeout)
+				tp, err = rpcClient().AddTransport(pk, string(transportType), public, timeout)
 				if err == nil {
 					logger.Infof("Established %v transport to %v", transportType, pk)
 					break
