@@ -2,58 +2,131 @@ package network
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 )
 
-type dmsgClient struct {
-	dmsgC dmsg.Client
+// dmsgClientAdapter is a wrapper around dmsg.Client to conform to Client
+// interface
+type dmsgClientAdapter struct {
+	dmsgC *dmsg.Client
 }
 
-// func newDmsgClient(dmsgC dmsg.Client) Client {
-// 	return &dmsgClient{dmsgC: dmsg.Client}
-// }
-
-// Dial implements interface
-func (c *dmsgClient) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (*Conn, error) {
-	panic("not implemented")
+func newDmsgClient(dmsgC *dmsg.Client) Client {
+	return &dmsgClientAdapter{dmsgC: dmsgC}
 }
 
-// Start implements interface
-func (c *dmsgClient) Start() error {
-	panic("not implemented")
+// LocalAddr implements interface
+func (c *dmsgClientAdapter) LocalAddr() (net.Addr, error) {
+	for _, ses := range c.dmsgC.AllSessions() {
+		return ses.SessionCommon.GetConn().LocalAddr(), nil
+	}
+	return nil, fmt.Errorf("not listening to dmsg")
 }
 
-// Listen implements interface
-func (c *dmsgClient) Listen(port uint16) (*Listener, error) {
-	panic("not implemented")
+// Dial implements Client interface
+func (c *dmsgClientAdapter) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Conn, error) {
+	conn, err := c.dmsgC.DialStream(ctx, dmsg.Addr{PK: remote, Port: port})
+	if err != nil {
+		return nil, err
+	}
+	return &dmsgConnAdapter{conn}, nil
 }
 
-// todo: remove
-func (c *dmsgClient) LocalAddr() (net.Addr, error) {
-	return nil, nil
+// Start implements Client interface
+func (c *dmsgClientAdapter) Start() error {
+	// todo: update interface to pass context properly?
+	go c.dmsgC.Serve(context.TODO())
+	return nil
 }
 
-// PK implements interface
-func (c *dmsgClient) PK() cipher.PubKey {
+// Listen implements Client interface
+func (c *dmsgClientAdapter) Listen(port uint16) (Listener, error) {
+	lis, err := c.dmsgC.Listen(port)
+	if err != nil {
+		return nil, err
+	}
+	return &dmsgListenerAdapter{lis}, nil
+}
+
+// PK implements Client interface
+func (c *dmsgClientAdapter) PK() cipher.PubKey {
 	return c.dmsgC.LocalPK()
 }
 
-// SK implements interface
-func (c *dmsgClient) SK() cipher.SecKey {
+// SK implements Client interface
+func (c *dmsgClientAdapter) SK() cipher.SecKey {
 	return c.dmsgC.LocalSK()
 }
 
-// Close implements interface
-func (c *dmsgClient) Close() error {
+// Close implements Client interface
+func (c *dmsgClientAdapter) Close() error {
 	// todo: maybe not, the dmsg instance we get is the global one that is used
 	// in plenty other places
 	return c.dmsgC.Close()
 }
 
-// Type implements interface
-func (c *dmsgClient) Type() Type {
+// Type implements Client interface
+func (c *dmsgClientAdapter) Type() Type {
+	return DMSG
+}
+
+// wrapper around listener returned by dmsg.Client
+// that conforms to Listener interface
+type dmsgListenerAdapter struct {
+	*dmsg.Listener
+}
+
+// AcceptConn implements Listener interface
+func (lis *dmsgListenerAdapter) AcceptConn() (Conn, error) {
+	return nil, nil
+}
+
+// Network implements Listener interface
+func (lis *dmsgListenerAdapter) Network() Type {
+	return DMSG
+}
+
+// PK implements Listener interface
+func (lis *dmsgListenerAdapter) PK() cipher.PubKey {
+	return lis.PK()
+}
+
+// Port implements Listener interface
+func (lis *dmsgListenerAdapter) Port() uint16 {
+	return lis.DmsgAddr().Port
+}
+
+// wrapper around connection returned by dmsg.Client
+// that conforms to Conn interface
+type dmsgConnAdapter struct {
+	*dmsg.Stream
+}
+
+// LocalPK implements Conn interface
+func (c *dmsgConnAdapter) LocalPK() cipher.PubKey {
+	return c.RawLocalAddr().PK
+}
+
+// RemotePK implements Conn interface
+func (c *dmsgConnAdapter) RemotePK() cipher.PubKey {
+	return c.RawRemoteAddr().PK
+}
+
+// LocalPort implements Conn interface
+func (c *dmsgConnAdapter) LocalPort() uint16 {
+	return c.RawLocalAddr().Port
+}
+
+// RemotePort implements Conn interface
+func (c *dmsgConnAdapter) RemotePort() uint16 {
+	return c.RawRemoteAddr().Port
+}
+
+// Network implements Conn interface
+func (c *dmsgConnAdapter) Network() Type {
 	return DMSG
 }

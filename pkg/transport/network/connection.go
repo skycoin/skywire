@@ -32,7 +32,6 @@ type Conn interface {
 	RemotePort() uint16
 
 	// Network returns network of connection
-	// todo: consider switching to Type instead of string
 	Network() Type
 }
 
