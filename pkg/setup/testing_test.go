@@ -17,11 +17,11 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router/routerclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/snet"
 )
 
 // creates a mock dialer
-func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network.Dialer {
+func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) snet.Dialer {
 	newRPCConn := func(gw interface{}) net.Conn {
 		connC, connS := net.Pipe()
 		t.Cleanup(func() {
@@ -38,7 +38,7 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network
 
 	if gateways == nil {
 		conn := newRPCConn(new(mockGatewayForDialer))
-		dialer := new(network.MockDialer)
+		dialer := new(snet.MockDialer)
 		dialer.On("Dial", mock.Anything, mock.Anything, mock.Anything).Return(conn, nil)
 		return dialer
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"sync"
 	"testing"
@@ -11,13 +12,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/internal/testhelpers"
+	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/snet/snettest"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -39,260 +46,260 @@ func TestMain(m *testing.M) {
 
 // Test ensures that we can establish connection between 2 routers. 1st router dials
 // the 2nd one, 2nd one accepts. We get 2 noise-wrapped route groups and check that
-// // these route groups correctly communicate with each other.
-// func Test_router_NoiseRouteGroups(t *testing.T) {
-// 	// We're doing 2 key pairs for 2 communicating routers.
-// 	keys := snettest.GenKeyPairs(2)
+// these route groups correctly communicate with each other.
+func Test_router_NoiseRouteGroups(t *testing.T) {
+	// We're doing 2 key pairs for 2 communicating routers.
+	keys := snettest.GenKeyPairs(2)
 
-// 	desc := routing.NewRouteDescriptor(keys[0].PK, keys[1].PK, 1, 1)
+	desc := routing.NewRouteDescriptor(keys[0].PK, keys[1].PK, 1, 1)
 
-// 	forwardHops := []routing.Hop{
-// 		{From: keys[0].PK, To: keys[1].PK, TpID: transport.MakeTransportID(keys[0].PK, keys[1].PK, dmsg.Type)},
-// 	}
+	forwardHops := []routing.Hop{
+		{From: keys[0].PK, To: keys[1].PK, TpID: transport.MakeTransportID(keys[0].PK, keys[1].PK, dmsg.Type)},
+	}
 
-// 	reverseHops := []routing.Hop{
-// 		{From: keys[1].PK, To: keys[0].PK, TpID: transport.MakeTransportID(keys[1].PK, keys[0].PK, dmsg.Type)},
-// 	}
+	reverseHops := []routing.Hop{
+		{From: keys[1].PK, To: keys[0].PK, TpID: transport.MakeTransportID(keys[1].PK, keys[0].PK, dmsg.Type)},
+	}
 
-// 	// Route that will be established
-// 	route := routing.BidirectionalRoute{
-// 		Desc:      desc,
-// 		KeepAlive: DefaultRouteKeepAlive,
-// 		Forward:   forwardHops,
-// 		Reverse:   reverseHops,
-// 	}
+	// Route that will be established
+	route := routing.BidirectionalRoute{
+		Desc:      desc,
+		KeepAlive: DefaultRouteKeepAlive,
+		Forward:   forwardHops,
+		Reverse:   reverseHops,
+	}
 
-// 	// Create test env
-// 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
-// 	defer nEnv.Teardown()
+	// Create test env
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
 
-// 	tpD := transport.NewDiscoveryMock()
+	tpD := transport.NewDiscoveryMock()
 
-// 	// Prepare transports
-// 	m0, m1, _, _, err := transport.CreateTransportPair(tpD, keys[:2], nEnv, dmsg.Type)
-// 	require.NoError(t, err)
+	// Prepare transports
+	m0, m1, _, _, err := transport.CreateTransportPair(tpD, keys[:2], nEnv, dmsg.Type)
+	require.NoError(t, err)
 
-// 	forward := [2]cipher.PubKey{keys[0].PK, keys[1].PK}
-// 	backward := [2]cipher.PubKey{keys[1].PK, keys[0].PK}
+	forward := [2]cipher.PubKey{keys[0].PK, keys[1].PK}
+	backward := [2]cipher.PubKey{keys[1].PK, keys[0].PK}
 
-// 	// Paths to be returned from route finder
-// 	rfPaths := make(map[routing.PathEdges][][]routing.Hop)
-// 	rfPaths[forward] = append(rfPaths[forward], forwardHops)
-// 	rfPaths[backward] = append(rfPaths[backward], reverseHops)
+	// Paths to be returned from route finder
+	rfPaths := make(map[routing.PathEdges][][]routing.Hop)
+	rfPaths[forward] = append(rfPaths[forward], forwardHops)
+	rfPaths[backward] = append(rfPaths[backward], reverseHops)
 
-// 	rfCl := &rfclient.MockClient{}
-// 	rfCl.On("FindRoutes", mock.Anything, []routing.PathEdges{forward, backward},
-// 		&rfclient.RouteOptions{MinHops: minHops, MaxHops: maxHops}).Return(rfPaths, testhelpers.NoErr)
+	rfCl := &rfclient.MockClient{}
+	rfCl.On("FindRoutes", mock.Anything, []routing.PathEdges{forward, backward},
+		&rfclient.RouteOptions{MinHops: minHops, MaxHops: maxHops}).Return(rfPaths, testhelpers.NoErr)
 
-// 	r0Logger := logging.MustGetLogger(fmt.Sprintf("router_%d", 0))
+	r0Logger := logging.MustGetLogger(fmt.Sprintf("router_%d", 0))
 
-// 	fwdRt, revRt := route.ForwardAndReverse()
-// 	srcPK := route.Desc.SrcPK()
-// 	dstPK := route.Desc.DstPK()
+	fwdRt, revRt := route.ForwardAndReverse()
+	srcPK := route.Desc.SrcPK()
+	dstPK := route.Desc.DstPK()
 
-// 	fwdRules0 := routing.ForwardRule(route.KeepAlive, 1, 2, forwardHops[0].TpID, srcPK, dstPK, 1, 1)
-// 	revRules0 := routing.ConsumeRule(route.KeepAlive, 3, srcPK, dstPK, 1, 1)
+	fwdRules0 := routing.ForwardRule(route.KeepAlive, 1, 2, forwardHops[0].TpID, srcPK, dstPK, 1, 1)
+	revRules0 := routing.ConsumeRule(route.KeepAlive, 3, srcPK, dstPK, 1, 1)
 
-// 	// Edge rules to be returned from route group dialer
-// 	initEdge := routing.EdgeRules{Desc: revRt.Desc, Forward: fwdRules0, Reverse: revRules0}
+	// Edge rules to be returned from route group dialer
+	initEdge := routing.EdgeRules{Desc: revRt.Desc, Forward: fwdRules0, Reverse: revRules0}
 
-// 	setupCl0 := &setupclient.MockRouteGroupDialer{}
-// 	setupCl0.On("Dial", mock.Anything, r0Logger, nEnv.Nets[0], mock.Anything, route).
-// 		Return(initEdge, testhelpers.NoErr)
+	setupCl0 := &setupclient.MockRouteGroupDialer{}
+	setupCl0.On("Dial", mock.Anything, r0Logger, nEnv.Nets[0], mock.Anything, route).
+		Return(initEdge, testhelpers.NoErr)
 
-// 	r0Conf := &Config{
-// 		Logger:           r0Logger,
-// 		PubKey:           keys[0].PK,
-// 		SecKey:           keys[0].SK,
-// 		TransportManager: m0,
-// 		RouteFinder:      rfCl,
-// 		RouteGroupDialer: setupCl0,
-// 	}
+	r0Conf := &Config{
+		Logger:           r0Logger,
+		PubKey:           keys[0].PK,
+		SecKey:           keys[0].SK,
+		TransportManager: m0,
+		RouteFinder:      rfCl,
+		RouteGroupDialer: setupCl0,
+	}
 
-// 	// Create routers
-// 	r0Ifc, err := New(nEnv.Nets[0], r0Conf)
-// 	require.NoError(t, err)
+	// Create routers
+	r0Ifc, err := New(nEnv.Nets[0], r0Conf)
+	require.NoError(t, err)
 
-// 	r0, ok := r0Ifc.(*router)
-// 	require.True(t, ok)
+	r0, ok := r0Ifc.(*router)
+	require.True(t, ok)
 
-// 	r1Conf := &Config{
-// 		Logger:           logging.MustGetLogger(fmt.Sprintf("router_%d", 1)),
-// 		PubKey:           keys[1].PK,
-// 		SecKey:           keys[1].SK,
-// 		TransportManager: m1,
-// 	}
+	r1Conf := &Config{
+		Logger:           logging.MustGetLogger(fmt.Sprintf("router_%d", 1)),
+		PubKey:           keys[1].PK,
+		SecKey:           keys[1].SK,
+		TransportManager: m1,
+	}
 
-// 	r1Ifc, err := New(nEnv.Nets[1], r1Conf)
-// 	require.NoError(t, err)
+	r1Ifc, err := New(nEnv.Nets[1], r1Conf)
+	require.NoError(t, err)
 
-// 	r1, ok := r1Ifc.(*router)
-// 	require.True(t, ok)
+	r1, ok := r1Ifc.(*router)
+	require.True(t, ok)
 
-// 	ctx := context.Background()
+	ctx := context.Background()
 
-// 	nrg1IfcCh := make(chan net.Conn)
-// 	acceptErrCh := make(chan error)
-// 	go func() {
-// 		nrg1Ifc, err := r1.AcceptRoutes(ctx)
-// 		acceptErrCh <- err
-// 		nrg1IfcCh <- nrg1Ifc
-// 		close(acceptErrCh)
-// 		close(nrg1IfcCh)
-// 	}()
+	nrg1IfcCh := make(chan net.Conn)
+	acceptErrCh := make(chan error)
+	go func() {
+		nrg1Ifc, err := r1.AcceptRoutes(ctx)
+		acceptErrCh <- err
+		nrg1IfcCh <- nrg1Ifc
+		close(acceptErrCh)
+		close(nrg1IfcCh)
+	}()
 
-// 	dialErrCh := make(chan error)
-// 	nrg0IfcCh := make(chan net.Conn)
-// 	go func() {
-// 		nrg0Ifc, err := r0.DialRoutes(context.Background(), r1.conf.PubKey, 1, 1, nil)
-// 		dialErrCh <- err
-// 		nrg0IfcCh <- nrg0Ifc
-// 		close(dialErrCh)
-// 		close(nrg0IfcCh)
-// 	}()
+	dialErrCh := make(chan error)
+	nrg0IfcCh := make(chan net.Conn)
+	go func() {
+		nrg0Ifc, err := r0.DialRoutes(context.Background(), r1.conf.PubKey, 1, 1, nil)
+		dialErrCh <- err
+		nrg0IfcCh <- nrg0Ifc
+		close(dialErrCh)
+		close(nrg0IfcCh)
+	}()
 
-// 	fwdRules1 := routing.ForwardRule(route.KeepAlive, 4, 3, reverseHops[0].TpID, dstPK, srcPK, 1, 1)
-// 	revRules1 := routing.ConsumeRule(route.KeepAlive, 2, dstPK, srcPK, 1, 1)
+	fwdRules1 := routing.ForwardRule(route.KeepAlive, 4, 3, reverseHops[0].TpID, dstPK, srcPK, 1, 1)
+	revRules1 := routing.ConsumeRule(route.KeepAlive, 2, dstPK, srcPK, 1, 1)
 
-// 	// This edge is returned by the setup node to accepting router
-// 	respEdge := routing.EdgeRules{Desc: fwdRt.Desc, Forward: fwdRules1, Reverse: revRules1}
+	// This edge is returned by the setup node to accepting router
+	respEdge := routing.EdgeRules{Desc: fwdRt.Desc, Forward: fwdRules1, Reverse: revRules1}
 
-// 	// Unblock AcceptRoutes, imitates setup node request with EdgeRules
-// 	r1.accept <- respEdge
+	// Unblock AcceptRoutes, imitates setup node request with EdgeRules
+	r1.accept <- respEdge
 
-// 	// At some point raw route group gets into `rgsRaw` and waits for
-// 	// handshake packets. we're waiting for this moment in the cycle
-// 	// to start passing packets from the transport to route group
-// 	for {
-// 		r0.mx.Lock()
-// 		if _, ok := r0.rgsRaw[initEdge.Desc]; ok {
-// 			rg := r0.rgsRaw[initEdge.Desc]
-// 			go pushPackets(ctx, m0, rg)
-// 			r0.mx.Unlock()
-// 			break
-// 		}
-// 		r0.mx.Unlock()
-// 	}
+	// At some point raw route group gets into `rgsRaw` and waits for
+	// handshake packets. we're waiting for this moment in the cycle
+	// to start passing packets from the transport to route group
+	for {
+		r0.mx.Lock()
+		if _, ok := r0.rgsRaw[initEdge.Desc]; ok {
+			rg := r0.rgsRaw[initEdge.Desc]
+			go pushPackets(ctx, m0, rg)
+			r0.mx.Unlock()
+			break
+		}
+		r0.mx.Unlock()
+	}
 
-// 	for {
-// 		r1.mx.Lock()
-// 		if _, ok := r1.rgsRaw[respEdge.Desc]; ok {
-// 			rg := r1.rgsRaw[respEdge.Desc]
-// 			go pushPackets(ctx, m1, rg)
-// 			r1.mx.Unlock()
-// 			break
-// 		}
-// 		r1.mx.Unlock()
-// 	}
+	for {
+		r1.mx.Lock()
+		if _, ok := r1.rgsRaw[respEdge.Desc]; ok {
+			rg := r1.rgsRaw[respEdge.Desc]
+			go pushPackets(ctx, m1, rg)
+			r1.mx.Unlock()
+			break
+		}
+		r1.mx.Unlock()
+	}
 
-// 	require.NoError(t, <-acceptErrCh)
-// 	require.NoError(t, <-dialErrCh)
+	require.NoError(t, <-acceptErrCh)
+	require.NoError(t, <-dialErrCh)
 
-// 	nrg0Ifc := <-nrg0IfcCh
-// 	require.NotNil(t, nrg0Ifc)
-// 	nrg1Ifc := <-nrg1IfcCh
-// 	require.NotNil(t, nrg1Ifc)
+	nrg0Ifc := <-nrg0IfcCh
+	require.NotNil(t, nrg0Ifc)
+	nrg1Ifc := <-nrg1IfcCh
+	require.NotNil(t, nrg1Ifc)
 
-// 	nrg0, ok := nrg0Ifc.(*NoiseRouteGroup)
-// 	require.True(t, ok)
-// 	require.NotNil(t, nrg0)
+	nrg0, ok := nrg0Ifc.(*NoiseRouteGroup)
+	require.True(t, ok)
+	require.NotNil(t, nrg0)
 
-// 	nrg1, ok := nrg1Ifc.(*NoiseRouteGroup)
-// 	require.True(t, ok)
-// 	require.NotNil(t, nrg1)
+	nrg1, ok := nrg1Ifc.(*NoiseRouteGroup)
+	require.True(t, ok)
+	require.NotNil(t, nrg1)
 
-// 	data := []byte("Hello there!")
-// 	n, err := nrg0.Write(data)
-// 	require.NoError(t, err)
-// 	require.Equal(t, len(data), n)
+	data := []byte("Hello there!")
+	n, err := nrg0.Write(data)
+	require.NoError(t, err)
+	require.Equal(t, len(data), n)
 
-// 	received := make([]byte, 1024)
-// 	n, err = nrg1.Read(received)
-// 	require.NoError(t, err)
-// 	require.Equal(t, len(data), n)
-// 	require.Equal(t, data, received[:n])
+	received := make([]byte, 1024)
+	n, err = nrg1.Read(received)
+	require.NoError(t, err)
+	require.Equal(t, len(data), n)
+	require.Equal(t, data, received[:n])
 
-// 	require.True(t, nrg0.IsAlive())
-// 	require.True(t, nrg1.IsAlive())
+	require.True(t, nrg0.IsAlive())
+	require.True(t, nrg1.IsAlive())
 
-// 	err = nrg0.Close()
-// 	require.NoError(t, err)
+	err = nrg0.Close()
+	require.NoError(t, err)
 
-// 	require.False(t, nrg0.IsAlive())
-// 	require.False(t, nrg1.IsAlive())
+	require.False(t, nrg0.IsAlive())
+	require.False(t, nrg1.IsAlive())
 
-// 	require.True(t, nrg1.rg.isRemoteClosed())
-// 	err = nrg1.Close()
-// 	require.NoError(t, err)
-// 	require.False(t, nrg1.IsAlive())
-// }
+	require.True(t, nrg1.rg.isRemoteClosed())
+	err = nrg1.Close()
+	require.NoError(t, err)
+	require.False(t, nrg1.IsAlive())
+}
 
-// func TestRouter_Serve(t *testing.T) {
-// 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
-// 	keys := snettest.GenKeyPairs(2)
+func TestRouter_Serve(t *testing.T) {
+	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
+	keys := snettest.GenKeyPairs(2)
 
-// 	// create test env
-// 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
-// 	defer nEnv.Teardown()
+	// create test env
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
 
-// 	rEnv := NewTestEnv(t, nEnv.Nets)
-// 	defer rEnv.Teardown()
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
 
-// 	// Create routers
-// 	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
-// 	require.NoError(t, err)
+	// Create routers
+	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
+	require.NoError(t, err)
 
-// 	r0, ok := r0Ifc.(*router)
-// 	require.True(t, ok)
+	r0, ok := r0Ifc.(*router)
+	require.True(t, ok)
 
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-// 	require.NoError(t, r0.tm.Close())
-// 	require.NoError(t, r0.Serve(ctx))
-// }
+	require.NoError(t, r0.tm.Close())
+	require.NoError(t, r0.Serve(ctx))
+}
 
 const ruleKeepAlive = 1 * time.Hour
 
-// // Ensure that received packets are handled properly in `(*Router).handleTransportPacket()`.
-// func TestRouter_handleTransportPacket(t *testing.T) {
-// 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
-// 	keys := snettest.GenKeyPairs(2)
+// Ensure that received packets are handled properly in `(*Router).handleTransportPacket()`.
+func TestRouter_handleTransportPacket(t *testing.T) {
+	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
+	keys := snettest.GenKeyPairs(2)
 
-// 	pk1 := keys[0].PK
-// 	pk2 := keys[1].PK
+	pk1 := keys[0].PK
+	pk2 := keys[1].PK
 
-// 	// create test env
-// 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
-// 	defer nEnv.Teardown()
+	// create test env
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
 
-// 	rEnv := NewTestEnv(t, nEnv.Nets)
-// 	defer rEnv.Teardown()
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
 
-// 	// Create routers
-// 	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
-// 	require.NoError(t, err)
+	// Create routers
+	r0Ifc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
+	require.NoError(t, err)
 
-// 	r0, ok := r0Ifc.(*router)
-// 	require.True(t, ok)
+	r0, ok := r0Ifc.(*router)
+	require.True(t, ok)
 
-// 	r1Ifc, err := New(nEnv.Nets[1], rEnv.GenRouterConfig(1))
-// 	require.NoError(t, err)
+	r1Ifc, err := New(nEnv.Nets[1], rEnv.GenRouterConfig(1))
+	require.NoError(t, err)
 
-// 	r1, ok := r1Ifc.(*router)
-// 	require.True(t, ok)
+	r1, ok := r1Ifc.(*router)
+	require.True(t, ok)
 
-// 	defer func() {
-// 		require.NoError(t, r0.Close())
-// 		require.NoError(t, r1.Close())
-// 	}()
+	defer func() {
+		require.NoError(t, r0.Close())
+		require.NoError(t, r1.Close())
+	}()
 
-// 	// Create dmsg transport between two `snet.Network` entities.
-// 	tp1, err := rEnv.TpMngrs[1].SaveTransport(context.TODO(), pk1, dmsg.Type, transport.LabelUser)
-// 	require.NoError(t, err)
+	// Create dmsg transport between two `snet.Network` entities.
+	tp1, err := rEnv.TpMngrs[1].SaveTransport(context.TODO(), pk1, dmsg.Type, transport.LabelUser)
+	require.NoError(t, err)
 
-// 	testHandlePackets(t, r0, r1, tp1, pk1, pk2)
-// }
+	testHandlePackets(t, r0, r1, tp1, pk1, pk2)
+}
 
 func testHandlePackets(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTransport, pk1, pk2 cipher.PubKey) {
 	var wg sync.WaitGroup
@@ -625,46 +632,46 @@ func testConsumeRule(t *testing.T, r0, r1 *router, tp1 *transport.ManagedTranspo
 	require.Equal(t, consumeMsg, data)
 }
 
-// func TestRouter_Rules(t *testing.T) {
-// 	pk, sk := cipher.GenerateKeyPair()
+func TestRouter_Rules(t *testing.T) {
+	pk, sk := cipher.GenerateKeyPair()
 
-// 	env := snettest.NewEnv(t, []snettest.KeyPair{{PK: pk, SK: sk}}, []string{dmsg.Type})
-// 	defer env.Teardown()
+	env := snettest.NewEnv(t, []snettest.KeyPair{{PK: pk, SK: sk}}, []string{dmsg.Type})
+	defer env.Teardown()
 
-// 	rt := routing.NewTable()
+	rt := routing.NewTable()
 
-// 	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
-// 	keys := snettest.GenKeyPairs(2)
+	// We are generating two key pairs - one for the a `Router`, the other to send packets to `Router`.
+	keys := snettest.GenKeyPairs(2)
 
-// 	// create test env
-// 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
-// 	defer nEnv.Teardown()
+	// create test env
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
 
-// 	rEnv := NewTestEnv(t, nEnv.Nets)
-// 	defer rEnv.Teardown()
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
 
-// 	rIfc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
-// 	require.NoError(t, err)
+	rIfc, err := New(nEnv.Nets[0], rEnv.GenRouterConfig(0))
+	require.NoError(t, err)
 
-// 	r, ok := rIfc.(*router)
-// 	require.True(t, ok)
+	r, ok := rIfc.(*router)
+	require.True(t, ok)
 
-// 	defer func() {
-// 		require.NoError(t, r.Close())
-// 	}()
+	defer func() {
+		require.NoError(t, r.Close())
+	}()
 
-// 	r.rt = rt
+	r.rt = rt
 
-// 	// TEST: Set and get expired and unexpired rule.
-// 	t.Run("GetRule", func(t *testing.T) {
-// 		testGetRule(t, r, rt)
-// 	})
+	// TEST: Set and get expired and unexpired rule.
+	t.Run("GetRule", func(t *testing.T) {
+		testGetRule(t, r, rt)
+	})
 
-// 	// TEST: Ensure removing route descriptor works properly.
-// 	t.Run("RemoveRouteDescriptor", func(t *testing.T) {
-// 		testRemoveRouteDescriptor(t, r, rt)
-// 	})
-// }
+	// TEST: Ensure removing route descriptor works properly.
+	t.Run("RemoveRouteDescriptor", func(t *testing.T) {
+		testRemoveRouteDescriptor(t, r, rt)
+	})
+}
 
 func testRemoveRouteDescriptor(t *testing.T, r *router, rt routing.Table) {
 	clearRoutingTableRules(rt)
@@ -722,24 +729,24 @@ func testGetRule(t *testing.T, r *router, rt routing.Table) {
 	assert.Equal(t, rule, gotRule)
 }
 
-// func TestRouter_SetupIsTrusted(t *testing.T) {
-// 	keys := snettest.GenKeyPairs(2)
+func TestRouter_SetupIsTrusted(t *testing.T) {
+	keys := snettest.GenKeyPairs(2)
 
-// 	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
-// 	defer nEnv.Teardown()
+	nEnv := snettest.NewEnv(t, keys, []string{dmsg.Type})
+	defer nEnv.Teardown()
 
-// 	rEnv := NewTestEnv(t, nEnv.Nets)
-// 	defer rEnv.Teardown()
+	rEnv := NewTestEnv(t, nEnv.Nets)
+	defer rEnv.Teardown()
 
-// 	routerConfig := rEnv.GenRouterConfig(0)
-// 	routerConfig.SetupNodes = append(routerConfig.SetupNodes, keys[0].PK)
+	routerConfig := rEnv.GenRouterConfig(0)
+	routerConfig.SetupNodes = append(routerConfig.SetupNodes, keys[0].PK)
 
-// 	r0, err := New(nEnv.Nets[0], routerConfig)
-// 	require.NoError(t, err)
+	r0, err := New(nEnv.Nets[0], routerConfig)
+	require.NoError(t, err)
 
-// 	assert.True(t, r0.SetupIsTrusted(keys[0].PK))
-// 	assert.False(t, r0.SetupIsTrusted(keys[1].PK))
-// }
+	assert.True(t, r0.SetupIsTrusted(keys[0].PK))
+	assert.False(t, r0.SetupIsTrusted(keys[1].PK))
+}
 
 func clearRouteGroups(routers ...*router) {
 	for _, r := range routers {
@@ -788,7 +795,7 @@ func NewTestEnv(t *testing.T, nets []*snet.Network) *TestEnv {
 			LogStore:        transport.InMemoryTransportLogStore(),
 		}
 
-		ms[i], err = transport.NewManager(nil, n, nil, mConfs[i])
+		ms[i], err = transport.NewManager(nil, n, mConfs[i])
 		require.NoError(t, err)
 
 		go ms[i].Serve(context.TODO())
