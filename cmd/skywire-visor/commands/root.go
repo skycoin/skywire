@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
 	_ "net/http/pprof" // nolint:gosec // https://golang.org/doc/diagnostics.html#profiling
 	"os"
@@ -284,7 +283,12 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 			log.Warn("Error during fetching servers list from skycoin")
 			break
 		}
-		defer resp.Body.Close()
+		defer func() {
+			err := resp.Body.Close()
+			if err != nil {
+				log.Warn(err)
+			}
+		}()
 		serversListYml, err = io.ReadAll(resp.Body)
 		if err != nil {
 			log.Warn("Error during fetching servers list from skycoin")
@@ -296,7 +300,12 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 		if err != nil {
 			log.Warn("Cannot create backup servers list file")
 		}
-		defer out.Close()
+		defer func() {
+			err := out.Close()
+			if err != nil {
+				log.Warn(err)
+			}
+		}()
 		_, err = io.Copy(out, resp.Body)
 		if err != nil {
 			log.Warn("Cannot save backup servers list file")
@@ -322,7 +331,6 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 		if err != nil {
 			log.Fatal("Error during parsing servers list")
 		}
-
 		if conf.IsTest {
 			conf.Dmsg.Discovery = servers.Servers[0].Dmsg
 			conf.Transport.AddressResolver = servers.Servers[0].AddressResolver
@@ -341,8 +349,7 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 			log.Infof("The %s selected", servers.Servers[1].Name)
 		} else {
 			// TODO should use robust random to get better load balancing on servers
-			rand.Seed(time.Now().Unix())
-			randomServer := rand.Intn(len(servers.Servers)-2) + 2
+			randomServer := ((time.Now().Unix() % 11) % 2) + 2
 			conf.Dmsg.Discovery = servers.Servers[randomServer].Dmsg
 			conf.Transport.AddressResolver = servers.Servers[randomServer].AddressResolver
 			conf.Transport.Discovery = servers.Servers[randomServer].Transport
