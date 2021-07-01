@@ -1,4 +1,4 @@
-servers:
+test:
   -
     capacity: 80
     name: server_test
@@ -8,6 +8,7 @@ servers:
     routing: 'http://routefinder.skywire.cc'
     uptime_tracker: 'http://uptime.tracker.skywire.cc'
     launcher: 'http://service.discovery.skywire.cc' 
+china:
   -
     capacity: 80
     name: server_cn
@@ -16,7 +17,8 @@ servers:
     address_resolver: 'http://address.resolver.skywire.cn'
     routing: 'http://routefinder.skywire.cn'
     uptime_tracker: 'http://uptime.tracker.skywire.cn'
-    launcher: 'http://service.discovery.skywire.cn' 
+    launcher: 'http://service.discovery.skywire.cn'
+other:
   -
     capacity: 70
     name: server_us
@@ -29,9 +31,9 @@ servers:
   -
     capacity: 40
     name: server_eu
-    dmsg: 'http://dmsg.discovery.skywire.eu'
-    transport: 'http://transport.discovery.skywire.eu'
-    address_resolver: 'http://address.resolver.skywire.eu'
-    routing: 'http://routefinder.skywire.eu'
-    uptime_tracker: 'http://uptime.tracker.skywire.eu'
-    launcher: 'http://service.discovery.skywire.eu'   
+    dmsg: 'http://dmsgd.skywire.skycoin.com'
+    transport: 'http://tpd.skywire.skycoin.com'
+    address_resolver: 'http://ar.skywire.skycoin.com'
+    routing: 'http://rf.skywire.skycoin.com'
+    uptime_tracker: 'http://ut.skywire.skycoin.com'
+    launcher: 'http://sd.skycoin.com'   

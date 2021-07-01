@@ -275,7 +275,7 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 	var err error
 	log := mLog.PackageLogger("visor:config")
 
-	// get servers.yml file online and store in path
+	// trying to get servers list from skycoin, and save it in local
 	for !fetchStatus {
 		log.Info("Trying to fetch servers list from skycoin")
 		resp, err := http.Get(conf.ServersListAddress)
@@ -313,7 +313,7 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 		log.Info("Servers list backup saved")
 		fetchStatus = true
 	}
-	// if online not reached, use stored file
+	// if servers list not reached from skycoin, use stored backup file
 	for !fetchStatus {
 		log.Info("Trying to fetch servers list from stored backup")
 		filename := filepath.Clean(defaultServersName)
@@ -331,36 +331,29 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 		if err != nil {
 			log.Fatal("Error during parsing servers list")
 		}
+
 		if conf.IsTest {
-			conf.Dmsg.Discovery = servers.Servers[0].Dmsg
-			conf.Transport.AddressResolver = servers.Servers[0].AddressResolver
-			conf.Transport.Discovery = servers.Servers[0].Transport
-			conf.Routing.RouteFinder = servers.Servers[0].Routing
-			conf.UptimeTracker.Addr = servers.Servers[0].UptimeTracker
-			conf.Launcher.Discovery.ServiceDisc = servers.Servers[0].Launcher
-			log.Infof("The %s selected", servers.Servers[0].Name)
+			setServersConfig(conf, log, servers.Test)
 		} else if chineseServer {
-			conf.Dmsg.Discovery = servers.Servers[1].Dmsg
-			conf.Transport.AddressResolver = servers.Servers[1].AddressResolver
-			conf.Transport.Discovery = servers.Servers[1].Transport
-			conf.Routing.RouteFinder = servers.Servers[1].Routing
-			conf.UptimeTracker.Addr = servers.Servers[1].UptimeTracker
-			conf.Launcher.Discovery.ServiceDisc = servers.Servers[1].Launcher
-			log.Infof("The %s selected", servers.Servers[1].Name)
+			setServersConfig(conf, log, servers.China)
 		} else {
-			// TODO should use robust random to get better load balancing on servers
-			randomServer := ((time.Now().Unix() % 11) % 2) + 2
-			conf.Dmsg.Discovery = servers.Servers[randomServer].Dmsg
-			conf.Transport.AddressResolver = servers.Servers[randomServer].AddressResolver
-			conf.Transport.Discovery = servers.Servers[randomServer].Transport
-			conf.Routing.RouteFinder = servers.Servers[randomServer].Routing
-			conf.UptimeTracker.Addr = servers.Servers[randomServer].UptimeTracker
-			conf.Launcher.Discovery.ServiceDisc = servers.Servers[randomServer].Launcher
-			log.Infof("The %s selected", servers.Servers[randomServer].Name)
+			setServersConfig(conf, log, servers.Other)
 		}
+
 	} else {
 		log.Fatal("Servers list not avialble, both from skycoin.com and your local backup")
 	}
+}
+
+func setServersConfig(conf *visorconfig.V1, log *logging.Logger, servers []serversData) {
+	randomServer := ((time.Now().Unix() % 11) % int64(len(servers)))
+	conf.Dmsg.Discovery = servers[randomServer].Dmsg
+	conf.Transport.AddressResolver = servers[randomServer].AddressResolver
+	conf.Transport.Discovery = servers[randomServer].Transport
+	conf.Routing.RouteFinder = servers[randomServer].Routing
+	conf.UptimeTracker.Addr = servers[randomServer].UptimeTracker
+	conf.Launcher.Discovery.ServiceDisc = servers[randomServer].Launcher
+	log.Infof("The %s selected", servers[randomServer].Name)
 }
 
 func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
@@ -410,13 +403,17 @@ func checkHvIsRunning(addr string, retries int) bool {
 }
 
 type serversList struct {
-	Servers []struct {
-		Name            string
-		Dmsg            string
-		Transport       string
-		AddressResolver string
-		Routing         string
-		UptimeTracker   string
-		Launcher        string
-	}
+	Test  []serversData
+	China []serversData
+	Other []serversData
+}
+
+type serversData struct {
+	Name            string
+	Dmsg            string
+	Transport       string
+	AddressResolver string
+	Routing         string
+	UptimeTracker   string
+	Launcher        string
 }
