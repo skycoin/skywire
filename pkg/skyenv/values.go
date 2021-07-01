@@ -8,8 +8,9 @@ import (
 
 // Constants for skywire root directories.
 const (
-	DefaultSkywirePath        = "."
-	PackageSkywirePath        = "/opt/skywire"
+	DefaultSkywirePath = "."
+	PackageSkywirePath = "/opt/skywire"
+	// TODO make a decision about actual name of the domain
 	DefaultServersListAddress = "http://servers-list.skycoin.com"
 )
 

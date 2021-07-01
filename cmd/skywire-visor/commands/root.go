@@ -49,7 +49,7 @@ var (
 	confPath      string
 	delay         string
 	launchBrowser bool
-	chineseServer bool
+	localServer   bool
 )
 
 func init() {
@@ -60,7 +60,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file location. If the value is 'STDIN', config file will be read from stdin.")
 	rootCmd.Flags().StringVar(&delay, "delay", "0ns", "start delay (deprecated)") // deprecated
 	rootCmd.Flags().BoolVar(&launchBrowser, "launch-browser", false, "open hypervisor web ui (hypervisor only) with system browser")
-	rootCmd.Flags().BoolVar(&chineseServer, "chinese-server", false, "force skywire-visor to connect to chinese server")
+	rootCmd.Flags().BoolVar(&localServer, "local-server", false, "force skywire-visor to connect to local server")
 }
 
 var rootCmd = &cobra.Command{
@@ -334,10 +334,10 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 
 		if conf.IsTest {
 			setServersConfig(conf, log, servers.Test)
-		} else if chineseServer {
-			setServersConfig(conf, log, servers.China)
+		} else if localServer {
+			setServersConfig(conf, log, servers.Local)
 		} else {
-			setServersConfig(conf, log, servers.Other)
+			setServersConfig(conf, log, servers.Worldwide)
 		}
 
 	} else {
@@ -403,9 +403,9 @@ func checkHvIsRunning(addr string, retries int) bool {
 }
 
 type serversList struct {
-	Test  []serversData
-	China []serversData
-	Other []serversData
+	Test      []serversData
+	Local     []serversData
+	Worldwide []serversData
 }
 
 type serversData struct {

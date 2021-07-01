@@ -8,7 +8,7 @@ test:
     routing: 'http://routefinder.skywire.cc'
     uptime_tracker: 'http://uptime.tracker.skywire.cc'
     launcher: 'http://service.discovery.skywire.cc' 
-china:
+local:
   -
     capacity: 80
     name: server_cn
@@ -18,7 +18,7 @@ china:
     routing: 'http://routefinder.skywire.cn'
     uptime_tracker: 'http://uptime.tracker.skywire.cn'
     launcher: 'http://service.discovery.skywire.cn'
-other:
+worldwide:
   -
     capacity: 70
     name: server_us
