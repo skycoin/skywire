@@ -11,13 +11,13 @@ test:
 local:
   -
     capacity: 80
-    name: server_cn
-    dmsg: 'http://dmsg.discovery.skywire.cn'
-    transport: 'http://transport.discovery.skywire.cn'
-    address_resolver: 'http://address.resolver.skywire.cn'
-    routing: 'http://routefinder.skywire.cn'
-    uptime_tracker: 'http://uptime.tracker.skywire.cn'
-    launcher: 'http://service.discovery.skywire.cn'
+    name: server_local
+    dmsg: 'http://dmsg.discovery.skywire.local'
+    transport: 'http://transport.discovery.skywire.local'
+    address_resolver: 'http://address.resolver.skywire.local'
+    routing: 'http://routefinder.skywire.local'
+    uptime_tracker: 'http://uptime.tracker.skywire.local'
+    launcher: 'http://service.discovery.skywire.local'
 worldwide:
   -
     capacity: 70

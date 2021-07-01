@@ -121,7 +121,10 @@ var rootCmd = &cobra.Command{
 		defer stopPProf()
 
 		conf := initConfig(log, args, confPath)
-		initAddresses(conf, log)
+		err = initAddresses(conf, log)
+		if err != nil {
+			log.Fatal("Servers list not avialble, both from skycoin.com and your local backup")
+		}
 
 		v, ok := visor.NewVisor(conf, restartCtx)
 		if !ok {
@@ -268,7 +271,7 @@ func initConfig(mLog *logging.MasterLogger, args []string, confPath string) *vis
 	return conf
 }
 
-func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
+func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) error {
 	var fetchStatus bool
 	var serversListYml []byte
 	var servers serversList
@@ -330,19 +333,19 @@ func initAddresses(conf *visorconfig.V1, mLog *logging.MasterLogger) {
 		err := yaml.Unmarshal(serversListYml, &servers)
 		if err != nil {
 			log.Fatal("Error during parsing servers list")
+			return err
 		}
 
 		if conf.IsTest {
 			setServersConfig(conf, log, servers.Test)
-		} else if localServer {
+		} else if localServer || checkLocalTime() {
 			setServersConfig(conf, log, servers.Local)
 		} else {
 			setServersConfig(conf, log, servers.Worldwide)
 		}
-
-	} else {
-		log.Fatal("Servers list not avialble, both from skycoin.com and your local backup")
+		return nil
 	}
+	return err
 }
 
 func setServersConfig(conf *visorconfig.V1, log *logging.Logger, servers []serversData) {
@@ -354,6 +357,10 @@ func setServersConfig(conf *visorconfig.V1, log *logging.Logger, servers []serve
 	conf.UptimeTracker.Addr = servers[randomServer].UptimeTracker
 	conf.Launcher.Discovery.ServiceDisc = servers[randomServer].Launcher
 	log.Infof("The %s selected", servers[randomServer].Name)
+}
+
+func checkLocalTime() bool {
+	return time.Now().UTC().Add(8*time.Hour).Format("2006-01-02 15:04:05 Mon") == time.Now().Local().Format("2006-01-02 15:04:05 Mon")
 }
 
 func runBrowser(conf *visorconfig.V1, log *logging.MasterLogger) {
