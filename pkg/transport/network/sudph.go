@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/internal/packetfilter"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 )
 
 const (
@@ -62,12 +64,21 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	sudphVisorsConn := c.filter.NewConn(visorsConnPriority, nil)
 	c.filter.Start()
 	c.log.Infof("Binding")
-	addrCh, err := c.ar.BindSUDPH(c.filter)
+	addrCh, err := c.ar.BindSUDPH(c.filter, c.makeBindHandshake())
 	if err != nil {
 		return nil, err
 	}
 	go c.PICKNAMEFORME(sudphVisorsConn, addrCh)
 	return kcp.ServeConn(nil, 0, 0, sudphVisorsConn)
+}
+
+// make a handshake function that is compatible with address resolver interface
+func (c *sudphClient) makeBindHandshake() func(in net.Conn) (net.Conn, error) {
+	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
+	hs := handshake.InitiatorHandshake(c.SK(), dmsg.Addr{PK: c.PK(), Port: 0}, emptyAddr)
+	return func(in net.Conn) (net.Conn, error) {
+		return doHandshake(in, hs, SUDPH, c.log)
+	}
 }
 
 // todo: name

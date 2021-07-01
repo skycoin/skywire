@@ -8,6 +8,8 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/noise"
+	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 )
 
 const encryptHSTimout = 5 * time.Second
@@ -40,6 +42,28 @@ type conn struct {
 	lAddr, rAddr dmsg.Addr
 	freePort     func()
 	connType     Type
+}
+
+// DoHandshake performs given handshake over given raw connection and wraps
+// connection in network.Conn
+func DoHandshake(rawConn net.Conn, hs handshake.Handshake, netType Type, log *logging.Logger) (Conn, error) {
+	return doHandshake(rawConn, hs, netType, log)
+}
+
+// handshake performs given handshake over given raw connection and wraps
+// connection in network.conn
+// todo: ugly but necessary for AR compatibility
+// consider moving "doing handshake" part to handshake package
+func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType Type, log *logging.Logger) (*conn, error) {
+	lAddr, rAddr, err := hs(rawConn, time.Now().Add(handshake.Timeout))
+	if err != nil {
+		if err := rawConn.Close(); err != nil {
+			log.WithError(err).Warnf("Failed to close connection")
+		}
+		return nil, err
+	}
+	handshakedConn := &conn{Conn: rawConn, lAddr: lAddr, rAddr: rAddr, connType: netType}
+	return handshakedConn, nil
 }
 
 func (c *conn) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool) error {
