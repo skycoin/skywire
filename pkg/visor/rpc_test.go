@@ -54,7 +54,6 @@ func TestHealth(t *testing.T) {
 				},
 			},
 			uptimeTracker: utClient,
-			arClient:      arClient,
 			rfClient:      rfClient,
 		}
 
