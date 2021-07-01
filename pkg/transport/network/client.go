@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -158,22 +157,16 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 // wrapConn performs handshake over provided raw connection and wraps it in
 // network.Conn type using the data obtained from handshake process
 func (c *genericClient) wrapConn(rawConn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*conn, error) {
-	lAddr, rAddr, err := hs(rawConn, time.Now().Add(handshake.Timeout))
+	conn, err := doHandshake(rawConn, hs, c.netType, c.log)
 	if err != nil {
-		if err := rawConn.Close(); err != nil {
-			c.log.WithError(err).Warnf("Failed to close connection")
-		}
 		onClose()
+	}
+	conn.freePort = onClose
+	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), conn.lAddr, conn.rAddr)
+	if err := conn.encrypt(c.lPK, c.lSK, initiator); err != nil {
 		return nil, err
 	}
-	c.log.Infof("Sent handshake to %v, local addr %v, remote addr %v", rawConn.RemoteAddr(), lAddr, rAddr)
-
-	wrappedConn := &conn{Conn: rawConn, lAddr: lAddr, rAddr: rAddr, freePort: onClose, connType: c.netType}
-	err = wrappedConn.encrypt(c.lPK, c.lSK, initiator)
-	if err != nil {
-		return nil, err
-	}
-	return wrappedConn, nil
+	return conn, nil
 }
 
 // acceptConn accepts new connection in underlying raw network listener,
