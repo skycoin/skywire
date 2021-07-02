@@ -91,16 +91,15 @@ type Overview struct {
 	Transports      []*TransportSummary  `json:"transports"`
 	RoutesCount     int                  `json:"routes_count"`
 	LocalIP         string               `json:"local_ip"`
-	NATType         string               `json:"nat_type"`
 	PublicIP        string               `json:"public_ip"`
+	IsSymmetricNAT  bool                 `json:"is_symmetic_nat"`
 }
 
 // Overview implements API.
 func (v *Visor) Overview() (*Overview, error) {
 	var tSummaries []*TransportSummary
-	var natType string
 	var publicIP string
-
+	var isSymmetricNAT bool
 	if v == nil {
 		panic("v is nil")
 	}
@@ -113,13 +112,12 @@ func (v *Visor) Overview() (*Overview, error) {
 		return true
 	})
 
-	switch v.net.Conf().NATType {
+	switch v.net.Conf().StunClient.NATType {
 	case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
-		natType = v.net.Conf().NATType.String()
-		publicIP = v.net.Conf().PublicIP.String()
+		publicIP = v.net.Conf().StunClient.PublicIP.IP()
+		isSymmetricNAT = true
 	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-		natType = v.net.Conf().NATType.String()
-		publicIP = v.net.Conf().PublicIP.IP()
+		isSymmetricNAT = false
 	}
 
 	overview := &Overview{
@@ -129,8 +127,8 @@ func (v *Visor) Overview() (*Overview, error) {
 		Apps:            v.appL.AppStates(),
 		Transports:      tSummaries,
 		RoutesCount:     v.router.RoutesCount(),
-		NATType:         natType,
 		PublicIP:        publicIP,
+		IsSymmetricNAT:  isSymmetricNAT,
 	}
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
