@@ -63,6 +63,8 @@ var (
 	ar vinit.Module
 	// App discovery
 	disc vinit.Module
+	// Stun client
+	sc vinit.Module
 	// Snet (different network types)
 	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
@@ -105,7 +107,8 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
-	sn = maker("snet", initSNet, &ar, &disc, &ebc)
+	sc = maker("stun_client", initStunClient)
+	sn = maker("snet", initSNet, &ar, &disc, &ebc, &sc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
 	tr = maker("transport", initTransport, &sn, &ebc)
@@ -117,7 +120,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
 	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sc, &sn, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
@@ -181,11 +184,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
-	nc := snet.NetworkConfigs{
-		Dmsg: v.conf.Dmsg,
-		STCP: v.conf.STCP,
-	}
+func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	var nat stun.NATType
 	var host *stun.Host
@@ -214,12 +213,27 @@ stunLoop:
 		}
 	}
 
+	sc := &snet.StunClient{
+		PublicIP: host,
+		NATType:  nat,
+	}
+	v.initLock.Lock()
+	v.stunClient = sc
+	v.initLock.Unlock()
+	return nil
+}
+
+func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
+	nc := snet.NetworkConfigs{
+		Dmsg: v.conf.Dmsg,
+		STCP: v.conf.STCP,
+	}
+
 	conf := snet.Config{
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
-		NATType:        nat,
-		PublicIP:       host,
+		StunClient:     *v.stunClient,
 		NetworkConfigs: nc,
 	}
 

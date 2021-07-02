@@ -73,9 +73,8 @@ type Config struct {
 	PubKey         cipher.PubKey
 	SecKey         cipher.SecKey
 	ARClient       arclient.APIClient
-	NATType        stun.NATType
-	PublicIP       *stun.Host
 	NetworkConfigs NetworkConfigs
+	StunClient     StunClient
 }
 
 // NetworkConfigs represents all network configs.
@@ -88,6 +87,12 @@ type NetworkConfigs struct {
 type NetworkClients struct {
 	DmsgC  *dmsg.Client
 	Direct map[string]directtp.Client
+}
+
+// StunClient represents the visors network details.
+type StunClient struct {
+	PublicIP *stun.Host
+	NATType  stun.NATType
 }
 
 // Network represents a network between nodes in Skywire.
@@ -169,9 +174,9 @@ func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogg
 			AddressResolver: conf.ARClient,
 		}
 		// sudph will only be initialized if NAT is determined not to be symmetric
-		switch conf.NATType {
+		switch conf.StunClient.NATType {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-			log.Infof("SUDPH transport wont be available as visor is under %v.", conf.NATType.String())
+			log.Infof("SUDPH transport wont be available as visor is under %v.", conf.StunClient.NATType.String())
 		default:
 			clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
 		}
