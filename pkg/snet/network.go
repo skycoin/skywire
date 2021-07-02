@@ -168,13 +168,10 @@ func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogg
 			SK:              conf.SecKey,
 			AddressResolver: conf.ARClient,
 		}
-		// SUDPH wont be initilised only if the visor is under any symmetric NAT
-		// along with the other NAT types all other errors will also initilise the SUDPH
-		// as without a proper response from a STUN server we cannot determine if the
-		// visor is un der any symmetric NAT
+		// sudph will only be initialized if NAT is determined not to be symmetric
 		switch conf.NATType {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-			break
+			log.Infof("SUDPH transport wont be available as visor is under %v.", conf.NATType.String())
 		default:
 			clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
 		}
