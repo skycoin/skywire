@@ -30,7 +30,7 @@ func (_m *MockAPIClient) BindSTCPR(ctx context.Context, port string) error {
 }
 
 // BindSUDPH provides a mock function with given fields: filter
-func (_m *MockAPIClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
+func (_m *MockAPIClient) BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error) {
 	ret := _m.Called(filter)
 
 	var r0 <-chan RemoteVisor

@@ -15,8 +15,8 @@ import (
 	"github.com/skycoin/skywire/internal/testhelpers"
 	"github.com/skycoin/skywire/internal/utclient"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -40,7 +40,7 @@ func TestHealth(t *testing.T) {
 		utClient := &utclient.MockAPIClient{}
 		utClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
-		arClient := &arclient.MockAPIClient{}
+		arClient := &addrresolver.MockAPIClient{}
 		arClient.On("Health", mock.Anything).Return(http.StatusOK, nil)
 
 		rfClient := &rfclient.MockClient{}
