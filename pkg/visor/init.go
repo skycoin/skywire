@@ -183,8 +183,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Dmsg == nil {
-		// todo: this is preserved behavior from snet. Do we need it?
-		return nil
+		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, v.conf.Dmsg)
 
