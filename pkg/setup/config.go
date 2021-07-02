@@ -5,7 +5,7 @@ import (
 
 	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/snet/dmsgc"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 )
 
 //go:generate readmegen -n Config -o ./README.md ./config.go
