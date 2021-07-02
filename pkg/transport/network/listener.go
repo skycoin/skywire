@@ -92,7 +92,6 @@ func (l *listener) Port() uint16 {
 }
 
 // Network returns network type
-// todo: consider switching to Type instead of string
 func (l *listener) Network() Type {
 	return l.network
 }

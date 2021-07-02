@@ -38,8 +38,7 @@ func (c *dmsgClientAdapter) Dial(ctx context.Context, remote cipher.PubKey, port
 
 // Start implements Client interface
 func (c *dmsgClientAdapter) Start() error {
-	// todo: update interface to pass context properly?
-	go c.dmsgC.Serve(context.TODO())
+	// no need to serve, the wrapped dmsgC is already serving
 	return nil
 }
 
@@ -64,9 +63,9 @@ func (c *dmsgClientAdapter) SK() cipher.SecKey {
 
 // Close implements Client interface
 func (c *dmsgClientAdapter) Close() error {
-	// todo: maybe not, the dmsg instance we get is the global one that is used
-	// in plenty other places
-	return c.dmsgC.Close()
+	// this client is for transport usage, but dmsgC it wraps may be used in
+	// other places. It should be closed by whoever initialized it, not here
+	return nil
 }
 
 // Type implements Client interface
