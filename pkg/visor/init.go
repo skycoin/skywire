@@ -185,38 +185,7 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-
-	var nat stun.NATType
-	var host *stun.Host
-	var err error
-stunLoop:
-	for _, stunServer := range v.conf.StunServers {
-		nC := stun.NewClient()
-		nC.SetServerAddr(stunServer)
-
-		nat, host, err = nC.Discover()
-		if err != nil {
-			log.Warn(err)
-		}
-
-		switch nat {
-		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			log.Warn(nat.String())
-			// incase we fail to connect to all the STUN servers give a warning
-			if stunServer == v.conf.StunServers[len(v.conf.StunServers)-1] {
-				log.Warn("All STUN servers offline")
-			}
-		default:
-			log.Info(nat.String())
-			log.Info(host.String())
-			break stunLoop
-		}
-	}
-
-	sc := &snet.StunClient{
-		PublicIP: host,
-		NATType:  nat,
-	}
+	sc := stunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
 	v.stunClient = sc
 	v.initLock.Unlock()
@@ -809,4 +778,41 @@ func getErrors(ctx context.Context) chan error {
 		panic("runtime errors channel is not set in context")
 	}
 	return errs
+}
+
+func stunDetails(stunServers []string, log *logging.Logger) *snet.StunClient {
+
+	var nat stun.NATType
+	var host *stun.Host
+	var err error
+	for _, stunServer := range stunServers {
+		nC := stun.NewClient()
+		nC.SetServerAddr(stunServer)
+
+		nat, host, err = nC.Discover()
+		if err != nil {
+			log.Warn(err)
+		}
+
+		switch nat {
+		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+			log.Warn(nat.String())
+			// incase we fail to connect to all the STUN servers give a warning
+			if stunServer == stunServers[len(stunServers)-1] {
+				log.Warn("All STUN servers offline")
+			}
+		default:
+			log.Info(nat.String())
+			log.Info(host.String())
+			return &snet.StunClient{
+				PublicIP: host,
+				NATType:  nat,
+			}
+		}
+	}
+
+	return &snet.StunClient{
+		PublicIP: host,
+		NATType:  nat,
+	}
 }
