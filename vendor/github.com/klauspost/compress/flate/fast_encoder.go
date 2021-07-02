@@ -35,16 +35,16 @@ func newFastEnc(level int) fastEnc {
 }
 
 const (
-	tableBits       = 15             // Bits used in the table
+	tableBits       = 16             // Bits used in the table
 	tableSize       = 1 << tableBits // Size of the table
 	tableShift      = 32 - tableBits // Right-shift to get the tableBits most significant bits of a uint32.
 	baseMatchOffset = 1              // The smallest match offset
 	baseMatchLength = 3              // The smallest match length per the RFC section 3.2.5
 	maxMatchOffset  = 1 << 15        // The largest match offset
 
-	bTableBits   = 17                                               // Bits used in the big tables
+	bTableBits   = 18                                               // Bits used in the big tables
 	bTableSize   = 1 << bTableBits                                  // Size of the table
-	allocHistory = maxStoreBlockSize * 10                           // Size to preallocate for history.
+	allocHistory = maxStoreBlockSize * 20                           // Size to preallocate for history.
 	bufferReset  = (1 << 31) - allocHistory - maxStoreBlockSize - 1 // Reset the buffer offset when reaching this.
 )
 
@@ -92,6 +92,7 @@ func hash(u uint32) uint32 {
 }
 
 type tableEntry struct {
+	val    uint32
 	offset int32
 }
 
@@ -127,7 +128,7 @@ func (e *fastGen) addBlock(src []byte) int32 {
 // hash4 returns the hash of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <32.
 func hash4u(u uint32, h uint8) uint32 {
-	return (u * prime4bytes) >> ((32 - h) & reg8SizeMask32)
+	return (u * prime4bytes) >> ((32 - h) & 31)
 }
 
 type tableEntryPrev struct {
@@ -138,25 +139,25 @@ type tableEntryPrev struct {
 // hash4x64 returns the hash of the lowest 4 bytes of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <32.
 func hash4x64(u uint64, h uint8) uint32 {
-	return (uint32(u) * prime4bytes) >> ((32 - h) & reg8SizeMask32)
+	return (uint32(u) * prime4bytes) >> ((32 - h) & 31)
 }
 
 // hash7 returns the hash of the lowest 7 bytes of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <64.
 func hash7(u uint64, h uint8) uint32 {
-	return uint32(((u << (64 - 56)) * prime7bytes) >> ((64 - h) & reg8SizeMask64))
+	return uint32(((u << (64 - 56)) * prime7bytes) >> ((64 - h) & 63))
 }
 
 // hash8 returns the hash of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <64.
 func hash8(u uint64, h uint8) uint32 {
-	return uint32((u * prime8bytes) >> ((64 - h) & reg8SizeMask64))
+	return uint32((u * prime8bytes) >> ((64 - h) & 63))
 }
 
 // hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <64.
 func hash6(u uint64, h uint8) uint32 {
-	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & reg8SizeMask64))
+	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & 63))
 }
 
 // matchlen will return the match length between offsets and t in src.
