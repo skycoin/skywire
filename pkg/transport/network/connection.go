@@ -84,7 +84,6 @@ func (c *conn) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool) erro
 }
 
 // EncryptConn encrypts given connection
-// todo: make private when tpconn.Conn is gone
 func EncryptConn(config noise.Config, conn net.Conn) (net.Conn, error) {
 	ns, err := noise.New(noise.HandshakeKK, config)
 	if err != nil {
@@ -133,5 +132,4 @@ func (c *conn) LocalPort() uint16 { return c.lAddr.Port }
 func (c *conn) RemotePort() uint16 { return c.rAddr.Port }
 
 // Network returns network of connection
-// todo: consider switching to Type instead of string
 func (c *conn) Network() Type { return c.connType }

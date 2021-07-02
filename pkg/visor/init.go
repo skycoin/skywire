@@ -23,12 +23,12 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/setup/setupclient"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -198,11 +198,6 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("dmsgC", func() error {
 		return dmsgC.Close()
 	})
-	return nil
-}
-
-func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
-
 	return nil
 }
 
