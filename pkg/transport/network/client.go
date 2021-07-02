@@ -32,7 +32,8 @@ type Client interface {
 	// for different ports for the same client. It requires Start to be called
 	// to start accepting connections
 	Listen(port uint16) (Listener, error)
-	// todo: remove
+	// LocalAddr returns the actual network address under which this client listens to
+	// new connections
 	LocalAddr() (net.Addr, error)
 	// PK returns public key of the visor running this client
 	PK() cipher.PubKey
@@ -58,7 +59,7 @@ type ClientFactory struct {
 }
 
 // MakeClient creates a new client of specified type
-func (f *ClientFactory) MakeClient(netType Type) Client {
+func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 	log := logging.MustGetLogger(string(netType))
 	p := porter.New(porter.MinEphemeral)
 
@@ -77,16 +78,15 @@ func (f *ClientFactory) MakeClient(netType Type) Client {
 
 	switch netType {
 	case STCP:
-		return newStcp(generic, f.PKTable)
+		return newStcp(generic, f.PKTable), nil
 	case STCPR:
-		return newStcpr(resolved)
+		return newStcpr(resolved), nil
 	case SUDPH:
-		return newSudph(resolved)
+		return newSudph(resolved), nil
 	case DMSG:
-		return newDmsgClient(f.DmsgC)
+		return newDmsgClient(f.DmsgC), nil
 	}
-	// todo: maybe return an error that type is not found
-	return nil
+	return nil, fmt.Errorf("cannot initiate client, type %s not supported", netType)
 }
 
 // genericClient unites common logic for all clients
@@ -130,7 +130,6 @@ func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK c
 	return c.wrapConn(conn, hs, true, freePort)
 }
 
-// todo: context?
 // acceptConnections continuously accepts incoming connections that come from given listener
 // these connections will be properly handshaked and passed to an appropriate skywire listener
 // using skywire port
@@ -197,7 +196,6 @@ func (c *genericClient) acceptConn() error {
 	return lis.introduce(wrappedConn)
 }
 
-// todo: remove
 // LocalAddr returns local address. This is network address the client
 // listens to for incoming connections, not skywire address
 func (c *genericClient) LocalAddr() (net.Addr, error) {
