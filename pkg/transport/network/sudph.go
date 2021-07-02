@@ -55,6 +55,7 @@ func (c *sudphClient) serve() {
 	c.acceptConnections(lis)
 }
 
+// listen
 func (c *sudphClient) listen() (net.Listener, error) {
 	packetListener, err := net.ListenPacket("udp", "")
 	if err != nil {
@@ -68,7 +69,7 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	go c.PICKNAMEFORME(sudphVisorsConn, addrCh)
+	go c.acceptAddresses(sudphVisorsConn, addrCh)
 	return kcp.ServeConn(nil, 0, 0, sudphVisorsConn)
 }
 
@@ -81,8 +82,12 @@ func (c *sudphClient) makeBindHandshake() func(in net.Conn) (net.Conn, error) {
 	}
 }
 
-// todo: name
-func (c *sudphClient) PICKNAMEFORME(conn net.PacketConn, addrCh <-chan addrresolver.RemoteVisor) {
+// acceptAddresses will read visor addresses from addrCh and send holepunch
+// packets to them
+// Basically each address coming from addrCh is a dial request from some remote
+// visor to us. Dialing visor contacts address resolver and gives the address to
+// it, address resolver in turn sends us this address.
+func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrresolver.RemoteVisor) {
 	for addr := range addrCh {
 		udpAddr, err := net.ResolveUDPAddr("udp", addr.Addr)
 		if err != nil {
@@ -105,7 +110,7 @@ func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
 	}
-
+	// this will lookup visor address in address resolver and then dial that address
 	conn, err := c.dialVisor(ctx, rPK, c.dialWithTimeout)
 	if err != nil {
 		return nil, err
@@ -135,6 +140,8 @@ func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Con
 	}
 }
 
+// dial will send holepunch packet to the remote addr over UDP, and
+// return the connection
 func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
 	rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 	if err != nil {
