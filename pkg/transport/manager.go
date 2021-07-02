@@ -155,7 +155,7 @@ func (tm *Manager) initTransports(ctx context.Context) {
 			tpID   = entry.Entry.ID
 		)
 		isInitiator := tm.Conf.PubKey == entry.Entry.Edges[0]
-		if _, err := tm.saveTransport(remote, isInitiator, tpType, entry.Entry.Label); err != nil {
+		if _, err := tm.saveTransport(ctx, remote, isInitiator, tpType, entry.Entry.Label); err != nil {
 			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
 		} else {
 			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
@@ -285,44 +285,19 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 		return nil, io.ErrClosedPipe
 	}
 	for {
-		mTp, err := tm.saveTransport(remote, true, netType, label)
+		mTp, err := tm.saveTransport(ctx, remote, true, netType, label)
+
 		if err != nil {
-			return nil, fmt.Errorf("save transport: %w", err)
-		}
-
-		tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.Type())
-
-		if err = mTp.Dial(ctx); err != nil {
-			tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.Type(), err)
-			// This occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
-			// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
 			if err == ErrNotServing {
-				if closeErr := mTp.Close(); closeErr != nil {
-					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
-				}
-				tm.deleteTransport(mTp.Entry.ID)
 				continue
 			}
-
-			// This occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in
-			// the STCP table. There is no point in retrying as a connection would be impossible, so we just return an
-			// error.
-			if errors.Is(err, network.ErrStcpEntryNotFound) {
-				if closeErr := mTp.Close(); closeErr != nil {
-					tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
-				}
-				tm.deleteTransport(mTp.Entry.ID)
-				return nil, err
-			}
-
-			tm.Logger.WithError(err).Warn("Underlying transport connection is not established, will retry later.")
+			return nil, fmt.Errorf("save transport: %w", err)
 		}
-
 		return mTp, nil
 	}
 }
 
-func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netType network.Type, label Label) (*ManagedTransport, error) {
+func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, initiator bool, netType network.Type, label Label) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 	if !tm.IsKnownNetwork(netType) {
@@ -363,6 +338,25 @@ func (tm *Manager) saveTransport(remote cipher.PubKey, initiator bool, netType n
 			}
 		}
 	}
+
+	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
+	if err := mTp.Dial(ctx); err != nil {
+		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
+		// The first occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
+		// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
+		// The second occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in
+		// the STCP table. There is no point in retrying as a connection would be impossible, so we just return an
+		// error.
+		if err == ErrNotServing || errors.Is(err, network.ErrStcpEntryNotFound) {
+			if closeErr := mTp.Close(); closeErr != nil {
+				tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
+			}
+			tm.deleteTransport(mTp.Entry.ID)
+		}
+		tm.Logger.WithError(err).Warn("Underlying transport connection is not established.")
+		return nil, err
+	}
+
 	go func() {
 		mTp.Serve(tm.readCh)
 		tm.deleteTransport(mTp.Entry.ID)
