@@ -25,9 +25,9 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet/snettest"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 )
 
@@ -497,7 +497,7 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			panic(err)
 		}
 
-		keys := snettest.GenKeyPairs(2)
+		keys := cipherutil.GenKeyPairs(2)
 
 		fwdRule := routing.ForwardRule(ruleKeepAlive, fwdRID[0], routing.RouteID(r.Uint32()), uuid.New(), keys[0].PK, keys[1].PK, 0, 0)
 		if err := rt.SaveRule(fwdRule); err != nil {
