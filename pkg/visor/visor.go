@@ -56,11 +56,12 @@ type Visor struct {
 
 	ebc *appevent.Broadcaster // event broadcaster
 
-	net      *snet.Network
-	tpM      *transport.Manager
-	arClient arclient.APIClient
-	router   router.Router
-	rfClient rfclient.Client
+	stunClient *snet.StunClient
+	net        *snet.Network
+	tpM        *transport.Manager
+	arClient   arclient.APIClient
+	router     router.Router
+	rfClient   rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
