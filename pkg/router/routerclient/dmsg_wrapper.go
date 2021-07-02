@@ -23,5 +23,5 @@ func (w *dmsgClientDialer) Dial(ctx context.Context, remote cipher.PubKey, port 
 }
 
 func (w *dmsgClientDialer) Type() string {
-	return dmsg.Type
+	return string(network.DMSG)
 }

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -52,7 +51,7 @@ func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network
 
 type mockDialer map[cipher.PubKey]net.Conn
 
-func (d mockDialer) Type() string { return dmsg.Type }
+func (d mockDialer) Type() string { return string(network.DMSG) }
 
 func (d mockDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (net.Conn, error) {
 	conn, ok := d[remote]

@@ -7,7 +7,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/spf13/cobra"
 
@@ -117,7 +116,7 @@ var addTpCmd = &cobra.Command{
 				network.STCP,
 				network.STCPR,
 				network.SUDPH,
-				dmsg.Type,
+				network.DMSG,
 			}
 
 			for _, transportType := range transportTypes {
