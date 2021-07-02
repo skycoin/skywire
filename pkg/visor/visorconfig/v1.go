@@ -8,7 +8,7 @@ import (
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
-	"github.com/skycoin/skywire/pkg/snet/dmsgc"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
