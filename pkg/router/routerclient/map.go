@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/skycoin/dmsg/cipher"
+
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
