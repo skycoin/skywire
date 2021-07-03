@@ -117,7 +117,6 @@ type genericClient struct {
 // initConnection will initialize skywire connection over opened raw connection to
 // the remote client
 // The process will perform handshake over raw connection
-// todo: rename to handshake, initHandshake, skyConnect or smth?
 func (c *genericClient) initConnection(ctx context.Context, conn net.Conn, rPK cipher.PubKey, rPort uint16) (*conn, error) {
 	lPort, freePort, err := c.porter.ReserveEphemeral(ctx)
 	if err != nil {
@@ -156,7 +155,6 @@ func (c *genericClient) acceptConnections(lis net.Listener) {
 // wrapConn performs handshake over provided raw connection and wraps it in
 // network.Conn type using the data obtained from handshake process
 func (c *genericClient) wrapConn(rawConn net.Conn, hs handshake.Handshake, initiator bool, onClose func()) (*conn, error) {
-	// todo: move handshake logic to handshake package, pass there net.Conn
 	conn, err := doHandshake(rawConn, hs, c.netType, c.log)
 	if err != nil {
 		onClose()

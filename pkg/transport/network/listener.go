@@ -64,12 +64,12 @@ func (l *listener) AcceptConn() (Conn, error) {
 func (l *listener) Close() error {
 	l.once.Do(func() {
 		close(l.done)
-		// todo: consider if removing locks will change anything
-		// todo: close all pending connections in l.accept
 		l.mx.Lock()
 		close(l.accept)
 		l.mx.Unlock()
-
+		for conn := range l.accept {
+			conn.Close()
+		}
 		l.freePort()
 	})
 
@@ -98,7 +98,6 @@ func (l *listener) Network() Type {
 
 // Introduce is used by Client to introduce a new connection to this Listener
 func (l *listener) introduce(conn *conn) error {
-	// todo: think if this is needed
 	select {
 	case <-l.done:
 		return io.ErrClosedPipe
