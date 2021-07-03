@@ -52,8 +52,6 @@ func DoHandshake(rawConn net.Conn, hs handshake.Handshake, netType Type, log *lo
 
 // handshake performs given handshake over given raw connection and wraps
 // connection in network.conn
-// todo: ugly but necessary for AR compatibility
-// consider moving "doing handshake" part to handshake package
 func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType Type, log *logging.Logger) (*conn, error) {
 	lAddr, rAddr, err := hs(rawConn, time.Now().Add(handshake.Timeout))
 	if err != nil {
