@@ -68,7 +68,7 @@ func (l *listener) Close() error {
 		close(l.accept)
 		l.mx.Unlock()
 		for conn := range l.accept {
-			conn.Close()
+			conn.Close() //nolint: errcheck, gosec
 		}
 		l.freePort()
 	})
@@ -104,7 +104,6 @@ func (l *listener) introduce(conn *conn) error {
 	default:
 		l.mx.Lock()
 		defer l.mx.Unlock()
-
 		select {
 		case l.accept <- conn:
 			return nil

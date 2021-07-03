@@ -95,7 +95,7 @@ func (lis *dmsgListenerAdapter) Network() Type {
 
 // PK implements Listener interface
 func (lis *dmsgListenerAdapter) PK() cipher.PubKey {
-	return lis.PK()
+	return lis.Listener.DmsgAddr().PK
 }
 
 // Port implements Listener interface
