@@ -280,7 +280,7 @@ func (n *Network) Close() error {
 		}
 	}
 	close(directErrors)
-
+	wg.Wait()
 	if dmsgErr != nil {
 		return dmsgErr
 	}
