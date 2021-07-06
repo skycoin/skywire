@@ -74,7 +74,6 @@ type Config struct {
 	SecKey         cipher.SecKey
 	ARClient       arclient.APIClient
 	NetworkConfigs NetworkConfigs
-	StunClient     StunClient
 }
 
 // NetworkConfigs represents all network configs.
@@ -167,19 +166,6 @@ func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogg
 
 		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf, masterLogger)
 
-		sudphConf := directtp.Config{
-			Type:            tptypes.SUDPH,
-			PK:              conf.PubKey,
-			SK:              conf.SecKey,
-			AddressResolver: conf.ARClient,
-		}
-		// sudph will only be initialized if NAT is determined not to be symmetric
-		switch conf.StunClient.NATType {
-		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-			log.Infof("SUDPH transport wont be available as visor is under %v", conf.StunClient.NATType.String())
-		default:
-			clients.Direct[tptypes.SUDPH] = directtp.NewClient(sudphConf, masterLogger)
-		}
 	}
 
 	return NewRaw(conf, clients), nil
@@ -204,6 +190,28 @@ func NewRaw(conf Config, clients NetworkClients) *Network {
 	}
 
 	return n
+}
+
+// AddSudphClient adds Sudph client concurrently
+func (n *Network) AddSudphClient(stunClient *StunClient, masterLogger *logging.MasterLogger) {
+	sudphConf := directtp.Config{
+		Type:            tptypes.SUDPH,
+		PK:              n.conf.PubKey,
+		SK:              n.conf.SecKey,
+		AddressResolver: n.conf.ARClient,
+	}
+	// sudph will only be initialized if NAT is determined not to be symmetric
+	switch stunClient.NATType {
+	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+		log.Infof("SUDPH transport wont be available as visor is under %v", stunClient.NATType.String())
+	default:
+		sudphClient := directtp.NewClient(sudphConf, masterLogger)
+		n.clients.Direct[tptypes.SUDPH] = sudphClient
+		n.addNetworkType(tptypes.SUDPH)
+		if err := sudphClient.Serve(); err != nil {
+			log.Errorf("failed to initiate 'sudph': %w", err)
+		}
+	}
 }
 
 // Conf gets network configuration.
