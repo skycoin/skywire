@@ -23,8 +23,8 @@ type TransportListener struct {
 }
 
 // NewTransportListener makes a TransportListener from configuration
-func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg.Client, tm *transport.Manager) (*TransportListener, error) {
-	log := logging.MustGetLogger("transport_setup")
+func NewTransportListener(ctx context.Context, conf *visorconfig.V1, dmsgC *dmsg.Client, tm *transport.Manager, masterLogger *logging.MasterLogger) (*TransportListener, error) {
+	log := masterLogger.PackageLogger("transport_setup")
 	log.WithField("local_pk", conf.PK).Info("Connecting to the dmsg network.")
 
 	go dmsgC.Serve(ctx)
