@@ -107,8 +107,8 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
-	sc = maker("stun_client", initStunClient)
-	sn = maker("snet", initSNet, &ar, &disc, &ebc, &sc)
+	sn = maker("snet", initSNet, &ar, &disc, &ebc)
+	sc = maker("stun_client", initStunClient, &ar, &sn)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
 	tr = maker("transport", initTransport, &sn, &ebc)
@@ -120,7 +120,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
 	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sc, &sn, &pty,
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
@@ -184,14 +184,6 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	sc := stunDetails(v.conf.StunServers, log)
-	v.initLock.Lock()
-	v.stunClient = sc
-	v.initLock.Unlock()
-	return nil
-}
-
 func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 	nc := snet.NetworkConfigs{
 		Dmsg: v.conf.Dmsg,
@@ -202,7 +194,6 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PubKey:         v.conf.PK,
 		SecKey:         v.conf.SK,
 		ARClient:       v.arClient,
-		StunClient:     *v.stunClient,
 		NetworkConfigs: nc,
 	}
 
@@ -218,6 +209,17 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.initLock.Lock()
 	v.net = n
+	v.initLock.Unlock()
+	return nil
+}
+
+func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	sc := stunDetails(v.conf.StunServers, log)
+	if v.arClient != nil {
+		v.net.AddSudphClient(sc, v.MasterLogger())
+	}
+	v.initLock.Lock()
+	v.stunClient = sc
 	v.initLock.Unlock()
 	return nil
 }
