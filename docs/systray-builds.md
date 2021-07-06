@@ -46,7 +46,15 @@ $ make build-systray
 
 #### Linux
 
-You need to have an icon defined in `/opt/skywire/icon.png` (WIP, provide linux installer for it)
+- You need to have an icon defined in `/opt/skywire/icon.png` (WIP, provide linux installer for it)
+- You need to install `gnome-shell-extension-appindicator`
+- After you installed the extension, go to the tweaks section of your gnome shell settings, and
+  activate `Kstatusnotifieritem / appindicator support`
+- Alternatively, you can use:
+
+```bash
+$ gnome-extensions enable ubuntu-appindicators@ubuntu.com
+```
 
 #### Mac / Darwin
 
