@@ -25,7 +25,7 @@ require (
 	github.com/schollz/progressbar/v2 v2.15.0
 	github.com/shirou/gopsutil/v3 v3.21.4
 	github.com/sirupsen/logrus v1.8.1
-	github.com/skycoin/dmsg v0.0.0-20210607131549-0c02e58ac5ee
+	github.com/skycoin/dmsg v0.0.0-20210616115957-702a819a9b3d
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8

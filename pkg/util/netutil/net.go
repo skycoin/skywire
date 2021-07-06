@@ -103,3 +103,18 @@ func DefaultNetworkInterfaceIPs() ([]net.IP, error) {
 	}
 	return localIPs, nil
 }
+
+// HasPublicIP returns true if this machine has at least one
+// publically available IP address
+func HasPublicIP() (bool, error) {
+	localIPs, err := LocalNetworkInterfaceIPs()
+	if err != nil {
+		return false, err
+	}
+	for _, IP := range localIPs {
+		if IsPublicIP(IP) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
