@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,7 +16,6 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/toqueteos/webbrowser"
 
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -40,17 +38,17 @@ var (
 )
 
 // GetOnGUIReady creates func to run on GUI startup.
-func GetOnGUIReady(icon []byte) func() {
+func GetOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	return func() {
 		systray.SetTooltip("Skywire")
 
 		systray.SetTemplateIcon(icon, icon)
 
-		initOpenHypervisorBtn()
+		initOpenHypervisorBtn(conf)
 		initUninstallBtn()
 		initQuitBtn()
 
-		go handleUserInteraction()
+		go handleUserInteraction(conf)
 	}
 }
 
@@ -86,13 +84,8 @@ func Stop() {
 	systray.Quit()
 }
 
-func initOpenHypervisorBtn() {
-	vConf, err := readVisorConfig()
-	if err != nil {
-		log.WithError(err).Fatalln("Failed to read visor config")
-	}
-
-	hvAddr := getHVAddr(vConf)
+func initOpenHypervisorBtn(conf *visorconfig.V1) {
+	hvAddr := getHVAddr(conf)
 
 	mOpenHypervisor = systray.AddMenuItem("Open Hypervisor", "")
 
@@ -137,11 +130,11 @@ func initQuitBtn() {
 	mQuit = systray.AddMenuItem("Quit", "")
 }
 
-func handleUserInteraction() {
+func handleUserInteraction(conf *visorconfig.V1) {
 	for {
 		select {
 		case <-mOpenHypervisor.ClickedCh:
-			handleOpenHypervisor()
+			handleOpenHypervisor(conf)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:
@@ -150,8 +143,8 @@ func handleUserInteraction() {
 	}
 }
 
-func handleOpenHypervisor() {
-	if err := openHypervisor(); err != nil {
+func handleOpenHypervisor(conf *visorconfig.V1) {
+	if err := openHypervisor(conf); err != nil {
 		log.WithError(err).Errorln("Failed to open hypervisor")
 	}
 }
@@ -203,12 +196,7 @@ func isHypervisorRunning(addr string) bool {
 	return true
 }
 
-func openHypervisor() error {
-	conf, err := readVisorConfig()
-	if err != nil {
-		return fmt.Errorf("failed to read visor config: %w", err)
-	}
-
+func openHypervisor(conf *visorconfig.V1) error {
 	hvAddr := getHVAddr(conf)
 	if hvAddr == "" {
 		return nil
@@ -236,29 +224,4 @@ func getHVAddr(conf *visorconfig.V1) string {
 	}
 
 	return addr
-}
-
-func readVisorConfig() (*visorconfig.V1, error) {
-	confPath := skyenv.PackageSkywirePath() + "/skywire-config.json"
-
-	f, err := os.Open(confPath) //nolint:gosec
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	raw, err := ioutil.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read in config: %w", err)
-	}
-
-	if err := f.Close(); err != nil {
-		log.WithError(err).Error("Closing config file resulted in error.")
-	}
-
-	conf, err := visorconfig.Parse(log, confPath, raw)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	return conf, nil
 }

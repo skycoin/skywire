@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	stopVisorWg sync.WaitGroup
+	stopVisorWg   sync.WaitGroup
 	runSysTrayApp bool
 )
 
@@ -27,7 +27,7 @@ func init() {
 }
 
 func runApp(args ...string) {
-	l := logging.MustGetLogger("sys_tray_setup")
+	l := logging.NewMasterLogger()
 	sysTrayIcon, err := gui.ReadSysTrayIcon()
 	if err != nil {
 		l.WithError(err).Fatalln("Failed to read system tray icon")
@@ -38,7 +38,9 @@ func runApp(args ...string) {
 		gui.Stop()
 	}()
 
-	systray.Run(gui.GetOnGUIReady(sysTrayIcon), gui.OnGUIQuit)
+	conf := initConfig(l, args, confPath)
+
+	systray.Run(gui.GetOnGUIReady(sysTrayIcon, conf), gui.OnGUIQuit)
 
 }
 
