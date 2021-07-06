@@ -111,13 +111,14 @@ func (v *Visor) Overview() (*Overview, error) {
 			newTransportSummary(v.tpM, tp, true, v.router.SetupIsTrusted(tp.Remote())))
 		return true
 	})
-
-	switch v.net.Conf().StunClient.NATType {
-	case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
-		publicIP = v.net.Conf().StunClient.PublicIP.IP()
-		isSymmetricNAT = true
-	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-		isSymmetricNAT = false
+	if v.stunClient != nil {
+		switch v.stunClient.NATType {
+		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
+			publicIP = v.stunClient.PublicIP.IP()
+			isSymmetricNAT = true
+		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+			isSymmetricNAT = false
+		}
 	}
 
 	overview := &Overview{
