@@ -4,10 +4,12 @@ package commands
 
 import (
 	"context"
+	"sync"
+
 	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
+
 	"github.com/skycoin/skywire/internal/gui"
-	"sync"
 )
 
 var (

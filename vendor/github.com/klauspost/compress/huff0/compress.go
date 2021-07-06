@@ -77,11 +77,8 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		// Each symbol present maximum once or too well distributed.
 		return nil, false, ErrIncompressible
 	}
-	if s.Reuse == ReusePolicyMust && !canReuse {
-		// We must reuse, but we can't.
-		return nil, false, ErrIncompressible
-	}
-	if (s.Reuse == ReusePolicyPrefer || s.Reuse == ReusePolicyMust) && canReuse {
+
+	if s.Reuse == ReusePolicyPrefer && canReuse {
 		keepTable := s.cTable
 		keepTL := s.actualTableLog
 		s.cTable = s.prevTable
@@ -92,9 +89,6 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		if err == nil && len(s.Out) < wantSize {
 			s.OutData = s.Out
 			return s.Out, true, nil
-		}
-		if s.Reuse == ReusePolicyMust {
-			return nil, false, ErrIncompressible
 		}
 		// Do not attempt to re-use later.
 		s.prevTable = s.prevTable[:0]

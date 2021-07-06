@@ -8,6 +8,7 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/dmsg/disc"
+	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -115,7 +116,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				LocalAddr: networkConfigs.STCP.LocalAddr,
 			}
 
-			clients.Direct[tptypes.STCP] = directtp.NewClient(conf)
+			clients.Direct[tptypes.STCP] = directtp.NewClient(conf, logging.NewMasterLogger())
 		}
 
 		if hasStcpr {
@@ -126,7 +127,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				AddressResolver: addressResolver,
 			}
 
-			clients.Direct[tptypes.STCPR] = directtp.NewClient(conf)
+			clients.Direct[tptypes.STCPR] = directtp.NewClient(conf, logging.NewMasterLogger())
 		}
 
 		if hasSudph {
@@ -137,7 +138,7 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 				AddressResolver: addressResolver,
 			}
 
-			clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf)
+			clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf, logging.NewMasterLogger())
 		}
 
 		snetConfig := snet.Config{
