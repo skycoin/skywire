@@ -56,6 +56,8 @@ $ make build-systray
 $ gnome-extensions enable ubuntu-appindicators@ubuntu.com
 ```
 
+- Logout, and run the application
+
 #### Mac / Darwin
 
 You need to have an icon defined in `/Applications/Skywire.app/Contents/Resources/tray_icon.tiff`
