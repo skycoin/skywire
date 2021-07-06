@@ -16,7 +16,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 		inputMargin            = 12 - 1
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
 	)
-	if debugDeflate && e.cur < 0 {
+	if debugDecode && e.cur < 0 {
 		panic(fmt.Sprint("e.cur < 0: ", e.cur))
 	}
 
@@ -81,12 +81,12 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			}
 
 			now := load6432(src, nextS)
-			e.table[nextHash] = tableEntry{offset: s + e.cur}
+			e.table[nextHash] = tableEntry{offset: s + e.cur, val: cv}
 			nextHash = hash(uint32(now))
 
 			offset := s - (candidate.offset - e.cur)
-			if offset < maxMatchOffset && cv == load3232(src, candidate.offset-e.cur) {
-				e.table[nextHash] = tableEntry{offset: nextS + e.cur}
+			if offset < maxMatchOffset && cv == candidate.val {
+				e.table[nextHash] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
 				break
 			}
 
@@ -96,11 +96,11 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			nextS++
 			candidate = e.table[nextHash]
 			now >>= 8
-			e.table[nextHash] = tableEntry{offset: s + e.cur}
+			e.table[nextHash] = tableEntry{offset: s + e.cur, val: cv}
 
 			offset = s - (candidate.offset - e.cur)
-			if offset < maxMatchOffset && cv == load3232(src, candidate.offset-e.cur) {
-				e.table[nextHash] = tableEntry{offset: nextS + e.cur}
+			if offset < maxMatchOffset && cv == candidate.val {
+				e.table[nextHash] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
 				break
 			}
 			cv = uint32(now)
@@ -139,7 +139,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 				// Index first pair after match end.
 				if int(s+l+4) < len(src) {
 					cv := load3232(src, s)
-					e.table[hash(cv)] = tableEntry{offset: s + e.cur}
+					e.table[hash(cv)] = tableEntry{offset: s + e.cur, val: cv}
 				}
 				goto emitRemainder
 			}
@@ -153,14 +153,14 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			x := load6432(src, s-2)
 			o := e.cur + s - 2
 			prevHash := hash(uint32(x))
-			e.table[prevHash] = tableEntry{offset: o}
+			e.table[prevHash] = tableEntry{offset: o, val: uint32(x)}
 			x >>= 16
 			currHash := hash(uint32(x))
 			candidate = e.table[currHash]
-			e.table[currHash] = tableEntry{offset: o + 2}
+			e.table[currHash] = tableEntry{offset: o + 2, val: uint32(x)}
 
 			offset := s - (candidate.offset - e.cur)
-			if offset > maxMatchOffset || uint32(x) != load3232(src, candidate.offset-e.cur) {
+			if offset > maxMatchOffset || uint32(x) != candidate.val {
 				cv = uint32(x >> 8)
 				s++
 				break
