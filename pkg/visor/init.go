@@ -448,7 +448,7 @@ func initHypervisors(v *Visor) bool {
 }
 
 func initUptimeTracker(v *Visor) bool {
-	const tickDuration = 1 * time.Minute
+	const tickDuration = 5 * time.Minute
 
 	report := v.makeReporter("uptime_tracker")
 	conf := v.conf.UptimeTracker

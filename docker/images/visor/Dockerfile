@@ -1,5 +1,4 @@
 # Builder
-# ARG builder_base=golang:alpine 
 ARG base=alpine
 FROM golang:alpine  as builder
 
@@ -15,23 +14,26 @@ WORKDIR skywire
 
 RUN go build -mod=vendor -tags netgo -ldflags="-w -s" \
       -o skywire-visor cmd/skywire-visor/skywire-visor.go &&\
-    go build  -mod=vendor -ldflags="-w -s" -o skywire-cli ./cmd/skywire-cli	&&\
-    go build  -mod=vendor -ldflags="-w -s" -o ./apps/skychat.v1.0 ./cmd/apps/skychat	&&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/skysocks.v1.0 ./cmd/apps/skysocks &&\
-	  go build  -mod=vendor -ldflags="-w -s" -o ./apps/skysocks-client.v1.0  ./cmd/apps/skysocks-client
+    go build -mod=vendor -ldflags="-w -s" -o skywire-cli ./cmd/skywire-cli	&&\
+    go build -mod=vendor -ldflags="-w -s" -o ./apps/skychat ./cmd/apps/skychat	&&\
+	go build -mod=vendor -ldflags="-w -s" -o ./apps/skysocks ./cmd/apps/skysocks &&\
+	go build -mod=vendor -ldflags="-w -s" -o ./apps/skysocks-client  ./cmd/apps/skysocks-client && \
+	go build -mod=vendor -ldflags="-w -s" -o ./apps/vpn-server ./cmd/apps/vpn-server && \
+	go build -mod=vendor -ldflags="-w -s" -o ./apps/vpn-client ./cmd/apps/vpn-client
 
 
 ## Resulting image
 FROM ${base} as visor-runner
 
 COPY --from=builder /go/skywire/skywire-visor skywire-visor
-COPY --from=builder /go/skywire/apps bin/apps
+COPY --from=builder /go/skywire/apps /apps
 COPY --from=builder /go/skywire/docker/images/visor/update.sh update.sh
 COPY --from=builder /go/skywire/skywire-cli bin/skywire-cli
+COPY --from=builder /go/skywire/docker/images/visor/entrypoint.sh entrypoint.sh
 
 RUN ./update.sh
 
-ENTRYPOINT [ "./skywire-visor" ]
+ENTRYPOINT [ "./entrypoint.sh" ]
 
 # default target
 FROM  visor-runner
