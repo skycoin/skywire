@@ -29,7 +29,7 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Cli
 		var conn net.Conn
 		err := retry.Do(ctx, func() (rErr error) {
 			log.Info("Dialing...")
-			addr := dmsg.Addr{rAddr.PK, rAddr.Port}
+			addr := dmsg.Addr{PK: rAddr.PK, Port: rAddr.Port}
 			conn, rErr = dmsgC.Dial(ctx, addr)
 			return rErr
 		})
