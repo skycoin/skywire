@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -32,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/snet/stunclient"
 	"github.com/skycoin/skywire/pkg/transport"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
@@ -95,7 +95,7 @@ var (
 	pvs vinit.Module
 	// Public visor: advertise current visor as public
 	pv vinit.Module
-	// Transport check module
+	// Transport check module (this is not a functional module but a grouping of all transport types initializations)
 	tc vinit.Module
 	// hypervisor module
 	hv vinit.Module
@@ -226,7 +226,7 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	sc := stunDetails(v.conf.StunServers, log)
+	sc := stunclient.GetDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
 	v.stunClient = sc
 	v.initLock.Unlock()
@@ -282,8 +282,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSnetCheck(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	logger := v.MasterLogger().PackageLogger("snet_check")
-	v.net.WaitTillNetworkReady(logger)
+	<-v.net.WaitTillNetworkReady()
 	return nil
 }
 
@@ -818,41 +817,4 @@ func getErrors(ctx context.Context) chan error {
 		panic("runtime errors channel is not set in context")
 	}
 	return errs
-}
-
-func stunDetails(stunServers []string, log *logging.Logger) *snet.StunClient {
-
-	var nat stun.NATType
-	var host *stun.Host
-	var err error
-	for _, stunServer := range stunServers {
-		nC := stun.NewClient()
-		nC.SetServerAddr(stunServer)
-
-		nat, host, err = nC.Discover()
-		if err != nil {
-			log.Warn(err)
-		}
-
-		switch nat {
-		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			log.Warn(nat.String())
-			// incase we fail to connect to all the STUN servers give a warning
-			if stunServer == stunServers[len(stunServers)-1] {
-				log.Warn("All STUN servers offline")
-			}
-		default:
-			log.Info(nat.String())
-			log.Info(host.String())
-			return &snet.StunClient{
-				PublicIP: host,
-				NATType:  nat,
-			}
-		}
-	}
-
-	return &snet.StunClient{
-		PublicIP: host,
-		NATType:  nat,
-	}
 }
