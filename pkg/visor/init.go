@@ -73,6 +73,8 @@ var (
 	sctp vinit.Module
 	// Snet (different network types)
 	sn vinit.Module
+	// SnetCheck (check if atleast one network is available)
+	snCheck vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
 	// Transport manager
@@ -115,25 +117,26 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
+	sc = maker("stun_client", initStunClient)
 	sn = maker("snet", initSNet, &ar, &disc, &ebc)
-	sc = maker("stun_client", initStunClient, &ar, &sn)
 	sudph = maker("sudph_client", initSudphClient, &ar, &sc)
 	sctpr = maker("sctpr_client", initSctprClient, &ar, &ebc)
 	sctp = maker("sctp_client", initSctpClient, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
-	pty = maker("dmsg_pty", initDmsgpty, &sn)
+	snCheck = maker("snet_check", initSnetCheck, &sn)
+	pty = maker("dmsg_pty", initDmsgpty, &sn, &dmsgCtrl)
 	tr = maker("transport", initTransport, &sn, &ebc)
 	trs = maker("transport_setup", initTransportSetup, &sn, &tr)
-	rt = maker("router", initRouter, &tr, &sn)
+	rt = maker("router", initRouter, &tr, &sn, &dmsgCtrl)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &sn, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &sn)
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
 	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
-	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
+	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr, &dmsgCtrl)
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn,
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &snCheck, &pty)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -209,14 +212,11 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 		NetworkConfigs: nc,
 	}
 
-	n, err := snet.New(conf, v.ebc, v.MasterLogger())
+	n, err := snet.New(conf)
 	if err != nil {
 		return err
 	}
 
-	if err := n.Init(); err != nil {
-		return err
-	}
 	v.pushCloseStack("snet", n.Close)
 
 	v.initLock.Lock()
@@ -256,10 +256,10 @@ func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	dmsgC := v.net.Dmsg()
-	if dmsgC == nil {
-		return nil
+func initDmsgCtrl(ctx context.Context, v *Visor, log *logging.Logger) error {
+	var dmsgC *dmsg.Client
+	if v.conf.Dmsg != nil {
+		dmsgC = v.net.AddDmsgClient(v.ebc, v.MasterLogger())
 	}
 	const dmsgTimeout = time.Second * 20
 	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
@@ -275,9 +275,15 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	v.pushCloseStack("snet.dmsgctrl", cl.Close)
+	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
+	return nil
+}
+
+func initSnetCheck(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	logger := v.MasterLogger().PackageLogger("snet_check")
+	v.net.WaitTillNetworkReady(logger)
 	return nil
 }
 
