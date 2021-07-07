@@ -125,7 +125,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		mainModule = hv
 	}
 	mainModule.InitConcurrent(ctx)
-	sc.InitConcurrent(ctx)
+	tc.InitConcurrent(ctx)
 	if err := mainModule.Wait(ctx); err != nil {
 		log.Error(err)
 		return nil, false
