@@ -97,6 +97,7 @@ type Network struct {
 	clients NetworkClients
 
 	atleastOneTransport chan bool
+	doOnce              sync.Once
 
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
@@ -110,6 +111,7 @@ func New(conf Config) (*Network, error) {
 		clients: NetworkClients{
 			Direct: make(map[string]directtp.Client),
 		},
+		atleastOneTransport: make(chan bool, 1),
 	}, nil
 }
 
@@ -239,9 +241,9 @@ func (n *Network) IsNetworkReady(netType string) bool {
 	return ok
 }
 
-// WaitTillNetworkReady waits till any one of the network is ready.
-func (n *Network) WaitTillNetworkReady() chan bool {
-	return n.atleastOneTransport
+// WaitTillOneTransportReady waits till any one of the transports in the network is ready.
+func (n *Network) WaitTillOneTransportReady() {
+	<-n.atleastOneTransport
 }
 
 // Close closes underlying connections.
@@ -391,12 +393,9 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 func (n *Network) addNetworkType(netType string) {
 	n.netsMu.Lock()
 	defer n.netsMu.Unlock()
-	var doOnce sync.Once
-	if len(n.nets) == 1 {
-		doOnce.Do(func() {
-			n.atleastOneTransport <- true
-		})
-	}
+	n.doOnce.Do(func() {
+		n.atleastOneTransport <- true
+	})
 	if _, ok := n.nets[netType]; !ok {
 		n.nets[netType] = struct{}{}
 		n.onNewNetworkTypeMu.Lock()
