@@ -53,7 +53,7 @@ github.com/inconshreveable/mousetrap
 # github.com/json-iterator/go v1.1.11
 ## explicit
 github.com/json-iterator/go
-# github.com/klauspost/compress v1.11.0
+# github.com/klauspost/compress v1.10.0
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
@@ -67,7 +67,9 @@ github.com/klauspost/pgzip
 # github.com/klauspost/reedsolomon v1.9.9
 ## explicit
 github.com/klauspost/reedsolomon
-# github.com/mattn/go-colorable v0.1.8
+# github.com/kz/discordrus v1.2.0
+github.com/kz/discordrus
+# github.com/mattn/go-colorable v0.1.6
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.13
 ## explicit
@@ -125,13 +127,14 @@ github.com/shirou/gopsutil/process
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/dmsg v0.0.0-20210607131549-0c02e58ac5ee
+# github.com/skycoin/dmsg v0.0.0-20210616115957-702a819a9b3d
 ## explicit
 github.com/skycoin/dmsg
 github.com/skycoin/dmsg/buildinfo
 github.com/skycoin/dmsg/cipher
 github.com/skycoin/dmsg/cmdutil
 github.com/skycoin/dmsg/disc
+github.com/skycoin/dmsg/discord
 github.com/skycoin/dmsg/dmsgctrl
 github.com/skycoin/dmsg/dmsgpty
 github.com/skycoin/dmsg/dmsgtest
