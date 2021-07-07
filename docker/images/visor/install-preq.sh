@@ -8,6 +8,6 @@ fi
 
 if type apk >/dev/null; then
   apk update
-  apk add --no-cache ca-certificates openssl iproute2 bash git
+  apk add --no-cache ca-certificates openssl iproute2 bash
   update-ca-certificates --fresh
 fi
