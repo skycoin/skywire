@@ -282,7 +282,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSnetCheck(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	<-v.net.WaitTillNetworkReady()
+	v.net.WaitTillOneTransportReady()
 	return nil
 }
 
