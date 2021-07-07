@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/snet"
 	"github.com/skycoin/skywire/pkg/snet/arclient"
+	"github.com/skycoin/skywire/pkg/snet/stunclient"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
@@ -56,7 +57,7 @@ type Visor struct {
 
 	ebc *appevent.Broadcaster // event broadcaster
 
-	stunClient *snet.StunClient
+	stunClient *stunclient.Details
 	net        *snet.Network
 	tpM        *transport.Manager
 	arClient   arclient.APIClient

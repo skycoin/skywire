@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/snet/directtp"
 	"github.com/skycoin/skywire/pkg/snet/directtp/pktable"
 	"github.com/skycoin/skywire/pkg/snet/directtp/tptypes"
+	"github.com/skycoin/skywire/pkg/snet/stunclient"
 )
 
 var log = logging.MustGetLogger("snet")
@@ -88,18 +89,14 @@ type NetworkClients struct {
 	Direct map[string]directtp.Client
 }
 
-// StunClient represents the visors network details.
-type StunClient struct {
-	PublicIP *stun.Host
-	NATType  stun.NATType
-}
-
 // Network represents a network between nodes in Skywire.
 type Network struct {
 	conf    Config
 	netsMu  sync.RWMutex
 	nets    map[string]struct{} // networks to be used with transports
 	clients NetworkClients
+
+	atleastOneTransport chan bool
 
 	onNewNetworkTypeMu sync.Mutex
 	onNewNetworkType   func(netType string)
@@ -117,7 +114,7 @@ func New(conf Config) (*Network, error) {
 }
 
 // AddSudphClient adds Sudph client concurrently
-func (n *Network) AddSudphClient(stunClient *StunClient, masterLogger *logging.MasterLogger) {
+func (n *Network) AddSudphClient(stunClient *stunclient.Details, masterLogger *logging.MasterLogger) {
 	log := masterLogger.PackageLogger("sudph_client")
 	sudphConf := directtp.Config{
 		Type:            tptypes.SUDPH,
@@ -227,45 +224,6 @@ func (n *Network) Conf() Config {
 	return n.conf
 }
 
-// // Init initiates server connections.
-// func (n *Network) Init() error {
-// 	if n.clients.DmsgC != nil {
-// 		time.Sleep(200 * time.Millisecond)
-// 		go n.clients.DmsgC.Serve(context.Background())
-// 		time.Sleep(200 * time.Millisecond)
-// 	}
-
-// 	if n.conf.NetworkConfigs.STCP != nil {
-// 		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
-// 			if err := client.Serve(); err != nil {
-// 				return fmt.Errorf("failed to initiate 'stcp': %w", err)
-// 			}
-// 		} else {
-// 			log.Infof("No config found for stcp")
-// 		}
-// 	}
-
-// 	if n.conf.ARClient != nil {
-// 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
-// 			if err := client.Serve(); err != nil {
-// 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
-// 			}
-// 		} else {
-// 			log.Infof("No config found for stcpr")
-// 		}
-
-// 		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
-// 			if err := client.Serve(); err != nil {
-// 				return fmt.Errorf("failed to initiate 'sudph': %w", err)
-// 			}
-// 		} else {
-// 			log.Infof("No config found for sudph")
-// 		}
-// 	}
-
-// 	return nil
-// }
-
 // OnNewNetworkType sets callback to be called when new network type is ready.
 func (n *Network) OnNewNetworkType(callback func(netType string)) {
 	n.onNewNetworkTypeMu.Lock()
@@ -282,19 +240,8 @@ func (n *Network) IsNetworkReady(netType string) bool {
 }
 
 // WaitTillNetworkReady waits till any one of the network is ready.
-func (n *Network) WaitTillNetworkReady(log *logging.Logger) {
-	n.netsMu.Lock()
-	nets := n.nets
-	n.netsMu.Unlock()
-	if len(nets) == 0 {
-		print(len(nets))
-		time.Sleep(200 * time.Millisecond)
-		n.WaitTillNetworkReady(log)
-	} else {
-		for net := range nets {
-			log.Infof("Transport %v initialized", net)
-		}
-	}
+func (n *Network) WaitTillNetworkReady() chan bool {
+	return n.atleastOneTransport
 }
 
 // Close closes underlying connections.
@@ -444,7 +391,12 @@ func (n *Network) Listen(network string, port uint16) (*Listener, error) {
 func (n *Network) addNetworkType(netType string) {
 	n.netsMu.Lock()
 	defer n.netsMu.Unlock()
-
+	var doOnce sync.Once
+	if len(n.nets) == 1 {
+		doOnce.Do(func() {
+			n.atleastOneTransport <- true
+		})
+	}
 	if _, ok := n.nets[netType]; !ok {
 		n.nets[netType] = struct{}{}
 		n.onNewNetworkTypeMu.Lock()
