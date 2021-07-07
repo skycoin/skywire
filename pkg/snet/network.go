@@ -106,59 +106,19 @@ type Network struct {
 }
 
 // New creates a network from a config.
-func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogger) (*Network, error) {
-	clients := NetworkClients{
-		Direct: make(map[string]directtp.Client),
-	}
-
-	if conf.NetworkConfigs.Dmsg != nil {
-		dmsgConf := &dmsg.Config{
-			MinSessions: conf.NetworkConfigs.Dmsg.SessionsCount,
-			Callbacks: &dmsg.ClientCallbacks{
-				OnSessionDial: func(network, addr string) error {
-					data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
-					event := appevent.NewEvent(appevent.TCPDial, data)
-					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-					// @evanlinjin: An error is not returned here as this will cancel the session dial.
-					return nil
-				},
-				OnSessionDisconnect: func(network, addr string, _ error) {
-					data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
-					event := appevent.NewEvent(appevent.TCPClose, data)
-					_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-				},
-			},
-		}
-		clients.DmsgC = dmsg.NewClient(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.NetworkConfigs.Dmsg.Discovery), dmsgConf)
-		clients.DmsgC.SetLogger(masterLogger.PackageLogger("snet.dmsgC"))
-	}
-
-	return NewRaw(conf, clients), nil
-}
-
-// NewRaw creates a network from a config and a dmsg client.
-func NewRaw(conf Config, clients NetworkClients) *Network {
-	n := &Network{
-		conf:    conf,
-		nets:    make(map[string]struct{}),
-		clients: clients,
-	}
-
-	if clients.DmsgC != nil {
-		n.addNetworkType(dmsg.Type)
-	}
-
-	for k, v := range clients.Direct {
-		if v != nil {
-			n.addNetworkType(k)
-		}
-	}
-
-	return n
+func New(conf Config) (*Network, error) {
+	return &Network{
+		conf: conf,
+		nets: make(map[string]struct{}),
+		clients: NetworkClients{
+			Direct: make(map[string]directtp.Client),
+		},
+	}, nil
 }
 
 // AddSudphClient adds Sudph client concurrently
 func (n *Network) AddSudphClient(stunClient *StunClient, masterLogger *logging.MasterLogger) {
+	log := masterLogger.PackageLogger("sudph_client")
 	sudphConf := directtp.Config{
 		Type:            tptypes.SUDPH,
 		PK:              n.conf.PubKey,
@@ -181,6 +141,7 @@ func (n *Network) AddSudphClient(stunClient *StunClient, masterLogger *logging.M
 
 // AddSctprClient adds Sctpr client concurrently
 func (n *Network) AddSctprClient(eb *appevent.Broadcaster, masterLogger *logging.MasterLogger) {
+	log := masterLogger.PackageLogger("sctpr_client")
 	stcprConf := directtp.Config{
 		Type:            tptypes.STCPR,
 		PK:              n.conf.PubKey,
@@ -197,12 +158,13 @@ func (n *Network) AddSctprClient(eb *appevent.Broadcaster, masterLogger *logging
 	n.clients.Direct[tptypes.STCPR] = sctprClient
 	n.addNetworkType(tptypes.STCPR)
 	if err := sctprClient.Serve(); err != nil {
-		log.Errorf("failed to initiate 'stcpr': %w", err)
+		log.Errorf("Failed to initiate 'stcpr': %w", err)
 	}
 }
 
 // AddSctpClient adds Sctp client concurrently
 func (n *Network) AddSctpClient(eb *appevent.Broadcaster, masterLogger *logging.MasterLogger) {
+	log := masterLogger.PackageLogger("sctp_client")
 	if n.conf.NetworkConfigs.STCP != nil {
 		conf := directtp.Config{
 			Type:      tptypes.STCP,
@@ -222,7 +184,7 @@ func (n *Network) AddSctpClient(eb *appevent.Broadcaster, masterLogger *logging.
 		n.addNetworkType(tptypes.STCP)
 		if n.conf.NetworkConfigs.STCP.LocalAddr != "" {
 			if err := sctpClient.Serve(); err != nil {
-				log.Errorf("failed to initiate 'stcp': %w", err)
+				log.Errorf("Failed to initiate 'stcp': %w", err)
 			}
 		} else {
 			log.Infof("No Local address found for stcp")
@@ -230,49 +192,79 @@ func (n *Network) AddSctpClient(eb *appevent.Broadcaster, masterLogger *logging.
 	}
 }
 
+// AddDmsgClient adds Dmsg client concurrently
+func (n *Network) AddDmsgClient(eb *appevent.Broadcaster, masterLogger *logging.MasterLogger) *dmsg.Client {
+	dmsgConf := &dmsg.Config{
+		MinSessions: n.conf.NetworkConfigs.Dmsg.SessionsCount,
+		Callbacks: &dmsg.ClientCallbacks{
+			OnSessionDial: func(network, addr string) error {
+				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
+				event := appevent.NewEvent(appevent.TCPDial, data)
+				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+				// @evanlinjin: An error is not returned here as this will cancel the session dial.
+				return nil
+			},
+			OnSessionDisconnect: func(network, addr string, _ error) {
+				data := appevent.TCPCloseData{RemoteNet: network, RemoteAddr: addr}
+				event := appevent.NewEvent(appevent.TCPClose, data)
+				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+			},
+		},
+	}
+	n.clients.DmsgC = dmsg.NewClient(n.conf.PubKey, n.conf.SecKey, disc.NewHTTP(n.conf.NetworkConfigs.Dmsg.Discovery), dmsgConf)
+	n.clients.DmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
+	n.addNetworkType(dmsg.Type)
+
+	time.Sleep(200 * time.Millisecond)
+	go n.clients.DmsgC.Serve(context.Background())
+	time.Sleep(2000 * time.Millisecond)
+
+	return n.clients.DmsgC
+}
+
 // Conf gets network configuration.
 func (n *Network) Conf() Config {
 	return n.conf
 }
 
-// Init initiates server connections.
-func (n *Network) Init() error {
-	if n.clients.DmsgC != nil {
-		time.Sleep(200 * time.Millisecond)
-		go n.clients.DmsgC.Serve(context.Background())
-		time.Sleep(200 * time.Millisecond)
-	}
+// // Init initiates server connections.
+// func (n *Network) Init() error {
+// 	if n.clients.DmsgC != nil {
+// 		time.Sleep(200 * time.Millisecond)
+// 		go n.clients.DmsgC.Serve(context.Background())
+// 		time.Sleep(200 * time.Millisecond)
+// 	}
 
-	if n.conf.NetworkConfigs.STCP != nil {
-		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcp': %w", err)
-			}
-		} else {
-			log.Infof("No config found for stcp")
-		}
-	}
+// 	if n.conf.NetworkConfigs.STCP != nil {
+// 		if client, ok := n.clients.Direct[tptypes.STCP]; ok && client != nil && n.conf.NetworkConfigs.STCP.LocalAddr != "" {
+// 			if err := client.Serve(); err != nil {
+// 				return fmt.Errorf("failed to initiate 'stcp': %w", err)
+// 			}
+// 		} else {
+// 			log.Infof("No config found for stcp")
+// 		}
+// 	}
 
-	if n.conf.ARClient != nil {
-		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
-			}
-		} else {
-			log.Infof("No config found for stcpr")
-		}
+// 	if n.conf.ARClient != nil {
+// 		if client, ok := n.clients.Direct[tptypes.STCPR]; ok && client != nil {
+// 			if err := client.Serve(); err != nil {
+// 				return fmt.Errorf("failed to initiate 'stcpr': %w", err)
+// 			}
+// 		} else {
+// 			log.Infof("No config found for stcpr")
+// 		}
 
-		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
-			if err := client.Serve(); err != nil {
-				return fmt.Errorf("failed to initiate 'sudph': %w", err)
-			}
-		} else {
-			log.Infof("No config found for sudph")
-		}
-	}
+// 		if client, ok := n.clients.Direct[tptypes.SUDPH]; ok && client != nil {
+// 			if err := client.Serve(); err != nil {
+// 				return fmt.Errorf("failed to initiate 'sudph': %w", err)
+// 			}
+// 		} else {
+// 			log.Infof("No config found for sudph")
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // OnNewNetworkType sets callback to be called when new network type is ready.
 func (n *Network) OnNewNetworkType(callback func(netType string)) {
@@ -287,6 +279,22 @@ func (n *Network) IsNetworkReady(netType string) bool {
 	_, ok := n.nets[netType]
 	n.netsMu.Unlock()
 	return ok
+}
+
+// WaitTillNetworkReady waits till any one of the network is ready.
+func (n *Network) WaitTillNetworkReady(log *logging.Logger) {
+	n.netsMu.Lock()
+	nets := n.nets
+	n.netsMu.Unlock()
+	if len(nets) == 0 {
+		print(len(nets))
+		time.Sleep(200 * time.Millisecond)
+		n.WaitTillNetworkReady(log)
+	} else {
+		for net := range nets {
+			log.Infof("Transport %v initialized", net)
+		}
+	}
 }
 
 // Close closes underlying connections.
