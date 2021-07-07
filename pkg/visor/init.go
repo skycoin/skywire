@@ -65,6 +65,12 @@ var (
 	disc vinit.Module
 	// Stun client
 	sc vinit.Module
+	// SUDPH client
+	sudph vinit.Module
+	// SCTPR client
+	sctpr vinit.Module
+	// SCTP client
+	sctp vinit.Module
 	// Snet (different network types)
 	sn vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
@@ -87,6 +93,8 @@ var (
 	pvs vinit.Module
 	// Public visor: advertise current visor as public
 	pv vinit.Module
+	// Transport check module
+	tc vinit.Module
 	// hypervisor module
 	hv vinit.Module
 	// dmsg ctrl
@@ -109,6 +117,9 @@ func registerModules(logger *logging.MasterLogger) {
 	disc = maker("discovery", initDiscovery)
 	sn = maker("snet", initSNet, &ar, &disc, &ebc)
 	sc = maker("stun_client", initStunClient, &ar, &sn)
+	sudph = maker("sudph_client", initSudphClient, &ar, &sc)
+	sctpr = maker("sctpr_client", initSctprClient, &ar, &ebc)
+	sctp = maker("sctp_client", initSctpClient, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
 	pty = maker("dmsg_pty", initDmsgpty, &sn)
 	tr = maker("transport", initTransport, &sn, &ebc)
@@ -120,6 +131,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
 	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
+	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn, &pty,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &dmsgCtrl)
 
@@ -215,12 +227,32 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	sc := stunDetails(v.conf.StunServers, log)
-	if v.arClient != nil {
-		v.net.AddSudphClient(sc, v.MasterLogger())
-	}
 	v.initLock.Lock()
 	v.stunClient = sc
 	v.initLock.Unlock()
+	return nil
+}
+
+func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.arClient != nil {
+		v.net.AddSudphClient(v.stunClient, v.MasterLogger())
+	}
+	return nil
+}
+
+func initSctprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.arClient != nil {
+		v.net.AddSctprClient(v.ebc, v.MasterLogger())
+	}
+	return nil
+}
+
+func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.STCP.LocalAddr != "" {
+		v.net.AddSctpClient(v.ebc, v.MasterLogger())
+	} else {
+		log.Infof("No Local address found for stcp")
+	}
 	return nil
 }
 
