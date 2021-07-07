@@ -64,6 +64,7 @@ type Visor struct {
 	router     router.Router
 	rfClient   rfclient.Client
 
+	isNetConf   chan bool             // net config check
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
@@ -101,6 +102,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		conf:       conf,
 		restartCtx: restartCtx,
 		initLock:   new(sync.Mutex),
+		isNetConf:  make(chan bool),
 	}
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {

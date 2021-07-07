@@ -73,8 +73,6 @@ var (
 	sctp vinit.Module
 	// Snet (different network types)
 	sn vinit.Module
-	// SnetCheck (check if atleast one network is available)
-	snCheck vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
 	// Transport manager
@@ -122,8 +120,7 @@ func registerModules(logger *logging.MasterLogger) {
 	sudph = maker("sudph_client", initSudphClient, &ar, &sc)
 	sctpr = maker("sctpr_client", initSctprClient, &ar, &ebc)
 	sctp = maker("sctp_client", initSctpClient, &ebc)
-	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &sn)
-	snCheck = maker("snet_check", initSnetCheck, &sn)
+	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl)
 	pty = maker("dmsg_pty", initDmsgpty, &sn, &dmsgCtrl)
 	tr = maker("transport", initTransport, &sn, &ebc)
 	trs = maker("transport_setup", initTransportSetup, &sn, &tr)
@@ -136,7 +133,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pvs = maker("public_visor", initPublicVisor, &sn, &ar, &disc)
 	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr, &dmsgCtrl)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &sn,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &snCheck, &pty)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &pty)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -222,6 +219,8 @@ func initSNet(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.net = n
 	v.initLock.Unlock()
+	v.isNetConf <- true
+	v.net.WaitTillOneTransportReady()
 	return nil
 }
 
@@ -234,6 +233,7 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// <-v.isNetConf
 	if v.arClient != nil {
 		v.net.AddSudphClient(v.stunClient, v.MasterLogger())
 	}
@@ -241,6 +241,7 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSctprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// <-v.isNetConf
 	if v.arClient != nil {
 		v.net.AddSctprClient(v.ebc, v.MasterLogger())
 	}
@@ -248,6 +249,7 @@ func initSctprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// <-v.isNetConf
 	if v.conf.STCP.LocalAddr != "" {
 		v.net.AddSctpClient(v.ebc, v.MasterLogger())
 	} else {
@@ -257,6 +259,7 @@ func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initDmsgCtrl(ctx context.Context, v *Visor, log *logging.Logger) error {
+	<-v.isNetConf
 	var dmsgC *dmsg.Client
 	if v.conf.Dmsg != nil {
 		dmsgC = v.net.AddDmsgClient(v.ebc, v.MasterLogger())
@@ -278,11 +281,6 @@ func initDmsgCtrl(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
-	return nil
-}
-
-func initSnetCheck(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	v.net.WaitTillOneTransportReady()
 	return nil
 }
 
