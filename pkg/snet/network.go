@@ -274,18 +274,13 @@ func (n *Network) Close() error {
 		if directClient == nil {
 			continue
 		}
-		wg.Add(1)
-		go func(client directtp.Client) {
-			err := client.Close()
-			if err != nil {
-				directErrors <- err
-			}
-			wg.Done()
-		}(directClient)
+		err := directClient.Close()
+		if err != nil {
+			directErrors <- err
+		}
 	}
-	wg.Wait()
 	close(directErrors)
-
+	wg.Wait()
 	if dmsgErr != nil {
 		return dmsgErr
 	}
