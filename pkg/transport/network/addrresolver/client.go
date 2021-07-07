@@ -219,6 +219,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	return nil
 }
 
+// Handshake type is used to decouple client from handshake and network packages
 type Handshake func(net.Conn) (net.Conn, error)
 
 func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-chan RemoteVisor, error) {

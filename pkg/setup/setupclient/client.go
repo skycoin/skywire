@@ -45,7 +45,7 @@ func NewClient(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, set
 
 func (c *Client) dial(ctx context.Context, dmsgC *dmsg.Client) (net.Conn, error) {
 	for _, sPK := range c.setupNodes {
-		addr := dmsg.Addr{sPK, skyenv.DmsgSetupPort}
+		addr := dmsg.Addr{PK: sPK, Port: skyenv.DmsgSetupPort}
 		conn, err := dmsgC.Dial(ctx, addr)
 		if err != nil {
 			c.log.WithError(err).Warnf("failed to dial to setup node: setupPK(%s)", sPK)
