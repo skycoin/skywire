@@ -6,14 +6,13 @@ ARG BUILDINFO_LDFLAGS
 ARG CGO_ENABLED=0
 ENV CGO_ENABLED=${CGO_ENABLED} \
     GOOS=linux  \
-    GOARCH=amd64 \
     GO111MODULE=on
 
 COPY . /skywire
 
 WORKDIR /skywire
 
-RUN apk add --no-cache make && \
+RUN apk add --no-cache make git && \
     sh -c /skywire/docker/images/visor/install-preq.sh && \
     make host-apps && \
     make build-deploy && \
