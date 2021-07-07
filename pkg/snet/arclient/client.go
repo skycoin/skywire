@@ -432,9 +432,8 @@ func (c *httpClient) Close() error {
 		if err := c.sudphConn.Close(); err != nil {
 			c.log.WithError(err).Errorf("Failed to close SUDPH")
 		}
+		close(c.closed)
 	}
-
-	close(c.closed)
 
 	return nil
 }
