@@ -133,41 +133,6 @@ func New(conf Config, eb *appevent.Broadcaster, masterLogger *logging.MasterLogg
 		clients.DmsgC.SetLogger(masterLogger.PackageLogger("snet.dmsgC"))
 	}
 
-	if conf.NetworkConfigs.STCP != nil {
-		conf := directtp.Config{
-			Type:      tptypes.STCP,
-			PK:        conf.PubKey,
-			SK:        conf.SecKey,
-			Table:     pktable.NewTable(conf.NetworkConfigs.STCP.PKTable),
-			LocalAddr: conf.NetworkConfigs.STCP.LocalAddr,
-			BeforeDialCallback: func(network, addr string) error {
-				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
-				event := appevent.NewEvent(appevent.TCPDial, data)
-				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-				return nil
-			},
-		}
-		clients.Direct[tptypes.STCP] = directtp.NewClient(conf, masterLogger)
-	}
-
-	if conf.ARClient != nil {
-		stcprConf := directtp.Config{
-			Type:            tptypes.STCPR,
-			PK:              conf.PubKey,
-			SK:              conf.SecKey,
-			AddressResolver: conf.ARClient,
-			BeforeDialCallback: func(network, addr string) error {
-				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
-				event := appevent.NewEvent(appevent.TCPDial, data)
-				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
-				return nil
-			},
-		}
-
-		clients.Direct[tptypes.STCPR] = directtp.NewClient(stcprConf, masterLogger)
-
-	}
-
 	return NewRaw(conf, clients), nil
 }
 
@@ -210,6 +175,57 @@ func (n *Network) AddSudphClient(stunClient *StunClient, masterLogger *logging.M
 		n.addNetworkType(tptypes.SUDPH)
 		if err := sudphClient.Serve(); err != nil {
 			log.Errorf("failed to initiate 'sudph': %w", err)
+		}
+	}
+}
+
+// AddSctprClient adds Sctpr client concurrently
+func (n *Network) AddSctprClient(eb *appevent.Broadcaster, masterLogger *logging.MasterLogger) {
+	stcprConf := directtp.Config{
+		Type:            tptypes.STCPR,
+		PK:              n.conf.PubKey,
+		SK:              n.conf.SecKey,
+		AddressResolver: n.conf.ARClient,
+		BeforeDialCallback: func(network, addr string) error {
+			data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
+			event := appevent.NewEvent(appevent.TCPDial, data)
+			_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+			return nil
+		},
+	}
+	sctprClient := directtp.NewClient(stcprConf, masterLogger)
+	n.clients.Direct[tptypes.STCPR] = sctprClient
+	n.addNetworkType(tptypes.STCPR)
+	if err := sctprClient.Serve(); err != nil {
+		log.Errorf("failed to initiate 'stcpr': %w", err)
+	}
+}
+
+// AddSctpClient adds Sctp client concurrently
+func (n *Network) AddSctpClient(eb *appevent.Broadcaster, masterLogger *logging.MasterLogger) {
+	if n.conf.NetworkConfigs.STCP != nil {
+		conf := directtp.Config{
+			Type:      tptypes.STCP,
+			PK:        n.conf.PubKey,
+			SK:        n.conf.SecKey,
+			Table:     pktable.NewTable(n.conf.NetworkConfigs.STCP.PKTable),
+			LocalAddr: n.conf.NetworkConfigs.STCP.LocalAddr,
+			BeforeDialCallback: func(network, addr string) error {
+				data := appevent.TCPDialData{RemoteNet: network, RemoteAddr: addr}
+				event := appevent.NewEvent(appevent.TCPDial, data)
+				_ = eb.Broadcast(context.Background(), event) //nolint:errcheck
+				return nil
+			},
+		}
+		sctpClient := directtp.NewClient(conf, masterLogger)
+		n.clients.Direct[tptypes.STCP] = sctpClient
+		n.addNetworkType(tptypes.STCP)
+		if n.conf.NetworkConfigs.STCP.LocalAddr != "" {
+			if err := sctpClient.Serve(); err != nil {
+				log.Errorf("failed to initiate 'stcp': %w", err)
+			}
+		} else {
+			log.Infof("No Local address found for stcp")
 		}
 	}
 }
