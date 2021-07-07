@@ -141,15 +141,15 @@ func NewEnv(t *testing.T, keys []KeyPair, networks []string) *Env {
 			clients.Direct[tptypes.SUDPH] = directtp.NewClient(conf, logging.NewMasterLogger())
 		}
 
-		snetConfig := snet.Config{
-			PubKey:         pairs.PK,
-			SecKey:         pairs.SK,
-			NetworkConfigs: networkConfigs,
-		}
+		// snetConfig := snet.Config{
+		// 	PubKey:         pairs.PK,
+		// 	SecKey:         pairs.SK,
+		// 	NetworkConfigs: networkConfigs,
+		// }
 
-		n := snet.NewRaw(snetConfig, clients)
-		require.NoError(t, n.Init())
-		ns[i] = n
+		// // n := snet.NewRaw(snetConfig, clients)
+		// // require.NoError(t, n.Init())
+		// ns[i] = n
 	}
 
 	// Prepare teardown closure.
