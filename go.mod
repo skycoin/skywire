@@ -7,6 +7,7 @@ require (
 	github.com/VictoriaMetrics/metrics v1.17.2
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/creack/pty v1.1.11 // indirect
+	github.com/gen2brain/dlgs v0.0.0-20210609125024-bf6c92aaa984
 	github.com/getlantern/golog v0.0.0-20201105130739-9586b8bde3a9 // indirect
 	github.com/getlantern/hidden v0.0.0-20201229170000-e66e7f878730 // indirect
 	github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6 // indirect
@@ -31,7 +32,7 @@ require (
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.0.0
-	github.com/sqweek/dialog v0.0.0-20210702151303-c326b49d3f01
+	github.com/sqweek/dialog v0.0.0-20210702151303-c326b49d3f01 // indirect
 	github.com/stretchr/testify v1.6.1
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
