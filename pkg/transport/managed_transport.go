@@ -140,11 +140,11 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 			if err != nil {
 				log.WithError(err).Warn("Failed to read packet, closing transport")
 				mt.close()
+				return
 			}
 			select {
 			case <-mt.done:
 				return
-
 			case readCh <- p:
 			}
 		}
@@ -165,6 +165,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 				}
 			} else {
 				mt.log.Info("Stopping transport due to inactivity")
+				mt.close()
 			}
 		}
 	}
@@ -221,7 +222,6 @@ func (mt *ManagedTransport) close() {
 		mt.conn = nil
 	}
 	mt.connMx.Unlock()
-	mt.once.Do(func() { close(mt.done) })
 	_ = mt.updateStatus(false, 1) //nolint:errcheck
 	if mt.Type() == network.STCPR && mt.remoteAddr != "" {
 		mt.ebc.SendTPClose(context.Background(), string(network.STCPR), mt.remoteAddr)
@@ -298,10 +298,6 @@ func (mt *ManagedTransport) isLeastSignificantEdge() bool {
 	return sorted[0] == mt.client.PK()
 }
 
-func (mt *ManagedTransport) isInitiator() bool {
-	return mt.Entry.EdgeIndex(mt.client.PK()) == 0
-}
-
 /*
 	<<< UNDERLYING CONNECTION >>>
 */
@@ -352,20 +348,6 @@ func (mt *ManagedTransport) setConn(newConn network.Conn) error {
 	return nil
 }
 
-func (mt *ManagedTransport) clearConn() {
-	if !mt.isServing() {
-		return
-	}
-
-	if mt.conn != nil {
-		if err := mt.conn.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close connection")
-		}
-		mt.conn = nil
-	}
-	_ = mt.updateStatus(false, 1) //nolint:errcheck
-}
-
 func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 	if tries < 1 {
 		panic(fmt.Errorf("mt.updateStatus: invalid input: got tries=%d (want tries > 0)", tries))
@@ -412,7 +394,7 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 					Warn("Failed to update transport status. Closing transport...")
 				mt.isUp = false
 				mt.isUpErr = httpErr
-				mt.once.Do(func() { close(mt.done) }) // Only time when mt.done is closed outside of mt.close()
+				mt.close()
 				return
 			}
 
@@ -451,7 +433,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 
 	n, err := mt.conn.Write(packet)
 	if err != nil {
-		mt.clearConn()
+		mt.close()
 		return err
 	}
 	if n > routing.PacketHeaderSize {
