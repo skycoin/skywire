@@ -185,7 +185,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			RemotePK:       conn.RemotePK(),
 			TransportLabel: LabelUser,
 			ebc:            tm.ebc,
-		}, false)
+		})
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -266,7 +266,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 		return nil, io.ErrClosedPipe
 	}
 	for {
-		mTp, err := tm.saveTransport(ctx, remote, true, netType, label)
+		mTp, err := tm.saveTransport(ctx, remote, netType, label)
 
 		if err != nil {
 			if err == ErrNotServing {
@@ -278,7 +278,7 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 }
 
-func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, initiator bool, netType network.Type, label Label) (*ManagedTransport, error) {
+func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netType network.Type, label Label) (*ManagedTransport, error) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 	if !tm.IsKnownNetwork(netType) {
@@ -306,7 +306,7 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, init
 		LS:             tm.Conf.LogStore,
 		RemotePK:       remote,
 		TransportLabel: label,
-	}, initiator)
+	})
 
 	// todo: do we need this here? Client dial will run resolve anyway
 	if mTp.Type() == network.STCPR && tm.arClient != nil {

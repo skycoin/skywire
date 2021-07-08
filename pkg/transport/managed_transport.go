@@ -76,18 +76,15 @@ type ManagedTransport struct {
 }
 
 // NewManagedTransport creates a new ManagedTransport.
-func NewManagedTransport(conf ManagedTransportConfig, isInitiator bool) *ManagedTransport {
-	initiator, target := conf.client.PK(), conf.RemotePK
-	if !isInitiator {
-		initiator, target = target, initiator
-	}
+func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
+	aPK, bPK := conf.client.PK(), conf.RemotePK
 	mt := &ManagedTransport{
 		log:      logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
 		rPK:      conf.RemotePK,
 		dc:       conf.DC,
 		ls:       conf.LS,
 		client:   conf.client,
-		Entry:    MakeEntry(initiator, target, conf.client.Type(), true, conf.TransportLabel),
+		Entry:    MakeEntry(aPK, bPK, conf.client.Type(), true, conf.TransportLabel),
 		LogEntry: new(LogEntry),
 		connCh:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
