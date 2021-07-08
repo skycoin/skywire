@@ -77,7 +77,6 @@ func (tm *Manager) Serve(ctx context.Context) {
 func (tm *Manager) serve(ctx context.Context) {
 	tm.initClients()
 	tm.runClients(ctx)
-	tm.initTransports(ctx)
 	tm.Logger.Info("transport manager is serving.")
 }
 
@@ -143,29 +142,6 @@ func (tm *Manager) Networks() []string {
 		nets = append(nets, string(netType))
 	}
 	return nets
-}
-
-func (tm *Manager) initTransports(ctx context.Context) {
-
-	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
-	if err != nil {
-		log.Warnf("No transports found for local visor: %v", err)
-	}
-	tm.Logger.Debugf("Initializing %d transports", len(entries))
-	for _, entry := range entries {
-		tm.Logger.Debugf("Initializing TP %v", *entry.Entry)
-		var (
-			tpType = entry.Entry.Type
-			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
-			tpID   = entry.Entry.ID
-		)
-		isInitiator := tm.Conf.PubKey == entry.Entry.Edges[0]
-		if _, err := tm.saveTransport(ctx, remote, isInitiator, tpType, entry.Entry.Label); err != nil {
-			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
-		} else {
-			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
-		}
-	}
 }
 
 // Stcpr returns stcpr client
