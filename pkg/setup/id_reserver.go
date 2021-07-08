@@ -12,7 +12,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router/routerclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // ErrNoKey is returned when key is not found.
@@ -51,7 +51,7 @@ type idReserver struct {
 
 // NewIDReserver creates a new route ID reserver from a dialer and a slice of paths.
 // The exact number of route IDs to reserve from each router is determined from the slice of paths.
-func NewIDReserver(ctx context.Context, dialer snet.Dialer, paths [][]routing.Hop) (IDReserver, error) {
+func NewIDReserver(ctx context.Context, dialer network.Dialer, paths [][]routing.Hop) (IDReserver, error) {
 	var total int // the total number of route IDs we reserve from the routers
 
 	// Prepare 'rec': A map representing the number of expected rules per visor PK.
