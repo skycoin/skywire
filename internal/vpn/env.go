@@ -114,6 +114,8 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 // - domain without port;
 // - IP with port;
 // - IP without port.
+// In case domain is provided instead of an IP address, a DNS lookup is also
+// performed to resolve the actual IP address
 func IPFromEnv(key string) (net.IP, bool, error) {
 	return ParseIP(os.Getenv(key))
 }
@@ -125,6 +127,8 @@ func IPFromEnv(key string) (net.IP, bool, error) {
 // - domain without port;
 // - IP with port;
 // - IP without port.
+// In case domain is provided instead of an IP address, a DNS lookup is also
+// performed to resolve the actual IP address
 func ParseIP(addr string) (net.IP, bool, error) {
 	if addr == "" {
 		return nil, false, nil
