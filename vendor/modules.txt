@@ -3,6 +3,8 @@
 github.com/AudriusButkevicius/pfilter
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 github.com/StackExchange/wmi
+# github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf
+github.com/TheTitanrain/w32
 # github.com/VictoriaMetrics/metrics v1.17.2
 ## explicit
 github.com/VictoriaMetrics/metrics
@@ -119,6 +121,8 @@ github.com/mmcloughlin/avo/x86
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
+# github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e
+## explicit
 # github.com/nwaples/rardecode v1.0.0
 github.com/nwaples/rardecode
 # github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
@@ -185,6 +189,10 @@ github.com/songgao/water
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
+# github.com/sqweek/dialog v0.0.0-20210702151303-c326b49d3f01
+## explicit
+github.com/sqweek/dialog
+github.com/sqweek/dialog/cocoa
 # github.com/stretchr/objx v0.1.1
 github.com/stretchr/objx
 # github.com/stretchr/testify v1.6.1
@@ -303,6 +311,8 @@ golang.zx2c4.com/wireguard/tun/wintun/namespaceapi
 golang.zx2c4.com/wireguard/tun/wintun/nci
 golang.zx2c4.com/wireguard/tun/wintun/registry
 golang.zx2c4.com/wireguard/tun/wintun/setupapi
+# gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f
+## explicit
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
 # nhooyr.io/websocket v1.8.2
