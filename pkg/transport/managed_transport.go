@@ -117,56 +117,53 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	log.Info("Serving.")
 
 	defer func() {
-		// Ensure logs tp logs are up to date before closing.
-		if mt.logMod() {
-			if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
-				log.WithError(err).Warn("Failed to record log entry.")
-			}
-		}
 		mt.close()
 		log.WithField("remaining_tps", atomic.AddInt32(&mTpCount, -1)).
 			Info("Stopped serving.")
 	}()
 
-	// Read loop.
-	go func() {
-		log := mt.log.WithField("src", "read_loop")
-		defer func() {
-			mt.wg.Done()
-			log.Debug("Closed read loop.")
-		}()
-		for {
-			p, err := mt.readPacket()
-			if err != nil {
-				log.WithError(err).Warn("Failed to read packet, closing transport")
-				mt.close()
-				return
-			}
-			select {
-			case <-mt.done:
-				return
-			case readCh <- p:
-			}
-		}
-	}()
+	go mt.readLoop(readCh)
+	mt.logLoop()
+}
 
-	// Logging loop
+// readLoop continuously reads packets from the underlying transport connection
+// and sends them to readCh
+// This is a blocking call
+func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
+	log := mt.log.WithField("src", "read_loop")
+	defer func() {
+		mt.wg.Done()
+		log.Debug("Closed read loop.")
+	}()
+	for {
+		p, err := mt.readPacket()
+		if err != nil {
+			log.WithError(err).Warn("Failed to read packet, closing transport")
+			mt.close()
+			return
+		}
+		select {
+		case <-mt.done:
+			return
+		case readCh <- p:
+		}
+	}
+}
+
+// logLoop continuously stores transport data in the log entry,
+// in case there is data to store
+// This is a blocking call
+func (mt *ManagedTransport) logLoop() {
+	// Ensure logs tp logs are up to date before closing.
+	defer mt.recordLog()
 	logTicker := time.NewTicker(logWriteInterval)
 	for {
 		select {
 		case <-mt.done:
 			logTicker.Stop()
 			return
-
 		case <-logTicker.C:
-			if mt.logMod() {
-				if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
-					mt.log.WithError(err).Warn("Failed to record log entry")
-				}
-			} else {
-				mt.log.Info("Stopping transport due to inactivity")
-				mt.close()
-			}
+			mt.recordLog()
 		}
 	}
 }
@@ -508,6 +505,16 @@ func (mt *ManagedTransport) logMod() bool {
 		return true
 	}
 	return false
+}
+
+// records this transport's log, in case there is data to be logged
+func (mt *ManagedTransport) recordLog() {
+	if !mt.logMod() {
+		return
+	}
+	if err := mt.ls.Record(mt.Entry.ID, mt.LogEntry); err != nil {
+		log.WithError(err).Warn("Failed to record log entry.")
+	}
 }
 
 // Remote returns the remote public key.
