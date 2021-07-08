@@ -1,9 +1,10 @@
-//+build !systray
+//+build systray
 
 package osutil
 
 import (
-	"fmt"
+	"github.com/gen2brain/dlgs"
+	"os/exec"
 	"syscall"
 )
 
@@ -12,7 +13,15 @@ func GainRoot() (int, error) {
 	uid := syscall.Getuid()
 
 	if err := syscall.Setuid(0); err != nil {
-		return 0, fmt.Errorf("failed to setuid 0: %w", err)
+		pwd, success, err := dlgs.Password("Sudo", "your sudo password")
+		if err != nil {
+			return 0, err
+		}
+
+		if !success {
+			return uid, err
+		}
+		exec.Command("echo", pwd, "|", "sudo", "-S")
 	}
 
 	return uid, nil

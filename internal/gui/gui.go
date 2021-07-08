@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gen2brain/dlgs"
 	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
-	"github.com/sqweek/dialog"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -150,7 +150,10 @@ func handleOpenHypervisor(conf *visorconfig.V1) {
 }
 
 func handleUninstall() {
-	cond := dialog.Message("Do you want to uninstall visor?").Title("Uninstall").YesNo()
+	cond, err := dlgs.Question("Uninstall", "Do you want to uninstall visor?", true)
+	if err != nil {
+		return
+	}
 	if cond {
 		mOpenHypervisor.Disable()
 		mUninstall.Disable()
