@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet"
 )
 
 //go:generate mockery -name RouteGroupDialer -case underscore -inpkg
@@ -18,7 +18,7 @@ type RouteGroupDialer interface {
 	Dial(
 		ctx context.Context,
 		log *logging.Logger,
-		n *snet.Network,
+		dmsgC *dmsg.Client,
 		setupNodes []cipher.PubKey,
 		req routing.BidirectionalRoute,
 	) (routing.EdgeRules, error)
@@ -35,11 +35,11 @@ func NewSetupNodeDialer() RouteGroupDialer {
 func (d *setupNodeDialer) Dial(
 	ctx context.Context,
 	log *logging.Logger,
-	n *snet.Network,
+	dmsgC *dmsg.Client,
 	setupNodes []cipher.PubKey,
 	req routing.BidirectionalRoute,
 ) (routing.EdgeRules, error) {
-	client, err := NewClient(ctx, log, n, setupNodes)
+	client, err := NewClient(ctx, log, dmsgC, setupNodes)
 	if err != nil {
 		return routing.EdgeRules{}, err
 	}

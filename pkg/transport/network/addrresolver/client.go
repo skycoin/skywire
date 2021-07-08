@@ -1,5 +1,5 @@
-// Package arclient implements address resolver client
-package arclient
+// Package addrresolver implements address resolver client
+package addrresolver
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
-	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	dmsgnetutil "github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -24,8 +23,6 @@ import (
 	"github.com/skycoin/skywire/internal/httpauth"
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/internal/packetfilter"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tpconn"
-	"github.com/skycoin/skywire/pkg/snet/directtp/tphandshake"
 )
 
 const (
@@ -56,8 +53,8 @@ type Error struct {
 type APIClient interface {
 	io.Closer
 	BindSTCPR(ctx context.Context, port string) error
-	BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error)
-	Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error)
+	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
+	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Health(ctx context.Context) (int, error)
 }
 
@@ -222,7 +219,10 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	return nil
 }
 
-func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor, error) {
+// Handshake type is used to decouple client from handshake and network packages
+type Handshake func(net.Conn) (net.Conn, error)
+
+func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-chan RemoteVisor, error) {
 	if !c.isReady() {
 		c.log.Infof("BindSUDPR: Address resolver is not ready yet, waiting...")
 		<-c.ready
@@ -242,8 +242,11 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter) (<-chan RemoteVisor
 	}
 
 	c.log.Infof("SUDPH Local port: %v", localPort)
-
-	arConn, err := c.wrapConn(c.sudphConn)
+	kcpConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, c.sudphConn)
+	if err != nil {
+		return nil, err
+	}
+	arConn, err := hs(kcpConn)
 	if err != nil {
 		return nil, err
 	}
@@ -387,34 +390,6 @@ func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
 	}(addrCh)
 
 	return addrCh
-}
-
-func (c *httpClient) wrapConn(conn net.PacketConn) (*tpconn.Conn, error) {
-	arKCPConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, conn)
-	if err != nil {
-		return nil, err
-	}
-
-	emptyAddr := dmsg.Addr{PK: cipher.PubKey{}, Port: 0}
-	hs := tphandshake.InitiatorHandshake(c.sk, dmsg.Addr{PK: c.pk, Port: 0}, emptyAddr)
-
-	connConfig := tpconn.Config{
-		Log:       c.log,
-		Conn:      arKCPConn,
-		LocalPK:   c.pk,
-		LocalSK:   c.sk,
-		Deadline:  time.Now().Add(tphandshake.Timeout),
-		Handshake: hs,
-		Encrypt:   false,
-		Initiator: true,
-	}
-
-	arConn, err := tpconn.NewConn(connConfig)
-	if err != nil {
-		return nil, fmt.Errorf("newConn: %w", err)
-	}
-
-	return arConn, nil
 }
 
 func (c *httpClient) Close() error {
