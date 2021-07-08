@@ -2,4 +2,7 @@
 
 package gui
 
-const iconPath = "/Applications/Skywire.app/Contents/Resources/tray_icon.tiff"
+const (
+	iconPath        = "/Applications/Skywire.app/Contents/Resources/tray_icon.tiff"
+	deinstallerPath = "/Applications/Skywire.app/Contents/deinstaller"
+)
