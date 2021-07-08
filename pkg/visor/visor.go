@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/internal/utclient"
@@ -18,10 +19,9 @@ import (
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/snet"
-	"github.com/skycoin/skywire/pkg/snet/arclient"
-	"github.com/skycoin/skywire/pkg/snet/stunclient"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -55,14 +55,15 @@ type Visor struct {
 	updater       *updater.Updater
 	uptimeTracker utclient.APIClient
 
-	ebc *appevent.Broadcaster // event broadcaster
+	ebc   *appevent.Broadcaster // event broadcaster
+	dmsgC *dmsg.Client
 
-	stunClient *stunclient.Details
-	net        *snet.Network
-	tpM        *transport.Manager
-	arClient   arclient.APIClient
-	router     router.Router
-	rfClient   rfclient.Client
+	stunClient *network.StunDetails
+	// net        *snet.network
+	tpM      *transport.Manager
+	arClient addrresolver.APIClient
+	router   router.Router
+	rfClient rfclient.Client
 
 	isNetConf   chan bool             // net config check
 	procM       appserver.ProcManager // proc manager
@@ -224,6 +225,6 @@ func (v *Visor) uptimeTrackerClient() utclient.APIClient {
 }
 
 // addressResolverClient is a convenience function to obtain uptime address resovler client.
-func (v *Visor) addressResolverClient() arclient.APIClient {
+func (v *Visor) addressResolverClient() addrresolver.APIClient {
 	return v.arClient
 }
