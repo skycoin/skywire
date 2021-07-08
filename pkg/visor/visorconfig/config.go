@@ -7,10 +7,11 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/restart"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
 )
 
@@ -51,7 +52,7 @@ var (
 func MakeBaseConfig(common *Common) *V1 {
 	conf := new(V1)
 	conf.Common = common
-	conf.Dmsg = &snet.DmsgConfig{
+	conf.Dmsg = &dmsgc.DmsgConfig{
 		Discovery:     skyenv.DefaultDmsgDiscAddr,
 		SessionsCount: 1,
 	}
@@ -112,7 +113,7 @@ func defaultConfigFromCommon(cc *Common, hypervisor bool, genAppConfig map[strin
 		CLIAddr: skyenv.DefaultDmsgPtyCLIAddr,
 	}
 
-	conf.STCP = &snet.STCPConfig{
+	conf.STCP = &network.STCPConfig{
 		LocalAddr: skyenv.DefaultSTCPAddr,
 		PKTable:   nil,
 	}

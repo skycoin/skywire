@@ -16,9 +16,10 @@ import (
 	"github.com/skycoin/dmsg/netutil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 const logWriteInterval = time.Second * 3
@@ -45,12 +46,11 @@ const (
 
 // ManagedTransportConfig is a configuration for managed transport.
 type ManagedTransportConfig struct {
-	Net            *snet.Network
+	client         network.Client
+	ebc            *appevent.Broadcaster
 	DC             DiscoveryClient
 	LS             LogStore
 	RemotePK       cipher.PubKey
-	NetName        string
-	AfterClosed    TPCloseCallback
 	TransportLabel Label
 }
 
@@ -62,13 +62,13 @@ type ManagedTransport struct {
 	log *logging.Logger
 
 	rPK        cipher.PubKey
-	netName    string
 	Entry      Entry
 	LogEntry   *LogEntry
 	logUpdates uint32
 
-	dc DiscoveryClient
-	ls LogStore
+	dc  DiscoveryClient
+	ls  LogStore
+	ebc *appevent.Broadcaster
 
 	isUp    bool  // records last successful status update to discovery
 	isUpErr error // records whether the last status update was successful or not
@@ -77,8 +77,8 @@ type ManagedTransport struct {
 	redialCancel context.CancelFunc // for canceling redialling logic
 	redialMx     sync.Mutex
 
-	n      *snet.Network
-	conn   *snet.Conn
+	client network.Client
+	conn   network.Conn
 	connCh chan struct{}
 	connMx sync.Mutex
 
@@ -87,29 +87,25 @@ type ManagedTransport struct {
 	wg   sync.WaitGroup
 
 	remoteAddr string
-
-	afterClosedMu sync.RWMutex
-	afterClosed   TPCloseCallback
 }
 
 // NewManagedTransport creates a new ManagedTransport.
 func NewManagedTransport(conf ManagedTransportConfig, isInitiator bool) *ManagedTransport {
-	initiator, target := conf.Net.LocalPK(), conf.RemotePK
+	initiator, target := conf.client.PK(), conf.RemotePK
 	if !isInitiator {
 		initiator, target = target, initiator
 	}
 	mt := &ManagedTransport{
-		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
-		rPK:         conf.RemotePK,
-		netName:     conf.NetName,
-		n:           conf.Net,
-		dc:          conf.DC,
-		ls:          conf.LS,
-		Entry:       MakeEntry(initiator, target, conf.NetName, true, conf.TransportLabel),
-		LogEntry:    new(LogEntry),
-		connCh:      make(chan struct{}, 1),
-		done:        make(chan struct{}),
-		afterClosed: conf.AfterClosed,
+		log:      logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		rPK:      conf.RemotePK,
+		dc:       conf.DC,
+		ls:       conf.LS,
+		client:   conf.client,
+		Entry:    MakeEntry(initiator, target, conf.client.Type(), true, conf.TransportLabel),
+		LogEntry: new(LogEntry),
+		connCh:   make(chan struct{}, 1),
+		done:     make(chan struct{}),
+		ebc:      conf.ebc,
 	}
 	mt.wg.Add(2)
 	return mt
@@ -222,12 +218,6 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	}
 }
 
-func (mt *ManagedTransport) onAfterClosed(f TPCloseCallback) {
-	mt.afterClosedMu.Lock()
-	mt.afterClosed = f
-	mt.afterClosedMu.Unlock()
-}
-
 func (mt *ManagedTransport) isServing() bool {
 	select {
 	case <-mt.done:
@@ -253,13 +243,8 @@ func (mt *ManagedTransport) Close() (err error) {
 
 func (mt *ManagedTransport) close() {
 	mt.disconnect()
-
-	mt.afterClosedMu.RLock()
-	afterClosed := mt.afterClosed
-	mt.afterClosedMu.RUnlock()
-
-	if afterClosed != nil {
-		afterClosed(mt.netName, mt.remoteAddr)
+	if mt.Type() == network.STCPR && mt.remoteAddr != "" {
+		mt.ebc.SendTPClose(context.Background(), string(network.STCPR), mt.remoteAddr)
 	}
 }
 
@@ -271,11 +256,11 @@ func (mt *ManagedTransport) disconnect() {
 }
 
 // Accept accepts a new underlying connection.
-func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
+func (mt *ManagedTransport) Accept(ctx context.Context, conn network.Conn) error {
 	mt.connMx.Lock()
 	defer mt.connMx.Unlock()
 
-	if conn.Network() != mt.netName {
+	if conn.Network() != mt.Type() {
 		return ErrWrongNetwork
 	}
 
@@ -292,7 +277,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn *snet.Conn) error {
 	defer cancel()
 
 	mt.log.Debug("Performing settlement handshake...")
-	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.n.LocalSK()); err != nil {
+	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
@@ -316,7 +301,7 @@ func (mt *ManagedTransport) Dial(ctx context.Context) error {
 }
 
 func (mt *ManagedTransport) dial(ctx context.Context) error {
-	tp, err := mt.n.Dial(ctx, mt.netName, mt.rPK, skyenv.DmsgTransportPort)
+	conn, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
 		return fmt.Errorf("snet.Dial: %w", err)
 	}
@@ -324,11 +309,11 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	if err := MakeSettlementHS(true).Do(ctx, mt.dc, tp, mt.n.LocalSK()); err != nil {
+	if err := MakeSettlementHS(true).Do(ctx, mt.dc, conn, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
-	if err := mt.setConn(tp); err != nil {
+	if err := mt.setConn(conn); err != nil {
 		return fmt.Errorf("setConn: %w", err)
 	}
 
@@ -389,18 +374,18 @@ func (mt *ManagedTransport) redialLoop(ctx context.Context) error {
 
 func (mt *ManagedTransport) isLeastSignificantEdge() bool {
 	sorted := SortEdges(mt.Entry.Edges[0], mt.Entry.Edges[1])
-	return sorted[0] == mt.n.LocalPK()
+	return sorted[0] == mt.client.PK()
 }
 
 func (mt *ManagedTransport) isInitiator() bool {
-	return mt.Entry.EdgeIndex(mt.n.LocalPK()) == 0
+	return mt.Entry.EdgeIndex(mt.client.PK()) == 0
 }
 
 /*
 	<<< UNDERLYING CONNECTION >>>
 */
 
-func (mt *ManagedTransport) getConn() *snet.Conn {
+func (mt *ManagedTransport) getConn() network.Conn {
 	if !mt.isServing() {
 		return nil
 	}
@@ -413,7 +398,7 @@ func (mt *ManagedTransport) getConn() *snet.Conn {
 
 // setConn sets 'mt.conn' (the underlying connection).
 // If 'mt.conn' is already occupied, close the newly introduced connection.
-func (mt *ManagedTransport) setConn(newConn *snet.Conn) error {
+func (mt *ManagedTransport) setConn(newConn network.Conn) error {
 
 	if mt.conn != nil {
 		if mt.isLeastSignificantEdge() {
@@ -573,7 +558,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log := mt.log.WithField("func", "readPacket")
 
-	var conn *snet.Conn
+	var conn network.Conn
 	for {
 		if conn = mt.getConn(); conn != nil {
 			break
@@ -639,4 +624,4 @@ func (mt *ManagedTransport) logMod() bool {
 func (mt *ManagedTransport) Remote() cipher.PubKey { return mt.rPK }
 
 // Type returns the transport type.
-func (mt *ManagedTransport) Type() string { return mt.netName }
+func (mt *ManagedTransport) Type() network.Type { return mt.client.Type() }

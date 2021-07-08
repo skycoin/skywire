@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -280,7 +281,7 @@ func (v *Visor) StartApp(appName string) error {
 	if appName == skyenv.VPNClientName {
 		// todo: can we use some kind of app start hook that will be used for both autostart
 		// and start? Reason: this is also called in init for autostart
-		maker := vpnEnvMaker(v.conf, v.net, v.tpM.STCPRRemoteAddrs())
+		maker := vpnEnvMaker(v.conf, v.dmsgC, v.tpM.STCPRRemoteAddrs())
 		envs, err = maker()
 		if err != nil {
 			return err
@@ -478,10 +479,10 @@ func (v *Visor) TransportTypes() ([]string, error) {
 func (v *Visor) Transports(types []string, pks []cipher.PubKey, logs bool) ([]*TransportSummary, error) {
 	var result []*TransportSummary
 
-	typeIncluded := func(tType string) bool {
+	typeIncluded := func(tType network.Type) bool {
 		if types != nil {
 			for _, ft := range types {
-				if tType == ft {
+				if string(tType) == ft {
 					return true
 				}
 			}
@@ -532,7 +533,7 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, public bool, t
 
 	v.log.Debugf("Saving transport to %v via %v", remote, tpType)
 
-	tp, err := v.tpM.SaveTransport(ctx, remote, tpType, transport.LabelUser)
+	tp, err := v.tpM.SaveTransport(ctx, remote, network.Type(tpType), transport.LabelUser)
 	if err != nil {
 		return nil, err
 	}

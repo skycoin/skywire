@@ -46,7 +46,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
 	}
 
-	dmsgC := v.net.Dmsg()
+	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		err := errors.New("cannot create dmsgpty with nil dmsg client")
 		return err
