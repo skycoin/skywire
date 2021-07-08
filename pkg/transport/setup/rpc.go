@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skycoin/src/util/logging"
 
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // TransportGateway that exposes methods to be used via RPC
@@ -20,7 +21,7 @@ type TransportGateway struct {
 // TransportRequest to perform an action over RPC
 type TransportRequest struct {
 	RemotePK cipher.PubKey
-	Type     string
+	Type     network.Type
 }
 
 // UUIDRequest contains id in UUID format
@@ -33,7 +34,7 @@ type TransportResponse struct {
 	ID     uuid.UUID
 	Local  cipher.PubKey
 	Remote cipher.PubKey
-	Type   string
+	Type   network.Type
 	IsUp   bool
 }
 

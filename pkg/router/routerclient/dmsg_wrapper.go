@@ -7,11 +7,11 @@ import (
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 
-	"github.com/skycoin/skywire/pkg/snet"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // WrapDmsgClient wraps a dmsg client to implement snet.Dialer
-func WrapDmsgClient(dmsgC *dmsg.Client) snet.Dialer {
+func WrapDmsgClient(dmsgC *dmsg.Client) network.Dialer {
 	return &dmsgClientDialer{Client: dmsgC}
 }
 
@@ -24,5 +24,5 @@ func (w *dmsgClientDialer) Dial(ctx context.Context, remote cipher.PubKey, port 
 }
 
 func (w *dmsgClientDialer) Type() string {
-	return dmsg.Type
+	return string(network.DMSG)
 }
