@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
+
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 var (
@@ -38,7 +40,7 @@ type Entry struct {
 	Edges [2]cipher.PubKey `json:"edges"`
 
 	// Type represents the transport type.
-	Type string `json:"type"`
+	Type network.Type `json:"type"`
 
 	// Public determines whether the transport is to be exposed to other nodes or not.
 	// Public transports are to be registered in the Transport Discovery.
@@ -48,10 +50,10 @@ type Entry struct {
 }
 
 // MakeEntry creates a new transport entry
-func MakeEntry(initiator, target cipher.PubKey, tpType string, public bool, label Label) Entry {
+func MakeEntry(initiator, target cipher.PubKey, netType network.Type, public bool, label Label) Entry {
 	entry := Entry{
-		ID:     MakeTransportID(initiator, target, tpType),
-		Type:   tpType,
+		ID:     MakeTransportID(initiator, target, netType),
+		Type:   netType,
 		Public: public,
 		Label:  label,
 	}

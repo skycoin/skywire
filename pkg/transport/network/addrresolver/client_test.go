@@ -1,4 +1,4 @@
-package arclient
+package addrresolver
 
 import (
 	"context"
