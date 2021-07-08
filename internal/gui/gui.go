@@ -14,9 +14,9 @@ import (
 
 	"github.com/getlantern/systray"
 	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/sqweek/dialog"
 	"github.com/toqueteos/webbrowser"
 
-	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -150,20 +150,21 @@ func handleOpenHypervisor(conf *visorconfig.V1) {
 }
 
 func handleUninstall() {
-	mOpenHypervisor.Disable()
-	mUninstall.Disable()
-	mQuit.Disable()
+	cond := dialog.Message("Do you want to uninstall visor?").Title("Uninstall").YesNo()
+	if cond {
+		mOpenHypervisor.Disable()
+		mUninstall.Disable()
+		mQuit.Disable()
 
-	stopVisor()
+		stopVisor()
 
-	const deinstallerPath = "/Applications/Skywire.app/Contents/deinstaller"
-	if err := osutil.Run("/bin/bash", "-c", deinstallerPath); err != nil {
-		mUninstall.Enable()
-		log.WithError(err).Errorln("Failed to run deinstaller")
-		return
+		if err := platformExecUninstall(); err != nil {
+			mUninstall.Enable()
+			log.WithError(err).Errorln("Failed to run deinstaller")
+			return
+		}
+		systray.Quit()
 	}
-
-	systray.Quit()
 }
 
 func stopVisor() {
