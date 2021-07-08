@@ -186,7 +186,7 @@ $ skywire-cli visor add-rule (app <route-id> <local-pk> <local-port> <remote-pk>
 ##### Example
 
 ```
-$ $ skywire-cli visor add-rule -h
+$ skywire-cli visor add-rule -h
 Adds a new routing rule
 
 Usage:
@@ -210,7 +210,7 @@ $ skywire-cli visor add-tp <remote-public-key> [flags]
 ##### Example
 
 ```
-$ $ skywire-cli visor add-tp -h
+$ skywire-cli visor add-tp -h
 Adds a new transport
 
 Usage:
@@ -258,7 +258,7 @@ $ skywire-cli visor disc-tp (--id=<transport-id> | --pk=<edge-public-key>)
 ##### Example
 
 ```
-$ $ skywire-cli visor disc-tp -h
+$ skywire-cli visor disc-tp -h
 Queries the Transport Discovery to find transport(s) of given transport ID or edge public key
 
 Usage:
@@ -312,6 +312,13 @@ echo
 ```
 $ skywire-cli visor exec echo "hello world"
 hello world
+```
+
+escape a flag
+
+```
+$skywire-cli visor exec echo -- "-a"
+-a
 ```
 
 
@@ -594,7 +601,7 @@ $ skywire-cli visor ls-apps
 ##### Example
 
 ```
-$ $ skywire-cli visor ls-apps
+$ skywire-cli visor ls-apps
 app                 ports     auto_start     status
 skychat             1         true           running
 skysocks            3         true           running
@@ -677,7 +684,7 @@ $ skywire-cli visor rm-rule <route-id>
 ##### Example
 
 ```
-$ $ skywire-cli visor rm-rule -h
+$ skywire-cli visor rm-rule -h
 Removes a routing rule via route ID key
 
 Usage:
@@ -695,7 +702,7 @@ $ skywire-cli visor rm-tp <transport-id>
 ##### Example
 
 ```
-$ $ skywire-cli visor rm-tp -h
+$ skywire-cli visor rm-tp -h
 Removes transport with given id
 
 Usage:
@@ -713,7 +720,7 @@ $ skywire-cli visor rule <route-id>
 ##### Example
 
 ```
-$ $ skywire-cli visor rule -h
+$ skywire-cli visor rule -h
 Returns a routing rule via route ID key
 
 Usage:
