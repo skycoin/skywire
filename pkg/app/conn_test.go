@@ -18,7 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/snet/snettest"
+	"github.com/skycoin/skywire/pkg/util/cipherutil"
 )
 
 func TestConn_Read(t *testing.T) {
@@ -175,7 +175,7 @@ func (p *wrappedConn) RemoteAddr() net.Addr {
 func TestConn_TestConn(t *testing.T) {
 	mp := func() (net.Conn, net.Conn, func(), error) {
 		netType := appnet.TypeSkynet
-		keys := snettest.GenKeyPairs(2)
+		keys := cipherutil.GenKeyPairs(2)
 		fmt.Printf("C1 Local: %s\n", keys[0].PK)
 		fmt.Printf("C2 Local: %s\n", keys[1].PK)
 		p1, p2 := net.Pipe()
@@ -219,7 +219,7 @@ func TestConn_TestConn(t *testing.T) {
 
 		rpcS := rpc.NewServer()
 
-		appKeys := snettest.GenKeyPairs(2)
+		appKeys := cipherutil.GenKeyPairs(2)
 
 		var (
 			procKey1 appcommon.ProcKey
