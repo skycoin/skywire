@@ -1,4 +1,4 @@
-package pktable
+package stcp
 
 import (
 	"bufio"

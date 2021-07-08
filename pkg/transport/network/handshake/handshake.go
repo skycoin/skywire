@@ -1,4 +1,4 @@
-package tphandshake
+package handshake
 
 import (
 	"bytes"
@@ -98,8 +98,19 @@ func InitiatorHandshake(lSK cipher.SecKey, localAddr, remoteAddr dmsg.Addr) Hand
 	})
 }
 
+// CheckF2 checks second frame of handshake
+type CheckF2 = func(f2 Frame2) error
+
+// MakeF2PortChecker returns new CheckF2 function that will use
+// port checker to check port in Frame2
+func MakeF2PortChecker(portChecker func(port uint16) error) CheckF2 {
+	return func(f2 Frame2) error {
+		return portChecker(f2.DstAddr.Port)
+	}
+}
+
 // ResponderHandshake creates the handshake logic on the responder's side.
-func ResponderHandshake(checkF2 func(f2 Frame2) error) Handshake {
+func ResponderHandshake(checkF2 CheckF2) Handshake {
 	return handshakeMiddleware(func(conn net.Conn, deadline time.Time) (lAddr, rAddr dmsg.Addr, err error) {
 		if err = readFrame0(conn); err != nil {
 			return dmsg.Addr{}, dmsg.Addr{}, err

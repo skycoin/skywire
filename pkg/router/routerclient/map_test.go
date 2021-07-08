@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 func TestMakeMap(t *testing.T) {
@@ -160,5 +160,5 @@ func (d *testDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (ne
 }
 
 func (testDialer) Type() string {
-	return dmsg.Type
+	return string(network.DMSG)
 }
