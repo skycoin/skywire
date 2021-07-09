@@ -78,6 +78,12 @@ func (tm *Manager) serve(ctx context.Context) {
 	tm.initClients()
 	tm.runClients(ctx)
 	go tm.cleanupTransports(ctx)
+	// todo: add "persistent transports" loop that will continuously try
+	// to establish transports from that list (unless they are already running)
+	// persistent transports should come from visor configuration and will
+	// allow user to set connections to other visors that:
+	// 1. will be established upon visor startup
+	// 2. will be redialed when broken
 	tm.Logger.Info("transport manager is serving.")
 }
 
