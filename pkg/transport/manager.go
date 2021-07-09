@@ -334,18 +334,6 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 		TransportLabel: label,
 	})
 
-	// todo: do we need this here? Client dial will run resolve anyway
-	if mTp.Type() == network.STCPR && tm.arClient != nil {
-		visorData, err := tm.arClient.Resolve(context.Background(), string(mTp.Type()), remote)
-		if err == nil {
-			mTp.remoteAddr = visorData.RemoteAddr
-		} else {
-			if err != addrresolver.ErrNoEntry {
-				return nil, fmt.Errorf("failed to resolve %s: %w", remote, err)
-			}
-		}
-	}
-
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	if err := mTp.Dial(ctx); err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
@@ -381,8 +369,9 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.Entry.Type == network.STCPR && tp.remoteAddr != "" {
-			addrs = append(addrs, tp.remoteAddr)
+		remoteRaw := tp.conn.RemoteRawAddr().String()
+		if tp.Entry.Type == network.STCPR && remoteRaw != "" {
+			addrs = append(addrs, remoteRaw)
 		}
 	}
 
