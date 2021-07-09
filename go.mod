@@ -13,6 +13,7 @@ require (
 	github.com/getlantern/ops v0.0.0-20200403153110-8476b16edcd6 // indirect
 	github.com/getlantern/systray v1.1.0
 	github.com/go-chi/chi v4.1.2+incompatible
+	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/securecookie v1.1.1
@@ -30,6 +31,7 @@ require (
 	github.com/skycoin/dmsg v0.0.0-20210616115957-702a819a9b3d
 	github.com/skycoin/skycoin v0.27.1
 	github.com/skycoin/yamux v0.0.0-20200803175205-571ceb89da9f
+	github.com/snapcore/snapd v0.0.0-20210709104427-3268a532e396
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.0.0
 	github.com/sqweek/dialog v0.0.0-20210702151303-c326b49d3f01 // indirect
