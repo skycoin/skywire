@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -116,9 +117,9 @@ func registerModules(logger *logging.MasterLogger) {
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
 	sc = maker("stun_client", initStunClient)
-	sudph = maker("sudph", initSudphClient, &ar, &sc)
-	sctpr = maker("sctpr", initSctprClient, &ar, &ebc)
-	sctp = maker("sctp", initSctpClient, &ebc)
+	sudph = maker("sudph", initSudphClient, &sc)
+	sctpr = maker("sctpr", initSctprClient)
+	sctp = maker("sctp", initSctpClient)
 	dmsgC = maker("dmsg", initDmsg, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
@@ -129,7 +130,7 @@ func registerModules(logger *logging.MasterLogger) {
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
-	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr, &dmsgCtrl)
+	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
@@ -221,42 +222,24 @@ func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// <-v.isNetConf
-	if v.arClient != nil {
-		v.net.AddSudphClient(v.stunClient, v.MasterLogger())
+	switch v.stunClient.NATType {
+	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+		log.Infof("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+	default:
+		v.tpM.InitClient(ctx, network.SUDPH)
 	}
 	return nil
 }
 
 func initSctprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// <-v.isNetConf
-	if v.arClient != nil {
-		v.net.AddSctprClient(v.ebc, v.MasterLogger())
-	}
+	v.tpM.InitClient(ctx, network.STCPR)
 	return nil
 }
 
 func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// <-v.isNetConf
-	if v.conf.STCP.LocalAddr != "" {
-		v.net.AddSctpClient(v.ebc, v.MasterLogger())
-	} else {
-		log.Infof("No Local address found for stcp")
-	}
+	v.tpM.InitClient(ctx, network.STCP)
 	return nil
 }
-
-// func initDmsgCtrl(ctx context.Context, v *Visor, log *logging.Logger) error {
-// 	<-v.isNetConf
-// 	var dmsgC *dmsg.Client
-// 	if v.conf.Dmsg != nil {
-// 		dmsgC = v.net.AddDmsgClient(v.ebc, v.MasterLogger())
-
-// 	v.pushCloseStack("dmsgC", func() error {
-// 		return dmsgC.Close()
-// 	})
-// 	return nil
-// }
 
 func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	dmsgC := v.dmsgC
