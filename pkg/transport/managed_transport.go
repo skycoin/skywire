@@ -55,9 +55,8 @@ type ManagedTransport struct {
 	LogEntry   *LogEntry
 	logUpdates uint32
 
-	dc  DiscoveryClient
-	ls  LogStore
-	ebc *appevent.Broadcaster
+	dc DiscoveryClient
+	ls LogStore
 
 	client network.Client
 	conn   network.Conn
@@ -67,8 +66,6 @@ type ManagedTransport struct {
 	done chan struct{}
 	once sync.Once
 	wg   sync.WaitGroup
-
-	remoteAddr string
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -84,7 +81,6 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		LogEntry: new(LogEntry),
 		connCh:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
-		ebc:      conf.ebc,
 	}
 	mt.wg.Add(2)
 	return mt
@@ -200,9 +196,6 @@ func (mt *ManagedTransport) close() {
 	}
 	mt.connMx.Unlock()
 	_ = mt.updateStatus(false, 1) //nolint:errcheck
-	if mt.Type() == network.STCPR && mt.remoteAddr != "" {
-		mt.ebc.SendTPClose(context.Background(), string(network.STCPR), mt.remoteAddr)
-	}
 }
 
 // Accept accepts a new underlying connection.
