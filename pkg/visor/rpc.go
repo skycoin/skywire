@@ -136,7 +136,6 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		Remote:  tp.Remote(),
 		Type:    tp.Type(),
 		IsSetup: isSetup,
-		IsUp:    tp.IsUp(),
 		Label:   tp.Entry.Label,
 	}
 	if includeLogs {
