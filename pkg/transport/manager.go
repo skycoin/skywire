@@ -77,6 +77,7 @@ func (tm *Manager) Serve(ctx context.Context) {
 func (tm *Manager) serve(ctx context.Context) {
 	tm.initClients()
 	tm.runClients(ctx)
+	go tm.cleanupTransports(ctx)
 	tm.Logger.Info("transport manager is serving.")
 }
 
@@ -114,6 +115,31 @@ func (tm *Manager) runClients(ctx context.Context) {
 		tm.wg.Add(1)
 		tm.wgMu.Unlock()
 		go tm.acceptTransports(ctx, lis)
+	}
+}
+
+func (tm *Manager) cleanupTransports(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			tm.mx.Lock()
+			var toDelete []*ManagedTransport
+			for _, tp := range tm.tps {
+				if tp.IsClosed() {
+					toDelete = append(toDelete, tp)
+				}
+			}
+			for _, tp := range toDelete {
+				delete(tm.tps, tp.Entry.ID)
+			}
+			tm.mx.Unlock()
+			if len(toDelete) > 0 {
+				tm.Logger.Infof("Deleted %d unused transport entries", len(toDelete))
+			}
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
