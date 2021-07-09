@@ -151,7 +151,7 @@ func printTransports(tps ...*visor.TransportSummary) {
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
-		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%v\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
+		_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
 		internal.Catch(err)
 	}
 	internal.Catch(w.Flush())
