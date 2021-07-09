@@ -1,4 +1,4 @@
-//+build systray
+//+build linux,systray
 
 package osutil
 
