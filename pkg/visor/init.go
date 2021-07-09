@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/sirupsen/logrus"
 	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
@@ -63,6 +64,14 @@ var (
 	ar vinit.Module
 	// App discovery
 	disc vinit.Module
+	// Stun client
+	sc vinit.Module
+	// SUDPH client
+	sudph vinit.Module
+	// SCTPR client
+	sctpr vinit.Module
+	// SCTP client
+	sctp vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	pty vinit.Module
 	// Dmsg module
@@ -85,6 +94,8 @@ var (
 	pvs vinit.Module
 	// Public visor: advertise current visor as public
 	pv vinit.Module
+	// Transport check module (this is not a functional module but a grouping of all transport types initializations)
+	tc vinit.Module
 	// hypervisor module
 	hv vinit.Module
 	// dmsg ctrl
@@ -105,6 +116,10 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
+	sc = maker("stun_client", initStunClient)
+	sudph = maker("sudph", initSudphClient, &sc)
+	sctpr = maker("sctpr", initSctprClient)
+	sctp = maker("sctp", initSctpClient)
 	dmsgC = maker("dmsg", initDmsg, &ebc)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
@@ -115,6 +130,7 @@ func registerModules(logger *logging.MasterLogger) {
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
+	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
@@ -194,10 +210,34 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	v.dmsgC = dmsgC
 	v.initLock.Unlock()
+	return nil
+}
 
-	v.pushCloseStack("dmsgC", func() error {
-		return dmsgC.Close()
-	})
+func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	sc := network.GetStunDetails(v.conf.StunServers, log)
+	v.initLock.Lock()
+	v.stunClient = sc
+	v.initLock.Unlock()
+	return nil
+}
+
+func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	switch v.stunClient.NATType {
+	case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
+		log.Infof("SUDPH transport wont be available as visor is under %v", v.stunClient.NATType.String())
+	default:
+		v.tpM.InitClient(ctx, network.SUDPH)
+	}
+	return nil
+}
+
+func initSctprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	v.tpM.InitClient(ctx, network.STCPR)
+	return nil
+}
+
+func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	v.tpM.InitClient(ctx, network.STCP)
 	return nil
 }
 
@@ -220,7 +260,7 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if err != nil {
 		return err
 	}
-	v.pushCloseStack("snet.dmsgctrl", cl.Close)
+	v.pushCloseStack("dmsgctrl", cl.Close)
 
 	dmsgctrl.ServeListener(cl, 0)
 	return nil

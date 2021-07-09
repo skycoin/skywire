@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routefinder/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
@@ -57,11 +58,14 @@ type Visor struct {
 	ebc   *appevent.Broadcaster // event broadcaster
 	dmsgC *dmsg.Client
 
+	stunClient *network.StunDetails
+	// net        *snet.network
 	tpM      *transport.Manager
 	arClient addrresolver.APIClient
 	router   router.Router
 	rfClient rfclient.Client
 
+	isNetConf   chan bool             // net config check
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.Launcher    // app launcher
 	serviceDisc appdisc.Factory
@@ -99,6 +103,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		conf:       conf,
 		restartCtx: restartCtx,
 		initLock:   new(sync.Mutex),
+		isNetConf:  make(chan bool),
 	}
 
 	if logLvl, err := logging.LevelFromString(conf.LogLevel); err != nil {
@@ -124,6 +129,7 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		mainModule = hv
 	}
 	mainModule.InitConcurrent(ctx)
+	tc.InitConcurrent(ctx)
 	if err := mainModule.Wait(ctx); err != nil {
 		log.Error(err)
 		return nil, false
