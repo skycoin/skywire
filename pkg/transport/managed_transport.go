@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/dmsg/httputil"
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -179,6 +180,10 @@ func (mt *ManagedTransport) IsClosed() bool {
 }
 
 // close underlying connection and update entry status in transport discovery
+// todo: this currently performs http request to discovery service
+// it only makes sense to wait for the completion if we are closing the visor itself,
+// regular transport close operations should probably call it concurrently
+// need to find a way to handle this properly (done channel in return?)
 func (mt *ManagedTransport) close() {
 	select {
 	case <-mt.done:
@@ -195,7 +200,7 @@ func (mt *ManagedTransport) close() {
 		mt.conn = nil
 	}
 	mt.connMx.Unlock()
-	_ = mt.updateStatus(false, 1) //nolint:errcheck
+	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
 // Accept accepts a new underlying connection.
@@ -303,10 +308,6 @@ func (mt *ManagedTransport) setConn(newConn network.Conn) error {
 		mt.conn = nil
 	}
 
-	if err := mt.updateStatus(true, 1); err != nil {
-		return fmt.Errorf("failed to update transport status: %w", err)
-	}
-
 	// Set new underlying connection.
 	mt.conn = newConn
 	select {
@@ -318,51 +319,22 @@ func (mt *ManagedTransport) setConn(newConn network.Conn) error {
 	return nil
 }
 
-func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
-	if tries < 1 {
-		panic(fmt.Errorf("mt.updateStatus: invalid input: got tries=%d (want tries > 0)", tries))
-	}
-
-	// If not serving, we should update status to 'DOWN' and ensure 'updateStatus' returns error.
-	if !mt.isServing() {
-		isUp = false
-	}
-	defer func() {
-		if err == nil && !mt.isServing() {
-			err = ErrNotServing
+func (mt *ManagedTransport) deleteFromDiscovery() error {
+	retrier := netutil.NewRetrier(1*time.Second, 5, 2)
+	return retrier.Do(func() error {
+		err := mt.dc.DeleteTransport(context.Background(), mt.Entry.ID)
+		if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+			mt.log.
+				WithError(err).
+				WithField("temporary", true).
+				Warn("Failed to update transport status.")
+			return err
 		}
-	}()
-
-	for i := 0; i < tries; i++ {
-		// @evanlinjin: We don't pass context as we always want transport status to be updated.
-		if _, err = mt.dc.UpdateStatuses(context.Background(), &Status{ID: mt.Entry.ID, IsUp: isUp}); err != nil {
-
-			// Only retry if error is temporary.
-			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
-				mt.log.
-					WithError(err).
-					WithField("temporary", true).
-					WithField("retry", i+1 < tries).
-					Warn("Failed to update transport status.")
-				continue
-			}
-
-			// Close managed transport if associated entry is not in discovery.
-			if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusNotFound {
-				mt.log.
-					WithError(err).
-					WithField("temporary", false).
-					WithField("retry", false).
-					Warn("Failed to update transport status. Closing transport...")
-				mt.close()
-				return
-			}
-
-			break
+		if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusNotFound {
+			return nil
 		}
-		break
-	}
-	return err
+		return err
+	})
 }
 
 /*

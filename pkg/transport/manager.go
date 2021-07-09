@@ -445,12 +445,8 @@ func (tm *Manager) close() {
 
 	close(tm.done)
 
-	statuses := make([]*Status, 0, len(tm.tps))
 	for _, tr := range tm.tps {
 		tr.close()
-	}
-	if _, err := tm.Conf.DiscoveryClient.UpdateStatuses(context.Background(), statuses...); err != nil {
-		tm.Logger.Warnf("failed to update transport statuses: %v", err)
 	}
 
 	tm.wgMu.Lock()
