@@ -3,25 +3,29 @@
 package osutil
 
 import (
-	"github.com/gen2brain/dlgs"
-	"os/exec"
+	"github.com/snapcore/snapd/polkit"
+	"os"
 	"syscall"
 )
+
+func checkAccess() bool {
+	curPid := os.Getpid()
+	authorization, err := polkit.CheckAuthorization(int32(curPid), 0, "", nil, 1)
+	if err != nil {
+		return false
+	}
+	return authorization
+}
 
 // GainRoot escalates privileges to gain root access. Returns `uid` to be stored.
 func GainRoot() (int, error) {
 	uid := syscall.Getuid()
 
 	if err := syscall.Setuid(0); err != nil {
-		pwd, success, err := dlgs.Password("Sudo", "your sudo password")
-		if err != nil {
-			return 0, err
+		if checkAccess() {
+			return GainRoot()
 		}
-
-		if !success {
-			return uid, err
-		}
-		exec.Command("echo", pwd, "|", "sudo", "-S")
+		return uid, err
 	}
 
 	return uid, nil
