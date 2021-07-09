@@ -75,47 +75,44 @@ func (tm *Manager) Serve(ctx context.Context) {
 }
 
 func (tm *Manager) serve(ctx context.Context) {
-	tm.initClients()
-	tm.runClients(ctx)
-	tm.initTransports(ctx)
+	tm.InitClient(ctx, network.DMSG)
+	// tm.initTransports(ctx)
 	tm.Logger.Info("transport manager is serving.")
 }
 
-func (tm *Manager) initClients() {
-	acceptedNetworks := []network.Type{network.STCP, network.STCPR, network.SUDPH, network.DMSG}
-	for _, netType := range acceptedNetworks {
-		client, err := tm.factory.MakeClient(netType)
-		if err != nil {
-			tm.Logger.Warnf("Cannot initialize %s transport client", netType)
-			continue
-		}
-		tm.netClients[netType] = client
+// InitClient initilizes a network client
+func (tm *Manager) InitClient(ctx context.Context, netType network.Type) {
+
+	client, err := tm.factory.MakeClient(netType)
+	if err != nil {
+		tm.Logger.Warnf("Cannot initialize %s transport client", netType)
 	}
+	tm.netClients[netType] = client
+	tm.runClient(ctx, netType)
+	tm.initTransports(ctx, netType)
 }
 
-func (tm *Manager) runClients(ctx context.Context) {
+func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
 	if tm.isClosing() {
 		return
 	}
-	for _, client := range tm.netClients {
-		tm.Logger.Infof("Serving %s network", client.Type())
-		err := client.Start()
-		if err != nil {
-			tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
-			continue
-		}
-		lis, err := client.Listen(skyenv.DmsgTransportPort)
-		if err != nil {
-			tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
-				client.Type(), skyenv.DmsgTransportPort)
-			return
-		}
-		tm.Logger.Infof("listening on network: %s", client.Type())
-		tm.wgMu.Lock()
-		tm.wg.Add(1)
-		tm.wgMu.Unlock()
-		go tm.acceptTransports(ctx, lis)
+	client := tm.netClients[netType]
+	tm.Logger.Infof("Serving %s network", client.Type())
+	err := client.Start()
+	if err != nil {
+		tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
 	}
+	lis, err := client.Listen(skyenv.DmsgTransportPort)
+	if err != nil {
+		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
+			client.Type(), skyenv.DmsgTransportPort)
+		return
+	}
+	tm.Logger.Infof("listening on network: %s", client.Type())
+	tm.wgMu.Lock()
+	tm.wg.Add(1)
+	tm.wgMu.Unlock()
+	go tm.acceptTransports(ctx, lis)
 }
 
 func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener) {
@@ -145,25 +142,27 @@ func (tm *Manager) Networks() []string {
 	return nets
 }
 
-func (tm *Manager) initTransports(ctx context.Context) {
+func (tm *Manager) initTransports(ctx context.Context, netType network.Type) {
 
 	entries, err := tm.Conf.DiscoveryClient.GetTransportsByEdge(ctx, tm.Conf.PubKey)
 	if err != nil {
-		log.Warnf("No transports found for local visor: %v", err)
+		log.Warnf("No %v transports found for local visor: %v", netType, err)
 	}
 	tm.Logger.Debugf("Initializing %d transports", len(entries))
 	for _, entry := range entries {
-		tm.Logger.Debugf("Initializing TP %v", *entry.Entry)
-		var (
-			tpType = entry.Entry.Type
-			remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
-			tpID   = entry.Entry.ID
-		)
-		isInitiator := tm.Conf.PubKey == entry.Entry.Edges[0]
-		if _, err := tm.saveTransport(ctx, remote, isInitiator, tpType, entry.Entry.Label); err != nil {
-			tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
-		} else {
-			tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
+		if entry.Entry.Type == netType {
+			tm.Logger.Debugf("Initializing TP %v", *entry.Entry)
+			var (
+				tpType = entry.Entry.Type
+				remote = entry.Entry.RemoteEdge(tm.Conf.PubKey)
+				tpID   = entry.Entry.ID
+			)
+			isInitiator := tm.Conf.PubKey == entry.Entry.Edges[0]
+			if _, err := tm.saveTransport(ctx, remote, isInitiator, tpType, entry.Entry.Label); err != nil {
+				tm.Logger.Warnf("INIT: failed to init tp: type(%s) remote(%s) tpID(%s)", tpType, remote, tpID)
+			} else {
+				tm.Logger.Debugf("Successfully initialized TP %v", *entry.Entry)
+			}
 		}
 	}
 }
