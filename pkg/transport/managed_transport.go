@@ -23,6 +23,7 @@ import (
 )
 
 const logWriteInterval = time.Second * 3
+const heartbeatInterval = time.Second * 45
 
 // Records number of managedTransports.
 var mTpCount int32
@@ -105,6 +106,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	}()
 
 	go mt.readLoop(readCh)
+	go mt.heartbeatLoop()
 	mt.logLoop()
 }
 
@@ -128,6 +130,19 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 		case <-mt.done:
 			return
 		case readCh <- p:
+		}
+	}
+}
+
+func (mt *ManagedTransport) heartbeatLoop() {
+	ticker := time.NewTicker(logWriteInterval)
+	for {
+		select {
+		case <-mt.done:
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			// todo: call TD heartbeat method repeatedly
 		}
 	}
 }
