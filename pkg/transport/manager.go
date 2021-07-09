@@ -337,25 +337,12 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	if err := mTp.Dial(ctx); err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
-		// The first occurs when an old tp is returned by 'tm.saveTransport', meaning a tp of the same transport ID was
-		// just deleted (and has not yet fully closed). Hence, we should close and delete the old tp and try again.
-		// The second occurs when the tp type is STCP and the requested remote PK is not associated with an IP address in
-		// the STCP table. There is no point in retrying as a connection would be impossible, so we just return an
-		// error.
-		if err == ErrNotServing || errors.Is(err, network.ErrStcpEntryNotFound) {
-			if closeErr := mTp.Close(); closeErr != nil {
-				tm.Logger.WithError(err).Warn("Closing mTp returns non-nil error.")
-			}
-			tm.deleteTransport(mTp.Entry.ID)
+		if closeErr := mTp.Close(); closeErr != nil {
+			tm.Logger.WithError(err).Warn("Error closing transport")
 		}
-		tm.Logger.WithError(err).Warn("Underlying transport connection is not established.")
 		return nil, err
 	}
-
-	go func() {
-		mTp.Serve(tm.readCh)
-		tm.deleteTransport(mTp.Entry.ID)
-	}()
+	go mTp.Serve(tm.readCh)
 	tm.tps[tpID] = mTp
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 	return mTp, nil
@@ -392,7 +379,8 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 
-		// Deregister transport.
+		// todo: this should probably be moved to tp.close because we want to deregister
+		// a transport completely and not deal with transport statuses at all
 		if err := tm.Conf.DiscoveryClient.DeleteTransport(ctx, id); err != nil {
 			tm.Logger.WithError(err).Warnf("Failed to deregister transport of ID %s from discovery.", id)
 		} else {
@@ -403,12 +391,6 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		tp.close()
 		delete(tm.tps, id)
 	}
-}
-
-func (tm *Manager) deleteTransport(id uuid.UUID) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
-	delete(tm.tps, id)
 }
 
 // ReadPacket reads data packets from routes.
