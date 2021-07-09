@@ -59,10 +59,6 @@ type ManagedTransport struct {
 	ls  LogStore
 	ebc *appevent.Broadcaster
 
-	isUp    bool  // records last successful status update to discovery
-	isUpErr error // records whether the last status update was successful or not
-	isUpMux sync.Mutex
-
 	client network.Client
 	conn   network.Conn
 	connCh chan struct{}
@@ -92,14 +88,6 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	}
 	mt.wg.Add(2)
 	return mt
-}
-
-// IsUp returns true if transport status is up.
-func (mt *ManagedTransport) IsUp() bool {
-	mt.isUpMux.Lock()
-	isUp := mt.isUp && mt.isUpErr == nil
-	mt.isUpMux.Unlock()
-	return isUp
 }
 
 // Serve serves and manages the transport.
@@ -180,12 +168,7 @@ func (mt *ManagedTransport) isServing() bool {
 func (mt *ManagedTransport) Close() (err error) {
 	mt.close()
 	mt.wg.Wait()
-
-	mt.isUpMux.Lock()
-	err = mt.isUpErr
-	mt.isUpMux.Unlock()
-
-	return err
+	return nil
 }
 
 // IsClosed returns true when the transport is closed
@@ -357,14 +340,6 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 		}
 	}()
 
-	mt.isUpMux.Lock()
-	defer mt.isUpMux.Unlock()
-
-	// If last update is the same as current, nothing needs to be done.
-	if mt.isUp == isUp {
-		return nil
-	}
-
 	for i := 0; i < tries; i++ {
 		// @evanlinjin: We don't pass context as we always want transport status to be updated.
 		if _, err = mt.dc.UpdateStatuses(context.Background(), &Status{ID: mt.Entry.ID, IsUp: isUp}); err != nil {
@@ -386,30 +361,15 @@ func (mt *ManagedTransport) updateStatus(isUp bool, tries int) (err error) {
 					WithField("temporary", false).
 					WithField("retry", false).
 					Warn("Failed to update transport status. Closing transport...")
-				mt.isUp = false
-				mt.isUpErr = httpErr
 				mt.close()
 				return
 			}
 
 			break
 		}
-		mt.log.
-			WithField("status", statusString(isUp)).
-			Info("Transport status updated.")
 		break
 	}
-
-	mt.isUp = isUp
-	mt.isUpErr = err
 	return err
-}
-
-func statusString(isUp bool) string {
-	if isUp {
-		return "UP"
-	}
-	return "DOWN"
 }
 
 /*
