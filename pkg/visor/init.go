@@ -265,7 +265,9 @@ func initSctprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	v.tpM.InitClient(ctx, network.STCP)
+	if v.conf.STCP != nil {
+		v.tpM.InitClient(ctx, network.STCP)
+	}
 	return nil
 }
 
@@ -288,11 +290,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
 	// todo: pass down configuration?
-	table := stcp.NewTable(v.conf.STCP.PKTable)
+	var table stcp.PKTable
+	var listenAddr string
+	if v.conf.STCP != nil {
+		table = stcp.NewTable(v.conf.STCP.PKTable)
+		listenAddr = v.conf.STCP.LocalAddr
+	}
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,
-		ListenAddr: v.conf.STCP.LocalAddr,
+		ListenAddr: listenAddr,
 		PKTable:    table,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
