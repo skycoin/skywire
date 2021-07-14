@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/skycoin/dmsg"
 	"github.com/skycoin/dmsg/cipher"
 	"github.com/skycoin/skycoin/src/util/logging"
 
@@ -68,16 +69,15 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 }
 
 // Serve runs listening loop across all registered factories.
-func (tm *Manager) Serve(ctx context.Context) {
-	tm.serveOnce.Do(func() {
-		tm.serve(ctx)
-	})
-}
-
-func (tm *Manager) serve(ctx context.Context) {
+// func (tm *Manager) Serve(ctx context.Context) {
+// 	tm.serveOnce.Do(func() {
+// 		tm.serve(ctx)
+// 	})
+// }
+// InitDmsgClient
+func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
+	tm.factory.DmsgC = dmsgC
 	tm.InitClient(ctx, network.DMSG)
-	// tm.initTransports(ctx)
-	tm.Logger.Info("transport manager is serving.")
 }
 
 // InitClient initilizes a network client

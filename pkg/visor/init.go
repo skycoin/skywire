@@ -116,25 +116,27 @@ func registerModules(logger *logging.MasterLogger) {
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver)
 	disc = maker("discovery", initDiscovery)
+	tr = maker("transport", initTransport, &ar, &ebc)
+
 	sc = maker("stun_client", initStunClient)
-	sudph = maker("sudph", initSudphClient, &sc)
-	sctpr = maker("sctpr", initSctprClient)
-	sctp = maker("sctp", initSctpClient)
+	sudph = maker("sudph", initSudphClient, &sc, &tr)
+	sctpr = maker("sctpr", initSctprClient, &tr)
+	sctp = maker("sctp", initSctpClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc)
-	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC)
+	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
+
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
-	tr = maker("transport", initTransport, &ar, &ebc, &dmsgC)
 	rt = maker("router", initRouter, &tr, &dmsgC)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	cli = maker("cli", initCLI)
 	hvs = maker("hypervisors", initHypervisors, &dmsgC)
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
-	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr)
-	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
+	tc = vinit.MakeModule("transport_check", vinit.DoNothing, logger, &sudph, &sctp, &sctpr, &dmsgCtrl, &trs)
+	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &trs, &hvs, &ut, &pv, &pvs, &dmsgCtrl)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -197,6 +199,14 @@ func initDiscovery(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
+func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	sc := network.GetStunDetails(v.conf.StunServers, log)
+	v.initLock.Lock()
+	v.stunClient = sc
+	v.initLock.Unlock()
+	return nil
+}
+
 func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.Dmsg == nil {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
@@ -213,11 +223,29 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initStunClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	sc := network.GetStunDetails(v.conf.StunServers, log)
-	v.initLock.Lock()
-	v.stunClient = sc
-	v.initLock.Unlock()
+func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return nil
+	}
+	const dmsgTimeout = time.Second * 20
+	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
+	logger.Info("Connecting to the dmsg network...")
+	select {
+	case <-time.After(dmsgTimeout):
+		logger.Warn("Failed to connect to the dmsg network, will try again later.")
+	case <-v.dmsgC.Ready():
+		logger.Info("Connected to the dmsg network.")
+		v.tpM.InitDmsgClient(ctx, dmsgC)
+	}
+	// dmsgctrl setup
+	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
+	if err != nil {
+		return err
+	}
+	v.pushCloseStack("dmsgctrl", cl.Close)
+
+	dmsgctrl.ServeListener(cl, 0)
 	return nil
 }
 
@@ -238,31 +266,6 @@ func initSctprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initSctpClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.tpM.InitClient(ctx, network.STCP)
-	return nil
-}
-
-func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	dmsgC := v.dmsgC
-	if dmsgC == nil {
-		return nil
-	}
-	const dmsgTimeout = time.Second * 20
-	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
-	logger.Info("Connecting to the dmsg network...")
-	select {
-	case <-time.After(dmsgTimeout):
-		logger.Warn("Failed to connect to the dmsg network, will try again later.")
-	case <-v.dmsgC.Ready():
-		logger.Info("Connected to the dmsg network.")
-	}
-	// dmsgctrl setup
-	cl, err := dmsgC.Listen(skyenv.DmsgCtrlPort)
-	if err != nil {
-		return err
-	}
-	v.pushCloseStack("dmsgctrl", cl.Close)
-
-	dmsgctrl.ServeListener(cl, 0)
 	return nil
 }
 
@@ -293,7 +296,6 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PKTable:    table,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
-		DmsgC:      v.dmsgC,
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
@@ -301,19 +303,8 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		tpM.Serve(ctx)
-	}()
-
 	v.pushCloseStack("transport.manager", func() error {
-		cancel()
 		err := tpM.Close()
-		wg.Wait()
 		return err
 	})
 

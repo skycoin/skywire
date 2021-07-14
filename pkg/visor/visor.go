@@ -59,11 +59,10 @@ type Visor struct {
 	dmsgC *dmsg.Client
 
 	stunClient *network.StunDetails
-	// net        *snet.network
-	tpM      *transport.Manager
-	arClient addrresolver.APIClient
-	router   router.Router
-	rfClient rfclient.Client
+	tpM        *transport.Manager
+	arClient   addrresolver.APIClient
+	router     router.Router
+	rfClient   rfclient.Client
 
 	isNetConf   chan bool             // net config check
 	procM       appserver.ProcManager // proc manager
