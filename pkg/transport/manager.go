@@ -103,7 +103,9 @@ func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
 	if tm.isClosing() {
 		return
 	}
+	tm.mx.Lock()
 	client := tm.netClients[netType]
+	tm.mx.Unlock()
 	tm.Logger.Infof("Serving %s network", client.Type())
 	err := client.Start()
 	if err != nil {
