@@ -133,10 +133,6 @@ func NewVisor(conf *visorconfig.V1, restartCtx *restart.Context) (*Visor, bool) 
 		return nil, false
 	}
 	tm.InitConcurrent(ctx)
-	if err := tm.Wait(ctx); err != nil {
-		log.Error(err)
-		return nil, false
-	}
 	// todo: rewrite to be infinite concurrent loop that will watch for
 	// module runtime errors and act on it (by stopping visor for example)
 	if !v.processRuntimeErrs() {
