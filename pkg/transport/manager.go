@@ -84,7 +84,9 @@ func (tm *Manager) InitClient(ctx context.Context, netType network.Type) {
 	if err != nil {
 		tm.Logger.Warnf("Cannot initialize %s transport client", netType)
 	}
+	tm.mx.Lock()
 	tm.netClients[netType] = client
+	tm.mx.Unlock()
 	tm.runClient(ctx, netType)
 	tm.initTransports(ctx, netType)
 
