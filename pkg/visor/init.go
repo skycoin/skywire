@@ -94,7 +94,7 @@ var (
 	pvs vinit.Module
 	// Public visor: advertise current visor as public
 	pv vinit.Module
-	// Transport module (this is not a functional module but a grouping of all transport types initializations)
+	// Transport module (this is not a functional module but a grouping of all heavy transport types initializations)
 	tm vinit.Module
 	// hypervisor module
 	hv vinit.Module
@@ -133,10 +133,10 @@ func registerModules(logger *logging.MasterLogger) {
 	ut = maker("uptime_tracker", initUptimeTracker)
 	pv = maker("public_visors", initPublicVisors, &tr)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
-	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sudph, &sctp, &sctpr, &dmsgCtrl, &trs)
+	tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &sc, &sudph, &dmsgCtrl)
 	pvs = maker("public_visor", initPublicVisor, &tr, &ar, &disc)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &up, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &sctp, &sctpr)
 
 	hv = maker("hypervisor", initHypervisor, &vis)
 }
@@ -323,12 +323,23 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) error {
 	ctx, cancel := context.WithCancel(ctx)
-	ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
-	if err != nil {
-		cancel()
-		return err
-	}
-	go ts.Serve(ctx)
+	// To remove the block set by NewTransportListener if dmsg is not initilized
+	go func() {
+		ts, err := ts.NewTransportListener(ctx, v.conf, v.dmsgC, v.tpM, v.MasterLogger())
+		if err != nil {
+			log.Warn(err)
+			cancel()
+		}
+		select {
+		case <-ctx.Done():
+		default:
+			go ts.Serve(ctx)
+		}
+	}()
+
+	// waiting for atleast one transport to initilize
+	<-v.tpM.Ready()
+
 	v.pushCloseStack("transport_setup.rpc", func() error {
 		cancel()
 		return nil
