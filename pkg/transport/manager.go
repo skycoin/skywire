@@ -95,6 +95,7 @@ func (tm *Manager) InitClient(ctx context.Context, netType network.Type) {
 	tm.readyOnce.Do(func() { close(tm.ready) })
 }
 
+// Ready checks if the transport manager is ready with atleast one transport
 func (tm *Manager) Ready() <-chan struct{} {
 	return tm.ready
 }
