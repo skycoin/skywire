@@ -228,12 +228,18 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if dmsgC == nil {
 		return nil
 	}
+
 	const dmsgTimeout = time.Second * 20
 	logger := dmsgC.Logger().WithField("timeout", dmsgTimeout)
 	logger.Info("Connecting to the dmsg network...")
 	select {
 	case <-time.After(dmsgTimeout):
 		logger.Warn("Failed to connect to the dmsg network, will try again later.")
+		go func() {
+			<-v.dmsgC.Ready()
+			logger.Info("Connected to the dmsg network.")
+			v.tpM.InitDmsgClient(ctx, dmsgC)
+		}()
 	case <-v.dmsgC.Ready():
 		logger.Info("Connected to the dmsg network.")
 		v.tpM.InitDmsgClient(ctx, dmsgC)
