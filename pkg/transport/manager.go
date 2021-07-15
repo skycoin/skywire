@@ -40,9 +40,11 @@ type Manager struct {
 	mx        sync.RWMutex
 	wgMu      sync.Mutex
 	wg        sync.WaitGroup
-	serveOnce sync.Once // ensure we only serve once.
 	closeOnce sync.Once // ensure we only close once.
 	done      chan struct{}
+
+	readyOnce sync.Once // ensure we only ready once.
+	ready     chan struct{}
 
 	factory    network.ClientFactory
 	netClients map[network.Type]network.Client
@@ -60,6 +62,7 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 		tps:        make(map[uuid.UUID]*ManagedTransport),
 		readCh:     make(chan routing.Packet, 20),
 		done:       make(chan struct{}),
+		ready:      make(chan struct{}),
 		netClients: make(map[network.Type]network.Client),
 		arClient:   arClient,
 		factory:    factory,
@@ -68,13 +71,7 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 	return tm, nil
 }
 
-// Serve runs listening loop across all registered factories.
-// func (tm *Manager) Serve(ctx context.Context) {
-// 	tm.serveOnce.Do(func() {
-// 		tm.serve(ctx)
-// 	})
-// }
-// InitDmsgClient
+// InitDmsgClient initilizes the dmsg client and also adds dmsgC to the factory
 func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 	tm.factory.DmsgC = dmsgC
 	tm.InitClient(ctx, network.DMSG)
@@ -90,6 +87,14 @@ func (tm *Manager) InitClient(ctx context.Context, netType network.Type) {
 	tm.netClients[netType] = client
 	tm.runClient(ctx, netType)
 	tm.initTransports(ctx, netType)
+
+	// Transport Manager is 'ready' once we have successfully initilized
+	// with at least one transport client.
+	tm.readyOnce.Do(func() { close(tm.ready) })
+}
+
+func (tm *Manager) Ready() <-chan struct{} {
+	return tm.ready
 }
 
 func (tm *Manager) runClient(ctx context.Context, netType network.Type) {
