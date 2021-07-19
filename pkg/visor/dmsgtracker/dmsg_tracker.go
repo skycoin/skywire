@@ -23,6 +23,10 @@ const (
 	DefaultDTMUpdateTimeout  = time.Second * 10
 )
 
+var (
+	log = logging.MustGetLogger("dmsg_tracker") // nolint: gochecknoglobals
+)
+
 // DmsgClientSummary summaries a dmsg client.
 type DmsgClientSummary struct {
 	PK        cipher.PubKey `json:"public_key"`
@@ -130,7 +134,8 @@ func (dtm *Manager) serve() {
 
 	t := time.NewTicker(dtm.updateInterval)
 	defer t.Stop()
-
+	<-dtm.dc.Ready()
+	dtm.getAndUpdateAllTrackers(ctx)
 	for {
 		select {
 		case <-dtm.done:
@@ -138,14 +143,21 @@ func (dtm *Manager) serve() {
 
 		case <-t.C:
 			ctx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
-
-			dtm.mx.Lock()
-			dtm.updateAllTrackers(ctx, dtm.dm)
-			dtm.mx.Unlock()
-
+			dtm.getAndUpdateAllTrackers(ctx)
 			cancel()
 		}
 	}
+}
+
+func (dtm *Manager) getAndUpdateAllTrackers(ctx context.Context) {
+	if _, ok := dtm.Get(dtm.dc.LocalPK()); !ok {
+		if _, err := dtm.MustGet(ctx, dtm.dc.LocalPK()); err != nil {
+			log.WithError(err).Warn("Failed to dial tracker stream.")
+		}
+	}
+	dtm.mx.Lock()
+	dtm.updateAllTrackers(ctx, dtm.dm)
+	dtm.mx.Unlock()
 }
 
 func (dtm *Manager) updateAllTrackers(ctx context.Context, dts map[cipher.PubKey]*DmsgTracker) {
