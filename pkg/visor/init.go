@@ -224,9 +224,6 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	// TODO: currently the dmsg transport is initilized if its unable to do so in the 20 seconds
-	// but the `DMSG server` in the visor details UI dosenot reflect it.
-	// same if the Connection with `DMSG server` beaks and reconnects (ersonp)
 	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		return nil
