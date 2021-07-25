@@ -334,12 +334,15 @@ Usage:
 Flags:
   -h, --help                    help for gen-config
       --hypervisor-pks string   public keys of hypervisors that should be added to this visor
-      --is-hypervisor           whether to generate config to run this visor as a hypervisor.
+  -i, --is-hypervisor           generate a hypervisor configuration.
   -o, --output string           path of output config file. (default "skywire-config.json")
-  -p, --package                 use defaults for package-based installations
-  -r, --replace                 whether to allow rewrite of a file that already exists (this retains the keys).
-      --sk cipher.SecKey        if unspecified, a random key pair will be generated. (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -t, --testenv                 whether to use production or test deployment service.
+  -p, --package                 use defaults for package-based installations in /opt/skywire
+  -r, --replace                 rewrite existing config (retains keys).
+      --sk cipher.SecKey        if unspecified, a random key pair will be generated.
+                                 (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -s, --skybian                 use defaults paths found in skybian
+                                 writes config to /etc/skywire-config.json
+  -t, --testenv                 use test deployment service.
 
 Global Flags:
       --rpc string   RPC server address (default "localhost:3435")
@@ -438,9 +441,27 @@ $ skywire-cli visor gen-config
 }
 ```
 
-The default configuration is for a visor only. To generate a configuration which provides the hypervisor web interface, the --is-hypervisor flag can be passed.
+The default configuration is for a visor only. To generate a configuration which provides the hypervisor web interface, the -i or --is-hypervisor flag should be specified.
 ```
-$ skywire-cli visor gen-config --is-hypervisor
+$ skywire-cli visor gen-config -i
+```
+
+##### Example hypervisor configuration for skybian
+```
+$ skywire-cli visor gen-config -is
+```
+##### Example visor configuration for skybian
+
+It is the typical arrangement to set a visor to use a remote hypervisor if a local instance is not started.
+
+Determine the hypervisor public key by running the following command on the remote machine
+
+```
+_pubkey=$(cat /opt/skywire/skywire.json | grep pk\") _pubkey=${_pubkey#*: } ; echo $_pubkey
+```
+substitute the hypervisor public key in the following command:
+```
+$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -s
 ```
 
 ##### Example hypervisor configuration for package based installation
@@ -448,8 +469,7 @@ $ skywire-cli visor gen-config --is-hypervisor
 This assumes the skywire installation is at /opt/skywire with binaries and apps in their own subdirectories.
 
 ```
-$ cd /opt/skywire
-$ skywire-cli visor gen-config --is-hypervisor -pro skywire.json
+$ skywire-cli visor gen-config -ip
 [2021-06-24T09:09:39-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="/opt/skywire/skywire.json"
 [2021-06-24T09:09:39-05:00] INFO [visor:config]: Flushing config to file. config_version="v1.0.0" filepath="/opt/skywire/skywire.json"
 [2021-06-24T09:09:39-05:00] INFO [skywire-cli]: Updated file '/opt/skywire/skywire.json' to: {
@@ -572,13 +592,12 @@ When running a visor with or without a hypervisor on the same machine, it's wise
 Copy the `skywire.json` config file from the previous example to `skywire-visor.json`; then paste the public key from the above command output into the following command
 
 ```
-$ cd /opt/skywire
-$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -pro skywire-visor.json
+$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -p
 ```
 
 The configuration is written (or rewritten)
 
-The configuration files may be specified in corresponding systemd service files or init / startup scripts to start either a visor or hypervisor instance
+The configuration files should be specified in corresponding systemd service files or init / startup scripts to start either a visor or hypervisor instance
 
 starting the hypervisor intance
 ```
