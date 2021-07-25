@@ -14,9 +14,10 @@ import (
 	"time"
 
 	"embed"
+	"io/fs"
+
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
-	"io/fs"
 
 	"github.com/skycoin/skywire/internal/netutil"
 	"github.com/skycoin/skywire/pkg/app"
