@@ -106,7 +106,9 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	}()
 
 	go mt.readLoop(readCh)
-	go mt.heartbeatLoop()
+	if mt.Entry.IsLeastSignificantEdge(mt.client.PK()) {
+		go mt.heartbeatLoop()
+	}
 	mt.logLoop()
 }
 
@@ -142,7 +144,10 @@ func (mt *ManagedTransport) heartbeatLoop() {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			// todo: call TD heartbeat method repeatedly
+			err := mt.dc.HeartBeat(context.Background(), mt.Entry.ID)
+			if err != nil {
+				log.Warnf("Failed to send heartbeat")
+			}
 		}
 	}
 }

@@ -83,6 +83,12 @@ func (e *Entry) EdgeIndex(pk cipher.PubKey) int {
 	return -1
 }
 
+// IsLeastSignificantEdge returns true if given pk is least significant edge
+// of this entry
+func (e *Entry) IsLeastSignificantEdge(pk cipher.PubKey) bool {
+	return e.EdgeIndex(pk) == 0
+}
+
 // HasEdge returns true if the provided edge is present in 'e.Edges' field.
 func (e *Entry) HasEdge(edge cipher.PubKey) bool {
 	for _, pk := range e.Edges {
