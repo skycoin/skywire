@@ -167,35 +167,6 @@ func (c *apiClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	return httputil.ErrorFromResp(resp)
 }
 
-// UpdateStatuses updates statuses of transports in discovery.
-func (c *apiClient) UpdateStatuses(ctx context.Context, statuses ...*transport.Status) ([]*transport.EntryWithStatus, error) {
-	if len(statuses) == 0 {
-		return nil, nil
-	}
-
-	resp, err := c.Post(ctx, "/statuses", statuses)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close HTTP response body")
-		}
-	}()
-
-	if err := httputil.ErrorFromResp(resp); err != nil {
-		return nil, err
-	}
-
-	var entries []*transport.EntryWithStatus
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		return nil, fmt.Errorf("json: %w", err)
-	}
-
-	return entries, nil
-}
-
 func (c *apiClient) Health(ctx context.Context) (int, error) {
 	resp, err := c.Get(ctx, "/health")
 	if err != nil {
