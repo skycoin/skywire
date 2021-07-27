@@ -100,24 +100,6 @@ func (td *mockDiscoveryClient) DeleteTransport(ctx context.Context, id uuid.UUID
 	return nil
 }
 
-func (td *mockDiscoveryClient) UpdateStatuses(ctx context.Context, statuses ...*Status) ([]*EntryWithStatus, error) {
-	res := make([]*EntryWithStatus, 0)
-
-	for _, status := range statuses {
-		entry, err := td.GetTransportByID(ctx, status.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		td.Lock()
-		entry.IsUp = status.IsUp
-		td.entries[status.ID] = *entry
-		td.Unlock()
-	}
-
-	return res, nil
-}
-
 func (td *mockDiscoveryClient) Health(_ context.Context) (int, error) {
 	return http.StatusOK, nil
 }
