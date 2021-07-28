@@ -270,14 +270,14 @@ func (rc *rpcClient) RemoveTransport(tid uuid.UUID) error {
 	return rc.Call("RemoveTransport", &tid, &struct{}{})
 }
 
-func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
-	entries := make([]*transport.EntryWithStatus, 0)
+func (rc *rpcClient) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
+	entries := make([]*transport.Entry, 0)
 	err := rc.Call("DiscoverTransportsByPK", &pk, &entries)
 	return entries, err
 }
 
-func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
-	var entry transport.EntryWithStatus
+func (rc *rpcClient) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
+	var entry transport.Entry
 	err := rc.Call("DiscoverTransportByID", &id, &entry)
 	return &entry, err
 }
@@ -847,11 +847,11 @@ func (mc *mockRPCClient) RemoveTransport(tid uuid.UUID) error {
 	})
 }
 
-func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportsByPK(cipher.PubKey) ([]*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 
-func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.EntryWithStatus, error) {
+func (mc *mockRPCClient) DiscoverTransportByID(uuid.UUID) (*transport.Entry, error) {
 	return nil, ErrNotImplemented
 }
 

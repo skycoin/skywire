@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
@@ -15,8 +14,8 @@ import (
 // DiscoveryClient performs Transport discovery operations.
 type DiscoveryClient interface {
 	RegisterTransports(ctx context.Context, entries ...*SignedEntry) error
-	GetTransportByID(ctx context.Context, id uuid.UUID) (*EntryWithStatus, error)
-	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*EntryWithStatus, error)
+	GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error)
+	GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error)
 	DeleteTransport(ctx context.Context, id uuid.UUID) error
 	HeartBeat(ctx context.Context, id uuid.UUID) error
 	Health(ctx context.Context) (int, error)
@@ -24,32 +23,25 @@ type DiscoveryClient interface {
 
 type mockDiscoveryClient struct {
 	sync.Mutex
-	entries map[uuid.UUID]EntryWithStatus
+	entries map[uuid.UUID]Entry
 }
 
 // NewDiscoveryMock construct a new mock transport discovery client.
 func NewDiscoveryMock() DiscoveryClient {
-	return &mockDiscoveryClient{entries: map[uuid.UUID]EntryWithStatus{}}
+	return &mockDiscoveryClient{entries: map[uuid.UUID]Entry{}}
 }
 
 func (td *mockDiscoveryClient) RegisterTransports(ctx context.Context, entries ...*SignedEntry) error {
 	td.Lock()
 	for _, entry := range entries {
-		entryWithStatus := &EntryWithStatus{
-			Entry:      entry.Entry,
-			IsUp:       true,
-			Registered: time.Now().Unix(),
-			Statuses:   [2]bool{true, true},
-		}
-		td.entries[entry.Entry.ID] = *entryWithStatus
-		entry.Registered = entryWithStatus.Registered
+		td.entries[entry.Entry.ID] = *entry.Entry
 	}
 	td.Unlock()
 
 	return nil
 }
 
-func (td *mockDiscoveryClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*EntryWithStatus, error) {
+func (td *mockDiscoveryClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*Entry, error) {
 	td.Lock()
 	entry, ok := td.entries[id]
 	td.Unlock()
@@ -58,20 +50,20 @@ func (td *mockDiscoveryClient) GetTransportByID(ctx context.Context, id uuid.UUI
 		return nil, errors.New("transport not found")
 	}
 
-	return &EntryWithStatus{
-		Entry:      entry.Entry,
-		IsUp:       entry.IsUp,
-		Registered: entry.Registered,
-		Statuses:   entry.Statuses,
+	return &Entry{
+		ID:    entry.ID,
+		Edges: entry.Edges,
+		Label: entry.Label,
+		Type:  entry.Type,
 	}, nil
 }
 
-func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*EntryWithStatus, error) {
+func (td *mockDiscoveryClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*Entry, error) {
 	td.Lock()
-	res := make([]*EntryWithStatus, 0)
+	res := make([]*Entry, 0)
 	for _, entry := range td.entries {
-		if entry.Entry.HasEdge(pk) {
-			e := &EntryWithStatus{}
+		if entry.HasEdge(pk) {
+			e := &Entry{}
 			*e = entry
 			res = append(res, e)
 		}
