@@ -187,38 +187,36 @@ func TestRegisterTransports(t *testing.T) {
 }
 
 func TestGetTransportByID(t *testing.T) {
-	entry := &transport.EntryWithStatus{Entry: newTestEntry(), IsUp: true}
+	entry := newTestEntry()
 	srv := httptest.NewServer(authHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, fmt.Sprintf("/transports/id:%s", entry.Entry.ID), r.URL.String())
+		assert.Equal(t, fmt.Sprintf("/transports/id:%s", entry.ID), r.URL.String())
 		require.NoError(t, json.NewEncoder(w).Encode(entry))
 	})))
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
-	resEntry, err := c.GetTransportByID(context.Background(), entry.Entry.ID)
+	resEntry, err := c.GetTransportByID(context.Background(), entry.ID)
 	require.NoError(t, err)
 
-	assert.Equal(t, entry.Entry, resEntry.Entry)
-	assert.True(t, entry.IsUp)
+	assert.Equal(t, entry, resEntry)
 }
 
 func TestGetTransportsByEdge(t *testing.T) {
-	entry := &transport.EntryWithStatus{Entry: newTestEntry(), IsUp: true}
+	entry := newTestEntry()
 	srv := httptest.NewServer(authHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, fmt.Sprintf("/transports/edge:%s", entry.Entry.Edges[0]), r.URL.String())
-		require.NoError(t, json.NewEncoder(w).Encode([]*transport.EntryWithStatus{entry}))
+		assert.Equal(t, fmt.Sprintf("/transports/edge:%s", entry.Edges[0]), r.URL.String())
+		require.NoError(t, json.NewEncoder(w).Encode([]*transport.Entry{entry}))
 	})))
 	defer srv.Close()
 
 	c, err := NewHTTP(srv.URL, testPubKey, testSecKey)
 	require.NoError(t, err)
-	entries, err := c.GetTransportsByEdge(context.Background(), entry.Entry.Edges[0])
+	entries, err := c.GetTransportsByEdge(context.Background(), entry.Edges[0])
 	require.NoError(t, err)
 
 	require.Len(t, entries, 1)
-	assert.Equal(t, entry.Entry, entries[0].Entry)
-	assert.True(t, entries[0].IsUp)
+	assert.Equal(t, entry, entries[0])
 }
 
 func authHandler(t *testing.T, next http.Handler) http.Handler {

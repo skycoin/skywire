@@ -102,7 +102,7 @@ func (c *apiClient) RegisterTransports(ctx context.Context, entries ...*transpor
 }
 
 // GetTransportByID returns Transport for corresponding ID.
-func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transport.Entry, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/id:%s", id.String()))
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 		return nil, err
 	}
 
-	entry := &transport.EntryWithStatus{}
+	entry := &transport.Entry{}
 	if err := json.NewDecoder(resp.Body).Decode(entry); err != nil {
 		return nil, fmt.Errorf("json: %w", err)
 	}
@@ -127,7 +127,7 @@ func (c *apiClient) GetTransportByID(ctx context.Context, id uuid.UUID) (*transp
 }
 
 // GetTransportsByEdge returns all Transports registered for the edge.
-func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	resp, err := c.Get(ctx, fmt.Sprintf("/transports/edge:%s", pk))
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (c *apiClient) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) (
 		return nil, err
 	}
 
-	var entries []*transport.EntryWithStatus
+	var entries []*transport.Entry
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
 		return nil, fmt.Errorf("json: %w", err)
 	}

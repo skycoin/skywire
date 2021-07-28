@@ -3,7 +3,6 @@ package transport
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/skycoin/dmsg/cipher"
@@ -174,30 +173,4 @@ func (se *SignedEntry) Signature(pk cipher.PubKey) (cipher.Sig, error) {
 func NewSignedEntry(entry *Entry, pk cipher.PubKey, secKey cipher.SecKey) (*SignedEntry, error) {
 	se := &SignedEntry{Entry: entry}
 	return se, se.Sign(pk, secKey)
-}
-
-// EntryWithStatus stores Entry and Statuses returned by both Edges.
-type EntryWithStatus struct {
-	Entry      *Entry  `json:"entry"`
-	IsUp       bool    `json:"is_up"`
-	Registered int64   `json:"registered"`
-	Updated    int64   `json:"updated"`
-	Statuses   [2]bool `json:"statuses"`
-}
-
-// String implements stringer
-func (e *EntryWithStatus) String() string {
-	res := "entry:\n"
-	res += fmt.Sprintf("\tregistered at: %d\n", e.Registered)
-	res += fmt.Sprintf("\tstatus returned by edge 1: %t\n", e.Statuses[0])
-	res += fmt.Sprintf("\tstatus returned by edge 2: %t\n", e.Statuses[1])
-	if e.IsUp {
-		res += "\ttransport: up\n"
-	} else {
-		res += "\ttransport: down\n"
-	}
-	indentedStr := strings.Replace(e.Entry.String(), "\n\t", "\n\t\t", -1)
-	res += fmt.Sprintf("\ttransport info: \n\t\t%s", indentedStr)
-
-	return res
 }
