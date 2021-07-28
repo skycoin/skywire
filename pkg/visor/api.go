@@ -54,8 +54,8 @@ type API interface {
 	AddTransport(remote cipher.PubKey, tpType string, public bool, timeout time.Duration) (*TransportSummary, error)
 	RemoveTransport(tid uuid.UUID) error
 
-	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error)
-	DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error)
+	DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error)
+	DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error)
 
 	RoutingRules() ([]routing.Rule, error)
 	RoutingRule(key routing.RouteID) (routing.Rule, error)
@@ -550,7 +550,7 @@ func (v *Visor) RemoveTransport(tid uuid.UUID) error {
 }
 
 // DiscoverTransportsByPK implements API.
-func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entries, err := tpD.GetTransportsByEdge(context.Background(), pk)
@@ -562,7 +562,7 @@ func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.EntryWith
 }
 
 // DiscoverTransportByID implements API.
-func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.EntryWithStatus, error) {
+func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 	tpD := v.tpDiscClient()
 
 	entry, err := tpD.GetTransportByID(context.Background(), id)
