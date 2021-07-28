@@ -23,19 +23,19 @@ func GetStunDetails(stunServers []string, log *logging.Logger) *StunDetails {
 
 		nat, host, err = nC.Discover()
 		if err != nil {
-			log.Warn(err)
+			log.Warnf("Error %v on server: %v", err, stunServer)
 		}
 
 		switch nat {
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			log.Warn(nat.String())
+			log.Warnf("Reply from %v server: %v", stunServer, nat.String())
 			// incase we fail to connect to all the STUN servers give a warning
 			if stunServer == stunServers[len(stunServers)-1] {
 				log.Warn("All STUN servers offline")
 			}
 		default:
-			log.Info(nat.String())
-			log.Info(host.String())
+			log.Info("NAT Type: ", nat.String())
+			log.Info("Public IP: ", host.String())
 			return &StunDetails{
 				PublicIP: host,
 				NATType:  nat,
