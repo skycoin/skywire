@@ -66,7 +66,6 @@ type ManagedTransport struct {
 	connMx sync.Mutex
 
 	done chan struct{}
-	once sync.Once
 	wg   sync.WaitGroup
 }
 
@@ -137,7 +136,7 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 }
 
 func (mt *ManagedTransport) heartbeatLoop() {
-	ticker := time.NewTicker(logWriteInterval)
+	ticker := time.NewTicker(heartbeatInterval)
 	for {
 		select {
 		case <-mt.done:
