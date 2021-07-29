@@ -237,10 +237,11 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	logS := transport.InMemoryTransportLogStore()
 
 	tpMConf := transport.ManagerConfig{
-		PubKey:          v.conf.PK,
-		SecKey:          v.conf.SK,
-		DiscoveryClient: tpdC,
-		LogStore:        logS,
+		PubKey:            v.conf.PK,
+		SecKey:            v.conf.SK,
+		DiscoveryClient:   tpdC,
+		LogStore:          logS,
+		PersistentRemotes: v.conf.PersistentTransports,
 	}
 	managerLogger := v.MasterLogger().PackageLogger("transport_manager")
 
