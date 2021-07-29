@@ -19,12 +19,21 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
 
+const reconnectTimeout = 10 * time.Second
+
+// PersistentRemote is a persistent connection description
+type PersistentRemote struct {
+	PK      cipher.PubKey `json:"pk"`
+	NetType network.Type  `json:"type"`
+}
+
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
-	PubKey          cipher.PubKey
-	SecKey          cipher.SecKey
-	DiscoveryClient DiscoveryClient
-	LogStore        LogStore
+	PubKey            cipher.PubKey
+	SecKey            cipher.SecKey
+	DiscoveryClient   DiscoveryClient
+	LogStore          LogStore
+	PersistentRemotes []PersistentRemote
 }
 
 // Manager manages Transports.
@@ -78,13 +87,35 @@ func (tm *Manager) serve(ctx context.Context) {
 	tm.initClients()
 	tm.runClients(ctx)
 	go tm.cleanupTransports(ctx)
-	// todo: add "persistent transports" loop that will continuously try
-	// to establish transports from that list (unless they are already running)
-	// persistent transports should come from visor configuration and will
-	// allow user to set connections to other visors that:
-	// 1. will be established upon visor startup
-	// 2. will be redialed when broken
+	go tm.runReconnectPersistent(ctx)
 	tm.Logger.Info("transport manager is serving.")
+}
+
+func (tm *Manager) runReconnectPersistent(ctx context.Context) {
+	ticker := time.NewTicker(reconnectTimeout)
+	tm.reconnectPersistent(ctx)
+	for {
+		select {
+		case <-ticker.C:
+			tm.reconnectPersistent(ctx)
+		case <-tm.done:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (tm *Manager) reconnectPersistent(ctx context.Context) {
+	for _, remote := range tm.Conf.PersistentRemotes {
+		_, err := tm.GetTransport(remote.PK, remote.NetType)
+		if errors.Is(err, ErrNotFound) {
+			go tm.saveTransport(context.Background(), remote.PK, remote.NetType, LabelUser)
+		}
+		if err != nil {
+			tm.Logger.WithError(err).WithField("remote_pk", remote.PK).
+				Warnf("Cannot reconnect to persistent remote")
+		}
+	}
 }
 
 func (tm *Manager) initClients() {
