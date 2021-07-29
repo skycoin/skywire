@@ -212,7 +212,6 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		}
 	}()
 
-	c.log.Infof("BindSTCPR: Address resolver response: %v", resp)
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
