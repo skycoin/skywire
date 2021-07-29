@@ -109,7 +109,10 @@ func (tm *Manager) reconnectPersistent(ctx context.Context) {
 	for _, remote := range tm.Conf.PersistentRemotes {
 		_, err := tm.GetTransport(remote.PK, remote.NetType)
 		if errors.Is(err, ErrNotFound) {
-			go tm.saveTransport(context.Background(), remote.PK, remote.NetType, LabelUser)
+			_, err := tm.saveTransport(ctx, remote.PK, remote.NetType, LabelUser)
+			if err != nil {
+				tm.Logger.WithError(err).Warnf("Cannot establish persistent transport")
+			}
 		}
 		if err != nil {
 			tm.Logger.WithError(err).WithField("remote_pk", remote.PK).

@@ -2,6 +2,7 @@ package deprecated
 
 import (
 	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
