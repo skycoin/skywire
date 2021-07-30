@@ -17,11 +17,7 @@ for:
    
   install:
     - cmd: set GOPATH=c:\gopath
-    - cmd: echo %PATH%
-    - cmd: echo %GOPATH%
     - cmd: set PATH=%GOPATH%\bin;c:\go\bin;%PATH%
-    - cmd: go version
-    - cmd: go env
     - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
     - make dep
     - sh: ci_scripts/create-ip-aliases.sh
