@@ -1,0 +1,59 @@
+version: "{build}"
+
+platform:
+  - Any CPU
+
+stack: node 10.16.3
+    
+for:
+-
+  # Develop | Windows 
+  branches:
+    only:
+      - develop
+
+  image:
+    - ubuntu1804
+    - Visual Studio 2019
+    
+  init:
+    - cmd: choco install make
+   
+  install:
+    - cmd: set GOPATH=c:\gopath
+    - cmd: echo %PATH%
+    - cmd: echo %GOPATH%
+    - cmd: set PATH=%GOPATH%\bin;c:\go\bin;%PATH%
+    - cmd: go version
+    - cmd: go env
+    - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
+    - make dep
+    - sh: ci_scripts/create-ip-aliases.sh
+    - make install-deps-ui
+    
+  before_build:
+    - make check
+    - make lint-ui
+
+  build_script:
+    - make build
+    - make build-ui
+-
+  # Master | Ubuntu 18.04 LTS
+  branches:
+    only:
+      - master
+  
+  image:
+    - ubuntu1804
+
+  install:
+    - make dep
+    - ci_scripts/create-ip-aliases.sh
+
+  build_script:
+    - make build
+  
+  on_success:
+    - go install github.com/goreleaser/goreleaser@latest
+    - make github-release
