@@ -7,7 +7,7 @@ stack: node 10.16.3
     
 for:
 -
-  # non-Master | Windows 
+  # non-Master | Ubuntu 18.04 & Windows
   image:
     - ubuntu1804
     - Visual Studio 2019
@@ -35,7 +35,7 @@ for:
     - make build
     - make build-ui
 -
-  # Master | Ubuntu 18.04 LTS
+  # Master for Release | Ubuntu 18.04 LTS
   branches:
     only:
       - master
