@@ -83,14 +83,12 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		connCh:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
 	}
-	mt.wg.Add(2)
 	return mt
 }
 
 // Serve serves and manages the transport.
 func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
-	defer mt.wg.Done()
-
+	mt.wg.Add(3)
 	log := mt.log.
 		WithField("tp_id", mt.Entry.ID).
 		WithField("remote_pk", mt.rPK).
@@ -116,10 +114,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 // This is a blocking call
 func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	log := mt.log.WithField("src", "read_loop")
-	defer func() {
-		mt.wg.Done()
-		log.Debug("Closed read loop.")
-	}()
+	defer mt.wg.Done()
 	for {
 		p, err := mt.readPacket()
 		if err != nil {
@@ -136,6 +131,10 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 }
 
 func (mt *ManagedTransport) heartbeatLoop() {
+	defer func() {
+		mt.wg.Done()
+		log.Debug("Stopped heartbeat loop")
+	}()
 	ticker := time.NewTicker(heartbeatInterval)
 	for {
 		select {
@@ -155,8 +154,12 @@ func (mt *ManagedTransport) heartbeatLoop() {
 // in case there is data to store
 // This is a blocking call
 func (mt *ManagedTransport) logLoop() {
+	defer func() {
+		mt.recordLog()
+		mt.wg.Done()
+		mt.log.Debug("Stopped log loop")
+	}()
 	// Ensure logs tp logs are up to date before closing.
-	defer mt.recordLog()
 	logTicker := time.NewTicker(logWriteInterval)
 	for {
 		select {
@@ -183,6 +186,7 @@ func (mt *ManagedTransport) isServing() bool {
 // It only returns an error if transport status update fails.
 func (mt *ManagedTransport) Close() (err error) {
 	mt.close()
+	mt.log.Debug("Waiting for the waitgroup")
 	mt.wg.Wait()
 	return nil
 }
@@ -204,12 +208,14 @@ func (mt *ManagedTransport) IsClosed() bool {
 // regular transport close operations should probably call it concurrently
 // need to find a way to handle this properly (done channel in return?)
 func (mt *ManagedTransport) close() {
+	mt.log.Debug("Closing...")
 	select {
 	case <-mt.done:
 		return
 	default:
 		close(mt.done)
 	}
+	mt.log.Debug("Locking connMx")
 	mt.connMx.Lock()
 	close(mt.connCh)
 	if mt.conn != nil {
@@ -219,6 +225,7 @@ func (mt *ManagedTransport) close() {
 		mt.conn = nil
 	}
 	mt.connMx.Unlock()
+	mt.log.Debug("Unlocking connMx")
 	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
