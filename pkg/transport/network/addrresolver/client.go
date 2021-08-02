@@ -29,7 +29,7 @@ const (
 	// sudphPriority is used to set an order how connection filters apply.
 	sudphPriority          = 1
 	stcprBindPath          = "/bind/stcpr"
-	stcprAlivePath         = "/alive/stcpr/%s"
+	stcprAlivePath         = "/alive/stcpr"
 	stcprKeepAliveInterval = 300 * time.Second
 	addrChSize             = 1024
 	udpKeepAliveInterval   = 10 * time.Second
