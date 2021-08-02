@@ -27,12 +27,14 @@ import (
 
 const (
 	// sudphPriority is used to set an order how connection filters apply.
-	sudphPriority        = 1
-	stcprBindPath        = "/bind/stcpr"
-	addrChSize           = 1024
-	udpKeepAliveInterval = 10 * time.Second
-	udpKeepAliveMessage  = "keepalive"
-	defaultUDPPort       = "30178"
+	sudphPriority          = 1
+	stcprBindPath          = "/bind/stcpr"
+	stcprAlivePath         = "/alive/stcpr/%s"
+	stcprKeepAliveInterval = 300 * time.Second
+	addrChSize             = 1024
+	udpKeepAliveInterval   = 10 * time.Second
+	udpKeepAliveMessage    = "keepalive"
+	defaultUDPPort         = "30178"
 )
 
 var (
@@ -216,6 +218,12 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
+	go func() {
+		if err := c.keepStcprAliveLoop(ctx); err != nil {
+			c.log.WithError(err).Errorf("Failed to send TCP keep alive signal to address-resolver")
+		}
+	}()
+
 	return nil
 }
 
@@ -273,7 +281,7 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 	addrCh := c.readSUDPHMessages(arConn)
 
 	go func() {
-		if err := c.keepAliveLoop(arConn); err != nil {
+		if err := c.keepSudphAliveLoop(arConn); err != nil {
 			c.log.WithError(err).Errorf("Failed to send keep alive UDP packet to address-resolver")
 		}
 	}()
@@ -413,8 +421,25 @@ func (c *httpClient) Close() error {
 	return nil
 }
 
+// Keep stcpr alive in address-resolver
+func (c *httpClient) keepStcprAliveLoop(ctx context.Context) error {
+	for {
+		select {
+		case <-c.closed:
+			return nil
+		default:
+			_, err := c.Get(ctx, fmt.Sprintf(stcprAlivePath, c.pk.String()))
+			if err != nil {
+				return err
+			}
+
+			time.Sleep(stcprKeepAliveInterval)
+		}
+	}
+}
+
 // Keep NAT mapping alive.
-func (c *httpClient) keepAliveLoop(w io.Writer) error {
+func (c *httpClient) keepSudphAliveLoop(w io.Writer) error {
 	for {
 		select {
 		case <-c.closed:
