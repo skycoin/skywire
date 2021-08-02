@@ -428,7 +428,7 @@ func (c *httpClient) keepStcprAliveLoop(ctx context.Context) error {
 		case <-c.closed:
 			return nil
 		default:
-			_, err := c.Get(ctx, fmt.Sprintf(stcprAlivePath, c.pk.String()))
+			_, err := c.Get(ctx, stcprAlivePath)
 			if err != nil {
 				return err
 			}
