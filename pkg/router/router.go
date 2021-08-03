@@ -317,8 +317,6 @@ func (r *router) Serve(ctx context.Context) error {
 
 	go r.serveSetup()
 
-	r.tm.Serve(ctx)
-
 	return nil
 }
 
@@ -728,17 +726,16 @@ func (r *router) Close() error {
 
 	r.once.Do(func() {
 		close(r.done)
-
 		r.mx.Lock()
 		close(r.accept)
 		r.mx.Unlock()
 	})
-
 	if err := r.sl.Close(); err != nil {
 		r.logger.WithError(err).Warnf("closing route_manager returned error")
+		return err
 	}
 
-	return r.tm.Close()
+	return nil
 }
 
 func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule routing.Rule) error {
