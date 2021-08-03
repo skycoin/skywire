@@ -45,12 +45,10 @@ type Manager struct {
 	arClient addrresolver.APIClient
 	ebc      *appevent.Broadcaster
 
-	readCh    chan routing.Packet
-	mx        sync.RWMutex
-	wg        sync.WaitGroup
-	serveOnce sync.Once // ensure we only serve once.
-	closeOnce sync.Once // ensure we only close once.
-	done      chan struct{}
+	readCh chan routing.Packet
+	mx     sync.RWMutex
+	wg     sync.WaitGroup
+	done   chan struct{}
 
 	factory    network.ClientFactory
 	netClients map[network.Type]network.Client
@@ -493,25 +491,28 @@ func (tm *Manager) Local() cipher.PubKey {
 	return tm.Conf.PubKey
 }
 
-// Close closes opened transports and registered factories.
-func (tm *Manager) Close() error {
-	tm.closeOnce.Do(tm.close)
-	return nil
-}
-
-func (tm *Manager) close() {
+// Close closes opened transports, network clients
+// and all service tasks of transport manager
+func (tm *Manager) Close() {
+	select {
+	case <-tm.done:
+		return
+	default:
+	}
+	close(tm.done)
 	tm.Logger.Info("transport manager is closing.")
 	defer tm.Logger.Info("transport manager closed.")
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
-	close(tm.done)
-
 	for _, tr := range tm.tps {
 		tr.close()
 	}
 	for _, client := range tm.netClients {
-		client.Close()
+		err := client.Close()
+		if err != nil {
+			tm.Logger.WithError(err).Warnf("Failed to close %s client", client.Type())
+		}
 	}
 	tm.wg.Wait()
 	close(tm.readCh)
