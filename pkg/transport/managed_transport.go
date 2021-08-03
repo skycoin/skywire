@@ -274,6 +274,12 @@ func (mt *ManagedTransport) Dial(ctx context.Context) error {
 	return mt.dial(ctx)
 }
 
+// DialAsync is asynchronous version of dial that allows dialing in a different
+// goroutine
+func (mt *ManagedTransport) DialAsync(ctx context.Context, errCh chan error) {
+	errCh <- mt.Dial(ctx)
+}
+
 func (mt *ManagedTransport) dial(ctx context.Context) error {
 	conn, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
