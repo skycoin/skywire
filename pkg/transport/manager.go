@@ -291,6 +291,8 @@ var ErrUnknownNetwork = errors.New("unknown network type")
 // IsKnownNetwork returns true when netName is a known
 // network type that we are able to operate in
 func (tm *Manager) IsKnownNetwork(netName network.Type) bool {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
 	_, ok := tm.netClients[netName]
 	return ok
 }
@@ -354,10 +356,6 @@ func (tm *Manager) SaveTransport(ctx context.Context, remote cipher.PubKey, netT
 }
 
 func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netType network.Type, label Label) (*ManagedTransport, error) {
-	tm.mx.Lock()
-	tm.Logger.Debugf("Locked in saveTransport")
-	defer tm.mx.Unlock()
-	defer tm.Logger.Debugf("Unlocked in save transport")
 	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
@@ -365,13 +363,15 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	tpID := tm.tpIDFromPK(remote, netType)
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
-	oldMTp, ok := tm.tps[tpID]
-	if ok {
+	oldMTp, err := tm.GetTransportByID(tpID)
+	if err == nil {
 		tm.Logger.Debug("Found an old mTp from internal map.")
 		return oldMTp, nil
 	}
 
+	tm.mx.RLock()
 	client, ok := tm.netClients[network.Type(netType)]
+	tm.mx.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("client not found for the type %s", netType)
 	}
@@ -386,7 +386,10 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	})
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
-	if err := mTp.Dial(ctx); err != nil {
+	errCh := make(chan error)
+	go mTp.DialAsync(ctx, errCh)
+	err = <-errCh
+	if err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
 		if closeErr := mTp.Close(); closeErr != nil {
 			tm.Logger.WithError(err).Warn("Error closing transport")
@@ -394,7 +397,11 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 		return nil, err
 	}
 	go mTp.Serve(tm.readCh)
+	tm.mx.Lock()
+	tm.Logger.Debugf("Locked in saveTransport")
 	tm.tps[tpID] = mTp
+	tm.mx.Unlock()
+	tm.Logger.Debugf("Unlocked in saveTransport")
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 	return mTp, nil
 }
