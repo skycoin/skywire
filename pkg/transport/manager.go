@@ -47,7 +47,6 @@ type Manager struct {
 
 	readCh    chan routing.Packet
 	mx        sync.RWMutex
-	wgMu      sync.Mutex
 	wg        sync.WaitGroup
 	serveOnce sync.Once // ensure we only serve once.
 	closeOnce sync.Once // ensure we only close once.
@@ -77,22 +76,21 @@ func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appev
 	return tm, nil
 }
 
-// Serve runs listening loop across all registered factories.
+// Serve starts all network clients and starts accepting connections
+// from all those clients
+// Additionally, it runs cleanup and persistent reconnection routines
 func (tm *Manager) Serve(ctx context.Context) {
-	tm.serveOnce.Do(func() {
-		tm.serve(ctx)
-	})
-}
-
-func (tm *Manager) serve(ctx context.Context) {
 	tm.initClients()
 	tm.runClients(ctx)
+	// for cleanup and reconnect goroutines
+	tm.wg.Add(2)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
 	tm.Logger.Info("transport manager is serving.")
 }
 
 func (tm *Manager) runReconnectPersistent(ctx context.Context) {
+	defer tm.wg.Done()
 	ticker := time.NewTicker(reconnectPhaseDelay)
 	tm.reconnectPersistent(ctx)
 	for {
@@ -153,14 +151,15 @@ func (tm *Manager) runClients(ctx context.Context) {
 			return
 		}
 		tm.Logger.Infof("listening on network: %s", client.Type())
-		tm.wgMu.Lock()
-		tm.wg.Add(1)
-		tm.wgMu.Unlock()
-		go tm.acceptTransports(ctx, lis)
+		if client.Type() != network.DMSG {
+			tm.wg.Add(1)
+		}
+		go tm.acceptTransports(ctx, lis, client.Type())
 	}
 }
 
 func (tm *Manager) cleanupTransports(ctx context.Context) {
+	defer tm.wg.Done()
 	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
@@ -182,13 +181,17 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 				tm.Logger.Infof("Deleted %d unused transport entries", len(toDelete))
 			}
 		case <-ctx.Done():
+		case <-tm.done:
 			return
 		}
 	}
 }
 
-func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener) {
-	defer tm.wg.Done()
+func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t network.Type) {
+	// we do not close dmsg client explicitly, so we don't have to wait for it to finish
+	if t != network.DMSG {
+		defer tm.wg.Done()
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -499,7 +502,6 @@ func (tm *Manager) Close() error {
 func (tm *Manager) close() {
 	tm.Logger.Info("transport manager is closing.")
 	defer tm.Logger.Info("transport manager closed.")
-
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 
@@ -508,11 +510,10 @@ func (tm *Manager) close() {
 	for _, tr := range tm.tps {
 		tr.close()
 	}
-
-	tm.wgMu.Lock()
+	for _, client := range tm.netClients {
+		client.Close()
+	}
 	tm.wg.Wait()
-	tm.wgMu.Unlock()
-
 	close(tm.readCh)
 }
 
