@@ -273,9 +273,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("transport.manager", func() error {
 		cancel()
-		err := tpM.Close()
+		tpM.Close()
 		wg.Wait()
-		return err
+		return nil
 	})
 
 	v.initLock.Lock()
