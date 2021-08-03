@@ -22,8 +22,10 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
-const logWriteInterval = time.Second * 3
-const heartbeatInterval = time.Second * 45
+const (
+	logWriteInterval  = time.Second * 3
+	heartbeatInterval = time.Second * 45
+)
 
 // Records number of managedTransports.
 var mTpCount int32
@@ -38,12 +40,13 @@ var (
 
 // ManagedTransportConfig is a configuration for managed transport.
 type ManagedTransportConfig struct {
-	client         network.Client
-	ebc            *appevent.Broadcaster
-	DC             DiscoveryClient
-	LS             LogStore
-	RemotePK       cipher.PubKey
-	TransportLabel Label
+	client          network.Client
+	ebc             *appevent.Broadcaster
+	DC              DiscoveryClient
+	LS              LogStore
+	RemotePK        cipher.PubKey
+	TransportLabel  Label
+	InactiveTimeout time.Duration
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -67,6 +70,8 @@ type ManagedTransport struct {
 
 	done chan struct{}
 	wg   sync.WaitGroup
+
+	timeout time.Duration
 }
 
 // NewManagedTransport creates a new ManagedTransport.
@@ -82,6 +87,7 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		LogEntry: new(LogEntry),
 		connCh:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
+		timeout:  conf.InactiveTimeout,
 	}
 	return mt
 }
@@ -320,10 +326,19 @@ func (mt *ManagedTransport) getConn() network.Conn {
 	return conn
 }
 
+// updates underlying connection inactive deadline
+func (mt *ManagedTransport) updateConnDeadline() {
+	if mt.timeout != 0 {
+		err := mt.conn.SetDeadline(time.Now().Add(mt.timeout))
+		if err != nil {
+			mt.close()
+		}
+	}
+}
+
 // setConn sets 'mt.conn' (the underlying connection).
 // If 'mt.conn' is already occupied, close the newly introduced connection.
 func (mt *ManagedTransport) setConn(newConn network.Conn) error {
-
 	if mt.conn != nil {
 		if mt.isLeastSignificantEdge() {
 			mt.log.Debug("Underlying conn already exists, closing new conn.")
@@ -347,7 +362,7 @@ func (mt *ManagedTransport) setConn(newConn network.Conn) error {
 		mt.log.Debug("Sent signal to 'mt.connCh'.")
 	default:
 	}
-
+	mt.updateConnDeadline()
 	return nil
 }
 
@@ -390,6 +405,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 	if n > routing.PacketHeaderSize {
 		mt.logSent(uint64(n - routing.PacketHeaderSize))
 	}
+	mt.updateConnDeadline()
 	return nil
 }
 
@@ -417,7 +433,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		return nil, err
 	}
 	log.WithField("header_len", len(h)).WithField("header_raw", h).Debug("Read packet header.")
-
+	mt.updateConnDeadline()
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(conn, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
