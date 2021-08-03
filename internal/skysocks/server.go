@@ -3,6 +3,7 @@ package skysocks
 import (
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 
 	"github.com/armon/go-socks5"
@@ -12,6 +13,7 @@ import (
 
 // Server implements multiplexing proxy server using yamux.
 type Server struct {
+	sMu      sync.Mutex
 	socks    *socks5.Server
 	listener net.Listener
 	log      logrus.FieldLogger
@@ -36,7 +38,9 @@ func NewServer(passcode string, l logrus.FieldLogger) (*Server, error) {
 // Serve accept connections from listener and serves socks5 proxy for
 // the incoming connections.
 func (s *Server) Serve(l net.Listener) error {
+	s.sMu.Lock()
 	s.listener = l
+	s.sMu.Unlock()
 
 	for {
 		if s.isClosed() {
@@ -80,6 +84,8 @@ func (s *Server) Close() error {
 
 	s.close()
 
+	defer s.sMu.Unlock()
+	s.sMu.Lock()
 	return s.listener.Close()
 }
 
