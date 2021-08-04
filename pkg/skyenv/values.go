@@ -61,7 +61,6 @@ const (
 
 	DefaultDmsgPtyCLINet    = "unix"
 	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
-	DefaultDmsgPtyWhitelist = DefaultSkywirePath + "/dmsgpty/whitelist.json"
 )
 
 // Default STCP constants.
@@ -92,7 +91,7 @@ const (
 
 // RPC constants.
 const (
-	DefaultRPCAddr      = "localhost:3435"
+	DefaultRPCAddr      = "localhost:3435"	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
 	DefaultRPCTimeout   = 20 * time.Second
 	TransportRPCTimeout = 1 * time.Minute
 	UpdateRPCTimeout    = 6 * time.Hour // update requires huge timeout
