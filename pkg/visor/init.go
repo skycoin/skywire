@@ -301,9 +301,9 @@ func initTransportSetup(ctx context.Context, v *Visor, log *logging.Logger) erro
 func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Routing
 	rfClient := rfclient.NewHTTP(conf.RouteFinder, time.Duration(conf.RouteFinderTimeout))
-
+	logger := v.MasterLogger().PackageLogger("router")
 	rConf := router.Config{
-		Logger:           v.MasterLogger().PackageLogger("router"),
+		Logger:           logger,
 		PubKey:           v.conf.PK,
 		SecKey:           v.conf.SK,
 		TransportManager: v.tpM,
@@ -320,40 +320,15 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	// todo: this piece is somewhat ugly and inherited from the times when init was
-	// calling init functions sequentially
-	// It is probably a hack to run init
-	// "somewhat concurrently", where the heaviest init functions will be partially concurrent
-
-	// to avoid this we can:
-	// either introduce some kind of "task" functionality that abstracts out
-	// something that has to be run concurrent to the init, and check on their status
-	// stop in close functions, etc
-
-	// or, we can completely rely on the module system, and just wait for everything
-	// in init functions, instead of spawning more goroutines.
-	// but, even though modules themselves are concurrent this can introduce some
-	// performance penalties, because dependencies will be waiting on complete init
-
-	// leaving as it is until future requirements about init and modules are known
-
 	serveCtx, cancel := context.WithCancel(context.Background())
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		runtimeErrors := getErrors(ctx)
-		if err := r.Serve(serveCtx); err != nil {
-			runtimeErrors <- fmt.Errorf("serve router stopped: %w", err)
-		}
-	}()
+	if err := r.Serve(serveCtx); err != nil {
+		cancel()
+		return err
+	}
 
 	v.pushCloseStack("router.serve", func() error {
 		cancel()
-		err := r.Close()
-		wg.Wait()
-		return err
+		return r.Close()
 	})
 
 	v.initLock.Lock()
