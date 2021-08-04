@@ -60,9 +60,8 @@ var genConfigCmd = &cobra.Command{
 			logger.Fatal("Failed to create config: use of mutually exclusive flags")
 		}
 
-		//set replace flag & output for package and skybian configs
+		//set output for package and skybian configs
 		if packageConfig {
-			replace = true
 			if hypervisor {
 				output = "/opt/skywire/skywire.json"
 			} else {
@@ -70,7 +69,6 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		if skybianConfig {
-			replace = true
 			output = "/etc/skywire-config.json"
 		}
 
