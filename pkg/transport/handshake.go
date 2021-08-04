@@ -25,7 +25,7 @@ const (
 
 func makeEntryFromTpConn(conn network.Conn) Entry {
 	aPK, bPK := conn.LocalPK(), conn.RemotePK()
-	return MakeEntry(aPK, bPK, conn.Network(), true, LabelUser)
+	return MakeEntry(aPK, bPK, conn.Network(), LabelUser)
 }
 
 func compareEntries(expected, received *Entry) error {
@@ -39,10 +39,6 @@ func compareEntries(expected, received *Entry) error {
 
 	if expected.Type != received.Type {
 		return errors.New("received entry's 'type' is not of expected")
-	}
-
-	if expected.Public != received.Public {
-		return errors.New("received entry's 'public' is not of expected")
 	}
 
 	return nil
