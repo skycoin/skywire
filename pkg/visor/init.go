@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -540,50 +539,38 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 	return nil
 }
 
-// this service is not considered critical and always returns true
 // advertise this visor as public in service discovery
+// this service is not considered critical and always returns true
 func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error {
 	if !v.conf.IsPublic {
 		return nil
 	}
-
-	// retrieve interface IPs and check if at least one is public
-	defaultIPs, err := netutil.DefaultNetworkInterfaceIPs()
+	logger := v.MasterLogger().PackageLogger("public_visor")
+	hasPublic, err := netutil.HasPublicIP()
 	if err != nil {
+		logger.WithError(err).Warn("Failed to check for existing public IP address")
 		return nil
 	}
-	var found bool
-	for _, IP := range defaultIPs {
-		if netutil.IsPublicIP(IP) {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !hasPublic {
+		logger.Warn("No public IP address found, stopping")
 		return nil
 	}
 
-	// todo: consider moving this to transport into some helper function
 	stcpr, ok := v.tpM.Stcpr()
 	if !ok {
+		logger.Warn("No stcpr client found, stopping")
 		return nil
 	}
-	la, err := stcpr.LocalAddr()
+	addr, err := stcpr.LocalAddr()
 	if err != nil {
-		log.WithError(err).Errorln("Failed to get STCPR local addr")
+		logger.Warn("Failed to get STCPR local addr")
 		return nil
 	}
-	_, portStr, err := net.SplitHostPort(la.String())
+	port, err := netutil.ExtractPort(addr)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to extract port from addr %v", la.String())
+		logger.Warn("Failed to get STCPR port")
 		return nil
 	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		log.WithError(err).Errorf("Failed to convert port to int")
-		return nil
-	}
-
 	visorUpdater := v.serviceDisc.VisorUpdater(uint16(port))
 	visorUpdater.Start()
 
