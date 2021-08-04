@@ -33,7 +33,7 @@ for:
         - job_name: linux-386
 
     install:
-      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
+      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.41.1
       - make dep
       - sh: ci_scripts/create-ip-aliases.sh
       - make install-deps-ui
@@ -76,7 +76,7 @@ for:
       - sh: curl -OL "https://golang.org/dl/go1.16.6.darwin-amd64.tar.gz" && sudo tar -C /usr/local -xzf go1.16.6.darwin-amd64.tar.gz && export GOPATH=$HOME/go && export GOROOT=/usr/local/go && export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
       - sh: ci_scripts/create-ip-aliases.sh
       - cmd: choco install make
-      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
+      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.41.1
       - make dep
       - make install-deps-ui
     
