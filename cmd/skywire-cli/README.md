@@ -441,32 +441,32 @@ $ skywire-cli visor gen-config
 }
 ```
 
-The default configuration is for a visor only. To generate a configuration which provides the hypervisor web interface, the -i or --is-hypervisor flag should be specified.
+The default configuration is for a visor only. To generate a configuration which provides the hypervisor web interface, the `-i` or `--is-hypervisor` flag should be specified.
 ```
 $ skywire-cli visor gen-config -i
 ```
 
 ##### Example hypervisor configuration for skybian
 ```
-$ skywire-cli visor gen-config -is
+$ skywire-cli visor gen-config -irs
 ```
 ##### Example visor configuration for skybian
 
 It is the typical arrangement to set a visor to use a remote hypervisor if a local instance is not started.
 
-Determine the hypervisor public key by running the following command on the remote machine
+Determine the hypervisor public key by running the following command on the machine running the hypervisor
 
 ```
-_pubkey=$(cat /opt/skywire/skywire.json | grep pk\") _pubkey=${_pubkey#*: } ; echo $_pubkey
+$ skywire-cli visor pk
 ```
 substitute the hypervisor public key in the following command:
 ```
-$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -s
+$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -rs
 ```
 
 ##### Example hypervisor configuration for package based installation
 
-This assumes the skywire installation is at /opt/skywire with binaries and apps in their own subdirectories.
+This assumes the skywire installation is at `/opt/skywire` with binaries and apps in their own subdirectories.
 
 ```
 $ skywire-cli visor gen-config -ip
@@ -581,10 +581,10 @@ The configuration is written (or rewritten)
 It is the typical arrangement to set a visor to use a remote hypervisor if a local instance is not started.
 
 
-Determine the hypervisor public key by running the following command on the remote machine
+Determine the hypervisor public key by running the following command on the machine running the hypervisor
 
 ```
-_pubkey=$(cat /opt/skywire/skywire.json | grep pk\") _pubkey=${_pubkey#*: } ; echo $_pubkey
+$ skywire-cli visor pk
 ```
 
 When running a visor with or without a hypervisor on the same machine, it's wise to keep the same keys for the other config file.
@@ -592,7 +592,7 @@ When running a visor with or without a hypervisor on the same machine, it's wise
 Copy the `skywire.json` config file from the previous example to `skywire-visor.json`; then paste the public key from the above command output into the following command
 
 ```
-$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -p
+$ skywire-cli visor gen-config --hypervisor-pks <hypervisor-public-key> -pr
 ```
 
 The configuration is written (or rewritten)
