@@ -1,51 +1,107 @@
 version: "{build}"
 
-platform:
-  - Any CPU
-
 stack: node 10.16.3
+
+environment:
+  matrix:
+  - job_name: linux-amd64
+    appveyor_build_worker_image: ubuntu1804
+    GOARCH: amd64
+  - job_name: linux-arm
+    appveyor_build_worker_image: ubuntu1804
+    GOARCH: arm
+  - job_name: linux-arm64
+    appveyor_build_worker_image: ubuntu1804
+    GOARCH: arm64
+  - job_name: linux-386
+    appveyor_build_worker_image: ubuntu1804
+    GOARCH: 386
+  - job_name: darwin-amd64
+    appveyor_build_worker_image: macos
+    GOARCH: amd64
+  - job_name: windows-amd64
+    appveyor_build_worker_image: Visual Studio 2019
+    GOARCH: amd64
     
 for:
--
-  # non-Master | Ubuntu 18.04 & Windows
-  image:
-    - ubuntu1804
-    - Visual Studio 2019
+  - # Linux
+    matrix:
+      only:
+        - job_name: linux-arm
+        - job_name: linux-arm64
+        - job_name: linux-amd64
+        - job_name: linux-386
+
+    install:
+      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
+      - make dep
+      - sh: ci_scripts/create-ip-aliases.sh
+      - make install-deps-ui
     
-  init:
-    - cmd: choco install make
+    before_build:
+      - make check
+      - make lint-ui
    
-  install:
-    - cmd: set GOPATH=c:\gopath
-    - cmd: set PATH=%GOPATH%\bin;c:\go\bin;%PATH%
-    - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
-    - make dep
-    - sh: ci_scripts/create-ip-aliases.sh
-    - make install-deps-ui
+    build_script:
+      - make build
+      - make build-ui
+
+    after_build:
+      - sh: tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
+
+    artifacts:
+      - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
+        name: deploy
+
+    deploy:
+      - provider: GitHub
+        release: $(APPVEYOR_REPO_TAG_NAME)
+        auth_token:
+          secure: +dDZyatyLWT+Z7155rSYe6riwBiyqpRQrha0IyXsvjojZRoQAS5L6UpBlNeBFBsM
+        draft: true
+        artifact: deploy
+        on:
+          APPVEYOR_REPO_TAG: true
+  - # Windows and MacOS
+    matrix:
+      only:
+        - job_name: darwin-amd64
+        - job_name: windows-amd64
+
+    environment:
+      matrix:
+        - GOARCH: amd64
+
+    install:
+      - sh: curl -OL "https://golang.org/dl/go1.16.6.darwin-amd64.tar.gz" && sudo tar -C /usr/local -xzf go1.16.6.darwin-amd64.tar.gz && export GOPATH=$HOME/go && export GOROOT=/usr/local/go && export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
+      - sh: ci_scripts/create-ip-aliases.sh
+      - cmd: choco install make
+      - go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.40.1
+      - make dep
+      - make install-deps-ui
     
-  before_build:
-    - make check
-    - make lint-ui
-
-  build_script:
-    - make build
-    - make build-ui
--
-  # Master for Release | Ubuntu 18.04 LTS
-  branches:
-    only:
-      - master
+    before_build:
+      - make check
+      - make lint-ui
   
-  image:
-    - ubuntu1804
+    build_script:
+      - make build
+      - make build-ui
 
-  install:
-    - make dep
-    - ci_scripts/create-ip-aliases.sh
+    after_build:
+      - sh: tar -cvzf skywire-$APPVEYOR_REPO_TAG_NAME-$APPVEYOR_JOB_NAME.tar.gz ./apps/* ./skywire-visor ./skywire-cli ./setup-node
 
-  build_script:
-    - make build
-  
-  on_success:
-    - go install github.com/goreleaser/goreleaser@latest
-    - make github-release
+    artifacts:
+      - path: skywire-$(APPVEYOR_REPO_TAG_NAME)-$(APPVEYOR_JOB_NAME).tar.gz
+        name: deploy
+        
+    deploy:
+      - provider: GitHub
+        release: $(APPVEYOR_REPO_TAG_NAME)
+        auth_token:
+          secure: +dDZyatyLWT+Z7155rSYe6riwBiyqpRQrha0IyXsvjojZRoQAS5L6UpBlNeBFBsM
+        draft: true
+        artifact: deploy
+        on:
+          APPVEYOR_REPO_TAG: true
+
