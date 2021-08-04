@@ -41,21 +41,16 @@ type Entry struct {
 	// Type represents the transport type.
 	Type network.Type `json:"type"`
 
-	// Public determines whether the transport is to be exposed to other nodes or not.
-	// Public transports are to be registered in the Transport Discovery.
-	Public bool `json:"public"` // TODO(evanlinjin): remove this.
-
 	Label Label `json:"label"`
 }
 
 // MakeEntry creates a new transport entry
-func MakeEntry(aPK, bPK cipher.PubKey, netType network.Type, public bool, label Label) Entry {
+func MakeEntry(aPK, bPK cipher.PubKey, netType network.Type, label Label) Entry {
 	entry := Entry{
-		ID:     MakeTransportID(aPK, bPK, netType),
-		Type:   netType,
-		Public: public,
-		Label:  label,
-		Edges:  SortEdges(aPK, bPK),
+		ID:    MakeTransportID(aPK, bPK, netType),
+		Type:  netType,
+		Label: label,
+		Edges: SortEdges(aPK, bPK),
 	}
 	return entry
 }
@@ -101,11 +96,6 @@ func (e *Entry) HasEdge(edge cipher.PubKey) bool {
 // String implements stringer
 func (e *Entry) String() string {
 	res := ""
-	if e.Public {
-		res += "visibility: public\n"
-	} else {
-		res += "visibility: private\n"
-	}
 	res += fmt.Sprintf("\ttype: %s\n", e.Type)
 	res += fmt.Sprintf("\tid: %s\n", e.ID)
 	res += "\tedges:\n"

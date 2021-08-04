@@ -63,8 +63,8 @@ func printTransportEntries(entries ...*transport.Entry) {
 	_, err := fmt.Fprintln(w, "id\ttype\tpublic\tedge1\tedge2")
 	internal.Catch(err)
 	for _, e := range entries {
-		_, err := fmt.Fprintf(w, "%s\t%s\t%t\t%s\t%s\n",
-			e.ID, e.Type, e.Public, e.Edges[0], e.Edges[1])
+		_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+			e.ID, e.Type, e.Edges[0], e.Edges[1])
 		internal.Catch(err)
 	}
 	internal.Catch(w.Flush())

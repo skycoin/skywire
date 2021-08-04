@@ -83,7 +83,7 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		dc:       conf.DC,
 		ls:       conf.LS,
 		client:   conf.client,
-		Entry:    MakeEntry(aPK, bPK, conf.client.Type(), true, conf.TransportLabel),
+		Entry:    MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel),
 		LogEntry: new(LogEntry),
 		connCh:   make(chan struct{}, 1),
 		done:     make(chan struct{}),
