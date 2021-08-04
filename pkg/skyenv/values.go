@@ -106,7 +106,7 @@ const (
 	DefaultLogLevel       = "info"
 )
 
-// Package defaults - installation path: /opt/skywire
+// Package defaults
 const (
 	PackageAppBinPath       = PackageSkywirePath + "/apps"
 	PackageLocalPath        = PackageSkywirePath + "/local"
@@ -124,8 +124,7 @@ const (
 	DefaultTpLogStore = DefaultSkywirePath + "/transport_logs"
 )
 
-// Skybian defaults - github.com/skycoin/skybian/
-//these should really be imported
+// Skybian defaults
 const (
 	SkybianAppBinPath       = "/usr/bin/apps"
 	SkybianDmsgPtyWhiteList = "/var/skywire-visor/dsmgpty/whitelist.json"
