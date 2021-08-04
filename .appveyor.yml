@@ -5,13 +5,13 @@ stack: node 10.16.3
 environment:
   matrix:
   # For regular push, pr and etc.
-  - job_name: linux-amd64-push
+  - job_name: Linux
     appveyor_build_worker_image: ubuntu1804
     GOARCH: amd64
-  - job_name: darwin-amd64-push
+  - job_name: MacOS
     appveyor_build_worker_image: macos
     GOARCH: amd64
-  - job_name: windows-amd64-push
+  - job_name: Windows
     appveyor_build_worker_image: Visual Studio 2019
     GOARCH: amd64 
   # For release, by pushing tag
@@ -39,7 +39,7 @@ for:
     skip_tags: true
     matrix:
       only:
-        - job_name: linux-amd64-push
+        - job_name: Linux
 
     install:
       - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.41.1
@@ -59,8 +59,8 @@ for:
     skip_tags: true
     matrix:
       only:
-        - job_name: darwin-amd64-push
-        - job_name: windows-amd64-push
+        - job_name: MacOS
+        - job_name: Windows
 
     environment:
       matrix:
@@ -110,7 +110,7 @@ for:
       - provider: GitHub
         release: $(APPVEYOR_REPO_TAG_NAME)
         auth_token:
-          secure: +dDZyatyLWT+Z7155rSYe6riwBiyqpRQrha0IyXsvjojZRoQAS5L6UpBlNeBFBsM
+          secure: <secure_code>
         draft: true
         artifact: deploy
         on:
@@ -147,7 +147,7 @@ for:
       - provider: GitHub
         release: $(APPVEYOR_REPO_TAG_NAME)
         auth_token:
-          secure: +dDZyatyLWT+Z7155rSYe6riwBiyqpRQrha0IyXsvjojZRoQAS5L6UpBlNeBFBsM
+          secure: <secure_code>
         draft: true
         artifact: deploy
         on:
