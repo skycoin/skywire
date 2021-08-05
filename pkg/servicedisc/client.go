@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -186,11 +187,12 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	if err != nil {
 		return Service{}, nil
 	}
-
 	raw, err := json.Marshal(&c.entry)
 	if err != nil {
 		return Service{}, err
 	}
+
+	log.Printf("/api/services %v", raw)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
 		return Service{}, err
