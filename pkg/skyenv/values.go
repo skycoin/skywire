@@ -91,7 +91,7 @@ const (
 
 // RPC constants.
 const (
-	DefaultRPCAddr      = "localhost:3435"	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
+	DefaultRPCAddr      = "localhost:3435"
 	DefaultRPCTimeout   = 20 * time.Second
 	TransportRPCTimeout = 1 * time.Minute
 	UpdateRPCTimeout    = 6 * time.Hour // update requires huge timeout
