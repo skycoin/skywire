@@ -110,7 +110,7 @@ for:
       - provider: GitHub
         release: $(APPVEYOR_REPO_TAG_NAME)
         auth_token:
-          secure: <secure_code>
+          secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
         draft: true
         artifact: deploy
         on:
@@ -147,7 +147,7 @@ for:
       - provider: GitHub
         release: $(APPVEYOR_REPO_TAG_NAME)
         auth_token:
-          secure: <secure_code>
+          secure: ZrbNBE2wSfGvHzEq5GqEAUmNy7myDIl7KK05CKlZdQfieV7XdIAPXpkdHNEyZbvT
         draft: true
         artifact: deploy
         on:
