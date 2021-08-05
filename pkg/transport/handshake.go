@@ -51,6 +51,10 @@ func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey)
 		return nil, fmt.Errorf("failed to read entry: %w", err)
 	}
 
+	if recvSE.Entry == nil {
+		return nil, fmt.Errorf("failed to read entry: entry part of singed entry is empty")
+	}
+
 	if err := compareEntries(expected, recvSE.Entry); err != nil {
 		return nil, err
 	}
