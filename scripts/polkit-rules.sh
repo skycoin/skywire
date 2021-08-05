@@ -9,11 +9,14 @@ if [ "$(uname -s)" != "Linux" ]; then
   echo "$0 can only be run from Linux host"
 fi
 
-visorpath="$(echo $(realpath "${1}"))"
+# shellcheck disable=SC2046
+# shellcheck disable=SC2005
+# shellcheck disable=SC2086
+visorpath=$(realpath ${1})
 
 echo "creating policy for ${visorpath}"
 
-cat <<EOF >>/usr/share/polkit-1/actions/org.freedesktop.policykit.skywire-visor.policy
+cat <<EOF >/usr/share/polkit-1/actions/org.freedesktop.policykit.skywire-visor.policy
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
