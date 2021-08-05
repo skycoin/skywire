@@ -9,7 +9,11 @@ if [ "$(uname -s)" != "Linux" ]; then
   echo "$0 can only be run from Linux host"
 fi
 
-  cat <<EOF >>/usr/share/polkit-1/actions/org.freedesktop.policykit.skywire-visor.policy
+visorpath="$(echo $(realpath "${1}"))"
+
+echo "creating policy for ${visorpath}"
+
+cat <<EOF >>/usr/share/polkit-1/actions/org.freedesktop.policykit.skywire-visor.policy
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
@@ -24,7 +28,7 @@ fi
         <allow_inactive>auth_admin</allow_inactive>
         <allow_active>auth_admin</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">${1}</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">${visorpath}</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
     </action>
 </policyconfig>
