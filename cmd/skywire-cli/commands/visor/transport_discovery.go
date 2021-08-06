@@ -60,7 +60,7 @@ var discTpCmd = &cobra.Command{
 
 func printTransportEntries(entries ...*transport.Entry) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "id\ttype\tpublic\tedge1\tedge2")
+	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")
 	internal.Catch(err)
 	for _, e := range entries {
 		_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
