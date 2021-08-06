@@ -150,7 +150,7 @@ func (mt *ManagedTransport) heartbeatLoop() {
 		case <-ticker.C:
 			err := mt.dc.HeartBeat(context.Background(), mt.Entry.ID)
 			if err != nil {
-				log.Warnf("Failed to send heartbeat")
+				log.Warn("Failed to send heartbeat")
 			}
 		}
 	}
