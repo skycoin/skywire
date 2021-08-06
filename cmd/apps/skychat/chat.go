@@ -15,6 +15,7 @@ import (
 
 	"embed"
 	"io/fs"
+
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
 
