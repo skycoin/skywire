@@ -15,7 +15,6 @@ import (
 
 	"embed"
 	"io/fs"
-
 	"github.com/pkg/profile"
 	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cmdutil"
