@@ -59,8 +59,8 @@ const (
 const (
 	DmsgPtyPort uint16 = 22
 
-	DefaultDmsgPtyCLINet    = "unix"
-	DefaultDmsgPtyCLIAddr   = "/tmp/dmsgpty.sock"
+	DefaultDmsgPtyCLINet  = "unix"
+	DefaultDmsgPtyCLIAddr = "/tmp/dmsgpty.sock"
 )
 
 // Default STCP constants.
