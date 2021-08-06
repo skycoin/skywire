@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"io/fs"
-
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
