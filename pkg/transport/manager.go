@@ -399,10 +399,10 @@ func (tm *Manager) saveTransport(ctx context.Context, remote cipher.PubKey, netT
 	}
 	go mTp.Serve(tm.readCh)
 	tm.mx.Lock()
-	tm.Logger.Debugf("Locked in saveTransport")
+	tm.Logger.Debug("Locked in saveTransport")
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
-	tm.Logger.Debugf("Unlocked in saveTransport")
+	tm.Logger.Debug("Unlocked in saveTransport")
 	tm.Logger.Infof("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 	return mTp, nil
 }
@@ -429,7 +429,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	tm.mx.Lock()
 	tm.Logger.Debugf("Locked in DeleteTransport")
 	defer tm.mx.Unlock()
-	defer tm.Logger.Debugf("Unlocked in DeleteTransport")
+	defer tm.Logger.Debug("Unlocked in DeleteTransport")
 
 	if tm.isClosing() {
 		return
