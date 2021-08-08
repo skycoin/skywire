@@ -459,6 +459,7 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC *dmsg.Client, tpRemoteAddrs []strin
 		envMap := vpn.AppEnvArgs(envCfg)
 
 		envs := make([]string, 0, len(envMap))
+		appendExecPlatform(envs)
 		for k, v := range envMap {
 			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 		}
