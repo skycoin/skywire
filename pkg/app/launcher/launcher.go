@@ -36,10 +36,11 @@ var (
 
 // AppConfig defines app startup parameters.
 type AppConfig struct {
-	Name      string       `json:"name"`
-	Args      []string     `json:"args,omitempty"`
-	AutoStart bool         `json:"auto_start"`
-	Port      routing.Port `json:"port"`
+	Name         string       `json:"name"`
+	Args         []string     `json:"args,omitempty"`
+	AutoStart    bool         `json:"auto_start"`
+	Port         routing.Port `json:"port"`
+	SudoRequired bool         `json:"sudo_required"`
 }
 
 // Config configures the launcher.
