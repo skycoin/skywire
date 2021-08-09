@@ -25,6 +25,8 @@ import (
 // ErrVisorUnreachable is returned when visor is not reachable
 var ErrVisorUnreachable = errors.New("visor is unreachable")
 
+var log = logrus.New()
+
 const (
 	updateRetryDelay     = 5 * time.Second
 	discServiceTypeParam = "type"
@@ -206,7 +208,6 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 			}
 		}()
 	}
-	fmt.Errorf(" asdad %v", resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := ioutil.ReadAll(resp.Body)
@@ -216,6 +217,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 
 		var hErr HTTPResponse
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
+			log.Errorf(" respBody %v", respBody)
 			return Service{}, err
 		}
 
