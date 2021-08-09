@@ -217,7 +217,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 
 		var hErr HTTPResponse
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
-			log.Errorf(" respBody %v", respBody)
+			log.Errorf(" respBody %v", string(respBody))
 			return Service{}, err
 		}
 
