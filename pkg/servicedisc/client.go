@@ -25,8 +25,6 @@ import (
 // ErrVisorUnreachable is returned when visor is not reachable
 var ErrVisorUnreachable = errors.New("visor is unreachable")
 
-var log = logrus.New()
-
 const (
 	updateRetryDelay     = 5 * time.Second
 	discServiceTypeParam = "type"
@@ -120,6 +118,7 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 	if err != nil {
 		return nil, err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -188,6 +187,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	if err != nil {
 		return Service{}, nil
 	}
+
 	raw, err := json.Marshal(&c.entry)
 	if err != nil {
 		return Service{}, err
@@ -197,10 +197,12 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	if err != nil {
 		return Service{}, err
 	}
+
 	resp, err := auth.Do(req)
 	if err != nil {
 		return Service{}, err
 	}
+
 	if resp != nil {
 		defer func() {
 			if cErr := resp.Body.Close(); cErr != nil && err == nil {
@@ -215,13 +217,12 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 			return Service{}, fmt.Errorf("read response body: %w", err)
 		}
 
-		var hErr HTTPResponse
+		var hErr HTTPError
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
-			log.Errorf(" respBody %v", string(respBody))
 			return Service{}, err
 		}
 
-		return Service{}, hErr.Error
+		return Service{}, hErr.Err
 	}
 
 	var entry Service

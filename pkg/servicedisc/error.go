@@ -7,12 +7,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// HTTPResponse represents the http response struct.
-type HTTPResponse struct {
-	Error *HTTPError  `json:"error,omitempty"`
-	Data  interface{} `json:"data,omitempty"`
-}
-
 // HTTPError represents an HTTP error.
 type HTTPError struct {
 	HTTPStatus int   `json:"code"` // HTTP Status.
