@@ -222,7 +222,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 			return Service{}, err
 		}
 
-		return Service{}, hErr.Err
+		return Service{}, errors.New(hErr.Err)
 	}
 
 	var entry Service
