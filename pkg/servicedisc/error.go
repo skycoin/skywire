@@ -9,8 +9,8 @@ import (
 
 // HTTPError represents an HTTP error.
 type HTTPError struct {
-	HTTPStatus int   `json:"code"` // HTTP Status.
-	Err        error `json:"error"`
+	HTTPStatus int    `json:"code,omitempty"` // HTTP Status.
+	Err        string `json:"error,omitempty"`
 }
 
 // Error implements error.
@@ -20,7 +20,7 @@ func (err *HTTPError) Error() string {
 
 // Log prints a log message for the HTTP error.
 func (err *HTTPError) Log(log logrus.FieldLogger) {
-	log.WithError(err.Err).
+	log.WithError(err).
 		WithField("msg", err.Err).
 		WithField("http_status", http.StatusText(err.HTTPStatus)).
 		Warn()
