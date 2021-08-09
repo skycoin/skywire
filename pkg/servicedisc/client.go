@@ -195,7 +195,6 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	if err != nil {
 		return Service{}, err
 	}
-
 	resp, err := auth.Do(req)
 	if err != nil {
 		return Service{}, err
@@ -207,6 +206,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 			}
 		}()
 	}
+	fmt.Errorf(" asdad %v", resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, err := ioutil.ReadAll(resp.Body)
