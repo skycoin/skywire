@@ -1,0 +1,5 @@
+//+build systray
+
+package visor
+
+
