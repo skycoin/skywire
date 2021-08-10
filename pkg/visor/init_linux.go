@@ -3,5 +3,5 @@
 package visor
 
 func appendExecPlatform(envs []string) {
-	append(envs, "pkexec")
+	envs = append(envs, "pkexec")
 }
