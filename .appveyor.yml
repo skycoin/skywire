@@ -4,7 +4,7 @@ stack: node 10.16.3
 
 environment:
   matrix:
-  # For regular push, pr and etc.
+  # For regular jobs, such as push, pr and etc.
   - job_name: Linux
     appveyor_build_worker_image: ubuntu1804
     GOARCH: amd64
