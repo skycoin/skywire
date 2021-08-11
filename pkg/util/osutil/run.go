@@ -73,13 +73,13 @@ func run(bin string, stdout io.Writer, withEscalate bool, args ...string) error 
 	if withEscalate {
 		switch runtime.GOOS {
 		case "linux":
-			fullCmd = "pkexec" + bin + " " + strings.Join(args, " ")
+			fullCmd = "pkexec" + " " +  bin + " " + strings.Join(args, " ")
 			cmd = exec.Command("pkexec", binArgs...) //nolint:gosec
 		case "windows":
-			fullCmd = "runas" + bin + " " + strings.Join(args, " ")
+			fullCmd = "runas" + " " + bin + " " + strings.Join(args, " ")
 			cmd = exec.Command("runas", binArgs...) //nolint:gosec
 		default:
-			fullCmd = "sudo" + bin + " " + strings.Join(args, " ")
+			fullCmd = "sudo" + " " + bin + " " + strings.Join(args, " ")
 			cmd = exec.Command("sudo", binArgs...) //nolint:gosec
 		}
 	} else {
