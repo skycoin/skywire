@@ -17,7 +17,7 @@ type Listener interface {
 	PK() cipher.PubKey
 	Port() uint16
 	Network() Type
-	AcceptConn() (Conn, error)
+	AcceptTransport() (Transport, error)
 }
 
 type listener struct {
@@ -25,7 +25,7 @@ type listener struct {
 	mx       sync.Mutex
 	once     sync.Once
 	freePort func()
-	accept   chan *conn
+	accept   chan *transport
 	done     chan struct{}
 	network  Type
 }
@@ -39,7 +39,7 @@ func newListener(lAddr dmsg.Addr, freePort func(), network Type) *listener {
 	return &listener{
 		lAddr:    lAddr,
 		freePort: freePort,
-		accept:   make(chan *conn),
+		accept:   make(chan *transport),
 		done:     make(chan struct{}),
 		network:  network,
 	}
@@ -47,11 +47,11 @@ func newListener(lAddr dmsg.Addr, freePort func(), network Type) *listener {
 
 // Accept implements net.Listener, returns generic net.Conn
 func (l *listener) Accept() (net.Conn, error) {
-	return l.AcceptConn()
+	return l.AcceptTransport()
 }
 
-// AcceptConn accepts a skywire connection and returns network.Conn
-func (l *listener) AcceptConn() (Conn, error) {
+// AcceptTransport accepts a skywire transport connection and returns network.Transport
+func (l *listener) AcceptTransport() (Transport, error) {
 	c, ok := <-l.accept
 	if !ok {
 		return nil, io.ErrClosedPipe
@@ -67,8 +67,8 @@ func (l *listener) Close() error {
 		l.mx.Lock()
 		close(l.accept)
 		l.mx.Unlock()
-		for conn := range l.accept {
-			conn.Close() //nolint: errcheck, gosec
+		for transport := range l.accept {
+			transport.Close() //nolint: errcheck, gosec
 		}
 		l.freePort()
 	})
@@ -96,8 +96,8 @@ func (l *listener) Network() Type {
 	return l.network
 }
 
-// Introduce is used by Client to introduce a new connection to this Listener
-func (l *listener) introduce(conn *conn) error {
+// Introduce is used by Client to introduce a new transport to this Listener
+func (l *listener) introduce(transport *transport) error {
 	select {
 	case <-l.done:
 		return io.ErrClosedPipe
@@ -105,7 +105,7 @@ func (l *listener) introduce(conn *conn) error {
 		l.mx.Lock()
 		defer l.mx.Unlock()
 		select {
-		case l.accept <- conn:
+		case l.accept <- transport:
 			return nil
 		case <-l.done:
 			return io.ErrClosedPipe
