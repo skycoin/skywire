@@ -208,7 +208,7 @@ func (mt *ManagedTransport) IsClosed() bool {
 	}
 }
 
-// close underlying connection and update entry status in transport discovery
+// close underlying connection and remove the entry from transport discovery
 // todo: this currently performs http request to discovery service
 // it only makes sense to wait for the completion if we are closing the visor itself,
 // regular transport close operations should probably call it concurrently
