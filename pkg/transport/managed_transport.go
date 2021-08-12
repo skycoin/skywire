@@ -326,16 +326,6 @@ func (mt *ManagedTransport) getConn() network.Conn {
 	return conn
 }
 
-// updates underlying connection inactive deadline
-func (mt *ManagedTransport) updateConnDeadline() {
-	if mt.timeout != 0 {
-		err := mt.conn.SetDeadline(time.Now().Add(mt.timeout))
-		if err != nil {
-			mt.close()
-		}
-	}
-}
-
 // setConn sets 'mt.conn' (the underlying connection).
 // If 'mt.conn' is already occupied, close the newly introduced connection.
 func (mt *ManagedTransport) setConn(newConn network.Conn) error {
@@ -362,7 +352,6 @@ func (mt *ManagedTransport) setConn(newConn network.Conn) error {
 		mt.log.Debug("Sent signal to 'mt.connCh'.")
 	default:
 	}
-	mt.updateConnDeadline()
 	return nil
 }
 
@@ -405,7 +394,6 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 	if n > routing.PacketHeaderSize {
 		mt.logSent(uint64(n - routing.PacketHeaderSize))
 	}
-	mt.updateConnDeadline()
 	return nil
 }
 
@@ -433,7 +421,6 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		return nil, err
 	}
 	log.WithField("header_len", len(h)).WithField("header_raw", h).Debug("Read packet header.")
-	mt.updateConnDeadline()
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(conn, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
