@@ -28,12 +28,12 @@ func (c *dmsgClientAdapter) LocalAddr() (net.Addr, error) {
 }
 
 // Dial implements Client interface
-func (c *dmsgClientAdapter) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Conn, error) {
-	conn, err := c.dmsgC.DialStream(ctx, dmsg.Addr{PK: remote, Port: port})
+func (c *dmsgClientAdapter) Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Transport, error) {
+	transport, err := c.dmsgC.DialStream(ctx, dmsg.Addr{PK: remote, Port: port})
 	if err != nil {
 		return nil, err
 	}
-	return &dmsgConnAdapter{conn}, nil
+	return &dmsgTransportAdapter{transport}, nil
 }
 
 // Start implements Client interface
@@ -79,13 +79,13 @@ type dmsgListenerAdapter struct {
 	*dmsg.Listener
 }
 
-// AcceptConn implements Listener interface
-func (lis *dmsgListenerAdapter) AcceptConn() (Conn, error) {
+// AcceptTransport implements Listener interface
+func (lis *dmsgListenerAdapter) AcceptTransport() (Transport, error) {
 	stream, err := lis.Listener.AcceptStream()
 	if err != nil {
 		return nil, err
 	}
-	return &dmsgConnAdapter{stream}, nil
+	return &dmsgTransportAdapter{stream}, nil
 }
 
 // Network implements Listener interface
@@ -104,42 +104,42 @@ func (lis *dmsgListenerAdapter) Port() uint16 {
 }
 
 // wrapper around connection returned by dmsg.Client
-// that conforms to Conn interface
-type dmsgConnAdapter struct {
+// that conforms to Transport interface
+type dmsgTransportAdapter struct {
 	*dmsg.Stream
 }
 
-// LocalPK implements Conn interface
-func (c *dmsgConnAdapter) LocalPK() cipher.PubKey {
+// LocalPK implements Transport interface
+func (c *dmsgTransportAdapter) LocalPK() cipher.PubKey {
 	return c.RawLocalAddr().PK
 }
 
-// RemotePK implements Conn interface
-func (c *dmsgConnAdapter) RemotePK() cipher.PubKey {
+// RemotePK implements Transport interface
+func (c *dmsgTransportAdapter) RemotePK() cipher.PubKey {
 	return c.RawRemoteAddr().PK
 }
 
-// LocalPort implements Conn interface
-func (c *dmsgConnAdapter) LocalPort() uint16 {
+// LocalPort implements Transport interface
+func (c *dmsgTransportAdapter) LocalPort() uint16 {
 	return c.RawLocalAddr().Port
 }
 
-// RemotePort implements Conn interface
-func (c *dmsgConnAdapter) RemotePort() uint16 {
+// RemotePort implements Transport interface
+func (c *dmsgTransportAdapter) RemotePort() uint16 {
 	return c.RawRemoteAddr().Port
 }
 
-// LocalAddr implements Conn interface
-func (c *dmsgConnAdapter) LocalRawAddr() net.Addr {
+// LocalAddr implements Transport interface
+func (c *dmsgTransportAdapter) LocalRawAddr() net.Addr {
 	return c.RawLocalAddr()
 }
 
-// RemoteAddr implements Conn interface
-func (c *dmsgConnAdapter) RemoteRawAddr() net.Addr {
+// RemoteAddr implements Transport interface
+func (c *dmsgTransportAdapter) RemoteRawAddr() net.Addr {
 	return c.RawRemoteAddr()
 }
 
-// Network implements Conn interface
-func (c *dmsgConnAdapter) Network() Type {
+// Network implements Transport interface
+func (c *dmsgTransportAdapter) Network() Type {
 	return DMSG
 }

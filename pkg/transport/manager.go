@@ -22,7 +22,7 @@ import (
 const reconnectPhaseDelay = 10 * time.Second
 const reconnectRemoteTimeout = 3 * time.Second
 
-// PersistentRemote is a persistent connection description
+// PersistentRemote is a persistent transport connection description
 type PersistentRemote struct {
 	PK      cipher.PubKey `json:"pk"`
 	NetType network.Type  `json:"type"`
@@ -197,7 +197,7 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 			return
 		default:
 			if err := tm.acceptTransport(ctx, lis); err != nil {
-				tm.Logger.Warnf("Failed to accept connection: %v", err)
+				tm.Logger.Warnf("Failed to accept transport connection: %v", err)
 				if errors.Is(err, io.ErrClosedPipe) {
 					return
 				}
@@ -222,12 +222,12 @@ func (tm *Manager) Stcpr() (network.Client, bool) {
 }
 
 func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) error {
-	conn, err := lis.AcceptConn() // TODO: tcp panic.
+	transport, err := lis.AcceptTransport() // TODO: tcp panic.
 	if err != nil {
 		return err
 	}
 
-	tm.Logger.Infof("recv transport connection request: type(%s) remote(%s)", lis.Network(), conn.RemotePK())
+	tm.Logger.Infof("recv transport connection request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
 
 	tm.mx.Lock()
 	tm.Logger.Debugf("Locked in accept")
@@ -240,11 +240,11 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	// For transports for purpose(data).
 
-	tpID := tm.tpIDFromPK(conn.RemotePK(), conn.Network())
+	tpID := tm.tpIDFromPK(transport.RemotePK(), transport.Network())
 
-	client, ok := tm.netClients[network.Type(conn.Network())]
+	client, ok := tm.netClients[network.Type(transport.Network())]
 	if !ok {
-		return fmt.Errorf("client not found for the type %s", conn.Network())
+		return fmt.Errorf("client not found for the type %s", transport.Network())
 	}
 
 	mTp, ok := tm.tps[tpID]
@@ -255,7 +255,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			client:         client,
 			DC:             tm.Conf.DiscoveryClient,
 			LS:             tm.Conf.LogStore,
-			RemotePK:       conn.RemotePK(),
+			RemotePK:       transport.RemotePK(),
 			TransportLabel: LabelUser,
 			ebc:            tm.ebc,
 		})
@@ -275,11 +275,11 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		tm.Logger.Debugln("TP found, accepting...")
 	}
 
-	if err := mTp.Accept(ctx, conn); err != nil {
+	if err := mTp.Accept(ctx, transport); err != nil {
 		return err
 	}
 
-	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), conn.RemotePK(), tpID, !ok)
+	tm.Logger.Infof("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), tpID, !ok)
 	return nil
 }
 
@@ -415,7 +415,7 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		remoteRaw := tp.conn.RemoteRawAddr().String()
+		remoteRaw := tp.transport.RemoteRawAddr().String()
 		if tp.Entry.Type == network.STCPR && remoteRaw != "" {
 			addrs = append(addrs, remoteRaw)
 		}
@@ -435,7 +435,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		return
 	}
 
-	// Deregister transport before closing the underlying connection.
+	// Deregister transport before closing the underlying transport connection.
 	if tp, ok := tm.tps[id]; ok {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -448,7 +448,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
 		}
 
-		// Close underlying connection.
+		// Close underlying transport connection.
 		tp.close()
 		delete(tm.tps, id)
 	}

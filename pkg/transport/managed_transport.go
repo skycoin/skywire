@@ -34,8 +34,8 @@ var (
 	// ErrNotServing is the error returned when a transport is no longer served.
 	ErrNotServing = errors.New("transport is no longer being served")
 
-	// ErrConnAlreadyExists occurs when an underlying transport connection already exists.
-	ErrConnAlreadyExists = errors.New("underlying transport connection already exists")
+	// ErrTransportAlreadyExists occurs when an underlying transport connection already exists.
+	ErrTransportAlreadyExists = errors.New("underlying transport connection already exists")
 )
 
 // ManagedTransportConfig is a configuration for managed transport.
@@ -50,8 +50,8 @@ type ManagedTransportConfig struct {
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
-// There is a single underlying connection between two edges.
-// Initial dialing can be requested by either edge of the connection.
+// There is a single underlying transport connection between two edges.
+// Initial dialing can be requested by either edge of the transport connection.
 type ManagedTransport struct {
 	log *logging.Logger
 
@@ -63,10 +63,10 @@ type ManagedTransport struct {
 	dc DiscoveryClient
 	ls LogStore
 
-	client network.Client
-	conn   network.Conn
-	connCh chan struct{}
-	connMx sync.Mutex
+	client      network.Client
+	transport   network.Transport
+	transportCh chan struct{}
+	transportMx sync.Mutex
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -78,16 +78,16 @@ type ManagedTransport struct {
 func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	aPK, bPK := conf.client.PK(), conf.RemotePK
 	mt := &ManagedTransport{
-		log:      logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
-		rPK:      conf.RemotePK,
-		dc:       conf.DC,
-		ls:       conf.LS,
-		client:   conf.client,
-		Entry:    MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel),
-		LogEntry: new(LogEntry),
-		connCh:   make(chan struct{}, 1),
-		done:     make(chan struct{}),
-		timeout:  conf.InactiveTimeout,
+		log:         logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6])),
+		rPK:         conf.RemotePK,
+		dc:          conf.DC,
+		ls:          conf.LS,
+		client:      conf.client,
+		Entry:       MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel),
+		LogEntry:    new(LogEntry),
+		transportCh: make(chan struct{}, 1),
+		done:        make(chan struct{}),
+		timeout:     conf.InactiveTimeout,
 	}
 	return mt
 }
@@ -208,7 +208,7 @@ func (mt *ManagedTransport) IsClosed() bool {
 	}
 }
 
-// close underlying connection and remove the entry from transport discovery
+// close underlying transport connection and remove the entry from transport discovery
 // todo: this currently performs http request to discovery service
 // it only makes sense to wait for the completion if we are closing the visor itself,
 // regular transport close operations should probably call it concurrently
@@ -221,34 +221,34 @@ func (mt *ManagedTransport) close() {
 	default:
 		close(mt.done)
 	}
-	mt.log.Debug("Locking connMx")
-	mt.connMx.Lock()
-	close(mt.connCh)
-	if mt.conn != nil {
-		if err := mt.conn.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close underlying connection.")
+	mt.log.Debug("Locking transportMx")
+	mt.transportMx.Lock()
+	close(mt.transportCh)
+	if mt.transport != nil {
+		if err := mt.transport.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close underlying transport connection.")
 		}
-		mt.conn = nil
+		mt.transport = nil
 	}
-	mt.connMx.Unlock()
-	mt.log.Debug("Unlocking connMx")
+	mt.transportMx.Unlock()
+	mt.log.Debug("Unlocking transportMx")
 	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
-// Accept accepts a new underlying connection.
-func (mt *ManagedTransport) Accept(ctx context.Context, conn network.Conn) error {
-	mt.connMx.Lock()
-	defer mt.connMx.Unlock()
+// Accept accepts a new underlying transport connection.
+func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transport) error {
+	mt.transportMx.Lock()
+	defer mt.transportMx.Unlock()
 
-	if conn.Network() != mt.Type() {
+	if transport.Network() != mt.Type() {
 		return ErrWrongNetwork
 	}
 
 	if !mt.isServing() {
 		mt.log.WithError(ErrNotServing).Debug()
-		if err := conn.Close(); err != nil {
+		if err := transport.Close(); err != nil {
 			mt.log.WithError(err).
-				Warn("Failed to close newly accepted connection.")
+				Warn("Failed to close newly accepted transport connection.")
 		}
 		return ErrNotServing
 	}
@@ -257,24 +257,24 @@ func (mt *ManagedTransport) Accept(ctx context.Context, conn network.Conn) error
 	defer cancel()
 
 	mt.log.Debug("Performing settlement handshake...")
-	if err := MakeSettlementHS(false).Do(ctx, mt.dc, conn, mt.client.SK()); err != nil {
+	if err := MakeSettlementHS(false).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
-	mt.log.Debug("Setting underlying connection...")
-	return mt.setConn(conn)
+	mt.log.Debug("Setting underlying transport connection...")
+	return mt.setTransport(transport)
 }
 
-// Dial dials a new underlying connection.
+// Dial dials a new underlying transport connection.
 func (mt *ManagedTransport) Dial(ctx context.Context) error {
-	mt.connMx.Lock()
-	defer mt.connMx.Unlock()
+	mt.transportMx.Lock()
+	defer mt.transportMx.Unlock()
 
 	if !mt.isServing() {
 		return ErrNotServing
 	}
 
-	if mt.conn != nil {
+	if mt.transport != nil {
 		return nil
 	}
 	return mt.dial(ctx)
@@ -287,7 +287,7 @@ func (mt *ManagedTransport) DialAsync(ctx context.Context, errCh chan error) {
 }
 
 func (mt *ManagedTransport) dial(ctx context.Context) error {
-	conn, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
+	transportType, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
 		return fmt.Errorf("snet.Dial: %w", err)
 	}
@@ -295,12 +295,12 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	if err := MakeSettlementHS(true).Do(ctx, mt.dc, conn, mt.client.SK()); err != nil {
+	if err := MakeSettlementHS(true).Do(ctx, mt.dc, transportType, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
-	if err := mt.setConn(conn); err != nil {
-		return fmt.Errorf("setConn: %w", err)
+	if err := mt.setTransport(transportType); err != nil {
+		return fmt.Errorf("setTransport: %w", err)
 	}
 
 	return nil
@@ -312,44 +312,44 @@ func (mt *ManagedTransport) isLeastSignificantEdge() bool {
 }
 
 /*
-	<<< UNDERLYING CONNECTION >>>
+	<<< UNDERLYING TRANSPORT CONNECTION>>>
 */
 
-func (mt *ManagedTransport) getConn() network.Conn {
+func (mt *ManagedTransport) getTransport() network.Transport {
 	if !mt.isServing() {
 		return nil
 	}
 
-	mt.connMx.Lock()
-	conn := mt.conn
-	mt.connMx.Unlock()
-	return conn
+	mt.transportMx.Lock()
+	transport := mt.transport
+	mt.transportMx.Unlock()
+	return transport
 }
 
-// setConn sets 'mt.conn' (the underlying connection).
-// If 'mt.conn' is already occupied, close the newly introduced connection.
-func (mt *ManagedTransport) setConn(newConn network.Conn) error {
-	if mt.conn != nil {
+// set sets 'mt.transport' (the underlying transport connection).
+// If 'mt.transport' is already occupied, close the newly introduced transport connection.
+func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
+	if mt.transport != nil {
 		if mt.isLeastSignificantEdge() {
-			mt.log.Debug("Underlying conn already exists, closing new conn.")
-			if err := newConn.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close new conn.")
+			mt.log.Debug("Underlying transport connection already exists, closing new transport connection.")
+			if err := newTransport.Close(); err != nil {
+				log.WithError(err).Warn("Failed to close new transport connection.")
 			}
-			return ErrConnAlreadyExists
+			return ErrTransportAlreadyExists
 		}
 
-		mt.log.Debug("Underlying conn already exists, closing old conn.")
-		if err := mt.conn.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close old conn.")
+		mt.log.Debug("Underlying transport connection already exists, closing old transport connection.")
+		if err := mt.transport.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close old transport connection.")
 		}
-		mt.conn = nil
+		mt.transport = nil
 	}
 
-	// Set new underlying connection.
-	mt.conn = newConn
+	// Set new underlying transport connection.
+	mt.transport = newTransport
 	select {
-	case mt.connCh <- struct{}{}:
-		mt.log.Debug("Sent signal to 'mt.connCh'.")
+	case mt.transportCh <- struct{}{}:
+		mt.log.Debug("Sent signal to 'mt.transportCh'.")
 	default:
 	}
 	return nil
@@ -379,14 +379,14 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 
 // WritePacket writes a packet to the remote.
 func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
-	mt.connMx.Lock()
-	defer mt.connMx.Unlock()
+	mt.transportMx.Lock()
+	defer mt.transportMx.Unlock()
 
-	if mt.conn == nil {
-		return fmt.Errorf("write packet: cannot write to conn, conn is not set up")
+	if mt.transport == nil {
+		return fmt.Errorf("write packet: cannot write to transport, transport is not set up")
 	}
 
-	n, err := mt.conn.Write(packet)
+	n, err := mt.transport.Write(packet)
 	if err != nil {
 		mt.close()
 		return err
@@ -401,28 +401,28 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	log := mt.log.WithField("func", "readPacket")
 
-	var conn network.Conn
+	var transport network.Transport
 	for {
-		if conn = mt.getConn(); conn != nil {
+		if transport = mt.getTransport(); transport != nil {
 			break
 		}
 		select {
 		case <-mt.done:
 			return nil, ErrNotServing
-		case <-mt.connCh:
+		case <-mt.transportCh:
 		}
 	}
 
 	log.Debug("Awaiting packet...")
 
 	h := make(routing.Packet, routing.PacketHeaderSize)
-	if _, err = io.ReadFull(conn, h); err != nil {
+	if _, err = io.ReadFull(transport, h); err != nil {
 		log.WithError(err).Debugf("Failed to read packet header.")
 		return nil, err
 	}
 	log.WithField("header_len", len(h)).WithField("header_raw", h).Debug("Read packet header.")
 	p := make([]byte, h.Size())
-	if _, err = io.ReadFull(conn, p); err != nil {
+	if _, err = io.ReadFull(transport, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
 		return nil, err
 	}
