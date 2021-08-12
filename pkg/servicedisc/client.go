@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/httpauth"
 	nu "github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/pkg/util/buildinfo"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
