@@ -24,7 +24,7 @@ import (
 
 const (
 	logWriteInterval  = time.Second * 3
-	heartbeatInterval = time.Second * 45
+	heartbeatInterval = time.Minute * 10
 )
 
 // Records number of managedTransports.
