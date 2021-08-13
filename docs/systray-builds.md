@@ -69,5 +69,10 @@ TBD
 Then you can run it with
 
 ```bash
+
+# Linux
 $ ./skywire-visor -c <YOUR_CONFIG_PATH> --systray
+
+# MacOS
+$ sudo ./skywire-visor -c <YOUR_CONFIG_PATH> --systray
 ```
