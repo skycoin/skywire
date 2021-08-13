@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/dmsg/buildinfo"
 	"github.com/skycoin/dmsg/cipher"
 
 	"github.com/skycoin/skywire/internal/httpauth"
 	nu "github.com/skycoin/skywire/internal/netutil"
-	"github.com/skycoin/skywire/pkg/util/buildinfo"
 	"github.com/skycoin/skywire/pkg/util/netutil"
 )
 
@@ -118,6 +118,7 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int) (out []Service,
 	if err != nil {
 		return nil, err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -191,6 +192,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	if err != nil {
 		return Service{}, err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
 		return Service{}, err
@@ -200,6 +202,7 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 	if err != nil {
 		return Service{}, err
 	}
+
 	if resp != nil {
 		defer func() {
 			if cErr := resp.Body.Close(); cErr != nil && err == nil {
@@ -214,12 +217,12 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 			return Service{}, fmt.Errorf("read response body: %w", err)
 		}
 
-		var hErr HTTPResponse
+		var hErr HTTPError
 		if err = json.Unmarshal(respBody, &hErr); err != nil {
 			return Service{}, err
 		}
 
-		return Service{}, hErr.Error
+		return Service{}, errors.New(hErr.Err)
 	}
 
 	var entry Service
