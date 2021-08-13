@@ -1,5 +1,3 @@
 //+build systray
 
 package visor
-
-
