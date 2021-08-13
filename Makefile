@@ -48,7 +48,7 @@ check: lint test ## Run linters and tests
 
 build: host-apps bin ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
 
-build-systray: host-apps bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
+build-systray: host-apps-systray bin-systray ## Install dependencies, build apps and binaries `go build` with ${OPTS}, with CGO and systray
 
 build-static: host-apps-static bin-static ## Build apps and binaries. `go build` with ${OPTS}
 
