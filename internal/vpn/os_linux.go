@@ -1,4 +1,4 @@
-//+build linux,!systray
+//+build linux
 
 package vpn
 

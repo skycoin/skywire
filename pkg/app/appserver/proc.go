@@ -7,6 +7,8 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,7 +66,22 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	}
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
-	cmd := exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	var cmd *exec.Cmd
+	if conf.SudoRequired {
+		absBinPath, _ := filepath.Abs(conf.BinaryLoc)
+		binArgs := []string{absBinPath}
+		binArgs = append(binArgs, conf.ProcArgs...)
+		switch runtime.GOOS {
+		case "linux":
+			cmd = exec.Command("pkexec", binArgs...) //nolint:gosec
+		case "windows":
+			cmd = exec.Command("runas", binArgs...) //nolint:gosec
+		default:
+			cmd = exec.Command("sudo", binArgs...) //nolint:gosec
+		}
+	} else {
+		cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+	}
 	cmd.Dir = conf.ProcWorkDir
 	cmd.Env = append(os.Environ(), conf.Envs()...)
 

@@ -279,16 +279,17 @@ func (l *Launcher) RestartApp(name string) error {
 
 func makeProcConfig(lc Config, ac AppConfig, envs []string) (appcommon.ProcConfig, error) {
 	procConf := appcommon.ProcConfig{
-		AppName:     ac.Name,
-		AppSrvAddr:  lc.ServerAddr,
-		ProcKey:     appcommon.RandProcKey(),
-		ProcArgs:    ac.Args,
-		ProcEnvs:    envs,
-		ProcWorkDir: filepath.Join(lc.LocalPath, ac.Name),
-		VisorPK:     lc.VisorPK,
-		RoutingPort: ac.Port,
-		BinaryLoc:   filepath.Join(lc.BinPath, ac.Name),
-		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
+		AppName:      ac.Name,
+		AppSrvAddr:   lc.ServerAddr,
+		ProcKey:      appcommon.RandProcKey(),
+		ProcArgs:     ac.Args,
+		ProcEnvs:     envs,
+		ProcWorkDir:  filepath.Join(lc.LocalPath, ac.Name),
+		VisorPK:      lc.VisorPK,
+		RoutingPort:  ac.Port,
+		BinaryLoc:    filepath.Join(lc.BinPath, ac.Name),
+		LogDBLoc:     filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
+		SudoRequired: ac.SudoRequired,
 	}
 	err := ensureDir(&procConf.ProcWorkDir)
 	return procConf, err
