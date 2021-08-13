@@ -67,23 +67,34 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
 	var cmd *exec.Cmd
+	envs := conf.Envs()
+
 	if conf.SudoRequired {
 		absBinPath, _ := filepath.Abs(conf.BinaryLoc)
 		binArgs := []string{absBinPath}
 		binArgs = append(binArgs, conf.ProcArgs...)
 		switch runtime.GOOS {
 		case "linux":
-			cmd = exec.Command("pkexec", binArgs...) //nolint:gosec
+			pkenvs := make([]string, len(envs)+1)
+			pkenvs[0] = "env"
+			for i, env := range envs {
+				pkenvs[i+1] = env
+			}
+			pkenvs = append(pkenvs, binArgs...)
+			cmd = exec.Command("pkexec", pkenvs...) //nolint:gosec
+
 		case "windows":
 			cmd = exec.Command("runas", binArgs...) //nolint:gosec
+			cmd.Env = append(os.Environ(), envs...)
 		default:
 			cmd = exec.Command("sudo", binArgs...) //nolint:gosec
+			cmd.Env = append(os.Environ(), envs...)
 		}
 	} else {
 		cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) // nolint:gosec
+		cmd.Env = append(os.Environ(), envs...)
 	}
 	cmd.Dir = conf.ProcWorkDir
-	cmd.Env = append(os.Environ(), conf.Envs()...)
 
 	appLog, appLogDB := appcommon.NewProcLogger(conf)
 	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").Writer()
