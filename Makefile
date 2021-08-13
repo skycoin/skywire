@@ -142,6 +142,13 @@ host-apps: ## Build app
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-server ./cmd/apps/vpn-server
 	${OPTS} go build ${BUILD_OPTS} -o ./apps/vpn-client ./cmd/apps/vpn-client
 
+host-apps-systray: ## Build app
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skychat ./cmd/apps/skychat
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks ./cmd/apps/skysocks
+	${OPTS} go build ${BUILD_OPTS} -o ./apps/skysocks-client  ./cmd/apps/skysocks-client
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-server ./cmd/apps/vpn-server
+	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./apps/vpn-client ./cmd/apps/vpn-client
+
 # Static Apps
 host-apps-static: ## Build app
 	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o ./apps/skychat ./cmd/apps/skychat
@@ -159,7 +166,7 @@ bin: ## Build `skywire-visor`, `skywire-cli`
 bin-systray:
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-visor ./cmd/skywire-visor
 	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./skywire-cli ./cmd/skywire-cli
-	${OPTS} go build ${BUILD_OPTS} -tags systray -o ./setup-node ./cmd/setup-node
+	${OPTS} go build ${BUILD_OPTS} -o ./setup-node ./cmd/setup-node
 
 # Static Bin
 bin-static: ## Build `skywire-visor`, `skywire-cli`
