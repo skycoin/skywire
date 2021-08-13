@@ -70,7 +70,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	envs := conf.Envs()
 
 	if conf.SudoRequired {
-		absBinPath, _ := filepath.Abs(conf.BinaryLoc)
+		absBinPath, _ := filepath.Abs(conf.BinaryLoc) // nolint:errcheck
 		binArgs := []string{absBinPath}
 		binArgs = append(binArgs, conf.ProcArgs...)
 		switch runtime.GOOS {

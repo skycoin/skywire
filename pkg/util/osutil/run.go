@@ -73,7 +73,7 @@ func run(bin string, stdout io.Writer, withEscalate bool, args ...string) error 
 	if withEscalate {
 		switch runtime.GOOS {
 		case "linux":
-			fullCmd = "pkexec" + " " +  bin + " " + strings.Join(args, " ")
+			fullCmd = "pkexec" + " " + bin + " " + strings.Join(args, " ")
 			cmd = exec.Command("pkexec", binArgs...) //nolint:gosec
 		case "windows":
 			fullCmd = "runas" + " " + bin + " " + strings.Join(args, " ")
@@ -84,7 +84,7 @@ func run(bin string, stdout io.Writer, withEscalate bool, args ...string) error 
 		}
 	} else {
 		fullCmd = bin + " " + strings.Join(args, " ")
-		cmd = exec.Command(bin, args...)
+		cmd = exec.Command(bin, args...) // nolint:gosec
 	}
 
 	stderrBuf := bytes.NewBuffer(nil)
