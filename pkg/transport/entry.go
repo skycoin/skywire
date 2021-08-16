@@ -42,6 +42,9 @@ type Entry struct {
 	Type network.Type `json:"type"`
 
 	Label Label `json:"label"`
+
+	// Deprecated
+	Public bool `json:"public"` //TODO(ersonp): Remove after a month of release
 }
 
 // MakeEntry creates a new transport entry
