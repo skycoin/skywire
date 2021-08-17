@@ -50,10 +50,11 @@ type Entry struct {
 // MakeEntry creates a new transport entry
 func MakeEntry(aPK, bPK cipher.PubKey, netType network.Type, label Label) Entry {
 	entry := Entry{
-		ID:    MakeTransportID(aPK, bPK, netType),
-		Type:  netType,
-		Label: label,
-		Edges: SortEdges(aPK, bPK),
+		ID:     MakeTransportID(aPK, bPK, netType),
+		Type:   netType,
+		Label:  label,
+		Edges:  SortEdges(aPK, bPK),
+		Public: true,
 	}
 	return entry
 }
