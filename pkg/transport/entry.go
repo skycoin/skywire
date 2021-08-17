@@ -44,7 +44,7 @@ type Entry struct {
 	Label Label `json:"label"`
 
 	// Deprecated
-	Public bool `json:"public"` //TODO(ersonp): Remove after a month of release
+	Public bool `json:"public"` //TODO(ersonp):remove this after a month of the release being pushed out (v0.5.0).
 }
 
 // MakeEntry creates a new transport entry
@@ -54,7 +54,7 @@ func MakeEntry(aPK, bPK cipher.PubKey, netType network.Type, label Label) Entry 
 		Type:   netType,
 		Label:  label,
 		Edges:  SortEdges(aPK, bPK),
-		Public: true,
+		Public: true, // TODO (ersonp): remove this after a month of the release being pushed out (v0.5.0).
 	}
 	return entry
 }
