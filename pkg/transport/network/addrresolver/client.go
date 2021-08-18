@@ -228,6 +228,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		if err := c.keepStcprHeartbeatLoop(ctx); err != nil {
 			c.log.WithError(err).Errorf("Failed to send TCP heartbeat signal to address-resolver")
 		}
+		c.log.Errorf("444444444444444444")
 	}()
 
 	return nil
@@ -435,6 +436,7 @@ func (c *httpClient) keepStcprHeartbeatLoop(ctx context.Context) error {
 		c.log.Errorf("233333333333333333333")
 		_, err := c.Get(ctx, stcprHeartbeatPath)
 		if err != nil {
+			c.log.Error(err)
 			return err
 		}
 		select {
