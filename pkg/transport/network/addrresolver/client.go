@@ -145,12 +145,14 @@ func (c *httpClient) initHTTPClient() {
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
 	<-c.ready
 
+	c.log.Errorf("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy")
 	addr := c.httpClient.Addr() + path
 
 	req, err := http.NewRequest(http.MethodGet, addr, new(bytes.Buffer))
 	if err != nil {
 		return nil, err
 	}
+	c.log.Errorf("xzzzzzzzzzzzzzzzzzzzzzzzzzzz")
 
 	return c.httpClient.Do(req.WithContext(ctx))
 }
@@ -439,6 +441,7 @@ func (c *httpClient) keepStcprHeartbeatLoop(ctx context.Context) error {
 			c.log.Error(err)
 			return err
 		}
+		c.log.Errorf("xxxxxxxxxxxxxxxxxxxx")
 		select {
 		case <-c.closed:
 			return nil
