@@ -145,14 +145,12 @@ func (c *httpClient) initHTTPClient() {
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
 	<-c.ready
 
-	c.log.Errorf("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy")
 	addr := c.httpClient.Addr() + path
 
 	req, err := http.NewRequest(http.MethodGet, addr, new(bytes.Buffer))
 	if err != nil {
 		return nil, err
 	}
-	c.log.Errorf("xzzzzzzzzzzzzzzzzzzzzzzzzzzz")
 
 	return c.httpClient.Do(req.WithContext(ctx))
 }
@@ -220,17 +218,10 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, extractError(resp.Body))
 	}
 
-	c.log.Errorf("HERERERERERERERERERE")
-	c.log.Errorf("HERERERERERERERERERE")
-	c.log.Errorf("HERERERERERERERERERE")
-	c.log.Errorf("HERERERERERERERERERE")
 	go func() {
-		c.log.Errorf("2222222222222222222")
-
 		if err := c.keepStcprHeartbeatLoop(ctx); err != nil {
 			c.log.WithError(err).Errorf("Failed to send TCP heartbeat signal to address-resolver")
 		}
-		c.log.Errorf("444444444444444444")
 	}()
 
 	return nil
@@ -433,15 +424,10 @@ func (c *httpClient) Close() error {
 // Keep stcpr heartbeat in address-resolver
 func (c *httpClient) keepStcprHeartbeatLoop(ctx context.Context) error {
 	for {
-		c.log.Errorf("233333333333333333333")
-		c.log.Errorf("233333333333333333333")
-		c.log.Errorf("233333333333333333333")
 		_, err := c.Get(ctx, stcprHeartbeatPath)
 		if err != nil {
-			c.log.Error(err)
 			return err
 		}
-		c.log.Errorf("xxxxxxxxxxxxxxxxxxxx")
 		select {
 		case <-c.closed:
 			return nil
