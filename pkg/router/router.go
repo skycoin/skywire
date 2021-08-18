@@ -317,8 +317,6 @@ func (r *router) Serve(ctx context.Context) error {
 
 	go r.serveSetup()
 
-	// r.tm.Serve(ctx)
-
 	return nil
 }
 
