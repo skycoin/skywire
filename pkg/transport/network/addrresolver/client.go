@@ -428,6 +428,8 @@ func (c *httpClient) keepStcprHeartbeatLoop(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		c.log.Debugf("Sent TCP heartbeat signal to address-resolver")
 		select {
 		case <-c.closed:
 			return nil
