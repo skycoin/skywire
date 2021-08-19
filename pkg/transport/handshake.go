@@ -98,14 +98,6 @@ func MakeSettlementHS(init bool) SettlementHS {
 	initHS := func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (err error) {
 		entry := makeEntryFromTransport(transport)
 
-		// TODO(evanlinjin): Probably not needed as this is called in mTp already. Need to double check.
-		//defer func() {
-		//	// @evanlinjin: I used background context to ensure status is always updated.
-		//	if _, err := dc.UpdateStatuses(context.Background(), &Status{ID: entry.ID, IsUp: err == nil}); err != nil {
-		//		log.WithError(err).Error("Failed to update statuses")
-		//	}
-		//}()
-
 		// create signed entry and send it to responding visor.
 		se, err := NewSignedEntry(&entry, transport.LocalPK(), sk)
 		if err != nil {
