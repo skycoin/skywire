@@ -9,7 +9,7 @@ To build `skywire-visor` with systray feature enabled, you have to had these ins
 - Debian / Ubuntu and its derivations
 
 ```bash
-$ sudo apt install libgtk-3-dev libappindicator-3-dev
+$ sudo apt install libgtk-3-dev libappindicator3-dev
 ```
 
 - Fedora / RHEL and its derivations
