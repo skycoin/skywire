@@ -278,9 +278,29 @@ func (p *Proc) Stop() error {
 	}
 
 	if p.cmd.Process != nil {
-		err := p.cmd.Process.Signal(os.Interrupt)
-		if err != nil {
-			return err
+		if p.conf.SudoRequired {
+			var cmd *exec.Cmd
+			pid := p.cmd.Process.Pid
+			switch runtime.GOOS {
+			case "linux":
+				cmd = exec.Command("pkexec", "kill", strconv.Itoa(pid))
+			case "windows":
+				cmd = exec.Command("runas", fmt.Sprintf(`"taskkill /f /pid %s"`, strconv.Itoa(pid))) //nolint:gosec
+			default:
+				cmd = exec.Command("sudo", "kill", strconv.Itoa(pid)) //nolint:gosec
+			}
+			cmd.Stdout = p.log.WithField("func", "(STDOUT)").Writer()
+			cmd.Stderr = p.log.WithField("func", "(STDERR)").Writer()
+
+			if err := cmd.Start(); err != nil {
+				return err
+			}
+
+		} else {
+			err := p.cmd.Process.Signal(os.Interrupt)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
