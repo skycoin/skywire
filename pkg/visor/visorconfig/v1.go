@@ -58,7 +58,7 @@ type V1 struct {
 	RestartCheckDelay Duration `json:"restart_check_delay,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic          bool     `json:"is_public"`
 
-	PersistentTransports []transport.PersistentRemote `json:"persistent_transports"`
+	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 
 	Hypervisor *hypervisorconfig.Config `json:"hypervisor,omitempty"`
 }
