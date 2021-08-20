@@ -73,6 +73,9 @@ type API interface {
 	RuntimeLogs() (string, error)
 
 	SetMinHops(uint16) error
+
+	GetPersistentTransports() ([]transport.PersistentTransports, error)
+	SetPersistentTransports([]transport.PersistentTransports) error
 }
 
 // HealthCheckable resource returns its health status as an integer
@@ -743,4 +746,14 @@ func (v *Visor) RuntimeLogs() (string, error) {
 // SetMinHops sets min_hops routing config of visor
 func (v *Visor) SetMinHops(in uint16) error {
 	return v.conf.UpdateMinHops(in)
+}
+
+// SetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	return v.conf.UpdatePersistentTransports(pts)
+}
+
+// GetPersistentTransports sets min_hops routing config of visor
+func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return v.conf.GetPersistentTransports()
 }
