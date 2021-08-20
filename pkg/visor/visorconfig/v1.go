@@ -189,6 +189,22 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 	return v1.flush(v1)
 }
 
+// UpdatePersistentTransports updates min_hops config
+func (v1 *V1) UpdatePersistentTransports(pts []transport.PersistentTransports) error {
+	v1.mu.Lock()
+	v1.PersistentTransports = pts
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// GetPersistentTransports updates min_hops config
+func (v1 *V1) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+	return v1.PersistentTransports, nil
+}
+
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the launcher.
 // It removes argName from app args if value is an empty string.
 // The updated config gets flushed to file if there are any changes.

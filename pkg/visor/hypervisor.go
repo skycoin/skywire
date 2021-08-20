@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/updater"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/hypervisorconfig"
@@ -261,6 +262,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/update/available/{channel}", hv.visorUpdateAvailable())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
+				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
+				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 			})
 		})
 
@@ -1318,6 +1321,37 @@ func (hv *Hypervisor) postMinHops() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) putPersistentTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var reqBody []transport.PersistentTransports
+
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("putPersistentTransports request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+
+		if err := ctx.API.SetPersistentTransports(reqBody); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, struct{}{})
+	})
+}
+
+func (hv *Hypervisor) getPersistentTransports() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		pts, err := ctx.API.GetPersistentTransports()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, pts)
 	})
 }
 
