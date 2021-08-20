@@ -22,7 +22,7 @@ import (
 const reconnectPhaseDelay = 10 * time.Second
 const reconnectRemoteTimeout = 3 * time.Second
 
-// PersistentTransports is a persistent transport connection description
+// PersistentTransports is a persistent transports description
 type PersistentTransports struct {
 	PK      cipher.PubKey `json:"pk"`
 	NetType network.Type  `json:"type"`
@@ -197,7 +197,7 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 			return
 		default:
 			if err := tm.acceptTransport(ctx, lis); err != nil {
-				tm.Logger.Warnf("Failed to accept transport connection: %v", err)
+				tm.Logger.Warnf("Failed to accept transport: %v", err)
 				if errors.Is(err, io.ErrClosedPipe) {
 					return
 				}
@@ -227,7 +227,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		return err
 	}
 
-	tm.Logger.Infof("recv transport connection request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
+	tm.Logger.Infof("recv transport request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
 
 	tm.mx.Lock()
 	tm.Logger.Debugf("Locked in accept")
@@ -435,7 +435,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 		return
 	}
 
-	// Deregister transport before closing the underlying transport connection.
+	// Deregister transport before closing the underlying transport.
 	if tp, ok := tm.tps[id]; ok {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -448,7 +448,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 			tm.Logger.Infof("De-registered transport of ID %s from discovery.", id)
 		}
 
-		// Close underlying transport connection.
+		// Close underlying transport.
 		tp.close()
 		delete(tm.tps, id)
 	}

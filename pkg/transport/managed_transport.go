@@ -34,8 +34,8 @@ var (
 	// ErrNotServing is the error returned when a transport is no longer served.
 	ErrNotServing = errors.New("transport is no longer being served")
 
-	// ErrTransportAlreadyExists occurs when an underlying transport connection already exists.
-	ErrTransportAlreadyExists = errors.New("underlying transport connection already exists")
+	// ErrTransportAlreadyExists occurs when an underlying transport already exists.
+	ErrTransportAlreadyExists = errors.New("underlying transport already exists")
 )
 
 // ManagedTransportConfig is a configuration for managed transport.
@@ -50,8 +50,8 @@ type ManagedTransportConfig struct {
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
-// There is a single underlying transport connection between two edges.
-// Initial dialing can be requested by either edge of the transport connection.
+// There is a single underlying transport between two edges.
+// Initial dialing can be requested by either edge of the transport.
 type ManagedTransport struct {
 	log *logging.Logger
 
@@ -115,7 +115,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	mt.logLoop()
 }
 
-// readLoop continuously reads packets from the underlying transport connection
+// readLoop continuously reads packets from the underlying transport
 // and sends them to readCh
 // This is a blocking call
 func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
@@ -208,7 +208,7 @@ func (mt *ManagedTransport) IsClosed() bool {
 	}
 }
 
-// close underlying transport connection and remove the entry from transport discovery
+// close underlying transport and remove the entry from transport discovery
 // todo: this currently performs http request to discovery service
 // it only makes sense to wait for the completion if we are closing the visor itself,
 // regular transport close operations should probably call it concurrently
@@ -226,7 +226,7 @@ func (mt *ManagedTransport) close() {
 	close(mt.transportCh)
 	if mt.transport != nil {
 		if err := mt.transport.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close underlying transport connection.")
+			log.WithError(err).Warn("Failed to close underlying transport.")
 		}
 		mt.transport = nil
 	}
@@ -235,7 +235,7 @@ func (mt *ManagedTransport) close() {
 	_ = mt.deleteFromDiscovery() //nolint:errcheck
 }
 
-// Accept accepts a new underlying transport connection.
+// Accept accepts a new underlying transport.
 func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transport) error {
 	mt.transportMx.Lock()
 	defer mt.transportMx.Unlock()
@@ -248,7 +248,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 		mt.log.WithError(ErrNotServing).Debug()
 		if err := transport.Close(); err != nil {
 			mt.log.WithError(err).
-				Warn("Failed to close newly accepted transport connection.")
+				Warn("Failed to close newly accepted transport.")
 		}
 		return ErrNotServing
 	}
@@ -261,11 +261,11 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
-	mt.log.Debug("Setting underlying transport connection...")
+	mt.log.Debug("Setting underlying transport...")
 	return mt.setTransport(transport)
 }
 
-// Dial dials a new underlying transport connection.
+// Dial dials a new underlying transport.
 func (mt *ManagedTransport) Dial(ctx context.Context) error {
 	mt.transportMx.Lock()
 	defer mt.transportMx.Unlock()
@@ -287,7 +287,7 @@ func (mt *ManagedTransport) DialAsync(ctx context.Context, errCh chan error) {
 }
 
 func (mt *ManagedTransport) dial(ctx context.Context) error {
-	transportType, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
+	transport, err := mt.client.Dial(ctx, mt.rPK, skyenv.DmsgTransportPort)
 	if err != nil {
 		return fmt.Errorf("snet.Dial: %w", err)
 	}
@@ -295,11 +295,11 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
-	if err := MakeSettlementHS(true).Do(ctx, mt.dc, transportType, mt.client.SK()); err != nil {
+	if err := MakeSettlementHS(true).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 		return fmt.Errorf("settlement handshake failed: %w", err)
 	}
 
-	if err := mt.setTransport(transportType); err != nil {
+	if err := mt.setTransport(transport); err != nil {
 		return fmt.Errorf("setTransport: %w", err)
 	}
 
@@ -312,7 +312,7 @@ func (mt *ManagedTransport) isLeastSignificantEdge() bool {
 }
 
 /*
-	<<< UNDERLYING TRANSPORT CONNECTION>>>
+	<<< UNDERLYING TRANSPORT>>>
 */
 
 func (mt *ManagedTransport) getTransport() network.Transport {
@@ -326,26 +326,26 @@ func (mt *ManagedTransport) getTransport() network.Transport {
 	return transport
 }
 
-// set sets 'mt.transport' (the underlying transport connection).
-// If 'mt.transport' is already occupied, close the newly introduced transport connection.
+// set sets 'mt.transport' (the underlying transport).
+// If 'mt.transport' is already occupied, close the newly introduced transport.
 func (mt *ManagedTransport) setTransport(newTransport network.Transport) error {
 	if mt.transport != nil {
 		if mt.isLeastSignificantEdge() {
-			mt.log.Debug("Underlying transport connection already exists, closing new transport connection.")
+			mt.log.Debug("Underlying transport already exists, closing new transport.")
 			if err := newTransport.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close new transport connection.")
+				log.WithError(err).Warn("Failed to close new transport.")
 			}
 			return ErrTransportAlreadyExists
 		}
 
-		mt.log.Debug("Underlying transport connection already exists, closing old transport connection.")
+		mt.log.Debug("Underlying transport already exists, closing old transport.")
 		if err := mt.transport.Close(); err != nil {
-			log.WithError(err).Warn("Failed to close old transport connection.")
+			log.WithError(err).Warn("Failed to close old transport.")
 		}
 		mt.transport = nil
 	}
 
-	// Set new underlying transport connection.
+	// Set new underlying transport.
 	mt.transport = newTransport
 	select {
 	case mt.transportCh <- struct{}{}:
