@@ -22,19 +22,19 @@ import (
 const reconnectPhaseDelay = 10 * time.Second
 const reconnectRemoteTimeout = 3 * time.Second
 
-// PersistentRemote is a persistent transport connection description
-type PersistentRemote struct {
+// PersistentTransports is a persistent transport connection description
+type PersistentTransports struct {
 	PK      cipher.PubKey `json:"pk"`
 	NetType network.Type  `json:"type"`
 }
 
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
-	PubKey            cipher.PubKey
-	SecKey            cipher.SecKey
-	DiscoveryClient   DiscoveryClient
-	LogStore          LogStore
-	PersistentRemotes []PersistentRemote
+	PubKey               cipher.PubKey
+	SecKey               cipher.SecKey
+	DiscoveryClient      DiscoveryClient
+	LogStore             LogStore
+	PersistentTransports []PersistentTransports
 }
 
 // Manager manages Transports.
@@ -105,7 +105,7 @@ func (tm *Manager) runReconnectPersistent(ctx context.Context) {
 }
 
 func (tm *Manager) reconnectPersistent(ctx context.Context) {
-	for _, remote := range tm.Conf.PersistentRemotes {
+	for _, remote := range tm.Conf.PersistentTransports {
 		tm.Logger.Debugf("Reconnecting to persistent transport to %s, type %s", remote.PK, remote.NetType)
 		deadlined, cancel := context.WithTimeout(ctx, reconnectRemoteTimeout)
 		_, err := tm.saveTransport(deadlined, remote.PK, remote.NetType, LabelUser)
