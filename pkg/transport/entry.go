@@ -42,19 +42,15 @@ type Entry struct {
 	Type network.Type `json:"type"`
 
 	Label Label `json:"label"`
-
-	// Deprecated
-	Public bool `json:"public"` //TODO(ersonp):remove this after a month of the release being pushed out (v0.5.0).
 }
 
 // MakeEntry creates a new transport entry
 func MakeEntry(aPK, bPK cipher.PubKey, netType network.Type, label Label) Entry {
 	entry := Entry{
-		ID:     MakeTransportID(aPK, bPK, netType),
-		Type:   netType,
-		Label:  label,
-		Edges:  SortEdges(aPK, bPK),
-		Public: true, // TODO (ersonp): remove this after a month of the release being pushed out (v0.5.0).
+		ID:    MakeTransportID(aPK, bPK, netType),
+		Type:  netType,
+		Label: label,
+		Edges: SortEdges(aPK, bPK),
 	}
 	return entry
 }
