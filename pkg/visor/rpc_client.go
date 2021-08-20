@@ -345,6 +345,19 @@ func (rc *rpcClient) SetMinHops(hops uint16) error {
 	return err
 }
 
+// SetPersistentTransports sets the persistent_transports from visor routing config
+func (rc *rpcClient) SetPersistentTransports(pts []transport.PersistentTransports) error {
+	err := rc.Call("SetPersistentTransports", &pts, &struct{}{})
+	return err
+}
+
+// GetPersistentTransports gets the persistent_transports from visor routing config
+func (rc *rpcClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	var tps []transport.PersistentTransports
+	err := rc.Call("GetPersistentTransports", &struct{}{}, &tps)
+	return tps, err
+}
+
 // StatusMessage defines a status of visor update.
 type StatusMessage struct {
 	Text    string
@@ -936,6 +949,16 @@ func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 }
 
 // SetMinHops implements API
-func (mc *mockRPCClient) SetMinHops(n uint16) error {
+func (mc *mockRPCClient) SetMinHops(_ uint16) error {
+	return nil
+}
+
+// GetPersistentTransports implements API
+func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransports, error) {
+	return []transport.PersistentTransports{}, nil
+}
+
+// SetPersistentTransports implements API
+func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTransports) error {
 	return nil
 }
