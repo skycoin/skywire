@@ -128,7 +128,7 @@ type Router interface {
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
 
-	// routing table related methods
+	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule
 	Rule(routing.RouteID) (routing.Rule, error)
