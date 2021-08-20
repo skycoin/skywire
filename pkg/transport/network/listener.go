@@ -50,7 +50,7 @@ func (l *listener) Accept() (net.Conn, error) {
 	return l.AcceptTransport()
 }
 
-// AcceptTransport accepts a skywire transport connection and returns network.Transport
+// AcceptTransport accepts a skywire transport and returns network.Transport
 func (l *listener) AcceptTransport() (Transport, error) {
 	c, ok := <-l.accept
 	if !ok {

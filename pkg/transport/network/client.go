@@ -21,25 +21,25 @@ import (
 
 // Client provides access to skywire network
 // It allows dialing remote visors using their public keys, as
-// well as listening to incoming transport connections from other visors
+// well as listening to incoming transports from other visors
 type Client interface {
 	// Dial remote visor, that is listening on the given skywire port
 	Dial(ctx context.Context, remote cipher.PubKey, port uint16) (Transport, error)
 	// Start initializes the client and prepares it for listening. It is required
-	// to be called to start accepting transport connections
+	// to be called to start accepting transports
 	Start() error
 	// Listen on the given skywire port. This can be called multiple times
 	// for different ports for the same client. It requires Start to be called
-	// to start accepting transport connections
+	// to start accepting transports
 	Listen(port uint16) (Listener, error)
 	// LocalAddr returns the actual network address under which this client listens to
-	// new transport connections
+	// new transports
 	LocalAddr() (net.Addr, error)
 	// PK returns public key of the visor running this client
 	PK() cipher.PubKey
 	// SK returns secret key of the visor running this client
 	SK() cipher.SecKey
-	// Close the client, stop accepting transport connections. Connections returned by the
+	// Close the client, stop accepting transports. Connections returned by the
 	// client should be closed manually
 	Close() error
 	// Type returns skywire network type in which this client operates
@@ -94,7 +94,7 @@ func (f *ClientFactory) MakeClient(netType Type) (Client, error) {
 // and outgoing raw network connections, obtaining remote information
 // from the handshake and wrapping raw connections with skywire
 // transport type.
-// Incoming transport connections also directed to appropriate listener using
+// Incoming transports also directed to appropriate listener using
 // skywire port, obtained from incoming transport handshake
 type genericClient struct {
 	lPK        cipher.PubKey
@@ -129,7 +129,7 @@ func (c *genericClient) initTransport(ctx context.Context, conn net.Conn, rPK ci
 	return c.wrapTransport(conn, hs, true, freePort)
 }
 
-// acceptTransports continuously accepts incoming transport connections that come from given listener
+// acceptTransports continuously accepts incoming transports that come from given listener
 // these connections will be properly handshaked and passed to an appropriate skywire listener
 // using skywire port
 func (c *genericClient) acceptTransports(lis net.Listener) {
